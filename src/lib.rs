@@ -34,11 +34,7 @@ pub mod prelude {
 
 #[track_caller]
 pub fn assert_that<'t, T, A: Into<Actual<'t, T>>>(actual: A) -> AssertThat<'t, T> {
-    AssertThat {
-        actual: actual.into(),
-        print_location: true,
-        additional_messages: Vec::new(),
-    }
+    AssertThat::new(actual.into())
 }
 
 #[track_caller]
@@ -59,6 +55,15 @@ pub struct AssertThat<'t, T> {
 }
 
 impl<'t, T> AssertThat<'t, T> {
+    #[track_caller]
+    pub(crate) fn new(actual: Actual<'t, T>) -> Self {
+        AssertThat {
+            actual,
+            print_location: true,
+            additional_messages: Vec::new(),
+        }
+    }
+
     fn derive<U>(&'t self, mapper: impl Fn(&'t T) -> U) -> AssertThat<'t, U> {
         AssertThat {
             actual: Actual::Owned(mapper(self.actual.borrowed())),
