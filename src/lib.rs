@@ -18,10 +18,13 @@ pub mod prelude {
     pub use crate::assertions::debug;
     pub use crate::assertions::display;
     pub use crate::assertions::eq;
-    pub use crate::assertions::map;
+    pub use crate::assertions::hashmap;
+    pub use crate::assertions::iter;
+    pub use crate::assertions::iter::IntoIteratorAssertions;
     pub use crate::assertions::option;
     pub use crate::assertions::ord;
     pub use crate::assertions::range;
+    pub use crate::assertions::ref_cell;
     pub use crate::assertions::result;
     pub use crate::assertions::slice;
     pub use crate::assertions::str_slice;
@@ -82,7 +85,7 @@ impl<'t, T> AssertThat<'t, T> {
 }
 
 impl<'t, T> AssertThat<'t, T> {
-    pub fn actual(&self) -> &T {
+    pub fn actual(&'t self) -> &'t T {
         self.actual.borrowed()
     }
 
@@ -121,7 +124,7 @@ impl<'t, T> AssertThat<'t, T> {
                     -------- assertr --------
                     {failure}
 
-                    {additional_messages:?}
+                    Details: {additional_messages:#?}
                     -------- assertr --------
                 ",
                 additional_messages = self.additional_messages,
@@ -143,7 +146,7 @@ impl<'t, T> AssertThat<'t, T> {
 
                     {failure}
 
-                    {additional_messages:?}
+                    Details: {additional_messages:#?}
                     -------- assertr --------
                 ",
                 file = caller_location.file(),

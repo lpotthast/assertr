@@ -28,11 +28,12 @@ impl<'t, T> AssertThat<'t, &[T]> {
         let expected: &[T] = expected.as_ref();
 
         if actual != expected {
-            self.fail_with(GenericFailure {
-                arguments: format_args!(
-                    "actual: {actual:#?},\n\ndid not exactly match\n\nexpected: {expected:#?}",
-                ),
-            });
+            self.with_additional_message("The order of elements does not match!")
+                .fail_with(GenericFailure {
+                    arguments: format_args!(
+                        "Actual: {actual:#?},\n\ndid not exactly match\n\nExpected: {expected:#?}",
+                    ),
+                });
         }
         self
     }
@@ -68,7 +69,7 @@ impl<'t, T> AssertThat<'t, &[T]> {
         if !elements_not_found.is_empty() || !elements_not_expected.is_empty() {
             self.fail_with(GenericFailure {
                 arguments: format_args!(
-                    "actual: {actual:#?},\n\nelements expected: {expected:#?}\n\nelements not found: {elements_not_found:#?}\n\nelements not expected: {elements_not_expected:#?}",
+                    "Actual: {actual:#?},\n\nElements expected: {expected:#?}\n\nElements not found: {elements_not_found:#?}\n\nElements not expected: {elements_not_expected:#?}",
                     actual = actual,
                     expected = expected.as_ref()
                 )
@@ -93,9 +94,7 @@ mod tests {
     #[test]
     fn is_empty_slice_panics_when_not_empty() {
         assert_that_panic_by(|| {
-            assert_that([42].as_slice())
-                .with_location(false)
-                .is_empty();
+            assert_that([42].as_slice()).with_location(false).is_empty();
         })
         .has_box_type::<String>()
         .has_debug_value(formatdoc! {r#"
@@ -125,9 +124,9 @@ mod tests {
                 .contains_exactly([2, 3, 4])
         })
         .has_box_type::<String>()
-        .has_debug_value(formatdoc! {"
+        .has_debug_value(formatdoc! {r#"
                 -------- assertr --------
-                actual: [
+                Actual: [
                     1,
                     2,
                     3,
@@ -135,13 +134,17 @@ mod tests {
 
                 did not exactly match
 
-                expected: [
+                Expected: [
                     2,
                     3,
                     4,
                 ]
+
+                Details: [
+                    "The order of elements does not match!",
+                ]
                 -------- assertr --------
-            "});
+            "#});
     }
 
     #[test]
@@ -159,23 +162,23 @@ mod tests {
         .has_box_type::<String>()
         .has_debug_value(formatdoc! {"
                 -------- assertr --------
-                actual: [
+                Actual: [
                     1,
                     2,
                     3,
                 ],
 
-                elements expected: [
+                Elements expected: [
                     2,
                     3,
                     4,
                 ]
 
-                elements not found: [
+                Elements not found: [
                     4,
                 ]
 
-                elements not expected: [
+                Elements not expected: [
                     1,
                 ]
                 -------- assertr --------

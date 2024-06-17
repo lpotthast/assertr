@@ -7,7 +7,7 @@ pub enum Actual<'t, T> {
 }
 
 impl<'t, T> Actual<'t, T> {
-    pub fn borrowed(&self) -> &T {
+    pub fn borrowed(&'t self) -> &'t T {
         match self {
             Actual::Borrowed(t) => *t,
             Actual::Owned(t) => t,

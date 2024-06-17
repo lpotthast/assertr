@@ -1,7 +1,4 @@
-use crate::{
-    failure::GenericFailure,
-    AssertThat,
-};
+use crate::{failure::GenericFailure, AssertThat};
 use std::fmt::Debug;
 
 /// Assertions for generic arrays.
@@ -88,7 +85,7 @@ mod tests {
         .has_box_type::<String>()
         .has_debug_value(formatdoc! {r#"
                 -------- assertr --------
-                actual: [
+                Actual: [
                     1,
                     2,
                     3,
@@ -96,10 +93,14 @@ mod tests {
 
                 did not exactly match
 
-                expected: [
+                Expected: [
                     3,
                     4,
                     1,
+                ]
+
+                Details: [
+                    "The order of elements does not match!",
                 ]
                 -------- assertr --------
             "#});
@@ -120,23 +121,23 @@ mod tests {
         .has_box_type::<String>()
         .has_debug_value(formatdoc! {"
                 -------- assertr --------
-                actual: [
+                Actual: [
                     1,
                     2,
                     3,
                 ],
 
-                elements expected: [
+                Elements expected: [
                     2,
                     3,
                     4,
                 ]
 
-                elements not found: [
+                Elements not found: [
                     4,
                 ]
 
-                elements not expected: [
+                Elements not expected: [
                     1,
                 ]
                 -------- assertr --------
