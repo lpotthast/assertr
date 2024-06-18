@@ -8,7 +8,7 @@ impl<'t, T> ConditionAssertions<T> for AssertThat<'t, T> {
     fn is<C: Condition<T>>(self, condition: C) -> Self {
         match condition.test(self.actual()) {
             Ok(()) => {}
-            Err(arguments) => self.fail_with(GenericFailure {
+            Err(arguments) => self.fail(GenericFailure {
                 arguments: format_args!("Condition did not match:\n\n{arguments}"),
             }),
         }

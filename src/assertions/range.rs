@@ -12,7 +12,7 @@ impl<'t, T> AssertThat<'t, RangeFrom<T>> {
         T: PartialOrd + Debug,
     {
         if !self.actual.borrowed().contains(&expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
                     actual = self.actual.borrowed()
@@ -30,7 +30,7 @@ impl<'t, T> AssertThat<'t, RangeTo<T>> {
         T: PartialOrd + Debug,
     {
         if !self.actual.borrowed().contains(&expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
                     actual = self.actual.borrowed()
@@ -45,7 +45,7 @@ impl<'t, T> AssertThat<'t, RangeTo<T>> {
         T: PartialOrd + Debug,
     {
         if self.actual.borrowed().contains(&expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual RangeTo: {actual:#?}\n\nContains element expected not to be contained: {expected:#?}",
                     actual = self.actual.borrowed()
@@ -63,7 +63,7 @@ impl<'t, T> AssertThat<'t, RangeToInclusive<T>> {
         T: PartialOrd + Debug,
     {
         if !self.actual.borrowed().contains(&expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
                     actual = self.actual.borrowed()

@@ -9,7 +9,7 @@ impl<'t, T: Debug> AssertThat<'t, T> {
         let expected = format!("{:?}", expected);
 
         if actual != expected {
-            self.fail_with(ExpectedActualFailure {
+            self.fail(ExpectedActualFailure {
                 expected: &expected,
                 actual: &actual,
             });

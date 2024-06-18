@@ -33,7 +33,7 @@ impl<'t> AssertThat<'t, String> {
 mod tests {
     use indoc::formatdoc;
 
-    use crate::{assert_that, assert_that_panic_by};
+    use crate::prelude::*;
 
     #[test]
     fn is_empty_succeeds_when_empty() {
@@ -47,8 +47,8 @@ mod tests {
                 .with_location(false)
                 .is_empty();
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo"
 
@@ -71,16 +71,16 @@ mod tests {
                 .with_location(false)
                 .contains("42");
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
-                -------- assertr --------
-                Actual: "foo bar baz"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
+            -------- assertr --------
+            Actual: "foo bar baz"
 
-                does not contain
+            does not contain
 
-                Expected: "42"
-                -------- assertr --------
-            "#});
+            Expected: "42"
+            -------- assertr --------
+        "#});
     }
 
     #[test]
@@ -95,8 +95,8 @@ mod tests {
                 .with_location(false)
                 .starts_with("oo");
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo bar baz"
 
@@ -119,8 +119,8 @@ mod tests {
                 .with_location(false)
                 .ends_with("raz");
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo bar baz"
 

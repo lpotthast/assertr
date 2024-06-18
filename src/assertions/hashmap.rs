@@ -10,7 +10,7 @@ impl<'t, K, V> AssertThat<'t, HashMap<K, V>> {
         V: PartialEq + Debug,
     {
         if !self.actual.borrowed().contains_key(&expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\ndoes not contain expected key: {expected:#?}",
                     actual = self.actual.borrowed(),
@@ -26,14 +26,13 @@ impl<'t, K, V> AssertThat<'t, HashMap<K, V>> {
         K: Debug,
         V: PartialEq + Debug,
     {
-        if self
+        if !self
             .actual
             .borrowed()
             .values()
-            .find(|it| *it == &expected)
-            .is_none()
+            .any(|it| *it == expected)
         {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\ndoes not contain expected value: {expected:#?}",
                     actual = self.actual.borrowed(),
@@ -50,7 +49,7 @@ mod tests {
 
     use indoc::formatdoc;
 
-    use crate::{assert_that, assert_that_panic_by};
+    use crate::prelude::*;
 
     #[test]
     fn contains_key_succeeds_when_key_is_present() {
@@ -66,8 +65,8 @@ mod tests {
             map.insert("foo", "bar");
             assert_that(map).with_location(false).contains_key("baz");
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: {{
                     "foo": "bar",
@@ -92,8 +91,8 @@ mod tests {
             map.insert("foo", "bar");
             assert_that(map).with_location(false).contains_value("baz");
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: {{
                     "foo": "bar",

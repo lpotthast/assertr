@@ -1,15 +1,27 @@
 use crate::{failure::GenericFailure, AssertThat};
 use std::fmt::Debug;
 
+pub trait ArrayAssertions<T: Debug> {
+    fn is_empty(self) -> Self;
+
+    fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
+    where
+        T: PartialEq;
+
+    fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
+    where
+        T: PartialEq;
+}
+
 /// Assertions for generic arrays.
-impl<'t, T, const N: usize> AssertThat<'t, [T; N]> {
+impl<'t, T: Debug, const N: usize> ArrayAssertions<T> for AssertThat<'t, [T; N]> {
     #[track_caller]
-    pub fn is_empty(self) -> Self
+    fn is_empty(self) -> Self
     where
         T: Debug,
     {
         if !self.actual.borrowed().as_ref().is_empty() {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",
                     actual = self.actual.borrowed(),
@@ -20,9 +32,9 @@ impl<'t, T, const N: usize> AssertThat<'t, [T; N]> {
     }
 
     #[track_caller]
-    pub fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
+    fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
     where
-        T: PartialEq + Debug,
+        T: PartialEq,
     {
         self.derive(|actual| actual.as_slice())
             .contains_exactly(expected);
@@ -30,9 +42,9 @@ impl<'t, T, const N: usize> AssertThat<'t, [T; N]> {
     }
 
     #[track_caller]
-    pub fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
+    fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
     where
-        T: PartialEq + Debug,
+        T: PartialEq,
     {
         self.derive(|actual| actual.as_slice())
             .contains_exactly_in_any_order(expected);
@@ -55,8 +67,8 @@ mod tests {
     #[test]
     fn is_empty_panics_when_not_empty() {
         assert_that_panic_by(|| assert_that([1, 2, 3]).with_location(false).is_empty())
-            .has_box_type::<String>()
-            .has_debug_value(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: [1, 2, 3]
 
@@ -82,8 +94,8 @@ mod tests {
                 .with_location(false)
                 .contains_exactly([3, 4, 1])
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: [
                     1,
@@ -100,7 +112,43 @@ mod tests {
                 ]
 
                 Details: [
-                    "The order of elements does not match!",
+                    Elements not expected: [
+                        2,
+                    ],
+                    Elements not found: [
+                        4,
+                    ],
+                ]
+                -------- assertr --------
+            "#});
+    }
+
+    #[test]
+    fn contains_exactly_panics_with_detail_message_when_only_differing_in_order() {
+        assert_that_panic_by(|| {
+            assert_that([1, 2, 3])
+                .with_location(false)
+                .contains_exactly([3, 2, 1])
+        })
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Actual: [
+                    1,
+                    2,
+                    3,
+                ],
+
+                did not exactly match
+
+                Expected: [
+                    3,
+                    2,
+                    1,
+                ]
+
+                Details: [
+                    The order of elements does not match!,
                 ]
                 -------- assertr --------
             "#});
@@ -118,8 +166,8 @@ mod tests {
                 .with_location(false)
                 .contains_exactly_in_any_order([2, 3, 4])
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Actual: [
                     1,

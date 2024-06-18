@@ -12,7 +12,7 @@ impl<'t, T: PartialOrd> AssertThat<'t, T> {
         let expected = &expected;
 
         if !(actual < expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not less than\n\nExpected: {expected:#?}"
                 ),
@@ -30,7 +30,7 @@ impl<'t, T: PartialOrd> AssertThat<'t, T> {
         let expected = &expected;
 
         if !(actual > expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not greater than\n\nExpected: {expected:#?}"
                 ),
@@ -48,7 +48,7 @@ impl<'t, T: PartialOrd> AssertThat<'t, T> {
         let expected = &expected;
 
         if !(actual <= expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not less or equal to\n\nExpected: {expected:#?}"
                 ),
@@ -66,7 +66,7 @@ impl<'t, T: PartialOrd> AssertThat<'t, T> {
         let expected = &expected;
 
         if !(actual >= expected) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not greater or equal to\n\nExpected: {expected:#?}"
                 ),

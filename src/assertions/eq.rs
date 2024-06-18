@@ -1,32 +1,36 @@
-use crate::{failure::ExpectedActualFailure, AssertThat};
+use crate::{
+    failure::{ExpectedActualFailure, GenericFailure},
+    AssertThat,
+};
 use std::fmt::Debug;
 
-// General Assertions
-impl<'t, T: PartialEq> AssertThat<'t, T> {
+// Assertions usable when T implements PartialEq.
+pub trait EqualityAssertions<T: PartialEq + Debug> {
+    fn is_equal_to(self, expected: T) -> Self;
+    fn is_not_equal_to(self, expected: T) -> Self;
+}
+
+impl<'t, T: PartialEq + Debug> EqualityAssertions<T> for AssertThat<'t, T> {
     #[track_caller]
-    pub fn is_equal_to(self, expected: T) -> Self
-    where
-        T: Debug,
-    {
+    fn is_equal_to(self, expected: T) -> Self {
         let actual = self.actual.borrowed();
         let expected = &expected;
 
         if actual != expected {
-            self.fail_with(ExpectedActualFailure { expected, actual });
+            self.fail(GenericFailure {
+                arguments: format_args!("Expected: {:#?}\n\n  Actual: {:#?}", expected, actual),
+            });
         }
         self
     }
 
     #[track_caller]
-    pub fn is_not_equal_to(self, expected: T) -> Self
-    where
-        T: Debug,
-    {
+    fn is_not_equal_to(self, expected: T) -> Self {
         let actual = self.actual.borrowed();
         let expected = &expected;
 
         if actual == expected {
-            self.fail_with(ExpectedActualFailure { expected, actual });
+            self.fail(ExpectedActualFailure { expected, actual });
         }
         self
     }
@@ -36,7 +40,7 @@ impl<'t, T: PartialEq> AssertThat<'t, T> {
 mod tests {
     use indoc::formatdoc;
 
-    use crate::{assert_that, assert_that_panic_by};
+    use crate::prelude::*;
 
     #[test]
     fn is_equal_to_succeeds_when_equal() {
@@ -48,12 +52,12 @@ mod tests {
     #[test]
     fn is_equal_to_panics_when_not_equal() {
         assert_that_panic_by(|| assert_that("foo").with_location(false).is_equal_to("bar"))
-            .has_box_type::<String>()
-            .has_debug_value(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expected: "bar"
 
-                Actual: "foo"
+                  Actual: "foo"
                 -------- assertr --------
             "#});
     }

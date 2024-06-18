@@ -23,12 +23,12 @@ mod tests {
 
     impl<'t> PersonAssertions for AssertThat<'t, Person> {
         fn has_age(self, expected: u32) -> Self {
-            assert_that(self.actual().age).is_equal_to(expected);
+            self.derive(|p| p.age).is_equal_to(expected);
             self
         }
 
         fn is_alive(self) -> Self {
-            assert_that(self.actual().meta.alive).is_true();
+            self.derive(|p| p.meta.alive).is_true();
             self
         }
     }

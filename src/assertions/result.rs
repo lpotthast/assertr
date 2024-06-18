@@ -13,7 +13,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>> {
         E: Debug,
     {
         if !self.actual.borrowed().is_ok() {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Result:Ok",
                     actual = self.actual.borrowed()
@@ -37,7 +37,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>> {
         E: Debug,
     {
         if !self.actual.borrowed().is_err() {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Result:Err",
                     actual = self.actual.borrowed()
@@ -56,7 +56,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>> {
 mod tests {
     use indoc::formatdoc;
 
-    use crate::{assert_that, assert_that_panic_by};
+    use crate::prelude::*;
 
     #[test]
     fn is_ok_succeeds_when_ok() {
@@ -70,8 +70,8 @@ mod tests {
                 .with_location(false)
                 .is_ok();
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: Err(
                     "someError",
@@ -94,8 +94,8 @@ mod tests {
                 .with_location(false)
                 .is_err();
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: Ok(
                     42,

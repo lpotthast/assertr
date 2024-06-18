@@ -12,7 +12,7 @@ impl<'t, T> AssertThat<'t, Option<T>> {
         T: Debug,
     {
         if !self.actual.borrowed().is_some() {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Option:Some",
                     actual = self.actual.borrowed()
@@ -35,7 +35,7 @@ impl<'t, T> AssertThat<'t, Option<T>> {
         T: Debug,
     {
         if !self.actual.borrowed().is_none() {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Option:None",
                     actual = self.actual.borrowed()
@@ -51,7 +51,7 @@ impl<'t, T> AssertThat<'t, Option<T>> {
 mod tests {
     use indoc::formatdoc;
 
-    use crate::{assert_that, assert_that_panic_by};
+    use crate::prelude::*;
 
     #[test]
     fn test_option_is_some() {
@@ -70,8 +70,8 @@ mod tests {
                 .with_location(false)
                 .is_none()
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Actual: Some(
                     42,

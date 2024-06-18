@@ -6,7 +6,7 @@ impl<'t> AssertThat<'t, &str> {
     #[track_caller]
     pub fn is_empty(&self) {
         if !self.actual.borrowed().is_empty() {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",
                     actual = self.actual.borrowed(),
@@ -18,7 +18,7 @@ impl<'t> AssertThat<'t, &str> {
     #[track_caller]
     pub fn contains<E: AsRef<str> + Debug>(&self, expected: E) {
         if !self.actual.borrowed().contains(expected.as_ref()) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\ndoes not contain\n\nExpected: {expected:?}",
                     actual = self.actual.borrowed(),
@@ -31,7 +31,7 @@ impl<'t> AssertThat<'t, &str> {
     #[track_caller]
     pub fn starts_with<E: AsRef<str> + Debug>(&self, expected: E) {
         if !self.actual.borrowed().starts_with(expected.as_ref()) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\ndoes not start with\n\nExpected: {expected:?}",
                     actual = self.actual.borrowed(),
@@ -44,7 +44,7 @@ impl<'t> AssertThat<'t, &str> {
     #[track_caller]
     pub fn ends_with<E: AsRef<str> + Debug>(&self, expected: E) {
         if !self.actual.borrowed().ends_with(expected.as_ref()) {
-            self.fail_with(GenericFailure {
+            self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\ndoes not end with\n\nExpected: {expected:?}",
                     actual = self.actual.borrowed(),
@@ -59,7 +59,7 @@ impl<'t> AssertThat<'t, &str> {
 mod tests {
     use indoc::formatdoc;
 
-    use crate::{assert_that, assert_that_panic_by};
+    use crate::prelude::*;
 
     #[test]
     fn is_empty_succeeds_when_empty() {
@@ -71,8 +71,8 @@ mod tests {
         assert_that_panic_by(|| {
             assert_that("foo").with_location(false).is_empty();
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo"
 
@@ -95,8 +95,8 @@ mod tests {
                 .with_location(false)
                 .contains("42");
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo bar baz"
 
@@ -119,8 +119,8 @@ mod tests {
                 .with_location(false)
                 .starts_with("oo");
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo bar baz"
 
@@ -143,8 +143,8 @@ mod tests {
                 .with_location(false)
                 .ends_with("raz");
         })
-        .has_box_type::<String>()
-        .has_debug_value(formatdoc! {r#"
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo bar baz"
 

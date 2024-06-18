@@ -1,12 +1,12 @@
 use std::fmt::{Debug, Display};
 
-pub trait Failure: Display {}
+pub trait Failure<'a>: Display {}
 
 pub struct GenericFailure<'a> {
     pub arguments: std::fmt::Arguments<'a>,
 }
 
-impl<'a> Failure for GenericFailure<'a> {}
+impl<'a> Failure<'a> for GenericFailure<'a> {}
 
 impl<'a> Display for GenericFailure<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -19,7 +19,7 @@ pub struct ExpectedActualFailure<'e, 'a, E: Debug, A: Debug> {
     pub actual: &'a A,
 }
 
-impl<'e, 'a, E: Debug, A: Debug> Failure for ExpectedActualFailure<'e, 'a, E, A> {}
+impl<'f, 'e, 'a, E: Debug, A: Debug> Failure<'f> for ExpectedActualFailure<'e, 'a, E, A> {}
 
 impl<'e, 'a, E: Debug, A: Debug> Display for ExpectedActualFailure<'e, 'a, E, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
