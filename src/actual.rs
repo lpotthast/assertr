@@ -14,7 +14,7 @@ impl<'t, T> Actual<'t, T> {
         }
     }
 
-    pub fn borrowed(&'t self) -> &'t T {
+    pub fn borrowed(&self) -> &T {
         match self {
             Actual::Borrowed(t) => t,
             Actual::Owned(t) => t,

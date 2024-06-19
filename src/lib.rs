@@ -24,16 +24,15 @@ pub mod prelude {
     pub use crate::assertions::boxed;
     pub use crate::assertions::debug;
     pub use crate::assertions::display;
-    pub use crate::assertions::eq;
-    pub use crate::assertions::eq::EqualityAssertions;
     pub use crate::assertions::hashmap;
     pub use crate::assertions::iter;
     pub use crate::assertions::iter::IntoIteratorAssertions;
     pub use crate::assertions::mutex;
     pub use crate::assertions::option;
-    pub use crate::assertions::ord;
     pub use crate::assertions::panic_value;
     pub use crate::assertions::panic_value::PanicValueAssertions;
+    pub use crate::assertions::partial_eq;
+    pub use crate::assertions::partial_ord;
     pub use crate::assertions::path;
     pub use crate::assertions::range;
     pub use crate::assertions::ref_cell;
@@ -177,6 +176,15 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             failures: self.failures,
             mode: self.mode,
         }
+    }
+
+    pub fn satisfies<'u, U: 'u, Ignored>(
+        self,
+        mapper: impl FnOnce(&T) -> U,
+        assertions: impl FnOnce(AssertThat<'u, U, M>) -> Ignored,
+    ) -> Self {
+        assertions(self.derive(mapper));
+        self
     }
 
     /// Gives the `actual` value contain in this assertion a descriptive name.

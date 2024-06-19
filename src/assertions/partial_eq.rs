@@ -4,15 +4,9 @@ use crate::{
 };
 use std::fmt::Debug;
 
-// Assertions usable when T implements PartialEq.
-pub trait EqualityAssertions<T: PartialEq + Debug> {
-    fn is_equal_to(self, expected: T) -> Self;
-    fn is_not_equal_to(self, expected: T) -> Self;
-}
-
-impl<'t, T: PartialEq + Debug, M: Mode> EqualityAssertions<T> for AssertThat<'t, T, M> {
+impl<'t, T: PartialEq + Debug, M: Mode> AssertThat<'t, T, M> {
     #[track_caller]
-    fn is_equal_to(self, expected: T) -> Self {
+    pub fn is_equal_to(self, expected: T) -> Self {
         let actual = self.actual();
         let expected = &expected;
 
@@ -25,7 +19,7 @@ impl<'t, T: PartialEq + Debug, M: Mode> EqualityAssertions<T> for AssertThat<'t,
     }
 
     #[track_caller]
-    fn is_not_equal_to(self, expected: T) -> Self {
+    pub fn is_not_equal_to(self, expected: T) -> Self {
         let actual = self.actual();
         let expected = &expected;
 
