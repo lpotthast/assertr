@@ -1,7 +1,7 @@
-use crate::AssertThat;
+use crate::{AssertThat, Mode};
 use std::fmt::Debug;
 
-impl<'t, T: Debug> AssertThat<'t, Vec<T>> {
+impl<'t, T: Debug, M: Mode> AssertThat<'t, Vec<T>, M> {
     #[track_caller]
     pub fn is_empty(self) -> Self {
         self.derive(|it| it.as_slice()).is_empty();

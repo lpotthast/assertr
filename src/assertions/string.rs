@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
-use crate::AssertThat;
+use crate::{AssertThat, Mode};
 
 // Assertions for Strings.
-impl<'t> AssertThat<'t, String> {
+impl<'t, M: Mode> AssertThat<'t, String, M> {
     #[track_caller]
     pub fn is_empty(self) -> Self {
         self.derive(|actual| actual.as_str()).is_empty();

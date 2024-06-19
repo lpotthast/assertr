@@ -1,19 +1,19 @@
-use crate::{failure::GenericFailure, AssertThat};
+use crate::{failure::GenericFailure, AssertThat, Mode};
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 /// Assertions for generic maps.
-impl<'t, K, V> AssertThat<'t, HashMap<K, V>> {
+impl<'t, K, V, M: Mode> AssertThat<'t, HashMap<K, V>, M> {
     #[track_caller]
     pub fn contains_key(self, expected: K) -> Self
     where
         K: Eq + Hash + Debug,
         V: PartialEq + Debug,
     {
-        if !self.actual.borrowed().contains_key(&expected) {
+        if !self.actual().borrowed().contains_key(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\ndoes not contain expected key: {expected:#?}",
-                    actual = self.actual.borrowed(),
+                    actual = self.actual().borrowed(),
                 ),
             });
         }
@@ -26,16 +26,11 @@ impl<'t, K, V> AssertThat<'t, HashMap<K, V>> {
         K: Debug,
         V: PartialEq + Debug,
     {
-        if !self
-            .actual
-            .borrowed()
-            .values()
-            .any(|it| *it == expected)
-        {
+        if !self.actual().borrowed().values().any(|it| *it == expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\ndoes not contain expected value: {expected:#?}",
-                    actual = self.actual.borrowed(),
+                    actual = self.actual().borrowed(),
                 ),
             });
         }

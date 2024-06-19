@@ -1,11 +1,12 @@
+use crate::Mode;
 use crate::{failure::GenericFailure, AssertThat};
 use std::fmt::Debug;
 use std::sync::Mutex;
 
-impl<'t, T: Debug> AssertThat<'t, Mutex<T>> {
+impl<'t, T: Debug, M: Mode> AssertThat<'t, Mutex<T>, M> {
     #[track_caller]
     pub fn is_locked(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if let Ok(guard) = actual.try_lock() {
             self.fail(GenericFailure {
                 arguments: format_args!("Expected: Mutex {{ data: {guard:#?}, poisoned: {poisoned} }} \n\nto be locked, but it wasn't!",
@@ -17,7 +18,7 @@ impl<'t, T: Debug> AssertThat<'t, Mutex<T>> {
 
     #[track_caller]
     pub fn is_not_locked(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if let Err(_err) = actual.try_lock() {
             self.fail(GenericFailure {
                 arguments: format_args!("Expected: Mutex {{ data: <locked>, poisoned: {poisoned} }} \n\nto not be locked, but it was!",

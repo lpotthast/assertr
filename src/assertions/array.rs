@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, AssertThat};
+use crate::{failure::GenericFailure, AssertThat, Mode};
 use std::fmt::Debug;
 
 pub trait ArrayAssertions<T: Debug> {
@@ -14,17 +14,17 @@ pub trait ArrayAssertions<T: Debug> {
 }
 
 /// Assertions for generic arrays.
-impl<'t, T: Debug, const N: usize> ArrayAssertions<T> for AssertThat<'t, [T; N]> {
+impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'t, [T; N], M> {
     #[track_caller]
     fn is_empty(self) -> Self
     where
         T: Debug,
     {
-        if !self.actual.borrowed().as_ref().is_empty() {
+        if !self.actual().borrowed().as_ref().is_empty() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",
-                    actual = self.actual.borrowed(),
+                    actual = self.actual().borrowed(),
                 ),
             });
         }

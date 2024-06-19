@@ -1,12 +1,13 @@
+use crate::Mode;
 use crate::{failure::GenericFailure, AssertThat};
 use std::cell::RefCell;
 use std::fmt::Debug;
 
-impl<'t, T: Debug> AssertThat<'t, RefCell<T>> {
+impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
     /// Check that the RefCell is immutably or mutably borrowed.
     #[track_caller]
     pub fn is_borrowed(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
 
         if actual.try_borrow_mut().is_ok() {
             self.fail(GenericFailure {
@@ -21,7 +22,7 @@ impl<'t, T: Debug> AssertThat<'t, RefCell<T>> {
     /// Check that the RefCell is mutably borrowed.
     #[track_caller]
     pub fn is_mutably_borrowed(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
 
         if actual.try_borrow().is_ok() {
             self.fail(GenericFailure {
@@ -36,7 +37,7 @@ impl<'t, T: Debug> AssertThat<'t, RefCell<T>> {
     /// Check that the RefCell is not mutably borrowed, wither by being not borrowed at all, or only borrowed immutably.
     #[track_caller]
     pub fn is_not_mutably_borrowed(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
 
         if actual.try_borrow_mut().is_ok() {
             self.fail(GenericFailure {

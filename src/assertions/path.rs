@@ -1,12 +1,12 @@
-use crate::{failure::GenericFailure, AssertThat};
+use crate::{failure::GenericFailure, AssertThat, Mode};
 use std::path::Path;
 
 // TODO: PathBuf
 
-impl<'t> AssertThat<'t, &Path> {
+impl<'t, M: Mode> AssertThat<'t, &Path, M> {
     #[track_caller]
     pub fn exists(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if !actual.exists() {
             self.fail(GenericFailure {
                 arguments: format_args!("Expected: {actual:#?}\n\nto exist, but it does not!"),
@@ -17,7 +17,7 @@ impl<'t> AssertThat<'t, &Path> {
 
     #[track_caller]
     pub fn does_not_exist(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if actual.exists() {
             self.fail(GenericFailure {
                 arguments: format_args!("Expected: {actual:#?}\n\nto not exist, but it does!"),
@@ -28,7 +28,7 @@ impl<'t> AssertThat<'t, &Path> {
 
     #[track_caller]
     pub fn is_a_file(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if !actual.is_file() {
             self.fail(GenericFailure {
                 arguments: format_args!("Expected: {actual:#?}\n\nto be a file, but it is not!"),
@@ -39,7 +39,7 @@ impl<'t> AssertThat<'t, &Path> {
 
     #[track_caller]
     pub fn is_a_directory(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if !actual.is_dir() {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -52,7 +52,7 @@ impl<'t> AssertThat<'t, &Path> {
 
     #[track_caller]
     pub fn is_a_symlink(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if !actual.is_symlink() {
             self.fail(GenericFailure {
                 arguments: format_args!("Expected: {actual:#?}\n\nto be a symlink, but it is not!"),
@@ -63,7 +63,7 @@ impl<'t> AssertThat<'t, &Path> {
 
     #[track_caller]
     pub fn has_a_root(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if !actual.has_root() {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -76,7 +76,7 @@ impl<'t> AssertThat<'t, &Path> {
 
     #[track_caller]
     pub fn is_relative(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         if !actual.is_relative() {
             self.fail(GenericFailure {
                 arguments: format_args!(

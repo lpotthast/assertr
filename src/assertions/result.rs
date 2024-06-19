@@ -1,22 +1,22 @@
-use crate::{actual::Actual, failure::GenericFailure, AssertThat};
+use crate::{actual::Actual, failure::GenericFailure, AssertThat, Mode};
 use std::fmt::Debug;
 
 // Assertions for generic result values.
-impl<'t, T, E> AssertThat<'t, Result<T, E>> {
+impl<'t, T, E, M: Mode> AssertThat<'t, Result<T, E>, M> {
     /// This is a terminal operation on the contained `Result`,
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
     #[track_caller]
-    pub fn is_ok(self) -> AssertThat<'t, T>
+    pub fn is_ok(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
         E: Debug,
     {
-        if !self.actual.borrowed().is_ok() {
+        if !self.actual().borrowed().is_ok() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Result:Ok",
-                    actual = self.actual.borrowed()
+                    actual = self.actual().borrowed()
                 ),
             });
         }
@@ -31,16 +31,16 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>> {
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained error value.
     #[track_caller]
-    pub fn is_err(self) -> AssertThat<'t, E>
+    pub fn is_err(self) -> AssertThat<'t, E, M>
     where
         T: Debug,
         E: Debug,
     {
-        if !self.actual.borrowed().is_err() {
+        if !self.actual().borrowed().is_err() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Result:Err",
-                    actual = self.actual.borrowed()
+                    actual = self.actual().borrowed()
                 ),
             });
         }

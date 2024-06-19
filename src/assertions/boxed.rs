@@ -1,21 +1,18 @@
-use std::{
-    any::{Any, TypeId},
-    mem::ManuallyDrop,
-};
+use std::any::{Any, TypeId};
 
-use crate::{failure::GenericFailure, AssertThat};
+use crate::{failure::GenericFailure, AssertThat, Mode};
 
 /// Assertions for boxed values.
-impl<'t> AssertThat<'t, Box<dyn Any>> {
+impl<'t, M: Mode> AssertThat<'t, Box<dyn Any>, M> {
     /// If this fails in capturing mode, a panic is raised!
     #[track_caller]
-    pub fn has_type_ref<E>(&'t self) -> AssertThat<'t, Box<&'t E>>
+    pub fn has_type_ref<E>(&'t self) -> AssertThat<'t, &'t E, M>
     where
         E: 'static,
     {
-        let any = self.actual.borrowed();
+        let any = self.actual().borrowed();
         match any.downcast_ref::<E>() {
-            Some(casted) => self.derive(|_actual| Box::new(casted)),
+            Some(casted) => self.derive(|_actual| casted),
             None => {
                 self.fail(GenericFailure {
                     arguments: format_args!(
@@ -24,34 +21,49 @@ impl<'t> AssertThat<'t, Box<dyn Any>> {
                         expected_type_id = TypeId::of::<E>(),
                     ),
                 });
-                panic!("Cannot continue in capturing mode!");
+                panic!("Cannot continue in capturing mode!"); // TODO: Consider typestates!
             }
         }
     }
 
     /// If this fails in capturing mode, a panic is raised!
     #[track_caller]
-    pub fn has_type<E: 'static>(mut self) -> AssertThat<'t, E> {
-        let any: Box<dyn Any> = unsafe {
-            // Safety: AssertThat's Drop impl does not use this field.
-            ManuallyDrop::take(&mut self.actual).unwrap_owned()
-        };
+    pub fn has_type<E: 'static>(self) -> AssertThat<'t, E, M> {
+        // TODO: Remove unsafe!
+        let any: Box<dyn Any> = self.actual.unwrap_owned();
+
         match any.downcast::<E>() {
-            Ok(casted) => self.map_with_actual_already_taken(move || (*casted).into()),
+            Ok(casted) => {
+                AssertThat {
+                    actual: (*casted).into(),
+                    subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+                    detail_messages: self.detail_messages,
+                    print_location: self.print_location,
+                    failures: self.failures,
+                    mode: self.mode,
+                }
+            }
             Err(err) => {
-                self.map_with_actual_already_taken(move || err.into())
-                    .with_detail_message(format!(
-                        "Panic value was not of type '{expected_type_name}'",
-                        expected_type_name = std::any::type_name::<E>()
-                    ))
-                    .fail(GenericFailure {
-                        arguments: format_args!(
-                            "is not of expected type: {expected_type_name} ({expected_type_id:?})",
-                            expected_type_name = std::any::type_name::<E>(),
-                            expected_type_id = TypeId::of::<E>(),
-                        ),
-                    });
-                panic!("Cannot continue in capturing mode!");
+                AssertThat {
+                    actual: err.into(),
+                    subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+                    detail_messages: self.detail_messages,
+                    print_location: self.print_location,
+                    failures: self.failures,
+                    mode: self.mode,
+                }
+                .with_detail_message(format!(
+                    "Panic value was not of type '{expected_type_name}'",
+                    expected_type_name = std::any::type_name::<E>()
+                ))
+                .fail(GenericFailure {
+                    arguments: format_args!(
+                        "is not of expected type: {expected_type_name} ({expected_type_id:?})",
+                        expected_type_name = std::any::type_name::<E>(),
+                        expected_type_id = TypeId::of::<E>(),
+                    ),
+                });
+                panic!("Cannot continue in capturing mode!"); // TODO: Consider typestates!
             }
         }
     }

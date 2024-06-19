@@ -1,21 +1,21 @@
 use crate::{
     failure::{ExpectedActualFailure, GenericFailure},
-    AssertThat,
+    AssertThat, Mode,
 };
 use std::fmt::Debug;
 
 // Assertions for generic slices.
-impl<'t, T> AssertThat<'t, &[T]> {
+impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     #[track_caller]
     pub fn is_empty(self) -> Self
     where
         T: Debug,
     {
-        if !self.actual.borrowed().as_ref().is_empty() {
+        if !self.actual().borrowed().as_ref().is_empty() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",
-                    actual = self.actual.borrowed(),
+                    actual = self.actual().borrowed(),
                 ),
             });
         }
@@ -28,7 +28,7 @@ impl<'t, T> AssertThat<'t, &[T]> {
     where
         T: Debug,
     {
-        let actual = self.actual.borrowed().as_ref().len();
+        let actual = self.actual().borrowed().as_ref().len();
         if actual != expected {
             self = self.with_detail_message("Slice was not of expected length!");
             self.fail(ExpectedActualFailure {
@@ -51,7 +51,7 @@ impl<'t, T> AssertThat<'t, &[T]> {
         EE: AsRef<[E]>,
         T: PartialEq<E> + Debug,
     {
-        let actual = *self.actual.borrowed();
+        let actual = *self.actual().borrowed();
         let expected = expected.as_ref();
 
         let result = crate::util::slice::compare(actual, expected);
@@ -70,7 +70,7 @@ impl<'t, T> AssertThat<'t, &[T]> {
                 self.add_detail_message("The order of elements does not match!");
             }
 
-            let actual = self.actual.borrowed();
+            let actual = self.actual().borrowed();
 
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -86,7 +86,7 @@ impl<'t, T> AssertThat<'t, &[T]> {
     where
         T: PartialEq + Debug,
     {
-        let actual: &[T] = self.actual.borrowed();
+        let actual: &[T] = self.actual().borrowed();
         let expected: &[T] = expected.as_ref();
 
         let mut elements_found = Vec::new();

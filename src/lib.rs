@@ -1,4 +1,9 @@
-use std::{any::Any, cell::RefCell, fmt::Debug, mem::ManuallyDrop, panic::UnwindSafe};
+use std::{
+    any::{Any, TypeId},
+    cell::RefCell,
+    fmt::Debug,
+    panic::UnwindSafe,
+};
 
 use actual::Actual;
 use failure::Failure;
@@ -42,7 +47,7 @@ pub mod prelude {
     pub use crate::AssertThat;
 }
 
-pub struct PanicValue(Box<dyn Any + Send>);
+pub struct PanicValue(Box<dyn Any>);
 
 struct DetailMessages<'a>(&'a [String]);
 
@@ -62,15 +67,36 @@ impl<'a> Debug for DetailMessages<'a> {
     }
 }
 
+pub trait Mode: Default + Clone + 'static {
+    fn is_capture(&self) -> bool {
+        TypeId::of::<Self>() == TypeId::of::<Capture>()
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct FailFast;
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct FailLate;
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct Capture {
+    captured: bool,
+}
+
+impl Mode for FailFast {}
+impl Mode for FailLate {}
+impl Mode for Capture {}
+
 #[track_caller]
-pub fn assert_that<'t, T, A: Into<Actual<'t, T>>>(actual: A) -> AssertThat<'t, T> {
+pub fn assert_that<'t, T, A: Into<Actual<'t, T>>>(actual: A) -> AssertThat<'t, T, FailFast> {
     AssertThat::new(actual.into())
 }
 
 #[track_caller]
 pub fn assert_that_panic_by<'t, F: FnOnce() -> R + UnwindSafe, R>(
     fun: F,
-) -> AssertThat<'t, PanicValue> {
+) -> AssertThat<'t, PanicValue, FailFast> {
     assert_that(std::panic::catch_unwind(move || {
         fun();
     }))
@@ -79,20 +105,21 @@ pub fn assert_that_panic_by<'t, F: FnOnce() -> R + UnwindSafe, R>(
     .map(|it| PanicValue(it.unwrap_owned()).into())
 }
 
-pub struct AssertThat<'t, T> {
-    actual: ManuallyDrop<Actual<'t, T>>,
+pub struct AssertThat<'t, T, M: Mode> {
+    actual: Actual<'t, T>,
 
-    subject_name: ManuallyDrop<Option<String>>,
-    detail_messages: ManuallyDrop<RefCell<Vec<String>>>,
+    subject_name: Option<String>,
+    detail_messages: RefCell<Vec<String>>,
     print_location: bool,
-    capture: bool,
-    failures: ManuallyDrop<RefCell<Vec<String>>>,
-    failures_captured: bool,
+    failures: RefCell<Vec<String>>,
+
+    mode: M,
 }
 
-impl<'t, T> Drop for AssertThat<'t, T> {
+// Drop cannot be specialized...
+impl Drop for Capture {
     fn drop(&mut self) {
-        if self.capture && !self.failures_captured {
+        if !self.captured {
             // Note: We cannot print the actual value, as we cannot add bounds to T,
             // as this would render this Drop implementation not being called for all AssertThat's!
             panic!("{}", String::from("You dropped an `assert_that(..)` value, on which `.with_capture(true)` was called, without actually capturing the assertions failures using `.capture_failures()`!"));
@@ -100,95 +127,67 @@ impl<'t, T> Drop for AssertThat<'t, T> {
     }
 }
 
-impl<'t, T> AssertThat<'t, T> {
+impl<'t, T> AssertThat<'t, T, FailFast> {
     #[track_caller]
     pub(crate) fn new(actual: Actual<'t, T>) -> Self {
         AssertThat {
-            actual: ManuallyDrop::new(actual),
-            subject_name: ManuallyDrop::new(None),
-            detail_messages: ManuallyDrop::new(RefCell::new(Vec::new())),
+            actual,
+            subject_name: None,
+            detail_messages: RefCell::new(Vec::new()),
             print_location: true,
-            capture: false,
-            failures: ManuallyDrop::new(RefCell::new(Vec::new())),
-            failures_captured: false,
+            failures: RefCell::new(Vec::new()),
+            mode: FailFast,
         }
     }
+}
 
-    pub fn derive<U>(&'t self, mapper: impl FnOnce(&'t T) -> U) -> AssertThat<'t, U> {
-        AssertThat {
-            actual: ManuallyDrop::new(Actual::Owned(mapper(self.actual.borrowed()))),
-            subject_name: ManuallyDrop::new(None), // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
-            detail_messages: ManuallyDrop::new(RefCell::new(Vec::new())), // TODO: keep messages?
-            print_location: self.print_location,
-            capture: self.capture,
-            failures: ManuallyDrop::new(RefCell::new(Vec::new())), // TODO: keep failures?
-            failures_captured: false,
-        }
+impl<'t, T> AssertThat<'t, T, Capture> {
+    #[must_use]
+    pub fn capture_failures(mut self) -> Vec<String> {
+        self.mode.captured = true;
+        self.failures.take()
+    }
+}
+
+impl<'t, T, M: Mode> AssertThat<'t, T, M> {
+    pub fn actual(&self) -> &Actual<T> {
+        &self.actual
     }
 
-    pub(crate) fn map_with_actual_already_taken<U>(
-        mut self,
-        mapper: impl FnOnce() -> Actual<'t, U>,
-    ) -> AssertThat<'t, U> {
-        let failures_captured = self.failures_captured;
-        self.failures_captured = true; // Avoid panic on drop of self!
+    pub fn actual_ref(&self) -> &T {
+        self.actual().borrowed()
+    }
 
+    pub fn derive<'u, U>(&'t self, mapper: impl FnOnce(&'t T) -> U) -> AssertThat<'u, U, M> {
         AssertThat {
-            actual: ManuallyDrop::new(mapper()),
-            subject_name: ManuallyDrop::new(None), // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
-            detail_messages: unsafe {
-                // Safety: AssertThat's Drop impl does not use this field.
-                ManuallyDrop::new(ManuallyDrop::take(&mut self.detail_messages))
-            },
+            actual: Actual::Owned(mapper(self.actual().borrowed())),
+            subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: RefCell::new(Vec::new()), // TODO: keep messages?
             print_location: self.print_location,
-            capture: self.capture,
-            failures: unsafe {
-                // Safety: AssertThat's Drop impl does not use this field.
-                ManuallyDrop::new(ManuallyDrop::take(&mut self.failures))
-            },
-            failures_captured,
+            failures: RefCell::new(Vec::new()), // TODO: keep failures?
+            mode: self.mode.clone(),            // Clone safe?
         }
     }
 
     pub(crate) fn map<U>(
-        mut self,
+        self,
         mapper: impl FnOnce(Actual<T>) -> Actual<U>,
-    ) -> AssertThat<'t, U> {
-        let failures_captured = self.failures_captured;
-        self.failures_captured = true; // Avoid panic on drop of self!
-
+    ) -> AssertThat<'t, U, M> {
         AssertThat {
-            actual: unsafe {
-                // Safety: AssertThat's Drop impl does not use this field.
-                ManuallyDrop::new(mapper(ManuallyDrop::take(&mut self.actual)))
-            },
-            subject_name: unsafe {
-                // Safety: AssertThat's Drop impl does not use this field.
-                ManuallyDrop::new(ManuallyDrop::take(&mut self.subject_name))
-            }, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
-            detail_messages: unsafe {
-                // Safety: AssertThat's Drop impl does not use this field.
-                ManuallyDrop::new(ManuallyDrop::take(&mut self.detail_messages))
-            },
+            actual: mapper(self.actual),
+            subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: self.detail_messages,
             print_location: self.print_location,
-            capture: self.capture,
-            failures: unsafe {
-                // Safety: AssertThat's Drop impl does not use this field.
-                ManuallyDrop::new(ManuallyDrop::take(&mut self.failures))
-            },
-            failures_captured,
+            failures: self.failures,
+            mode: self.mode,
         }
-    }
-
-    pub fn actual(&'t self) -> &'t T {
-        self.actual.borrowed()
     }
 
     /// Gives the `actual` value contain in this assertion a descriptive name.
     /// This name will be part of panic messages when set.
     #[allow(dead_code)]
     pub fn with_subject_name(mut self, subject_name: impl Into<String>) -> Self {
-        *self.subject_name = Some(subject_name.into());
+        self.subject_name = Some(subject_name.into());
         self
     }
 
@@ -216,10 +215,10 @@ impl<'t, T> AssertThat<'t, T> {
     /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
     #[allow(dead_code)]
-    pub fn with_conditional_detail_message<M: Into<String> + 'static>(
+    pub fn with_conditional_detail_message<DM: Into<String> + 'static>(
         self,
         condition: bool,
-        message_provider: impl Fn(&Self) -> M,
+        message_provider: impl Fn(&Self) -> DM,
     ) -> Self {
         if condition {
             let message = message_provider(&self);
@@ -233,9 +232,15 @@ impl<'t, T> AssertThat<'t, T> {
     /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
     #[allow(dead_code)]
-    pub fn with_capture(mut self, value: bool) -> Self {
-        self.capture = value;
-        self
+    pub fn with_capture(self) -> AssertThat<'t, T, Capture> {
+        AssertThat {
+            actual: self.actual,
+            subject_name: self.subject_name,
+            detail_messages: self.detail_messages,
+            print_location: self.print_location,
+            failures: self.failures,
+            mode: Capture { captured: false },
+        }
     }
 
     /// Control wether the location is shown on assertion failure.
@@ -300,16 +305,10 @@ impl<'t, T> AssertThat<'t, T> {
             },
         };
 
-        match self.capture {
+        match self.mode.is_capture() {
             true => self.failures.borrow_mut().push(err),
             false => panic!("{err}"),
         };
-    }
-
-    #[must_use]
-    pub fn capture_failures(mut self) -> Vec<String> {
-        self.failures_captured = true;
-        self.failures.take()
     }
 }
 
@@ -323,7 +322,7 @@ mod tests {
     fn with_capture_yields_failures_and_does_not_panic() {
         let failures = assert_that(42)
             .with_location(false)
-            .with_capture(true)
+            .with_capture()
             .is_greater_than(100)
             .is_equal_to(1)
             .capture_failures();
@@ -354,7 +353,7 @@ mod tests {
     fn dropping_a_capturing_assert_panics_when_failures_occurred_which_were_not_captured() {
         let assert = assert_that(42)
             .with_location(false)
-            .with_capture(true)
+            .with_capture()
             .is_equal_to(43);
 
         assert_that_panic_by(move || drop(assert))

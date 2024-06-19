@@ -1,10 +1,10 @@
-use crate::{failure::ExpectedActualFailure, AssertThat};
+use crate::{failure::ExpectedActualFailure, AssertThat, Mode};
 
 /// Assertions for booleans.
-impl<'t> AssertThat<'t, bool> {
+impl<'t, M: Mode> AssertThat<'t, bool, M> {
     #[track_caller]
     pub fn is_true(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         let expected = &true;
         if actual != expected {
             self.fail(ExpectedActualFailure { expected, actual });
@@ -14,7 +14,7 @@ impl<'t> AssertThat<'t, bool> {
 
     #[track_caller]
     pub fn is_false(self) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         let expected = &false;
         if actual != expected {
             self.fail(ExpectedActualFailure { expected, actual });

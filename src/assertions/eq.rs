@@ -1,6 +1,6 @@
 use crate::{
     failure::{ExpectedActualFailure, GenericFailure},
-    AssertThat,
+    AssertThat, Mode,
 };
 use std::fmt::Debug;
 
@@ -10,10 +10,10 @@ pub trait EqualityAssertions<T: PartialEq + Debug> {
     fn is_not_equal_to(self, expected: T) -> Self;
 }
 
-impl<'t, T: PartialEq + Debug> EqualityAssertions<T> for AssertThat<'t, T> {
+impl<'t, T: PartialEq + Debug, M: Mode> EqualityAssertions<T> for AssertThat<'t, T, M> {
     #[track_caller]
     fn is_equal_to(self, expected: T) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         let expected = &expected;
 
         if actual != expected {
@@ -26,7 +26,7 @@ impl<'t, T: PartialEq + Debug> EqualityAssertions<T> for AssertThat<'t, T> {
 
     #[track_caller]
     fn is_not_equal_to(self, expected: T) -> Self {
-        let actual = self.actual.borrowed();
+        let actual = self.actual().borrowed();
         let expected = &expected;
 
         if actual == expected {

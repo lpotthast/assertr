@@ -12,6 +12,7 @@ struct Metadata {
 #[cfg(test)]
 mod tests {
     use assertr::prelude::*;
+    use assertr::Mode;
 
     use crate::Metadata;
     use crate::Person;
@@ -21,7 +22,7 @@ mod tests {
         fn is_alive(self) -> Self;
     }
 
-    impl<'t> PersonAssertions for AssertThat<'t, Person> {
+    impl<'t, M: Mode> PersonAssertions for AssertThat<'t, Person, M> {
         fn has_age(self, expected: u32) -> Self {
             self.derive(|p| p.age).is_equal_to(expected);
             self
