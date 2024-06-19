@@ -9,10 +9,9 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, Vec<T>, M> {
     }
 
     #[track_caller]
-    pub fn contains_exactly<E, EE>(self, expected: EE) -> Self
+    pub fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         E: Debug + 't,
-        EE: AsRef<[E]>,
         T: PartialEq<E> + Debug,
     {
         self.derive(|it| it.as_slice()).contains_exactly(expected);

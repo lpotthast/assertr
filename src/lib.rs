@@ -67,35 +67,64 @@ impl<'a> Debug for DetailMessages<'a> {
 }
 
 pub trait Mode: Default + Clone + 'static {
+    fn is_panic(&self) -> bool {
+        TypeId::of::<Self>() == TypeId::of::<Panic>()
+    }
+
     fn is_capture(&self) -> bool {
         TypeId::of::<Self>() == TypeId::of::<Capture>()
     }
+
+    fn set_derived(&mut self);
 }
 
+/// Panic mode. When an assertions fails, a panic message is raised and the program terminates immediately.
+/// Subsequent assertions after a failure are therefore not executed.
+/// This is the default mode and allows an AssertThat to be mapped to a different type with a condition,
+/// failing when that condition cannot be met.
+/// A good example for that is `assert_that(Err("foo")).is_err().is_equal_to("foo")`, where the `is_err`
+/// implementation can map the contained actual value to the errors error value and allow for simpler chaining of assertions.
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct FailFast;
-
-#[derive(Debug, Default, PartialEq, Clone)]
-pub struct FailLate;
+pub struct Panic {
+    derived: bool,
+}
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Capture {
+    derived: bool,
     captured: bool,
 }
 
-impl Mode for FailFast {}
-impl Mode for FailLate {}
-impl Mode for Capture {}
+impl Mode for Panic {
+    fn set_derived(&mut self) {
+        self.derived = true;
+    }
+}
+impl Mode for Capture {
+    fn set_derived(&mut self) {
+        self.derived = true;
+    }
+}
+
+impl Drop for Capture {
+    fn drop(&mut self) {
+        if !self.captured && !self.derived {
+            // Note: We cannot print the actual value, as we cannot add bounds to T,
+            // as this would render this Drop implementation not being called for all AssertThat's!
+            panic!("{}", String::from("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"));
+        }
+    }
+}
 
 #[track_caller]
-pub fn assert_that<'t, T, A: Into<Actual<'t, T>>>(actual: A) -> AssertThat<'t, T, FailFast> {
+pub fn assert_that<'t, T, A: Into<Actual<'t, T>>>(actual: A) -> AssertThat<'t, T, Panic> {
     AssertThat::new(actual.into())
 }
 
 #[track_caller]
 pub fn assert_that_panic_by<'t, F: FnOnce() -> R + UnwindSafe, R>(
     fun: F,
-) -> AssertThat<'t, PanicValue, FailFast> {
+) -> AssertThat<'t, PanicValue, Panic> {
     assert_that(std::panic::catch_unwind(move || {
         fun();
     }))
@@ -112,21 +141,10 @@ pub struct AssertThat<'t, T, M: Mode> {
     print_location: bool,
     failures: RefCell<Vec<String>>,
 
-    mode: M,
+    mode: RefCell<M>,
 }
 
-// Drop cannot be specialized...
-impl Drop for Capture {
-    fn drop(&mut self) {
-        if !self.captured {
-            // Note: We cannot print the actual value, as we cannot add bounds to T,
-            // as this would render this Drop implementation not being called for all AssertThat's!
-            panic!("{}", String::from("You dropped an `assert_that(..)` value, on which `.with_capture(true)` was called, without actually capturing the assertions failures using `.capture_failures()`!"));
-        }
-    }
-}
-
-impl<'t, T> AssertThat<'t, T, FailFast> {
+impl<'t, T> AssertThat<'t, T, Panic> {
     #[track_caller]
     pub(crate) fn new(actual: Actual<'t, T>) -> Self {
         AssertThat {
@@ -135,15 +153,15 @@ impl<'t, T> AssertThat<'t, T, FailFast> {
             detail_messages: RefCell::new(Vec::new()),
             print_location: true,
             failures: RefCell::new(Vec::new()),
-            mode: FailFast,
+            mode: RefCell::new(Panic { derived: false }),
         }
     }
 }
 
 impl<'t, T> AssertThat<'t, T, Capture> {
     #[must_use]
-    pub fn capture_failures(mut self) -> Vec<String> {
-        self.mode.captured = true;
+    pub fn capture_failures(self) -> Vec<String> {
+        self.mode.borrow_mut().captured = true;
         self.failures.take()
     }
 }
@@ -153,19 +171,28 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self.actual.borrowed()
     }
 
-    pub fn derive<'u, U>(&'t self, mapper: impl FnOnce(&'t T) -> U) -> AssertThat<'u, U, M> {
+    pub fn derive<'a, 'u, U: 'u, F>(&'a self, mapper: F) -> AssertThat<'u, U, M>
+    where
+        't: 'u,
+        F: FnOnce(&'a T) -> U,
+    {
+        let mut mode = self.mode.replace(M::default());
+        mode.set_derived();
+
         AssertThat {
-            actual: Actual::Owned(mapper(self.actual())),
+            actual: Actual::Owned(mapper(self.actual.borrowed())),
             subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: RefCell::new(Vec::new()), // TODO: keep messages?
             print_location: self.print_location,
             failures: RefCell::new(Vec::new()), // TODO: keep failures?
-            mode: self.mode.clone(),            // Clone safe?
+            mode: RefCell::new(mode),
         }
     }
 
     pub(crate) fn map<U>(
         self,
+        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
+        // requiring only one type, which is the type we want to map to.
         mapper: impl FnOnce(Actual<T>) -> Actual<U>,
     ) -> AssertThat<'t, U, M> {
         AssertThat {
@@ -178,11 +205,20 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub fn satisfies<'u, U: 'u, Ignored>(
-        self,
-        mapper: impl FnOnce(&T) -> U,
-        assertions: impl FnOnce(AssertThat<'u, U, M>) -> Ignored,
-    ) -> Self {
+    pub fn satisfies<U, F, Ignored, A>(self, mapper: F, assertions: A) -> Self
+    where
+        for<'a> F: FnOnce(&'a T) -> U,
+        for<'a> A: FnOnce(AssertThat<'a, U, M>) -> Ignored,
+    {
+        assertions(self.derive(mapper));
+        self
+    }
+
+    pub fn satisfies_ref<U, F, Ignored, A>(self, mapper: F, assertions: A) -> Self
+    where
+        for<'a> F: FnOnce(&'a T) -> &'a U,
+        for<'a> A: FnOnce(AssertThat<'a, &'a U, M>) -> Ignored,
+    {
         assertions(self.derive(mapper));
         self
     }
@@ -237,13 +273,18 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
     #[allow(dead_code)]
     pub fn with_capture(self) -> AssertThat<'t, T, Capture> {
+        *self.mode.borrow_mut() = M::default();
+
         AssertThat {
             actual: self.actual,
             subject_name: self.subject_name,
             detail_messages: self.detail_messages,
             print_location: self.print_location,
             failures: self.failures,
-            mode: Capture { captured: false },
+            mode: RefCell::new(Capture {
+                derived: false,
+                captured: false,
+            }),
         }
     }
 
@@ -257,7 +298,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
-    pub fn fail_using<F: Failure<'t>>(&'t self, failure_provider: impl Fn(&Self) -> F) {
+    pub fn fail_using<F: Failure<'t>>(&self, failure_provider: impl Fn(&Self) -> F) {
         let failure = failure_provider(self);
         self.fail(failure);
     }
@@ -309,7 +350,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             },
         };
 
-        match self.mode.is_capture() {
+        match self.mode.borrow().is_capture() {
             true => self.failures.borrow_mut().push(err),
             false => panic!("{err}"),
         };
@@ -362,6 +403,6 @@ mod tests {
 
         assert_that_panic_by(move || drop(assert))
             .has_type::<String>()
-            .is_equal_to(format!("You dropped an `assert_that(..)` value, on which `.with_capture(true)` was called, without actually capturing the assertions failures using `.capture_failures()`!"));
+            .is_equal_to(format!("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"));
     }
 }
