@@ -150,17 +150,13 @@ impl<'t, T> AssertThat<'t, T, Capture> {
 }
 
 impl<'t, T, M: Mode> AssertThat<'t, T, M> {
-    pub fn actual(&self) -> &Actual<T> {
-        &self.actual
-    }
-
-    pub fn actual_ref(&self) -> &T {
-        self.actual().borrowed()
+    pub fn actual(&self) -> &T {
+        self.actual.borrowed()
     }
 
     pub fn derive<'u, U>(&'t self, mapper: impl FnOnce(&'t T) -> U) -> AssertThat<'u, U, M> {
         AssertThat {
-            actual: Actual::Owned(mapper(self.actual().borrowed())),
+            actual: Actual::Owned(mapper(self.actual())),
             subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: RefCell::new(Vec::new()), // TODO: keep messages?
             print_location: self.print_location,

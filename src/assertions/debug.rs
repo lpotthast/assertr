@@ -5,7 +5,7 @@ use std::fmt::Debug;
 impl<'t, T: Debug, M: Mode> AssertThat<'t, T, M> {
     #[track_caller]
     pub fn has_debug_value(self, expected: impl Debug) -> Self {
-        let actual = format!("{:?}", self.actual().borrowed());
+        let actual = format!("{:?}", self.actual());
         let expected = format!("{:?}", expected);
 
         if actual != expected {

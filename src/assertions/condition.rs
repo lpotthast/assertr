@@ -6,7 +6,7 @@ use crate::{
 
 impl<'t, T, M: Mode> ConditionAssertions<T> for AssertThat<'t, T, M> {
     fn is<C: Condition<T>>(self, condition: C) -> Self {
-        match condition.test(self.actual_ref()) {
+        match condition.test(self.actual()) {
             Ok(()) => {}
             Err(arguments) => self.fail(GenericFailure {
                 arguments: format_args!("Condition did not match:\n\n{arguments}"),

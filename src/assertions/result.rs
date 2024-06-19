@@ -12,11 +12,11 @@ impl<'t, T, E, M: Mode> AssertThat<'t, Result<T, E>, M> {
         T: Debug,
         E: Debug,
     {
-        if !self.actual().borrowed().is_ok() {
+        if !self.actual().is_ok() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Result:Ok",
-                    actual = self.actual().borrowed()
+                    actual = self.actual()
                 ),
             });
         }
@@ -36,11 +36,11 @@ impl<'t, T, E, M: Mode> AssertThat<'t, Result<T, E>, M> {
         T: Debug,
         E: Debug,
     {
-        if !self.actual().borrowed().is_err() {
+        if !self.actual().is_err() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Result:Err",
-                    actual = self.actual().borrowed()
+                    actual = self.actual()
                 ),
             });
         }

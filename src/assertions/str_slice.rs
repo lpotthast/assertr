@@ -5,11 +5,11 @@ use std::fmt::Debug;
 impl<'t, M: Mode> AssertThat<'t, &str, M> {
     #[track_caller]
     pub fn is_empty(&self) {
-        if !self.actual().borrowed().is_empty() {
+        if !self.actual().is_empty() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",
-                    actual = self.actual().borrowed(),
+                    actual = self.actual(),
                 ),
             });
         }
@@ -17,11 +17,11 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
 
     #[track_caller]
     pub fn contains<E: AsRef<str> + Debug>(&self, expected: E) {
-        if !self.actual().borrowed().contains(expected.as_ref()) {
+        if !self.actual().contains(expected.as_ref()) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\ndoes not contain\n\nExpected: {expected:?}",
-                    actual = self.actual().borrowed(),
+                    actual = self.actual(),
                     expected = &expected,
                 ),
             });
@@ -30,11 +30,11 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
 
     #[track_caller]
     pub fn starts_with<E: AsRef<str> + Debug>(&self, expected: E) {
-        if !self.actual().borrowed().starts_with(expected.as_ref()) {
+        if !self.actual().starts_with(expected.as_ref()) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\ndoes not start with\n\nExpected: {expected:?}",
-                    actual = self.actual().borrowed(),
+                    actual = self.actual(),
                     expected = &expected,
                 ),
             });
@@ -43,11 +43,11 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
 
     #[track_caller]
     pub fn ends_with<E: AsRef<str> + Debug>(&self, expected: E) {
-        if !self.actual().borrowed().ends_with(expected.as_ref()) {
+        if !self.actual().ends_with(expected.as_ref()) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\ndoes not end with\n\nExpected: {expected:?}",
-                    actual = self.actual().borrowed(),
+                    actual = self.actual(),
                     expected = &expected,
                 ),
             });

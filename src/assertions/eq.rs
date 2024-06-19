@@ -13,7 +13,7 @@ pub trait EqualityAssertions<T: PartialEq + Debug> {
 impl<'t, T: PartialEq + Debug, M: Mode> EqualityAssertions<T> for AssertThat<'t, T, M> {
     #[track_caller]
     fn is_equal_to(self, expected: T) -> Self {
-        let actual = self.actual().borrowed();
+        let actual = self.actual();
         let expected = &expected;
 
         if actual != expected {
@@ -26,7 +26,7 @@ impl<'t, T: PartialEq + Debug, M: Mode> EqualityAssertions<T> for AssertThat<'t,
 
     #[track_caller]
     fn is_not_equal_to(self, expected: T) -> Self {
-        let actual = self.actual().borrowed();
+        let actual = self.actual();
         let expected = &expected;
 
         if actual == expected {

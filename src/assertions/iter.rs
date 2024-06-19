@@ -13,11 +13,11 @@ where
     #[track_caller]
     fn contains<E: Borrow<T>>(self, expected: E) -> Self {
         let expected = expected.borrow();
-        if !self.actual().borrowed().into_iter().any(|it| it == expected) {
+        if !self.actual().into_iter().any(|it| it == expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: ...\n\ndoes not contain expected key: {expected:#?}",
-                    //actual = self.actual().borrowed(),
+                    //actual = self.actual_ref(),
                 ),
             });
         }
@@ -27,15 +27,15 @@ where
     // TODO: Should this exist? Should we create is_empty() impl's for concrete collection types instead?
     #[track_caller]
     fn iterator_is_empty(self) -> Self {
-        let count = self.actual().borrowed().into_iter().count();
+        let count = self.actual().into_iter().count();
 
-        let actual = self.actual().borrowed().into_iter().collect::<Vec<_>>();
+        let actual = self.actual().into_iter().collect::<Vec<_>>();
 
         if count != 0 {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nIs not empty!",
-                    //actual = self.actual().borrowed(),
+                    //actual = self.actual_ref(),
                 ),
             });
         }

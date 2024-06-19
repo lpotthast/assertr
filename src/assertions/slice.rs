@@ -11,11 +11,11 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     where
         T: Debug,
     {
-        if !self.actual().borrowed().as_ref().is_empty() {
+        if !self.actual().as_ref().is_empty() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",
-                    actual = self.actual().borrowed(),
+                    actual = self.actual(),
                 ),
             });
         }
@@ -28,7 +28,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     where
         T: Debug,
     {
-        let actual = self.actual().borrowed().as_ref().len();
+        let actual = self.actual().as_ref().len();
         if actual != expected {
             self = self.with_detail_message("Slice was not of expected length!");
             self.fail(ExpectedActualFailure {
@@ -51,7 +51,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
         EE: AsRef<[E]>,
         T: PartialEq<E> + Debug,
     {
-        let actual = *self.actual().borrowed();
+        let actual = *self.actual();
         let expected = expected.as_ref();
 
         let result = crate::util::slice::compare(actual, expected);
@@ -70,7 +70,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
                 self.add_detail_message("The order of elements does not match!");
             }
 
-            let actual = self.actual().borrowed();
+            let actual = self.actual();
 
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -86,7 +86,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     where
         T: PartialEq + Debug,
     {
-        let actual: &[T] = self.actual().borrowed();
+        let actual: &[T] = self.actual();
         let expected: &[T] = expected.as_ref();
 
         let mut elements_found = Vec::new();

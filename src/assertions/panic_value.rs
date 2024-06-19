@@ -15,7 +15,7 @@ impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> 
         //self.map::<Box<dyn Any>>(|it| Actual::Owned(it.unwrap_owned().0))
         //    .has_type_ref::<E>()
 
-        let any = &self.actual().borrowed().0;
+        let any = &self.actual().0;
         match any.downcast_ref::<E>() {
             Some(casted) => self.derive(|_actual| casted),
             None => {

@@ -11,11 +11,11 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeFrom<T>, M> {
     where
         T: PartialOrd + Debug,
     {
-        if !self.actual().borrowed().contains(&expected) {
+        if !self.actual().contains(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
-                    actual = self.actual().borrowed()
+                    actual = self.actual()
                 ),
             })
         }
@@ -29,11 +29,11 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeTo<T>, M> {
     where
         T: PartialOrd + Debug,
     {
-        if !self.actual().borrowed().contains(&expected) {
+        if !self.actual().contains(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
-                    actual = self.actual().borrowed()
+                    actual = self.actual()
                 ),
             })
         }
@@ -44,11 +44,11 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeTo<T>, M> {
     where
         T: PartialOrd + Debug,
     {
-        if self.actual().borrowed().contains(&expected) {
+        if self.actual().contains(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual RangeTo: {actual:#?}\n\nContains element expected not to be contained: {expected:#?}",
-                    actual = self.actual().borrowed()
+                    actual = self.actual()
                 ),
             })
         }
@@ -62,11 +62,11 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeToInclusive<T>, M> {
     where
         T: PartialOrd + Debug,
     {
-        if !self.actual().borrowed().contains(&expected) {
+        if !self.actual().contains(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
-                    actual = self.actual().borrowed()
+                    actual = self.actual()
                 ),
             })
         }

@@ -10,7 +10,7 @@ impl<'t, M: Mode> AssertThat<'t, Box<dyn Any>, M> {
     where
         E: 'static,
     {
-        let any = self.actual().borrowed();
+        let any = self.actual();
         match any.downcast_ref::<E>() {
             Some(casted) => self.derive(|_actual| casted),
             None => {

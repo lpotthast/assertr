@@ -1,5 +1,5 @@
 use crate::{failure::GenericFailure, AssertThat, Mode};
-use std::fmt::Debug;
+use std::{cmp::Ordering, fmt::Debug};
 
 /// Comparable
 impl<'t, T: PartialOrd, M: Mode> AssertThat<'t, T, M> {
@@ -8,10 +8,13 @@ impl<'t, T: PartialOrd, M: Mode> AssertThat<'t, T, M> {
     where
         T: Debug,
     {
-        let actual = self.actual().borrowed();
+        let actual = self.actual();
         let expected = &expected;
 
-        if !(actual < expected) {
+        if matches!(
+            actual.partial_cmp(expected),
+            Some(Ordering::Equal) | Some(Ordering::Greater)
+        ) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not less than\n\nExpected: {expected:#?}"
@@ -26,10 +29,13 @@ impl<'t, T: PartialOrd, M: Mode> AssertThat<'t, T, M> {
     where
         T: Debug,
     {
-        let actual = self.actual().borrowed();
+        let actual = self.actual();
         let expected = &expected;
 
-        if !(actual > expected) {
+        if matches!(
+            actual.partial_cmp(expected),
+            Some(Ordering::Less) | Some(Ordering::Equal)
+        ) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not greater than\n\nExpected: {expected:#?}"
@@ -44,10 +50,10 @@ impl<'t, T: PartialOrd, M: Mode> AssertThat<'t, T, M> {
     where
         T: Debug,
     {
-        let actual = self.actual().borrowed();
+        let actual = self.actual();
         let expected = &expected;
 
-        if !(actual <= expected) {
+        if matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not less or equal to\n\nExpected: {expected:#?}"
@@ -62,10 +68,10 @@ impl<'t, T: PartialOrd, M: Mode> AssertThat<'t, T, M> {
     where
         T: Debug,
     {
-        let actual = self.actual().borrowed();
+        let actual = self.actual();
         let expected = &expected;
 
-        if !(actual >= expected) {
+        if matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not greater or equal to\n\nExpected: {expected:#?}"

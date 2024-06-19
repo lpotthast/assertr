@@ -11,11 +11,11 @@ impl<'t, T, M: Mode> AssertThat<'t, Option<T>, M> {
     where
         T: Debug,
     {
-        if !self.actual().borrowed().is_some() {
+        if !self.actual().is_some() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Option:Some",
-                    actual = self.actual().borrowed()
+                    actual = self.actual()
                 ),
             });
         }
@@ -34,11 +34,11 @@ impl<'t, T, M: Mode> AssertThat<'t, Option<T>, M> {
     where
         T: Debug,
     {
-        if !self.actual().borrowed().is_none() {
+        if !self.actual().is_none() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Option:None",
-                    actual = self.actual().borrowed()
+                    actual = self.actual()
                 ),
             });
         }

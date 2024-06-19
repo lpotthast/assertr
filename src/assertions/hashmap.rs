@@ -9,11 +9,11 @@ impl<'t, K, V, M: Mode> AssertThat<'t, HashMap<K, V>, M> {
         K: Eq + Hash + Debug,
         V: PartialEq + Debug,
     {
-        if !self.actual().borrowed().contains_key(&expected) {
+        if !self.actual().contains_key(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\ndoes not contain expected key: {expected:#?}",
-                    actual = self.actual().borrowed(),
+                    actual = self.actual(),
                 ),
             });
         }
@@ -26,11 +26,11 @@ impl<'t, K, V, M: Mode> AssertThat<'t, HashMap<K, V>, M> {
         K: Debug,
         V: PartialEq + Debug,
     {
-        if !self.actual().borrowed().values().any(|it| *it == expected) {
+        if !self.actual().values().any(|it| *it == expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\ndoes not contain expected value: {expected:#?}",
-                    actual = self.actual().borrowed(),
+                    actual = self.actual(),
                 ),
             });
         }

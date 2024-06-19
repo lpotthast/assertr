@@ -5,7 +5,7 @@ use std::fmt::Display;
 impl<'t, T: Display, M: Mode> AssertThat<'t, T, M> {
     #[track_caller]
     pub fn has_display_value(self, expected: impl Display) -> Self {
-        let actual = format!("{}", self.actual().borrowed());
+        let actual = format!("{}", self.actual());
         let expected = format!("{}", expected);
 
         if actual != expected {
