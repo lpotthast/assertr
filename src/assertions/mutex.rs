@@ -1,11 +1,12 @@
-use crate::Mode;
 use crate::{failure::GenericFailure, AssertThat};
+use crate::{tracking::AssertionTracking, Mode};
 use std::fmt::Debug;
 use std::sync::Mutex;
 
 impl<'t, T: Debug, M: Mode> AssertThat<'t, Mutex<T>, M> {
     #[track_caller]
     pub fn is_locked(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if let Ok(guard) = actual.try_lock() {
             self.fail(GenericFailure {
@@ -18,6 +19,7 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, Mutex<T>, M> {
 
     #[track_caller]
     pub fn is_not_locked(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if let Err(_err) = actual.try_lock() {
             self.fail(GenericFailure {

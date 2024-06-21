@@ -1,6 +1,11 @@
 use std::any::{Any, TypeId};
 
-use crate::{actual::Actual, failure::GenericFailure, AssertThat, Mode, PanicValue};
+use crate::{
+    actual::Actual, failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode,
+    PanicValue,
+};
+
+use super::boxed::BoxAssertions;
 
 /// Assertions for PanicValue's, the output of a panic occurred within a `assert_that_panic_by`.
 pub trait PanicValueAssertions<'t, M: Mode> {
@@ -12,6 +17,8 @@ impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> 
     /// If this fails in capturing mode, a panic is raised!
     #[track_caller]
     fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M> {
+        self.track_assertion();
+
         //self.map::<Box<dyn Any>>(|it| Actual::Owned(it.unwrap_owned().0))
         //    .has_type_ref::<E>()
 

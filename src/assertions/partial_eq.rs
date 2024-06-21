@@ -1,30 +1,33 @@
-use crate::{
-    failure::{ExpectedActualFailure, GenericFailure},
-    AssertThat, Mode,
-};
+use crate::{tracking::AssertionTracking, AssertThat, Mode};
 use std::fmt::Debug;
 
 impl<'t, T: PartialEq + Debug, M: Mode> AssertThat<'t, T, M> {
     #[track_caller]
     pub fn is_equal_to(self, expected: T) -> Self {
+        self.track_assertion();
+
         let actual = self.actual();
         let expected = &expected;
 
         if actual != expected {
-            self.fail(GenericFailure {
-                arguments: format_args!("Expected: {:#?}\n\n  Actual: {:#?}", expected, actual),
-            });
+            self.fail_with_arguments(format_args!(
+                "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
+            ));
         }
         self
     }
 
     #[track_caller]
     pub fn is_not_equal_to(self, expected: T) -> Self {
+        self.track_assertion();
+
         let actual = self.actual();
         let expected = &expected;
 
         if actual == expected {
-            self.fail(ExpectedActualFailure { expected, actual });
+            self.fail_with_arguments(format_args!(
+                "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
+            ));
         }
         self
     }

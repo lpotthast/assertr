@@ -27,6 +27,13 @@ Fluent assertions for the Rust programming language.
 Many assertions require std::fmt::Debug, limiting usability to types implementing Debug.
 Can we implement fallback rendering? Will probably require the currently unstable specialization feature.
 
+## Decisions
+
+- Derived assertions are not allowed to control whether or not the location is printed.
+- Detail messages are collected from the current assertion upwards, taking the messages of all parents into account.
+- Failures are stored at the root assertion.
+- Failures can only be extracted from the root assertion.
+
 ## Examples
 
     use assertr::prelude::*;

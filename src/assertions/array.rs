@@ -1,7 +1,8 @@
-use crate::{failure::GenericFailure, AssertThat, Mode};
+use crate::{failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
 use std::fmt::Debug;
 
 pub trait ArrayAssertions<T: Debug> {
+    #[allow(clippy::wrong_self_convention)]
     fn is_empty(self) -> Self;
 
     fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
@@ -20,6 +21,7 @@ impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'t
     where
         T: Debug,
     {
+        self.track_assertion();
         if !self.actual().as_ref().is_empty() {
             self.fail(GenericFailure {
                 arguments: format_args!(

@@ -1,4 +1,4 @@
-use crate::{actual::Actual, failure::GenericFailure, AssertThat, Mode};
+use crate::{actual::Actual, failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
 use std::fmt::Debug;
 
 // Assertions for generic optional values.
@@ -11,6 +11,8 @@ impl<'t, T, M: Mode> AssertThat<'t, Option<T>, M> {
     where
         T: Debug,
     {
+        self.track_assertion();
+
         if !self.actual().is_some() {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -34,6 +36,8 @@ impl<'t, T, M: Mode> AssertThat<'t, Option<T>, M> {
     where
         T: Debug,
     {
+        self.track_assertion();
+
         if !self.actual().is_none() {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -46,6 +50,8 @@ impl<'t, T, M: Mode> AssertThat<'t, Option<T>, M> {
         self.map(|_actual| Actual::Owned(()))
     }
 }
+
+// TODO: is_ok_satisfying, is_err_satisfying
 
 #[cfg(test)]
 mod tests {

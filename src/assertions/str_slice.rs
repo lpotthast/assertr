@@ -1,10 +1,11 @@
-use crate::{failure::GenericFailure, AssertThat, Mode};
+use crate::{failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
 use std::fmt::Debug;
 
 /// Assertions for str slices.
 impl<'t, M: Mode> AssertThat<'t, &str, M> {
     #[track_caller]
     pub fn is_empty(&self) {
+        self.track_assertion();
         if !self.actual().is_empty() {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -17,6 +18,7 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
 
     #[track_caller]
     pub fn contains<E: AsRef<str> + Debug>(&self, expected: E) {
+        self.track_assertion();
         if !self.actual().contains(expected.as_ref()) {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -30,6 +32,7 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
 
     #[track_caller]
     pub fn starts_with<E: AsRef<str> + Debug>(&self, expected: E) {
+        self.track_assertion();
         if !self.actual().starts_with(expected.as_ref()) {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -43,6 +46,7 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
 
     #[track_caller]
     pub fn ends_with<E: AsRef<str> + Debug>(&self, expected: E) {
+        self.track_assertion();
         if !self.actual().ends_with(expected.as_ref()) {
             self.fail(GenericFailure {
                 arguments: format_args!(

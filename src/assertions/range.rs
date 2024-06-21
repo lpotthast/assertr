@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::ops::{RangeFrom, RangeTo, RangeToInclusive};
 
 use crate::failure::GenericFailure;
-use crate::{AssertThat, Mode};
+use crate::{AssertThat, tracking::AssertionTracking, Mode};
 
 /// Assertions for generic arrays.
 impl<'t, T, M: Mode> AssertThat<'t, RangeFrom<T>, M> {
@@ -11,6 +11,7 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeFrom<T>, M> {
     where
         T: PartialOrd + Debug,
     {
+        self.track_assertion();
         if !self.actual().contains(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -29,6 +30,7 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeTo<T>, M> {
     where
         T: PartialOrd + Debug,
     {
+        self.track_assertion();
         if !self.actual().contains(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -44,6 +46,7 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeTo<T>, M> {
     where
         T: PartialOrd + Debug,
     {
+        self.track_assertion();
         if self.actual().contains(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -62,6 +65,7 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeToInclusive<T>, M> {
     where
         T: PartialOrd + Debug,
     {
+        self.track_assertion();
         if !self.actual().contains(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(

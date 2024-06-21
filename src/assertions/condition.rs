@@ -1,11 +1,12 @@
 use crate::{
     condition::{Condition, ConditionAssertions},
     failure::GenericFailure,
-    AssertThat, Mode,
+    AssertThat, tracking::AssertionTracking, Mode,
 };
 
 impl<'t, T, M: Mode> ConditionAssertions<T> for AssertThat<'t, T, M> {
     fn is<C: Condition<T>>(self, condition: C) -> Self {
+        self.track_assertion();
         match condition.test(self.actual()) {
             Ok(()) => {}
             Err(arguments) => self.fail(GenericFailure {

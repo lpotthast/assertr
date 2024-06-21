@@ -1,17 +1,19 @@
 use std::any::{Any, TypeId};
 
-use crate::{failure::GenericFailure, AssertThat, Mode};
+use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
+
+pub trait BoxAssertions<'t, M: Mode> {
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M>;
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, M>;
+}
 
 /// Assertions for boxed values.
-impl<'t, M: Mode> AssertThat<'t, Box<dyn Any>, M> {
+impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
     /// If this fails in capturing mode, a panic is raised!
     #[track_caller]
-    pub fn has_type_ref<E>(&'t self) -> AssertThat<'t, &'t E, M>
-    where
-        E: 'static,
-    {
-        let any = self.actual();
-        match any.downcast_ref::<E>() {
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M> {
+        self.track_assertion();
+        match self.actual().downcast_ref::<E>() {
             Some(casted) => self.derive(|_actual| casted),
             None => {
                 self.fail(GenericFailure {
@@ -28,27 +30,29 @@ impl<'t, M: Mode> AssertThat<'t, Box<dyn Any>, M> {
 
     /// If this fails in capturing mode, a panic is raised!
     #[track_caller]
-    pub fn has_type<E: 'static>(self) -> AssertThat<'t, E, M> {
-        // TODO: Remove unsafe!
-        let any: Box<dyn Any> = self.actual.unwrap_owned();
-
-        match any.downcast::<E>() {
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, M> {
+        self.track_assertion();
+        match self.actual.unwrap_owned().downcast::<E>() {
             Ok(casted) => {
                 AssertThat {
+                    parent: self.parent,
                     actual: (*casted).into(),
                     subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
                     detail_messages: self.detail_messages,
                     print_location: self.print_location,
+                    num_assertions: self.num_assertions,
                     failures: self.failures,
                     mode: self.mode,
                 }
             }
             Err(err) => {
                 AssertThat {
+                    parent: self.parent,
                     actual: err.into(),
                     subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
                     detail_messages: self.detail_messages,
                     print_location: self.print_location,
+                    num_assertions: self.num_assertions,
                     failures: self.failures,
                     mode: self.mode,
                 }

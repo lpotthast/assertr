@@ -1,5 +1,6 @@
 use crate::{
     failure::{ExpectedActualFailure, GenericFailure},
+    tracking::AssertionTracking,
     AssertThat, Mode,
 };
 use std::fmt::Debug;
@@ -11,6 +12,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     where
         T: Debug,
     {
+        self.track_assertion();
         if !self.actual().as_ref().is_empty() {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -28,6 +30,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     where
         T: Debug,
     {
+        self.track_assertion();
         let actual = self.actual().as_ref().len();
         if actual != expected {
             self = self.with_detail_message("Slice was not of expected length!");
@@ -51,6 +54,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
         EE: AsRef<[E]>,
         T: PartialEq<E> + Debug,
     {
+        self.track_assertion();
         let actual = *self.actual();
         let expected = expected.as_ref();
 
@@ -67,7 +71,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
                 self.add_detail_message(format!("Elements not found: {:#?}", result.not_in_a));
             }
             if result.only_differing_in_order {
-                self.add_detail_message("The order of elements does not match!");
+                self.add_detail_message("The order of elements does not match!".to_owned());
             }
 
             let actual = self.actual();
@@ -86,6 +90,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     where
         T: PartialEq + Debug,
     {
+        self.track_assertion();
         let actual: &[T] = self.actual();
         let expected: &[T] = expected.as_ref();
 

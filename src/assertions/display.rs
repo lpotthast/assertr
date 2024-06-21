@@ -1,10 +1,11 @@
-use crate::{failure::ExpectedActualFailure, AssertThat, Mode};
+use crate::{failure::ExpectedActualFailure, AssertThat, tracking::AssertionTracking, Mode};
 use std::fmt::Display;
 
-// General Assertions
 impl<'t, T: Display, M: Mode> AssertThat<'t, T, M> {
     #[track_caller]
     pub fn has_display_value(self, expected: impl Display) -> Self {
+        self.track_assertion();
+
         let actual = format!("{}", self.actual());
         let expected = format!("{}", expected);
 
@@ -19,4 +20,6 @@ impl<'t, T: Display, M: Mode> AssertThat<'t, T, M> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    // TODO
+}

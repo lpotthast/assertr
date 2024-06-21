@@ -1,23 +1,34 @@
-use crate::{failure::ExpectedActualFailure, AssertThat, Mode};
+use crate::{tracking::AssertionTracking, AssertThat, Mode};
+
+pub trait BoolAssertions {
+    fn is_true(self) -> Self;
+    fn is_false(self) -> Self;
+}
 
 /// Assertions for booleans.
-impl<'t, M: Mode> AssertThat<'t, bool, M> {
+impl<'t, M: Mode> BoolAssertions for AssertThat<'t, bool, M> {
     #[track_caller]
-    pub fn is_true(self) -> Self {
+    fn is_true(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         let expected = &true;
         if actual != expected {
-            self.fail(ExpectedActualFailure { expected, actual });
+            self.fail_with_arguments(format_args!(
+                "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
+            ));
         }
         self
     }
 
     #[track_caller]
-    pub fn is_false(self) -> Self {
+    fn is_false(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         let expected = &false;
         if actual != expected {
-            self.fail(ExpectedActualFailure { expected, actual });
+            self.fail_with_arguments(format_args!(
+                "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
+            ));
         }
         self
     }
@@ -42,7 +53,7 @@ mod tests {
                 -------- assertr --------
                 Expected: true
 
-                Actual: false
+                  Actual: false
                 -------- assertr --------
             "#});
     }
@@ -60,7 +71,7 @@ mod tests {
                 -------- assertr --------
                 Expected: false
 
-                Actual: true
+                  Actual: true
                 -------- assertr --------
             "#});
     }

@@ -1,4 +1,6 @@
-use crate::{actual::Actual, failure::GenericFailure, AssertThat, Capture, Panic};
+use crate::{
+    actual::Actual, failure::GenericFailure, AssertThat, tracking::AssertionTracking, Capture, Panic,
+};
 use std::fmt::Debug;
 
 // Assertions for generic result values.
@@ -12,6 +14,8 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
         T: Debug,
         E: Debug,
     {
+        self.track_assertion();
+
         if !self.actual().is_ok() {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -37,6 +41,8 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
         T: Debug,
         E: Debug,
     {
+        self.track_assertion();
+
         if !self.actual().is_err() {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -56,12 +62,14 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
 
 impl<'t, T, E> AssertThat<'t, Result<T, E>, Capture> {
     #[track_caller]
-    pub fn is_ok_satisfying<Ignored, A>(self, assertions: A) -> Self
+    pub fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, Capture>) -> Ignored,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, Capture>),
     {
+        self.track_assertion();
+
         if self.actual().is_ok() {
             self.satisfies_ref(|it| it.as_ref().unwrap(), assertions)
         } else {
@@ -76,12 +84,14 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Capture> {
     }
 
     #[track_caller]
-    pub fn is_err_satisfying<Ignored, A>(self, assertions: A) -> Self
+    pub fn is_err_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a E, Capture>) -> Ignored,
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, Capture>),
     {
+        self.track_assertion();
+
         if self.actual().is_err() {
             self.satisfies_ref(|it| it.as_ref().unwrap_err(), assertions)
         } else {
@@ -152,14 +162,22 @@ mod tests {
 
     #[test]
     fn is_ok_satisfying_succeeds_when_ok() {
-        assert_that(
-            assert_that(Result::<i32, ()>::Ok(42))
-                .with_capture()
-                .is_ok_satisfying(|ok| {
-                    ok.is_equal_to(&42);
-                })
-                .capture_failures(),
-        )
-        .contains_exactly::<String>([]);
+        assert_that(Result::<i32, ()>::Ok(42))
+            .with_location(false)
+            .with_capture()
+            .is_ok_satisfying(|ok_value| {
+                ok_value.is_greater_than(&9000);
+            })
+            .capture_failures()
+            .assert_that_it()
+            .contains_exactly::<String>([formatdoc! {"
+                -------- assertr --------
+                Actual: 42
+
+                is not greater than
+
+                Expected: 9000
+                -------- assertr --------
+            "}]);
     }
 }

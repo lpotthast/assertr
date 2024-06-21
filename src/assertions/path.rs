@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, AssertThat, Mode};
+use crate::{failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
 use std::path::Path;
 
 // TODO: PathBuf
@@ -6,6 +6,7 @@ use std::path::Path;
 impl<'t, M: Mode> AssertThat<'t, &Path, M> {
     #[track_caller]
     pub fn exists(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if !actual.exists() {
             self.fail(GenericFailure {
@@ -17,6 +18,7 @@ impl<'t, M: Mode> AssertThat<'t, &Path, M> {
 
     #[track_caller]
     pub fn does_not_exist(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if actual.exists() {
             self.fail(GenericFailure {
@@ -28,6 +30,7 @@ impl<'t, M: Mode> AssertThat<'t, &Path, M> {
 
     #[track_caller]
     pub fn is_a_file(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if !actual.is_file() {
             self.fail(GenericFailure {
@@ -39,6 +42,7 @@ impl<'t, M: Mode> AssertThat<'t, &Path, M> {
 
     #[track_caller]
     pub fn is_a_directory(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if !actual.is_dir() {
             self.fail(GenericFailure {
@@ -52,6 +56,7 @@ impl<'t, M: Mode> AssertThat<'t, &Path, M> {
 
     #[track_caller]
     pub fn is_a_symlink(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if !actual.is_symlink() {
             self.fail(GenericFailure {
@@ -63,6 +68,7 @@ impl<'t, M: Mode> AssertThat<'t, &Path, M> {
 
     #[track_caller]
     pub fn has_a_root(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if !actual.has_root() {
             self.fail(GenericFailure {
@@ -76,6 +82,7 @@ impl<'t, M: Mode> AssertThat<'t, &Path, M> {
 
     #[track_caller]
     pub fn is_relative(self) -> Self {
+        self.track_assertion();
         let actual = self.actual();
         if !actual.is_relative() {
             self.fail(GenericFailure {

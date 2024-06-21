@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, AssertThat, Mode};
+use crate::{failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 /// Assertions for generic maps.
@@ -9,6 +9,7 @@ impl<'t, K, V, M: Mode> AssertThat<'t, HashMap<K, V>, M> {
         K: Eq + Hash + Debug,
         V: PartialEq + Debug,
     {
+        self.track_assertion();
         if !self.actual().contains_key(&expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
@@ -26,6 +27,7 @@ impl<'t, K, V, M: Mode> AssertThat<'t, HashMap<K, V>, M> {
         K: Debug,
         V: PartialEq + Debug,
     {
+        self.track_assertion();
         if !self.actual().values().any(|it| *it == expected) {
             self.fail(GenericFailure {
                 arguments: format_args!(
