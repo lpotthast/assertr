@@ -1,7 +1,9 @@
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 pub trait BoolAssertions {
+    #[allow(clippy::wrong_self_convention)]
     fn is_true(self) -> Self;
+    #[allow(clippy::wrong_self_convention)]
     fn is_false(self) -> Self;
 }
 

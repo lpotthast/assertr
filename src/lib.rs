@@ -153,7 +153,7 @@ impl<'t, T> AssertThat<'t, T, Capture> {
     #[must_use]
     pub fn capture_failures(self) -> Vec<String> {
         let mut mode = self.mode.borrow_mut();
-        assert_eq!(mode.captured, false);
+        assert!(!mode.captured);
         mode.captured = true;
         self.failures.take()
     }

@@ -75,7 +75,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
-    pub fn add_detail_message<'a>(&self, message: String) {
+    pub fn add_detail_message(&self, message: String) {
         self.detail_messages.borrow_mut().push(message);
     }
 }
