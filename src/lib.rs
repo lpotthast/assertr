@@ -2,7 +2,7 @@ use std::{
     any::Any,
     cell::RefCell,
     future::Future,
-    panic::{RefUnwindSafe, UnwindSafe},
+    panic::{AssertUnwindSafe, RefUnwindSafe, UnwindSafe},
 };
 
 use actual::Actual;
@@ -47,6 +47,10 @@ pub mod prelude {
     pub use crate::assertions::std::slice;
     pub use crate::assertions::std::str_slice;
     pub use crate::assertions::std::string;
+    #[cfg(feature = "tokio")]
+    pub use crate::assertions::tokio::rw_lock;
+    #[cfg(feature = "tokio")]
+    pub use crate::assertions::tokio::rw_lock::TokioRwLockAssertions;
     pub use crate::condition::Condition;
     pub use crate::condition::ConditionAssertions;
     pub use crate::mode::Mode;
@@ -62,12 +66,12 @@ pub fn assert_that<'t, T>(actual: impl Into<Actual<'t, T>>) -> AssertThat<'t, T,
 }
 
 #[track_caller]
-pub fn assert_that_panic_by<'t, F: FnOnce() -> R + UnwindSafe, R>(
+pub fn assert_that_panic_by<'t, F: FnOnce() -> R, R>(
     fun: F,
 ) -> AssertThat<'t, PanicValue, Panic> {
-    assert_that(std::panic::catch_unwind(move || {
+    assert_that(std::panic::catch_unwind(AssertUnwindSafe(move || {
         fun();
-    }))
+    })))
     .with_detail_message("Function did not panic as expected!")
     .is_err()
     .map(|it| PanicValue(it.unwrap_owned()).into())

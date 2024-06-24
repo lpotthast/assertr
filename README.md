@@ -48,3 +48,11 @@ Can we implement fallback rendering? Will probably require the currently unstabl
 
 ## Contribution
 
+
+## Testing
+
+This crate uses features. Some tests are declared under conditional compilation.
+
+Run all tests using
+
+    cargo test --all-features
