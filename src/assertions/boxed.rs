@@ -32,8 +32,26 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
     #[track_caller]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, M> {
         self.track_assertion();
-        match self.actual.unwrap_owned().downcast::<E>() {
-            Ok(casted) => {
+
+        enum CastResult<'c, C> {
+            Owned(Box<C>),
+            Ref(&'c C),
+            Err(String),
+        }
+
+        let cast = match self.actual {
+            crate::actual::Actual::Borrowed(b) => b
+                .downcast_ref::<E>()
+                .map(|it| CastResult::Ref(it))
+                .unwrap_or_else(|| CastResult::Err(String::from("asd"))),
+            crate::actual::Actual::Owned(o) => o
+                .downcast::<E>()
+                .map(|it| CastResult::Owned(it))
+                .unwrap_or_else(|err| CastResult::Err(format!("{err:#?}"))),
+        };
+
+        match cast {
+            CastResult::Owned(casted) => {
                 AssertThat {
                     parent: self.parent,
                     actual: (*casted).into(),
@@ -45,7 +63,19 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                     mode: self.mode,
                 }
             }
-            Err(err) => {
+            CastResult::Ref(casted) => {
+                AssertThat {
+                    parent: self.parent,
+                    actual: casted.into(),
+                    subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+                    detail_messages: self.detail_messages,
+                    print_location: self.print_location,
+                    num_assertions: self.num_assertions,
+                    failures: self.failures,
+                    mode: self.mode,
+                }
+            }
+            CastResult::Err(err) => {
                 AssertThat {
                     parent: self.parent,
                     actual: err.into(),

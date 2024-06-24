@@ -16,7 +16,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
     {
         self.track_assertion();
 
-        if !self.actual().is_ok() {
+        if self.actual().is_err() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Result:Ok",
@@ -25,7 +25,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
             });
         }
 
-        // Calling unwrap_err is safe here, as we would have seen a panic when the the error is not present!
+        // Calling `unwrap` is safe here, as we would have seen a panic when the the error is not present!
         self.map(|it| match it {
             Actual::Owned(o) => Actual::Owned(o.unwrap()),
             Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap()),
@@ -43,7 +43,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
     {
         self.track_assertion();
 
-        if !self.actual().is_err() {
+        if self.actual().is_ok() {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\nis not of expected variant: Result:Err",
@@ -52,7 +52,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
             });
         }
 
-        // Calling unwrap_err is safe here, as we would have seen a panic when the the error is not present!
+        // Calling `unwrap_err` is safe here, as we would have seen a panic when the the error is not present!
         self.map(|it| match it {
             Actual::Owned(o) => Actual::Owned(o.unwrap_err()),
             Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap_err()),

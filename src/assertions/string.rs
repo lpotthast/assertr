@@ -5,6 +5,12 @@ use crate::{AssertThat, Mode};
 // Assertions for Strings.
 impl<'t, M: Mode> AssertThat<'t, String, M> {
     #[track_caller]
+    pub fn has_length(self, expected: usize) -> Self {
+        self.derive(|actual| actual.as_str()).has_length(expected);
+        self
+    }
+
+    #[track_caller]
     pub fn is_empty(self) -> Self {
         self.derive(|actual| actual.as_str()).is_empty();
         self
@@ -34,6 +40,28 @@ mod tests {
     use indoc::formatdoc;
 
     use crate::prelude::*;
+
+    #[test]
+    fn has_length_succeeds_when_expected_length_matches() {
+        assert_that(String::from("foo bar")).has_length(7);
+    }
+
+    #[test]
+    fn has_length_panics_when_expected_length_does_not_match() {
+        assert_that_panic_by(|| {
+            assert_that(String::from("foo bar")).with_location(false).has_length(42);
+        })
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Actual: "foo bar" (length: 7)
+
+                does not have length
+
+                Expected: 42
+                -------- assertr --------
+            "#});
+    }
 
     #[test]
     fn is_empty_succeeds_when_empty() {

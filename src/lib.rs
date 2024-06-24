@@ -1,6 +1,7 @@
 use std::{
     any::Any,
     cell::RefCell,
+    future::Future,
     panic::{RefUnwindSafe, UnwindSafe},
 };
 
@@ -57,7 +58,7 @@ pub mod prelude {
 pub struct PanicValue(Box<dyn Any>);
 
 #[track_caller]
-pub fn assert_that<'t, T, A: Into<Actual<'t, T>>>(actual: A) -> AssertThat<'t, T, Panic> {
+pub fn assert_that<'t, T>(actual: impl Into<Actual<'t, T>>) -> AssertThat<'t, T, Panic> {
     AssertThat::new(actual.into())
 }
 
@@ -164,6 +165,66 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self.actual.borrowed()
     }
 
+    pub fn map<U>(
+        self,
+        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
+        // requiring only one type, which is the type we want to map to.
+        mapper: impl FnOnce(Actual<T>) -> Actual<U>,
+    ) -> AssertThat<'t, U, M> {
+        AssertThat {
+            parent: self.parent,
+            actual: mapper(self.actual),
+            subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: self.detail_messages,
+            print_location: self.print_location,
+            num_assertions: self.num_assertions,
+            failures: self.failures,
+            mode: self.mode,
+        }
+    }
+
+    pub fn map_owned<U>(
+        self,
+        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
+        // requiring only one type, which is the type we want to map to.
+        mapper: impl FnOnce(<T as ToOwned>::Owned) -> U,
+    ) -> AssertThat<'t, U, M>
+    where
+        T: ToOwned,
+    {
+        AssertThat {
+            parent: self.parent,
+            actual: Actual::Owned(mapper(self.actual.borrowed().to_owned())),
+            subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: self.detail_messages,
+            print_location: self.print_location,
+            num_assertions: self.num_assertions,
+            failures: self.failures,
+            mode: self.mode,
+        }
+    }
+
+    pub async fn map_async<U: 't, Fut>(
+        self,
+        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
+        // requiring only one type, which is the type we want to map to.
+        mapper: impl FnOnce(Actual<T>) -> Fut,
+    ) -> AssertThat<'t, U, M>
+    where
+        Fut: Future<Output = U>,
+    {
+        AssertThat {
+            parent: self.parent,
+            actual: mapper(self.actual).await.into(),
+            subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: self.detail_messages,
+            print_location: self.print_location,
+            num_assertions: self.num_assertions,
+            failures: self.failures,
+            mode: self.mode,
+        }
+    }
+
     pub fn derive<'u, U: 'u>(&'t self, mapper: impl FnOnce(&'t T) -> U) -> AssertThat<'u, U, M>
     where
         't: 'u,
@@ -183,21 +244,25 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub(crate) fn map<U>(
-        self,
-        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
-        // requiring only one type, which is the type we want to map to.
-        mapper: impl FnOnce(Actual<T>) -> Actual<U>,
-    ) -> AssertThat<'t, U, M> {
+    pub async fn derive_async<'u, U: 'u, Fut: Future<Output = U>>(
+        &'t self,
+        mapper: impl FnOnce(&'t T) -> Fut,
+    ) -> AssertThat<'u, U, M>
+    where
+        't: 'u,
+    {
+        let mut mode = self.mode.replace(M::default());
+        mode.set_derived();
+
         AssertThat {
-            parent: self.parent,
-            actual: mapper(self.actual),
-            subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
-            detail_messages: self.detail_messages,
+            parent: Some(self),
+            actual: Actual::Owned(mapper(self.actual()).await),
+            subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: RefCell::new(Vec::new()), // TODO: keep messages?
             print_location: self.print_location,
-            num_assertions: self.num_assertions,
-            failures: self.failures,
-            mode: self.mode,
+            num_assertions: RefCell::new(NumAssertions::new()),
+            failures: RefCell::new(Vec::new()), // TODO: keep failures?
+            mode: RefCell::new(mode),
         }
     }
 

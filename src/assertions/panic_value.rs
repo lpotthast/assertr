@@ -41,8 +41,11 @@ impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> 
     /// If this fails in capturing mode, a panic is raised!
     #[track_caller]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, M> {
-        self.map::<Box<dyn Any>>(|it| Actual::Owned(it.unwrap_owned().0))
-            .has_type::<E>()
+        self.map::<Box<dyn Any>>(|it| match it {
+            Actual::Borrowed(b) => Actual::Borrowed(&b.0),
+            Actual::Owned(o) => Actual::Owned(o.0),
+        })
+        .has_type::<E>()
     }
 }
 
@@ -61,7 +64,11 @@ mod tests {
 
     #[test]
     fn has_type_succeeds_when_type_matches() {
-        let actual = PanicValue(Box::new(String::from("foo")));
+        let actual: PanicValue = PanicValue(Box::new(String::from("foo")));
+
+        assert_that::<'_, PanicValue>(&actual)
+            .has_type::<String>()
+            .is_equal_to(String::from("foo"));
 
         assert_that(actual)
             .has_type::<String>()

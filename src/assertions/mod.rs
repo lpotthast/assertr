@@ -13,6 +13,7 @@ pub mod panic_value;
 pub mod partial_eq;
 pub mod partial_ord;
 pub mod path;
+pub mod process;
 pub mod range;
 pub mod ref_cell;
 pub mod result;
