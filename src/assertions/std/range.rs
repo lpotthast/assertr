@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::ops::{RangeFrom, RangeTo, RangeToInclusive};
 
 use crate::failure::GenericFailure;
-use crate::{AssertThat, tracking::AssertionTracking, Mode};
+use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 /// Assertions for generic arrays.
 impl<'t, T, M: Mode> AssertThat<'t, RangeFrom<T>, M> {

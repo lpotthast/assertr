@@ -1,4 +1,4 @@
-use crate::{failure::ExpectedActualFailure, AssertThat, tracking::AssertionTracking, Mode};
+use crate::{failure::ExpectedActualFailure, tracking::AssertionTracking, AssertThat, Mode};
 use std::fmt::Display;
 
 impl<'t, T: Display, M: Mode> AssertThat<'t, T, M> {

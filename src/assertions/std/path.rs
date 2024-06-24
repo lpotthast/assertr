@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
+use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
 use std::path::Path;
 
 // TODO: PathBuf
@@ -110,9 +110,9 @@ mod tests {
         let path = Path::new(file!());
         assert_that(path)
             .exists()
-            .is_equal_to(Path::new("src/assertions/path.rs"))
+            .is_equal_to(Path::new("src/assertions/std/path.rs"))
             .map(|it| it.borrowed().to_str().unwrap_or_default().into())
-            .is_equal_to("src/assertions/path.rs");
+            .is_equal_to("src/assertions/std/path.rs");
     }
 
     #[test]

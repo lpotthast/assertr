@@ -1,4 +1,6 @@
-use crate::{actual::Actual, failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
+use crate::{
+    actual::Actual, failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode,
+};
 use std::fmt::Debug;
 
 // Assertions for generic optional values.

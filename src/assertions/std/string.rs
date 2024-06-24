@@ -49,7 +49,9 @@ mod tests {
     #[test]
     fn has_length_panics_when_expected_length_does_not_match() {
         assert_that_panic_by(|| {
-            assert_that(String::from("foo bar")).with_location(false).has_length(42);
+            assert_that(String::from("foo bar"))
+                .with_location(false)
+                .has_length(42);
         })
         .has_type::<String>()
         .is_equal_to(formatdoc! {r#"

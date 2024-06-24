@@ -1,5 +1,6 @@
 use crate::{
-    actual::Actual, failure::GenericFailure, AssertThat, tracking::AssertionTracking, Capture, Panic,
+    actual::Actual, failure::GenericFailure, tracking::AssertionTracking, AssertThat, Capture,
+    Panic,
 };
 use std::fmt::Debug;
 

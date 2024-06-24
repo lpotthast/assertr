@@ -1,7 +1,8 @@
 use crate::{
     condition::{Condition, ConditionAssertions},
     failure::GenericFailure,
-    AssertThat, tracking::AssertionTracking, Mode,
+    tracking::AssertionTracking,
+    AssertThat, Mode,
 };
 
 impl<'t, T, M: Mode> ConditionAssertions<T> for AssertThat<'t, T, M> {

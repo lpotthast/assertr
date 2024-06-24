@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
+use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
 use std::{borrow::Borrow, fmt::Debug};
 
 pub trait IntoIteratorAssertions<'t, T: PartialEq + Debug> {

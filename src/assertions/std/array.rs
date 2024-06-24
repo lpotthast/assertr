@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
+use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
 use std::fmt::Debug;
 
 pub trait ArrayAssertions<T: Debug> {

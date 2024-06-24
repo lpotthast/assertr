@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, AssertThat, tracking::AssertionTracking, Mode};
+use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 /// Assertions for generic maps.
