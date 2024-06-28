@@ -1,7 +1,6 @@
 pub mod array;
 pub mod bool;
 pub mod boxed;
-pub mod condition;
 pub mod debug;
 pub mod display;
 pub mod hashmap;

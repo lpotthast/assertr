@@ -115,9 +115,13 @@ mod tests {
             let rw_lock = RwLock::new(42);
             let rw_lock_write_guard = rw_lock.write().await;
 
-            assert_that_panic_by(|| assert_that::<RwLock<u32>>(&rw_lock).with_location(false).is_not_locked())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that::<RwLock<u32>>(&rw_lock)
+                    .with_location(false)
+                    .is_not_locked()
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: RwLock {{ data: <locked> }}
 
@@ -135,9 +139,13 @@ mod tests {
             let rw_lock = RwLock::new(42);
             let rw_lock_read_guard = rw_lock.read().await;
 
-            assert_that_panic_by(|| assert_that::<RwLock<u32>>(&rw_lock).with_location(false).is_not_locked())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that::<RwLock<u32>>(&rw_lock)
+                    .with_location(false)
+                    .is_not_locked()
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: RwLock {{ data: 42 }}
 

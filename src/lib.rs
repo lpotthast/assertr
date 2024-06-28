@@ -1,3 +1,6 @@
+// Allow functions named `is_*`, taking self by value instead of taking self by mutable reference or reference.
+#![allow(clippy::wrong_self_convention)]
+
 use std::{
     any::Any,
     cell::RefCell,
@@ -23,6 +26,7 @@ pub mod util;
 pub mod prelude {
     pub use crate::assert_that;
     pub use crate::assert_that_panic_by;
+    pub use crate::assertions::condition;
     pub use crate::assertions::std::array;
     pub use crate::assertions::std::array::ArrayAssertions;
     pub use crate::assertions::std::bool;
@@ -31,16 +35,19 @@ pub mod prelude {
     pub use crate::assertions::std::boxed::BoxAssertions;
     pub use crate::assertions::std::debug;
     pub use crate::assertions::std::display;
+    pub use crate::assertions::std::display::DisplayAssertions;
     pub use crate::assertions::std::hashmap;
     pub use crate::assertions::std::iter;
     pub use crate::assertions::std::iter::IntoIteratorAssertions;
     pub use crate::assertions::std::mutex;
+    pub use crate::assertions::std::mutex::MutexAssertions;
     pub use crate::assertions::std::option;
     pub use crate::assertions::std::panic_value;
     pub use crate::assertions::std::panic_value::PanicValueAssertions;
     pub use crate::assertions::std::partial_eq;
     pub use crate::assertions::std::partial_ord;
     pub use crate::assertions::std::path;
+    pub use crate::assertions::std::path::PathAssertions;
     pub use crate::assertions::std::range;
     pub use crate::assertions::std::ref_cell;
     pub use crate::assertions::std::result;
@@ -66,9 +73,7 @@ pub fn assert_that<'t, T>(actual: impl Into<Actual<'t, T>>) -> AssertThat<'t, T,
 }
 
 #[track_caller]
-pub fn assert_that_panic_by<'t, F: FnOnce() -> R, R>(
-    fun: F,
-) -> AssertThat<'t, PanicValue, Panic> {
+pub fn assert_that_panic_by<'t, F: FnOnce() -> R, R>(fun: F) -> AssertThat<'t, PanicValue, Panic> {
     assert_that(std::panic::catch_unwind(AssertUnwindSafe(move || {
         fun();
     })))
@@ -239,10 +244,10 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             parent: Some(self),
             actual: Actual::Owned(mapper(self.actual())),
             subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
-            detail_messages: RefCell::new(Vec::new()), // TODO: keep messages?
+            detail_messages: RefCell::new(Vec::new()),
             print_location: self.print_location,
             num_assertions: RefCell::new(NumAssertions::new()),
-            failures: RefCell::new(Vec::new()), // TODO: keep failures?
+            failures: RefCell::new(Vec::new()),
             mode: RefCell::new(mode),
         }
     }
@@ -261,10 +266,10 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             parent: Some(self),
             actual: Actual::Owned(mapper(self.actual()).await),
             subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
-            detail_messages: RefCell::new(Vec::new()), // TODO: keep messages?
+            detail_messages: RefCell::new(Vec::new()),
             print_location: self.print_location,
             num_assertions: RefCell::new(NumAssertions::new()),
-            failures: RefCell::new(Vec::new()), // TODO: keep failures?
+            failures: RefCell::new(Vec::new()),
             mode: RefCell::new(mode),
         }
     }

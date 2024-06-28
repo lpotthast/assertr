@@ -1,2 +1,8 @@
+# Ignore the Rust compiler output.
 /target
+
+# Ignore custom VSCode launch settings.
+/vscode/launch.json
+
+# Ignore MacOS related files.
 .DS_Store

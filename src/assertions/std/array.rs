@@ -2,7 +2,6 @@ use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mo
 use std::fmt::Debug;
 
 pub trait ArrayAssertions<T: Debug> {
-    #[allow(clippy::wrong_self_convention)]
     fn is_empty(self) -> Self;
 
     fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self

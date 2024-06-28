@@ -1,9 +1,7 @@
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 pub trait BoolAssertions {
-    #[allow(clippy::wrong_self_convention)]
     fn is_true(self) -> Self;
-    #[allow(clippy::wrong_self_convention)]
     fn is_false(self) -> Self;
 }
 
@@ -38,43 +36,50 @@ impl<'t, M: Mode> BoolAssertions for AssertThat<'t, bool, M> {
 
 #[cfg(test)]
 mod tests {
-    use indoc::formatdoc;
 
-    use crate::prelude::*;
+    mod is_true {
+        use crate::prelude::*;
+        use indoc::formatdoc;
 
-    #[test]
-    fn is_true_succeeds_when_true() {
-        assert_that(true).is_true();
+        #[test]
+        fn succeeds_when_true() {
+            assert_that(true).is_true();
+        }
+
+        #[test]
+        fn panics_when_false() {
+            assert_that_panic_by(|| assert_that(false).with_location(false).is_true())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: true
+
+                      Actual: false
+                    -------- assertr --------
+                "#});
+        }
     }
 
-    #[test]
-    fn is_true_panics_when_false() {
-        assert_that_panic_by(|| assert_that(false).with_location(false).is_true())
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expected: true
+    mod is_false {
+        use crate::prelude::*;
+        use indoc::formatdoc;
 
-                  Actual: false
-                -------- assertr --------
-            "#});
-    }
+        #[test]
+        fn succeeds_when_false() {
+            assert_that(false).is_false();
+        }
 
-    #[test]
-    fn is_false_succeeds_when_false() {
-        assert_that(false).is_false();
-    }
+        #[test]
+        fn panics_when_true() {
+            assert_that_panic_by(|| assert_that(true).with_location(false).is_false())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: false
 
-    #[test]
-    fn is_false_panics_when_true() {
-        assert_that_panic_by(|| assert_that(true).with_location(false).is_false())
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expected: false
-
-                  Actual: true
-                -------- assertr --------
-            "#});
+                      Actual: true
+                    -------- assertr --------
+                "#});
+        }
     }
 }
