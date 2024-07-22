@@ -125,156 +125,258 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
         }
         self
     }
+
+    #[track_caller]
+    pub fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
+    where
+        T: Debug,
+        P: Fn(&T) -> bool, // predicate
+    {
+        self.track_assertion();
+        let actual = *self.actual();
+        let expected = expected.as_ref();
+
+        let result = crate::util::slice::test_matching_any(actual, expected);
+
+        if !result.not_matched.is_empty() {
+            #[allow(dropping_references)]
+            drop(actual);
+
+            if !result.not_matched.is_empty() {
+                self.add_detail_message(format!("Elements not matched: {:#?}", result.not_matched));
+            }
+
+            let actual = self.actual();
+
+            self.fail(GenericFailure {
+                arguments: format_args!(
+                    "Actual: {actual:#?},\n\ndid not exactly match predicates in any order.",
+                ),
+            });
+        }
+        self
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use indoc::formatdoc;
+    mod is_empty {
+        use indoc::formatdoc;
 
-    use crate::prelude::*;
+        use crate::prelude::*;
 
-    #[test]
-    fn is_empty_slice_succeeds_when_empty() {
-        let slice: &[i32] = [].as_slice();
-        assert_that(slice).is_empty();
+        #[test]
+        fn with_slice_succeeds_when_empty() {
+            let slice: &[i32] = [].as_slice();
+            assert_that(slice).is_empty();
+        }
+
+        #[test]
+        fn with_slice_panics_when_not_empty() {
+            assert_that_panic_by(|| {
+                assert_that([42].as_slice()).with_location(false).is_empty();
+            })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: [42]
+
+                    was expected to be empty, but it is not!
+                    -------- assertr --------
+                "#});
+        }
     }
 
-    #[test]
-    fn is_empty_slice_panics_when_not_empty() {
-        assert_that_panic_by(|| {
-            assert_that([42].as_slice()).with_location(false).is_empty();
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Actual: [42]
+    mod contains_exactly {
+        use indoc::formatdoc;
 
-                was expected to be empty, but it is not!
-                -------- assertr --------
-            "#});
-    }
+        use crate::prelude::*;
+        #[test]
+        fn succeeds_when_exact_match() {
+            assert_that([1, 2, 3].as_slice()).contains_exactly([1, 2, 3]);
+        }
 
-    #[test]
-    fn contains_exactly_succeeds_when_exact_match() {
-        assert_that([1, 2, 3].as_slice()).contains_exactly([1, 2, 3]);
-    }
+        #[test]
+        fn compiles_for_different_type_combinations() {
+            assert_that(["foo".to_owned()].as_slice()).contains_exactly(["foo"]);
+            assert_that(["foo"].as_slice()).contains_exactly(["foo"]);
+            assert_that(["foo"].as_slice()).contains_exactly(["foo".to_owned()]);
+            assert_that(["foo"].as_slice()).contains_exactly(vec!["foo".to_owned()]);
+            assert_that(vec!["foo"].as_slice()).contains_exactly(vec!["foo".to_owned()].into_iter());
+        }
 
-    #[test]
-    fn contains_exactly_compiles_for_different_type_combinations() {
-        assert_that(["foo".to_owned()].as_slice()).contains_exactly(["foo"]);
-        assert_that(["foo"].as_slice()).contains_exactly(["foo"]);
-        assert_that(["foo"].as_slice()).contains_exactly(["foo".to_owned()]);
-        assert_that(["foo"].as_slice()).contains_exactly(vec!["foo".to_owned()]);
-        assert_that(vec!["foo"].as_slice()).contains_exactly(vec!["foo".to_owned()].into_iter());
-    }
+        #[test]
+        fn succeeds_when_exact_match_provided_as_slice() {
+            assert_that([1, 2, 3].as_slice()).contains_exactly(&[1, 2, 3]);
+        }
 
-    #[test]
-    fn contains_exactly_succeeds_when_exact_match_provided_as_slice() {
-        assert_that([1, 2, 3].as_slice()).contains_exactly(&[1, 2, 3]);
-    }
-
-    #[test]
-    fn contains_exactly_panics_when_not_exact_match() {
-        assert_that_panic_by(|| {
-            assert_that([1, 2, 3].as_slice())
-                .with_location(false)
-                .contains_exactly([2, 3, 4])
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Actual: [
-                    1,
-                    2,
-                    3,
-                ],
-
-                did not exactly match
-
-                Expected: [
-                    2,
-                    3,
-                    4,
-                ]
-
-                Details: [
-                    Elements not expected: [
+        #[test]
+        fn panics_when_not_exact_match() {
+            assert_that_panic_by(|| {
+                assert_that([1, 2, 3].as_slice())
+                    .with_location(false)
+                    .contains_exactly([2, 3, 4])
+            })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: [
                         1,
+                        2,
+                        3,
                     ],
+
+                    did not exactly match
+
+                    Expected: [
+                        2,
+                        3,
+                        4,
+                    ]
+
+                    Details: [
+                        Elements not expected: [
+                            1,
+                        ],
+                        Elements not found: [
+                            4,
+                        ],
+                    ]
+                    -------- assertr --------
+                "#});
+        }
+
+        #[test]
+        fn panics_with_detail_message_when_only_differing_in_order() {
+            assert_that_panic_by(|| {
+                assert_that([1, 2, 3].as_slice())
+                    .with_location(false)
+                    .contains_exactly([3, 2, 1])
+            })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ],
+
+                    did not exactly match
+
+                    Expected: [
+                        3,
+                        2,
+                        1,
+                    ]
+
+                    Details: [
+                        The order of elements does not match!,
+                    ]
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod contains_exactly_in_any_order {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_slices_match() {
+            assert_that([1, 2, 3].as_slice()).contains_exactly_in_any_order([2, 3, 1]);
+        }
+
+        #[test]
+        fn panics_when_slice_contains_unknown_data() {
+            assert_that_panic_by(|| {
+                assert_that([1, 2, 3].as_slice())
+                    .with_location(false)
+                    .contains_exactly_in_any_order([2, 3, 4])
+            })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ],
+
+                    Elements expected: [
+                        2,
+                        3,
+                        4,
+                    ]
+
                     Elements not found: [
                         4,
+                    ]
+
+                    Elements not expected: [
+                        1,
+                    ]
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod contains_exactly_matching_in_any_order {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_slices_match() {
+            assert_that([1, 2, 3].as_slice()).contains_exactly_matching_in_any_order(
+                [
+                    move |it: &i32| *it == 1,
+                    move |it: &i32| *it == 2,
+                    move |it: &i32| *it == 3,
+                ].as_slice());
+        }
+
+        #[test]
+        fn succeeds_when_slices_match_in_different_order() {
+            assert_that([1, 2, 3].as_slice()).contains_exactly_matching_in_any_order(
+                [
+                    move |it: &i32| *it == 3,
+                    move |it: &i32| *it == 1,
+                    move |it: &i32| *it == 2,
+                ].as_slice());
+        }
+
+        #[test]
+        fn panics_when_slice_contains_non_matching_data() {
+            assert_that_panic_by(|| {
+                assert_that([1, 2, 3].as_slice())
+                    .with_location(false)
+                    .contains_exactly_matching_in_any_order(
+                        [
+                            move |it: &i32| *it == 2,
+                            move |it: &i32| *it == 3,
+                            move |it: &i32| *it == 4,
+                        ].as_slice())
+            })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Actual: [
+                        1,
+                        2,
+                        3,
                     ],
-                ]
-                -------- assertr --------
-            "#});
-    }
 
-    #[test]
-    fn contains_exactly_panics_with_detail_message_when_only_differing_in_order() {
-        assert_that_panic_by(|| {
-            assert_that([1, 2, 3].as_slice())
-                .with_location(false)
-                .contains_exactly([3, 2, 1])
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Actual: [
-                    1,
-                    2,
-                    3,
-                ],
+                    did not exactly match predicates in any order.
 
-                did not exactly match
-
-                Expected: [
-                    3,
-                    2,
-                    1,
-                ]
-
-                Details: [
-                    The order of elements does not match!,
-                ]
-                -------- assertr --------
-            "#});
-    }
-
-    #[test]
-    fn contains_exactly_in_any_order_succeeds_when_slices_match() {
-        assert_that([1, 2, 3].as_slice()).contains_exactly_in_any_order([2, 3, 1]);
-    }
-
-    #[test]
-    fn contains_exactly_in_any_order_panics_when_slice_contains_unknown_data() {
-        assert_that_panic_by(|| {
-            assert_that([1, 2, 3].as_slice())
-                .with_location(false)
-                .contains_exactly_in_any_order([2, 3, 4])
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {"
-                -------- assertr --------
-                Actual: [
-                    1,
-                    2,
-                    3,
-                ],
-
-                Elements expected: [
-                    2,
-                    3,
-                    4,
-                ]
-
-                Elements not found: [
-                    4,
-                ]
-
-                Elements not expected: [
-                    1,
-                ]
-                -------- assertr --------
-            "});
+                    Details: [
+                        Elements not matched: [
+                            1,
+                        ],
+                    ]
+                    -------- assertr --------
+                "});
+        }
     }
 }
