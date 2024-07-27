@@ -7,7 +7,7 @@ impl<'t, K, V, M: Mode> AssertThat<'t, HashMap<K, V>, M> {
     pub fn contains_key(self, expected: K) -> Self
     where
         K: Eq + Hash + Debug,
-        V: PartialEq + Debug,
+        V: Debug,
     {
         self.track_assertion();
         if !self.actual().contains_key(&expected) {
@@ -62,8 +62,8 @@ mod tests {
             map.insert("foo", "bar");
             assert_that(map).with_location(false).contains_key("baz");
         })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: {{
                     "foo": "bar",
@@ -88,8 +88,8 @@ mod tests {
             map.insert("foo", "bar");
             assert_that(map).with_location(false).contains_value("baz");
         })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: {{
                     "foo": "bar",
