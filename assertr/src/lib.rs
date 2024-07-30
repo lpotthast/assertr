@@ -25,6 +25,8 @@ pub mod tracking;
 pub mod util;
 
 pub mod prelude {
+    pub use derive_assertr_eq::AssertrEq;
+
     pub use crate::assert_that;
     pub use crate::assert_that_panic_by;
     pub use crate::Asserting;
