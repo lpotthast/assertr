@@ -338,7 +338,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    /// Control wether the location is shown on assertion failure.
+    /// Control whether the location is shown on assertion failure.
     ///
     /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
@@ -349,20 +349,22 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     }
 }
 
-pub enum Eq<T: PartialEq> {
+// Note: T does not necessarily need to be `PartialEq`.
+// T might itself be a type we want to compare using AssertrEq instead of PartialEq!
+pub enum Eq<T> {
     Any,
     Eq(T),
 }
 
-pub fn eq<T: PartialEq>(v: T) -> Eq<T> {
+pub fn eq<T>(v: T) -> Eq<T> {
     Eq::Eq(v)
 }
 
-pub fn any<T: PartialEq>() -> Eq<T> {
+pub fn any<T>() -> Eq<T> {
     Eq::Any
 }
 
-impl<T: PartialEq + Debug> Debug for Eq<T> {
+impl<T: Debug> Debug for Eq<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Eq::Any => f.write_str("Eq::Any"),

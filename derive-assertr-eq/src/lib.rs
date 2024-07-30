@@ -1,11 +1,12 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
-use darling::*;
 use proc_macro::TokenStream;
+
+use darling::*;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Visibility};
+use syn::{DeriveInput, parse_macro_input, Visibility};
 
 #[derive(Debug, FromField)]
 #[darling(attributes(assertr_eq))]
@@ -15,6 +16,8 @@ struct MyFieldReceiver {
     ty: syn::Type,
 
     vis: syn::Visibility,
+
+    map_type: Option<syn::Type>,
 }
 
 #[derive(Debug, FromDeriveInput)]
@@ -59,16 +62,27 @@ pub fn store(input: TokenStream) -> TokenStream {
         .map(|field| {
             let vis = &field.vis;
             let ident = &field.ident;
-            let ty = &field.ty;
+            let ty = match &field.map_type {
+                None => &field.ty,
+                Some(ty) => ty,
+            };
             quote! { #vis #ident: ::assertr::Eq<#ty> }
         });
 
     let eq_impls = filtered_fields.map(|field| {
         let ident = &field.ident;
+        let use_assertr_eq = match &field.map_type {
+            None => false,
+            Some(_ty) => true,
+        };
+        let eq_check = match use_assertr_eq {
+            true => quote! { ::assertr::AssertrEq::eq(&self.#ident, v) },
+            false => quote! { ::core::cmp::PartialEq::eq(&self.#ident, v) },
+        };
         quote! {
             && match &other.#ident {
                 ::assertr::Eq::Any => true,
-                ::assertr::Eq::Eq(v) => { &self.#ident == v },
+                ::assertr::Eq::Eq(v) => { #eq_check },
             }
         }
     }).collect::<Vec<_>>();

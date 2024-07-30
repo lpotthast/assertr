@@ -61,7 +61,7 @@ mod tests {
             fn eq(&self, other: &FooAssertrEq) -> bool {
                 match other.id {
                     crate::Eq::Any => true,
-                    crate::Eq::Eq(v) => self.id == v,
+                    crate::Eq::Eq(v) => ::core::cmp::PartialEq::eq(&self.id, &v),
                 }
             }
         }
