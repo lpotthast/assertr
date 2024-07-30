@@ -23,7 +23,8 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, Vec<T>, M> {
     where
         P: Fn(&T) -> bool, // predicate
     {
-        self.derive(|it| it.as_slice()).contains_exactly_matching_in_any_order(expected);
+        self.derive(|it| it.as_slice())
+            .contains_exactly_matching_in_any_order(expected);
         self
     }
 }

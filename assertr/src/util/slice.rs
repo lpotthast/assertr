@@ -47,7 +47,10 @@ pub(crate) struct TestMatchingResult<'t, A> {
     pub(crate) not_matched: Vec<&'t A>,
 }
 
-pub(crate) fn test_matching_any<'t, A, P>(aa: &'t [A], predicates: &'t [P]) -> TestMatchingResult<'t, A>
+pub(crate) fn test_matching_any<'t, A, P>(
+    aa: &'t [A],
+    predicates: &'t [P],
+) -> TestMatchingResult<'t, A>
 where
     P: Fn(&'t A) -> bool,
 {
@@ -59,9 +62,7 @@ where
         }
     }
 
-    TestMatchingResult {
-        not_matched,
-    }
+    TestMatchingResult { not_matched }
 }
 
 #[cfg(test)]
@@ -113,7 +114,8 @@ mod tests {
                     move |it: &i32| *it == 1,
                     move |it: &i32| *it == 2,
                     move |it: &i32| *it == 3,
-                ].as_slice(),
+                ]
+                .as_slice(),
             );
 
             assert_that(result.not_matched).is_empty();
@@ -127,7 +129,8 @@ mod tests {
                     move |it: &i32| *it == 3,
                     move |it: &i32| *it == 2,
                     move |it: &i32| *it == 1,
-                ].as_slice(),
+                ]
+                .as_slice(),
             );
 
             assert_that(result.not_matched).is_empty();
@@ -135,12 +138,16 @@ mod tests {
 
         #[test]
         fn returns_not_equal_and_lists_differences_on_non_matching_input() {
-            let result = test_matching_any(&[1, 5, 7], [
-                move |it: &i32| *it == 5,
-                move |it: &i32| *it == 3,
-                move |it: &i32| *it == 4,
-                move |it: &i32| *it == 42,
-            ].as_slice());
+            let result = test_matching_any(
+                &[1, 5, 7],
+                [
+                    move |it: &i32| *it == 5,
+                    move |it: &i32| *it == 3,
+                    move |it: &i32| *it == 4,
+                    move |it: &i32| *it == 42,
+                ]
+                .as_slice(),
+            );
 
             assert_that(result.not_matched).contains_exactly([&1, &7]);
         }

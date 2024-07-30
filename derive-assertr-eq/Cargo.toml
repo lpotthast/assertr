@@ -1,0 +1,24 @@
+[package]
+name = "derive-assertr-eq"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[[test]]
+name = "tests"
+path = "tests/progress.rs"
+
+[dev-dependencies]
+serde = "1.0.204"
+serde_json = "1.0.121"
+trybuild = { version = "1.0.98", features = ["diff"] }
+
+[dependencies]
+assertr = { path = "../assertr" }
+darling = { workspace = true }
+proc-macro-error = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }

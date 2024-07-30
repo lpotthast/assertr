@@ -9,6 +9,7 @@ pub mod mutex;
 pub mod num;
 pub mod option;
 pub mod panic_value;
+pub mod partial_assertr_eq;
 pub mod partial_eq;
 pub mod partial_ord;
 pub mod path;

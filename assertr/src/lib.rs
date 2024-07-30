@@ -7,6 +7,7 @@ use std::{
     future::Future,
     panic::{AssertUnwindSafe, RefUnwindSafe, UnwindSafe},
 };
+use std::fmt::{Debug, Formatter};
 
 use actual::Actual;
 use details::WithDetail;
@@ -26,6 +27,7 @@ pub mod util;
 pub mod prelude {
     pub use crate::assert_that;
     pub use crate::assert_that_panic_by;
+    pub use crate::Asserting;
     pub use crate::assertions::condition;
     pub use crate::assertions::std::array;
     pub use crate::assertions::std::array::ArrayAssertions;
@@ -44,6 +46,8 @@ pub mod prelude {
     pub use crate::assertions::std::option;
     pub use crate::assertions::std::panic_value;
     pub use crate::assertions::std::panic_value::PanicValueAssertions;
+    pub use crate::assertions::std::partial_assertr_eq;
+    pub use crate::assertions::std::partial_assertr_eq::AssertrPartialEqAssertions;
     pub use crate::assertions::std::partial_eq;
     pub use crate::assertions::std::partial_ord;
     pub use crate::assertions::std::path;
@@ -58,11 +62,11 @@ pub mod prelude {
     pub use crate::assertions::tokio::rw_lock;
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::rw_lock::TokioRwLockAssertions;
+    pub use crate::AssertrEq;
+    pub use crate::AssertThat;
     pub use crate::condition::Condition;
     pub use crate::condition::ConditionAssertions;
     pub use crate::mode::Mode;
-    pub use crate::AssertThat;
-    pub use crate::Asserting;
 }
 
 pub struct PanicValue(Box<dyn Any>);
@@ -77,9 +81,9 @@ pub fn assert_that_panic_by<'t, F: FnOnce() -> R, R>(fun: F) -> AssertThat<'t, P
     assert_that(std::panic::catch_unwind(AssertUnwindSafe(move || {
         fun();
     })))
-    .with_detail_message("Function did not panic as expected!")
-    .is_err()
-    .map(|it| PanicValue(it.unwrap_owned()).into())
+        .with_detail_message("Function did not panic as expected!")
+        .is_err()
+        .map(|it| PanicValue(it.unwrap_owned()).into())
 }
 
 pub trait Asserting {
@@ -219,7 +223,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         mapper: impl FnOnce(Actual<T>) -> Fut,
     ) -> AssertThat<'t, U, M>
     where
-        Fut: Future<Output = U>,
+        Fut: Future<Output=U>,
     {
         AssertThat {
             parent: self.parent,
@@ -252,7 +256,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub async fn derive_async<'u, U: 'u, Fut: Future<Output = U>>(
+    pub async fn derive_async<'u, U: 'u, Fut: Future<Output=U>>(
         &'t self,
         mapper: impl FnOnce(&'t T) -> Fut,
     ) -> AssertThat<'u, U, M>
@@ -282,8 +286,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
-        for<'a> F: FnOnce(&'a T) -> U,
-        for<'a> A: FnOnce(AssertThat<'a, U, M>),
+            for<'a> F: FnOnce(&'a T) -> U,
+            for<'a> A: FnOnce(AssertThat<'a, U, M>),
     {
         assertions(self.derive(mapper));
         self
@@ -291,8 +295,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
     pub fn satisfies_ref<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
-        for<'a> F: FnOnce(&'a T) -> &'a U,
-        for<'a> A: FnOnce(AssertThat<'a, &'a U, M>),
+            for<'a> F: FnOnce(&'a T) -> &'a U,
+            for<'a> A: FnOnce(AssertThat<'a, &'a U, M>),
     {
         assertions(self.derive(mapper));
         self
@@ -337,6 +341,33 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     pub fn with_location(mut self, value: bool) -> Self {
         self.print_location = value;
         self
+    }
+}
+
+pub enum Eq<T: PartialEq> {
+    Any,
+    Eq(T),
+}
+
+impl<T: PartialEq + Debug> Debug for Eq<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Eq::Any => f.write_str("Eq::Any"),
+            Eq::Eq(v) => f.write_fmt(format_args!("Eq::Eq({v:?})")),
+        }
+    }
+}
+
+/// Debug is required, as we want to display the expected value in error messages!
+pub trait AssertEqTypeOf<O: ?Sized>: Debug {}
+
+pub trait AssertrEq<Rhs: ?Sized + AssertEqTypeOf<Self>> {
+    #[must_use]
+    fn eq(&self, other: &Rhs) -> bool;
+
+    #[must_use]
+    fn ne(&self, other: &Rhs) -> bool {
+        !self.eq(other)
     }
 }
 

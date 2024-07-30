@@ -56,10 +56,12 @@ impl<'t, T, M: Mode> Fallible for AssertThat<'t, T, M> {
 }
 
 impl<'t, T, M: Mode> AssertThat<'t, T, M> {
+    #[track_caller]
     pub fn fail(&self, failure: impl Into<String>) {
         self.fail_with_arguments(format_args!("{}", failure.into()));
     }
 
+    #[track_caller]
     pub fn fail_using<'a>(&self, failure_provider: impl FnOnce(&Self) -> Arguments<'a>) {
         self.fail_with_arguments(failure_provider(self));
     }
