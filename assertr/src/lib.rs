@@ -42,6 +42,7 @@ pub mod prelude {
     pub use crate::assertions::std::display;
     pub use crate::assertions::std::display::DisplayAssertions;
     pub use crate::assertions::std::hashmap;
+    pub use crate::assertions::std::hashmap::HashMapAssertions;
     pub use crate::assertions::std::iter;
     pub use crate::assertions::std::iter::IntoIteratorAssertions;
     pub use crate::assertions::std::mutex;
