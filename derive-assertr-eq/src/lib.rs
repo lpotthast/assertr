@@ -71,7 +71,11 @@ pub fn store(input: TokenStream) -> TokenStream {
 
     let eq_impls = filtered_fields.map(|field| {
         let ident = &field.ident;
-        let eq_check = quote! { ::core::cmp::PartialEq::eq(&self.#ident, v) };
+        let ty = match &field.map_type {
+            None => &field.ty,
+            Some(ty) => ty,
+        };
+        let eq_check = quote! { ::core::cmp::PartialEq::<#ty>::eq(&self.#ident, v) };
         quote! {
             && match &other.#ident {
                 ::assertr::Eq::Any => true,
