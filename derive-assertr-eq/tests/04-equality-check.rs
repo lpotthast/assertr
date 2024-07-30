@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use assertr::prelude::*;
-use derive_assertr_eq::AssertrEq;
 
 #[derive(Debug, AssertrEq)]
 pub struct Foo {
@@ -20,14 +19,14 @@ fn main() {
     };
 
     assert_that(&foo).is_equal_to_assertr(FooAssertrEq {
-        id: assertr::Eq::Any,
-        name: assertr::Eq::Any,
-        timestamp: assertr::Eq::Any,
+        id: any(),
+        name: any(),
+        timestamp: any(),
     });
 
     assert_that(&foo).is_equal_to_assertr(FooAssertrEq {
-        id: assertr::Eq::Eq(1),
-        name: assertr::Eq::Eq("bob".to_string()),
-        timestamp: assertr::Eq::Any,
+        id: eq(1),
+        name: eq("bob".to_string()),
+        timestamp: any(),
     });
 }

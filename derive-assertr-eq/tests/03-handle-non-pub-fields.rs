@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use derive_assertr_eq::AssertrEq;
+use assertr::prelude::*;
 
 #[derive(Debug, AssertrEq)]
 pub struct Foo {
@@ -11,5 +11,5 @@ pub struct Foo {
 }
 
 fn main() {
-    let _ = FooAssertrEq { id: assertr::Eq::Any };
+    let _ = FooAssertrEq { id: any() };
 }

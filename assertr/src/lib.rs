@@ -27,6 +27,7 @@ pub mod util;
 pub mod prelude {
     pub use derive_assertr_eq::AssertrEq;
 
+    pub use crate::any;
     pub use crate::assert_that;
     pub use crate::assert_that_panic_by;
     pub use crate::Asserting;
@@ -68,6 +69,7 @@ pub mod prelude {
     pub use crate::AssertThat;
     pub use crate::condition::Condition;
     pub use crate::condition::ConditionAssertions;
+    pub use crate::eq;
     pub use crate::mode::Mode;
 }
 
@@ -349,6 +351,14 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 pub enum Eq<T: PartialEq> {
     Any,
     Eq(T),
+}
+
+pub fn eq<T: PartialEq>(v: T) -> Eq<T> {
+    Eq::Eq(v)
+}
+
+pub fn any<T: PartialEq>() -> Eq<T> {
+    Eq::Any
 }
 
 impl<T: PartialEq + Debug> Debug for Eq<T> {

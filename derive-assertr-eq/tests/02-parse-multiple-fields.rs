@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use derive_assertr_eq::AssertrEq;
+use assertr::prelude::*;
 
 #[derive(AssertrEq)]
 pub struct Foo {
