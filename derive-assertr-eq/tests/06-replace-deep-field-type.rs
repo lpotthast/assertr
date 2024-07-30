@@ -11,25 +11,25 @@ pub struct Bar {
 pub struct Foo {
     pub id: i32,
 
-    #[assertr_eq(map_type = "BarAssertrEq")]
-    pub bar: Bar,
+    #[assertr_eq(map_type = "Vec<BarAssertrEq>")]
+    pub bars: Vec<Bar>,
 }
 
 fn main() {
     let foo = Foo {
         id: 1,
-        bar: Bar {
+        bars: vec![Bar {
             id: 42,
-        },
+        }],
     };
 
     assert_that::<Foo>(&foo).is_equal_to(FooAssertrEq {
         id: any(),
-        bar: any(),
+        bars: any(),
     });
 
     assert_that::<Foo>(&foo).is_equal_to(FooAssertrEq {
         id: eq(1),
-        bar: eq(BarAssertrEq { id: eq(42) }),
+        bars: eq(vec![BarAssertrEq { id: eq(42) }]),
     });
 }

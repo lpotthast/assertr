@@ -50,9 +50,8 @@ pub mod prelude {
     pub use crate::assertions::std::option;
     pub use crate::assertions::std::panic_value;
     pub use crate::assertions::std::panic_value::PanicValueAssertions;
-    pub use crate::assertions::std::partial_assertr_eq;
-    pub use crate::assertions::std::partial_assertr_eq::AssertrPartialEqAssertions;
     pub use crate::assertions::std::partial_eq;
+    pub use crate::assertions::std::partial_eq::PartialEqAssertions;
     pub use crate::assertions::std::partial_ord;
     pub use crate::assertions::std::path;
     pub use crate::assertions::std::path::PathAssertions;
@@ -66,7 +65,6 @@ pub mod prelude {
     pub use crate::assertions::tokio::rw_lock;
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::rw_lock::TokioRwLockAssertions;
-    pub use crate::AssertrEq;
     pub use crate::AssertThat;
     pub use crate::condition::Condition;
     pub use crate::condition::ConditionAssertions;
@@ -370,19 +368,6 @@ impl<T: Debug> Debug for Eq<T> {
             Eq::Any => f.write_str("Eq::Any"),
             Eq::Eq(v) => f.write_fmt(format_args!("Eq::Eq({v:?})")),
         }
-    }
-}
-
-/// Debug is required, as we want to display the expected value in error messages!
-pub trait AssertEqTypeOf<O: ?Sized>: Debug {}
-
-pub trait AssertrEq<Rhs: ?Sized + AssertEqTypeOf<Self>> {
-    #[must_use]
-    fn eq(&self, other: &Rhs) -> bool;
-
-    #[must_use]
-    fn ne(&self, other: &Rhs) -> bool {
-        !self.eq(other)
     }
 }
 

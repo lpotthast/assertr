@@ -1,9 +1,26 @@
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
 use std::fmt::Debug;
 
-impl<'t, T: PartialEq + Debug, M: Mode> AssertThat<'t, T, M> {
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
+
+pub trait PartialEqAssertions<T> {
+    fn is_equal_to<E>(self, expected: E) -> Self
+    where
+        T: PartialEq<E> + Debug,
+        E: Debug;
+
+    fn is_not_equal_to<E>(self, expected: E) -> Self
+    where
+        T: PartialEq<E> + Debug,
+        E: Debug;
+}
+
+impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
     #[track_caller]
-    pub fn is_equal_to(self, expected: T) -> Self {
+    fn is_equal_to<E>(self, expected: E) -> Self
+    where
+        T: PartialEq<E> + Debug,
+        E: Debug,
+    {
         self.track_assertion();
 
         let actual = self.actual();
@@ -18,7 +35,11 @@ impl<'t, T: PartialEq + Debug, M: Mode> AssertThat<'t, T, M> {
     }
 
     #[track_caller]
-    pub fn is_not_equal_to(self, expected: T) -> Self {
+    fn is_not_equal_to<E>(self, expected: E) -> Self
+    where
+        T: PartialEq<E> + Debug,
+        E: Debug,
+    {
         self.track_assertion();
 
         let actual = self.actual();
@@ -35,27 +56,46 @@ impl<'t, T: PartialEq + Debug, M: Mode> AssertThat<'t, T, M> {
 
 #[cfg(test)]
 mod tests {
-    use indoc::formatdoc;
+    mod is_equal_to {
+        use indoc::formatdoc;
 
-    use crate::prelude::*;
+        use crate::prelude::*;
 
-    #[test]
-    fn is_equal_to_succeeds_when_equal() {
-        assert_that("foo".to_owned()).is_equal_to("foo".to_owned());
-        assert_that(&"foo".to_owned()).is_equal_to(&"foo".to_owned());
-        assert_that("foo").is_equal_to("foo");
-    }
+        #[test]
+        fn succeeds_when_equal() {
+            assert_that("foo").is_equal_to("foo");
+            assert_that("foo".to_owned()).is_equal_to("foo".to_owned());
+            assert_that::<&String>(&"foo".to_owned()).is_equal_to(&"foo".to_owned());
+        }
 
-    #[test]
-    fn is_equal_to_panics_when_not_equal() {
-        assert_that_panic_by(|| assert_that("foo").with_location(false).is_equal_to("bar"))
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expected: "bar"
+        #[test]
+        fn panics_when_not_equal() {
+            assert_that_panic_by(|| assert_that("foo").with_location(false).is_equal_to("bar"))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: "bar"
 
-                  Actual: "foo"
-                -------- assertr --------
-            "#});
+                      Actual: "foo"
+                    -------- assertr --------
+                "#});
+        }
+
+        #[test]
+        fn accepts_expected_being_of_different_type() {
+            #[derive(Debug)]
+            struct Foo {}
+
+            #[derive(Debug)]
+            struct Bar {}
+
+            impl PartialEq<Bar> for Foo {
+                fn eq(&self, _other: &Bar) -> bool {
+                    true
+                }
+            }
+
+            assert_that(Foo {}).is_equal_to(Bar {});
+        }
     }
 }

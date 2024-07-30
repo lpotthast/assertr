@@ -18,13 +18,13 @@ fn main() {
         timestamp: std::time::Instant::now(),
     };
 
-    assert_that(&foo).is_equal_to_assertr(FooAssertrEq {
+    assert_that::<Foo>(&foo).is_equal_to(FooAssertrEq {
         id: any(),
         name: any(),
         timestamp: any(),
     });
 
-    assert_that(&foo).is_equal_to_assertr(FooAssertrEq {
+    assert_that::<Foo>(&foo).is_equal_to(FooAssertrEq {
         id: eq(1),
         name: eq("bob".to_string()),
         timestamp: any(),

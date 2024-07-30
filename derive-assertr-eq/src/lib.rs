@@ -71,14 +71,7 @@ pub fn store(input: TokenStream) -> TokenStream {
 
     let eq_impls = filtered_fields.map(|field| {
         let ident = &field.ident;
-        let use_assertr_eq = match &field.map_type {
-            None => false,
-            Some(_ty) => true,
-        };
-        let eq_check = match use_assertr_eq {
-            true => quote! { ::assertr::AssertrEq::eq(&self.#ident, v) },
-            false => quote! { ::core::cmp::PartialEq::eq(&self.#ident, v) },
-        };
+        let eq_check = quote! { ::core::cmp::PartialEq::eq(&self.#ident, v) };
         quote! {
             && match &other.#ident {
                 ::assertr::Eq::Any => true,
@@ -93,9 +86,7 @@ pub fn store(input: TokenStream) -> TokenStream {
             #(#eq_struct_fields),*
         }
 
-        impl ::assertr::AssertEqTypeOf<#original_struct_ident> for #eq_struct_ident {}
-
-        impl ::assertr::AssertrEq<#eq_struct_ident> for #original_struct_ident {
+        impl ::core::cmp::PartialEq<#eq_struct_ident> for #original_struct_ident {
             fn eq(&self, other: &#eq_struct_ident) -> bool {
                 true #(#eq_impls)*
             }
