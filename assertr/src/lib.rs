@@ -31,6 +31,8 @@ pub mod prelude {
     pub use crate::assert_that;
     pub use crate::assert_that_panic_by;
     pub use crate::assert_that_ref;
+    pub use crate::AssertingThat;
+    pub use crate::AssertingThatRef;
     pub use crate::assertions::condition;
     pub use crate::assertions::std::array;
     pub use crate::assertions::std::array::ArrayAssertions;
@@ -72,9 +74,6 @@ pub mod prelude {
     pub use crate::condition::ConditionAssertions;
     pub use crate::eq;
     pub use crate::mode::Mode;
-    pub use crate::AssertThat;
-    pub use crate::AssertingThat;
-    pub use crate::AssertingThatRef;
 }
 
 pub struct PanicValue(Box<dyn Any>);
