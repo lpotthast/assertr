@@ -3,7 +3,7 @@ use crate::{prelude::Mode, AssertThat};
 pub(crate) struct NumAssertions(usize);
 
 impl NumAssertions {
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self(0)
     }
 }
