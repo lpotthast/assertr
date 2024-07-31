@@ -20,19 +20,6 @@ impl<'a> Debug for DisplayString<'a> {
     }
 }
 
-/*
-
-1) Root Detail 1
-
-    1a) Derived1 Detail 1
-    1b) Derived1 Detail 2
-
-    2) Mapped Detail 1
-
-        2a) Derived2 Detail 1
-        2b) Derived2 Detail 2
-*/
-
 pub(crate) trait WithDetail {
     fn collect_messages(&self, collection: &mut Vec<String>);
 }

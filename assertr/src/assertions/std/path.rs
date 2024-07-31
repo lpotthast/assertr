@@ -1,5 +1,6 @@
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
 use std::{ffi::OsStr, path::Path};
+
+use crate::{AssertThat, failure::GenericFailure, Mode, tracking::AssertionTracking};
 
 // TODO: PathBuf
 
@@ -58,9 +59,11 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_dir() {
+            let exists = actual.exists();
+            let is_file = actual.is_file();
             self.fail(GenericFailure {
                 arguments: format_args!(
-                    "Expected: {actual:#?}\n\nto be a directory, but it is not!"
+                    "Expected: {actual:#?}\n\nto be a directory, but it is not!\nThe path exists: {exists}\nThe path is a file: {is_file}"
                 ),
             });
         }
@@ -158,52 +161,56 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
 
 #[cfg(test)]
 mod tests {
-
     mod exists {
+        use std::env;
+
         use crate::prelude::*;
-        use std::path::Path;
 
         #[test]
         fn succeeds_when_present() {
-            let path = Path::new(file!());
-            assert_that(path)
+            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+            assert_that(path.as_path())
                 .exists()
-                .is_equal_to(Path::new("src/assertions/std/path.rs"))
                 .map(|it| it.borrowed().to_str().unwrap_or_default().into())
-                .is_equal_to("src/assertions/std/path.rs");
+                .ends_with("src/assertions/std/path.rs");
         }
     }
 
     mod does_not_exist {
-        use crate::prelude::*;
         use std::path::Path;
+
+        use crate::prelude::*;
 
         #[test]
         fn succeeds_when_not_present() {
-            let path = Path::new("src/foo/bar/baz.rs");
+            let path = Path::new("../../foo/bar/baz.rs");
             assert_that(path).does_not_exist();
         }
     }
 
     mod is_file {
+        use std::env;
+
         use crate::prelude::*;
-        use std::path::Path;
 
         #[test]
         fn succeeds_when_file() {
-            let path = Path::new(file!());
-            assert_that(path).is_a_file();
+            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+            assert_that(path.as_path()).is_a_file();
         }
     }
 
     mod is_directory {
-        use crate::prelude::*;
+        use std::env;
         use std::path::Path;
+
+        use crate::prelude::*;
 
         #[test]
         fn succeeds_when_directory() {
-            let path = Path::new(file!()).parent().expect("present");
-            assert_that(path).is_a_directory();
+            let path = env::current_dir().unwrap().parent().unwrap()
+                .join(Path::new(file!()).parent().expect("present"));
+            assert_that(path.as_path()).is_a_directory();
         }
     }
 
@@ -218,8 +225,9 @@ mod tests {
     }
 
     mod has_a_root {
-        use crate::prelude::*;
         use std::path::Path;
+
+        use crate::prelude::*;
 
         #[test]
         fn succeeds_when_root() {
@@ -229,8 +237,9 @@ mod tests {
     }
 
     mod is_relative {
-        use crate::prelude::*;
         use std::path::Path;
+
+        use crate::prelude::*;
 
         #[test]
         fn succeeds_when_relative() {

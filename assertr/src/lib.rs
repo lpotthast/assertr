@@ -7,6 +7,7 @@ use std::{
     future::Future,
     panic::{AssertUnwindSafe, RefUnwindSafe, UnwindSafe},
 };
+use std::fmt::{Debug, Formatter};
 
 use actual::Actual;
 use details::WithDetail;
@@ -24,6 +25,9 @@ pub mod tracking;
 pub mod util;
 
 pub mod prelude {
+    pub use derive_assertr_eq::AssertrEq;
+
+    pub use crate::any;
     pub use crate::assert_that;
     pub use crate::assert_that_panic_by;
     pub use crate::assert_that_ref;
@@ -38,6 +42,7 @@ pub mod prelude {
     pub use crate::assertions::std::display;
     pub use crate::assertions::std::display::DisplayAssertions;
     pub use crate::assertions::std::hashmap;
+    pub use crate::assertions::std::hashmap::HashMapAssertions;
     pub use crate::assertions::std::iter;
     pub use crate::assertions::std::iter::IntoIteratorAssertions;
     pub use crate::assertions::std::mutex;
@@ -45,6 +50,8 @@ pub mod prelude {
     pub use crate::assertions::std::option;
     pub use crate::assertions::std::panic_value;
     pub use crate::assertions::std::panic_value::PanicValueAssertions;
+    pub use crate::assertions::std::partial_assertr_eq;
+    pub use crate::assertions::std::partial_assertr_eq::AssertrPartialEqAssertions;
     pub use crate::assertions::std::partial_eq;
     pub use crate::assertions::std::partial_ord;
     pub use crate::assertions::std::path;
@@ -59,8 +66,11 @@ pub mod prelude {
     pub use crate::assertions::tokio::rw_lock;
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::rw_lock::TokioRwLockAssertions;
+    pub use crate::AssertrEq;
+    pub use crate::AssertThat;
     pub use crate::condition::Condition;
     pub use crate::condition::ConditionAssertions;
+    pub use crate::eq;
     pub use crate::mode::Mode;
     pub use crate::AssertThat;
     pub use crate::AssertingThat;
@@ -68,8 +78,6 @@ pub mod prelude {
 }
 
 pub struct PanicValue(Box<dyn Any>);
-
-
 
 #[track_caller]
 pub fn assert_that<'t, T>(actual: impl Into<Actual<'t, T>>) -> AssertThat<'t, T, Panic> {
@@ -86,9 +94,9 @@ pub fn assert_that_panic_by<'t, R>(fun: impl FnOnce() -> R) -> AssertThat<'t, Pa
     assert_that(std::panic::catch_unwind(AssertUnwindSafe(move || {
         fun();
     })))
-    .with_detail_message("Function did not panic as expected!")
-    .is_err()
-    .map(|it| PanicValue(it.unwrap_owned()).into())
+        .with_detail_message("Function did not panic as expected!")
+        .is_err()
+        .map(|it| PanicValue(it.unwrap_owned()).into())
 }
 
 pub trait AssertingThat {
@@ -256,7 +264,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         mapper: impl FnOnce(Actual<T>) -> Fut,
     ) -> AssertThat<'t, U, M>
     where
-        Fut: Future<Output = U>,
+        Fut: Future<Output=U>,
     {
         AssertThat {
             parent: self.parent,
@@ -289,7 +297,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub async fn derive_async<'u, U: 'u, Fut: Future<Output = U>>(
+    pub async fn derive_async<'u, U: 'u, Fut: Future<Output=U>>(
         &'t self,
         mapper: impl FnOnce(&'t T) -> Fut,
     ) -> AssertThat<'u, U, M>
@@ -319,8 +327,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
-        for<'a> F: FnOnce(&'a T) -> U,
-        for<'a> A: FnOnce(AssertThat<'a, U, M>),
+            for<'a> F: FnOnce(&'a T) -> U,
+            for<'a> A: FnOnce(AssertThat<'a, U, M>),
     {
         assertions(self.derive(mapper));
         self
@@ -328,8 +336,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
     pub fn satisfies_ref<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
-        for<'a> F: FnOnce(&'a T) -> &'a U,
-        for<'a> A: FnOnce(AssertThat<'a, &'a U, M>),
+            for<'a> F: FnOnce(&'a T) -> &'a U,
+            for<'a> A: FnOnce(AssertThat<'a, &'a U, M>),
     {
         assertions(self.derive(mapper));
         self
@@ -366,7 +374,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    /// Control wether the location is shown on assertion failure.
+    /// Control whether the location is shown on assertion failure.
     ///
     /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
@@ -374,6 +382,43 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     pub fn with_location(mut self, value: bool) -> Self {
         self.print_location = value;
         self
+    }
+}
+
+// Note: T does not necessarily need to be `PartialEq`.
+// T might itself be a type we want to compare using AssertrEq instead of PartialEq!
+pub enum Eq<T> {
+    Any,
+    Eq(T),
+}
+
+pub fn eq<T>(v: T) -> Eq<T> {
+    Eq::Eq(v)
+}
+
+pub fn any<T>() -> Eq<T> {
+    Eq::Any
+}
+
+impl<T: Debug> Debug for Eq<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Eq::Any => f.write_str("Eq::Any"),
+            Eq::Eq(v) => f.write_fmt(format_args!("Eq::Eq({v:?})")),
+        }
+    }
+}
+
+/// Debug is required, as we want to display the expected value in error messages!
+pub trait AssertEqTypeOf<O: ?Sized>: Debug {}
+
+pub trait AssertrEq<Rhs: ?Sized + AssertEqTypeOf<Self>> {
+    #[must_use]
+    fn eq(&self, other: &Rhs) -> bool;
+
+    #[must_use]
+    fn ne(&self, other: &Rhs) -> bool {
+        !self.eq(other)
     }
 }
 
