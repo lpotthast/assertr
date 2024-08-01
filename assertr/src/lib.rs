@@ -122,11 +122,11 @@ impl<T> AssertingThat for T {
 pub trait AssertingThatRef {
     type Owned;
 
-    fn assert_that<'t, U>(&'t self, map: impl Fn(&'t Self) -> &'t U) -> AssertThat<'t, U, Panic>
+    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<U, Panic>
     where
         Self: Sized;
 
-    fn assert_that_it<'t>(&'t self) -> AssertThat<'t, Self::Owned, Panic>
+    fn assert_that_it(&self) -> AssertThat<Self::Owned, Panic>
     where
         Self: Sized;
 }
@@ -134,13 +134,13 @@ pub trait AssertingThatRef {
 impl<T> AssertingThatRef for &T {
     type Owned = T;
 
-    fn assert_that<'t, U>(&'t self, map: impl Fn(&'t Self) -> &'t U) -> AssertThat<'t, U, Panic>
+    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<U, Panic>
     where
         Self: Sized {
         assert_that_ref(map(self))
     }
 
-    fn assert_that_it<'t>(&'t self) -> AssertThat<'t, Self::Owned, Panic>
+    fn assert_that_it(&self) -> AssertThat<Self::Owned, Panic>
     where
         Self: Sized {
         assert_that_ref(self)
