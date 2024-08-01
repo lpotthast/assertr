@@ -1,16 +1,16 @@
 use std::fmt::Debug;
 
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertrPartialEq, AssertThat, EqContext, Mode, tracking::AssertionTracking};
 
 pub trait PartialEqAssertions<T> {
     fn is_equal_to<E>(self, expected: E) -> Self
     where
-        T: PartialEq<E> + Debug,
+        T: AssertrPartialEq<E> + Debug,
         E: Debug;
 
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
-        T: PartialEq<E> + Debug,
+        T: AssertrPartialEq<E> + Debug,
         E: Debug;
 }
 
@@ -18,7 +18,7 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
     #[track_caller]
     fn is_equal_to<E>(self, expected: E) -> Self
     where
-        T: PartialEq<E> + Debug,
+        T: AssertrPartialEq<E> + Debug,
         E: Debug,
     {
         self.track_assertion();
@@ -26,7 +26,9 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
         let actual = self.actual();
         let expected = &expected;
 
-        if actual != expected {
+        let mut ctx = EqContext { differences: Vec::new() };
+
+        if !AssertrPartialEq::eq(actual, expected, &mut ctx) {
             self.fail_with_arguments(format_args!(
                 "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
             ));
@@ -37,7 +39,7 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
     #[track_caller]
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
-        T: PartialEq<E> + Debug,
+        T: AssertrPartialEq<E> + Debug,
         E: Debug,
     {
         self.track_assertion();
@@ -45,7 +47,9 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
         let actual = self.actual();
         let expected = &expected;
 
-        if actual == expected {
+
+        let mut ctx = EqContext { differences: Vec::new() };
+        if AssertrPartialEq::eq(actual, expected, &mut ctx) {
             self.fail_with_arguments(format_args!(
                 "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
             ));

@@ -2,12 +2,12 @@
 
 use assertr::prelude::*;
 
-#[derive(Debug, PartialEq, AssertrEq)]
+#[derive(Debug, AssertrEq)]
 pub struct Bar {
     pub id: i32,
 }
 
-#[derive(Debug, PartialEq, AssertrEq)]
+#[derive(Debug, AssertrEq)]
 pub struct Foo {
     pub id: i32,
 
@@ -23,12 +23,12 @@ fn main() {
         },
     };
 
-    assert_that::<Foo>(&foo).is_equal_to(FooAssertrEq {
+    assert_that_ref(&foo).is_equal_to(FooAssertrEq {
         id: any(),
         bar: any(),
     });
 
-    assert_that::<Foo>(&foo).is_equal_to(FooAssertrEq {
+    assert_that_ref(&foo).is_equal_to(FooAssertrEq {
         id: eq(1),
         bar: eq(BarAssertrEq { id: eq(42) }),
     });

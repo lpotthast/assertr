@@ -2,6 +2,7 @@
 
 use assertr::prelude::*;
 
+// Deriving `Debug` is now necessary, as we want to actually use `Foo` in an assertion.
 #[derive(Debug, AssertrEq)]
 pub struct Foo {
     pub id: i32,

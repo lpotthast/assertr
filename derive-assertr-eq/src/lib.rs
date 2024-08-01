@@ -79,9 +79,9 @@ pub fn store(input: TokenStream) -> TokenStream {
             None => &field.ty,
             Some(ty) => ty,
         };
-        let eq_args = quote! { &self.#ident, v};
+        let eq_args = quote! { &self.#ident, v, ctx };
         let eq_check = match &field.compare_with {
-            None => quote! { ::core::cmp::PartialEq::<#ty>::eq(#eq_args) },
+            None => quote! { ::assertr::AssertrPartialEq::<#ty>::eq(#eq_args) },
             Some(eq_check) => {
                 quote! { #eq_check(#eq_args) }
             }
@@ -100,8 +100,8 @@ pub fn store(input: TokenStream) -> TokenStream {
             #(#eq_struct_fields),*
         }
 
-        impl ::core::cmp::PartialEq<#eq_struct_ident> for #original_struct_ident {
-            fn eq(&self, other: &#eq_struct_ident) -> bool {
+        impl ::assertr::AssertrPartialEq<#eq_struct_ident> for #original_struct_ident {
+            fn eq(&self, other: &#eq_struct_ident, ctx: &mut ::assertr::EqContext) -> bool {
                 true #(#eq_impls)*
             }
         }

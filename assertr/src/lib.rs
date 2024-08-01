@@ -23,6 +23,7 @@ pub mod failure;
 pub mod mode;
 pub mod tracking;
 pub mod util;
+pub mod cmp;
 
 pub mod prelude {
     pub use derive_assertr_eq::AssertrEq;
@@ -82,7 +83,7 @@ pub fn assert_that<'t, T>(actual: impl Into<Actual<'t, T>>) -> AssertThat<'t, T,
 }
 
 #[track_caller]
-pub fn assert_that_ref<'t, T>(actual: &'t T) -> AssertThat<'t, T, Panic> {
+pub fn assert_that_ref<T>(actual: &T) -> AssertThat<T, Panic> {
     AssertThat::new(Actual::Borrowed(actual))
 }
 
@@ -136,13 +137,15 @@ impl<T> AssertingThatRef for &T {
 
     fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<U, Panic>
     where
-        Self: Sized {
+        Self: Sized,
+    {
         assert_that_ref(map(self))
     }
 
     fn assert_that_it(&self) -> AssertThat<Self::Owned, Panic>
     where
-        Self: Sized {
+        Self: Sized,
+    {
         assert_that_ref(self)
     }
 }
@@ -379,6 +382,44 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     pub fn with_location(mut self, value: bool) -> Self {
         self.print_location = value;
         self
+    }
+}
+
+pub struct EqContext {
+    differences: Vec<String>,
+}
+
+impl EqContext {
+    pub fn new() -> Self {
+        Self { differences: Vec::new() }
+    }
+
+    pub fn add_difference(&mut self, difference: String) {
+        self.differences.push(difference);
+    }
+}
+
+pub trait AssertrPartialEq<Rhs: ?Sized = Self> {
+    /// This method tests for `self` and `other` values to be equal.
+    #[must_use]
+    fn eq(&self, other: &Rhs, ctx: &mut EqContext) -> bool;
+
+    /// This method tests for `!=`. The default implementation is almost always
+    /// sufficient, and should not be overridden without very good reason.
+    #[must_use]
+    fn ne(&self, other: &Rhs, ctx: &mut EqContext) -> bool {
+        !self.eq(other, ctx)
+    }
+}
+
+// AssertrPartialEq must be implemented for each type already being PartialEq,
+// so that we can solely rely on, and call, this ctx-enabled version in our assertions.
+impl<Rhs, T: PartialEq<Rhs>> AssertrPartialEq<Rhs> for T {
+    fn eq(&self, other: &Rhs, _ctx: &mut EqContext) -> bool {
+        PartialEq::eq(self, other)
+    }
+    fn ne(&self, other: &Rhs, _ctx: &mut EqContext) -> bool {
+        PartialEq::ne(self, other)
     }
 }
 

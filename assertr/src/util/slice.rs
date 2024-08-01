@@ -5,6 +5,7 @@ pub(crate) struct CompareResult<'t, A, B> {
     pub(crate) not_in_b: Vec<&'t A>,
 }
 
+// TODO: Move to cmp module and rename.
 pub(crate) fn compare<'t, A, B>(aa: &'t [A], bb: &'t [B]) -> CompareResult<'t, A, B>
 where
     A: PartialEq<B>,

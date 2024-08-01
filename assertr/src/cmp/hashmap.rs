@@ -1,26 +1,27 @@
 use std::collections::HashMap;
 use std::hash::Hash;
+use crate::{AssertrPartialEq, EqContext};
 
-pub fn compare<K, V1, V2>(map1: &HashMap<K, V1>, map2: &HashMap<K, V2>) -> bool
+pub fn compare<K, V1, V2>(map1: &HashMap<K, V1>, map2: &HashMap<K, V2>, ctx: &mut EqContext) -> bool
 where
     K: Eq + Hash,
-    V1: PartialEq<V2>,
+    V1: AssertrPartialEq<V2>,
 {
     if map1.len() != map2.len() {
         return false;
     }
 
     map1.iter().all(|(k, v1)| {
-        map2.get(k).map_or(false, |v2| v1 == v2)
+        map2.get(k).map_or(false, |v2| AssertrPartialEq::eq(v1, v2, ctx))
     })
 }
 
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
-
+    use crate::EqContext;
     use crate::prelude::*;
-    use crate::util::hashmap::compare;
+    use crate::cmp::hashmap::compare;
 
     #[derive(Debug, PartialEq)]
     struct Foo {
@@ -44,7 +45,9 @@ mod test {
         let m2 = HashMap::from([("e1", Bar { id: 42 })]);
         let m3 = HashMap::from([("e1", Bar { id: 43 })]);
 
-        assert_that(compare(&m1, &m2)).is_true();
-        assert_that(compare(&m1, &m3)).is_false();
+        let mut ctx = EqContext::new();
+
+        assert_that(compare(&m1, &m2, &mut ctx)).is_true();
+        assert_that(compare(&m1, &m3, &mut ctx)).is_false();
     }
 }

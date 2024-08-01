@@ -2,7 +2,7 @@
 
 use assertr::prelude::*;
 
-#[derive(Debug, AssertrEq)]
+#[derive(AssertrEq)]
 pub struct Foo {
     pub id: i32,
 }
