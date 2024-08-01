@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::{AssertThat, failure::GenericFailure, Mode, tracking::AssertionTracking};
+use crate::{AssertrPartialEq, AssertThat, EqContext, failure::GenericFailure, Mode, tracking::AssertionTracking};
 
 /// Assertions for generic `HashMap`s.∆
 pub trait HashMapAssertions<K, V> {
@@ -12,7 +12,7 @@ pub trait HashMapAssertions<K, V> {
     fn contains_value<E>(self, expected: E) -> Self
     where
         K: Debug,
-        V: PartialEq<E> + Debug,
+        V: AssertrPartialEq<E> + Debug,
         E: Debug;
 }
 
@@ -39,11 +39,15 @@ impl<'t, K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'t, HashMap<K, V>
     fn contains_value<E>(self, expected: E) -> Self
     where
         K: Debug,
-        V: PartialEq<E> + Debug,
+        V: AssertrPartialEq<E> + Debug,
         E: Debug,
     {
         self.track_assertion();
-        if !self.actual().values().any(|it| *it == expected) {
+
+        let mut ctx = EqContext::new();
+
+        if !self.actual().values().any(|it| AssertrPartialEq::eq(it, &expected, &mut ctx)) {
+            // TODO: Use context. NO: We are actually not interested in differences at this point!
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\ndoes not contain expected value: {expected:#?}",
