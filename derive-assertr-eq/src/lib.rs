@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use darling::*;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{DeriveInput, parse_macro_input, Visibility};
+use syn::{parse_macro_input, DeriveInput, Visibility};
 
 #[derive(Debug, FromField)]
 #[darling(attributes(assertr_eq))]
@@ -52,47 +52,48 @@ pub fn store(input: TokenStream) -> TokenStream {
 
     let original_struct_ident = input.ident.clone();
 
-    let filtered_fields = input
-        .fields()
-        .iter()
-        .filter(|field| match field.vis {
-            Visibility::Public(_) => true,
-            Visibility::Restricted(_) => false,
-            Visibility::Inherited => false,
-        });
+    let filtered_fields = input.fields().iter().filter(|field| match field.vis {
+        Visibility::Public(_) => true,
+        Visibility::Restricted(_) => false,
+        Visibility::Inherited => false,
+    });
 
-    let eq_struct_ident = Ident::new(format!("{}AssertrEq", input.ident).as_str(), Span::call_site());
-    let eq_struct_fields = filtered_fields.clone()
-        .map(|field| {
-            let vis = &field.vis;
-            let ident = &field.ident;
-            let ty = match &field.map_type {
-                None => &field.ty,
-                Some(ty) => ty,
-            };
-            quote! { #vis #ident: ::assertr::Eq<#ty> }
-        });
-
-    let eq_impls = filtered_fields.map(|field| {
+    let eq_struct_ident = Ident::new(
+        format!("{}AssertrEq", input.ident).as_str(),
+        Span::call_site(),
+    );
+    let eq_struct_fields = filtered_fields.clone().map(|field| {
+        let vis = &field.vis;
         let ident = &field.ident;
         let ty = match &field.map_type {
             None => &field.ty,
             Some(ty) => ty,
         };
-        let eq_args = quote! { &self.#ident, v, ctx };
-        let eq_check = match &field.compare_with {
-            None => quote! { ::assertr::AssertrPartialEq::<#ty>::eq(#eq_args) },
-            Some(eq_check) => {
-                quote! { #eq_check(#eq_args) }
+        quote! { #vis #ident: ::assertr::Eq<#ty> }
+    });
+
+    let eq_impls = filtered_fields
+        .map(|field| {
+            let ident = &field.ident;
+            let ty = match &field.map_type {
+                None => &field.ty,
+                Some(ty) => ty,
+            };
+            let eq_args = quote! { &self.#ident, v, ctx.as_deref_mut() };
+            let eq_check = match &field.compare_with {
+                None => quote! { ::assertr::AssertrPartialEq::<#ty>::eq(#eq_args) },
+                Some(eq_check) => {
+                    quote! { #eq_check(#eq_args) }
+                }
+            };
+            quote! {
+                && match &other.#ident {
+                    ::assertr::Eq::Any => true,
+                    ::assertr::Eq::Eq(v) => { #eq_check },
+                }
             }
-        };
-        quote! {
-            && match &other.#ident {
-                ::assertr::Eq::Any => true,
-                ::assertr::Eq::Eq(v) => { #eq_check },
-            }
-        }
-    }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     quote! {
         #[derive(::core::fmt::Debug)]
@@ -100,10 +101,17 @@ pub fn store(input: TokenStream) -> TokenStream {
             #(#eq_struct_fields),*
         }
 
-        impl ::assertr::AssertrPartialEq<#eq_struct_ident> for #original_struct_ident {
-            fn eq(&self, other: &#eq_struct_ident, ctx: &mut ::assertr::EqContext) -> bool {
+        impl ::assertr::AssertrPartialEq<#eq_struct_ident> for &#original_struct_ident {
+            fn eq(&self, other: &#eq_struct_ident, mut ctx: Option<&mut ::assertr::EqContext>) -> bool {
                 true #(#eq_impls)*
             }
         }
-    }.into()
+
+        impl ::assertr::AssertrPartialEq<#eq_struct_ident> for #original_struct_ident {
+            fn eq(&self, other: &#eq_struct_ident, ctx: Option<&mut ::assertr::EqContext>) -> bool {
+                ::assertr::AssertrPartialEq::eq(&self, other, ctx)
+            }
+        }
+    }
+    .into()
 }
