@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 
-use crate::{AssertrPartialEq, AssertThat, EqContext, failure::GenericFailure, Mode, tracking::AssertionTracking};
+use crate::{
+    failure::GenericFailure, tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode,
+};
 
 pub trait IntoIteratorAssertions<T: Debug> {
     fn contains<E>(self, expected: E) -> Self
@@ -14,7 +16,7 @@ pub trait IntoIteratorAssertions<T: Debug> {
 impl<'t, T, I, M: Mode> IntoIteratorAssertions<T> for AssertThat<'t, I, M>
 where
     T: Debug,
-    for<'any> &'any I: IntoIterator<Item=&'any T>,
+    for<'any> &'any I: IntoIterator<Item = &'any T>,
 {
     #[track_caller]
     fn contains<E>(self, expected: E) -> Self
@@ -24,9 +26,11 @@ where
     {
         self.track_assertion();
         let expected = expected;
-        let mut ctx = EqContext::new();
-        // TODO: Not interested in differences at this point!
-        if !self.actual().into_iter().any(|it| AssertrPartialEq::eq(it, &expected, &mut ctx)) {
+        if !self
+            .actual()
+            .into_iter()
+            .any(|it| AssertrPartialEq::eq(it, &expected, None))
+        {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: ...\n\ndoes not contain expected key: {expected:#?}",

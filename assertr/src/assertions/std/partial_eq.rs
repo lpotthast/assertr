@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::{AssertrPartialEq, AssertThat, EqContext, Mode, tracking::AssertionTracking};
+use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, EqContext, Mode};
 
 pub trait PartialEqAssertions<T> {
     fn is_equal_to<E>(self, expected: E) -> Self
@@ -26,9 +26,11 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
         let actual = self.actual();
         let expected = &expected;
 
-        let mut ctx = EqContext { differences: Vec::new() };
+        let mut ctx = EqContext {
+            differences: Vec::new(),
+        };
 
-        if !AssertrPartialEq::eq(actual, expected, &mut ctx) {
+        if !AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
             self.fail_with_arguments(format_args!(
                 "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
             ));
@@ -47,9 +49,11 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
         let actual = self.actual();
         let expected = &expected;
 
+        let mut ctx = EqContext {
+            differences: Vec::new(),
+        };
 
-        let mut ctx = EqContext { differences: Vec::new() };
-        if AssertrPartialEq::eq(actual, expected, &mut ctx) {
+        if AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
             self.fail_with_arguments(format_args!(
                 "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
             ));

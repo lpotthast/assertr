@@ -1,9 +1,6 @@
-use crate::{
-    failure::{ExpectedActualFailure, GenericFailure},
-    tracking::AssertionTracking,
-    AssertThat, Mode,
-};
 use std::fmt::Debug;
+
+use crate::{AssertrPartialEq, AssertThat, failure::{ExpectedActualFailure, GenericFailure}, Mode, tracking::AssertionTracking};
 
 // Assertions for generic slices.
 impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
@@ -52,7 +49,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     where
         E: Debug + 't,
         EE: AsRef<[E]>,
-        T: PartialEq<E> + Debug,
+        T: AssertrPartialEq<E> + Debug,
     {
         self.track_assertion();
         let actual = *self.actual();
@@ -176,8 +173,8 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that([42].as_slice()).with_location(false).is_empty();
             })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: [42]
 
@@ -191,6 +188,7 @@ mod tests {
         use indoc::formatdoc;
 
         use crate::prelude::*;
+
         #[test]
         fn succeeds_when_exact_match() {
             assert_that([1, 2, 3].as_slice()).contains_exactly([1, 2, 3]);
@@ -218,8 +216,8 @@ mod tests {
                     .with_location(false)
                     .contains_exactly([2, 3, 4])
             })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -254,8 +252,8 @@ mod tests {
                     .with_location(false)
                     .contains_exactly([3, 2, 1])
             })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -296,8 +294,8 @@ mod tests {
                     .with_location(false)
                     .contains_exactly_in_any_order([2, 3, 4])
             })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -336,7 +334,7 @@ mod tests {
                     move |it: &i32| *it == 2,
                     move |it: &i32| *it == 3,
                 ]
-                .as_slice(),
+                    .as_slice(),
             );
         }
 
@@ -348,7 +346,7 @@ mod tests {
                     move |it: &i32| *it == 1,
                     move |it: &i32| *it == 2,
                 ]
-                .as_slice(),
+                    .as_slice(),
             );
         }
 
@@ -363,11 +361,11 @@ mod tests {
                             move |it: &i32| *it == 3,
                             move |it: &i32| *it == 4,
                         ]
-                        .as_slice(),
+                            .as_slice(),
                     )
             })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Actual: [
                         1,

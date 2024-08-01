@@ -1,4 +1,4 @@
-use crate::{AssertThat, Mode};
+use crate::{AssertrPartialEq, AssertThat, Mode};
 use std::fmt::Debug;
 
 impl<'t, T: Debug, M: Mode> AssertThat<'t, Vec<T>, M> {
@@ -12,7 +12,7 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, Vec<T>, M> {
     pub fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         E: Debug + 't,
-        T: PartialEq<E> + Debug,
+        T: AssertrPartialEq<E> + Debug,
     {
         self.derive(|it| it.as_slice()).contains_exactly(expected);
         self

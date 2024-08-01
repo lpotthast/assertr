@@ -1,3 +1,5 @@
+use crate::{AssertrPartialEq, EqContext};
+
 pub(crate) struct CompareResult<'t, A, B> {
     pub(crate) strictly_equal: bool,
     pub(crate) only_differing_in_order: bool,
@@ -8,9 +10,9 @@ pub(crate) struct CompareResult<'t, A, B> {
 // TODO: Move to cmp module and rename.
 pub(crate) fn compare<'t, A, B>(aa: &'t [A], bb: &'t [B]) -> CompareResult<'t, A, B>
 where
-    A: PartialEq<B>,
+    A: AssertrPartialEq<B>,
 {
-    if aa == bb {
+    if AssertrPartialEq::eq(aa, bb, None) {
         return CompareResult {
             strictly_equal: true,
             only_differing_in_order: false,
@@ -24,14 +26,16 @@ where
     let mut not_in_a = Vec::new();
     let mut not_in_b = Vec::new();
 
+    let mut ctx = EqContext::new();
+
     for a in aa {
-        if !bb.iter().any(|b| a == b) {
+        if !bb.iter().any(|b| AssertrPartialEq::eq(a, b, Some(&mut ctx))) {
             not_in_b.push(a);
         }
     }
 
     for b in bb {
-        if !aa.iter().any(|a| a == b) {
+        if !aa.iter().any(|a| AssertrPartialEq::eq(a, b, Some(&mut ctx))) {
             not_in_a.push(b);
         }
     }
@@ -116,7 +120,7 @@ mod tests {
                     move |it: &i32| *it == 2,
                     move |it: &i32| *it == 3,
                 ]
-                .as_slice(),
+                    .as_slice(),
             );
 
             assert_that(result.not_matched).is_empty();
@@ -131,7 +135,7 @@ mod tests {
                     move |it: &i32| *it == 2,
                     move |it: &i32| *it == 1,
                 ]
-                .as_slice(),
+                    .as_slice(),
             );
 
             assert_that(result.not_matched).is_empty();
@@ -147,7 +151,7 @@ mod tests {
                     move |it: &i32| *it == 4,
                     move |it: &i32| *it == 42,
                 ]
-                .as_slice(),
+                    .as_slice(),
             );
 
             assert_that(result.not_matched).contains_exactly([&1, &7]);

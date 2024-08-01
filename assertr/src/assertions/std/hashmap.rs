@@ -1,6 +1,8 @@
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::{AssertrPartialEq, AssertThat, EqContext, failure::GenericFailure, Mode, tracking::AssertionTracking};
+use crate::{
+    failure::GenericFailure, tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode,
+};
 
 /// Assertions for generic `HashMap`s.∆
 pub trait HashMapAssertions<K, V> {
@@ -44,10 +46,11 @@ impl<'t, K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'t, HashMap<K, V>
     {
         self.track_assertion();
 
-        let mut ctx = EqContext::new();
-
-        if !self.actual().values().any(|it| AssertrPartialEq::eq(it, &expected, &mut ctx)) {
-            // TODO: Use context. NO: We are actually not interested in differences at this point!
+        if !self
+            .actual()
+            .values()
+            .any(|it| AssertrPartialEq::eq(it, &expected, None))
+        {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:#?}\n\ndoes not contain expected value: {expected:#?}",
@@ -82,8 +85,8 @@ mod tests {
                 map.insert("foo", "bar");
                 assert_that(map).with_location(false).contains_key("baz");
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: {{
                         "foo": "bar",
@@ -116,8 +119,8 @@ mod tests {
                 map.insert("foo", "bar");
                 assert_that(map).with_location(false).contains_value("baz");
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: {{
                         "foo": "bar",

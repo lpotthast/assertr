@@ -1,13 +1,13 @@
 // Allow functions named `is_*`, taking self by value instead of taking self by mutable reference or reference.
 #![allow(clippy::wrong_self_convention)]
 
+use std::fmt::{Debug, Formatter};
 use std::{
     any::Any,
     cell::RefCell,
     future::Future,
     panic::{AssertUnwindSafe, RefUnwindSafe, UnwindSafe},
 };
-use std::fmt::{Debug, Formatter};
 
 use actual::Actual;
 use details::WithDetail;
@@ -17,13 +17,13 @@ use tracking::{AssertionTracking, NumAssertions};
 
 pub mod actual;
 pub mod assertions;
+pub mod cmp;
 pub mod condition;
 pub mod details;
 pub mod failure;
 pub mod mode;
 pub mod tracking;
 pub mod util;
-pub mod cmp;
 
 pub mod prelude {
     pub use derive_assertr_eq::AssertrEq;
@@ -32,8 +32,6 @@ pub mod prelude {
     pub use crate::assert_that;
     pub use crate::assert_that_panic_by;
     pub use crate::assert_that_ref;
-    pub use crate::AssertingThat;
-    pub use crate::AssertingThatRef;
     pub use crate::assertions::condition;
     pub use crate::assertions::std::array;
     pub use crate::assertions::std::array::ArrayAssertions;
@@ -68,11 +66,13 @@ pub mod prelude {
     pub use crate::assertions::tokio::rw_lock;
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::rw_lock::TokioRwLockAssertions;
-    pub use crate::AssertThat;
     pub use crate::condition::Condition;
     pub use crate::condition::ConditionAssertions;
     pub use crate::eq;
     pub use crate::mode::Mode;
+    pub use crate::AssertThat;
+    pub use crate::AssertingThat;
+    pub use crate::AssertingThatRef;
 }
 
 pub struct PanicValue(Box<dyn Any>);
@@ -92,9 +92,9 @@ pub fn assert_that_panic_by<'t, R>(fun: impl FnOnce() -> R) -> AssertThat<'t, Pa
     assert_that(std::panic::catch_unwind(AssertUnwindSafe(move || {
         fun();
     })))
-        .with_detail_message("Function did not panic as expected!")
-        .is_err()
-        .map(|it| PanicValue(it.unwrap_owned()).into())
+    .with_detail_message("Function did not panic as expected!")
+    .is_err()
+    .map(|it| PanicValue(it.unwrap_owned()).into())
 }
 
 pub trait AssertingThat {
@@ -264,7 +264,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         mapper: impl FnOnce(Actual<T>) -> Fut,
     ) -> AssertThat<'t, U, M>
     where
-        Fut: Future<Output=U>,
+        Fut: Future<Output = U>,
     {
         AssertThat {
             parent: self.parent,
@@ -297,7 +297,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub async fn derive_async<'u, U: 'u, Fut: Future<Output=U>>(
+    pub async fn derive_async<'u, U: 'u, Fut: Future<Output = U>>(
         &'t self,
         mapper: impl FnOnce(&'t T) -> Fut,
     ) -> AssertThat<'u, U, M>
@@ -327,8 +327,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
-            for<'a> F: FnOnce(&'a T) -> U,
-            for<'a> A: FnOnce(AssertThat<'a, U, M>),
+        for<'a> F: FnOnce(&'a T) -> U,
+        for<'a> A: FnOnce(AssertThat<'a, U, M>),
     {
         assertions(self.derive(mapper));
         self
@@ -336,8 +336,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
     pub fn satisfies_ref<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
-            for<'a> F: FnOnce(&'a T) -> &'a U,
-            for<'a> A: FnOnce(AssertThat<'a, &'a U, M>),
+        for<'a> F: FnOnce(&'a T) -> &'a U,
+        for<'a> A: FnOnce(AssertThat<'a, &'a U, M>),
     {
         assertions(self.derive(mapper));
         self
@@ -391,7 +391,9 @@ pub struct EqContext {
 
 impl EqContext {
     pub fn new() -> Self {
-        Self { differences: Vec::new() }
+        Self {
+            differences: Vec::new(),
+        }
     }
 
     pub fn add_difference(&mut self, difference: String) {
@@ -402,24 +404,38 @@ impl EqContext {
 pub trait AssertrPartialEq<Rhs: ?Sized = Self> {
     /// This method tests for `self` and `other` values to be equal.
     #[must_use]
-    fn eq(&self, other: &Rhs, ctx: &mut EqContext) -> bool;
+    fn eq(&self, other: &Rhs, ctx: Option<&mut EqContext>) -> bool;
 
     /// This method tests for `!=`. The default implementation is almost always
     /// sufficient, and should not be overridden without very good reason.
     #[must_use]
-    fn ne(&self, other: &Rhs, ctx: &mut EqContext) -> bool {
+    fn ne(&self, other: &Rhs, ctx: Option<&mut EqContext>) -> bool {
         !self.eq(other, ctx)
     }
 }
 
 // AssertrPartialEq must be implemented for each type already being PartialEq,
 // so that we can solely rely on, and call, this ctx-enabled version in our assertions.
-impl<Rhs, T: PartialEq<Rhs>> AssertrPartialEq<Rhs> for T {
-    fn eq(&self, other: &Rhs, _ctx: &mut EqContext) -> bool {
+impl<Rhs: ?Sized, T: PartialEq<Rhs>> AssertrPartialEq<Rhs> for T {
+    fn eq(&self, other: &Rhs, _ctx: Option<&mut EqContext>) -> bool {
         PartialEq::eq(self, other)
     }
-    fn ne(&self, other: &Rhs, _ctx: &mut EqContext) -> bool {
+    fn ne(&self, other: &Rhs, _ctx: Option<&mut EqContext>) -> bool {
         PartialEq::ne(self, other)
+    }
+}
+
+impl<T1: AssertrPartialEq<T2>, T2> AssertrPartialEq<[T2]> for [T1] {
+    fn eq(&self, other: &[T2], mut ctx: Option<&mut EqContext>) -> bool {
+        self.iter().enumerate().all(|(i, t1)| {
+            other
+                .get(i)
+                .map_or(false, |t2| AssertrPartialEq::eq(t1, t2, ctx.as_deref_mut()))
+        })
+    }
+
+    fn ne(&self, other: &[T2], ctx: Option<&mut EqContext>) -> bool {
+        !Self::eq(self, other, ctx)
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::{AssertrPartialEq, EqContext};
 
 /// PartialEq like comparison on slices, but with an `EqContext`, tracking exact differences.
-pub fn compare<V1, V2>(slice1: &[V1], slice2: &[V2], ctx: &mut EqContext) -> bool
+pub fn compare<V1, V2>(slice1: &[V1], slice2: &[V2], mut ctx: Option<&mut EqContext>) -> bool
 where
     V1: AssertrPartialEq<V2>,
 {
@@ -12,15 +12,17 @@ where
 
     slice1.iter().enumerate().all(|(i, v1)| {
         // TODO: Handle absence with ctx.
-        slice2.get(i).map_or(false, |v2| AssertrPartialEq::eq(v1, v2, ctx))
+        slice2
+            .get(i)
+            .map_or(false, |v2| AssertrPartialEq::eq(v1, v2, ctx.as_deref_mut()))
     })
 }
 
 #[cfg(test)]
 mod test {
-    use crate::EqContext;
-    use crate::prelude::*;
     use crate::cmp::slice::compare;
+    use crate::prelude::*;
+    use crate::EqContext;
 
     #[derive(Debug, PartialEq)]
     struct Foo {
@@ -46,7 +48,7 @@ mod test {
 
         let mut ctx = EqContext::new();
 
-        assert_that(compare(&slice1, &slice2, &mut ctx)).is_true();
-        assert_that(compare(&slice1, &slice3, &mut ctx)).is_false();
+        assert_that(compare(&slice1, &slice2, Some(&mut ctx))).is_true();
+        assert_that(compare(&slice1, &slice3, Some(&mut ctx))).is_false();
     }
 }
