@@ -9,10 +9,11 @@ pub trait HashMapAssertions<K, V> {
         K: Eq + Hash + Debug,
         V: Debug;
 
-    fn contains_value(self, expected: V) -> Self
+    fn contains_value<E>(self, expected: E) -> Self
     where
         K: Debug,
-        V: PartialEq + Debug;
+        V: PartialEq<E> + Debug,
+        E: Debug;
 }
 
 impl<'t, K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'t, HashMap<K, V>, M> {
@@ -35,10 +36,11 @@ impl<'t, K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'t, HashMap<K, V>
     }
 
     #[track_caller]
-    fn contains_value(self, expected: V) -> Self
+    fn contains_value<E>(self, expected: E) -> Self
     where
         K: Debug,
-        V: PartialEq + Debug,
+        V: PartialEq<E> + Debug,
+        E: Debug,
     {
         self.track_assertion();
         if !self.actual().values().any(|it| *it == expected) {
@@ -120,6 +122,13 @@ mod tests {
                     does not contain expected value: "baz"
                     -------- assertr --------
                 "#});
+        }
+
+        #[test]
+        fn compiles_with_any_type_comparable_to_the_actual_value_type() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_that(map).contains_value("bar".to_string());
         }
     }
 }
