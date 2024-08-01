@@ -5,10 +5,12 @@ edition = "2021"
 
 [features]
 tokio = ["dep:tokio"]
+serde = ["dep:serde"]
 
 [dependencies]
 derive-assertr-eq = { path = "../derive-assertr-eq" }
 tokio = { version = "1.38.0", optional = true, features = ["full"] }
+serde = { version = "1.0.204", optional = true, features = ["derive"] }
 indoc = "2.0.5"
 
 [dev-dependencies]

@@ -17,7 +17,11 @@ struct MyFieldReceiver {
 
     vis: syn::Visibility,
 
+    #[darling(default)]
     map_type: Option<syn::Type>,
+
+    #[darling(default)]
+    compare_with: Option<syn::Path>,
 }
 
 #[derive(Debug, FromDeriveInput)]
@@ -75,7 +79,12 @@ pub fn store(input: TokenStream) -> TokenStream {
             None => &field.ty,
             Some(ty) => ty,
         };
-        let eq_check = quote! { ::core::cmp::PartialEq::<#ty>::eq(&self.#ident, v) };
+        let eq_check = match &field.compare_with {
+            None => quote! { ::core::cmp::PartialEq::<#ty>::eq(&self.#ident, v) },
+            Some(eq_check) => {
+                quote! { #eq_check(&self.#ident, v) }
+            }
+        };
         quote! {
             && match &other.#ident {
                 ::assertr::Eq::Any => true,
