@@ -7,4 +7,5 @@ fn tests() {
     t.pass("tests/04-equality-check.rs");
     t.pass("tests/05-replace-field-type.rs");
     t.pass("tests/06-replace-deep-field-type.rs");
+    t.pass("tests/07-derive-impl-for-reference.rs");
 }
