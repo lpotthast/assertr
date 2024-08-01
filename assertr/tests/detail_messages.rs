@@ -1,4 +1,4 @@
-use assertr::{assert_that, Asserting};
+use assertr::{assert_that, AssertingThat};
 use indoc::formatdoc;
 
 #[derive(Debug, PartialEq)]

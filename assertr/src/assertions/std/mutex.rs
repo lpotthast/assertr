@@ -84,7 +84,7 @@ mod tests {
         fn panics_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
-            assert_that_panic_by(|| assert_that(&mutex).with_location(false).is_not_locked())
+            assert_that_panic_by(|| assert_that::<Mutex<i32>>(&mutex).with_location(false).is_not_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------

@@ -30,7 +30,9 @@ pub mod prelude {
     pub use crate::any;
     pub use crate::assert_that;
     pub use crate::assert_that_panic_by;
-    pub use crate::Asserting;
+    pub use crate::assert_that_ref;
+    pub use crate::AssertingThat;
+    pub use crate::AssertingThatRef;
     pub use crate::assertions::condition;
     pub use crate::assertions::std::array;
     pub use crate::assertions::std::array::ArrayAssertions;
@@ -80,7 +82,12 @@ pub fn assert_that<'t, T>(actual: impl Into<Actual<'t, T>>) -> AssertThat<'t, T,
 }
 
 #[track_caller]
-pub fn assert_that_panic_by<'t, F: FnOnce() -> R, R>(fun: F) -> AssertThat<'t, PanicValue, Panic> {
+pub fn assert_that_ref<'t, T>(actual: &'t T) -> AssertThat<'t, T, Panic> {
+    AssertThat::new(Actual::Borrowed(actual))
+}
+
+#[track_caller]
+pub fn assert_that_panic_by<'t, R>(fun: impl FnOnce() -> R) -> AssertThat<'t, PanicValue, Panic> {
     assert_that(std::panic::catch_unwind(AssertUnwindSafe(move || {
         fun();
     })))
@@ -89,7 +96,7 @@ pub fn assert_that_panic_by<'t, F: FnOnce() -> R, R>(fun: F) -> AssertThat<'t, P
         .map(|it| PanicValue(it.unwrap_owned()).into())
 }
 
-pub trait Asserting {
+pub trait AssertingThat {
     fn assert_that<'t, U>(self, map: impl Fn(Self) -> U) -> AssertThat<'t, U, Panic>
     where
         Self: Sized;
@@ -99,7 +106,7 @@ pub trait Asserting {
         Self: Sized;
 }
 
-impl<T> Asserting for T {
+impl<T> AssertingThat for T {
     fn assert_that<'t, U>(self, map: impl Fn(T) -> U) -> AssertThat<'t, U, Panic>
     where
         Self: Sized,
@@ -109,6 +116,34 @@ impl<T> Asserting for T {
 
     fn assert_that_it<'t>(self) -> AssertThat<'t, Self, Panic> {
         assert_that(self)
+    }
+}
+
+pub trait AssertingThatRef {
+    type Owned;
+
+    fn assert_that<'t, U>(&'t self, map: impl Fn(&'t Self) -> &'t U) -> AssertThat<'t, U, Panic>
+    where
+        Self: Sized;
+
+    fn assert_that_it<'t>(&'t self) -> AssertThat<'t, Self::Owned, Panic>
+    where
+        Self: Sized;
+}
+
+impl<T> AssertingThatRef for &T {
+    type Owned = T;
+
+    fn assert_that<'t, U>(&'t self, map: impl Fn(&'t Self) -> &'t U) -> AssertThat<'t, U, Panic>
+    where
+        Self: Sized {
+        assert_that_ref(map(self))
+    }
+
+    fn assert_that_it<'t>(&'t self) -> AssertThat<'t, Self::Owned, Panic>
+    where
+        Self: Sized {
+        assert_that_ref(self)
     }
 }
 
@@ -151,7 +186,7 @@ impl<'t, T, M: Mode> RefUnwindSafe for AssertThat<'t, T, M> {}
 
 impl<'t, T> AssertThat<'t, T, Panic> {
     #[track_caller]
-    pub(crate) fn new(actual: Actual<'t, T>) -> Self {
+    pub(crate) const fn new(actual: Actual<'t, T>) -> Self {
         AssertThat {
             parent: None,
             actual,
