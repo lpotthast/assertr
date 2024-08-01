@@ -1,20 +1,22 @@
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
+use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode, AssertrPartialEq, EqContext};
 use std::{borrow::Borrow, fmt::Debug};
 
-pub trait IntoIteratorAssertions<'t, T: PartialEq + Debug> {
+pub trait IntoIteratorAssertions<'t, T: AssertrPartialEq + Debug> {
     fn contains<E: Borrow<T>>(self, expected: E) -> Self;
     fn iterator_is_empty(self) -> Self;
 }
 
-impl<'t, T: PartialEq + Debug, I, M: Mode> IntoIteratorAssertions<'t, T> for AssertThat<'t, I, M>
+impl<'t, T: AssertrPartialEq + Debug, I, M: Mode> IntoIteratorAssertions<'t, T> for AssertThat<'t, I, M>
 where
-    for<'any> &'any I: IntoIterator<Item = &'any T>,
+        for<'any> &'any I: IntoIterator<Item=&'any T>,
 {
     #[track_caller]
     fn contains<E: Borrow<T>>(self, expected: E) -> Self {
         self.track_assertion();
         let expected = expected.borrow();
-        if !self.actual().into_iter().any(|it| it == expected) {
+        let mut ctx = EqContext::new();
+        // TODO: Not interested in differences at this point!
+        if !self.actual().into_iter().any(|it| AssertrPartialEq::eq(it, expected, &mut ctx)) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: ...\n\ndoes not contain expected key: {expected:#?}",
