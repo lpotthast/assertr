@@ -1,22 +1,32 @@
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode, AssertrPartialEq, EqContext};
-use std::{borrow::Borrow, fmt::Debug};
+use std::fmt::Debug;
 
-pub trait IntoIteratorAssertions<'t, T: AssertrPartialEq + Debug> {
-    fn contains<E: Borrow<T>>(self, expected: E) -> Self;
+use crate::{AssertrPartialEq, AssertThat, EqContext, failure::GenericFailure, Mode, tracking::AssertionTracking};
+
+pub trait IntoIteratorAssertions<T: Debug> {
+    fn contains<E>(self, expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E>;
+
     fn iterator_is_empty(self) -> Self;
 }
 
-impl<'t, T: AssertrPartialEq + Debug, I, M: Mode> IntoIteratorAssertions<'t, T> for AssertThat<'t, I, M>
+impl<'t, T, I, M: Mode> IntoIteratorAssertions<T> for AssertThat<'t, I, M>
 where
-        for<'any> &'any I: IntoIterator<Item=&'any T>,
+    T: Debug,
+    for<'any> &'any I: IntoIterator<Item=&'any T>,
 {
     #[track_caller]
-    fn contains<E: Borrow<T>>(self, expected: E) -> Self {
+    fn contains<E>(self, expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E>,
+    {
         self.track_assertion();
-        let expected = expected.borrow();
+        let expected = expected;
         let mut ctx = EqContext::new();
         // TODO: Not interested in differences at this point!
-        if !self.actual().into_iter().any(|it| AssertrPartialEq::eq(it, expected, &mut ctx)) {
+        if !self.actual().into_iter().any(|it| AssertrPartialEq::eq(it, &expected, &mut ctx)) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: ...\n\ndoes not contain expected key: {expected:#?}",
@@ -56,5 +66,11 @@ mod tests {
             .contains(42)
             .contains(3)
             .contains(2);
+    }
+
+    #[test]
+    fn compiles_for_comparable_but_different_type() {
+        let values = vec!["foo"];
+        assert_that(values).contains("foo".to_string());
     }
 }
