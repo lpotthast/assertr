@@ -79,10 +79,11 @@ pub fn store(input: TokenStream) -> TokenStream {
             None => &field.ty,
             Some(ty) => ty,
         };
+        let eq_args = quote! { &self.#ident, v};
         let eq_check = match &field.compare_with {
-            None => quote! { ::core::cmp::PartialEq::<#ty>::eq(&self.#ident, v) },
+            None => quote! { ::core::cmp::PartialEq::<#ty>::eq(#eq_args) },
             Some(eq_check) => {
-                quote! { #eq_check(&self.#ident, v) }
+                quote! { #eq_check(#eq_args) }
             }
         };
         quote! {
