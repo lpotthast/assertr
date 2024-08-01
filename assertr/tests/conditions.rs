@@ -1,6 +1,6 @@
-use assertr::prelude::*;
-
 use std::fmt::Arguments;
+
+use assertr::prelude::*;
 
 struct Person {
     meta: Metadata,

@@ -1,5 +1,6 @@
-use assertr::{assert_that, AssertingThat};
 use indoc::formatdoc;
+
+use assertr::prelude::*;
 
 #[derive(Debug, PartialEq)]
 struct Person {
