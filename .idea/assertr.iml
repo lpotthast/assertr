@@ -6,7 +6,8 @@
       <sourceFolder url="file://$MODULE_DIR$/assertr/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/derive-assertr-eq/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/derive-assertr-eq/tests" isTestSource="true" />
-      <excludeFolder url="file://$MODULE_DIR$/assertr/target" />
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
