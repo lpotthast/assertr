@@ -62,6 +62,7 @@ pub fn store(input: TokenStream) -> TokenStream {
         format!("{}AssertrEq", input.ident).as_str(),
         Span::call_site(),
     );
+    
     let eq_struct_fields = filtered_fields.clone().map(|field| {
         let vis = &field.vis;
         let ident = &field.ident;
@@ -74,7 +75,8 @@ pub fn store(input: TokenStream) -> TokenStream {
 
     let eq_impls = filtered_fields
         .map(|field| {
-            let ident = &field.ident;
+            let ident = field.ident.as_ref().expect("only named fields are supported!");
+            let ident_string = ident.to_string();
             let ty = match &field.map_type {
                 None => &field.ty,
                 Some(ty) => ty,
@@ -89,11 +91,18 @@ pub fn store(input: TokenStream) -> TokenStream {
             quote! {
                 && match &other.#ident {
                     ::assertr::Eq::Any => true,
-                    ::assertr::Eq::Eq(v) => { #eq_check },
+                    ::assertr::Eq::Eq(v) => {
+                        let eq = #eq_check;
+                        if !eq {
+                            if let Some(ctx) = ctx.as_mut() {
+                                ctx.add_field_difference(#ident_string, v, &self.#ident);
+                            }
+                        }
+                        eq
+                    },
                 }
             }
-        })
-        .collect::<Vec<_>>();
+        });
 
     quote! {
         #[derive(::core::fmt::Debug)]

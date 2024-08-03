@@ -385,19 +385,52 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     }
 }
 
-pub struct EqContext {
+pub struct Differences {
     differences: Vec<String>,
 }
 
-impl EqContext {
+impl Default for Differences {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Differences {
     pub fn new() -> Self {
         Self {
             differences: Vec::new(),
         }
     }
+}
 
-    pub fn add_difference(&mut self, difference: String) {
-        self.differences.push(difference);
+impl Debug for Differences {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(self.differences.iter().map(|it| details::DisplayString(it)))
+            .finish()
+    }
+}
+
+
+pub struct EqContext {
+    differences: Differences,
+}
+
+impl Default for EqContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EqContext {
+    pub fn new() -> Self {
+        Self {
+            differences: Differences::default(),
+        }
+    }
+
+    pub fn add_field_difference(&mut self, field_name: &str, expected: impl Debug, actual: impl Debug) {
+        self.differences.differences.push(format!("\"{field_name}\": expected {expected:#?}, but was {actual:#?}"));
     }
 }
 

@@ -12,7 +12,7 @@ impl<'a> Debug for DetailMessages<'a> {
     }
 }
 
-struct DisplayString<'a>(&'a str);
+pub(crate) struct DisplayString<'a>(pub(crate) &'a str);
 
 impl<'a> Debug for DisplayString<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
