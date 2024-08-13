@@ -116,12 +116,14 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         let actual = self.actual();
         let actual_file_name = actual.file_name();
         let expected_file_name = expected.as_ref();
-        if actual_file_name == Some(expected_file_name) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Expected: {actual:#?}\n\nwith actual file_name: {actual_file_name:#?}\n\nto be equal to\n\nExpected: {expected_file_name:#?}"
-                ),
-            });
+        if let Some(actual_file_name) = actual_file_name {
+            if actual_file_name != expected_file_name {
+                self.fail(GenericFailure {
+                    arguments: format_args!(
+                        "Path: {actual:?}\n\nExpected filename: {expected_file_name:#?}\n  Actual filename: {actual_file_name:#?}"
+                    ),
+                });
+            }
         }
         self
     }
@@ -131,12 +133,14 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         let actual = self.actual();
         let actual_file_stem = actual.file_stem();
         let expected_file_stem = expected.as_ref();
-        if actual_file_stem == Some(expected_file_stem) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Expected: {actual:#?}\n\nwith actual file_stem: {actual_file_stem:#?}\n\nto be equal to\n\nExpected: {expected_file_stem:#?}"
-                ),
-            });
+        if let Some(actual_file_stem) = actual_file_stem {
+            if actual_file_stem != expected_file_stem {
+                self.fail(GenericFailure {
+                    arguments: format_args!(
+                        "Path: {actual:?}\n\nExpected filestem: {expected_file_stem:#?}\n  Actual filestem: {actual_file_stem:#?}"
+                    ),
+                });
+            }
         }
         self
     }
@@ -146,12 +150,14 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         let actual = self.actual();
         let actual_extension = actual.extension();
         let expected_extension = expected.as_ref();
-        if actual_extension == Some(OsStr::new(expected_extension)) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Expected: {actual:#?}\n\nwith actual extension: {actual_extension:#?}\n\nto be equal to\n\nExpected: {expected_extension:#?}"
-                ),
-            });
+        if let Some(actual_extension) = actual_extension {
+            if actual_extension != expected_extension {
+                self.fail(GenericFailure {
+                    arguments: format_args!(
+                        "Path: {actual:?}\n\nExpected extension: {expected_extension:#?}\n  Actual extension: {actual_extension:#?}"
+                    ),
+                });
+            }
         }
         self
     }
@@ -245,6 +251,90 @@ mod tests {
         fn succeeds_when_relative() {
             let path = Path::new("foo/bar/baz.rs");
             assert_that(path).is_relative();
+        }
+    }
+
+    mod has_filename {
+        use std::env;
+        use indoc::formatdoc;
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_equal() {
+            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+            assert_that(path.as_path()).has_file_name("path.rs");
+        }
+
+        #[test]
+        fn panics_when_different() {
+            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+            let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+            assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_file_name("some.json"))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Path: "src/assertions/std/path.rs"
+
+                    Expected filename: "some.json"
+                      Actual filename: "path.rs"
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod has_file_stem {
+        use std::env;
+        use indoc::formatdoc;
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_equal() {
+            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+            assert_that(path.as_path()).has_file_stem("path");
+        }
+
+        #[test]
+        fn panics_when_different() {
+            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+            let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+            assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_file_stem("some"))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Path: "src/assertions/std/path.rs"
+
+                    Expected filestem: "some"
+                      Actual filestem: "path"
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod has_extension {
+        use std::env;
+        use indoc::formatdoc;
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_equal() {
+            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+            assert_that(path.as_path()).has_extension("rs");
+        }
+
+        #[test]
+        fn panics_when_different() {
+            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+            let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+            assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_extension("json"))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Path: "src/assertions/std/path.rs"
+
+                    Expected extension: "json"
+                      Actual extension: "rs"
+                    -------- assertr --------
+                "#});
         }
     }
 }
