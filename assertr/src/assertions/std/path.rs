@@ -116,7 +116,7 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         let actual = self.actual();
         let actual_file_name = actual.file_name();
         let expected_file_name = expected.as_ref();
-        if actual_file_name == Some(OsStr::new(expected_file_name)) {
+        if actual_file_name == Some(expected_file_name) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Expected: {actual:#?}\n\nwith actual file_name: {actual_file_name:#?}\n\nto be equal to\n\nExpected: {expected_file_name:#?}"
@@ -131,7 +131,7 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         let actual = self.actual();
         let actual_file_stem = actual.file_stem();
         let expected_file_stem = expected.as_ref();
-        if actual_file_stem == Some(OsStr::new(expected_file_stem)) {
+        if actual_file_stem == Some(expected_file_stem) {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Expected: {actual:#?}\n\nwith actual file_stem: {actual_file_stem:#?}\n\nto be equal to\n\nExpected: {expected_file_stem:#?}"
