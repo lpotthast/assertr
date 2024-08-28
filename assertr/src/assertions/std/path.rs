@@ -1,8 +1,6 @@
 use std::{ffi::OsStr, path::Path};
-
+use std::path::PathBuf;
 use crate::{AssertThat, failure::GenericFailure, Mode, tracking::AssertionTracking};
-
-// TODO: PathBuf
 
 pub trait PathAssertions {
     fn exists(self) -> Self;
@@ -15,6 +13,66 @@ pub trait PathAssertions {
     fn has_file_name(self, expected: impl AsRef<OsStr>) -> Self;
     fn has_file_stem(self, expected: impl AsRef<OsStr>) -> Self;
     fn has_extension(self, expected: impl AsRef<OsStr>) -> Self;
+}
+
+impl<'t, M: Mode> PathAssertions for AssertThat<'t, PathBuf, M> {
+    #[track_caller]
+    fn exists(self) -> Self {
+        self.derive(|it| it.as_path()).exists();
+        self
+    }
+
+    #[track_caller]
+    fn does_not_exist(self) -> Self {
+        self.derive(|it| it.as_path()).does_not_exist();
+        self
+    }
+
+    #[track_caller]
+    fn is_a_file(self) -> Self {
+        self.derive(|it| it.as_path()).is_a_file();
+        self
+    }
+
+    #[track_caller]
+    fn is_a_directory(self) -> Self {
+        self.derive(|it| it.as_path()).is_a_directory();
+        self
+    }
+
+    #[track_caller]
+    fn is_a_symlink(self) -> Self {
+        self.derive(|it| it.as_path()).is_a_symlink();
+        self
+    }
+
+    #[track_caller]
+    fn has_a_root(self) -> Self {
+        self.derive(|it| it.as_path()).has_a_root();
+        self
+    }
+
+    #[track_caller]
+    fn is_relative(self) -> Self {
+        self.derive(|it| it.as_path()).is_relative();
+        self
+    }
+
+    #[track_caller]
+    fn has_file_name(self, expected: impl AsRef<OsStr>) -> Self {
+        self.derive(|it| it.as_path()).has_file_name(expected);
+        self
+    }
+
+    fn has_file_stem(self, expected: impl AsRef<OsStr>) -> Self {
+        self.derive(|it| it.as_path()).has_file_stem(expected);
+        self
+    }
+
+    fn has_extension(self, expected: impl AsRef<OsStr>) -> Self {
+        self.derive(|it| it.as_path()).has_extension(expected);
+        self
+    }
 }
 
 impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
@@ -167,174 +225,349 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
 
 #[cfg(test)]
 mod tests {
-    mod exists {
-        use std::env;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_present() {
-            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-            assert_that(path.as_path())
-                .exists()
-                .map(|it| it.borrowed().to_str().unwrap_or_default().into())
-                .ends_with("src/assertions/std/path.rs");
+    mod path {
+        mod exists {
+            use std::env;
+    
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_present() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path.as_path())
+                    .exists()
+                    .map(|it| it.borrowed().to_str().unwrap_or_default().into())
+                    .ends_with("src/assertions/std/path.rs");
+            }
+        }
+    
+        mod does_not_exist {
+            use std::path::Path;
+    
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_not_present() {
+                let path = Path::new("../../foo/bar/baz.rs");
+                assert_that(path).does_not_exist();
+            }
+        }
+    
+        mod is_file {   
+            use std::env;
+    
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_file() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path.as_path()).is_a_file();
+            }
+        }
+    
+        mod is_directory {
+            use std::env;
+            use std::path::Path;
+    
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_directory() {
+                let path = env::current_dir().unwrap().parent().unwrap()
+                    .join(Path::new(file!()).parent().expect("present"));
+                assert_that(path.as_path()).is_a_directory();
+            }
+        }
+    
+        mod is_symlink {
+            /*
+            #[test]
+            fn is_symlink_succeeds_when_directory() {
+                let path = Path::new(file!());
+                assert_that(path).is_symlink();
+            }
+            */
+        }
+    
+        mod has_a_root {
+            use std::path::Path;
+    
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_root() {
+                let path = Path::new("/foo/bar/baz.rs");
+                assert_that(path).has_a_root();
+            }
+        }
+    
+        mod is_relative {
+            use std::path::Path;
+    
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_relative() {
+                let path = Path::new("foo/bar/baz.rs");
+                assert_that(path).is_relative();
+            }
+        }
+    
+        mod has_filename {
+            use std::env;
+            use indoc::formatdoc;
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_equal() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path.as_path()).has_file_name("path.rs");
+            }
+    
+            #[test]
+            fn panics_when_different() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_file_name("some.json"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
+                        -------- assertr --------
+                        Path: "src/assertions/std/path.rs"
+    
+                        Expected filename: "some.json"
+                          Actual filename: "path.rs"
+                        -------- assertr --------
+                    "#});
+            }
+        }
+    
+        mod has_file_stem {
+            use std::env;
+            use indoc::formatdoc;
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_equal() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path.as_path()).has_file_stem("path");
+            }
+    
+            #[test]
+            fn panics_when_different() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_file_stem("some"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
+                        -------- assertr --------
+                        Path: "src/assertions/std/path.rs"
+    
+                        Expected filestem: "some"
+                          Actual filestem: "path"
+                        -------- assertr --------
+                    "#});
+            }
+        }
+    
+        mod has_extension {
+            use std::env;
+            use indoc::formatdoc;
+            use crate::prelude::*;
+    
+            #[test]
+            fn succeeds_when_equal() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path.as_path()).has_extension("rs");
+            }
+    
+            #[test]
+            fn panics_when_different() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_extension("json"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
+                        -------- assertr --------
+                        Path: "src/assertions/std/path.rs"
+    
+                        Expected extension: "json"
+                          Actual extension: "rs"
+                        -------- assertr --------
+                    "#});
+            }
         }
     }
+    
+    mod path_buf {
+        mod exists {
+            use std::env;
 
-    mod does_not_exist {
-        use std::path::Path;
+            use crate::prelude::*;
 
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_not_present() {
-            let path = Path::new("../../foo/bar/baz.rs");
-            assert_that(path).does_not_exist();
-        }
-    }
-
-    mod is_file {
-        use std::env;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_file() {
-            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-            assert_that(path.as_path()).is_a_file();
-        }
-    }
-
-    mod is_directory {
-        use std::env;
-        use std::path::Path;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_directory() {
-            let path = env::current_dir().unwrap().parent().unwrap()
-                .join(Path::new(file!()).parent().expect("present"));
-            assert_that(path.as_path()).is_a_directory();
-        }
-    }
-
-    mod is_symlink {
-        /*
-        #[test]
-        fn is_symlink_succeeds_when_directory() {
-            let path = Path::new(file!());
-            assert_that(path).is_symlink();
-        }
-        */
-    }
-
-    mod has_a_root {
-        use std::path::Path;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_root() {
-            let path = Path::new("/foo/bar/baz.rs");
-            assert_that(path).has_a_root();
-        }
-    }
-
-    mod is_relative {
-        use std::path::Path;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_relative() {
-            let path = Path::new("foo/bar/baz.rs");
-            assert_that(path).is_relative();
-        }
-    }
-
-    mod has_filename {
-        use std::env;
-        use indoc::formatdoc;
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_equal() {
-            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-            assert_that(path.as_path()).has_file_name("path.rs");
+            #[test]
+            fn succeeds_when_present() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path)
+                    .exists()
+                    .map(|it| it.unwrap_owned().display().to_string().into())
+                    .ends_with("src/assertions/std/path.rs");
+            }
         }
 
-        #[test]
-        fn panics_when_different() {
-            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-            let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
-            assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_file_name("some.json"))
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Path: "src/assertions/std/path.rs"
+        mod does_not_exist {
+            use std::path::Path;
 
-                    Expected filename: "some.json"
-                      Actual filename: "path.rs"
-                    -------- assertr --------
-                "#});
-        }
-    }
+            use crate::prelude::*;
 
-    mod has_file_stem {
-        use std::env;
-        use indoc::formatdoc;
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_equal() {
-            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-            assert_that(path.as_path()).has_file_stem("path");
+            #[test]
+            fn succeeds_when_not_present() {
+                let path = Path::new("../../foo/bar/baz.rs");
+                assert_that(path).does_not_exist();
+            }
         }
 
-        #[test]
-        fn panics_when_different() {
-            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-            let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
-            assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_file_stem("some"))
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Path: "src/assertions/std/path.rs"
+        mod is_file {
+            use std::env;
 
-                    Expected filestem: "some"
-                      Actual filestem: "path"
-                    -------- assertr --------
-                "#});
-        }
-    }
+            use crate::prelude::*;
 
-    mod has_extension {
-        use std::env;
-        use indoc::formatdoc;
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_equal() {
-            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-            assert_that(path.as_path()).has_extension("rs");
+            #[test]
+            fn succeeds_when_file() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path).is_a_file();
+            }
         }
 
-        #[test]
-        fn panics_when_different() {
-            let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-            let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
-            assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_extension("json"))
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Path: "src/assertions/std/path.rs"
+        mod is_directory {
+            use std::env;
+            use std::path::Path;
 
-                    Expected extension: "json"
-                      Actual extension: "rs"
-                    -------- assertr --------
-                "#});
+            use crate::prelude::*;
+
+            #[test]
+            fn succeeds_when_directory() {
+                let path = env::current_dir().unwrap().parent().unwrap()
+                    .join(Path::new(file!()).parent().expect("present"));
+                assert_that(path).is_a_directory();
+            }
+        }
+
+        mod is_symlink {
+            /*
+            #[test]
+            fn is_symlink_succeeds_when_directory() {
+                let path = Path::new(file!());
+                assert_that(path).is_symlink();
+            }
+            */
+        }
+
+        mod has_a_root {
+            use std::path::Path;
+
+            use crate::prelude::*;
+
+            #[test]
+            fn succeeds_when_root() {
+                let path = Path::new("/foo/bar/baz.rs");
+                assert_that(path).has_a_root();
+            }
+        }
+
+        mod is_relative {
+            use std::path::Path;
+
+            use crate::prelude::*;
+
+            #[test]
+            fn succeeds_when_relative() {
+                let path = Path::new("foo/bar/baz.rs");
+                assert_that(path).is_relative();
+            }
+        }
+
+        mod has_filename {
+            use std::env;
+            use indoc::formatdoc;
+            use crate::prelude::*;
+
+            #[test]
+            fn succeeds_when_equal() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path).has_file_name("path.rs");
+            }
+
+            #[test]
+            fn panics_when_different() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_file_name("some.json"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
+                        -------- assertr --------
+                        Path: "src/assertions/std/path.rs"
+    
+                        Expected filename: "some.json"
+                          Actual filename: "path.rs"
+                        -------- assertr --------
+                    "#});
+            }
+        }
+
+        mod has_file_stem {
+            use std::env;
+            use indoc::formatdoc;
+            use crate::prelude::*;
+
+            #[test]
+            fn succeeds_when_equal() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path).has_file_stem("path");
+            }
+
+            #[test]
+            fn panics_when_different() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_file_stem("some"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
+                        -------- assertr --------
+                        Path: "src/assertions/std/path.rs"
+    
+                        Expected filestem: "some"
+                          Actual filestem: "path"
+                        -------- assertr --------
+                    "#});
+            }
+        }
+
+        mod has_extension {
+            use std::env;
+            use indoc::formatdoc;
+            use crate::prelude::*;
+
+            #[test]
+            fn succeeds_when_equal() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                assert_that(path).has_extension("rs");
+            }
+
+            #[test]
+            fn panics_when_different() {
+                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                assert_that_panic_by(|| assert_that(relative_path).with_location(false).has_extension("json"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
+                        -------- assertr --------
+                        Path: "src/assertions/std/path.rs"
+    
+                        Expected extension: "json"
+                          Actual extension: "rs"
+                        -------- assertr --------
+                    "#});
+            }
         }
     }
 }
