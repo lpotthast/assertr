@@ -1,7 +1,9 @@
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
 use std::fmt::Debug;
 
+/// Assertions for values implementing [Debug].
 pub trait DebugAssertions {
+    /// Test that actual and expected have the same `Debug` representation.
     fn has_debug_value(self, expected: impl Debug) -> Self;
 }
 
@@ -102,10 +104,22 @@ mod tests {
             use indoc::formatdoc;
 
             #[derive(Debug)]
-            #[allow(dead_code)] // Allow fields to never be read.
+            #[expect(dead_code)] // Expect fields to never be read.
             struct Person {
                 age: u32,
                 alive: bool,
+            }
+
+            #[test]
+            fn succeeds_when_equal_using_other_value() {
+                assert_that(Person {
+                    age: 42,
+                    alive: true,
+                })
+                .has_debug_value(Person {
+                    age: 42,
+                    alive: true,
+                });
             }
 
             #[test]

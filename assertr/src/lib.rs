@@ -33,12 +33,18 @@ pub mod prelude {
     pub use crate::assert_that_panic_by;
     pub use crate::assert_that_ref;
     pub use crate::assertions::condition;
+    pub use crate::assertions::core::option;
+    pub use crate::assertions::core::option::OptionAssertions;
+    pub use crate::assertions::core::result;
+    pub use crate::assertions::core::result::ResultAssertions;
     pub use crate::assertions::std::array;
     pub use crate::assertions::std::array::ArrayAssertions;
     pub use crate::assertions::std::bool;
     pub use crate::assertions::std::bool::BoolAssertions;
     pub use crate::assertions::std::boxed;
     pub use crate::assertions::std::boxed::BoxAssertions;
+    pub use crate::assertions::std::command;
+    pub use crate::assertions::std::command::CommandAssertions;
     pub use crate::assertions::std::debug;
     pub use crate::assertions::std::display;
     pub use crate::assertions::std::display::DisplayAssertions;
@@ -48,7 +54,6 @@ pub mod prelude {
     pub use crate::assertions::std::iter::IntoIteratorAssertions;
     pub use crate::assertions::std::mutex;
     pub use crate::assertions::std::mutex::MutexAssertions;
-    pub use crate::assertions::std::option;
     pub use crate::assertions::std::panic_value;
     pub use crate::assertions::std::panic_value::PanicValueAssertions;
     pub use crate::assertions::std::partial_eq;
@@ -58,14 +63,21 @@ pub mod prelude {
     pub use crate::assertions::std::path::PathAssertions;
     pub use crate::assertions::std::range;
     pub use crate::assertions::std::ref_cell;
-    pub use crate::assertions::std::result;
     pub use crate::assertions::std::slice;
+    pub use crate::assertions::std::slice::SliceAssertions;
     pub use crate::assertions::std::str_slice;
+    pub use crate::assertions::std::str_slice::StrSliceAssertions;
     pub use crate::assertions::std::string;
+    pub use crate::assertions::std::vec;
+    pub use crate::assertions::std::vec::VecAssertions;
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::rw_lock;
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::rw_lock::TokioRwLockAssertions;
+    #[cfg(feature = "tokio")]
+    pub use crate::assertions::tokio::watch;
+    #[cfg(feature = "tokio")]
+    pub use crate::assertions::tokio::watch::TokioWatchReceiverAssertions;
     pub use crate::condition::Condition;
     pub use crate::condition::ConditionAssertions;
     pub use crate::eq;
@@ -89,6 +101,8 @@ pub fn assert_that_ref<T>(actual: &T) -> AssertThat<T, Panic> {
 
 #[track_caller]
 pub fn assert_that_panic_by<'t, R>(fun: impl FnOnce() -> R) -> AssertThat<'t, PanicValue, Panic> {
+    use crate::prelude::ResultAssertions;
+
     assert_that(std::panic::catch_unwind(AssertUnwindSafe(move || {
         fun();
     })))
@@ -207,7 +221,10 @@ impl<'t, T> AssertThat<'t, T, Capture> {
     #[must_use]
     pub fn capture_failures(self) -> Vec<String> {
         let mut mode = self.mode.borrow_mut();
-        assert!(!mode.captured);
+        assert!(
+            !mode.captured,
+            "You can only capture the assertion failures once!"
+        );
         mode.captured = true;
         self.failures.take()
     }
@@ -411,7 +428,6 @@ impl Debug for Differences {
     }
 }
 
-
 pub struct EqContext {
     differences: Differences,
 }
@@ -429,8 +445,15 @@ impl EqContext {
         }
     }
 
-    pub fn add_field_difference(&mut self, field_name: &str, expected: impl Debug, actual: impl Debug) {
-        self.differences.differences.push(format!("\"{field_name}\": expected {expected:#?}, but was {actual:#?}"));
+    pub fn add_field_difference(
+        &mut self,
+        field_name: &str,
+        expected: impl Debug,
+        actual: impl Debug,
+    ) {
+        self.differences.differences.push(format!(
+            "\"{field_name}\": expected {expected:#?}, but was {actual:#?}"
+        ));
     }
 }
 
@@ -542,7 +565,7 @@ mod tests {
 
         assert_that_panic_by(move || drop(assert))
             .has_type::<String>()
-            .is_equal_to(format!("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"));
+            .is_equal_to("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!".to_string());
     }
 
     #[test]

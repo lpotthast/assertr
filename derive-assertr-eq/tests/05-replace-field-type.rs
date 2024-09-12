@@ -18,9 +18,7 @@ pub struct Foo {
 fn main() {
     let foo = Foo {
         id: 1,
-        bar: Bar {
-            id: 42,
-        },
+        bar: Bar { id: 42 },
     };
 
     assert_that_ref(&foo).is_equal_to(FooAssertrEq {

@@ -2,12 +2,12 @@ use std::any::{Any, TypeId};
 
 use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
 
+/// Assertions for boxed values.
 pub trait BoxAssertions<'t, M: Mode> {
     fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M>;
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, M>;
 }
 
-/// Assertions for boxed values.
 impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
     /// If this fails in capturing mode, a panic is raised!
     #[track_caller]

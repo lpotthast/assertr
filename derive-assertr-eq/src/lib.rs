@@ -4,30 +4,30 @@
 use proc_macro::TokenStream;
 
 use darling::*;
-use proc_macro2::{Ident, Span};
+use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Visibility};
+use syn::{parse_macro_input, DeriveInput, Ident, Path, Type, Visibility};
 
 #[derive(Debug, FromField)]
 #[darling(attributes(assertr_eq))]
 struct MyFieldReceiver {
-    ident: Option<syn::Ident>,
+    ident: Option<Ident>,
 
-    ty: syn::Type,
+    ty: Type,
 
-    vis: syn::Visibility,
-
-    #[darling(default)]
-    map_type: Option<syn::Type>,
+    vis: Visibility,
 
     #[darling(default)]
-    compare_with: Option<syn::Path>,
+    map_type: Option<Type>,
+
+    #[darling(default)]
+    compare_with: Option<Path>,
 }
 
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(assertr_eq), supports(struct_any))]
 struct MyInputReceiver {
-    ident: syn::Ident,
+    ident: Ident,
 
     data: ast::Data<(), MyFieldReceiver>,
 }
@@ -47,7 +47,7 @@ pub fn store(input: TokenStream) -> TokenStream {
 
     let input: MyInputReceiver = match FromDeriveInput::from_derive_input(&ast) {
         Ok(args) => args,
-        Err(err) => return darling::Error::write_errors(err).into(),
+        Err(err) => return Error::write_errors(err).into(),
     };
 
     let original_struct_ident = input.ident.clone();
@@ -62,7 +62,7 @@ pub fn store(input: TokenStream) -> TokenStream {
         format!("{}AssertrEq", input.ident).as_str(),
         Span::call_site(),
     );
-    
+
     let eq_struct_fields = filtered_fields.clone().map(|field| {
         let vis = &field.vis;
         let ident = &field.ident;
@@ -73,36 +73,38 @@ pub fn store(input: TokenStream) -> TokenStream {
         quote! { #vis #ident: ::assertr::Eq<#ty> }
     });
 
-    let eq_impls = filtered_fields
-        .map(|field| {
-            let ident = field.ident.as_ref().expect("only named fields are supported!");
-            let ident_string = ident.to_string();
-            let ty = match &field.map_type {
-                None => &field.ty,
-                Some(ty) => ty,
-            };
-            let eq_args = quote! { &self.#ident, v, ctx.as_deref_mut() };
-            let eq_check = match &field.compare_with {
-                None => quote! { ::assertr::AssertrPartialEq::<#ty>::eq(#eq_args) },
-                Some(eq_check) => {
-                    quote! { #eq_check(#eq_args) }
-                }
-            };
-            quote! {
-                && match &other.#ident {
-                    ::assertr::Eq::Any => true,
-                    ::assertr::Eq::Eq(v) => {
-                        let eq = #eq_check;
-                        if !eq {
-                            if let Some(ctx) = ctx.as_mut() {
-                                ctx.add_field_difference(#ident_string, v, &self.#ident);
-                            }
-                        }
-                        eq
-                    },
-                }
+    let eq_impls = filtered_fields.map(|field| {
+        let ident = field
+            .ident
+            .as_ref()
+            .expect("only named fields are supported!");
+        let ident_string = ident.to_string();
+        let ty = match &field.map_type {
+            None => &field.ty,
+            Some(ty) => ty,
+        };
+        let eq_args = quote! { &self.#ident, v, ctx.as_deref_mut() };
+        let eq_check = match &field.compare_with {
+            None => quote! { ::assertr::AssertrPartialEq::<#ty>::eq(#eq_args) },
+            Some(eq_check) => {
+                quote! { #eq_check(#eq_args) }
             }
-        });
+        };
+        quote! {
+            && match &other.#ident {
+                ::assertr::Eq::Any => true,
+                ::assertr::Eq::Eq(v) => {
+                    let eq = #eq_check;
+                    if !eq {
+                        if let Some(ctx) = ctx.as_mut() {
+                            ctx.add_field_difference(#ident_string, v, &self.#ident);
+                        }
+                    }
+                    eq
+                },
+            }
+        }
+    });
 
     quote! {
         #[derive(::core::fmt::Debug)]
@@ -121,6 +123,5 @@ pub fn store(input: TokenStream) -> TokenStream {
                 ::assertr::AssertrPartialEq::eq(&self, other, ctx)
             }
         }
-    }
-    .into()
+    }.into()
 }

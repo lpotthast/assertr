@@ -1,16 +1,39 @@
 use crate::{
-    actual::Actual, failure::GenericFailure, tracking::AssertionTracking, AssertThat, Capture,
-    Panic,
+    actual::Actual, failure::GenericFailure, mode::Mode, tracking::AssertionTracking, AssertThat,
 };
 use std::fmt::Debug;
 
+pub trait ResultAssertions<'t, M: Mode, T, E> {
+    fn is_ok(self) -> AssertThat<'t, T, M>
+    where
+        T: Debug,
+        E: Debug;
+
+    fn is_err(self) -> AssertThat<'t, E, M>
+    where
+        T: Debug,
+        E: Debug;
+
+    fn is_ok_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
+
+    fn is_err_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
+}
+
 // Assertions for generic result values.
-impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
+impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<T, E>, M> {
     /// This is a terminal operation on the contained `Result`,
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
     #[track_caller]
-    pub fn is_ok(self) -> AssertThat<'t, T, Panic>
+    fn is_ok(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
         E: Debug,
@@ -26,7 +49,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
             });
         }
 
-        // Calling `unwrap` is safe here, as we would have seen a panic when the the error is not present!
+        // Calling `unwrap` is safe here, as we would have seen a panic when the error is not present!
         self.map(|it| match it {
             Actual::Owned(o) => Actual::Owned(o.unwrap()),
             Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap()),
@@ -37,7 +60,7 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained error value.
     #[track_caller]
-    pub fn is_err(self) -> AssertThat<'t, E, Panic>
+    fn is_err(self) -> AssertThat<'t, E, M>
     where
         T: Debug,
         E: Debug,
@@ -53,21 +76,19 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Panic> {
             });
         }
 
-        // Calling `unwrap_err` is safe here, as we would have seen a panic when the the error is not present!
+        // Calling `unwrap_err` is safe here, as we would have seen a panic when the error is not present!
         self.map(|it| match it {
             Actual::Owned(o) => Actual::Owned(o.unwrap_err()),
             Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap_err()),
         })
     }
-}
 
-impl<'t, T, E> AssertThat<'t, Result<T, E>, Capture> {
     #[track_caller]
-    pub fn is_ok_satisfying<A>(self, assertions: A) -> Self
+    fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, Capture>),
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>),
     {
         self.track_assertion();
 
@@ -85,11 +106,11 @@ impl<'t, T, E> AssertThat<'t, Result<T, E>, Capture> {
     }
 
     #[track_caller]
-    pub fn is_err_satisfying<A>(self, assertions: A) -> Self
+    fn is_err_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a E, Capture>),
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>),
     {
         self.track_assertion();
 

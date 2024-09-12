@@ -1,4 +1,7 @@
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
+use crate::{
+    failure::GenericFailure, prelude::SliceAssertions, tracking::AssertionTracking, AssertThat,
+    Mode,
+};
 use std::fmt::Debug;
 
 pub trait ArrayAssertions<T: Debug> {
@@ -21,7 +24,7 @@ impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'t
         T: Debug,
     {
         self.track_assertion();
-        if !self.actual().as_ref().is_empty() {
+        if N != 0 {
             self.fail(GenericFailure {
                 arguments: format_args!(
                     "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",

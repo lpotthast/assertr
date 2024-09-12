@@ -1,11 +1,45 @@
 use std::fmt::Debug;
 
-use crate::{AssertrPartialEq, AssertThat, failure::{ExpectedActualFailure, GenericFailure}, Mode, tracking::AssertionTracking};
+use crate::{
+    failure::{ExpectedActualFailure, GenericFailure},
+    tracking::AssertionTracking,
+    AssertThat, AssertrPartialEq, Mode,
+};
 
-// Assertions for generic slices.
-impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
+pub trait SliceAssertions<'t, T> {
+    fn is_empty(self) -> Self
+    where
+        T: Debug;
+
+    fn has_length(self, expected: usize) -> Self
+    where
+        T: Debug;
+
+    /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
+    ///
+    /// - [T]: Original subject type. The "actual value" is of type &[T] (slice T).
+    /// - [E]: Type of elements in our "expected value" slice.
+    /// - [EE]: The "expected value". Anything that can be seen as &[E] (slice E). Having this extra type, instead of directly accepting `&[E]` allows us to be generic over the input in both internal type and slice representation.
+    fn contains_exactly<E, EE>(self, expected: EE) -> Self
+    where
+        E: Debug + 't,
+        EE: AsRef<[E]>,
+        T: AssertrPartialEq<E> + Debug;
+
+    fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
+    where
+        T: PartialEq + Debug;
+
+    /// [P] - Predicate
+    fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
+    where
+        T: Debug,
+        P: Fn(&T) -> bool;
+}
+
+impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
     #[track_caller]
-    pub fn is_empty(self) -> Self
+    fn is_empty(self) -> Self
     where
         T: Debug,
     {
@@ -21,9 +55,8 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
         self
     }
 
-    // TODO: Test
     #[track_caller]
-    pub fn has_length(mut self, expected: usize) -> Self
+    fn has_length(mut self, expected: usize) -> Self
     where
         T: Debug,
     {
@@ -39,13 +72,8 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
         self
     }
 
-    /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
-    ///
-    /// T: Original subject type. The "actual value" is of type &[T] (slice T).
-    /// E: Type of elements in our "expected value" slice.
-    /// EE: The "expected value". Anything that can be seen as &[E] (slice E). Having this extra type, instead of directly accepting `&[E]` allows us to be generic over the input in both internal type and slice representation.
     #[track_caller]
-    pub fn contains_exactly<E, EE>(self, expected: EE) -> Self
+    fn contains_exactly<E, EE>(self, expected: EE) -> Self
     where
         E: Debug + 't,
         EE: AsRef<[E]>,
@@ -58,9 +86,6 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
         let result = crate::util::slice::compare(actual, expected);
 
         if !result.strictly_equal {
-            #[allow(dropping_references)]
-            drop(actual);
-
             if !result.not_in_b.is_empty() {
                 self.add_detail_message(format!("Elements not expected: {:#?}", result.not_in_b));
             }
@@ -83,7 +108,7 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     }
 
     #[track_caller]
-    pub fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
+    fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
     where
         T: PartialEq + Debug,
     {
@@ -124,10 +149,10 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
     }
 
     #[track_caller]
-    pub fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
+    fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         T: Debug,
-        P: Fn(&T) -> bool, // predicate
+        P: Fn(&T) -> bool,
     {
         self.track_assertion();
         let actual = *self.actual();
@@ -136,9 +161,6 @@ impl<'t, T, M: Mode> AssertThat<'t, &[T], M> {
         let result = crate::util::slice::test_matching_any(actual, expected);
 
         if !result.not_matched.is_empty() {
-            #[allow(dropping_references)]
-            drop(actual);
-
             if !result.not_matched.is_empty() {
                 self.add_detail_message(format!("Elements not matched: {:#?}", result.not_matched));
             }
@@ -173,12 +195,50 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that([42].as_slice()).with_location(false).is_empty();
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: [42]
 
                     was expected to be empty, but it is not!
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod has_length {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_length_matches_and_empty() {
+            let slice: &[i32] = [].as_slice();
+            assert_that(slice).has_length(0);
+        }
+        #[test]
+        fn succeeds_when_length_matches_and_non_empty() {
+            let slice: &[i32] = [1, 2, 3].as_slice();
+            assert_that(slice).has_length(3);
+        }
+
+        #[test]
+        fn panics_when_length_does_not_match() {
+            assert_that_panic_by(|| {
+                assert_that([42].as_slice())
+                    .with_location(false)
+                    .has_length(2);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: 2
+                    
+                      Actual: 1
+
+                    Details: [
+                        Slice was not of expected length!,
+                    ]
                     -------- assertr --------
                 "#});
         }
@@ -216,8 +276,8 @@ mod tests {
                     .with_location(false)
                     .contains_exactly([2, 3, 4])
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -252,8 +312,8 @@ mod tests {
                     .with_location(false)
                     .contains_exactly([3, 2, 1])
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -294,8 +354,8 @@ mod tests {
                     .with_location(false)
                     .contains_exactly_in_any_order([2, 3, 4])
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -334,7 +394,7 @@ mod tests {
                     move |it: &i32| *it == 2,
                     move |it: &i32| *it == 3,
                 ]
-                    .as_slice(),
+                .as_slice(),
             );
         }
 
@@ -346,7 +406,7 @@ mod tests {
                     move |it: &i32| *it == 1,
                     move |it: &i32| *it == 2,
                 ]
-                    .as_slice(),
+                .as_slice(),
             );
         }
 
@@ -361,11 +421,11 @@ mod tests {
                             move |it: &i32| *it == 3,
                             move |it: &i32| *it == 4,
                         ]
-                            .as_slice(),
+                        .as_slice(),
                     )
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Actual: [
                         1,

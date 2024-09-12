@@ -15,8 +15,8 @@ pub struct Foo {
 
     #[assertr_eq(
         map_type = "Vec<BarAssertrEq>",
-        compare_with = "::assertr::cmp::slice::compare")
-    ]
+        compare_with = "::assertr::cmp::slice::compare"
+    )]
     pub bars: Vec<Bar>,
 
     #[assertr_eq(
@@ -29,9 +29,7 @@ pub struct Foo {
 fn main() {
     let foo = Foo {
         id: 1,
-        bars: vec![Bar {
-            id: 42,
-        }],
+        bars: vec![Bar { id: 42 }],
         bars2: HashMap::new(),
     };
 

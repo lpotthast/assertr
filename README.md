@@ -30,7 +30,7 @@ Can we implement fallback rendering? Will probably require the currently unstabl
 
 ## Decisions
 
-- Derived assertions are not allowed to control whether or not the location is printed.
+- Derived assertions are not allowed to control whether the location is printed.
 - Detail messages are collected from the current assertion upwards, taking the messages of all parents into account.
 - Failures are stored at the root assertion.
 - Failures can only be extracted from the root assertion.

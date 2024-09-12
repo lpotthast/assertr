@@ -1,11 +1,11 @@
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
+/// Assertions for boolean values.
 pub trait BoolAssertions {
     fn is_true(self) -> Self;
     fn is_false(self) -> Self;
 }
 
-/// Assertions for booleans.
 impl<'t, M: Mode> BoolAssertions for AssertThat<'t, bool, M> {
     #[track_caller]
     fn is_true(self) -> Self {

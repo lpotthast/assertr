@@ -1,15 +1,26 @@
 use crate::{
     actual::Actual, failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode,
 };
-use std::fmt::Debug;
+use core::fmt::Debug;
+use core::option::Option;
+
+pub trait OptionAssertions<'t, T, M: Mode> {
+    fn is_some(self) -> AssertThat<'t, T, M>
+    where
+        T: Debug;
+
+    fn is_none(self) -> AssertThat<'t, (), M>
+    where
+        T: Debug;
+}
 
 // Assertions for generic optional values.
-impl<'t, T, M: Mode> AssertThat<'t, Option<T>, M> {
+impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M> {
     /// This is a terminal operation on the contained `Option`,
     /// as there is little meaningful to do with the option if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
     #[track_caller]
-    pub fn is_some(self) -> AssertThat<'t, T, M>
+    fn is_some(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
     {
@@ -34,7 +45,7 @@ impl<'t, T, M: Mode> AssertThat<'t, Option<T>, M> {
     /// as there is little meaningful to do with the option if its variant was ensured.
     /// This allows you to chain additional expectations on the contained error value.
     #[track_caller]
-    pub fn is_none(self) -> AssertThat<'t, (), M>
+    fn is_none(self) -> AssertThat<'t, (), M>
     where
         T: Debug,
     {
@@ -57,9 +68,8 @@ impl<'t, T, M: Mode> AssertThat<'t, Option<T>, M> {
 
 #[cfg(test)]
 mod tests {
-    use indoc::formatdoc;
-
     use crate::prelude::*;
+    use indoc::formatdoc;
 
     #[test]
     fn test_option_is_some() {

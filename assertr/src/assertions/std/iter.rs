@@ -22,9 +22,10 @@ where
     fn contains<E>(self, expected: E) -> Self
     where
         E: Debug,
-        T: AssertrPartialEq<E>,
+        T: Debug + AssertrPartialEq<E>,
     {
         self.track_assertion();
+        let actual = self.actual().into_iter().collect::<Vec<_>>();
         let expected = expected;
         if !self
             .actual()
@@ -33,8 +34,7 @@ where
         {
             self.fail(GenericFailure {
                 arguments: format_args!(
-                    "Actual: ...\n\ndoes not contain expected key: {expected:#?}",
-                    //actual = self.actual_ref(),
+                    "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}",
                 ),
             });
         }

@@ -29,13 +29,19 @@ where
     let mut ctx = EqContext::new();
 
     for a in aa {
-        if !bb.iter().any(|b| AssertrPartialEq::eq(a, b, Some(&mut ctx))) {
+        if !bb
+            .iter()
+            .any(|b| AssertrPartialEq::eq(a, b, Some(&mut ctx)))
+        {
             not_in_b.push(a);
         }
     }
 
     for b in bb {
-        if !aa.iter().any(|a| AssertrPartialEq::eq(a, b, Some(&mut ctx))) {
+        if !aa
+            .iter()
+            .any(|a| AssertrPartialEq::eq(a, b, Some(&mut ctx)))
+        {
             not_in_a.push(b);
         }
     }
@@ -120,7 +126,7 @@ mod tests {
                     move |it: &i32| *it == 2,
                     move |it: &i32| *it == 3,
                 ]
-                    .as_slice(),
+                .as_slice(),
             );
 
             assert_that(result.not_matched).is_empty();
@@ -135,7 +141,7 @@ mod tests {
                     move |it: &i32| *it == 2,
                     move |it: &i32| *it == 1,
                 ]
-                    .as_slice(),
+                .as_slice(),
             );
 
             assert_that(result.not_matched).is_empty();
@@ -151,7 +157,7 @@ mod tests {
                     move |it: &i32| *it == 4,
                     move |it: &i32| *it == 42,
                 ]
-                    .as_slice(),
+                .as_slice(),
             );
 
             assert_that(result.not_matched).contains_exactly([&1, &7]);

@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use crate::prelude::StrSliceAssertions;
 use crate::{AssertThat, Mode};
 
 // Assertions for Strings.

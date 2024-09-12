@@ -33,14 +33,16 @@ fn main() {
     });
 
     assert_that_panic_by(|| {
-        assert_that_ref(&foo).with_location(false).is_equal_to(FooAssertrEq {
-            id: eq(1),
-            name: eq("otto".to_string()),
-            data: any(),
-        })
+        assert_that_ref(&foo)
+            .with_location(false)
+            .is_equal_to(FooAssertrEq {
+                id: eq(1),
+                name: eq("otto".to_string()),
+                data: any(),
+            })
     })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+    .has_type::<String>()
+    .is_equal_to(formatdoc! {r#"
             -------- assertr --------
             Expected: FooAssertrEq {{
                 id: Eq::Eq(1),

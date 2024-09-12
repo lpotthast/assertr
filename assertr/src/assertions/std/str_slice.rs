@@ -1,10 +1,22 @@
 use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
 use std::fmt::Debug;
 
-/// Assertions for str slices.
-impl<'t, M: Mode> AssertThat<'t, &str, M> {
+/// Assertions for `&str` (str slices).
+pub trait StrSliceAssertions {
+    fn has_length(self, expected: usize) -> Self;
+
+    fn is_empty(self) -> Self;
+
+    fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self;
+
+    fn starts_with<E: AsRef<str> + Debug>(self, expected: E) -> Self;
+
+    fn ends_with<E: AsRef<str> + Debug>(self, expected: E) -> Self;
+}
+
+impl<'t, M: Mode> StrSliceAssertions for AssertThat<'t, &str, M> {
     #[track_caller]
-    pub fn has_length(self, expected: usize) -> Self {
+    fn has_length(self, expected: usize) -> Self {
         self.track_assertion();
         let actual = self.actual();
         let actual_len = actual.len();
@@ -20,7 +32,7 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
     }
 
     #[track_caller]
-    pub fn is_empty(self) -> Self {
+    fn is_empty(self) -> Self {
         self.track_assertion();
         if !self.actual().is_empty() {
             self.fail(GenericFailure {
@@ -34,7 +46,7 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
     }
 
     #[track_caller]
-    pub fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self {
         self.track_assertion();
         if !self.actual().contains(expected.as_ref()) {
             self.fail(GenericFailure {
@@ -49,7 +61,7 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
     }
 
     #[track_caller]
-    pub fn starts_with<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn starts_with<E: AsRef<str> + Debug>(self, expected: E) -> Self {
         self.track_assertion();
         if !self.actual().starts_with(expected.as_ref()) {
             self.fail(GenericFailure {
@@ -64,7 +76,7 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
     }
 
     #[track_caller]
-    pub fn ends_with<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn ends_with<E: AsRef<str> + Debug>(self, expected: E) -> Self {
         self.track_assertion();
         if !self.actual().ends_with(expected.as_ref()) {
             self.fail(GenericFailure {
@@ -81,68 +93,79 @@ impl<'t, M: Mode> AssertThat<'t, &str, M> {
 
 #[cfg(test)]
 mod tests {
-    use indoc::formatdoc;
 
-    use crate::prelude::*;
+    mod has_length {
+        use crate::prelude::*;
+        use indoc::formatdoc;
 
-    #[test]
-    fn has_length_succeeds_when_expected_length_matches() {
-        assert_that("foo bar").has_length(7);
+        #[test]
+        fn succeeds_when_expected_length_matches() {
+            assert_that("foo bar").has_length(7);
+        }
+
+        #[test]
+        fn panics_when_expected_length_does_not_match() {
+            assert_that_panic_by(|| {
+                assert_that("foo bar").with_location(false).has_length(42);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: "foo bar" (length: 7)
+    
+                    does not have length
+    
+                    Expected: 42
+                    -------- assertr --------
+                "#});
+        }
     }
 
-    #[test]
-    fn has_length_panics_when_expected_length_does_not_match() {
-        assert_that_panic_by(|| {
-            assert_that("foo bar").with_location(false).has_length(42);
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Actual: "foo bar" (length: 7)
+    mod is_empty {
+        use crate::prelude::*;
+        use indoc::formatdoc;
 
-                does not have length
+        #[test]
+        fn succeeds_when_empty() {
+            assert_that("").is_empty();
+        }
 
-                Expected: 42
-                -------- assertr --------
-            "#});
-    }
-
-    #[test]
-    fn is_empty_succeeds_when_empty() {
-        assert_that("").is_empty();
-    }
-
-    #[test]
-    fn is_empty_panics_when_not_empty() {
-        assert_that_panic_by(|| {
-            assert_that("foo").with_location(false).is_empty();
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        #[test]
+        fn panics_when_not_empty() {
+            assert_that_panic_by(|| {
+                assert_that("foo").with_location(false).is_empty();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo"
 
                 was expected to be empty, but it is not!
                 -------- assertr --------
             "#});
+        }
     }
 
-    #[test]
-    fn contains_succeeds_when_expected_is_contained() {
-        assert_that("foobar").contains("foo");
-        assert_that("foobar").contains("bar");
-        assert_that("foobar").contains("oob");
-    }
+    mod contains {
+        use crate::prelude::*;
+        use indoc::formatdoc;
 
-    #[test]
-    fn contains_panics_when_expected_is_not_contained() {
-        assert_that_panic_by(|| {
-            assert_that("foo bar baz")
-                .with_location(false)
-                .contains("42");
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        #[test]
+        fn succeeds_when_expected_is_contained() {
+            assert_that("foobar").contains("foo");
+            assert_that("foobar").contains("bar");
+            assert_that("foobar").contains("oob");
+        }
+
+        #[test]
+        fn panics_when_expected_is_not_contained() {
+            assert_that_panic_by(|| {
+                assert_that("foo bar baz")
+                    .with_location(false)
+                    .contains("42");
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo bar baz"
 
@@ -151,22 +174,27 @@ mod tests {
                 Expected: "42"
                 -------- assertr --------
             "#});
+        }
     }
 
-    #[test]
-    fn starts_with_succeeds_when_start_matches() {
-        assert_that("foo bar baz").starts_with("foo b");
-    }
+    mod starts_with {
+        use crate::prelude::*;
+        use indoc::formatdoc;
 
-    #[test]
-    fn starts_with_panics_when_start_is_different() {
-        assert_that_panic_by(|| {
-            assert_that("foo bar baz")
-                .with_location(false)
-                .starts_with("oo");
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        #[test]
+        fn succeeds_when_start_matches() {
+            assert_that("foo bar baz").starts_with("foo b");
+        }
+
+        #[test]
+        fn panics_when_start_is_different() {
+            assert_that_panic_by(|| {
+                assert_that("foo bar baz")
+                    .with_location(false)
+                    .starts_with("oo");
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo bar baz"
 
@@ -175,22 +203,27 @@ mod tests {
                 Expected: "oo"
                 -------- assertr --------
             "#});
+        }
     }
 
-    #[test]
-    fn ends_with_succeeds_when_start_matches() {
-        assert_that("foo bar baz").ends_with("r baz");
-    }
+    mod ends_with {
+        use crate::prelude::*;
+        use indoc::formatdoc;
 
-    #[test]
-    fn ends_with_panics_when_start_is_different() {
-        assert_that_panic_by(|| {
-            assert_that("foo bar baz")
-                .with_location(false)
-                .ends_with("raz");
-        })
-        .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        #[test]
+        fn succeeds_when_start_matches() {
+            assert_that("foo bar baz").ends_with("r baz");
+        }
+
+        #[test]
+        fn panics_when_start_is_different() {
+            assert_that_panic_by(|| {
+                assert_that("foo bar baz")
+                    .with_location(false)
+                    .ends_with("raz");
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: "foo bar baz"
 
@@ -199,5 +232,6 @@ mod tests {
                 Expected: "raz"
                 -------- assertr --------
             "#});
+        }
     }
 }
