@@ -1,4 +1,7 @@
-use std::fmt::{Arguments, Debug};
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt::{Arguments, Debug};
 
 use indoc::formatdoc;
 
@@ -17,7 +20,7 @@ pub trait Failure {
 }
 
 pub struct GenericFailure<'a> {
-    pub arguments: std::fmt::Arguments<'a>,
+    pub arguments: Arguments<'a>,
 }
 
 impl<'a> Failure for GenericFailure<'a> {
@@ -90,7 +93,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
                 detail_messages = DetailMessages(detail_messages.as_ref()),
             },
             (true, 0) => {
-                let caller_location = std::panic::Location::caller();
+                let caller_location = core::panic::Location::caller();
                 formatdoc! {"
                     -------- assertr --------
                     Assertion failed at {file}:{line}:{column}
@@ -104,7 +107,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
                 }
             }
             (true, _) => {
-                let caller_location = std::panic::Location::caller();
+                let caller_location = core::panic::Location::caller();
                 formatdoc! {"
                     -------- assertr --------
                     Assertion failed at {file}:{line}:{column}

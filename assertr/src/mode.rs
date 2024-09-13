@@ -1,4 +1,5 @@
-use std::any::TypeId;
+use alloc::string::String;
+use core::any::TypeId;
 
 pub trait Mode: Default + Clone + 'static {
     fn is_panic(&self) -> bool {
@@ -12,7 +13,7 @@ pub trait Mode: Default + Clone + 'static {
     fn set_derived(&mut self);
 }
 
-/// Panic mode. When an assertions fails, a panic message is raised and the program terminates immediately.
+/// Panic mode. When an assertion fails, a panic message is raised and the program terminates immediately.
 /// Subsequent assertions after a failure are therefore not executed.
 /// This is the default mode and allows an AssertThat to be mapped to a different type with a condition,
 /// failing when that condition cannot be met.

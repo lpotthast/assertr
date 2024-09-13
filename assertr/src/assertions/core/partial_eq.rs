@@ -1,4 +1,5 @@
-use std::fmt::Debug;
+use alloc::format;
+use core::fmt::Debug;
 
 use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, EqContext, Mode};
 

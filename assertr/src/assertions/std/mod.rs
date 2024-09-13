@@ -1,20 +1,15 @@
-pub mod array;
-pub mod bool;
-pub mod boxed;
 pub mod command;
-pub mod debug;
-pub mod display;
 pub mod hashmap;
-pub mod iter;
 pub mod mutex;
-pub mod num;
-pub mod panic_value;
-pub mod partial_eq;
-pub mod partial_ord;
 pub mod path;
-pub mod range;
-pub mod ref_cell;
-pub mod slice;
-pub mod str_slice;
-pub mod string;
-pub mod vec;
+
+pub mod prelude {
+    pub use super::command;
+    pub use super::command::CommandAssertions;
+    pub use super::hashmap;
+    pub use super::hashmap::HashMapAssertions;
+    pub use super::mutex;
+    pub use super::mutex::MutexAssertions;
+    pub use super::path;
+    pub use super::path::PathAssertions;
+}

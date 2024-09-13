@@ -1,7 +1,8 @@
+use core::cell::RefCell;
+use core::fmt::Debug;
+
 use crate::{failure::GenericFailure, AssertThat};
 use crate::{tracking::AssertionTracking, Mode};
-use std::cell::RefCell;
-use std::fmt::Debug;
 
 impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
     /// Check that the RefCell is immutably or mutably borrowed.

@@ -1,5 +1,5 @@
 use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
-use std::fmt::Debug;
+use core::fmt::Debug;
 use tokio::sync::RwLock;
 
 pub trait TokioRwLockAssertions<T: Debug> {

@@ -1,8 +1,9 @@
+use core::borrow::Borrow;
+use core::fmt::Debug;
+use core::ops::Deref;
+
 use crate::prelude::PartialEqAssertions;
 use crate::{AssertThat, Mode};
-use std::borrow::Borrow;
-use std::fmt::Debug;
-use std::ops::Deref;
 
 /// Assertions for the tokio::sync::watch::Receiver.
 pub trait TokioWatchReceiverAssertions<T: Debug> {

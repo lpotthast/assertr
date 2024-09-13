@@ -1,8 +1,9 @@
+use core::fmt::Debug;
+
 use crate::{
     failure::GenericFailure, prelude::SliceAssertions, tracking::AssertionTracking, AssertThat,
     Mode,
 };
-use std::fmt::Debug;
 
 pub trait ArrayAssertions<T: Debug> {
     fn is_empty(self) -> Self;

@@ -1,10 +1,37 @@
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
-use std::{borrow::Borrow, cmp::Ordering, fmt::Debug};
+use core::{borrow::Borrow, cmp::Ordering, fmt::Debug};
 
-/// Comparable
-impl<'t, T: PartialOrd + Debug, M: Mode> AssertThat<'t, T, M> {
+use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
+
+/// Assertions for comparable values.
+pub trait PartialOrdAssertions<T> {
+    fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>;
+
+    fn is_greater_than<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>;
+
+    fn is_less_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>;
+
+    fn is_greater_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>;
+}
+
+impl<'t, T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'t, T, M> {
     #[track_caller]
-    pub fn is_less_than(self, expected: impl Borrow<T>) -> Self {
+    fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>,
+    {
         self.track_assertion();
 
         let actual = self.actual();
@@ -24,11 +51,15 @@ impl<'t, T: PartialOrd + Debug, M: Mode> AssertThat<'t, T, M> {
     }
 
     #[track_caller]
-    pub fn is_greater_than(self, expected: impl Borrow<T>) -> Self {
+    fn is_greater_than<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>,
+    {
         self.track_assertion();
 
         let actual = self.actual();
-        let expected: &T = expected.borrow();
+        let expected = expected.borrow();
 
         if matches!(
             actual.partial_cmp(expected),
@@ -42,7 +73,11 @@ impl<'t, T: PartialOrd + Debug, M: Mode> AssertThat<'t, T, M> {
     }
 
     #[track_caller]
-    pub fn is_less_or_equal_to(self, expected: impl Borrow<T>) -> Self {
+    fn is_less_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>,
+    {
         self.track_assertion();
 
         let actual = self.actual();
@@ -59,7 +94,11 @@ impl<'t, T: PartialOrd + Debug, M: Mode> AssertThat<'t, T, M> {
     }
 
     #[track_caller]
-    pub fn is_greater_or_equal_to(self, expected: impl Borrow<T>) -> Self {
+    fn is_greater_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>,
+    {
         self.track_assertion();
 
         let actual = self.actual();

@@ -1,4 +1,7 @@
-use std::any::{Any, TypeId};
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::String;
+use core::any::{type_name, Any, TypeId};
 
 use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
 
@@ -19,7 +22,7 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                 self.fail(GenericFailure {
                     arguments: format_args!(
                         "is not of expected type: {expected_type_name} ({expected_type_id:?})",
-                        expected_type_name = std::any::type_name::<E>(),
+                        expected_type_name = type_name::<E>(),
                         expected_type_id = TypeId::of::<E>(),
                     ),
                 });
@@ -88,12 +91,12 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                 }
                 .with_detail_message(format!(
                     "Panic value was not of type '{expected_type_name}'",
-                    expected_type_name = std::any::type_name::<E>()
+                    expected_type_name = type_name::<E>()
                 ))
                 .fail(GenericFailure {
                     arguments: format_args!(
                         "is not of expected type: {expected_type_name} ({expected_type_id:?})",
-                        expected_type_name = std::any::type_name::<E>(),
+                        expected_type_name = type_name::<E>(),
                         expected_type_id = TypeId::of::<E>(),
                     ),
                 });

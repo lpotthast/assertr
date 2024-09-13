@@ -1,5 +1,7 @@
+use alloc::format;
+use core::fmt::Debug;
+
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
-use std::fmt::Debug;
 
 /// Assertions for values implementing [Debug].
 pub trait DebugAssertions {

@@ -1,4 +1,5 @@
-use std::fmt::Debug;
+use alloc::vec::Vec;
+use core::fmt::Debug;
 
 use crate::{
     failure::GenericFailure, tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode,

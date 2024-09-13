@@ -1,5 +1,7 @@
+use alloc::vec::Vec;
+use core::fmt::Debug;
+
 use crate::{prelude::SliceAssertions, AssertThat, AssertrPartialEq, Mode};
-use std::fmt::Debug;
 
 pub trait VecAssertions<'t, T: Debug> {
     fn is_empty(self) -> Self;
@@ -49,6 +51,10 @@ impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
 mod tests {
     mod is_empty {
         use crate::prelude::*;
+        use alloc::format;
+        use alloc::string::String;
+        use alloc::vec;
+        use alloc::vec::Vec;
         use indoc::formatdoc;
 
         #[test]

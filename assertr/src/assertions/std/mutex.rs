@@ -1,7 +1,8 @@
+use core::fmt::Debug;
+use std::sync::Mutex;
+
 use crate::{failure::GenericFailure, AssertThat};
 use crate::{tracking::AssertionTracking, Mode};
-use std::fmt::Debug;
-use std::sync::Mutex;
 
 pub trait MutexAssertions {
     fn is_locked(self) -> Self;

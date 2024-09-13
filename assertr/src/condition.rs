@@ -1,4 +1,4 @@
-use std::fmt::Arguments;
+use core::fmt::Arguments;
 
 pub trait Condition<T> {
     /// `value` can be considered to be the "expected" value.

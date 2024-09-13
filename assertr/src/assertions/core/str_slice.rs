@@ -1,5 +1,6 @@
+use core::fmt::Debug;
+
 use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
-use std::fmt::Debug;
 
 /// Assertions for `&str` (str slices).
 pub trait StrSliceAssertions {

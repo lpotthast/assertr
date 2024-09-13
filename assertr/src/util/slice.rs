@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::{AssertrPartialEq, EqContext};
 
 pub(crate) struct CompareResult<'t, A, B> {

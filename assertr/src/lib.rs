@@ -1,15 +1,18 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 // Allow functions named `is_*`, taking self by value instead of taking self by mutable reference or reference.
 #![allow(clippy::wrong_self_convention)]
 
-use std::fmt::{Debug, Formatter};
-use std::{
-    any::Any,
-    cell::RefCell,
-    future::Future,
-    panic::{AssertUnwindSafe, RefUnwindSafe, UnwindSafe},
-};
+extern crate alloc;
 
 use actual::Actual;
+use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
+use core::{
+    any::Any,
+    cell::RefCell,
+    fmt::{Debug, Formatter},
+    future::Future,
+    panic::{RefUnwindSafe, UnwindSafe},
+};
 use details::WithDetail;
 use failure::Fallible;
 use mode::{Capture, Mode, Panic};
@@ -30,54 +33,16 @@ pub mod prelude {
 
     pub use crate::any;
     pub use crate::assert_that;
+    #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by;
     pub use crate::assert_that_ref;
+    pub use crate::assertions::alloc::prelude::*;
     pub use crate::assertions::condition;
-    pub use crate::assertions::core::option;
-    pub use crate::assertions::core::option::OptionAssertions;
-    pub use crate::assertions::core::result;
-    pub use crate::assertions::core::result::ResultAssertions;
-    pub use crate::assertions::std::array;
-    pub use crate::assertions::std::array::ArrayAssertions;
-    pub use crate::assertions::std::bool;
-    pub use crate::assertions::std::bool::BoolAssertions;
-    pub use crate::assertions::std::boxed;
-    pub use crate::assertions::std::boxed::BoxAssertions;
-    pub use crate::assertions::std::command;
-    pub use crate::assertions::std::command::CommandAssertions;
-    pub use crate::assertions::std::debug;
-    pub use crate::assertions::std::display;
-    pub use crate::assertions::std::display::DisplayAssertions;
-    pub use crate::assertions::std::hashmap;
-    pub use crate::assertions::std::hashmap::HashMapAssertions;
-    pub use crate::assertions::std::iter;
-    pub use crate::assertions::std::iter::IntoIteratorAssertions;
-    pub use crate::assertions::std::mutex;
-    pub use crate::assertions::std::mutex::MutexAssertions;
-    pub use crate::assertions::std::panic_value;
-    pub use crate::assertions::std::panic_value::PanicValueAssertions;
-    pub use crate::assertions::std::partial_eq;
-    pub use crate::assertions::std::partial_eq::PartialEqAssertions;
-    pub use crate::assertions::std::partial_ord;
-    pub use crate::assertions::std::path;
-    pub use crate::assertions::std::path::PathAssertions;
-    pub use crate::assertions::std::range;
-    pub use crate::assertions::std::ref_cell;
-    pub use crate::assertions::std::slice;
-    pub use crate::assertions::std::slice::SliceAssertions;
-    pub use crate::assertions::std::str_slice;
-    pub use crate::assertions::std::str_slice::StrSliceAssertions;
-    pub use crate::assertions::std::string;
-    pub use crate::assertions::std::vec;
-    pub use crate::assertions::std::vec::VecAssertions;
+    pub use crate::assertions::core::prelude::*;
+    #[cfg(feature = "std")]
+    pub use crate::assertions::std::prelude::*;
     #[cfg(feature = "tokio")]
-    pub use crate::assertions::tokio::rw_lock;
-    #[cfg(feature = "tokio")]
-    pub use crate::assertions::tokio::rw_lock::TokioRwLockAssertions;
-    #[cfg(feature = "tokio")]
-    pub use crate::assertions::tokio::watch;
-    #[cfg(feature = "tokio")]
-    pub use crate::assertions::tokio::watch::TokioWatchReceiverAssertions;
+    pub use crate::assertions::tokio::prelude::*;
     pub use crate::condition::Condition;
     pub use crate::condition::ConditionAssertions;
     pub use crate::eq;
@@ -100,7 +65,12 @@ pub fn assert_that_ref<T>(actual: &T) -> AssertThat<T, Panic> {
 }
 
 #[track_caller]
+#[cfg(feature = "std")]
 pub fn assert_that_panic_by<'t, R>(fun: impl FnOnce() -> R) -> AssertThat<'t, PanicValue, Panic> {
+    extern crate std;
+
+    use core::panic::AssertUnwindSafe;
+
     use crate::prelude::ResultAssertions;
 
     assert_that(std::panic::catch_unwind(AssertUnwindSafe(move || {
@@ -421,7 +391,7 @@ impl Differences {
 }
 
 impl Debug for Differences {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_list()
             .entries(self.differences.iter().map(|it| details::DisplayString(it)))
             .finish()
@@ -511,7 +481,7 @@ pub fn any<T>() -> Eq<T> {
 }
 
 impl<T: Debug> Debug for Eq<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Eq::Any => f.write_str("Eq::Any"),
             Eq::Eq(v) => f.write_fmt(format_args!("Eq::Eq({v:?})")),
@@ -521,6 +491,8 @@ impl<T: Debug> Debug for Eq<T> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::format;
+    use alloc::string::{String, ToString};
     use indoc::formatdoc;
 
     use crate::prelude::*;

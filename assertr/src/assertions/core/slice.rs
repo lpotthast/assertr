@@ -1,4 +1,7 @@
-use std::fmt::Debug;
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::vec::Vec;
+use core::fmt::Debug;
 
 use crate::{
     failure::{ExpectedActualFailure, GenericFailure},

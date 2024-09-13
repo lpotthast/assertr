@@ -1,11 +1,14 @@
-use std::fmt::Debug;
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt::Debug;
 
 use crate::{mode::Mode, AssertThat};
 
 pub(crate) struct DetailMessages<'a>(pub(crate) &'a [String]);
 
 impl<'a> Debug for DetailMessages<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list()
             .entries(self.0.iter().map(|it| DisplayString(it)))
             .finish()
@@ -15,7 +18,7 @@ impl<'a> Debug for DetailMessages<'a> {
 pub(crate) struct DisplayString<'a>(pub(crate) &'a str);
 
 impl<'a> Debug for DisplayString<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.0)
     }
 }

@@ -1,5 +1,7 @@
+use alloc::format;
+use core::fmt::Display;
+
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
-use std::fmt::Display;
 
 pub trait DisplayAssertions {
     fn has_display_value(self, expected: impl Display) -> Self;

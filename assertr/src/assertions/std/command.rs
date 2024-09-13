@@ -1,8 +1,9 @@
+use std::ffi::OsStr;
+use std::process::Command;
+
 use crate::mode::Mode;
 use crate::prelude::IntoIteratorAssertions;
 use crate::AssertThat;
-use std::ffi::OsStr;
-use std::process::Command;
 
 pub trait CommandAssertions {
     fn has_arg(self, expected: impl AsRef<OsStr>) -> Self;

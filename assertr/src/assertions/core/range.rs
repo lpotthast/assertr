@@ -1,5 +1,5 @@
-use std::fmt::Debug;
-use std::ops::{RangeFrom, RangeTo, RangeToInclusive};
+use core::fmt::Debug;
+use core::ops::{RangeFrom, RangeTo, RangeToInclusive};
 
 use crate::failure::GenericFailure;
 use crate::{tracking::AssertionTracking, AssertThat, Mode};

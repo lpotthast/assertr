@@ -1,7 +1,7 @@
 use crate::{
     actual::Actual, failure::GenericFailure, mode::Mode, tracking::AssertionTracking, AssertThat,
 };
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 pub trait ResultAssertions<'t, M: Mode, T, E> {
     fn is_ok(self) -> AssertThat<'t, T, M>
