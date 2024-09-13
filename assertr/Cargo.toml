@@ -2,6 +2,16 @@
 name = "assertr"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.70"
+authors = ["Lukas Potthast <privat@lukas-potthast.de>"]
+license = "MIT OR Apache-2.0"
+readme = "../README.md"
+repository = "https://github.com/lpotthast/assertr"
+description = """
+Fluent assertions for the Rust programming language.
+"""
+categories = ["development-tools::testing", "no-std"]
+keywords = ["assertions", "assert", "assert-that", "testing"]
 
 [features]
 default = ["std"]
