@@ -3,6 +3,7 @@
 #![allow(clippy::wrong_self_convention)]
 
 extern crate alloc;
+extern crate core;
 
 use actual::Actual;
 use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
