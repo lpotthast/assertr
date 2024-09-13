@@ -29,7 +29,8 @@ pub mod tracking;
 pub mod util;
 
 pub mod prelude {
-    pub use derive_assertr_eq::AssertrEq;
+    #[cfg(feature = "derive")]
+    pub use assertr_derive::AssertrEq;
 
     pub use crate::any;
     pub use crate::assert_that;

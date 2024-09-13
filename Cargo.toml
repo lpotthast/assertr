@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["assertr", "derive-assertr-eq"]
+members = ["assertr", "assertr-derive"]
 default-members = ["assertr"]
 
 [workspace.dependencies]

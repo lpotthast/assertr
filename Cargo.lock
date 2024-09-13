@@ -41,13 +41,29 @@ name = "assertr"
 version = "0.1.0"
 dependencies = [
  "assertr",
- "derive-assertr-eq",
+ "assertr-derive",
  "indoc",
  "mockito",
  "reqwest",
  "serde",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "assertr-derive"
+version = "0.1.0"
+dependencies = [
+ "assertr",
+ "darling",
+ "indoc",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 2.0.77",
+ "trybuild",
 ]
 
 [[package]]
@@ -181,22 +197,6 @@ dependencies = [
  "darling_core",
  "quote",
  "syn 2.0.77",
-]
-
-[[package]]
-name = "derive-assertr-eq"
-version = "0.0.1"
-dependencies = [
- "assertr",
- "darling",
- "indoc",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "syn 2.0.77",
- "trybuild",
 ]
 
 [[package]]

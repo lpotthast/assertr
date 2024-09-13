@@ -6,16 +6,17 @@ edition = "2021"
 [features]
 default = ["std"]
 std = []
+derive = ["dep:assertr-derive"]
 tokio = ["dep:tokio"]
 serde = ["dep:serde"]
 reqwest = ["dep:reqwest"]
 
 [dependencies]
-derive-assertr-eq = { path = "../derive-assertr-eq" }
+assertr-derive = { version = "0.1.0", optional = true, path = "../assertr-derive" }
 indoc = "2.0.5"
+reqwest = { version = "0.12.7", optional = true }
 serde = { version = "1.0.204", optional = true, features = ["derive"] }
 tokio = { version = "1.38.0", optional = true, features = ["full"] }
-reqwest = { version = "0.12.7", optional = true }
 
 [dev-dependencies]
 assertr = { path = ".", features = ["std", "reqwest", "tokio"] }
