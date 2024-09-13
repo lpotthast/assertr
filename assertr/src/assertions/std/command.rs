@@ -11,7 +11,7 @@ pub trait CommandAssertions {
 
 impl<'t, M: Mode> CommandAssertions for AssertThat<'t, Command, M> {
     fn has_arg(self, expected: impl AsRef<OsStr>) -> Self {
-        self.derive(|it| it.get_args().into_iter().collect::<Vec<_>>())
+        self.derive(|it| it.get_args().collect::<Vec<_>>())
             .contains(expected.as_ref());
         self
     }

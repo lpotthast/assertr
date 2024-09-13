@@ -39,6 +39,8 @@ pub mod prelude {
     pub use crate::assertions::alloc::prelude::*;
     pub use crate::assertions::condition;
     pub use crate::assertions::core::prelude::*;
+    #[cfg(feature = "reqwest")]
+    pub use crate::assertions::reqwest::prelude::*;
     #[cfg(feature = "std")]
     pub use crate::assertions::std::prelude::*;
     #[cfg(feature = "tokio")]
