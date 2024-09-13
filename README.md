@@ -4,22 +4,25 @@ Fluent assertions for the Rust programming language.
 
 ## Goals
 
-- No requirement to use any macros. A simple
-  assert_that(...)
-  suffices.s
+- Assertions that read like english:
+  `assert_that("foobar").stars_with("foo")`
+  `assert_that((Ok(42)).is_ok().is_equal_to(42)`
 
-- One import suffices to access all possible assertions through autocomplete.
-  use assertr::prelude::*;
+- No requirement to use a macro. A simple
+  `assert_that(...)` suffices.
 
-- No requirement to always use explicit references. If you are free to give ownership, thats fine and possibly easier to
-  read.
-  assert_that([1, 2, 3]).contains_exactly_in_any_order([3, 1, 2])
+- One import should be enough to access all possible assertions through autocomplete.
+  `use assertr::prelude::*;`
+
+- No requirement to always use explicit references. If you are free to give ownership, that's fine.
+  `assert_that(MyStruct {}).is_equal_to(MyStruct {})`
 
 - Chainable assertions.
-  assert_that("foobar")
-  .is_not_empty()
-  .starts_with("foo")
-  .ends_with("bar")
+
+      assert_that("foobar")
+          .is_not_empty()
+          .starts_with("foo")
+          .ends_with("bar")
 
 - Extensible.
 
@@ -46,8 +49,6 @@ Can we implement fallback rendering? Will probably require the currently unstabl
 
 ## Extensibility
 
-## Contribution
-
 ## Testing
 
 To test all creates, run with --all when in root
@@ -59,3 +60,10 @@ This crate uses features. Some tests are declared under conditional compilation.
 Run all tests using
 
     cargo test --all-features
+
+## Contribution
+
+Midway through implementing this, I found out that "spectral" already exists, which uses a very similar style of
+assertions.
+After looking into it, I took the concept of generally relying on `*Assertions` trait definitions instead of directly
+implementing Assertions with multiple impl blocks on `AssertThat`.
