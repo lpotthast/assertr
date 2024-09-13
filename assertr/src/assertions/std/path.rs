@@ -436,7 +436,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_not_present() {
-                let path = Path::new("../../foo/bar/baz.rs");
+                let path = Path::new("../../foo/bar/baz.rs").to_owned();
                 assert_that(path).does_not_exist();
             }
         }
@@ -487,7 +487,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_root() {
-                let path = Path::new("/foo/bar/baz.rs");
+                let path = Path::new("/foo/bar/baz.rs").to_owned();
                 assert_that(path).has_a_root();
             }
         }
@@ -499,7 +499,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_relative() {
-                let path = Path::new("foo/bar/baz.rs");
+                let path = Path::new("foo/bar/baz.rs").to_owned();
                 assert_that(path).is_relative();
             }
         }
@@ -518,7 +518,10 @@ mod tests {
             #[test]
             fn panics_when_different() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                let relative_path = path
+                    .strip_prefix(env::current_dir().unwrap())
+                    .unwrap()
+                    .to_owned();
                 assert_that_panic_by(|| {
                     assert_that(relative_path)
                         .with_location(false)
@@ -550,7 +553,10 @@ mod tests {
             #[test]
             fn panics_when_different() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                let relative_path = path
+                    .strip_prefix(env::current_dir().unwrap())
+                    .unwrap()
+                    .to_owned();
                 assert_that_panic_by(|| {
                     assert_that(relative_path)
                         .with_location(false)
@@ -582,7 +588,10 @@ mod tests {
             #[test]
             fn panics_when_different() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-                let relative_path = path.strip_prefix(env::current_dir().unwrap()).unwrap();
+                let relative_path = path
+                    .strip_prefix(env::current_dir().unwrap())
+                    .unwrap()
+                    .to_owned();
                 assert_that_panic_by(|| {
                     assert_that(relative_path)
                         .with_location(false)
