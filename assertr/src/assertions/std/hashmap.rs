@@ -1,3 +1,4 @@
+use crate::failure::ExpectedActualFailure;
 use crate::{
     failure::GenericFailure, tracking::AssertionTracking, AssertThat, AssertrPartialEq, EqContext,
     Mode,
@@ -7,6 +8,21 @@ use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 /// Assertions for generic `HashMap`s.
 pub trait HashMapAssertions<K, V> {
+    fn has_length(self, expected: usize) -> Self
+    where
+        K: Debug,
+        V: Debug;
+
+    fn is_empty(self) -> Self
+    where
+        K: Debug,
+        V: Debug;
+
+    fn is_not_empty(self) -> Self
+    where
+        K: Debug,
+        V: Debug;
+
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where
         K: Eq + Hash + Debug,
@@ -26,6 +42,60 @@ pub trait HashMapAssertions<K, V> {
 }
 
 impl<'t, K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'t, HashMap<K, V>, M> {
+    #[track_caller]
+    fn has_length(mut self, expected: usize) -> Self
+    where
+        K: Debug,
+        V: Debug,
+    {
+        self.track_assertion();
+        let actual = self.actual().len();
+        if actual != expected {
+            self = self.with_detail_message("HashMap was not of expected length!");
+            self.fail(ExpectedActualFailure {
+                expected: &expected,
+                actual: &actual,
+            });
+        }
+        self
+    }
+
+    #[track_caller]
+    fn is_empty(self) -> Self
+    where
+        K: Debug,
+        V: Debug,
+    {
+        self.track_assertion();
+        if !self.actual().is_empty() {
+            self.fail(GenericFailure {
+                arguments: format_args!(
+                    "Actual: HashMap {actual:#?}\n\nwas expected to be empty, but it is not!",
+                    actual = self.actual(),
+                ),
+            });
+        }
+        self
+    }
+
+    #[track_caller]
+    fn is_not_empty(self) -> Self
+    where
+        K: Debug,
+        V: Debug,
+    {
+        self.track_assertion();
+        if self.actual().is_empty() {
+            self.fail(GenericFailure {
+                arguments: format_args!(
+                    "Actual: HashMap {actual:#?}\n\nwas expected NOT to be empty, but it IS empty!",
+                    actual = self.actual(),
+                ),
+            });
+        }
+        self
+    }
+
     #[track_caller]
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where
@@ -109,6 +179,113 @@ impl<'t, K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'t, HashMap<K, V>
 
 #[cfg(test)]
 mod tests {
+    mod has_length {
+        use indoc::formatdoc;
+        use std::collections::HashMap;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_length_matches_and_empty() {
+            let map = HashMap::<(), ()>::new();
+            assert_that(map).has_length(0);
+        }
+
+        #[test]
+        fn succeeds_when_length_matches_and_non_empty() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            map.insert("bar", "baz");
+            map.insert("baz", "foo");
+            assert_that(map).has_length(3);
+        }
+
+        #[test]
+        fn panics_when_length_does_not_match() {
+            assert_that_panic_by(|| {
+                let mut map = HashMap::new();
+                map.insert("foo", "bar");
+                assert_that(map).with_location(false).has_length(2);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: 2
+
+                      Actual: 1
+
+                    Details: [
+                        HashMap was not of expected length!,
+                    ]
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod is_empty {
+        use std::collections::HashMap;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_map_is_empty() {
+            let map = HashMap::<(), ()>::new();
+            assert_that(map).is_empty();
+        }
+
+        #[test]
+        fn panics_when_map_is_not_empty() {
+            assert_that_panic_by(|| {
+                let mut map = HashMap::new();
+                map.insert("foo", "bar");
+                assert_that(map).with_location(false).is_empty();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: HashMap {{
+                        "foo": "bar",
+                    }}
+
+                    was expected to be empty, but it is not!
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod is_not_empty {
+        use std::collections::HashMap;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_map_is_empty() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_that(map).is_not_empty();
+        }
+
+        #[test]
+        fn panics_when_map_is_empty() {
+            assert_that_panic_by(|| {
+                let map = HashMap::<(), ()>::new();
+                assert_that(map).with_location(false).is_not_empty();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: HashMap {{}}
+
+                    was expected NOT to be empty, but it IS empty!
+                    -------- assertr --------
+                "#});
+        }
+    }
+
     mod contains_key {
         use std::collections::HashMap;
 
