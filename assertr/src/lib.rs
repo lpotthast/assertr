@@ -40,6 +40,8 @@ pub mod prelude {
     pub use crate::assert_that_ref;
     pub use crate::assertions::alloc::prelude::*;
     pub use crate::assertions::condition;
+    pub use crate::assertions::condition::ConditionAssertions;
+    pub use crate::assertions::condition::IterableConditionAssertions;
     pub use crate::assertions::core::prelude::*;
     #[cfg(feature = "reqwest")]
     pub use crate::assertions::reqwest::prelude::*;
@@ -48,7 +50,6 @@ pub mod prelude {
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::prelude::*;
     pub use crate::condition::Condition;
-    pub use crate::condition::ConditionAssertions;
     pub use crate::eq;
     pub use crate::mode::Mode;
     pub use crate::AssertThat;

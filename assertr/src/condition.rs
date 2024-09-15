@@ -1,17 +1,8 @@
-use core::fmt::Arguments;
+use core::fmt::Display;
 
 pub trait Condition<T> {
-    /// `value` can be considered to be the "expected" value.
-    fn test<'a>(&self, value: &T) -> Result<(), Arguments<'a>>;
-}
+    type Error: Display;
 
-pub trait ConditionAssertions<T> {
-    fn is<C: Condition<T>>(self, condition: C) -> Self;
-    fn has<C: Condition<T>>(self, condition: C) -> Self;
-}
-
-// TODO: implement or consider removal
-pub trait CollectionConditionAssertions<T> {
-    fn are<C: Condition<T>>(self, condition: C) -> Self;
-    fn have<C: Condition<T>>(self, condition: C) -> Self;
+    /// Test that the actual `value` conforms to / matches this condition (`self`).
+    fn test<'a>(&self, value: &T) -> Result<(), Self::Error>;
 }
