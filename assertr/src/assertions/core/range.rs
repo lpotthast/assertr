@@ -3,7 +3,6 @@ use core::ops::{RangeFrom, RangeTo, RangeToInclusive};
 
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
-/// Assertions for generic arrays.
 impl<'t, T, M: Mode> AssertThat<'t, RangeFrom<T>, M> {
     #[track_caller]
     pub fn contains_element(&self, expected: T)
@@ -20,7 +19,6 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeFrom<T>, M> {
     }
 }
 
-/// Assertions for generic arrays.
 impl<'t, T, M: Mode> AssertThat<'t, RangeTo<T>, M> {
     #[track_caller]
     pub fn contains_element(&self, expected: T)
@@ -52,7 +50,6 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeTo<T>, M> {
     }
 }
 
-// Assertions for generic arrays.
 impl<'t, T, M: Mode> AssertThat<'t, RangeToInclusive<T>, M> {
     #[track_caller]
     pub fn contains_element(&self, expected: T)

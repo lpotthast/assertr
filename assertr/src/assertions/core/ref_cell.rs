@@ -12,7 +12,7 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
         let actual = self.actual();
         if actual.try_borrow_mut().is_ok() {
             self.fail(format_args!(
-                "Actual: {actual:#?} is not borrowed.\n\nExpected: RefCell to be borrowed (immutably) at least once."
+                "Actual: {actual:#?} is not borrowed.\n\nExpected: RefCell to be borrowed (immutably) at least once.\n"
             ));
         }
         self
@@ -25,7 +25,7 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
         let actual = self.actual();
         if actual.try_borrow().is_ok() {
             self.fail(format_args!(
-                "Actual: {actual:#?} is not mutably borrowed.\n\nExpected: RefCell to be borrowed mutably."
+                "Actual: {actual:#?} is not mutably borrowed.\n\nExpected: RefCell to be borrowed mutably.\n"
             ));
         }
         self
@@ -38,7 +38,7 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
         let actual = self.actual();
         if actual.try_borrow_mut().is_ok() {
             self.fail(format_args!(
-                "Actual: {actual:#?} is mutably borrowed.\n\nExpected: RefCell to not be borrowed mutably."
+                "Actual: {actual:#?} is mutably borrowed.\n\nExpected: RefCell to not be borrowed mutably.\n"
             ));
         }
         self
