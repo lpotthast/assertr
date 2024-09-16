@@ -18,12 +18,6 @@ impl Failure for &str {
     }
 }
 
-impl Failure for String {
-    fn write_to(self, target: &mut String) -> core::fmt::Result {
-        target.write_str(self.as_str())
-    }
-}
-
 impl Failure for Arguments<'_> {
     fn write_to(self, target: &mut String) -> core::fmt::Result {
         target.write_fmt(self)

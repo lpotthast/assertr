@@ -5,7 +5,7 @@ use crate::{actual::Actual, tracking::AssertionTracking, AssertThat, Mode, Panic
 
 use super::boxed::BoxAssertions;
 
-/// Assertions for PanicValue's, the output of a panic occurred within a `assert_that_panic_by`.
+/// Assertions for PanicValue's, the output of a panic occurred within an `assert_that_panic_by`.
 pub trait PanicValueAssertions<'t, M: Mode> {
     /// NOTE: If this fails in capturing mode, a panic is raised!
     fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M>;
