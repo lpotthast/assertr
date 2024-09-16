@@ -21,8 +21,8 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, T, M> {
         let expected_str = strip_quotation_marks(expected_string.as_str());
 
         if actual_str != expected_str {
-            self.fail_with_arguments(format_args!(
-                "Expected: {expected_str:?}\n\n  Actual: {actual_str:?}"
+            self.fail(format_args!(
+                "Expected: {expected_str:?}\n\n  Actual: {actual_str:?}\n"
             ));
         }
         self

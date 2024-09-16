@@ -13,8 +13,8 @@ impl<'t, M: Mode> BoolAssertions for AssertThat<'t, bool, M> {
         let actual = self.actual();
         let expected = &true;
         if actual != expected {
-            self.fail_with_arguments(format_args!(
-                "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
+            self.fail(format_args!(
+                "Expected: {expected:#?}\n\n  Actual: {actual:#?}\n",
             ));
         }
         self
@@ -26,8 +26,8 @@ impl<'t, M: Mode> BoolAssertions for AssertThat<'t, bool, M> {
         let actual = self.actual();
         let expected = &false;
         if actual != expected {
-            self.fail_with_arguments(format_args!(
-                "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
+            self.fail(format_args!(
+                "Expected: {expected:#?}\n\n  Actual: {actual:#?}\n",
             ));
         }
         self

@@ -3,7 +3,7 @@ use alloc::format;
 use alloc::string::String;
 use core::any::{type_name, Any, TypeId};
 
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
+use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 /// Assertions for boxed values.
 pub trait BoxAssertions<'t, M: Mode> {
@@ -19,13 +19,11 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
         match self.actual().downcast_ref::<E>() {
             Some(casted) => self.derive(|_actual| casted),
             None => {
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "is not of expected type: {expected_type_name} ({expected_type_id:?})",
-                        expected_type_name = type_name::<E>(),
-                        expected_type_id = TypeId::of::<E>(),
-                    ),
-                });
+                self.fail(format_args!(
+                    "is not of expected type: {expected_type_name} ({expected_type_id:?})",
+                    expected_type_name = type_name::<E>(),
+                    expected_type_id = TypeId::of::<E>(),
+                ));
                 panic!("Cannot continue in capturing mode!"); // TODO: Consider typestates!
             }
         }
@@ -93,13 +91,11 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                     "Panic value was not of type '{expected_type_name}'",
                     expected_type_name = type_name::<E>()
                 ))
-                .fail(GenericFailure {
-                    arguments: format_args!(
-                        "is not of expected type: {expected_type_name} ({expected_type_id:?})",
-                        expected_type_name = type_name::<E>(),
-                        expected_type_id = TypeId::of::<E>(),
-                    ),
-                });
+                .fail(format_args!(
+                    "is not of expected type: {expected_type_name} ({expected_type_id:?})",
+                    expected_type_name = type_name::<E>(),
+                    expected_type_id = TypeId::of::<E>(),
+                ));
                 panic!("Cannot continue in capturing mode!"); // TODO: Consider typestates!
             }
         }

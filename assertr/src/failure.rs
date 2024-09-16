@@ -1,9 +1,6 @@
-use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::{Arguments, Debug};
-
-use indoc::formatdoc;
+use core::fmt::{Arguments, Write};
 
 use crate::{
     details::{DetailMessages, WithDetail},
@@ -11,42 +8,39 @@ use crate::{
     AssertThat,
 };
 
+pub trait Failure {
+    fn write_to(self, target: &mut String) -> std::fmt::Result;
+}
+
+impl Failure for &str {
+    fn write_to(self, target: &mut String) -> core::fmt::Result {
+        target.write_str(self)
+    }
+}
+
+impl Failure for String {
+    fn write_to(self, target: &mut String) -> core::fmt::Result {
+        target.write_str(self.as_str())
+    }
+}
+
+impl Failure for Arguments<'_> {
+    fn write_to(self, target: &mut String) -> core::fmt::Result {
+        target.write_fmt(self)
+    }
+}
+
+impl<F> Failure for F
+where
+    F: FnOnce(&mut String) -> core::fmt::Result,
+{
+    fn write_to(self, target: &mut String) -> core::fmt::Result {
+        self(target)
+    }
+}
+
 pub(crate) trait Fallible {
     fn store_failure(&self, failure: String);
-}
-
-pub trait Failure {
-    fn format(&self) -> Arguments<'_>;
-}
-
-pub struct GenericFailure<'a> {
-    pub arguments: Arguments<'a>,
-}
-
-impl<'a> Failure for GenericFailure<'a> {
-    fn format(&self) -> Arguments<'_> {
-        self.arguments
-    }
-}
-
-pub struct ExpectedActualFailure<'e, 'a, E: Debug, A: Debug> {
-    pub expected: &'e E,
-    pub actual: &'a A,
-}
-
-impl<'a> From<GenericFailure<'a>> for String {
-    fn from(value: GenericFailure<'a>) -> Self {
-        format!("{}", value.arguments)
-    }
-}
-
-impl<'e, 'a, E: Debug, A: Debug> From<ExpectedActualFailure<'e, 'a, E, A>> for String {
-    fn from(value: ExpectedActualFailure<'e, 'a, E, A>) -> Self {
-        format!(
-            "Expected: {:#?}\n\n  Actual: {:#?}",
-            value.expected, value.actual
-        )
-    }
 }
 
 impl<'t, T, M: Mode> Fallible for AssertThat<'t, T, M> {
@@ -60,75 +54,51 @@ impl<'t, T, M: Mode> Fallible for AssertThat<'t, T, M> {
 
 impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     #[track_caller]
-    pub fn fail(&self, failure: impl Into<String>) {
-        self.fail_with_arguments(format_args!("{}", failure.into()));
-    }
-
-    #[track_caller]
-    pub fn fail_using<'a>(&self, failure_provider: impl FnOnce(&Self) -> Arguments<'a>) {
-        self.fail_with_arguments(failure_provider(self));
-    }
-
-    /// Final.
-    #[track_caller]
-    pub fn fail_with_arguments(&self, failure: Arguments<'_>) {
+    pub fn fail(&self, failure: impl Failure) {
         let mut detail_messages = Vec::new();
         self.collect_messages(&mut detail_messages);
 
-        // TODO: Compute should_print_location by reading root!
-        let err = match (self.print_location, detail_messages.len()) {
-            (false, 0) => formatdoc! {"
-                    -------- assertr --------
-                    {failure}
-                    -------- assertr --------
-                "
-            },
-            (false, _) => formatdoc! {"
-                    -------- assertr --------
-                    {failure}
-
-                    Details: {detail_messages:#?}
-                    -------- assertr --------
-                ",
-                detail_messages = DetailMessages(detail_messages.as_ref()),
-            },
-            (true, 0) => {
-                let caller_location = core::panic::Location::caller();
-                formatdoc! {"
-                    -------- assertr --------
-                    Assertion failed at {file}:{line}:{column}
-
-                    {failure}
-                    -------- assertr --------
-                ",
-                    file = caller_location.file(),
-                    line = caller_location.line(),
-                    column = caller_location.column(),
-                }
-            }
-            (true, _) => {
-                let caller_location = core::panic::Location::caller();
-                formatdoc! {"
-                    -------- assertr --------
-                    Assertion failed at {file}:{line}:{column}
-
-                    {failure}
-
-                    Details: {detail_messages:#?}
-                    -------- assertr --------
-                ",
-                    file = caller_location.file(),
-                    line = caller_location.line(),
-                    column = caller_location.column(),
-                    detail_messages = DetailMessages(detail_messages.as_ref()),
-                }
-            }
-        };
+        let msg = build_failure_message(self.print_location, detail_messages, failure)
+            .expect("no write error");
 
         // TODO: Check is_capture in root! Do not allow with_capture() on derived asserts.
         match self.mode.borrow().is_capture() {
-            true => self.store_failure(err),
-            false => panic!("{err}"),
+            true => self.store_failure(msg),
+            false => panic!("{msg}"),
         };
     }
+}
+
+fn build_failure_message(
+    print_location: bool,
+    detail_messages: Vec<String>,
+    failure: impl Failure,
+) -> Result<String, core::fmt::Error> {
+    let mut err = String::new();
+
+    err.write_str("-------- assertr --------\n")?;
+
+    if print_location {
+        let caller_location = core::panic::Location::caller();
+        let _ = err.write_fmt(format_args!(
+            "Assertion failed at {file}:{line}:{column}\n",
+            file = caller_location.file(),
+            line = caller_location.line(),
+            column = caller_location.column(),
+        ));
+    }
+
+    failure.write_to(&mut err)?;
+
+    if !detail_messages.is_empty() {
+        err.write_str("\n")?;
+        err.write_fmt(format_args!(
+            "Details: {detail_messages:#?}\n",
+            detail_messages = DetailMessages(detail_messages.as_ref())
+        ))?;
+    }
+
+    err.write_str("-------- assertr --------\n")?;
+
+    Ok(err)
 }

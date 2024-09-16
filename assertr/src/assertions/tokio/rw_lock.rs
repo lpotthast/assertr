@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
+use crate::{tracking::AssertionTracking, AssertThat, Mode};
 use core::fmt::Debug;
 use tokio::sync::RwLock;
 
@@ -20,19 +20,15 @@ impl<'t, T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'t, RwLock<T
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_err() {
                 // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "Actual: {actual:?}\n\nwas expected to not be read- or write-locked, but it is!\n\nIt is currently write-locked!",
-                        actual = self.actual(),
-                    ),
-                });
+                self.fail(format_args!(
+                    "Actual: {actual:?}\n\nwas expected to not be read- or write-locked, but it is!\n\nIt is currently write-locked!\n",
+                    actual = self.actual(),
+                ));
             } else {
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "Actual: {actual:?}\n\nwas expected to not be read- or write-locked, but it is!\n\nIt is currently read-locked!",
-                        actual = self.actual(),
-                    ),
-                });
+                self.fail(format_args!(
+                    "Actual: {actual:?}\n\nwas expected to not be read- or write-locked, but it is!\n\nIt is currently read-locked!\n",
+                    actual = self.actual(),
+                ));
             }
         }
         self
@@ -46,22 +42,18 @@ impl<'t, T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'t, RwLock<T
         self.track_assertion();
         if self.actual().try_write().is_ok() {
             // Can be locked for writing, must have zero locks than!
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:?}\n\nwas expected to be read-locked, but it is not!\n\nIt is not locked at all!",
-                    actual = self.actual(),
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:?}\n\nwas expected to be read-locked, but it is not!\n\nIt is not locked at all!\n",
+                actual = self.actual(),
+            ));
         } else {
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_err() {
                 // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "Actual: {actual:?}\n\nwas expected to be read-locked, but it is not!\n\nIt is currently write-locked!",
-                        actual = self.actual(),
-                    ),
-                });
+                self.fail(format_args!(
+                    "Actual: {actual:?}\n\nwas expected to be read-locked, but it is not!\n\nIt is currently write-locked!\n",
+                    actual = self.actual(),
+                ));
             }
         }
         self
@@ -75,22 +67,18 @@ impl<'t, T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'t, RwLock<T
         self.track_assertion();
         if self.actual().try_write().is_ok() {
             // Can be locked for writing, must have zero locks than!
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:?}\n\nwas expected to be write-locked, but it is not!",
-                    actual = self.actual(),
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:?}\n\nwas expected to be write-locked, but it is not!\n",
+                actual = self.actual(),
+            ));
         } else {
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_ok() {
                 // RwLock allows multiple readers, and we can read again, so existing lock must be read-lock!
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "Actual: {actual:?}\n\nwas expected to be write-locked, but it is not!\n\nIt is currently read-locked!",
-                        actual = self.actual(),
-                    ),
-                });
+                self.fail(format_args!(
+                    "Actual: {actual:?}\n\nwas expected to be write-locked, but it is not!\n\nIt is currently read-locked!\n",
+                    actual = self.actual(),
+                ));
             }
         }
         self

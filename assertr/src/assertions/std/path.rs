@@ -1,4 +1,4 @@
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
+use crate::{tracking::AssertionTracking, AssertThat, Mode};
 use std::path::PathBuf;
 use std::{ffi::OsStr, path::Path};
 
@@ -81,9 +81,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.exists() {
-            self.fail(GenericFailure {
-                arguments: format_args!("Expected: {actual:#?}\n\nto exist, but it does not!"),
-            });
+            self.fail(format_args!(
+                "Expected: {actual:#?}\n\nto exist, but it does not!\n"
+            ));
         }
         self
     }
@@ -93,9 +93,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         self.track_assertion();
         let actual = self.actual();
         if actual.exists() {
-            self.fail(GenericFailure {
-                arguments: format_args!("Expected: {actual:#?}\n\nto not exist, but it does!"),
-            });
+            self.fail(format_args!(
+                "Expected: {actual:#?}\n\nto not exist, but it does!\n"
+            ));
         }
         self
     }
@@ -105,9 +105,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_file() {
-            self.fail(GenericFailure {
-                arguments: format_args!("Expected: {actual:#?}\n\nto be a file, but it is not!"),
-            });
+            self.fail(format_args!(
+                "Expected: {actual:#?}\n\nto be a file, but it is not!\n"
+            ));
         }
         self
     }
@@ -119,11 +119,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         if !actual.is_dir() {
             let exists = actual.exists();
             let is_file = actual.is_file();
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Expected: {actual:#?}\n\nto be a directory, but it is not!\nThe path exists: {exists}\nThe path is a file: {is_file}"
-                ),
-            });
+            self.fail(format_args!(
+                "Expected: {actual:#?}\n\nto be a directory, but it is not!\nThe path exists: {exists}\nThe path is a file: {is_file}\n"
+            ));
         }
         self
     }
@@ -133,9 +131,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_symlink() {
-            self.fail(GenericFailure {
-                arguments: format_args!("Expected: {actual:#?}\n\nto be a symlink, but it is not!"),
-            });
+            self.fail(format_args!(
+                "Expected: {actual:#?}\n\nto be a symlink, but it is not!\n"
+            ));
         }
         self
     }
@@ -145,11 +143,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.has_root() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Expected: {actual:#?}\n\nto be a root-path, but it is not!"
-                ),
-            });
+            self.fail(format_args!(
+                "Expected: {actual:#?}\n\nto be a root-path, but it is not!\n"
+            ));
         }
         self
     }
@@ -159,11 +155,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_relative() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Expected: {actual:#?}\n\nto be a relative path, but it is not!"
-                ),
-            });
+            self.fail(format_args!(
+                "Expected: {actual:#?}\n\nto be a relative path, but it is not!\n"
+            ));
         }
         self
     }
@@ -176,11 +170,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         let expected_file_name = expected.as_ref();
         if let Some(actual_file_name) = actual_file_name {
             if actual_file_name != expected_file_name {
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "Path: {actual:?}\n\nExpected filename: {expected_file_name:#?}\n  Actual filename: {actual_file_name:#?}"
-                    ),
-                });
+                self.fail(format_args!(
+                    "Path: {actual:?}\n\nExpected filename: {expected_file_name:#?}\n  Actual filename: {actual_file_name:#?}\n"
+                ));
             }
         }
         self
@@ -193,11 +185,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         let expected_file_stem = expected.as_ref();
         if let Some(actual_file_stem) = actual_file_stem {
             if actual_file_stem != expected_file_stem {
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "Path: {actual:?}\n\nExpected filestem: {expected_file_stem:#?}\n  Actual filestem: {actual_file_stem:#?}"
-                    ),
-                });
+                self.fail(format_args!(
+                    "Path: {actual:?}\n\nExpected filestem: {expected_file_stem:#?}\n  Actual filestem: {actual_file_stem:#?}\n"
+                ));
             }
         }
         self
@@ -210,11 +200,9 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
         let expected_extension = expected.as_ref();
         if let Some(actual_extension) = actual_extension {
             if actual_extension != expected_extension {
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "Path: {actual:?}\n\nExpected extension: {expected_extension:#?}\n  Actual extension: {actual_extension:#?}"
-                    ),
-                });
+                self.fail(format_args!(
+                    "Path: {actual:?}\n\nExpected extension: {expected_extension:#?}\n  Actual extension: {actual_extension:#?}\n"
+                ));
             }
         }
         self

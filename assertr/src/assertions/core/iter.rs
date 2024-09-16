@@ -1,9 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::{
-    failure::GenericFailure, tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode,
-};
+use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode};
 
 pub trait IntoIteratorAssertions<T: Debug> {
     fn contains<E>(self, expected: E) -> Self
@@ -33,11 +31,9 @@ where
             .into_iter()
             .any(|it| AssertrPartialEq::eq(it, &expected, None))
         {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}",
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}\n",
+            ));
         }
         self
     }
@@ -48,12 +44,10 @@ where
         self.track_assertion();
         if self.actual().into_iter().count() != 0 {
             let actual = self.actual().into_iter().collect::<Vec<_>>();
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?}\n\nIs not empty!",
-                    //actual = self.actual_ref(),
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\nIs not empty!\n",
+                //actual = self.actual_ref(),
+            ));
         }
         self
     }

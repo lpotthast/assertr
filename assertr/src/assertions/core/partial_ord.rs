@@ -1,6 +1,6 @@
 use core::{borrow::Borrow, cmp::Ordering, fmt::Debug};
 
-use crate::{failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode};
+use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 /// Assertions for comparable values.
 pub trait PartialOrdAssertions<T> {
@@ -41,11 +41,9 @@ impl<'t, T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'t, T, M> {
             actual.partial_cmp(expected),
             Some(Ordering::Equal) | Some(Ordering::Greater)
         ) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?}\n\nis not less than\n\nExpected: {expected:#?}"
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\nis not less than\n\nExpected: {expected:#?}\n"
+            ));
         }
         self
     }
@@ -65,8 +63,8 @@ impl<'t, T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'t, T, M> {
             actual.partial_cmp(expected),
             Some(Ordering::Less) | Some(Ordering::Equal)
         ) {
-            self.fail_with_arguments(format_args!(
-                "Actual: {actual:#?}\n\nis not greater than\n\nExpected: {expected:#?}"
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\nis not greater than\n\nExpected: {expected:#?}\n"
             ));
         }
         self
@@ -84,11 +82,9 @@ impl<'t, T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'t, T, M> {
         let expected = expected.borrow();
 
         if matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?}\n\nis not less or equal to\n\nExpected: {expected:#?}"
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\nis not less or equal to\n\nExpected: {expected:#?}\n"
+            ));
         }
         self
     }
@@ -105,11 +101,9 @@ impl<'t, T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'t, T, M> {
         let expected = expected.borrow();
 
         if matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?}\n\nis not greater or equal to\n\nExpected: {expected:#?}"
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\nis not greater or equal to\n\nExpected: {expected:#?}\n"
+            ));
         }
         self
     }

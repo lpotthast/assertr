@@ -11,7 +11,7 @@ impl NumAssertions {
 impl Drop for NumAssertions {
     fn drop(&mut self) {
         if self.0 == 0 {
-            panic!("An AssertThat was dropped without performing any actual assertions!s");
+            panic!("An AssertThat was dropped without performing any actual assertions on it!");
         }
     }
 }
@@ -27,5 +27,19 @@ impl<'t, T, M: Mode> AssertionTracking for AssertThat<'t, T, M> {
         if let Some(parent) = self.parent {
             parent.track_assertion();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+
+    #[test]
+    fn panics_on_drop_when_no_assertions_were_made() {
+        assert_that_panic_by(|| assert_that(42).with_location(false))
+            .has_type::<&str>()
+            .is_equal_to(
+                "An AssertThat was dropped without performing any actual assertions on it!",
+            );
     }
 }

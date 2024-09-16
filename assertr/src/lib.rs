@@ -49,6 +49,7 @@ pub mod prelude {
     pub use crate::assertions::std::prelude::*;
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::prelude::*;
+    pub use crate::assertions::HasLength;
     pub use crate::condition::Condition;
     pub use crate::eq;
     pub use crate::mode::Mode;
@@ -60,16 +61,19 @@ pub mod prelude {
 pub struct PanicValue(Box<dyn Any>);
 
 #[track_caller]
+#[must_use]
 pub fn assert_that<'t, T>(actual: impl Into<Actual<'t, T>>) -> AssertThat<'t, T, Panic> {
     AssertThat::new(actual.into())
 }
 
 #[track_caller]
+#[must_use]
 pub fn assert_that_ref<T>(actual: &T) -> AssertThat<T, Panic> {
     AssertThat::new(Actual::Borrowed(actual))
 }
 
 #[track_caller]
+#[must_use]
 #[cfg(feature = "std")]
 pub fn assert_that_panic_by<'t, R>(fun: impl FnOnce() -> R) -> AssertThat<'t, PanicValue, Panic> {
     extern crate std;

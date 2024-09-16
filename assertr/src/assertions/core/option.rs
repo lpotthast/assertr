@@ -1,6 +1,4 @@
-use crate::{
-    actual::Actual, failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode,
-};
+use crate::{actual::Actual, tracking::AssertionTracking, AssertThat, Mode};
 use core::fmt::Debug;
 use core::option::Option;
 
@@ -31,12 +29,10 @@ impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M>
         self.track_assertion();
 
         if !self.actual().is_some() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?}\n\nis not of expected variant: Option:Some",
-                    actual = self.actual()
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\nis not of expected variant: Option:Some\n",
+                actual = self.actual()
+            ));
         }
 
         self.map(|actual| match actual {
@@ -53,12 +49,10 @@ impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M>
         self.track_assertion();
 
         if !self.actual().is_none() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?}\n\nis not of expected variant: Option:None",
-                    actual = self.actual()
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\nis not of expected variant: Option:None\n",
+                actual = self.actual()
+            ));
         }
 
         self.map(|_actual| Actual::Owned(()))

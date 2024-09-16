@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 use core::fmt::Debug;
 
-use crate::{failure::GenericFailure, AssertThat};
+use crate::AssertThat;
 use crate::{tracking::AssertionTracking, Mode};
 
 impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
@@ -11,11 +11,9 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
         self.track_assertion();
         let actual = self.actual();
         if actual.try_borrow_mut().is_ok() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?} is not borrowed.\n\nExpected: RefCell to be borrowed (immutably) at least once."
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?} is not borrowed.\n\nExpected: RefCell to be borrowed (immutably) at least once."
+            ));
         }
         self
     }
@@ -26,11 +24,9 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
         self.track_assertion();
         let actual = self.actual();
         if actual.try_borrow().is_ok() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?} is not mutably borrowed.\n\nExpected: RefCell to be borrowed mutably."
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?} is not mutably borrowed.\n\nExpected: RefCell to be borrowed mutably."
+            ));
         }
         self
     }
@@ -41,11 +37,9 @@ impl<'t, T: Debug, M: Mode> AssertThat<'t, RefCell<T>, M> {
         self.track_assertion();
         let actual = self.actual();
         if actual.try_borrow_mut().is_ok() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?} is mutably borrowed.\n\nExpected: RefCell to not be borrowed mutably."
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?} is mutably borrowed.\n\nExpected: RefCell to not be borrowed mutably."
+            ));
         }
         self
     }

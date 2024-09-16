@@ -6,8 +6,6 @@ use crate::{AssertThat, Mode};
 
 /// Assertions for heap-allocated, owned [String]s.
 pub trait StringAssertions {
-    fn has_length(self, expected: usize) -> Self;
-    fn is_empty(self) -> Self;
     fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self;
     fn starts_with<E: AsRef<str> + Debug>(self, expected: E) -> Self;
     fn ends_with<E: AsRef<str> + Debug>(self, expected: E) -> Self;
@@ -15,18 +13,6 @@ pub trait StringAssertions {
 
 // Assertions for Strings.
 impl<'t, M: Mode> StringAssertions for AssertThat<'t, String, M> {
-    #[track_caller]
-    fn has_length(self, expected: usize) -> Self {
-        self.derive(|actual| actual.as_str()).has_length(expected);
-        self
-    }
-
-    #[track_caller]
-    fn is_empty(self) -> Self {
-        self.derive(|actual| actual.as_str()).is_empty();
-        self
-    }
-
     #[track_caller]
     fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self {
         self.derive(|actual| actual.as_str()).contains(expected);
@@ -48,62 +34,6 @@ impl<'t, M: Mode> StringAssertions for AssertThat<'t, String, M> {
 
 #[cfg(test)]
 mod tests {
-    mod has_length {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        fn succeeds_when_expected_length_matches() {
-            assert_that(String::from("foo bar")).has_length(7);
-        }
-
-        #[test]
-        fn panics_when_expected_length_does_not_match() {
-            assert_that_panic_by(|| {
-                assert_that(String::from("foo bar"))
-                    .with_location(false)
-                    .has_length(42);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Actual: "foo bar" (length: 7)
-
-                    does not have length
-
-                    Expected: 42
-                    -------- assertr --------
-                "#});
-        }
-    }
-
-    mod is_empty {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        fn succeeds_when_empty() {
-            assert_that(String::from("")).is_empty();
-        }
-
-        #[test]
-        fn panics_when_not_empty() {
-            assert_that_panic_by(|| {
-                assert_that(String::from("foo"))
-                    .with_location(false)
-                    .is_empty();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Actual: "foo"
-
-                    was expected to be empty, but it is not!
-                    -------- assertr --------
-                "#});
-        }
-    }
-
     mod contains {
         use crate::prelude::*;
         use indoc::formatdoc;

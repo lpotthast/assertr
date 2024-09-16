@@ -3,21 +3,9 @@ use alloc::format;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::{
-    failure::{ExpectedActualFailure, GenericFailure},
-    tracking::AssertionTracking,
-    AssertThat, AssertrPartialEq, Mode,
-};
+use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode};
 
 pub trait SliceAssertions<'t, T> {
-    fn is_empty(self) -> Self
-    where
-        T: Debug;
-
-    fn has_length(self, expected: usize) -> Self
-    where
-        T: Debug;
-
     /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
     ///
     /// - [T]: Original subject type. The "actual value" is of type &[T] (slice T).
@@ -41,40 +29,6 @@ pub trait SliceAssertions<'t, T> {
 }
 
 impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
-    #[track_caller]
-    fn is_empty(self) -> Self
-    where
-        T: Debug,
-    {
-        self.track_assertion();
-        if !self.actual().as_ref().is_empty() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",
-                    actual = self.actual(),
-                ),
-            });
-        }
-        self
-    }
-
-    #[track_caller]
-    fn has_length(mut self, expected: usize) -> Self
-    where
-        T: Debug,
-    {
-        self.track_assertion();
-        let actual = self.actual().as_ref().len();
-        if actual != expected {
-            self = self.with_detail_message("Slice was not of expected length!");
-            self.fail(ExpectedActualFailure {
-                expected: &expected,
-                actual: &actual,
-            });
-        }
-        self
-    }
-
     #[track_caller]
     fn contains_exactly<E, EE>(self, expected: EE) -> Self
     where
@@ -101,11 +55,9 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
 
             let actual = self.actual();
 
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?},\n\ndid not exactly match\n\nExpected: {expected:#?}",
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?},\n\ndid not exactly match\n\nExpected: {expected:#?}\n",
+            ));
         }
         self
     }
@@ -140,13 +92,11 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
         }
 
         if !elements_not_found.is_empty() || !elements_not_expected.is_empty() {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?},\n\nElements expected: {expected:#?}\n\nElements not found: {elements_not_found:#?}\n\nElements not expected: {elements_not_expected:#?}",
-                    actual = actual,
-                    expected = expected
-                )
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?},\n\nElements expected: {expected:#?}\n\nElements not found: {elements_not_found:#?}\n\nElements not expected: {elements_not_expected:#?}\n",
+                actual = actual,
+                expected = expected
+            ));
         }
         self
     }
@@ -170,11 +120,9 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
 
             let actual = self.actual();
 
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:#?},\n\ndid not exactly match predicates in any order.",
-                ),
-            });
+            self.fail(format_args!(
+                "Actual: {actual:#?},\n\ndid not exactly match predicates in any order.\n",
+            ));
         }
         self
     }
@@ -182,71 +130,6 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
 
 #[cfg(test)]
 mod tests {
-    mod is_empty {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn with_slice_succeeds_when_empty() {
-            let slice: &[i32] = [].as_slice();
-            assert_that(slice).is_empty();
-        }
-
-        #[test]
-        fn with_slice_panics_when_not_empty() {
-            assert_that_panic_by(|| {
-                assert_that([42].as_slice()).with_location(false).is_empty();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Actual: [42]
-
-                    was expected to be empty, but it is not!
-                    -------- assertr --------
-                "#});
-        }
-    }
-
-    mod has_length {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn succeeds_when_length_matches_and_empty() {
-            let slice: &[i32] = [].as_slice();
-            assert_that(slice).has_length(0);
-        }
-        #[test]
-        fn succeeds_when_length_matches_and_non_empty() {
-            let slice: &[i32] = [1, 2, 3].as_slice();
-            assert_that(slice).has_length(3);
-        }
-
-        #[test]
-        fn panics_when_length_does_not_match() {
-            assert_that_panic_by(|| {
-                assert_that([42].as_slice())
-                    .with_location(false)
-                    .has_length(2);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expected: 2
-                    
-                      Actual: 1
-
-                    Details: [
-                        Slice was not of expected length!,
-                    ]
-                    -------- assertr --------
-                "#});
-        }
-    }
-
     mod contains_exactly {
         use indoc::formatdoc;
 

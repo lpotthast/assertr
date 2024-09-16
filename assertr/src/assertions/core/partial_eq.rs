@@ -33,8 +33,8 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
             if !ctx.differences.differences.is_empty() {
                 self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
             }
-            self.fail_with_arguments(format_args!(
-                "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
+            self.fail(format_args!(
+                "Expected: {expected:#?}\n\n  Actual: {actual:#?}\n",
             ));
         }
         self
@@ -57,7 +57,7 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
             if !ctx.differences.differences.is_empty() {
                 self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
             }
-            self.fail_with_arguments(format_args!(
+            self.fail(format_args!(
                 "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
             ));
         }

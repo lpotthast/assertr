@@ -1,8 +1,9 @@
 use core::fmt::Debug;
+use core::fmt::Write;
+use indoc::writedoc;
 use std::sync::Mutex;
 
-use crate::{failure::GenericFailure, AssertThat};
-use crate::{tracking::AssertionTracking, Mode};
+use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 pub trait MutexAssertions {
     fn is_locked(self) -> Self;
@@ -15,9 +16,12 @@ impl<'t, T: Debug, M: Mode> MutexAssertions for AssertThat<'t, Mutex<T>, M> {
         self.track_assertion();
         let actual = self.actual();
         if let Ok(guard) = actual.try_lock() {
-            self.fail(GenericFailure {
-                arguments: format_args!("Expected: Mutex {{ data: {guard:#?}, poisoned: {poisoned} }}\n\nto be locked, but it wasn't!",
-                poisoned = actual.is_poisoned())
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Expected: Mutex {{ data: {guard:#?}, poisoned: {poisoned} }}
+
+                    to be locked, but it wasn't!
+                "#, poisoned = actual.is_poisoned()}
             });
         }
         self
@@ -28,9 +32,12 @@ impl<'t, T: Debug, M: Mode> MutexAssertions for AssertThat<'t, Mutex<T>, M> {
         self.track_assertion();
         let actual = self.actual();
         if let Err(_err) = actual.try_lock() {
-            self.fail(GenericFailure {
-                arguments: format_args!("Expected: Mutex {{ data: <locked>, poisoned: {poisoned} }}\n\nto not be locked, but it was!",
-                poisoned = actual.is_poisoned())
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Expected: Mutex {{ data: <locked>, poisoned: {poisoned} }}
+
+                    to not be locked, but it was!
+                "#, poisoned = actual.is_poisoned()}
             });
         }
         self

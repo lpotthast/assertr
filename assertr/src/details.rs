@@ -29,8 +29,7 @@ pub(crate) trait WithDetail {
 
 impl<'t, T, M: Mode> WithDetail for AssertThat<'t, T, M> {
     fn collect_messages(&self, collection: &mut Vec<String>) {
-        let detail_messages = self.detail_messages.borrow();
-        for m in detail_messages.iter() {
+        for m in self.detail_messages.borrow().iter() {
             collection.push(m.to_owned());
         }
         if let Some(parent) = self.parent {
@@ -40,16 +39,16 @@ impl<'t, T, M: Mode> WithDetail for AssertThat<'t, T, M> {
 }
 
 impl<'t, T, M: Mode> AssertThat<'t, T, M> {
-    /// Specify an additional messages to be displayed on assertion failure.
+    /// Add a message to be displayed on assertion failure.
     ///
-    /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
-    /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
+    /// It can be helpful to call `.with_location(false)` when you want to test a panic message for exact equality
+    /// and do not want to be bothered by constantly differing line and column numbers for the assert-location.
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {
         self.detail_messages.borrow_mut().push(message.into());
         self
     }
 
-    /// Specify an additional messages to be displayed on assertion failure.
+    /// Add a message to be displayed on assertion failure bound by the given condition.
     ///
     /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
@@ -65,6 +64,10 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
+    /// Add a message to be displayed on assertion failure.
+    ///
+    /// Use this variant instead of the `with_` variants when not in a call-chain context and you
+    /// don't want to call an ownership-taking function.
     pub fn add_detail_message(&self, message: String) {
         self.detail_messages.borrow_mut().push(message);
     }

@@ -12,7 +12,7 @@ struct Metadata {
 struct IsAlive {}
 impl Condition<Person> for IsAlive {
     type Error = String;
-    fn test<'a>(&self, value: &Person) -> Result<(), Self::Error> {
+    fn test(&self, value: &Person) -> Result<(), Self::Error> {
         match value.meta.alive {
             true => Ok(()),
             false => Err(format!("{:#?} is dead!", value.name)),
@@ -25,7 +25,7 @@ struct HasName {
 }
 impl Condition<Person> for HasName {
     type Error = String;
-    fn test<'a>(&self, value: &Person) -> Result<(), Self::Error> {
+    fn test(&self, value: &Person) -> Result<(), Self::Error> {
         match value.name == self.expected {
             true => Ok(()),
             false => Err(format!(
@@ -41,7 +41,7 @@ struct HasNotName {
 }
 impl Condition<Person> for HasNotName {
     type Error = String;
-    fn test<'a>(&self, value: &Person) -> Result<(), Self::Error> {
+    fn test(&self, value: &Person) -> Result<(), Self::Error> {
         match value.name != self.unexpected {
             true => Ok(()),
             false => Err(format!("Person has unexpected name {:#?}!", value.name)),
@@ -68,7 +68,7 @@ fn is_able_to_use_custom_conditions_on_an_iterable_using_are_and_have() {
     };
     let kevin = Person {
         name: "Kevin",
-        meta: Metadata { alive: false },
+        meta: Metadata { alive: true },
     };
     let people = vec![bob, kevin];
     let alive = IsAlive {};

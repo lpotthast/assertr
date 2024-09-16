@@ -1,7 +1,6 @@
 use core::fmt::Debug;
 use core::ops::{RangeFrom, RangeTo, RangeToInclusive};
 
-use crate::failure::GenericFailure;
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 /// Assertions for generic arrays.
@@ -13,12 +12,10 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeFrom<T>, M> {
     {
         self.track_assertion();
         if !self.actual().contains(&expected) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
-                    actual = self.actual()
-                ),
-            })
+            self.fail(format_args!(
+                "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
+                actual = self.actual()
+            ))
         }
     }
 }
@@ -32,12 +29,10 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeTo<T>, M> {
     {
         self.track_assertion();
         if !self.actual().contains(&expected) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
-                    actual = self.actual()
-                ),
-            })
+            self.fail(format_args!(
+                "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
+                actual = self.actual()
+            ))
         }
     }
 
@@ -48,12 +43,11 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeTo<T>, M> {
     {
         self.track_assertion();
         if self.actual().contains(&expected) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
+            self.fail(format_args!(
                     "Actual RangeTo: {actual:#?}\n\nContains element expected not to be contained: {expected:#?}",
                     actual = self.actual()
                 ),
-            })
+            )
         }
     }
 }
@@ -67,12 +61,10 @@ impl<'t, T, M: Mode> AssertThat<'t, RangeToInclusive<T>, M> {
     {
         self.track_assertion();
         if !self.actual().contains(&expected) {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
-                    actual = self.actual()
-                ),
-            })
+            self.fail(format_args!(
+                "Actual range: {actual:#?}\n\nDoes not contain expected: {expected:#?}",
+                actual = self.actual()
+            ))
         }
     }
 }

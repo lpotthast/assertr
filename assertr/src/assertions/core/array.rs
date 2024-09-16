@@ -1,13 +1,8 @@
 use core::fmt::Debug;
 
-use crate::{
-    failure::GenericFailure, prelude::SliceAssertions, tracking::AssertionTracking, AssertThat,
-    Mode,
-};
+use crate::{prelude::SliceAssertions, AssertThat, Mode};
 
 pub trait ArrayAssertions<T: Debug> {
-    fn is_empty(self) -> Self;
-
     fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
     where
         T: PartialEq;
@@ -19,23 +14,6 @@ pub trait ArrayAssertions<T: Debug> {
 
 /// Assertions for generic arrays.
 impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'t, [T; N], M> {
-    #[track_caller]
-    fn is_empty(self) -> Self
-    where
-        T: Debug,
-    {
-        self.track_assertion();
-        if N != 0 {
-            self.fail(GenericFailure {
-                arguments: format_args!(
-                    "Actual: {actual:?}\n\nwas expected to be empty, but it is not!",
-                    actual = self.actual(),
-                ),
-            });
-        }
-        self
-    }
-
     #[track_caller]
     fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
     where
@@ -62,25 +40,6 @@ mod tests {
     use indoc::formatdoc;
 
     use crate::prelude::*;
-
-    #[test]
-    fn is_empty_succeeds_when_empty() {
-        let arr: [i32; 0] = [];
-        assert_that(arr).is_empty();
-    }
-
-    #[test]
-    fn is_empty_panics_when_not_empty() {
-        assert_that_panic_by(|| assert_that([1, 2, 3]).with_location(false).is_empty())
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Actual: [1, 2, 3]
-
-                was expected to be empty, but it is not!
-                -------- assertr --------
-            "#});
-    }
 
     #[test]
     fn contains_exactly_succeeds_when_exact_match() {

@@ -3,6 +3,7 @@ pub mod bool;
 pub mod debug;
 pub mod display;
 pub mod iter;
+pub mod length;
 pub mod num;
 pub mod option;
 pub mod partial_eq;
@@ -24,14 +25,18 @@ pub mod prelude {
     pub use super::display::DisplayAssertions;
     pub use super::iter;
     pub use super::iter::IntoIteratorAssertions;
+    pub use super::length;
+    pub use super::length::LengthAssertions;
+    pub use super::num;
+    pub use super::num::NumAssertions;
     pub use super::option;
     pub use super::option::OptionAssertions;
     pub use super::partial_eq;
     pub use super::partial_eq::PartialEqAssertions;
     pub use super::partial_ord;
     pub use super::partial_ord::PartialOrdAssertions;
-    pub use super::range;
-    pub use super::ref_cell;
+    pub use super::range; // TODO
+    pub use super::ref_cell; // TODO
     pub use super::result;
     pub use super::result::ResultAssertions;
     pub use super::slice;

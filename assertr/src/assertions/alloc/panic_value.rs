@@ -1,10 +1,7 @@
 use alloc::boxed::Box;
 use core::any::{type_name, Any, TypeId};
 
-use crate::{
-    actual::Actual, failure::GenericFailure, tracking::AssertionTracking, AssertThat, Mode,
-    PanicValue,
-};
+use crate::{actual::Actual, tracking::AssertionTracking, AssertThat, Mode, PanicValue};
 
 use super::boxed::BoxAssertions;
 
@@ -24,13 +21,11 @@ impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> 
         match any.downcast_ref::<E>() {
             Some(casted) => self.derive(|_actual| casted),
             None => {
-                self.fail(GenericFailure {
-                    arguments: format_args!(
-                        "is not of expected type: {expected_type_name} ({expected_type_id:?})",
-                        expected_type_name = type_name::<E>(),
-                        expected_type_id = TypeId::of::<E>(),
-                    ),
-                });
+                self.fail(format_args!(
+                    "is not of expected type: {expected_type_name} ({expected_type_id:?})",
+                    expected_type_name = type_name::<E>(),
+                    expected_type_id = TypeId::of::<E>(),
+                ));
                 panic!("Cannot continue in capturing mode!"); // Consider typestates!
             }
         }
