@@ -500,7 +500,6 @@ impl<T: Debug> Debug for Eq<T> {
 #[cfg(test)]
 mod tests {
     use alloc::format;
-    use alloc::string::{String, ToString};
     use indoc::formatdoc;
 
     use crate::prelude::*;
@@ -542,10 +541,9 @@ mod tests {
             .with_location(false)
             .with_capture()
             .is_equal_to(43);
-
         assert_that_panic_by(move || drop(assert))
-            .has_type::<String>()
-            .is_equal_to("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!".to_string());
+            .has_type::<&str>()
+            .is_equal_to("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!");
     }
 
     #[test]

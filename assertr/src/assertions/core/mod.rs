@@ -1,5 +1,6 @@
 pub mod array;
 pub mod bool;
+pub mod char;
 pub mod debug;
 pub mod display;
 pub mod iter;
@@ -19,6 +20,8 @@ pub mod prelude {
     pub use super::array::ArrayAssertions;
     pub use super::bool;
     pub use super::bool::BoolAssertions;
+    pub use super::char;
+    pub use super::char::CharAssertions;
     pub use super::debug;
     pub use super::debug::DebugAssertions;
     pub use super::display;
@@ -35,8 +38,11 @@ pub mod prelude {
     pub use super::partial_eq::PartialEqAssertions;
     pub use super::partial_ord;
     pub use super::partial_ord::PartialOrdAssertions;
-    pub use super::range; // TODO
-    pub use super::ref_cell; // TODO
+    pub use super::range;
+    pub use super::range::RangeAssertions;
+    pub use super::range::RangeBoundAssertions;
+    pub use super::ref_cell;
+    // TODO
     pub use super::result;
     pub use super::result::ResultAssertions;
     pub use super::slice;

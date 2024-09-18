@@ -1,4 +1,3 @@
-use alloc::string::String;
 use core::any::TypeId;
 
 pub trait Mode: Default + Clone + 'static {
@@ -35,6 +34,7 @@ impl Mode for Panic {
         self.derived = true;
     }
 }
+
 impl Mode for Capture {
     fn set_derived(&mut self) {
         self.derived = true;
@@ -44,9 +44,7 @@ impl Mode for Capture {
 impl Drop for Capture {
     fn drop(&mut self) {
         if !self.captured && !self.derived {
-            // Note: We cannot print the actual value, as we cannot add bounds to T,
-            // as this would render this Drop implementation not being called for all AssertThat's!
-            panic!("{}", String::from("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"));
+            panic!("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!");
         }
     }
 }

@@ -68,7 +68,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     ///
     /// Use this variant instead of the `with_` variants when not in a call-chain context and you
     /// don't want to call an ownership-taking function.
-    pub fn add_detail_message(&self, message: String) {
-        self.detail_messages.borrow_mut().push(message);
+    pub fn add_detail_message(&self, message: impl Into<String>) {
+        self.detail_messages.borrow_mut().push(message.into());
     }
 }

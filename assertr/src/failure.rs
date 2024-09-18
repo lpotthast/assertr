@@ -75,7 +75,7 @@ fn build_failure_message(
     if print_location {
         let caller_location = core::panic::Location::caller();
         let _ = err.write_fmt(format_args!(
-            "Assertion failed at {file}:{line}:{column}\n",
+            "Assertion failed at {file}:{line}:{column}\n\n",
             file = caller_location.file(),
             line = caller_location.line(),
             column = caller_location.column(),

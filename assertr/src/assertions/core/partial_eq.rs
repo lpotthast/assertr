@@ -1,5 +1,7 @@
 use alloc::format;
 use core::fmt::Debug;
+use core::fmt::Write;
+use indoc::writedoc;
 
 use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, EqContext, Mode};
 
@@ -33,9 +35,13 @@ impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
             if !ctx.differences.differences.is_empty() {
                 self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
             }
-            self.fail(format_args!(
-                "Expected: {expected:#?}\n\n  Actual: {actual:#?}\n",
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Expected: {expected:#?}
+                    
+                      Actual: {actual:#?}
+                "#}
+            });
         }
         self
     }
@@ -86,7 +92,7 @@ mod tests {
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected: "bar"
-
+                    
                       Actual: "foo"
                     -------- assertr --------
                 "#});
