@@ -2,13 +2,15 @@ use crate::{tracking::AssertionTracking, AssertThat, Mode};
 use core::fmt::Debug;
 use tokio::sync::RwLock;
 
+/// Assertions for the tokio::sync::RwLock type.
 pub trait TokioRwLockAssertions<T: Debug> {
     fn is_not_locked(self) -> Self;
+
     fn is_read_locked(self) -> Self;
+
     fn is_write_locked(self) -> Self;
 }
 
-/// Assertions for generic arrays.
 impl<'t, T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'t, RwLock<T>, M> {
     #[track_caller]
     fn is_not_locked(self) -> Self

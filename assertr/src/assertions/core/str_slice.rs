@@ -1,21 +1,20 @@
-use core::fmt::Debug;
-
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 /// Assertions for `&str` (str slices).
 pub trait StrSliceAssertions {
-    fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self;
+    fn contains(self, expected: impl AsRef<str>) -> Self;
 
-    fn starts_with<E: AsRef<str> + Debug>(self, expected: E) -> Self;
+    fn starts_with(self, expected: impl AsRef<str>) -> Self;
 
-    fn ends_with<E: AsRef<str> + Debug>(self, expected: E) -> Self;
+    fn ends_with(self, expected: impl AsRef<str>) -> Self;
 }
 
 impl<'t, M: Mode> StrSliceAssertions for AssertThat<'t, &str, M> {
     #[track_caller]
-    fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn contains(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();
-        if !self.actual().contains(expected.as_ref()) {
+        let expected = expected.as_ref();
+        if !self.actual().contains(expected) {
             self.fail(format_args!(
                 "Actual: {actual:?}\n\ndoes not contain\n\nExpected: {expected:?}\n",
                 actual = self.actual(),
@@ -26,9 +25,10 @@ impl<'t, M: Mode> StrSliceAssertions for AssertThat<'t, &str, M> {
     }
 
     #[track_caller]
-    fn starts_with<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn starts_with(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();
-        if !self.actual().starts_with(expected.as_ref()) {
+        let expected = expected.as_ref();
+        if !self.actual().starts_with(expected) {
             self.fail(format_args!(
                 "Actual: {actual:?}\n\ndoes not start with\n\nExpected: {expected:?}\n",
                 actual = self.actual(),
@@ -39,9 +39,10 @@ impl<'t, M: Mode> StrSliceAssertions for AssertThat<'t, &str, M> {
     }
 
     #[track_caller]
-    fn ends_with<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn ends_with(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();
-        if !self.actual().ends_with(expected.as_ref()) {
+        let expected = expected.as_ref();
+        if !self.actual().ends_with(expected) {
             self.fail(format_args!(
                 "Actual: {actual:?}\n\ndoes not end with\n\nExpected: {expected:?}\n",
                 actual = self.actual(),

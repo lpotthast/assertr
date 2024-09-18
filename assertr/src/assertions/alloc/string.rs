@@ -1,32 +1,32 @@
 use alloc::string::String;
-use core::fmt::Debug;
 
 use crate::prelude::StrSliceAssertions;
 use crate::{AssertThat, Mode};
 
 /// Assertions for heap-allocated, owned [String]s.
 pub trait StringAssertions {
-    fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self;
-    fn starts_with<E: AsRef<str> + Debug>(self, expected: E) -> Self;
-    fn ends_with<E: AsRef<str> + Debug>(self, expected: E) -> Self;
+    fn contains(self, expected: impl AsRef<str>) -> Self;
+
+    fn starts_with(self, expected: impl AsRef<str>) -> Self;
+
+    fn ends_with(self, expected: impl AsRef<str>) -> Self;
 }
 
-// Assertions for Strings.
 impl<'t, M: Mode> StringAssertions for AssertThat<'t, String, M> {
     #[track_caller]
-    fn contains<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn contains(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).contains(expected);
         self
     }
 
     #[track_caller]
-    fn starts_with<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn starts_with(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).starts_with(expected);
         self
     }
 
     #[track_caller]
-    fn ends_with<E: AsRef<str> + Debug>(self, expected: E) -> Self {
+    fn ends_with(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).ends_with(expected);
         self
     }

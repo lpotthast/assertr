@@ -26,6 +26,14 @@ pub trait NumAssertions<T: Num> {
     fn is_nan(self) -> Self
     where
         T: Float;
+
+    #[cfg(any(feature = "std", feature = "libm"))]
+    fn is_infinite(self) -> Self
+    where
+        T: Float;
+
+    // TODO: is_normal
+    // TODO: is_subnormal
 }
 
 impl<'t, T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'t, T, M> {
@@ -37,7 +45,8 @@ impl<'t, T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'t, T, M> {
             let expected = T::zero();
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
-                    Expected: {expected:#?}
+                    Expected: {expected:#?}]
+
                       Actual: {actual:#?}
                 "#}
             });
@@ -51,13 +60,18 @@ impl<'t, T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'t, T, M> {
         let actual = self.actual();
         if !actual.is_one() {
             let expected = T::one();
-            self.fail(format_args!(
-                "Expected: {expected:?}\n\n  Actual: {actual:?}"
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Expected: {expected:#?}]
+
+                      Actual: {actual:#?}
+                "#}
+            });
         }
         self
     }
 
+    #[track_caller]
     fn is_close_to(self, expected: T, allowed_deviation: T) -> Self
     where
         T: PartialOrd,
@@ -68,13 +82,18 @@ impl<'t, T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'t, T, M> {
         let min = expected.clone() - allowed_deviation.clone();
         let max = expected.clone() + allowed_deviation.clone();
         if !(actual >= &min && actual <= &max) {
-            self.fail(format_args!(
-                "Expected value in range [{min:?}, {max:?}]\n\n  Actual: {actual:?}"
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Expected value in range [{min:?}, {max:?}]
+
+                      Actual: {actual:#?}
+                "#}
+            });
         }
         self
     }
 
+    #[track_caller]
     #[cfg(any(feature = "std", feature = "libm"))]
     fn is_nan(self) -> Self
     where
@@ -83,10 +102,35 @@ impl<'t, T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'t, T, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_nan() {
-            let expected = T::nan();
-            self.fail(format_args!(
-                "Expected: {expected:?}]\n\n  Actual: {actual:?}"
-            ));
+            let nan = T::nan();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Expected: {nan:#?}
+
+                      Actual: {actual:#?}
+                "#}
+            });
+        }
+        self
+    }
+
+    #[track_caller]
+    #[cfg(any(feature = "std", feature = "libm"))]
+    fn is_infinite(self) -> Self
+    where
+        T: Float,
+    {
+        self.track_assertion();
+        let actual = self.actual();
+        if !actual.is_infinite() {
+            let inf = T::infinity();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Expected: +/- {inf:#?}
+                    
+                      Actual: {actual:#?}
+                "#}
+            });
         }
         self
     }
@@ -142,6 +186,11 @@ mod tests {
         assert_that(nan).is_nan();
         let nan: f64 = Float::nan();
         assert_that(nan).is_nan();
+
+        let inf: f32 = Float::infinity();
+        assert_that(inf).is_infinite();
+        let inf: f64 = Float::infinity();
+        assert_that(inf).is_infinite();
     }
 
     mod is_zero {
@@ -189,11 +238,55 @@ mod tests {
     mod is_nan {
         use crate::prelude::*;
         use ::num::Float;
+        use indoc::formatdoc;
 
         #[test]
-        fn succeeds_when_actual_is_nan() {
+        fn succeeds_when_nan() {
             let nan: f32 = Float::nan();
             assert_that(nan).is_nan();
+        }
+        #[test]
+        fn panics_when_not_nan() {
+            assert_that_panic_by(|| assert_that(3.14).with_location(false).is_nan())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: NaN
+
+                      Actual: 3.14
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod is_infinite {
+        use crate::prelude::*;
+        use ::num::Float;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_positive_infinity() {
+            let inf: f32 = Float::infinity();
+            assert_that(inf).is_infinite();
+        }
+
+        #[test]
+        fn succeeds_when_negative_infinity() {
+            let inf: f32 = Float::neg_infinity();
+            assert_that(inf).is_infinite();
+        }
+
+        #[test]
+        fn panics_when_not_infinity() {
+            assert_that_panic_by(|| assert_that(3.14).with_location(false).is_infinite())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: +/- inf
+
+                      Actual: 3.14
+                    -------- assertr --------
+                "#});
         }
     }
 }

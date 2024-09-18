@@ -1,16 +1,19 @@
+use core::fmt::Write;
+use indoc::writedoc;
+
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
 use crate::AssertThat;
-use core::fmt::Write;
-use indoc::writedoc;
 
 pub trait CharAssertions {
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self;
 
     fn is_lowercase(self) -> Self;
+
     fn is_uppercase(self) -> Self;
 
     fn is_ascii_lowercase(self) -> Self;
+
     fn is_ascii_uppercase(self) -> Self;
 
     //fn is_ascii(self) -> Self;

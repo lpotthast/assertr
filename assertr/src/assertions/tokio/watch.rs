@@ -5,7 +5,7 @@ use core::ops::Deref;
 use crate::prelude::PartialEqAssertions;
 use crate::{AssertThat, Mode};
 
-/// Assertions for the tokio::sync::watch::Receiver.
+/// Assertions for the tokio::sync::watch::Receiver type.
 pub trait TokioWatchReceiverAssertions<T: Debug> {
     fn has_current_value(self, expected: impl Borrow<T>) -> Self
     where

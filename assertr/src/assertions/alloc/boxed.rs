@@ -8,6 +8,7 @@ use crate::{tracking::AssertionTracking, AssertThat, Mode};
 /// Assertions for boxed values.
 pub trait BoxAssertions<'t, M: Mode> {
     fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M>;
+
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, M>;
 }
 
