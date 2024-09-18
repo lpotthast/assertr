@@ -69,7 +69,7 @@ mod tests {
                     Expected: Person {{
                         name: "alice",
                     }}
-                    
+
                       Actual: Person {{
                         name: "bob",
                     }}

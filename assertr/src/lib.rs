@@ -75,18 +75,12 @@ pub fn assert_that_ref<T>(actual: &T) -> AssertThat<T, Panic> {
 #[track_caller]
 #[must_use]
 #[cfg(feature = "std")]
-pub fn assert_that_panic_by<'t, R>(fun: impl FnOnce() -> R) -> AssertThat<'t, PanicValue, Panic> {
-    extern crate std;
-    use crate::prelude::ResultAssertions;
+pub fn assert_that_panic_by<'t, R>(
+    fun: impl FnOnce() -> R + 't,
+) -> AssertThat<'t, PanicValue, Panic> {
+    use crate::prelude::FnOnceAssertions;
 
-    assert_that(std::panic::catch_unwind(core::panic::AssertUnwindSafe(
-        move || {
-            fun();
-        },
-    )))
-    .with_detail_message("Function did not panic as expected!")
-    .is_err()
-    .map(|it| PanicValue(it.unwrap_owned()).into())
+    assert_that(fun).panics()
 }
 
 pub trait AssertingThat {

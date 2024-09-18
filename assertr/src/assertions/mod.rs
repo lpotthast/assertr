@@ -1,5 +1,6 @@
 use ::core::fmt::Debug;
-use ::std::collections::HashMap;
+use ::core::ops::Range;
+use ::std::ops::RangeInclusive;
 
 pub mod alloc;
 pub mod condition;
@@ -11,9 +12,6 @@ pub mod std;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-// TODO: Impl for ranges.
-// TODO: Impl for dir?
-// TODO: Impl for option?
 pub trait HasLength {
     fn is_empty(&self) -> bool {
         self.length() == 0
@@ -92,13 +90,14 @@ impl<T> HasLength for &Vec<T> {
     }
 }
 
-impl<K: Debug, V: Debug> HasLength for HashMap<K, V> {
+#[cfg(feature = "std")]
+impl<K: Debug, V: Debug> HasLength for ::std::collections::HashMap<K, V> {
     fn is_empty(&self) -> bool {
-        HashMap::is_empty(self)
+        ::std::collections::HashMap::is_empty(self)
     }
 
     fn length(&self) -> usize {
-        HashMap::len(self)
+        ::std::collections::HashMap::len(self)
     }
 
     fn type_name_hint(&self) -> Option<&'static str> {
@@ -106,16 +105,58 @@ impl<K: Debug, V: Debug> HasLength for HashMap<K, V> {
     }
 }
 
-impl<K: Debug, V: Debug> HasLength for &HashMap<K, V> {
+#[cfg(feature = "std")]
+impl<K: Debug, V: Debug> HasLength for &::std::collections::HashMap<K, V> {
     fn is_empty(&self) -> bool {
-        HashMap::is_empty(self)
+        ::std::collections::HashMap::is_empty(self)
     }
 
     fn length(&self) -> usize {
-        HashMap::len(self)
+        ::std::collections::HashMap::len(self)
     }
 
     fn type_name_hint(&self) -> Option<&'static str> {
         Some("&HashMap")
+    }
+}
+
+impl HasLength for Range<i32> {
+    fn is_empty(&self) -> bool {
+        self.length() == 0
+    }
+
+    fn length(&self) -> usize {
+        let s = (self.end - 1) - self.start;
+        s as usize
+    }
+
+    fn type_name_hint(&self) -> Option<&'static str> {
+        Some("Range<i32>")
+    }
+}
+
+impl HasLength for RangeInclusive<i32> {
+    fn is_empty(&self) -> bool {
+        self.length() == 0
+    }
+
+    fn length(&self) -> usize {
+        let s = self.end() - self.start();
+        s as usize
+    }
+
+    fn type_name_hint(&self) -> Option<&'static str> {
+        Some("RangeInclusive<i32>")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+
+    #[test]
+    fn has_length_on_ranges() {
+        assert_that(0..9).has_length(8);
+        assert_that(0..=9).has_length(9);
     }
 }
