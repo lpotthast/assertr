@@ -1,7 +1,46 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use crate::actual::Actual;
 use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode};
+
+pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
+    /// This is a terminal assertion, as it must consume the underlying iterator.
+    fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
+    where
+        E: Debug,
+        T: AssertrPartialEq<E>,
+        't: 'u;
+}
+
+impl<'t, T, I, M: Mode> IteratorAssertions<'t, T, M> for AssertThat<'t, I, M>
+where
+    T: Debug,
+    I: Iterator<Item = T>,
+{
+    #[track_caller]
+    fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
+    where
+        E: Debug,
+        T: Debug + AssertrPartialEq<E>,
+        't: 'u
+    {
+        self.track_assertion();
+        let (actual, this) = self.replace_actual_with(Actual::Owned(()));
+
+        let actual = actual.unwrap_owned().collect::<Vec<_>>();
+        let expected = expected;
+        if !actual
+            .iter()
+            .any(|it| AssertrPartialEq::eq(it, &expected, None))
+        {
+            this.fail(format_args!(
+                "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}\n",
+            ));
+        }
+        this
+    }
+}
 
 pub trait IntoIteratorAssertions<T: Debug> {
     fn contains<E>(self, expected: E) -> Self

@@ -29,6 +29,7 @@ pub mod prelude {
     pub use super::display;
     pub use super::display::DisplayAssertions;
     pub use super::iter;
+    pub use super::iter::IteratorAssertions;
     pub use super::iter::IntoIteratorAssertions;
     pub use super::length;
     pub use super::length::LengthAssertions;

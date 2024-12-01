@@ -22,7 +22,6 @@ path = "tests/progress.rs"
 
 [dependencies]
 darling = { workspace = true }
-proc-macro-error = { workspace = true }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 syn = { workspace = true }
@@ -30,6 +29,4 @@ syn = { workspace = true }
 [dev-dependencies]
 assertr = { path = "../assertr", features = ["std", "derive"] }
 indoc = "2.0.5"
-serde = "1.0.210"
-serde_json = "1.0.128"
 trybuild = { version = "1.0.99", features = ["diff"] }

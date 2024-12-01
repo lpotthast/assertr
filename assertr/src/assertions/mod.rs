@@ -13,6 +13,8 @@ pub mod std;
 pub mod tokio;
 
 pub trait HasLength {
+    fn length(&self) -> usize;
+
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
@@ -21,40 +23,38 @@ pub trait HasLength {
         !self.is_empty()
     }
 
-    fn length(&self) -> usize;
-
     fn type_name_hint(&self) -> Option<&'static str> {
         None
     }
 }
 
 impl HasLength for &str {
-    fn is_empty(&self) -> bool {
-        str::is_empty(self)
-    }
-
     fn length(&self) -> usize {
         str::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        str::is_empty(self)
     }
 }
 
 impl HasLength for String {
-    fn is_empty(&self) -> bool {
-        String::is_empty(self)
-    }
-
     fn length(&self) -> usize {
         String::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        String::is_empty(self)
     }
 }
 
 impl HasLength for &String {
-    fn is_empty(&self) -> bool {
-        String::is_empty(self)
-    }
-
     fn length(&self) -> usize {
         String::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        String::is_empty(self)
     }
 }
 
@@ -71,33 +71,33 @@ impl<T, const S: usize> HasLength for [T; S] {
 }
 
 impl<T> HasLength for Vec<T> {
-    fn is_empty(&self) -> bool {
-        Vec::is_empty(self)
-    }
-
     fn length(&self) -> usize {
         Vec::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        Vec::is_empty(self)
     }
 }
 
 impl<T> HasLength for &Vec<T> {
-    fn is_empty(&self) -> bool {
-        Vec::is_empty(self)
-    }
-
     fn length(&self) -> usize {
         Vec::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        Vec::is_empty(self)
     }
 }
 
 #[cfg(feature = "std")]
 impl<K: Debug, V: Debug> HasLength for ::std::collections::HashMap<K, V> {
-    fn is_empty(&self) -> bool {
-        ::std::collections::HashMap::is_empty(self)
-    }
-
     fn length(&self) -> usize {
         ::std::collections::HashMap::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        ::std::collections::HashMap::is_empty(self)
     }
 
     fn type_name_hint(&self) -> Option<&'static str> {
@@ -107,12 +107,12 @@ impl<K: Debug, V: Debug> HasLength for ::std::collections::HashMap<K, V> {
 
 #[cfg(feature = "std")]
 impl<K: Debug, V: Debug> HasLength for &::std::collections::HashMap<K, V> {
-    fn is_empty(&self) -> bool {
-        ::std::collections::HashMap::is_empty(self)
-    }
-
     fn length(&self) -> usize {
         ::std::collections::HashMap::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        ::std::collections::HashMap::is_empty(self)
     }
 
     fn type_name_hint(&self) -> Option<&'static str> {
@@ -121,13 +121,13 @@ impl<K: Debug, V: Debug> HasLength for &::std::collections::HashMap<K, V> {
 }
 
 impl HasLength for Range<i32> {
-    fn is_empty(&self) -> bool {
-        self.length() == 0
-    }
-
     fn length(&self) -> usize {
         let s = (self.end - 1) - self.start;
         s as usize
+    }
+
+    fn is_empty(&self) -> bool {
+        self.length() == 0
     }
 
     fn type_name_hint(&self) -> Option<&'static str> {
@@ -136,13 +136,13 @@ impl HasLength for Range<i32> {
 }
 
 impl HasLength for RangeInclusive<i32> {
-    fn is_empty(&self) -> bool {
-        self.length() == 0
-    }
-
     fn length(&self) -> usize {
         let s = self.end() - self.start();
         s as usize
+    }
+
+    fn is_empty(&self) -> bool {
+        self.length() == 0
     }
 
     fn type_name_hint(&self) -> Option<&'static str> {

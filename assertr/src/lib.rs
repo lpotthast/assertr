@@ -17,12 +17,13 @@ use core::{
 use details::WithDetail;
 use failure::Fallible;
 use mode::{Capture, Mode, Panic};
-use tracking::{AssertionTracking, NumAssertions};
+use tracking::{AssertionTracking, NumberOfAssertions};
 
 pub mod actual;
 pub mod assertions;
 pub mod cmp;
 pub mod condition;
+mod conversion;
 pub mod details;
 pub mod failure;
 pub mod mode;
@@ -51,6 +52,10 @@ pub mod prelude {
     pub use crate::assertions::tokio::prelude::*;
     pub use crate::assertions::HasLength;
     pub use crate::condition::Condition;
+    #[cfg(feature = "serde")]
+    pub use crate::conversion::json;
+    #[cfg(feature = "serde")]
+    pub use crate::conversion::toml;
     pub use crate::eq;
     pub use crate::mode::Mode;
     pub use crate::AssertThat;
@@ -146,7 +151,7 @@ pub struct AssertThat<'t, T, M: Mode> {
     detail_messages: RefCell<Vec<String>>,
     print_location: bool,
 
-    num_assertions: RefCell<NumAssertions>,
+    number_of_assertions: RefCell<NumberOfAssertions>,
     failures: RefCell<Vec<String>>,
 
     mode: RefCell<M>,
@@ -182,7 +187,7 @@ impl<'t, T> AssertThat<'t, T, Panic> {
             subject_name: None,
             detail_messages: RefCell::new(Vec::new()),
             print_location: true,
-            num_assertions: RefCell::new(NumAssertions::new()),
+            number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
             mode: RefCell::new(Panic { derived: false }),
         }
@@ -207,6 +212,29 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self.actual.borrowed()
     }
 
+    pub(crate) fn replace_actual_with<'u, U>(
+        self,
+        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
+        // requiring only one type, which is the type we want to map to.
+        new_actual: Actual<'u, U>,
+    ) -> (Actual<'t, T>, AssertThat<'u, U, M>)
+    where
+        't: 'u,
+    {
+        let previous_actual: Actual<'t, T> = self.actual;
+        let mapped = AssertThat {
+            parent: self.parent,
+            actual: new_actual,
+            subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: self.detail_messages,
+            print_location: self.print_location,
+            number_of_assertions: self.number_of_assertions,
+            failures: self.failures,
+            mode: self.mode,
+        };
+        (previous_actual, mapped)
+    }
+
     pub fn map<U>(
         self,
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
@@ -219,7 +247,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: self.detail_messages,
             print_location: self.print_location,
-            num_assertions: self.num_assertions,
+            number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: self.mode,
         }
@@ -240,7 +268,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: self.detail_messages,
             print_location: self.print_location,
-            num_assertions: self.num_assertions,
+            number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: self.mode,
         }
@@ -261,7 +289,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: self.detail_messages,
             print_location: self.print_location,
-            num_assertions: self.num_assertions,
+            number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: self.mode,
         }
@@ -280,7 +308,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: RefCell::new(Vec::new()),
             print_location: self.print_location,
-            num_assertions: RefCell::new(NumAssertions::new()),
+            number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
             mode: RefCell::new(mode),
         }
@@ -302,7 +330,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: RefCell::new(Vec::new()),
             print_location: self.print_location,
-            num_assertions: RefCell::new(NumAssertions::new()),
+            number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
             mode: RefCell::new(mode),
         }
@@ -310,7 +338,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
     // It would be nice to optimize this, so that:
     // - we do not need satisfies and satisfies_ref
-    // - we use a for<'a: 'b, 'b> (see https://users.rust-lang.org/t/why-cant-i-use-lifetime-bounds-in-hrtbs/97277/2) bound for F and A,
+    // - we use a `for<'a: 'b, 'b>` (see https://users.rust-lang.org/t/why-cant-i-use-lifetime-bounds-in-hrtbs/97277/2) bound for F and A,
     //   telling the compiler that the returned values live shorter than the input.
     // - we can replace () with some type R (return), letting the user write more succinct closures.
 
@@ -340,7 +368,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
-    /// Control wether the location is shown on assertion failure.
+    /// Control whether the location is shown on assertion failure.
     ///
     /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
@@ -354,7 +382,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             subject_name: self.subject_name,
             detail_messages: self.detail_messages,
             print_location: self.print_location,
-            num_assertions: self.num_assertions,
+            number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: RefCell::new(Capture {
                 derived: false,

@@ -60,7 +60,7 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                     subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
                     detail_messages: self.detail_messages,
                     print_location: self.print_location,
-                    num_assertions: self.num_assertions,
+                    number_of_assertions: self.number_of_assertions,
                     failures: self.failures,
                     mode: self.mode,
                 }
@@ -72,7 +72,7 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                     subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
                     detail_messages: self.detail_messages,
                     print_location: self.print_location,
-                    num_assertions: self.num_assertions,
+                    number_of_assertions: self.number_of_assertions,
                     failures: self.failures,
                     mode: self.mode,
                 }
@@ -84,7 +84,7 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                     subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
                     detail_messages: self.detail_messages,
                     print_location: self.print_location,
-                    num_assertions: self.num_assertions,
+                    number_of_assertions: self.number_of_assertions,
                     failures: self.failures,
                     mode: self.mode,
                 }
