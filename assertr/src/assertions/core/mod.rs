@@ -29,8 +29,8 @@ pub mod prelude {
     pub use super::display;
     pub use super::display::DisplayAssertions;
     pub use super::iter;
-    pub use super::iter::IteratorAssertions;
     pub use super::iter::IntoIteratorAssertions;
+    pub use super::iter::IteratorAssertions;
     pub use super::length;
     pub use super::length::LengthAssertions;
     pub use super::num;
@@ -49,7 +49,7 @@ pub mod prelude {
     pub use super::range::RangeAssertions;
     pub use super::range::RangeBoundAssertions;
     pub use super::ref_cell;
-    // TODO
+    pub use super::ref_cell::RefCellAssertions;
     pub use super::result;
     pub use super::result::ResultAssertions;
     pub use super::slice;

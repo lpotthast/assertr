@@ -21,7 +21,6 @@ mod tests {
     mod has_arg {
         use crate::prelude::*;
         use indoc::formatdoc;
-        use std::ffi::{OsStr, OsString};
         use std::process::Command;
 
         #[test]
