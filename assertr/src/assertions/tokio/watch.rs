@@ -2,14 +2,17 @@ use core::borrow::Borrow;
 use core::fmt::Debug;
 use core::ops::Deref;
 
-use crate::prelude::PartialEqAssertions;
-use crate::{AssertThat, Mode};
+use crate::prelude::*;
 
 /// Assertions for the tokio::sync::watch::Receiver type.
 pub trait TokioWatchReceiverAssertions<T: Debug> {
     fn has_current_value(self, expected: impl Borrow<T>) -> Self
     where
         T: PartialEq;
+
+    fn has_changed(self) -> Self;
+
+    fn has_not_changed(self) -> Self;
 }
 
 impl<'t, T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
@@ -25,19 +28,35 @@ impl<'t, T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
             .is_equal_to(expected.borrow());
         self
     }
+
+    fn has_changed(self) -> Self {
+        self.derive(|it| it.has_changed())
+            .with_detail_message("Expected a tokio `watch` channel to have changed.")
+            .is_ok()
+            .is_true();
+        self
+    }
+
+    fn has_not_changed(self) -> Self {
+        self.derive(|it| it.has_changed())
+            .with_detail_message("Expected a tokio `watch` channel to have not changed.")
+            .is_ok()
+            .is_false();
+        self
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    #[derive(Debug, PartialEq)]
+    struct Person {
+        name: String,
+    }
+
     mod has_current_value {
-        use crate::assertions::tokio::watch::TokioWatchReceiverAssertions;
+        use super::Person;
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[derive(Debug, PartialEq)]
-        struct Person {
-            name: String,
-        }
 
         #[tokio::test]
         async fn succeeds_when_equal() {
@@ -73,6 +92,74 @@ mod tests {
                       Actual: Person {{
                         name: "bob",
                     }}
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod has_changed {
+        use super::Person;
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[tokio::test]
+        async fn succeeds_when_changed() {
+            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            rx.mark_changed();
+
+            assert_that(rx).has_changed();
+        }
+
+        #[tokio::test]
+        async fn panics_when_not_changed() {
+            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            rx.mark_unchanged();
+
+            assert_that_panic_by(|| assert_that(rx).with_location(false).has_changed())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: true
+
+                      Actual: false
+
+                    Details: [
+                        Expected a tokio `watch` channel to have changed.,
+                    ]
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod has_not_changed {
+        use super::Person;
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[tokio::test]
+        async fn succeeds_when_not_changed() {
+            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            rx.mark_unchanged();
+
+            assert_that(rx).has_not_changed();
+        }
+
+        #[tokio::test]
+        async fn panics_when_changed() {
+            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            rx.mark_changed();
+
+            assert_that_panic_by(|| assert_that(rx).with_location(false).has_not_changed())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: false
+
+                      Actual: true
+
+                    Details: [
+                        Expected a tokio `watch` channel to have not changed.,
+                    ]
                     -------- assertr --------
                 "#});
         }

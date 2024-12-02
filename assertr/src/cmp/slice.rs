@@ -36,7 +36,7 @@ mod test {
 
     impl PartialEq<Bar> for Foo {
         fn eq(&self, other: &Bar) -> bool {
-            return self.id == other.id;
+            self.id == other.id
         }
     }
 
