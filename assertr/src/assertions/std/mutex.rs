@@ -6,8 +6,24 @@ use std::sync::Mutex;
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
 
 pub trait MutexAssertions {
+    /// Asserts that this mutex is locked.
+    /// Note that implementations may try to acquire the lock in order to check its state.
     fn is_locked(self) -> Self;
+
+    /// Asserts that this mutex is not locked.
+    /// Note that implementations may try to acquire the lock in order to check its state.
     fn is_not_locked(self) -> Self;
+
+    /// Asserts that this mutex is not locked.
+    /// Note that implementations may try to acquire the lock in order to check its state.
+    ///
+    /// Synonym for [Self::is_not_locked].
+    fn is_free(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_not_locked()
+    }
 }
 
 impl<'t, T: Debug, M: Mode> MutexAssertions for AssertThat<'t, Mutex<T>, M> {
@@ -106,6 +122,18 @@ mod tests {
                     -------- assertr --------
                 "});
             drop(guard);
+        }
+    }
+
+    mod is_free {
+        use std::sync::Mutex;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_not_locked() {
+            let mutex = Mutex::new(42);
+            assert_that(mutex).is_free();
         }
     }
 }
