@@ -5,7 +5,7 @@ use core::fmt::Write;
 use indoc::writedoc;
 use std::{collections::HashMap, hash::Hash};
 
-/// Assertions for generic `HashMap`s.
+/// Assertions for generic [HashMap]s.
 pub trait HashMapAssertions<K, V> {
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where

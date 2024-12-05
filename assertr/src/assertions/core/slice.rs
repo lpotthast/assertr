@@ -49,7 +49,7 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
             if !result.not_in_a.is_empty() {
                 self.add_detail_message(format!("Elements not found: {:#?}", result.not_in_a));
             }
-            if result.only_differing_in_order {
+            if result.only_differing_in_order() {
                 self.add_detail_message("The order of elements does not match!".to_owned());
             }
 

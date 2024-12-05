@@ -40,7 +40,6 @@ pub mod prelude {
     pub use crate::assert_that_panic_by;
     pub use crate::assert_that_ref;
     pub use crate::assertions::alloc::prelude::*;
-    pub use crate::assertions::condition;
     pub use crate::assertions::condition::ConditionAssertions;
     pub use crate::assertions::condition::IterableConditionAssertions;
     pub use crate::assertions::core::prelude::*;
@@ -445,6 +444,10 @@ impl EqContext {
         }
     }
 
+    pub fn add_difference(&mut self, difference: String) {
+        self.differences.differences.push(difference);
+    }
+
     pub fn add_field_difference(
         &mut self,
         field_name: &str,
@@ -483,11 +486,12 @@ impl<Rhs: ?Sized, T: PartialEq<Rhs>> AssertrPartialEq<Rhs> for T {
 
 impl<T1: AssertrPartialEq<T2>, T2> AssertrPartialEq<[T2]> for [T1] {
     fn eq(&self, other: &[T2], mut ctx: Option<&mut EqContext>) -> bool {
-        self.iter().enumerate().all(|(i, t1)| {
-            other
-                .get(i)
-                .map_or(false, |t2| AssertrPartialEq::eq(t1, t2, ctx.as_deref_mut()))
-        })
+        self.len() == other.len()
+            && self.iter().enumerate().all(|(i, t1)| {
+                other
+                    .get(i)
+                    .map_or(false, |t2| AssertrPartialEq::eq(t1, t2, ctx.as_deref_mut()))
+            })
     }
 
     fn ne(&self, other: &[T2], ctx: Option<&mut EqContext>) -> bool {

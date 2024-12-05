@@ -73,7 +73,7 @@ mod tests {
         fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
-            assert_that(&mutex).is_locked();
+            assert_that_ref(&mutex).is_locked();
             drop(guard);
         }
 

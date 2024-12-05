@@ -4,20 +4,40 @@ use crate::{AssertrPartialEq, EqContext};
 
 pub(crate) struct CompareResult<'t, A, B> {
     pub(crate) strictly_equal: bool,
-    pub(crate) only_differing_in_order: bool,
+    pub(crate) same_length: bool,
     pub(crate) not_in_a: Vec<&'t B>,
     pub(crate) not_in_b: Vec<&'t A>,
 }
 
-// TODO: Move to cmp module and rename.
+impl<'t, A, B> CompareResult<'t, A, B> {
+    pub fn only_differing_in_order(&self) -> bool {
+        !self.strictly_equal
+            && self.same_length
+            && self.not_in_a.is_empty()
+            && self.not_in_b.is_empty()
+    }
+}
+
 pub(crate) fn compare<'t, A, B>(aa: &'t [A], bb: &'t [B]) -> CompareResult<'t, A, B>
 where
     A: AssertrPartialEq<B>,
 {
-    if AssertrPartialEq::eq(aa, bb, None) {
+    compare_with_context(aa, bb, None)
+}
+
+// TODO: Move to cmp module and rename.
+pub(crate) fn compare_with_context<'t, A, B>(
+    aa: &'t [A],
+    bb: &'t [B],
+    mut ctx: Option<&mut EqContext>,
+) -> CompareResult<'t, A, B>
+where
+    A: AssertrPartialEq<B>,
+{
+    if AssertrPartialEq::eq(aa, bb, ctx.as_deref_mut()) {
         return CompareResult {
             strictly_equal: true,
-            only_differing_in_order: false,
+            same_length: true,
             not_in_a: Vec::new(),
             not_in_b: Vec::new(),
         };
@@ -28,12 +48,10 @@ where
     let mut not_in_a = Vec::new();
     let mut not_in_b = Vec::new();
 
-    let mut ctx = EqContext::new();
-
     for a in aa {
         if !bb
             .iter()
-            .any(|b| AssertrPartialEq::eq(a, b, Some(&mut ctx)))
+            .any(|b| AssertrPartialEq::eq(a, b, ctx.as_deref_mut()))
         {
             not_in_b.push(a);
         }
@@ -42,7 +60,7 @@ where
     for b in bb {
         if !aa
             .iter()
-            .any(|a| AssertrPartialEq::eq(a, b, Some(&mut ctx)))
+            .any(|a| AssertrPartialEq::eq(a, b, ctx.as_deref_mut()))
         {
             not_in_a.push(b);
         }
@@ -50,7 +68,7 @@ where
 
     CompareResult {
         strictly_equal: false,
-        only_differing_in_order: same_length && not_in_a.is_empty() && not_in_b.is_empty(),
+        same_length,
         not_in_a,
         not_in_b,
     }
@@ -88,8 +106,9 @@ mod tests {
         fn returns_equal_on_equal_input() {
             let result = compare(&[1, 2, 3], &[1, 2, 3]);
 
+            assert_that(result.only_differing_in_order()).is_false();
             assert_that(result.strictly_equal).is_true();
-            assert_that(result.only_differing_in_order).is_false();
+            assert_that(result.same_length).is_true();
             assert_that(result.not_in_a).is_empty();
             assert_that(result.not_in_b).is_empty();
         }
@@ -98,8 +117,9 @@ mod tests {
         fn returns_not_equal_on_equal_but_rearranged_input() {
             let result = compare(&[1, 2, 3], &[3, 2, 1]);
 
+            assert_that(result.only_differing_in_order()).is_true();
             assert_that(result.strictly_equal).is_false();
-            assert_that(result.only_differing_in_order).is_true();
+            assert_that(result.same_length).is_true();
             assert_that(result.not_in_a).is_empty();
             assert_that(result.not_in_b).is_empty();
         }
@@ -108,8 +128,9 @@ mod tests {
         fn returns_not_equal_and_lists_differences_on_differing_input() {
             let result = compare(&[1, 5, 7], &[5, 3, 4, 42]);
 
+            assert_that(result.only_differing_in_order()).is_false();
             assert_that(result.strictly_equal).is_false();
-            assert_that(result.only_differing_in_order).is_false();
+            assert_that(result.same_length).is_false();
             assert_that(result.not_in_a).contains_exactly([&3, &4, &42]);
             assert_that(result.not_in_b).contains_exactly([&1, &7]);
         }

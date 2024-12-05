@@ -36,9 +36,9 @@ mod tests {
     }
 
     mod has_status_code {
+        use super::MockServer;
         use crate::assert_that;
-        use crate::prelude::response::tests::MockServer;
-        use crate::prelude::ReqwestResponseAssertions;
+        use crate::prelude::*;
 
         #[tokio::test]
         async fn succeeds_when_status_code_matches() {

@@ -2,9 +2,16 @@ use crate::{tracking::AssertionTracking, AssertThat, Mode};
 use core::fmt::Debug;
 use tokio::sync::RwLock;
 
-/// Assertions for the tokio::sync::RwLock type.
+/// Assertions for tokio's [RwLock] type.
 pub trait TokioRwLockAssertions<T: Debug> {
     fn is_not_locked(self) -> Self;
+
+    fn is_free(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_not_locked()
+    }
 
     fn is_read_locked(self) -> Self;
 

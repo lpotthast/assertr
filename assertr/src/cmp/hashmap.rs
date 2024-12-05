@@ -2,6 +2,27 @@ use crate::{AssertrPartialEq, EqContext};
 use std::collections::HashMap;
 use std::hash::Hash;
 
+///
+/// This function is supposed to be used when deriving `AssertrEq`:
+/// ```
+/// use assertr::prelude::*;
+///
+/// #[derive(Debug, AssertrEq)]
+/// pub struct Bar {
+///     pub id: i32,
+/// }
+///
+/// #[derive(Debug, AssertrEq)]
+/// pub struct Foo {
+///     pub id: i32,
+///
+///     #[assertr_eq(
+///         map_type = "Vec<BarAssertrEq>",
+///         compare_with = "::assertr::cmp::slice::compare"
+///     )]
+///     pub bars: Vec<Bar>,
+/// }
+/// ```
 pub fn compare<K, V1, V2>(
     map1: &HashMap<K, V1>,
     map2: &HashMap<K, V2>,
