@@ -19,20 +19,15 @@ impl<'t, T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'t, T, M
     fn is_empty(self) -> Self {
         self.track_assertion();
         if !self.actual().is_empty() {
-            match self.actual().type_name_hint() {
-                None => {
-                    self.fail(format_args!(
-                        "Actual: {actual:#?}\n\nwas expected to be empty, but it is not!\n",
-                        actual = self.actual(),
-                    ));
-                }
-                Some(type_name_hint) => {
-                    self.fail(format_args!(
-                        "Actual: {type_name_hint} {actual:#?}\n\nwas expected to be empty, but it is not!\n",
-                        actual = self.actual(),
-                    ));
-                }
-            }
+            let actual = self.actual();
+            let type_name = core::any::type_name::<T>();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Actual: {type_name} {actual:#?}
+
+                    was expected to be empty, but it is not!
+                "#}
+            });
         }
         self
     }
@@ -41,20 +36,15 @@ impl<'t, T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'t, T, M
     fn is_not_empty(self) -> Self {
         self.track_assertion();
         if self.actual().is_empty() {
-            match self.actual().type_name_hint() {
-                None => {
-                    self.fail(format_args!(
-                        "Actual: {actual:#?}\n\nwas expected not to be empty, but it is!\n",
-                        actual = self.actual(),
-                    ));
-                }
-                Some(type_name_hint) => {
-                    self.fail(format_args!(
-                        "Actual: {type_name_hint} {actual:#?}\n\nwas expected not to be empty, but it is!\n",
-                        actual = self.actual(),
-                    ));
-                }
-            }
+            let actual = self.actual();
+            let type_name = core::any::type_name::<T>();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Actual: {type_name} {actual:#?}
+
+                    was expected not to be empty, but it is!
+                "#}
+            });
         }
         self
     }
@@ -64,9 +54,10 @@ impl<'t, T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'t, T, M
         self.track_assertion();
         let actual_len = self.actual().length();
         if actual_len != expected {
+            let type_name = core::any::type_name::<T>();
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
-                    Actual: {actual:#?}
+                    Actual: {type_name} {actual:#?}
 
                     does not have the correct length
 
@@ -97,7 +88,7 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
-                Actual: [
+                Actual: [i32; 3] [
                     1,
                     2,
                     3,
@@ -128,7 +119,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: [
+                    Actual: &[i32] [
                         42,
                     ]
 
@@ -155,7 +146,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
-                Actual: "foo"
+                Actual: &str "foo"
 
                 was expected to be empty, but it is not!
                 -------- assertr --------
@@ -182,7 +173,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: "foo"
+                    Actual: alloc::string::String "foo"
 
                     was expected to be empty, but it is not!
                     -------- assertr --------
@@ -212,7 +203,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: [
+                    Actual: alloc::vec::Vec<i32> [
                         42,
                     ]
 
@@ -245,7 +236,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: HashMap {{
+                    Actual: std::collections::hash::map::HashMap<&str, &str> {{
                         "foo": "bar",
                     }}
 
@@ -278,7 +269,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: HashMap {{}}
+                    Actual: std::collections::hash::map::HashMap<(), ()> {{}}
 
                     was expected not to be empty, but it is!
                     -------- assertr --------
@@ -303,7 +294,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: "foo bar"
+                    Actual: &str "foo bar"
     
                     does not have the correct length
     
@@ -333,7 +324,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: "foo bar"
+                    Actual: alloc::string::String "foo bar"
 
                     does not have the correct length
 
@@ -370,7 +361,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: [
+                    Actual: &[i32] [
                         42,
                     ]
 
@@ -407,7 +398,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: [
+                    Actual: alloc::vec::Vec<i32> [
                         42,
                     ]
 
@@ -451,7 +442,7 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
-                Actual: {{
+                Actual: std::collections::hash::map::HashMap<&str, &str> {{
                     "foo": "bar",
                 }}
 

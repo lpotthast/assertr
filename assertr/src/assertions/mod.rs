@@ -22,10 +22,6 @@ pub trait HasLength {
     fn is_not_empty(&self) -> bool {
         !self.is_empty()
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        None
-    }
 }
 
 impl HasLength for &str {
@@ -99,10 +95,6 @@ impl<K: Debug, V: Debug> HasLength for ::std::collections::HashMap<K, V> {
     fn is_empty(&self) -> bool {
         ::std::collections::HashMap::is_empty(self)
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("HashMap")
-    }
 }
 
 #[cfg(feature = "std")]
@@ -113,10 +105,6 @@ impl<K: Debug, V: Debug> HasLength for &::std::collections::HashMap<K, V> {
 
     fn is_empty(&self) -> bool {
         ::std::collections::HashMap::is_empty(self)
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("&HashMap")
     }
 }
 
@@ -129,10 +117,6 @@ impl HasLength for Range<usize> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<usize>")
-    }
 }
 
 impl HasLength for RangeInclusive<usize> {
@@ -143,10 +127,6 @@ impl HasLength for RangeInclusive<usize> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<usize>")
     }
 }
 
@@ -159,10 +139,6 @@ impl HasLength for Range<u8> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<u8>")
-    }
 }
 
 impl HasLength for RangeInclusive<u8> {
@@ -173,10 +149,6 @@ impl HasLength for RangeInclusive<u8> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<u8>")
     }
 }
 
@@ -189,10 +161,6 @@ impl HasLength for Range<u16> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<u16>")
-    }
 }
 
 impl HasLength for RangeInclusive<u16> {
@@ -203,10 +171,6 @@ impl HasLength for RangeInclusive<u16> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<u16>")
     }
 }
 
@@ -219,10 +183,6 @@ impl HasLength for Range<u32> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<u32>")
-    }
 }
 
 impl HasLength for RangeInclusive<u32> {
@@ -233,10 +193,6 @@ impl HasLength for RangeInclusive<u32> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<u32>")
     }
 }
 
@@ -249,10 +205,6 @@ impl HasLength for Range<u64> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<u64>")
-    }
 }
 
 impl HasLength for RangeInclusive<u64> {
@@ -263,10 +215,6 @@ impl HasLength for RangeInclusive<u64> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<u64>")
     }
 }
 
@@ -279,10 +227,6 @@ impl HasLength for Range<i8> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<i8>")
-    }
 }
 
 impl HasLength for RangeInclusive<i8> {
@@ -293,10 +237,6 @@ impl HasLength for RangeInclusive<i8> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<i8>")
     }
 }
 
@@ -309,10 +249,6 @@ impl HasLength for Range<i16> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<i16>")
-    }
 }
 
 impl HasLength for RangeInclusive<i16> {
@@ -323,10 +259,6 @@ impl HasLength for RangeInclusive<i16> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<i16>")
     }
 }
 
@@ -339,10 +271,6 @@ impl HasLength for Range<i32> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<i32>")
-    }
 }
 
 impl HasLength for RangeInclusive<i32> {
@@ -353,10 +281,6 @@ impl HasLength for RangeInclusive<i32> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<i32>")
     }
 }
 
@@ -369,10 +293,6 @@ impl HasLength for Range<i64> {
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("Range<i64>")
-    }
 }
 
 impl HasLength for RangeInclusive<i64> {
@@ -383,10 +303,6 @@ impl HasLength for RangeInclusive<i64> {
 
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    fn type_name_hint(&self) -> Option<&'static str> {
-        Some("RangeInclusive<i64>")
     }
 }
 
