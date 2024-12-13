@@ -92,7 +92,7 @@ mod tests {
                 .has_type::<&str>()
                 .is_equal_to("not implemented");
         }
-
+        
         #[test]
         fn panics_when_no_panic_occurs() {
             assert_that_panic_by(|| assert_that(|| 42).with_location(false).panics())
