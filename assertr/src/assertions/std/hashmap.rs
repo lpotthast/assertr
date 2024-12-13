@@ -12,6 +12,11 @@ pub trait HashMapAssertions<K, V> {
         K: Eq + Hash + Debug,
         V: Debug;
 
+    fn does_not_contain_key(self, not_expected: impl Borrow<K>) -> Self
+    where
+        K: Eq + Hash + Debug,
+        V: Debug;
+
     fn contains_value<E>(self, expected: E) -> Self
     where
         K: Debug,
@@ -42,6 +47,28 @@ impl<'t, K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'t, HashMap<K, V>
                     Actual: HashMap {actual:#?}
 
                     does not contain expected key: {expected:#?}
+                "#, actual = self.actual()}
+            });
+        }
+        self
+    }
+
+    #[track_caller]
+    fn does_not_contain_key(self, not_expected: impl Borrow<K>) -> Self
+    where
+        K: Eq + Hash + Debug,
+        V: Debug,
+    {
+        self.track_assertion();
+
+        let not_expected = not_expected.borrow();
+
+        if self.actual().contains_key(not_expected) {
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Actual: HashMap {actual:#?}
+
+                    contains unexpected key: {not_expected:#?}
                 "#, actual = self.actual()}
             });
         }
@@ -151,6 +178,42 @@ mod tests {
         }
     }
 
+    mod does_not_contain_key {
+        use std::collections::HashMap;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_key_is_absent() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_that(map).does_not_contain_key("baz");
+        }
+
+        #[test]
+        fn panics_when_key_is_present() {
+            assert_that_panic_by(|| {
+                let mut map = HashMap::new();
+                map.insert("foo", "bar");
+                assert_that(map)
+                    .with_location(false)
+                    .does_not_contain_key("foo");
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: HashMap {{
+                        "foo": "bar",
+                    }}
+
+                    contains unexpected key: "foo"
+                    -------- assertr --------
+                "#});
+        }
+    }
+
     mod contains_value {
         use std::collections::HashMap;
 
@@ -215,9 +278,9 @@ mod tests {
             }
             let mut map = HashMap::<&str, Person>::new();
             map.insert("foo", Person { age: 42 });
-            assert_that(&map).contains_entry("foo", &Person { age: 42 });
-            assert_that(&map).contains_entry("foo", Person { age: 42 });
-            assert_that(&map).contains_entry("foo", Box::new(Person { age: 42 }));
+            assert_that_ref(&map).contains_entry("foo", &Person { age: 42 });
+            assert_that_ref(&map).contains_entry("foo", Person { age: 42 });
+            assert_that_ref(&map).contains_entry("foo", Box::new(Person { age: 42 }));
         }
 
         #[test]

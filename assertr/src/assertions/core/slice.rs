@@ -8,9 +8,9 @@ use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode};
 pub trait SliceAssertions<'t, T> {
     /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
     ///
-    /// - [T]: Original subject type. The "actual value" is of type &[T] (slice T).
+    /// - [T]: Original subject type. The "actual value" is of type `&[T]` (slice T).
     /// - [E]: Type of elements in our "expected value" slice.
-    /// - [EE]: The "expected value". Anything that can be seen as &[E] (slice E). Having this extra type, instead of directly accepting `&[E]` allows us to be generic over the input in both internal type and slice representation.
+    /// - [EE]: The "expected value". Anything that can be seen as `&[E]` (slice E). Having this extra type, instead of directly accepting `&[E]` allows us to be generic over the input in both the element type and collection type.
     fn contains_exactly<E, EE>(self, expected: EE) -> Self
     where
         E: Debug + 't,

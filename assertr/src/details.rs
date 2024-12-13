@@ -40,24 +40,18 @@ impl<'t, T, M: Mode> WithDetail for AssertThat<'t, T, M> {
 
 impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     /// Add a message to be displayed on assertion failure.
-    ///
-    /// It can be helpful to call `.with_location(false)` when you want to test a panic message for exact equality
-    /// and do not want to be bothered by constantly differing line and column numbers for the assert-location.
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {
         self.detail_messages.borrow_mut().push(message.into());
         self
     }
 
     /// Add a message to be displayed on assertion failure bound by the given condition.
-    ///
-    /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
-    /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
     pub fn with_conditional_detail_message<Message: Into<String>>(
         self,
-        condition: bool,
+        condition: impl Fn(&Self) -> bool,
         message_provider: impl Fn(&Self) -> Message,
     ) -> Self {
-        if condition {
+        if condition(&self) {
             let message = message_provider(&self);
             self.detail_messages.borrow_mut().push(message.into());
         }
@@ -66,8 +60,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
     /// Add a message to be displayed on assertion failure.
     ///
-    /// Use this variant instead of the `with_` variants when not in a call-chain context and you
-    /// don't want to call an ownership-taking function.
+    /// Use this variant instead of the `with_` variants when not in a call-chain context,
+    /// and you don't want to call an ownership-taking function.
     pub fn add_detail_message(&self, message: impl Into<String>) {
         self.detail_messages.borrow_mut().push(message.into());
     }
