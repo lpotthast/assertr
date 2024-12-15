@@ -103,6 +103,17 @@ mod tests {
         use crate::util::slice::compare;
 
         #[test]
+        fn returns_equal_on_equal_input_using_refs() {
+            let result = compare(&[&1, &2, &3], &[&1, &2, &3]);
+
+            assert_that(result.only_differing_in_order()).is_false();
+            assert_that(result.strictly_equal).is_true();
+            assert_that(result.same_length).is_true();
+            assert_that(result.not_in_a).is_empty();
+            assert_that(result.not_in_b).is_empty();
+        }
+
+        #[test]
         fn returns_equal_on_equal_input() {
             let result = compare(&[1, 2, 3], &[1, 2, 3]);
 

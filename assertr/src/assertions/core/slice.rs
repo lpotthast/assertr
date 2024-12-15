@@ -6,6 +6,11 @@ use core::fmt::Debug;
 use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode};
 
 pub trait SliceAssertions<'t, T> {
+    fn contains<E>(self, expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E> + Debug;
+    
     /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
     ///
     /// - [T]: Original subject type. The "actual value" is of type `&[T]` (slice T).
@@ -29,6 +34,27 @@ pub trait SliceAssertions<'t, T> {
 }
 
 impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
+    #[track_caller]
+    fn contains<E>(self, expected: E) -> Self
+    where
+        E: Debug,
+        T: Debug + AssertrPartialEq<E>,
+    {
+        self.track_assertion();
+        let actual = self.actual().into_iter().collect::<Vec<_>>();
+        let expected = expected;
+        if !self
+            .actual()
+            .into_iter()
+            .any(|it| AssertrPartialEq::eq(it, &expected, None))
+        {
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}\n",
+            ));
+        }
+        self
+    }
+    
     #[track_caller]
     fn contains_exactly<E, EE>(self, expected: EE) -> Self
     where
