@@ -6,3 +6,4 @@ list:
 msrv:
     cargo install cargo-msrv
     cargo msrv find --path assertr
+    cargo msrv find --path assertr-derive
