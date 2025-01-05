@@ -29,4 +29,4 @@ syn = { workspace = true }
 [dev-dependencies]
 assertr = { path = "../assertr", features = ["std", "derive"] }
 indoc = "2.0.5"
-trybuild = { version = "1.0.99", features = ["diff"] }
+trybuild = { version = "1.0.101", features = ["diff"] }

@@ -5,6 +5,6 @@ default-members = ["assertr"]
 
 [workspace.dependencies]
 darling = "0.20.10"
-proc-macro2 = "1.0.86"
-quote = "1.0.37"
-syn = { version = "2.0.77", features = ["extra-traits"] }
+proc-macro2 = "1.0.92"
+quote = "1.0.38"
+syn = { version = "2.0.95", features = ["extra-traits"] }
