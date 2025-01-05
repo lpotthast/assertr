@@ -172,10 +172,10 @@ pub struct DerivedAssertThat<'t, T> {
 */
 
 pub(crate) trait DynAssertThat: Fallible + WithDetail + AssertionTracking {}
-impl<'t, T, M: Mode> DynAssertThat for AssertThat<'t, T, M> {}
+impl<T, M: Mode> DynAssertThat for AssertThat<'_, T, M> {}
 
-impl<'t, T, M: Mode> UnwindSafe for AssertThat<'t, T, M> {}
-impl<'t, T, M: Mode> RefUnwindSafe for AssertThat<'t, T, M> {}
+impl<T, M: Mode> UnwindSafe for AssertThat<'_, T, M> {}
+impl<T, M: Mode> RefUnwindSafe for AssertThat<'_, T, M> {}
 
 impl<'t, T> AssertThat<'t, T, Panic> {
     #[track_caller]
@@ -193,7 +193,7 @@ impl<'t, T> AssertThat<'t, T, Panic> {
     }
 }
 
-impl<'t, T> AssertThat<'t, T, Capture> {
+impl<T> AssertThat<'_, T, Capture> {
     #[must_use]
     pub fn capture_failures(self) -> Vec<String> {
         let mut mode = self.mode.borrow_mut();
