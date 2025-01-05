@@ -106,7 +106,7 @@ pub fn store(input: TokenStream) -> TokenStream {
         }
     });
 
-    quote! {
+    Into::into(quote! {
         #[derive(::core::fmt::Debug)]
         pub struct #eq_struct_ident {
             #(#eq_struct_fields),*
@@ -123,5 +123,5 @@ pub fn store(input: TokenStream) -> TokenStream {
                 ::assertr::AssertrPartialEq::eq(&self, other, ctx)
             }
         }
-    }.into()
+    })
 }
