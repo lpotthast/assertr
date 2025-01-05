@@ -16,7 +16,7 @@ pub trait RefCellAssertions {
     fn is_not_mutably_borrowed(self) -> Self;
 }
 
-impl<'t, T: Debug, M: Mode> RefCellAssertions for AssertThat<'t, RefCell<T>, M> {
+impl<T: Debug, M: Mode> RefCellAssertions for AssertThat<'_, RefCell<T>, M> {
     #[track_caller]
     fn is_borrowed(self) -> Self {
         self.track_assertion();

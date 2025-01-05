@@ -7,7 +7,7 @@ pub trait DisplayAssertions {
     fn has_display_value(self, expected: impl Display) -> Self;
 }
 
-impl<'t, T: Display, M: Mode> DisplayAssertions for AssertThat<'t, T, M> {
+impl<T: Display, M: Mode> DisplayAssertions for AssertThat<'_, T, M> {
     #[track_caller]
     fn has_display_value(self, expected: impl Display) -> Self {
         self.track_assertion();

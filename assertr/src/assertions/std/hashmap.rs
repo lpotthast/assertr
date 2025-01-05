@@ -30,7 +30,7 @@ pub trait HashMapAssertions<K, V> {
         E: Debug;
 }
 
-impl<'t, K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'t, HashMap<K, V>, M> {
+impl<K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'_, HashMap<K, V>, M> {
     #[track_caller]
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where

@@ -7,7 +7,7 @@ use crate::{mode::Mode, AssertThat};
 
 pub(crate) struct DetailMessages<'a>(pub(crate) &'a [String]);
 
-impl<'a> Debug for DetailMessages<'a> {
+impl Debug for DetailMessages<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list()
             .entries(self.0.iter().map(|it| DisplayString(it)))
@@ -17,7 +17,7 @@ impl<'a> Debug for DetailMessages<'a> {
 
 pub(crate) struct DisplayString<'a>(pub(crate) &'a str);
 
-impl<'a> Debug for DisplayString<'a> {
+impl Debug for DisplayString<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.0)
     }
@@ -27,7 +27,7 @@ pub(crate) trait WithDetail {
     fn collect_messages(&self, collection: &mut Vec<String>);
 }
 
-impl<'t, T, M: Mode> WithDetail for AssertThat<'t, T, M> {
+impl<T, M: Mode> WithDetail for AssertThat<'_, T, M> {
     fn collect_messages(&self, collection: &mut Vec<String>) {
         for m in self.detail_messages.borrow().iter() {
             collection.push(m.to_owned());
@@ -38,7 +38,7 @@ impl<'t, T, M: Mode> WithDetail for AssertThat<'t, T, M> {
     }
 }
 
-impl<'t, T, M: Mode> AssertThat<'t, T, M> {
+impl<T, M: Mode> AssertThat<'_, T, M> {
     /// Add a message to be displayed on assertion failure.
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {
         self.detail_messages.borrow_mut().push(message.into());

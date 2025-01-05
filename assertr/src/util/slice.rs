@@ -9,7 +9,7 @@ pub(crate) struct CompareResult<'t, A, B> {
     pub(crate) not_in_b: Vec<&'t A>,
 }
 
-impl<'t, A, B> CompareResult<'t, A, B> {
+impl<A, B> CompareResult<'_, A, B> {
     pub fn only_differing_in_order(&self) -> bool {
         !self.strictly_equal
             && self.same_length

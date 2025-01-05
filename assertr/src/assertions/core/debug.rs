@@ -9,7 +9,7 @@ pub trait DebugAssertions {
     fn has_debug_value(self, expected: impl Debug) -> Self;
 }
 
-impl<'t, T: Debug, M: Mode> AssertThat<'t, T, M> {
+impl<T: Debug, M: Mode> AssertThat<'_, T, M> {
     #[track_caller]
     pub fn has_debug_value(self, expected: impl Debug) -> Self {
         self.track_assertion();

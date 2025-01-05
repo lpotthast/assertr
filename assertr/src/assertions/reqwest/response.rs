@@ -6,7 +6,7 @@ pub trait ReqwestResponseAssertions {
     fn has_status_code(self, status: reqwest::StatusCode) -> Self;
 }
 
-impl<'t, M: Mode> ReqwestResponseAssertions for AssertThat<'t, reqwest::Response, M> {
+impl<M: Mode> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response, M> {
     fn has_status_code(self, status: reqwest::StatusCode) -> Self {
         self.derive(|it| it.status()).is_equal_to(status);
         self

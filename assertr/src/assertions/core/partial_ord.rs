@@ -25,7 +25,7 @@ pub trait PartialOrdAssertions<T> {
         T: PartialOrd<E>;
 }
 
-impl<'t, T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'t, T, M> {
+impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
     fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
     where

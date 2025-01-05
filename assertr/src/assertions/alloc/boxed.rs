@@ -44,7 +44,7 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                 } else {
                     // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
                     actual_type_name_will_be_any = true;
-                    Cow::Borrowed(std::any::type_name_of_val(&*borrowed_boxed_any))
+                    Cow::Borrowed(std::any::type_name_of_val(borrowed_boxed_any))
                 };
 
                 borrowed_boxed_any

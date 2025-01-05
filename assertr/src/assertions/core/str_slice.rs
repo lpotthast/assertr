@@ -9,7 +9,7 @@ pub trait StrSliceAssertions {
     fn ends_with(self, expected: impl AsRef<str>) -> Self;
 }
 
-impl<'t, M: Mode> StrSliceAssertions for AssertThat<'t, &str, M> {
+impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
     #[track_caller]
     fn contains(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();

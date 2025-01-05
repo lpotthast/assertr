@@ -36,7 +36,7 @@ pub trait NumAssertions<T: Num> {
     // TODO: is_subnormal
 }
 
-impl<'t, T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'t, T, M> {
+impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
     fn is_zero(self) -> Self {
         self.track_assertion();

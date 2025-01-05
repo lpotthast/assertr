@@ -17,7 +17,7 @@ pub trait PartialEqAssertions<T> {
         E: Debug;
 }
 
-impl<'t, T, M: Mode> PartialEqAssertions<T> for AssertThat<'t, T, M> {
+impl<T, M: Mode> PartialEqAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
     fn is_equal_to<E>(self, expected: E) -> Self
     where

@@ -110,8 +110,7 @@ impl<K: Debug, V: Debug> HasLength for &::std::collections::HashMap<K, V> {
 
 impl HasLength for Range<usize> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s
+        (self.end - 1) - self.start
     }
 
     fn is_empty(&self) -> bool {

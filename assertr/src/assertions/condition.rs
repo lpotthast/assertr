@@ -5,7 +5,7 @@ pub trait ConditionAssertions<T> {
     fn has<C: Condition<T>>(self, condition: C) -> Self;
 }
 
-impl<'t, T, M: Mode> ConditionAssertions<T> for AssertThat<'t, T, M> {
+impl<T, M: Mode> ConditionAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
     fn is<C: Condition<T>>(self, condition: C) -> Self {
         self.track_assertion();
@@ -30,7 +30,7 @@ where
     fn have<C: Condition<T>>(self, condition: C) -> Self;
 }
 
-impl<'t, I, T, M: Mode> IterableConditionAssertions<T, I> for AssertThat<'t, I, M>
+impl<I, T, M: Mode> IterableConditionAssertions<T, I> for AssertThat<'_, I, M>
 where
     for<'any> &'any I: IntoIterator<Item = &'any T>,
 {

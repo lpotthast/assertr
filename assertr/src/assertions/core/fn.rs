@@ -58,7 +58,7 @@ impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat
         let this = self.map(|it| match it {
             Actual::Borrowed(_) => panic!("panics() can only be called on an owned FnOnce!"),
             Actual::Owned(f) => Actual::Owned(std::panic::catch_unwind(
-                core::panic::AssertUnwindSafe(move || f()),
+                core::panic::AssertUnwindSafe(f),
             )),
         });
 

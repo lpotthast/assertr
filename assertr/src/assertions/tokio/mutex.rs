@@ -19,7 +19,7 @@ pub trait TokioMutexAssertions<T: Debug> {
     }
 }
 
-impl<'t, T: Debug, M: Mode> TokioMutexAssertions<T> for AssertThat<'t, Mutex<T>, M> {
+impl<T: Debug, M: Mode> TokioMutexAssertions<T> for AssertThat<'_, Mutex<T>, M> {
     #[track_caller]
     fn is_locked(self) -> Self {
         self.track_assertion();

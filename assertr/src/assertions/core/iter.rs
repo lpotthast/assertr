@@ -106,7 +106,7 @@ pub trait IntoIteratorAssertions<T: Debug> {
     fn into_iter_iterator_is_empty(self) -> Self;
 }
 
-impl<'t, T, I, M: Mode> IntoIteratorAssertions<T> for AssertThat<'t, I, M>
+impl<T, I, M: Mode> IntoIteratorAssertions<T> for AssertThat<'_, I, M>
 where
     T: Debug,
     for<'any> &'any I: IntoIterator<Item = &'any T>,
@@ -187,7 +187,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_value_is_present() {
-                let values = vec![1, 2, 3];
+                let values = [1, 2, 3];
                 let iter = values.iter();
                 assert_that(iter).contains(&1);
             }

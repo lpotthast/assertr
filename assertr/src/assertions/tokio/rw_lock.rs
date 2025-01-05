@@ -18,7 +18,7 @@ pub trait TokioRwLockAssertions<T: Debug> {
     fn is_write_locked(self) -> Self;
 }
 
-impl<'t, T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'t, RwLock<T>, M> {
+impl<T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'_, RwLock<T>, M> {
     #[track_caller]
     fn is_not_locked(self) -> Self
     where

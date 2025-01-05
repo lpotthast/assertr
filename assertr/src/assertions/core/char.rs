@@ -23,7 +23,7 @@ pub trait CharAssertions {
     //fn is_numeric(self) -> Self;
 }
 
-impl<'t, M: Mode> CharAssertions for AssertThat<'t, char, M> {
+impl<M: Mode> CharAssertions for AssertThat<'_, char, M> {
     #[track_caller]
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self {
         self.track_assertion();

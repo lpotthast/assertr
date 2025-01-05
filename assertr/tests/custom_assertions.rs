@@ -16,7 +16,7 @@ trait PersonAssertions {
     fn is_alive(self) -> Self;
 }
 
-impl<'t, M: Mode> PersonAssertions for AssertThat<'t, Person, M> {
+impl<M: Mode> PersonAssertions for AssertThat<'_, Person, M> {
     fn has_age(self, expected: u32) -> Self {
         self.satisfies(
             |p| p.age,

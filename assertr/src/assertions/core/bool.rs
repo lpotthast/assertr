@@ -6,7 +6,7 @@ pub trait BoolAssertions {
     fn is_false(self) -> Self;
 }
 
-impl<'t, M: Mode> BoolAssertions for AssertThat<'t, bool, M> {
+impl<M: Mode> BoolAssertions for AssertThat<'_, bool, M> {
     #[track_caller]
     fn is_true(self) -> Self {
         self.track_assertion();

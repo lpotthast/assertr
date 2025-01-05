@@ -13,7 +13,7 @@ pub trait ArrayAssertions<T: Debug> {
 }
 
 /// Assertions for generic arrays.
-impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'t, [T; N], M> {
+impl<T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'_, [T; N], M> {
     #[track_caller]
     fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
     where

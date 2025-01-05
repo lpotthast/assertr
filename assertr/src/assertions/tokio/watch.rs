@@ -15,8 +15,8 @@ pub trait TokioWatchReceiverAssertions<T: Debug> {
     fn has_not_changed(self) -> Self;
 }
 
-impl<'t, T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
-    for AssertThat<'t, tokio::sync::watch::Receiver<T>, M>
+impl<T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
+    for AssertThat<'_, tokio::sync::watch::Receiver<T>, M>
 {
     #[track_caller]
     fn has_current_value(self, expected: impl Borrow<T>) -> Self

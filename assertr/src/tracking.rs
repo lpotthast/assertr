@@ -20,7 +20,7 @@ pub(crate) trait AssertionTracking {
     fn track_assertion(&self);
 }
 
-impl<'t, T, M: Mode> AssertionTracking for AssertThat<'t, T, M> {
+impl<T, M: Mode> AssertionTracking for AssertThat<'_, T, M> {
     /// Track that a single assertion was made / is about to be checked.
     fn track_assertion(&self) {
         self.number_of_assertions.borrow_mut().0 += 1;

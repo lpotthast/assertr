@@ -9,7 +9,7 @@ pub trait CommandAssertions {
     fn has_arg(self, expected: impl AsRef<OsStr>) -> Self;
 }
 
-impl<'t, M: Mode> CommandAssertions for AssertThat<'t, Command, M> {
+impl<M: Mode> CommandAssertions for AssertThat<'_, Command, M> {
     fn has_arg(self, expected: impl AsRef<OsStr>) -> Self {
         self.derive(|it| it.get_args()).contains(expected.as_ref());
         self

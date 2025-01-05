@@ -26,7 +26,7 @@ pub trait MutexAssertions {
     }
 }
 
-impl<'t, T: Debug, M: Mode> MutexAssertions for AssertThat<'t, Mutex<T>, M> {
+impl<T: Debug, M: Mode> MutexAssertions for AssertThat<'_, Mutex<T>, M> {
     #[track_caller]
     fn is_locked(self) -> Self {
         self.track_assertion();

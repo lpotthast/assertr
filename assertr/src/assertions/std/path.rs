@@ -15,7 +15,7 @@ pub trait PathAssertions {
     fn has_extension(self, expected: impl AsRef<OsStr>) -> Self;
 }
 
-impl<'t, M: Mode> PathAssertions for AssertThat<'t, PathBuf, M> {
+impl<M: Mode> PathAssertions for AssertThat<'_, PathBuf, M> {
     #[track_caller]
     fn exists(self) -> Self {
         self.derive(|it| it.as_path()).exists();
@@ -75,7 +75,7 @@ impl<'t, M: Mode> PathAssertions for AssertThat<'t, PathBuf, M> {
     }
 }
 
-impl<'t, M: Mode> PathAssertions for AssertThat<'t, &Path, M> {
+impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
     #[track_caller]
     fn exists(self) -> Self {
         self.track_assertion();

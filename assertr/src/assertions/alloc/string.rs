@@ -12,7 +12,7 @@ pub trait StringAssertions {
     fn ends_with(self, expected: impl AsRef<str>) -> Self;
 }
 
-impl<'t, M: Mode> StringAssertions for AssertThat<'t, String, M> {
+impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
     #[track_caller]
     fn contains(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).contains(expected);

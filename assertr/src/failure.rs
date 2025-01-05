@@ -37,7 +37,7 @@ pub(crate) trait Fallible {
     fn store_failure(&self, failure: String);
 }
 
-impl<'t, T, M: Mode> Fallible for AssertThat<'t, T, M> {
+impl<T, M: Mode> Fallible for AssertThat<'_, T, M> {
     fn store_failure(&self, failure: String) {
         match &self.parent {
             Some(parent) => parent.store_failure(failure),
@@ -46,7 +46,7 @@ impl<'t, T, M: Mode> Fallible for AssertThat<'t, T, M> {
     }
 }
 
-impl<'t, T, M: Mode> AssertThat<'t, T, M> {
+impl<T, M: Mode> AssertThat<'_, T, M> {
     #[track_caller]
     pub fn fail(&self, failure: impl Failure) {
         let mut detail_messages = Vec::new();

@@ -38,7 +38,7 @@ pub trait RangeAssertions<B> {
     }
 }
 
-impl<'t, B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertThat<'t, R, M> {
+impl<B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertThat<'_, R, M> {
     #[track_caller]
     fn contains_element(&self, expected: B)
     where
@@ -76,7 +76,7 @@ impl<'t, B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertTha
     }
 }
 
-impl<'t, B, M: Mode> RangeAssertions<B> for AssertThat<'t, B, M> {
+impl<B, M: Mode> RangeAssertions<B> for AssertThat<'_, B, M> {
     fn is_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug,
