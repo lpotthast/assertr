@@ -13,6 +13,7 @@ struct Metadata {
 
 trait PersonAssertions {
     fn has_age(self, expected: u32) -> Self;
+    #[allow(clippy::wrong_self_convention)]
     fn is_alive(self) -> Self;
 }
 

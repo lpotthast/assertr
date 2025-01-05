@@ -247,13 +247,13 @@ mod tests {
         }
         #[test]
         fn panics_when_not_nan() {
-            assert_that_panic_by(|| assert_that(3.14).with_location(false).is_nan())
+            assert_that_panic_by(|| assert_that(1.23).with_location(false).is_nan())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected: NaN
 
-                      Actual: 3.14
+                      Actual: 1.23
                     -------- assertr --------
                 "#});
         }
@@ -278,13 +278,13 @@ mod tests {
 
         #[test]
         fn panics_when_not_infinity() {
-            assert_that_panic_by(|| assert_that(3.14).with_location(false).is_infinite())
+            assert_that_panic_by(|| assert_that(1.23).with_location(false).is_infinite())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected: +/- inf
 
-                      Actual: 3.14
+                      Actual: 1.23
                     -------- assertr --------
                 "#});
         }
