@@ -10,7 +10,7 @@ pub trait SliceAssertions<'t, T> {
     where
         E: Debug,
         T: AssertrPartialEq<E> + Debug;
-    
+
     /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
     ///
     /// - [T]: Original subject type. The "actual value" is of type `&[T]` (slice T).
@@ -41,11 +41,11 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
         T: Debug + AssertrPartialEq<E>,
     {
         self.track_assertion();
-        let actual = self.actual().into_iter().collect::<Vec<_>>();
+        let actual = self.actual().iter().collect::<Vec<_>>();
         let expected = expected;
         if !self
             .actual()
-            .into_iter()
+            .iter()
             .any(|it| AssertrPartialEq::eq(it, &expected, None))
         {
             self.fail(format_args!(
@@ -54,7 +54,7 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
         }
         self
     }
-    
+
     #[track_caller]
     fn contains_exactly<E, EE>(self, expected: EE) -> Self
     where

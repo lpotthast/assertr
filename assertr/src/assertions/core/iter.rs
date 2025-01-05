@@ -141,7 +141,7 @@ where
     {
         self.track_assertion();
         let actual = self.actual().into_iter().collect::<Vec<_>>();
-        let expected = expected.as_ref().into_iter().collect::<Vec<_>>();
+        let expected = expected.as_ref().iter().collect::<Vec<_>>();
 
         let result = crate::util::slice::compare(actual.as_slice(), expected.as_slice());
 
