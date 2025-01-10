@@ -63,6 +63,7 @@ impl<T, M: Mode> AssertThat<'_, T, M> {
     }
 }
 
+#[track_caller]
 fn build_failure_message(
     print_location: bool,
     detail_messages: Vec<String>,
