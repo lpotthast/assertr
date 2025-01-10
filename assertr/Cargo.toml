@@ -35,7 +35,7 @@ tokio = { version = "1.42.0", optional = true, features = ["full"] }
 
 [dev-dependencies]
 assertr = { path = ".", features = ["std", "derive", "reqwest", "tokio", "serde"] }
-# ^.. This is a somewhat hacky way to say: Please enable the "std" and "tokio" features for all tests.
+# ^... This is a somewhat hacky way to say: Please enable the "std" and "tokio" features for all tests.
 mockito = "1.6.1"
 # tempfile = "3.12.0"
 tokio = { version = "1.42.0", features = ["full"] }
