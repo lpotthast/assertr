@@ -64,10 +64,29 @@ pub mod prelude {
 
 pub struct PanicValue(Box<dyn Any>);
 
+/// The main entrypoint in an assertion context.
+///
+/// #### Example Usage
+/// ```rust,no_run
+/// use assertr::prelude::*;
+///
+/// // This will panic with a descriptive message and a pointer to the actual line of the assertion.
+/// assert_that(3).is_equal_to(4);
+///
+/// // This instead captures the assertion failure for later inspection.
+/// let failures = assert_that(3)
+///     .with_capture()
+///     .is_equal_to(4) // This will collect a failure instead of panicking.
+///     .capture_failures();
+///
+/// assert_that(failures)
+///     .has_length(1)
+///     .contains("");
+/// ```
 #[track_caller]
 #[must_use]
-pub fn assert_that<'t, T>(actual: impl Into<Actual<'t, T>>) -> AssertThat<'t, T, Panic> {
-    AssertThat::new(actual.into())
+pub fn assert_that<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
+    AssertThat::new(Actual::Owned(actual))
 }
 
 #[track_caller]
@@ -140,6 +159,36 @@ impl<T> AssertingThatRef for &T {
     }
 }
 
+/// `AssertThat` is the core structure used for assertions. It allows developers to perform
+/// assertions on actual values in a fluent and expressive manner, supporting detailed messages
+/// as well as different modes of operation, such as panic or capture modes.
+///
+/// ### Type Parameters
+/// - `'t`: The lifetime of the actual value being asserted.
+/// - `T`: The type of the actual value being asserted.
+/// - `M`: The assertion mode, implementing the [`Mode`] trait. Examples include `Panic` and `Capture` modes.
+///
+/// ### Fields
+/// - `parent`: A reference to the parent assertion, if this is a derived assertion. Failures will propagate to the root assertion.
+/// - `actual`: The value being asserted against.
+/// - `subject_name`: An optional subject name for the assertion, allowing for more descriptive error messages.
+/// - `detail_messages`: A collection of additional messages that provide context for the assertion.
+/// - `print_location`: A boolean indicating whether the source code location of the assertion should be printed on failure.
+/// - `number_of_assertions`: Tracks the number of assertions made.
+/// - `failures`: A collection of failure messages for assertions in `Capture` mode.
+/// - `mode`: The mode used for this assertion, determining behavior on failure.
+///
+/// ### Key Features
+/// - **Fluent API**: Chainable and composable methods for making expressive assertions.
+/// - **Detail Messages**: Add custom messages to provide context for failures.
+/// - **Modes**:
+///     - **Panic Mode**: The default mode where failures result in immediate panics.
+///     - **Capture Mode**: Collect failures instead of panicking, useful for batch processing scenarios.
+/// - **Derived Assertions**: Assertions derived from parent assertions, facilitating nested or mapped assertions.
+///
+/// ### Notes
+/// - When using `Capture` mode, failures must be captured explicitly.
+/// - This struct is designed to handle both simple and complex assertion chaining scenarios.
 pub struct AssertThat<'t, T, M: Mode> {
     // Derived assertions can be created. Calling `.fail*` on them should propagate to the root assertion!
     parent: Option<&'t dyn DynAssertThat>,

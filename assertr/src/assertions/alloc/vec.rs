@@ -65,4 +65,3 @@ mod tests {
         assert_that(vec).into_iter_contains_exactly([1, 2, 3]);
     }
 }
-

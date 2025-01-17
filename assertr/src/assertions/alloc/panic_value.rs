@@ -86,12 +86,10 @@ mod tests {
             let actual = PanicValue(Box::new(String::from("foo")));
 
             assert_that_panic_by(|| {
-                assert_that(actual)
-                    .with_location(false)
-                    .has_type::<u32>();
+                assert_that(actual).with_location(false).has_type::<u32>();
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected value type: u32
 

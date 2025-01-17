@@ -221,9 +221,9 @@ mod tests {
     }
 
     mod has_type_ref {
-        use std::any::Any;
         use crate::prelude::*;
         use indoc::formatdoc;
+        use std::any::Any;
 
         #[test]
         fn succeeds_when_type_matches() {
@@ -243,8 +243,8 @@ mod tests {
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expected value type: u32
 
@@ -262,8 +262,8 @@ mod tests {
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expected value type: u32
 

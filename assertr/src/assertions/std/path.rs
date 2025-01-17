@@ -507,7 +507,12 @@ mod tests {
 
             #[test]
             fn succeeds_when_present() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!()).to_owned();
+                let path = env::current_dir()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join(file!())
+                    .to_owned();
                 assert_that(path)
                     .exists()
                     .map(|it| it.unwrap_owned().display().to_string().into())
@@ -543,11 +548,7 @@ mod tests {
             #[test]
             fn panics_when_present() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-                assert_that_panic_by(|| {
-                    assert_that(path)
-                        .with_location(false)
-                        .does_not_exist()
-                })
+                assert_that_panic_by(|| assert_that(path).with_location(false).does_not_exist())
                     .has_type::<String>()
                     .contains("-------- assertr --------")
                     .contains("Expected: \"")
@@ -576,11 +577,11 @@ mod tests {
                         .exists() // Sanity-check. Non-existing paths would also not be files!
                         .is_a_file()
                 })
-                    .has_type::<String>()
-                    .contains("-------- assertr --------")
-                    .contains("Expected: \"")
-                    .contains("assertr/src/assertions/std\"")
-                    .contains("to be a file, but it is not!");
+                .has_type::<String>()
+                .contains("-------- assertr --------")
+                .contains("Expected: \"")
+                .contains("assertr/src/assertions/std\"")
+                .contains("to be a file, but it is not!");
             }
         }
 
@@ -609,13 +610,13 @@ mod tests {
                         .exists() // Sanity-check. Non-existing paths would also not be files!
                         .is_a_directory()
                 })
-                    .has_type::<String>()
-                    .contains("-------- assertr --------")
-                    .contains("Expected: \"")
-                    .contains("assertr/src/assertions/std/path.rs\"")
-                    .contains("to be a directory, but it is not!")
-                    .contains("The path exists: true")
-                    .contains("The path is a file: true");
+                .has_type::<String>()
+                .contains("-------- assertr --------")
+                .contains("Expected: \"")
+                .contains("assertr/src/assertions/std/path.rs\"")
+                .contains("to be a directory, but it is not!")
+                .contains("The path exists: true")
+                .contains("The path is a file: true");
             }
         }
 
@@ -701,8 +702,8 @@ mod tests {
                         .with_location(false)
                         .has_file_name("some.json")
                 })
-                    .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
     
@@ -730,8 +731,8 @@ mod tests {
                 assert_that_panic_by(|| {
                     assert_that(path).with_location(false).has_file_stem("some")
                 })
-                    .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
     
@@ -759,8 +760,8 @@ mod tests {
                 assert_that_panic_by(|| {
                     assert_that(path).with_location(false).has_extension("json")
                 })
-                    .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
     
