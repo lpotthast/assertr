@@ -17,6 +17,7 @@ use core::{
 use details::WithDetail;
 use failure::Fallible;
 use mode::{Capture, Mode, Panic};
+use std::marker::PhantomData;
 use tracking::{AssertionTracking, NumberOfAssertions};
 
 pub mod actual;
@@ -104,6 +105,30 @@ pub fn assert_that_panic_by<'t, R>(
     use crate::prelude::FnOnceAssertions;
 
     assert_that(fun).panics()
+}
+
+pub struct TypeHolder<T> {
+    phantom: PhantomData<T>,
+}
+
+impl<T> TypeHolder<T> {
+    pub fn get_type_name(&self) -> &'static str {
+        std::any::type_name::<T>()
+    }
+
+    pub fn needs_drop(&self) -> bool {
+        std::mem::needs_drop::<T>()
+    }
+
+    pub fn size(&self) -> usize {
+        size_of::<T>()
+    }
+}
+
+pub fn assert_that_type<T>() -> AssertThat<'static, TypeHolder<T>, Panic> {
+    AssertThat::new(Actual::Owned(TypeHolder {
+        phantom: Default::default(),
+    }))
 }
 
 pub trait AssertingThat {
@@ -438,6 +463,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             }),
         }
     }
+    //First, I really like putting focusing on implementing a central observability stack, which will make the setup, maintenance and working with it much easier.
+    // But are there estimations on how much load such a centralized system would get from the platform and tenants using our IAM solutions (Keycloak and Vault) and for which loads we can safely assume that this is fine? Especially once logs and traces are also getting captured?
 
     /// Control whether the location is shown on assertion failure.
     ///
