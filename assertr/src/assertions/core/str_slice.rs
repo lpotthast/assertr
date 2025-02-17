@@ -1,7 +1,18 @@
 use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use indoc::writedoc;
+use std::fmt::Write;
 
-/// Assertions for `&str` (str slices).
+/// Special assertions for `&str` (string slices) not covered by other general-purpose assertions,
+/// like our `PartialEqAssertions`.
 pub trait StrSliceAssertions {
+    /// Tests whether this string is empty or only containing whitespace characters.
+    /// 'Whitespace' is defined according to the terms of the Unicode Derived Core Property
+    /// `White_Space`.
+    fn is_blank(self) -> Self;
+
+    /// Tests whether this string is empty or only containing ascii-whitespace characters.
+    fn is_blank_ascii(self) -> Self;
+
     fn contains(self, expected: impl AsRef<str>) -> Self;
 
     fn starts_with(self, expected: impl AsRef<str>) -> Self;
@@ -10,6 +21,42 @@ pub trait StrSliceAssertions {
 }
 
 impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
+    #[track_caller]
+    fn is_blank(self) -> Self {
+        self.track_assertion();
+        // This iterator will yield no entries if the string is empty or all whitespace!
+        if !self.actual().split_whitespace().next().is_none() {
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Actual: {actual:?}
+                    
+                    contains non-whitespace characters.
+                    
+                    Expected it to be empty or only containing whitespace.
+                "#, actual = self.actual()}
+            });
+        }
+        self
+    }
+
+    #[track_caller]
+    fn is_blank_ascii(self) -> Self {
+        self.track_assertion();
+        // This iterator will yield no entries if the string is empty or all whitespace!
+        if !self.actual().split_ascii_whitespace().next().is_none() {
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Actual: {actual:?}
+                    
+                    contains non-whitespace characters.
+                    
+                    Expected it to be empty or only containing whitespace.
+                "#, actual = self.actual()}
+            });
+        }
+        self
+    }
+
     #[track_caller]
     fn contains(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();
@@ -55,6 +102,64 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
 
 #[cfg(test)]
 mod tests {
+    mod is_blank {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_expected_is_blank() {
+            assert_that("").is_blank();
+            assert_that(" ").is_blank();
+            assert_that("\t \n").is_blank();
+        }
+
+        #[test]
+        fn panics_when_expected_is_not_blank() {
+            assert_that_panic_by(|| {
+                assert_that("a").with_location(false).is_blank();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Actual: "a"
+
+                contains non-whitespace characters.
+
+                Expected it to be empty or only containing whitespace.
+                -------- assertr --------
+            "#});
+        }
+    }
+
+    mod is_blank_ascii {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_expected_is_blank() {
+            assert_that("").is_blank_ascii();
+            assert_that(" ").is_blank_ascii();
+            assert_that("\t \n").is_blank_ascii();
+        }
+
+        #[test]
+        fn panics_when_expected_is_not_blank() {
+            assert_that_panic_by(|| {
+                assert_that("a").with_location(false).is_blank_ascii();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Actual: "a"
+
+                contains non-whitespace characters.
+
+                Expected it to be empty or only containing whitespace.
+                -------- assertr --------
+            "#});
+        }
+    }
+
     mod contains {
         use crate::prelude::*;
         use indoc::formatdoc;
