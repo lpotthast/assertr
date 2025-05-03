@@ -23,6 +23,7 @@ pub mod prelude {
     pub use super::char::CharAssertions;
     pub use super::debug::DebugAssertions;
     pub use super::display::DisplayAssertions;
+    pub use super::r#fn::FnOnceAssertions;
     pub use super::iter::IntoIteratorAssertions;
     pub use super::iter::IteratorAssertions;
     pub use super::length::LengthAssertions;
@@ -31,11 +32,20 @@ pub mod prelude {
     pub use super::partial_eq::PartialEqAssertions;
     pub use super::partial_ord::PartialOrdAssertions;
     pub use super::poll::PollAssertions;
-    pub use super::r#fn::FnOnceAssertions;
     pub use super::range::RangeAssertions;
     pub use super::range::RangeBoundAssertions;
     pub use super::ref_cell::RefCellAssertions;
     pub use super::result::ResultAssertions;
     pub use super::slice::SliceAssertions;
     pub use super::str_slice::StrSliceAssertions;
+}
+
+pub(crate) fn strip_quotation_marks(mut str: &str) -> &str {
+    if str.starts_with('"') {
+        str = str.strip_prefix('"').unwrap();
+    }
+    if str.ends_with('"') {
+        str = str.strip_suffix('"').unwrap();
+    }
+    str
 }

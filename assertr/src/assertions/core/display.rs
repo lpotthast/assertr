@@ -1,7 +1,8 @@
 use alloc::format;
 use core::fmt::Display;
 
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::assertions::core::strip_quotation_marks;
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 pub trait DisplayAssertions {
     fn has_display_value(self, expected: impl Display) -> Self;
@@ -25,16 +26,6 @@ impl<T: Display, M: Mode> DisplayAssertions for AssertThat<'_, T, M> {
         }
         self
     }
-}
-
-fn strip_quotation_marks(mut str: &str) -> &str {
-    if str.starts_with('"') {
-        str = str.strip_prefix('"').unwrap();
-    }
-    if str.ends_with('"') {
-        str = str.strip_suffix('"').unwrap();
-    }
-    str
 }
 
 #[cfg(test)]
