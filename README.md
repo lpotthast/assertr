@@ -120,12 +120,15 @@ descriptions of the expected vs actual values. Descriptive messages can be colle
 #### Reduced Code Duplication
 
 With traditional assert macros, you often need to reference the same value multiple times:
-```
+
+```rust
 let vec = vec![1, 2, 3];
 assert_eq!(vec.len(), 3);
 assert!(vec.contains(&2));
 ```
+
 Versus the fluent style:
+
 ```rust
 assert_that(vec![1, 2, 3]).has_length(3).contains(2);
 ```
@@ -170,6 +173,11 @@ This crate uses features. Some tests are declared under conditional compilation.
 Run all tests using
 
     cargo test --all-features
+
+## MSRV
+
+- As of `0.1.0` the MSRV is `1.76.0`
+- As of `0.2.0` the MSRV is `1.85.0`
 
 ## Contributing
 

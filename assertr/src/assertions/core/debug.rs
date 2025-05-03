@@ -1,7 +1,8 @@
 use alloc::format;
 use core::fmt::Debug;
 
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::assertions::core::strip_quotation_marks;
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for values implementing [Debug].
 pub trait DebugAssertions {
@@ -27,16 +28,6 @@ impl<T: Debug, M: Mode> AssertThat<'_, T, M> {
         }
         self
     }
-}
-
-fn strip_quotation_marks(mut str: &str) -> &str {
-    if str.starts_with('"') {
-        str = str.strip_prefix('"').unwrap();
-    }
-    if str.ends_with('"') {
-        str = str.strip_suffix('"').unwrap();
-    }
-    str
 }
 
 #[cfg(test)]
