@@ -1,16 +1,18 @@
 #[cfg(feature = "serde")]
+use crate::AssertThat;
+#[cfg(feature = "serde")]
 use crate::actual::Actual;
 #[cfg(feature = "serde")]
 use crate::mode::Mode;
-#[cfg(feature = "serde")]
-use crate::AssertThat;
 
 /// A conversion function that can be used with `map` to easily convert any `serde::Serialize`able
 /// type into its JSON representation for further checks.
 /// Uses `serde_json` to perform the conversion.
 /// Panics when the conversion fails.
 ///
-/// ´´´
+/// ```
+/// use assertr::prelude::*;
+///
 /// #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 /// struct Person {
 ///     age: u32,
@@ -21,7 +23,7 @@ use crate::AssertThat;
 /// assert_that(person)
 ///     .map(json())
 ///     .is_equal_to(r#"{"age":42}"#);
-/// ´´´
+/// ```
 #[cfg(feature = "serde")]
 pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
     |it| {
@@ -36,7 +38,9 @@ pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
 /// Uses `toml` to perform the conversion.
 /// Panics when the conversion fails.
 ///
-/// ´´´
+/// ```
+/// use assertr::prelude::*;
+///
 /// #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 /// struct Config {
 ///     value: u32,
@@ -44,10 +48,10 @@ pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
 ///
 /// let config = Config { value: 42 };
 ///
-/// assert_that(person)
+/// assert_that(config)
 ///     .map(toml())
-///     .is_equal_to(r#"{"age":42}"#);
-/// ´´´
+///     .is_equal_to("value = 42\n");
+/// ```
 #[cfg(feature = "serde")]
 pub fn toml<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
     |it| {
