@@ -44,6 +44,8 @@ pub mod prelude {
     pub use crate::assertions::condition::ConditionAssertions;
     pub use crate::assertions::condition::IterableConditionAssertions;
     pub use crate::assertions::core::prelude::*;
+    #[cfg(feature = "jiff")]
+    pub use crate::assertions::jiff::prelude::*;
     #[cfg(feature = "reqwest")]
     pub use crate::assertions::reqwest::prelude::*;
     #[cfg(feature = "std")]
