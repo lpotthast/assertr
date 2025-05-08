@@ -1,6 +1,6 @@
+use crate::AssertThat;
 use crate::mode::Mode;
 use crate::prelude::PartialEqAssertions;
-use crate::AssertThat;
 
 pub trait ReqwestResponseAssertions {
     fn has_status_code(self, status: reqwest::StatusCode) -> Self;

@@ -1,4 +1,4 @@
-use crate::{actual::Actual, mode::Mode, tracking::AssertionTracking, AssertThat};
+use crate::{AssertThat, actual::Actual, mode::Mode, tracking::AssertionTracking};
 use core::fmt::Debug;
 
 pub trait ResultAssertions<'t, M: Mode, T, E> {

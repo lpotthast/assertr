@@ -3,7 +3,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::{mode::Mode, AssertThat};
+use crate::{AssertThat, mode::Mode};
 
 pub(crate) struct DetailMessages<'a>(pub(crate) &'a [String]);
 

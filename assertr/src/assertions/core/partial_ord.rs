@@ -1,6 +1,6 @@
 use core::{borrow::Borrow, cmp::Ordering, fmt::Debug};
 
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for comparable values.
 pub trait PartialOrdAssertions<T> {

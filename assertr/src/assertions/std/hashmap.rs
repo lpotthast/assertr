@@ -1,4 +1,4 @@
-use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, EqContext, Mode};
+use crate::{AssertThat, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking};
 use core::borrow::Borrow;
 use core::fmt::Debug;
 use core::fmt::Write;

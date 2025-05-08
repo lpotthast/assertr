@@ -3,7 +3,7 @@ use alloc::format;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode};
+use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
 pub trait SliceAssertions<'t, T> {
     fn contains<E>(self, expected: E) -> Self

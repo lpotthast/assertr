@@ -2,10 +2,10 @@ use core::fmt::{Debug, Write};
 use core::task::Poll;
 use indoc::writedoc;
 
+use crate::AssertThat;
 use crate::actual::Actual;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
-use crate::AssertThat;
 
 pub trait PollAssertions<'t, T, M: Mode> {
     fn is_pending(self) -> Self;

@@ -1,7 +1,7 @@
-use crate::{actual::Actual, tracking::AssertionTracking, AssertThat, Mode, PanicValue};
+use crate::{AssertThat, Mode, PanicValue, actual::Actual, tracking::AssertionTracking};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use core::any::{type_name, Any};
+use core::any::{Any, type_name};
 use indoc::writedoc;
 use std::fmt::Write;
 
@@ -65,7 +65,7 @@ impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> 
 #[cfg(test)]
 mod tests {
     mod has_type {
-        use crate::{prelude::*, PanicValue};
+        use crate::{PanicValue, prelude::*};
         use indoc::formatdoc;
 
         #[test]
@@ -100,7 +100,7 @@ mod tests {
     }
 
     mod has_type_ref {
-        use crate::{prelude::*, PanicValue};
+        use crate::{PanicValue, prelude::*};
         use indoc::formatdoc;
 
         #[test]

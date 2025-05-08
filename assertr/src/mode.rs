@@ -44,7 +44,9 @@ impl Mode for Capture {
 impl Drop for Capture {
     fn drop(&mut self) {
         if !self.captured && !self.derived {
-            panic!("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!");
+            panic!(
+                "You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"
+            );
         }
     }
 }

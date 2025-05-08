@@ -4,7 +4,7 @@ use core::ops::Bound;
 use core::ops::RangeBounds;
 use indoc::writedoc;
 
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for any type `R` representing a range (using bound type `B`).
 pub trait RangeBoundAssertions<B, R: RangeBounds<B>> {

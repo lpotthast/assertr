@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use crate::actual::Actual;
-use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, Mode};
+use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
 pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
     /// This is a terminal assertion, as it must consume the underlying iterator.

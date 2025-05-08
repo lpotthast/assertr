@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::{prelude::SliceAssertions, AssertThat, Mode};
+use crate::{AssertThat, Mode, prelude::SliceAssertions};
 
 pub trait ArrayAssertions<T: Debug> {
     fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self

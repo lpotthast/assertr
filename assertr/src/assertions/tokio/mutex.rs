@@ -1,4 +1,4 @@
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 use core::fmt::Debug;
 use indoc::writedoc;
 use std::fmt::Write;

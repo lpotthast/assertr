@@ -3,9 +3,9 @@ use alloc::vec::Vec;
 use core::fmt::{Arguments, Write};
 
 use crate::{
+    AssertThat,
     details::{DetailMessages, WithDetail},
     prelude::Mode,
-    AssertThat,
 };
 
 pub trait Failure {

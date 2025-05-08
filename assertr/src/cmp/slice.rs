@@ -59,9 +59,9 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::EqContext;
     use crate::cmp::slice::compare;
     use crate::prelude::*;
-    use crate::EqContext;
 
     #[derive(Debug, PartialEq)]
     struct Foo {

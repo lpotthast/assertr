@@ -1,9 +1,9 @@
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
-use core::any::{type_name, Any};
+use core::any::{Any, type_name};
 use indoc::writedoc;
 use std::fmt::Write;
 

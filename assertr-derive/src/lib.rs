@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use darling::*;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Ident, Path, Type, Visibility};
+use syn::{DeriveInput, Ident, Path, Type, Visibility, parse_macro_input};
 
 #[derive(Debug, FromField)]
 #[darling(attributes(assertr_eq))]

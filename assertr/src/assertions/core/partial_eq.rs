@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 
-use crate::{tracking::AssertionTracking, AssertThat, AssertrPartialEq, EqContext, Mode};
+use crate::{AssertThat, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking};
 
 pub trait PartialEqAssertions<T> {
     fn is_equal_to<E>(self, expected: E) -> Self

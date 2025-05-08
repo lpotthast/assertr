@@ -1,9 +1,9 @@
 use core::fmt::Write;
 use indoc::writedoc;
 
+use crate::AssertThat;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
-use crate::AssertThat;
 
 pub trait CharAssertions {
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self;

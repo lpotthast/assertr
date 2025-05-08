@@ -1,4 +1,4 @@
-use crate::{actual::Actual, tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, actual::Actual, tracking::AssertionTracking};
 use core::fmt::Debug;
 use core::option::Option;
 

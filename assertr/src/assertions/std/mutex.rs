@@ -3,7 +3,7 @@ use core::fmt::Write;
 use indoc::writedoc;
 use std::sync::Mutex;
 
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 pub trait MutexAssertions {
     /// Asserts that this mutex is locked.

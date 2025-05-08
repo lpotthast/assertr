@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::{prelude::SliceAssertions, AssertThat, AssertrPartialEq, Mode};
+use crate::{AssertThat, AssertrPartialEq, Mode, prelude::SliceAssertions};
 
 pub trait VecAssertions<'t, T: Debug> {
     fn contains<E>(self, expected: E) -> Self

@@ -1,4 +1,4 @@
-use crate::{tracking::AssertionTracking, AssertThat, Mode, TypeHolder};
+use crate::{AssertThat, Mode, TypeHolder, tracking::AssertionTracking};
 use core::fmt::Write;
 use indoc::writedoc;
 

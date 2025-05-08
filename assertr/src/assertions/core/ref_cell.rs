@@ -1,5 +1,5 @@
 use crate::AssertThat;
-use crate::{tracking::AssertionTracking, Mode};
+use crate::{Mode, tracking::AssertionTracking};
 use core::cell::RefCell;
 use core::fmt::Debug;
 use indoc::writedoc;

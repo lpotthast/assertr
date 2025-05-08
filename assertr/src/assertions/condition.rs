@@ -1,4 +1,4 @@
-use crate::{condition::Condition, tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, condition::Condition, tracking::AssertionTracking};
 
 pub trait ConditionAssertions<T> {
     fn is<C: Condition<T>>(self, condition: C) -> Self;

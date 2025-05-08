@@ -1,4 +1,4 @@
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for boolean values.
 pub trait BoolAssertions {
