@@ -1,4 +1,4 @@
-use crate::{tracking::AssertionTracking, AssertThat, Mode};
+use crate::{AssertThat, Mode, tracking::AssertionTracking};
 use indoc::writedoc;
 use std::fmt::Write;
 
@@ -25,7 +25,7 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
     fn is_blank(self) -> Self {
         self.track_assertion();
         // This iterator will yield no entries if the string is empty or all whitespace!
-        if !self.actual().split_whitespace().next().is_none() {
+        if self.actual().split_whitespace().next().is_some() {
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Actual: {actual:?}
@@ -43,7 +43,7 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
     fn is_blank_ascii(self) -> Self {
         self.track_assertion();
         // This iterator will yield no entries if the string is empty or all whitespace!
-        if !self.actual().split_ascii_whitespace().next().is_none() {
+        if self.actual().split_ascii_whitespace().next().is_some() {
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Actual: {actual:?}

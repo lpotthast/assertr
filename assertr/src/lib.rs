@@ -35,11 +35,15 @@ pub mod prelude {
     #[cfg(feature = "derive")]
     pub use assertr_derive::AssertrEq;
 
+    pub use crate::AssertThat;
+    pub use crate::AssertingThat;
+    pub use crate::AssertingThatRef;
     pub use crate::any;
     pub use crate::assert_that;
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by;
     pub use crate::assert_that_ref;
+    pub use crate::assertions::HasLength;
     pub use crate::assertions::alloc::prelude::*;
     pub use crate::assertions::condition::ConditionAssertions;
     pub use crate::assertions::condition::IterableConditionAssertions;
@@ -52,7 +56,6 @@ pub mod prelude {
     pub use crate::assertions::std::prelude::*;
     #[cfg(feature = "tokio")]
     pub use crate::assertions::tokio::prelude::*;
-    pub use crate::assertions::HasLength;
     pub use crate::condition::Condition;
     #[cfg(feature = "serde")]
     pub use crate::conversion::json;
@@ -60,9 +63,6 @@ pub mod prelude {
     pub use crate::conversion::toml;
     pub use crate::eq;
     pub use crate::mode::Mode;
-    pub use crate::AssertThat;
-    pub use crate::AssertingThat;
-    pub use crate::AssertingThatRef;
 }
 
 pub struct PanicValue(Box<dyn Any>);
@@ -465,13 +465,12 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             }),
         }
     }
-    //First, I really like putting focusing on implementing a central observability stack, which will make the setup, maintenance and working with it much easier.
-    // But are there estimations on how much load such a centralized system would get from the platform and tenants using our IAM solutions (Keycloak and Vault) and for which loads we can safely assume that this is fine? Especially once logs and traces are also getting captured?
 
-    /// Control whether the location is shown on assertion failure.
+    /// Control whether the location (file, line and column) is shown on assertion failure.
     ///
-    /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
-    /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
+    /// It can be helpful to call `.with_location(false)` when you want to test a panic message
+    /// for exact equality and do not want to be bothered by constantly differing line and column
+    /// numbers for the assert-location.
     #[allow(dead_code)]
     pub fn with_location(mut self, value: bool) -> Self {
         self.print_location = value;
@@ -568,7 +567,7 @@ impl<T1: AssertrPartialEq<T2>, T2> AssertrPartialEq<[T2]> for [T1] {
             && self.iter().enumerate().all(|(i, t1)| {
                 other
                     .get(i)
-                    .map_or(false, |t2| AssertrPartialEq::eq(t1, t2, ctx.as_deref_mut()))
+                    .is_some_and(|t2| AssertrPartialEq::eq(t1, t2, ctx.as_deref_mut()))
             })
     }
 

@@ -38,15 +38,15 @@ where
 
     map1.iter().all(|(k, v1)| {
         map2.get(k)
-            .map_or(false, |v2| AssertrPartialEq::eq(v1, v2, ctx.as_deref_mut()))
+            .is_some_and(|v2| AssertrPartialEq::eq(v1, v2, ctx.as_deref_mut()))
     })
 }
 
 #[cfg(test)]
 mod test {
+    use crate::EqContext;
     use crate::cmp::hashmap::compare;
     use crate::prelude::*;
-    use crate::EqContext;
     use std::collections::HashMap;
 
     #[derive(Debug, PartialEq)]
