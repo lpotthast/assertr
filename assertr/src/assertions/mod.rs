@@ -5,6 +5,8 @@ use ::std::ops::RangeInclusive;
 pub mod alloc;
 pub mod condition;
 pub mod core;
+#[cfg(feature = "jiff")]
+pub mod jiff;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 #[cfg(feature = "std")]
