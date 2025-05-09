@@ -1,17 +1,66 @@
 # assertr
 
-`assertr` allows you to write clear and intuitive assertions in your Rust code.\
-It offers a fluent API that makes your test code more readable and provides detailed failure messages\
-to help pinpoint issues quickly.
+A fluent assertion library for Rust that enables clear, intuitive, and readable test code\
+with detailed failure messages to help pinpoint issues quickly.
 
-## Overview & Features
+## Features
 
-- **Fluent API**: Chain assertion methods for improved readability
-- **Type-specific assertions**: Specialized assertions for different Rust types
-- **Detailed failure messages**: Get informative output when assertions fail
-- **Capture mode**: Collect assertion failures for batch verification
-- **Extensible**: Define custom assertions for your own types
-- **Derive macros**: Generate equality comparisons with `#[derive(AssertrEq)]`
+- 🔗 **Fluent API**: Chain multiple assertions for improved readability.
+- 🎯 **Type-specific Assertions**: Specialized checks for many Rust types as well as a broad generic type coverage.
+- 📝 **Detailed Error Messages**: Clear, context-rich failure messages.
+- 🔄 **Capture Mode**: Collect assertion failures for manual inspection.
+- 🛠 **Extensible**: Easily add custom assertions for your own types.
+- ⚡ **Derive Macros**: Perform partial struct assertions with the help of the `#[derive(AssertrEq)]` macro.
+
+## Installation
+
+```tome
+[dependencies]
+assertr = "0.2.0"
+```
+
+or
+
+```tome
+[dependencies]
+assertr = { version = "0.2.0", features = ["derive"] }
+```
+
+if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
+field-by-field value. More on that later.
+
+- You may disable the default features for no-std environments.
+
+- You may activate any of the following features:
+
+| feature | description                                                           | default feature |
+|---------|-----------------------------------------------------------------------|-----------------|
+| std     | Assertions for types from the standard library.                       | yes             |
+| derive  | Enables the `AssertrEq` derive macro.                                 | no              |
+| num     | Assertions for numeric types.                                         | yes             |
+| libm    | Use fallback implementations for Rust's float math functions in core. | no              |
+| serde   | Assertions for serializable types (supporting json and toml).         | no              |
+| jiff    | Assertions for types from the `jiff` crate.                           | no              |
+| tokio   | Assertions for types from the `tokio` crate.                          | no              |
+| reqwest | Assertions for types from the `reqwest` crate.                        | no              |
+
+## Quick start
+
+Always prefer importing the entire prelude, as in:
+
+```rust
+use assertr::prelude::*;
+
+#[test]
+fn test() {
+    assert_that("hello, world!")
+        .starts_with("hello")
+        .ends_with("!");
+}
+```
+
+This way, you are ensured to get full IDE autocompletion and always see all available assertions for the type you are
+currently writing an assertion on.
 
 ## Available Assertions
 
@@ -111,7 +160,7 @@ to help pinpoint issues quickly.
 | `HashMap<K, V>`                    | `contains_value(expected)`                         |                               | std               |
 | `HashMap<K, V>`                    | `contains_entry(expected_key, expected_value)`     |                               | std               |
 | `Command`                          | `has_arg(expected)`                                |                               | std               |
-| `TypeHolder<T>`                    | `needs_drop()`                                     |                               | std               |
+| `Type<T>`                          | `needs_drop()`                                     |                               | std               |
 | `Box<dyn Any>`                     | `has_type::<Expected>()`                           |                               | alloc             |
 | `Box<dyn Any>`                     | `has_type_ref::<Expected>()`                       |                               | alloc             |
 | `PanicValue`                       | `has_type::<Expected>()`                           |                               | alloc             |
@@ -161,29 +210,31 @@ let failures = assert_that(3)
 assert_that(failures).has_length(2);
 ```
 
-### Custom Assertions with Derived AssertrEq
+### Custom Assertions with derived AssertrEq
 
-You can generate equality comparisons for your structs with the derive macro: `AssertrEq`
+You can generate equality comparisons for your own struct types using the `AssertrEq` derive macro.
+
+**Make sure that the crates `derive` feature is active!**
 
 ``` rust
+// Deriving AssertrEq provides us an additional `PersonAssertrEq` type.
 #[derive(Debug, AssertrEq)]
 pub struct Person {
     pub name: String,
     pub age: i32,
 }
 
-// Use in assertions
-let person = Person { name: "Alice".to_string(), age: 30 };
+let person = Person { name: "Alice".to_owned(), age: 30 };
 
-// Full equality check
+// We can still perform a standard (full) equality check.
 assert_that_ref(&person).is_equal_to(Person { 
-    name: "Alice".to_string(), 
+    name: "Alice".to_owned(), 
     age: 30 
 });
 
-// Partial equality check with wildcards
+// But we can also do a partial equality check!
 assert_that_ref(&person).is_equal_to(PersonAssertrEq { 
-    name: eq("Alice".to_string()), 
+    name: eq("Alice".to_owned()), 
     age: any() // Match any age
 });
 ```
@@ -193,9 +244,11 @@ assert_that_ref(&person).is_equal_to(PersonAssertrEq {
 Test properties of types:
 
 ``` rust
-assert_that_type::<String>()
+assert_that_type::<MyType>()
     .needs_drop()
-    .size().is_greater_than(0);
+    .satisfies(|it| it.size(), |size| {
+        size.is_equal_to(32);
+    });
 ```
 
 ## Goals

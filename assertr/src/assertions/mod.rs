@@ -7,6 +7,8 @@ pub mod condition;
 pub mod core;
 #[cfg(feature = "jiff")]
 pub mod jiff;
+#[cfg(feature = "num")]
+pub mod num;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 #[cfg(feature = "std")]

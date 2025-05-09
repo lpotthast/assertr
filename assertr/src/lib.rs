@@ -43,6 +43,7 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by;
     pub use crate::assert_that_ref;
+    pub use crate::assert_that_type;
     pub use crate::assertions::HasLength;
     pub use crate::assertions::alloc::prelude::*;
     pub use crate::assertions::condition::ConditionAssertions;
@@ -50,6 +51,8 @@ pub mod prelude {
     pub use crate::assertions::core::prelude::*;
     #[cfg(feature = "jiff")]
     pub use crate::assertions::jiff::prelude::*;
+    #[cfg(feature = "num")]
+    pub use crate::assertions::num::NumAssertions;
     #[cfg(feature = "reqwest")]
     pub use crate::assertions::reqwest::prelude::*;
     #[cfg(feature = "std")]
@@ -109,11 +112,11 @@ pub fn assert_that_panic_by<'t, R>(
     assert_that(fun).panics()
 }
 
-pub struct TypeHolder<T> {
+pub struct Type<T> {
     phantom: PhantomData<T>,
 }
 
-impl<T> TypeHolder<T> {
+impl<T> Type<T> {
     pub fn get_type_name(&self) -> &'static str {
         std::any::type_name::<T>()
     }
@@ -127,8 +130,8 @@ impl<T> TypeHolder<T> {
     }
 }
 
-pub fn assert_that_type<T>() -> AssertThat<'static, TypeHolder<T>, Panic> {
-    AssertThat::new(Actual::Owned(TypeHolder {
+pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
+    AssertThat::new(Actual::Owned(Type {
         phantom: Default::default(),
     }))
 }

@@ -1,4 +1,4 @@
-use crate::{AssertThat, Mode, TypeHolder, tracking::AssertionTracking};
+use crate::{AssertThat, Mode, Type, tracking::AssertionTracking};
 use core::fmt::Write;
 use indoc::writedoc;
 
@@ -7,7 +7,7 @@ pub trait MemAssertions {
     fn needs_drop(self) -> Self;
 }
 
-impl<T, M: Mode> MemAssertions for AssertThat<'_, TypeHolder<T>, M> {
+impl<T, M: Mode> MemAssertions for AssertThat<'_, Type<T>, M> {
     #[track_caller]
     fn needs_drop(self) -> Self {
         self.track_assertion();

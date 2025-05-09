@@ -34,7 +34,6 @@ pub trait NumAssertions<T: Num> {
         T: PartialOrd,
         T: Clone;
 
-    // TODO: Why the libm/std feature guard?
     #[cfg(any(feature = "std", feature = "libm"))]
     fn is_nan(self) -> Self
     where

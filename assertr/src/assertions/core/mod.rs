@@ -6,7 +6,6 @@ pub mod display;
 pub mod r#fn;
 pub mod iter;
 pub mod length;
-pub mod num;
 pub mod option;
 pub mod partial_eq;
 pub mod partial_ord;
@@ -27,7 +26,6 @@ pub mod prelude {
     pub use super::iter::IntoIteratorAssertions;
     pub use super::iter::IteratorAssertions;
     pub use super::length::LengthAssertions;
-    pub use super::num::NumAssertions;
     pub use super::option::OptionAssertions;
     pub use super::partial_eq::PartialEqAssertions;
     pub use super::partial_ord::PartialOrdAssertions;
