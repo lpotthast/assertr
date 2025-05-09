@@ -3,12 +3,12 @@ use crate::mode::Mode;
 use crate::prelude::PartialEqAssertions;
 
 pub trait ReqwestResponseAssertions {
-    fn has_status_code(self, status: reqwest::StatusCode) -> Self;
+    fn has_status_code(self, expected: reqwest::StatusCode) -> Self;
 }
 
 impl<M: Mode> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response, M> {
-    fn has_status_code(self, status: reqwest::StatusCode) -> Self {
-        self.derive(|it| it.status()).is_equal_to(status);
+    fn has_status_code(self, expected: reqwest::StatusCode) -> Self {
+        self.derive(|it| it.status()).is_equal_to(expected);
         self
     }
 }
