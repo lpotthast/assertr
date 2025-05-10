@@ -6,9 +6,13 @@ with detailed failure messages to help pinpoint issues quickly.
 ## Features
 
 - 🔗 **Fluent API**: Chain multiple assertions for improved readability.
+  Fluent assertions provide better IDE support through method chaining. The IDE can show you exactly what
+  assertions are available for your specific type, making it hard to write invalid assertions and easier to discover
+  available checks.
 - 🎯 **Type-specific Assertions**: Specialized checks for many Rust types as well as a broad generic type coverage.
-- 📝 **Detailed Error Messages**: Clear, context-rich failure messages.
-- 🔄 **Capture Mode**: Collect assertion failures for manual inspection.
+- 📝 **Detailed Error Messages**: Clear, context-rich failure messages. Any assertion can extend the context with
+  additional descriptive output.
+- 🔄 **Capture Mode**: Collect assertion failures for manual inspection instead of immediately panicking.
 - 🛠 **Extensible**: Easily add custom assertions for your own types.
 - ⚡ **Derive Macros**: Perform partial struct assertions with the help of the `#[derive(AssertrEq)]` macro.
 
@@ -200,7 +204,7 @@ case an assertion is violated. We chose to not explicitly list these bounds in t
 
 Instead of immediately panicking on assertion failure, you can capture failures for later analysis:
 
-``` rust
+```rust
 let failures = assert_that(3)
     .with_capture()
     .is_equal_to(4)
@@ -210,33 +214,74 @@ let failures = assert_that(3)
 assert_that(failures).has_length(2);
 ```
 
-### Custom Assertions with derived AssertrEq
+### Partial equality assertions
 
-You can generate equality comparisons for your own struct types using the `AssertrEq` derive macro.
+You can derive a helper struct, allowing you to perform partial equality comparisons, for any owned struct type
+by annotating it with the `#[derive(AssertrEq)`.
 
-**Make sure that the crates `derive` feature is active!**
+**Make sure that this crates `derive` feature is active!**
 
-``` rust
-// Deriving AssertrEq provides us an additional `PersonAssertrEq` type.
+```toml
+assertr = { version = "0.2.0", features = ["derive"] }
+```
+
+```rust
+// Deriving `AssertrEq` provides us an additional `PersonAssertrEq` type.
+// Deriving `Debug` is necessary, as we want to actually use `Foo` in an assertion.
 #[derive(Debug, AssertrEq)]
 pub struct Person {
     pub name: String,
     pub age: i32,
+    pub data: (u32, u32),
 }
 
-let person = Person { name: "Alice".to_owned(), age: 30 };
+#[test]
+fn test() {
+    let alice = Person {
+        name: "Alice".to_owned(),
+        age: 30,
+        data: (100, 998)
+    };
+    
+    // We can still perform a standard (full) equality check.
+    assert_that_ref(&alice).is_equal_to(Person {
+        name: "Alice".to_owned(),
+        age: 30,
+        data: (100, 998),
+    });
+    
+    // But we can also do a partial equality check!
+    assert_that_ref(&alice).is_equal_to(PersonAssertrEq {
+        name: eq("Alice".to_owned()),
+        age: any(), // Match any age
+        data: any() // Match any data
+    });
+}
+```
 
-// We can still perform a standard (full) equality check.
-assert_that_ref(&person).is_equal_to(Person { 
-    name: "Alice".to_owned(), 
-    age: 30 
-});
+### Write assertions for your own types.
 
-// But we can also do a partial equality check!
-assert_that_ref(&person).is_equal_to(PersonAssertrEq { 
-    name: eq("Alice".to_owned()), 
-    age: any() // Match any age
-});
+```rust
+#[derive(Debug, PartialEq)]
+struct Person {
+    age: u32,
+}
+
+trait PersonAssertions {
+    fn has_age(self, expected: u32) -> Self;
+}
+
+impl<M: Mode> PersonAssertions for AssertThat<'_, Person, M> {
+    fn has_age(self, expected: u32) -> Self {
+        self.satisfies(|p| p.age, |age| { age.is_equal_to(expected); })
+    }
+}
+
+#[test]
+fn test() {
+    assert_that(Person { age: 30 })
+        .has_age(30);
+}
 ```
 
 ### Type Testing
@@ -253,92 +298,24 @@ assert_that_type::<MyType>()
 
 ## Goals
 
-- Assertions that read like english:
-  ```rust
-  assert_that("foobar").starts_with("foo").contains("ooba");
-  assert_that(vec![1, 2, 3]).has_length(3).contains(2);
-  assert_that((Ok(42)).is_ok().is_equal_to(42);
-  assert_that(Person { id: 42 }).has_debug_value("Person { id: 42 }");
-  ```
+```rust
+// Assertions that read like English.
+assert_that("foobar").starts_with("foo").contains("ooba");
+assert_that(vec![1, 2, 3]).has_length(3).contains(2);
+assert_that((Ok(42)).is_ok().is_equal_to(42);
+assert_that(Person { id: 42 }).has_debug_value("Person { id: 42 }");
 
-
-- Assertions to be defined on common traits as often as possible. Allowing, for example, all types implementing `Eq`
-  to allow `is_equal_to`, `PartialOrd` types to allow `is_greater_than` assertions and all types implementing the
-  `HasLength` trait to support the `has_length` assertion.
-
-
-- No requirement to use macros for simple assertions. An
-  `assert_that(...)` suffices to get into an assertion context. Use `assert_that_ref(&val)` if you cant give up
-  ownership and instead want to assert on a reference.
-
-
-- One import should be enough to access all possible assertions through **autocomplete**.
-  `use assertr::prelude::*;`
-
-
-- Chainable assertions.
-  ```rust
-  assert_that("foobar")
-      .is_not_empty()
-      .starts_with("foo")
-      .ends_with("bar")
-      .has_length(6);
-  ```
-
-
-- Extensibility. Write assertions for your own types.
-  ```rust
-  #[derive(Debug, PartialEq)]
-  struct Person {
-      age: u32,
-  }
-
-  trait PersonAssertions {
-      fn has_age(self, expected: u32) -> Self;
-  }
-
-  impl<M: Mode> PersonAssertions for AssertThat<'_, Person, M> {
-      fn has_age(self, expected: u32) -> Self {
-          self.satisfies(|p| p.age, |age| { age.is_equal_to(expected); })
-      }
-  }
-
-  #[test]
-  fn test() {
-      assert_that(Person { age: 30 })
-        .has_age(30);
-  }
-  ```
-
+// Chainable,
+assert_that("foobar")
+.is_not_empty()
+.starts_with("foo")
+.ends_with("bar")
+.has_length(6);
+```
 
 - Partial equality assertions (meaning that only some fields of a struct are compared, while some are ignored).
   Add the `AssertrEq` annotation to one of your struct to enable this.
-  ```rust
-  use assertr::prelude::*;
-  use indoc::formatdoc;
 
-  // Deriving `Debug` is necessary, as we want to actually use `Foo` in an assertion.
-  #[derive(Debug, AssertrEq)]
-  pub struct Foo {
-      pub id: i32,
-      pub name: String,
-      pub data: (u32, u32),
-  }
-
-  fn main() {
-      let foo = Foo {
-          id: 1,
-          name: "bob".to_string(),
-          data: (42, 100),
-      };
-
-      assert_that(foo).is_equal_to(FooAssertrEq {
-          id: eq(1),
-          name: eq("bob".to_string()),
-          data: any(),
-      });
-  }
-  ```
 
 ## Compared to other assertion styles
 
@@ -382,34 +359,20 @@ Versus the fluent style:
 assert_that(vec![1, 2, 3]).has_length(3).contains(2);
 ```
 
-#### Type Safety and IDE Support
-
-Fluent assertions provide better IDE support through method chaining. The IDE can show you exactly what
-assertions are available for your specific type, making it harder to write invalid assertions and easier to discover
-available checks.
-
-#### Extensibility
-
-It's generally easier to add new assertion types in a fluent interface - you just need to implement new methods on the
-assertion type. With macros, you'd need to create entirely new macros for each assertion type, which can be more complex
-and harder to maintain.
-
-## Open questions
-
-- Many assertions require `std::fmt::Debug`, limiting usability to types implementing Debug.
-  Can we implement fallback rendering? Will probably require the currently unstable specialization feature.
-
-- The differentiation between `assert_that` for owned values and `assert_that_ref` for references is bad.
-  One `assert_that` function, not being macro, accepting both owned values and references would be much preferred.
-  But that would also require the specialization feature to be able to detect the use of a reference type at
-  compiletime.
-
-## Decisions
+## Technical decisions
 
 - Derived assertions are not allowed to control whether the location is printed.
 - Detail messages are collected from the current assertion upwards, taking the messages of all parents into account.
 - Failures are stored at the root assertion.
 - Failures can only be extracted from the root assertion.
+- Assertions to be defined on common traits as often as possible. Allowing, for example, all types implementing `Eq`
+  to allow `is_equal_to`, `PartialOrd` types to allow `is_greater_than` assertions and all types implementing the
+  `HasLength` trait to support the `has_length` assertion.
+- No requirement to use macros for simple assertions. An
+  `assert_that(...)` suffices to get into an assertion context. Use `assert_that_ref(&val)` if you cant give up
+  ownership and instead want to assert on a reference.
+- One import should be enough to access all possible assertions through **autocomplete**.
+  `use assertr::prelude::*;`
 
 ## Testing
 
@@ -428,6 +391,16 @@ Run all tests using
 - As of `0.1.0` the MSRV is `1.76.0`
 - As of `0.2.0` the MSRV is `1.85.0`
 
+## Open questions
+
+- Many assertions require `std::fmt::Debug`, limiting usability to types implementing Debug.
+  Can we implement fallback rendering? Will probably require the currently unstable specialization feature.
+
+- The differentiation between `assert_that` for owned values and `assert_that_ref` for references is not ideal.
+  One `assert_that` function, not being a macro and accepting both owned values and references would be much preferred.
+  But that would probably also require the specialization feature to be able to detect the use of a reference type at
+  compiletime.
+
 ## Contributing
 
 Contributions are welcome. Feel free to open a PR with your suggested changes.
@@ -437,4 +410,4 @@ Contributions are welcome. Feel free to open a PR with your suggested changes.
 Midway through implementing this, I found out that "spectral" already exists, which uses a very similar style of
 assertions.
 After looking into it, I took the concept of generally relying on `*Assertions` trait definitions instead of directly
-implementing Assertions with multiple impl blocks on the `AssertThat` type._
+implementing Assertions with multiple impl blocks on the `AssertThat` type.
