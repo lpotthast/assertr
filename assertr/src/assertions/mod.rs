@@ -112,6 +112,28 @@ impl<K: Debug, V: Debug> HasLength for &::std::collections::HashMap<K, V> {
     }
 }
 
+#[cfg(feature = "std")]
+impl<V: Debug> HasLength for ::std::collections::HashSet<V> {
+    fn length(&self) -> usize {
+        ::std::collections::HashSet::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        ::std::collections::HashSet::is_empty(self)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<V: Debug> HasLength for &::std::collections::HashSet<V> {
+    fn length(&self) -> usize {
+        ::std::collections::HashSet::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        ::std::collections::HashSet::is_empty(self)
+    }
+}
+
 impl HasLength for Range<usize> {
     fn length(&self) -> usize {
         (self.end - 1) - self.start
