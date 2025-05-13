@@ -101,6 +101,7 @@ currently writing an assertion on.
 | `Vec<T>`                           | `contains(expected)`                               |                               | alloc             |
 | `Vec<T>`                           | `contains_exactly(expected)`                       |                               | alloc             |
 | `Vec<T>`                           | `contains_exactly_matching_in_any_order(expected)` |                               | alloc             |
+| `T: Debug`                         | `has_debug_string(expected)`                       |                               |                   |
 | `T: Debug`                         | `has_debug_value(expected)`                        |                               |                   |
 | `T: Display`                       | `has_display_value(expected)`                      |                               |                   |
 | `F: FnOnce -> R`                   | `panics()`                                         |                               |                   |
@@ -303,7 +304,7 @@ assert_that_type::<MyType>()
 assert_that("foobar").starts_with("foo").contains("ooba");
 assert_that(vec![1, 2, 3]).has_length(3).contains(2);
 assert_that((Ok(42)).is_ok().is_equal_to(42);
-assert_that(Person { id: 42 }).has_debug_value("Person { id: 42 }");
+assert_that(Person { id: 42 }).has_debug_string("Person { id: 42 }");
 
 // Chainable,
 assert_that("foobar")
