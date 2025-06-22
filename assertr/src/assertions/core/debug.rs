@@ -6,15 +6,31 @@ use core::fmt::Debug;
 /// Assertions for values implementing [Debug].
 pub trait DebugAssertions {
     /// Test that actual has the `expected` `Debug` representation.
-    fn has_debug_string(self, expected: impl AsRef<str>) -> Self;
+    fn have_debug_string(self, expected: impl AsRef<str>) -> Self;
+
+    /// Test that actual has the `expected` `Debug` representation.
+    fn has_debug_string(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.have_debug_string(expected)
+    }
 
     /// Test that actual and expected have the same `Debug` representation.
-    fn has_debug_value(self, expected: impl Debug) -> Self;
+    fn have_debug_value(self, expected: impl Debug) -> Self;
+
+    /// Test that actual and expected have the same `Debug` representation.
+    fn has_debug_value(self, expected: impl Debug) -> Self
+    where
+        Self: Sized,
+    {
+        self.have_debug_value(expected)
+    }
 }
 
 impl<T: Debug, M: Mode> DebugAssertions for AssertThat<'_, T, M> {
     #[track_caller]
-    fn has_debug_string(self, expected: impl AsRef<str>) -> Self {
+    fn have_debug_string(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();
 
         let actual_string = format!("{:?}", self.actual());
@@ -37,7 +53,7 @@ impl<T: Debug, M: Mode> DebugAssertions for AssertThat<'_, T, M> {
     }
 
     #[track_caller]
-    fn has_debug_value(self, expected: impl Debug) -> Self {
+    fn have_debug_value(self, expected: impl Debug) -> Self {
         self.track_assertion();
 
         let actual_string = format!("{:?}", self.actual());
@@ -63,15 +79,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal() {
-            assert_that(42).has_debug_string("42");
-            assert_that(42).has_debug_string(&"42");
-            assert_that(42).has_debug_string("42".to_string());
-            assert_that(42).has_debug_string(&"42".to_string());
+            42.must().have_debug_string("42");
+            42.must().have_debug_string(&"42");
+            42.must().have_debug_string("42".to_string());
+            42.must().have_debug_string(&"42".to_string());
         }
 
         #[test]
         fn succeeds_when_equal_on_static_string_containing_escaped_characters() {
-            assert_that("\n").has_debug_string(r#"\n"#);
+            "\n".must().have_debug_string(r#"\n"#);
         }
 
         #[test]
@@ -79,7 +95,7 @@ mod tests {
             #[derive(Debug)]
             struct Data(#[expect(unused)] &'static str);
 
-            assert_that(Data("\n")).has_debug_string(r#"Data("\n")"#);
+            Data("\n").must().have_debug_string(r#"Data("\n")"#);
         }
 
         #[test]
@@ -103,17 +119,17 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_same_value() {
-                assert_that(42).has_debug_value(42);
-                assert_that(42).has_debug_value(&42);
+                42.must().have_debug_value(42);
+                42.must().have_debug_value(&42);
             }
 
             // Although `has_debug_string` should be used instead!
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(42).has_debug_value("42");
-                assert_that(42).has_debug_value(&"42");
-                assert_that(42).has_debug_value("42".to_string());
-                assert_that(42).has_debug_value(&"42".to_string());
+                42.must().have_debug_value("42");
+                42.must().have_debug_value(&"42");
+                42.must().have_debug_value("42".to_string());
+                42.must().have_debug_value(&"42".to_string());
             }
 
             #[test]

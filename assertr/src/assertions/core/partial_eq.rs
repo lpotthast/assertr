@@ -6,10 +6,19 @@ use indoc::writedoc;
 use crate::{AssertThat, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking};
 
 pub trait PartialEqAssertions<T> {
-    fn is_equal_to<E>(self, expected: E) -> Self
+    fn be_equal_to<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E> + Debug,
         E: Debug;
+
+    fn is_equal_to<E>(self, expected: E) -> Self
+    where
+        T: AssertrPartialEq<E> + Debug,
+        E: Debug,
+        Self: Sized,
+    {
+        self.be_equal_to(expected)
+    }
 
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
@@ -19,7 +28,7 @@ pub trait PartialEqAssertions<T> {
 
 impl<T, M: Mode> PartialEqAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
-    fn is_equal_to<E>(self, expected: E) -> Self
+    fn be_equal_to<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E> + Debug,
         E: Debug,

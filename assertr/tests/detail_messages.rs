@@ -1,6 +1,6 @@
-use indoc::formatdoc;
-
+use assertr::IntoAssertContext;
 use assertr::prelude::*;
+use indoc::formatdoc;
 
 #[derive(Debug, PartialEq)]
 struct Person {
@@ -22,7 +22,7 @@ fn test() {
             },
         )
         .capture_failures()
-        .assert_that_it()
+        .assert()
         .contains_exactly::<String>([
             formatdoc! {r#"
                 -------- assertr --------

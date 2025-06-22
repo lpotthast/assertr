@@ -5,28 +5,49 @@ use crate::{AssertThat, Mode};
 
 /// Assertions for heap-allocated, owned [String]s.
 pub trait StringAssertions {
-    fn contains(self, expected: impl AsRef<str>) -> Self;
+    fn contain(self, expected: impl AsRef<str>) -> Self;
 
-    fn starts_with(self, expected: impl AsRef<str>) -> Self;
+    fn contains(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.contain(expected)
+    }
 
-    fn ends_with(self, expected: impl AsRef<str>) -> Self;
+    fn start_with(self, expected: impl AsRef<str>) -> Self;
+
+    fn starts_with(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.start_with(expected)
+    }
+
+    fn end_with(self, expected: impl AsRef<str>) -> Self;
+
+    fn ends_with(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.end_with(expected)
+    }
 }
 
 impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
     #[track_caller]
-    fn contains(self, expected: impl AsRef<str>) -> Self {
+    fn contain(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).contains(expected);
         self
     }
 
     #[track_caller]
-    fn starts_with(self, expected: impl AsRef<str>) -> Self {
+    fn start_with(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).starts_with(expected);
         self
     }
 
     #[track_caller]
-    fn ends_with(self, expected: impl AsRef<str>) -> Self {
+    fn end_with(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).ends_with(expected);
         self
     }
@@ -34,15 +55,15 @@ impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
 
 #[cfg(test)]
 mod tests {
-    mod contains {
+    mod contain {
         use crate::prelude::*;
         use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_expected_is_contained() {
-            assert_that(String::from("foobar")).contains("foo");
-            assert_that(String::from("foobar")).contains("bar");
-            assert_that(String::from("foobar")).contains("oob");
+            String::from("foobar").must().contain("foo");
+            String::from("foobar").must().contain("bar");
+            String::from("foobar").must().contain("oob");
         }
 
         #[test]
@@ -65,13 +86,13 @@ mod tests {
         }
     }
 
-    mod starts_with {
+    mod start_with {
         use crate::prelude::*;
         use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_start_matches() {
-            assert_that(String::from("foo bar baz")).starts_with("foo b");
+            String::from("foo bar baz").must().start_with("foo b");
         }
 
         #[test]
@@ -94,13 +115,13 @@ mod tests {
         }
     }
 
-    mod ends_with {
+    mod end_with {
         use crate::prelude::*;
         use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_start_matches() {
-            assert_that(String::from("foo bar baz")).ends_with("r baz");
+            String::from("foo bar baz").must().end_with("r baz");
         }
 
         #[test]

@@ -5,12 +5,19 @@ use crate::assertions::core::strip_quotation_marks;
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 pub trait DisplayAssertions {
-    fn has_display_value(self, expected: impl Display) -> Self;
+    fn have_display_value(self, expected: impl Display) -> Self;
+
+    fn has_display_value(self, expected: impl Display) -> Self
+    where
+        Self: Sized,
+    {
+        self.have_display_value(expected)
+    }
 }
 
 impl<T: Display, M: Mode> DisplayAssertions for AssertThat<'_, T, M> {
     #[track_caller]
-    fn has_display_value(self, expected: impl Display) -> Self {
+    fn have_display_value(self, expected: impl Display) -> Self {
         self.track_assertion();
 
         let actual_string = format!("{}", self.actual());
@@ -39,12 +46,12 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_same_value() {
-                assert_that(42).has_display_value(42);
+                42.must().have_display_value(42);
             }
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(42).has_display_value("42");
+                42.must().have_display_value("42");
             }
 
             #[test]

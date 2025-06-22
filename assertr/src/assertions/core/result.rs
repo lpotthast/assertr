@@ -2,7 +2,21 @@ use crate::{AssertThat, actual::Actual, mode::Mode, tracking::AssertionTracking}
 use core::fmt::Debug;
 
 pub trait ResultAssertions<'t, M: Mode, T, E> {
+    fn be_ok(self) -> AssertThat<'t, T, M>
+    where
+        T: Debug,
+        E: Debug;
+
     fn is_ok(self) -> AssertThat<'t, T, M>
+    where
+        T: Debug,
+        E: Debug,
+        Self: Sized,
+    {
+        self.be_ok()
+    }
+
+    fn be_err(self) -> AssertThat<'t, E, M>
     where
         T: Debug,
         E: Debug;
@@ -10,19 +24,43 @@ pub trait ResultAssertions<'t, M: Mode, T, E> {
     fn is_err(self) -> AssertThat<'t, E, M>
     where
         T: Debug,
-        E: Debug;
+        E: Debug,
+        Self: Sized,
+    {
+        self.be_err()
+    }
 
-    fn is_ok_satisfying<A>(self, assertions: A) -> Self
+    fn be_ok_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
         A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
 
-    fn is_err_satisfying<A>(self, assertions: A) -> Self
+    fn is_ok_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>),
+        Self: Sized,
+    {
+        self.be_ok_satisfying(assertions)
+    }
+
+    fn be_err_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
         A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
+
+    fn is_err_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>),
+        Self: Sized,
+    {
+        self.be_err_satisfying(assertions)
+    }
 }
 
 // Assertions for generic result values.
@@ -31,7 +69,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
     #[track_caller]
-    fn is_ok(self) -> AssertThat<'t, T, M>
+    fn be_ok(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
         E: Debug,
@@ -56,7 +94,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained error value.
     #[track_caller]
-    fn is_err(self) -> AssertThat<'t, E, M>
+    fn be_err(self) -> AssertThat<'t, E, M>
     where
         T: Debug,
         E: Debug,
@@ -78,7 +116,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     }
 
     #[track_caller]
-    fn is_ok_satisfying<A>(self, assertions: A) -> Self
+    fn be_ok_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
@@ -98,7 +136,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     }
 
     #[track_caller]
-    fn is_err_satisfying<A>(self, assertions: A) -> Self
+    fn be_err_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
@@ -126,15 +164,16 @@ mod tests {
 
     #[test]
     fn is_ok_succeeds_when_ok() {
-        assert_that(Result::<(), ()>::Ok(())).is_ok();
+        Result::<(), ()>::Ok(()).must().be_ok();
     }
 
     #[test]
     fn is_ok_panics_when_error() {
         assert_that_panic_by(|| {
-            assert_that(Result::<i32, String>::Err("someError".to_owned()))
+            Result::<i32, String>::Err("someError".to_owned())
+                .must()
                 .with_location(false)
-                .is_ok();
+                .be_ok();
         })
         .has_type::<String>()
         .is_equal_to(formatdoc! {r#"
@@ -150,7 +189,7 @@ mod tests {
 
     #[test]
     fn is_err_succeeds_when_error() {
-        assert_that(Result::<(), ()>::Err(())).is_err();
+        Result::<(), ()>::Err(()).must().be_err();
     }
 
     #[test]
@@ -174,14 +213,14 @@ mod tests {
 
     #[test]
     fn is_ok_satisfying_succeeds_when_ok() {
-        assert_that(Result::<i32, ()>::Ok(42))
+        Result::<i32, ()>::Ok(42)
+            .should()
             .with_location(false)
-            .with_capture()
             .is_ok_satisfying(|ok_value| {
                 ok_value.is_greater_than(&9000);
             })
             .capture_failures()
-            .assert_that_it()
+            .assert()
             .contains_exactly::<String>([formatdoc! {"
                 -------- assertr --------
                 Actual: 42

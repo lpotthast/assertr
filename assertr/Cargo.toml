@@ -35,6 +35,7 @@ serde = { version = "1.0.218", optional = true, features = ["derive"] }
 serde_json = { version = "1.0.140", optional = true }
 toml = { version = "0.8.20", optional = true }
 tokio = { version = "1.43.0", optional = true, features = ["full"] }
+impls = "1.0.3"
 
 [dev-dependencies]
 assertr = { path = ".", features = ["std", "derive", "jiff", "reqwest", "tokio", "serde"] }

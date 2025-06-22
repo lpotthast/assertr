@@ -36,8 +36,7 @@ pub mod prelude {
     pub use assertr_derive::AssertrEq;
 
     pub use crate::AssertThat;
-    pub use crate::AssertingThat;
-    pub use crate::AssertingThatRef;
+    pub use crate::IntoAssertContext;
     pub use crate::any;
     pub use crate::assert_that;
     #[cfg(feature = "std")]
@@ -92,13 +91,101 @@ pub struct PanicValue(Box<dyn Any>);
 #[track_caller]
 #[must_use]
 pub fn assert_that<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
-    AssertThat::new(Actual::Owned(actual))
+    AssertThat::new_panicking(Actual::Owned(actual))
 }
 
 #[track_caller]
 #[must_use]
 pub fn assert_that_ref<T>(actual: &T) -> AssertThat<T, Panic> {
-    AssertThat::new(Actual::Borrowed(actual))
+    AssertThat::new_panicking(Actual::Borrowed(actual))
+}
+
+/// Entrypoint that handles references.
+#[macro_export]
+macro_rules! assert_that {
+    ($expr:expr) => {
+        $crate::IntoAssertContext::assert($expr)
+    };
+}
+
+pub trait IntoAssertContext<'t, T> {
+    fn assert(self) -> AssertThat<'t, T, Panic>;
+    fn assert_ref(&'t self) -> AssertThat<'t, T, Panic>;
+
+    fn must(self) -> AssertThat<'t, T, Panic>;
+    fn must_ref(&'t self) -> AssertThat<'t, T, Panic>;
+
+    fn should(self) -> AssertThat<'t, T, Capture>;
+    fn should_ref(&'t self) -> AssertThat<'t, T, Capture>;
+}
+
+impl<'t, T> IntoAssertContext<'t, T> for T {
+    fn assert(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Owned(self))
+    }
+    fn assert_ref(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+
+    fn must(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Owned(self))
+    }
+    fn must_ref(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+
+    fn should(self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Owned(self))
+    }
+    fn should_ref(&'t self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
+}
+
+impl<'t, T> IntoAssertContext<'t, T> for &'t T {
+    fn assert(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+    fn assert_ref(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+
+    fn must(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+    fn must_ref(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+
+    fn should(self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
+    fn should_ref(&'t self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
+}
+
+impl<'t, T> IntoAssertContext<'t, T> for &'t mut T {
+    fn assert(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+    fn assert_ref(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+
+    fn must(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+    fn must_ref(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+
+    fn should(self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
+    fn should_ref(&'t self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
 }
 
 #[track_caller]
@@ -131,62 +218,9 @@ impl<T> Type<T> {
 }
 
 pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
-    AssertThat::new(Actual::Owned(Type {
+    AssertThat::new_panicking(Actual::Owned(Type {
         phantom: Default::default(),
     }))
-}
-
-pub trait AssertingThat {
-    fn assert_that<'t, U>(self, map: impl Fn(Self) -> U) -> AssertThat<'t, U, Panic>
-    where
-        Self: Sized;
-
-    fn assert_that_it<'t>(self) -> AssertThat<'t, Self, Panic>
-    where
-        Self: Sized;
-}
-
-impl<T> AssertingThat for T {
-    fn assert_that<'t, U>(self, map: impl Fn(T) -> U) -> AssertThat<'t, U, Panic>
-    where
-        Self: Sized,
-    {
-        assert_that(map(self))
-    }
-
-    fn assert_that_it<'t>(self) -> AssertThat<'t, Self, Panic> {
-        assert_that(self)
-    }
-}
-
-pub trait AssertingThatRef {
-    type Owned;
-
-    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<U, Panic>
-    where
-        Self: Sized;
-
-    fn assert_that_it(&self) -> AssertThat<Self::Owned, Panic>
-    where
-        Self: Sized;
-}
-
-impl<T> AssertingThatRef for &T {
-    type Owned = T;
-
-    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<U, Panic>
-    where
-        Self: Sized,
-    {
-        assert_that_ref(map(self))
-    }
-
-    fn assert_that_it(&self) -> AssertThat<Self::Owned, Panic>
-    where
-        Self: Sized,
-    {
-        assert_that_ref(self)
-    }
 }
 
 /// `AssertThat` is the core structure used for assertions. It allows developers to perform
@@ -258,7 +292,7 @@ impl<T, M: Mode> RefUnwindSafe for AssertThat<'_, T, M> {}
 
 impl<'t, T> AssertThat<'t, T, Panic> {
     #[track_caller]
-    pub(crate) const fn new(actual: Actual<'t, T>) -> Self {
+    pub(crate) const fn new_panicking(actual: Actual<'t, T>) -> Self {
         AssertThat {
             parent: None,
             actual,
@@ -267,7 +301,23 @@ impl<'t, T> AssertThat<'t, T, Panic> {
             print_location: true,
             number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
-            mode: RefCell::new(Panic { derived: false }),
+            mode: RefCell::new(Panic::const_default()),
+        }
+    }
+}
+
+impl<'t, T> AssertThat<'t, T, Capture> {
+    #[track_caller]
+    pub(crate) const fn new_capturing(actual: Actual<'t, T>) -> Self {
+        AssertThat {
+            parent: None,
+            actual,
+            subject_name: None,
+            detail_messages: RefCell::new(Vec::new()),
+            print_location: true,
+            number_of_assertions: RefCell::new(NumberOfAssertions::new()),
+            failures: RefCell::new(Vec::new()),
+            mode: RefCell::new(Capture::const_default()),
         }
     }
 }
@@ -653,7 +703,8 @@ mod tests {
     }
 
     #[test]
-    fn asserting_that_this_allows_entering_assertion_context() {
-        42.assert_that_it().is_equal_to(42);
+    fn allows_fluent_entry_into_assertion_context() {
+        42.assert_ref().is_equal_to(42);
+        42.assert().is_equal_to(42);
     }
 }

@@ -8,7 +8,26 @@ pub trait OptionAssertions<'t, T, M: Mode> {
     /// This is a terminal operation on the contained `Option`,
     /// as there is nothing meaningful to do with the option if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
+    fn be_some(self) -> AssertThat<'t, T, M>
+    where
+        T: Debug;
+
+    /// Test if this option is of the `Some` variant.
+    /// This is a terminal operation on the contained `Option`,
+    /// as there is nothing meaningful to do with the option if its variant was ensured.
+    /// This allows you to chain additional expectations on the contained success value.
     fn is_some(self) -> AssertThat<'t, T, M>
+    where
+        T: Debug,
+        Self: Sized,
+    {
+        self.be_some()
+    }
+
+    /// Test if this option is of the `None` variant.
+    /// This is a terminal operation on the contained `Option`,
+    /// as there is nothing meaningful to do with the option after its variant was ensured.
+    fn be_none(self) -> AssertThat<'t, (), M>
     where
         T: Debug;
 
@@ -17,12 +36,16 @@ pub trait OptionAssertions<'t, T, M: Mode> {
     /// as there is nothing meaningful to do with the option after its variant was ensured.
     fn is_none(self) -> AssertThat<'t, (), M>
     where
-        T: Debug;
+        T: Debug,
+        Self: Sized,
+    {
+        self.be_none()
+    }
 }
 
 impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M> {
     #[track_caller]
-    fn is_some(self) -> AssertThat<'t, T, M>
+    fn be_some(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
     {
@@ -42,7 +65,7 @@ impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M>
     }
 
     #[track_caller]
-    fn is_none(self) -> AssertThat<'t, (), M>
+    fn be_none(self) -> AssertThat<'t, (), M>
     where
         T: Debug,
     {
@@ -67,9 +90,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_some() {
-            assert_that(Option::<i32>::Some(42))
-                .is_some()
-                .is_equal_to(42);
+            Option::<i32>::Some(42).must().be_some().be_equal_to(42);
         }
 
         #[test]
@@ -103,9 +124,10 @@ mod tests {
         #[test]
         fn panics_when_some() {
             assert_that_panic_by(|| {
-                assert_that(Option::<i32>::Some(42))
+                Option::<i32>::Some(42)
+                    .must()
                     .with_location(false)
-                    .is_none()
+                    .be_none()
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {"

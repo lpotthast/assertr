@@ -13,7 +13,15 @@ pub trait RefCellAssertions {
     fn is_mutably_borrowed(self) -> Self;
 
     /// Check that the RefCell is not mutably borrowed, wither by being not borrowed at all, or only borrowed immutably.
-    fn is_not_mutably_borrowed(self) -> Self;
+    fn not_be_mutably_borrowed(self) -> Self;
+
+    /// Check that the RefCell is not mutably borrowed, wither by being not borrowed at all, or only borrowed immutably.
+    fn is_not_mutably_borrowed(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.not_be_mutably_borrowed()
+    }
 }
 
 impl<T: Debug, M: Mode> RefCellAssertions for AssertThat<'_, RefCell<T>, M> {
@@ -50,7 +58,7 @@ impl<T: Debug, M: Mode> RefCellAssertions for AssertThat<'_, RefCell<T>, M> {
     }
 
     #[track_caller]
-    fn is_not_mutably_borrowed(self) -> Self {
+    fn not_be_mutably_borrowed(self) -> Self {
         self.track_assertion();
         let actual = self.actual();
         if actual.try_borrow_mut().is_ok() {
@@ -78,7 +86,7 @@ mod tests {
         fn succeeds_when_borrowed() {
             let cell = RefCell::new(42);
             let borrow = cell.borrow();
-            assert_that_ref(&cell).is_borrowed();
+            assert_that!(&cell).is_borrowed();
             drop(borrow);
         }
 
@@ -86,14 +94,14 @@ mod tests {
         fn succeeds_when_mutably_borrowed() {
             let cell = RefCell::new(42);
             let borrow = cell.borrow_mut();
-            assert_that_ref(&cell).is_borrowed();
+            assert_that!(&cell).is_borrowed();
             drop(borrow);
         }
 
         #[test]
         fn panics_when_not_borrowed() {
             let cell = RefCell::new(42);
-            assert_that_panic_by(|| assert_that_ref(&cell).with_location(false).is_borrowed())
+            assert_that_panic_by(|| assert_that!(&cell).with_location(false).is_borrowed())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -115,8 +123,8 @@ mod tests {
         fn succeeds_when_mutably_borrowed() {
             let cell = RefCell::new(42);
             let borrow = cell.borrow_mut();
-            assert_that_ref(&cell).is_borrowed();
-            assert_that_ref(&cell).is_mutably_borrowed();
+            assert_that!(&cell).is_borrowed();
+            assert_that!(&cell).is_mutably_borrowed();
             drop(borrow);
         }
     }
@@ -129,7 +137,7 @@ mod tests {
         fn succeeds_when_not_borrowed_at_all() {
             let cell = RefCell::new(42);
             let borrow = cell.borrow();
-            assert_that_ref(&cell).is_not_mutably_borrowed();
+            cell.must_ref().not_be_mutably_borrowed();
             drop(borrow);
         }
 
@@ -137,7 +145,7 @@ mod tests {
         fn succeeds_when_immutably_borrowed() {
             let cell = RefCell::new(42);
             let borrow = cell.borrow();
-            assert_that_ref(&cell).is_not_mutably_borrowed();
+            assert_that!(&cell).is_not_mutably_borrowed();
             drop(borrow);
         }
     }
