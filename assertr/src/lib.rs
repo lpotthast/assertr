@@ -581,7 +581,9 @@ impl<T1: AssertrPartialEq<T2>, T2> AssertrPartialEq<[T2]> for [T1] {
 
 // Note: T does not necessarily need to be `PartialEq`.
 // T might itself be a type we want to compare using AssertrEq instead of PartialEq!
+#[derive(Default)]
 pub enum Eq<T> {
+    #[default]
     Any,
     Eq(T),
 }
