@@ -146,8 +146,7 @@ impl HasLength for Range<usize> {
 
 impl HasLength for RangeInclusive<usize> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s
+        self.end() - self.start()
     }
 
     fn is_empty(&self) -> bool {
