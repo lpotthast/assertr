@@ -107,7 +107,7 @@ pub fn store(input: TokenStream) -> TokenStream {
     });
 
     Into::into(quote! {
-        #[derive(::core::fmt::Debug)]
+        #[derive(::core::fmt::Debug, ::core::default::Default)]
         pub struct #eq_struct_ident {
             #(#eq_struct_fields),*
         }
