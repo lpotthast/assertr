@@ -402,11 +402,11 @@ mod tests {
                 // inverted range
                 assert_that(9_i64..1_i64).has_length(8);
                 assert_that(9_i64..=1_i64).has_length(9);
-                
+
                 // negative range
                 assert_that(-9_i64..-1_i64).has_length(8);
                 assert_that(-9_i64..=-1_i64).has_length(9);
-                
+
                 // across zero
                 assert_that(-4_i64..4_i64).has_length(8);
                 assert_that(-4_i64..=4_i64).has_length(9);
