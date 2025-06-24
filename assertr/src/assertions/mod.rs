@@ -136,198 +136,118 @@ impl<V: Debug> HasLength for &::std::collections::HashSet<V> {
 
 impl HasLength for Range<usize> {
     fn length(&self) -> usize {
-        (self.end - 1) - self.start
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        if self.start < self.end {
+            self.end - self.start
+        } else {
+            self.start - self.end
+        }
     }
 }
 
 impl HasLength for RangeInclusive<usize> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        let diff = if self.start() < self.end() {
+            self.end() - self.start()
+        } else {
+            self.start() - self.end()
+        };
+        diff + 1
     }
 }
 
 impl HasLength for Range<u8> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (self.end as i16 - self.start as i16).unsigned_abs() as usize
     }
 }
 
 impl HasLength for RangeInclusive<u8> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (*self.end() as i16 - *self.start() as i16).unsigned_abs() as usize + 1
     }
 }
 
 impl HasLength for Range<u16> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (self.end as i32 - self.start as i32).unsigned_abs() as usize
     }
 }
 
 impl HasLength for RangeInclusive<u16> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (*self.end() as i32 - *self.start() as i32).unsigned_abs() as usize + 1
     }
 }
 
 impl HasLength for Range<u32> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (self.end as i64 - self.start as i64).unsigned_abs() as usize
     }
 }
 
 impl HasLength for RangeInclusive<u32> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (*self.end() as i64 - *self.start() as i64).unsigned_abs() as usize + 1
     }
 }
 
 impl HasLength for Range<u64> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (self.end as i128 - self.start as i128).unsigned_abs() as usize
     }
 }
 
 impl HasLength for RangeInclusive<u64> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (*self.end() as i128 - *self.start() as i128).unsigned_abs() as usize + 1
     }
 }
 
 impl HasLength for Range<i8> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (self.end - self.start).unsigned_abs() as usize
     }
 }
 
 impl HasLength for RangeInclusive<i8> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (*self.end() - *self.start()).unsigned_abs() as usize + 1
     }
 }
 
 impl HasLength for Range<i16> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (self.end - self.start).unsigned_abs() as usize
     }
 }
 
 impl HasLength for RangeInclusive<i16> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (*self.end() - *self.start()).unsigned_abs() as usize + 1
     }
 }
 
 impl HasLength for Range<i32> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (self.end - self.start).unsigned_abs() as usize
     }
 }
 
 impl HasLength for RangeInclusive<i32> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (*self.end() - *self.start()).unsigned_abs() as usize + 1
     }
 }
 
 impl HasLength for Range<i64> {
     fn length(&self) -> usize {
-        let s = (self.end - 1) - self.start;
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (self.end - self.start).unsigned_abs() as usize
     }
 }
 
 impl HasLength for RangeInclusive<i64> {
     fn length(&self) -> usize {
-        let s = self.end() - self.start();
-        s as usize
-    }
-
-    fn is_empty(&self) -> bool {
-        self.length() == 0
+        (*self.end() - *self.start()).unsigned_abs() as usize + 1
     }
 }
 
@@ -340,8 +260,12 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_usize..9_usize).has_length(8);
-                assert_that(0_usize..=9_usize).has_length(9);
+                assert_that(1_usize..9_usize).has_length(8);
+                assert_that(1_usize..=9_usize).has_length(9);
+
+                // inverted range
+                assert_that(9_usize..1_usize).has_length(8);
+                assert_that(9_usize..=1_usize).has_length(9);
             }
         }
 
@@ -350,8 +274,12 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_u8..9_u8).has_length(8);
-                assert_that(0_u8..=9_u8).has_length(9);
+                assert_that(1_u8..9_u8).has_length(8);
+                assert_that(1_u8..=9_u8).has_length(9);
+
+                // inverted range
+                assert_that(9_u8..1_u8).has_length(8);
+                assert_that(9_u8..=1_u8).has_length(9);
             }
         }
 
@@ -360,8 +288,12 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_u16..9_u16).has_length(8);
-                assert_that(0_u16..=9_u16).has_length(9);
+                assert_that(1_u16..9_u16).has_length(8);
+                assert_that(1_u16..=9_u16).has_length(9);
+
+                // inverted range
+                assert_that(9_u16..1_u16).has_length(8);
+                assert_that(9_u16..=1_u16).has_length(9);
             }
         }
 
@@ -370,8 +302,12 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_u32..9_u32).has_length(8);
-                assert_that(0_u32..=9_u32).has_length(9);
+                assert_that(1_u32..9_u32).has_length(8);
+                assert_that(1_u32..=9_u32).has_length(9);
+
+                // inverted range
+                assert_that(9_u32..1_u32).has_length(8);
+                assert_that(9_u32..=1_u32).has_length(9);
             }
         }
 
@@ -380,8 +316,12 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_u64..9_u64).has_length(8);
-                assert_that(0_u64..=9_u64).has_length(9);
+                assert_that(1_u64..9_u64).has_length(8);
+                assert_that(1_u64..=9_u64).has_length(9);
+
+                // inverted range
+                assert_that(9_u64..1_u64).has_length(8);
+                assert_that(9_u64..=1_u64).has_length(9);
             }
         }
 
@@ -390,8 +330,20 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_i8..9_i8).has_length(8);
-                assert_that(0_i8..=9_i8).has_length(9);
+                assert_that(1_i8..9_i8).has_length(8);
+                assert_that(1_i8..=9_i8).has_length(9);
+
+                // inverted range
+                assert_that(9_i8..1_i8).has_length(8);
+                assert_that(9_i8..=1_i8).has_length(9);
+
+                // negative range
+                assert_that(-9_i8..-1_i8).has_length(8);
+                assert_that(-9_i8..=-1_i8).has_length(9);
+
+                // across zero
+                assert_that(-4_i8..4_i8).has_length(8);
+                assert_that(-4_i8..=4_i8).has_length(9);
             }
         }
 
@@ -400,8 +352,20 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_i16..9_i16).has_length(8);
-                assert_that(0_i16..=9_i16).has_length(9);
+                assert_that(1_i16..9_i16).has_length(8);
+                assert_that(1_i16..=9_i16).has_length(9);
+
+                // inverted range
+                assert_that(9_i16..1_i16).has_length(8);
+                assert_that(9_i16..=1_i16).has_length(9);
+
+                // negative range
+                assert_that(-9_i16..-1_i16).has_length(8);
+                assert_that(-9_i16..=-1_i16).has_length(9);
+
+                // across zero
+                assert_that(-4_i16..4_i16).has_length(8);
+                assert_that(-4_i16..=4_i16).has_length(9);
             }
         }
 
@@ -410,8 +374,20 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_i32..9_i32).has_length(8);
-                assert_that(0_i32..=9_i32).has_length(9);
+                assert_that(1_i32..9_i32).has_length(8);
+                assert_that(1_i32..=9_i32).has_length(9);
+
+                // inverted range
+                assert_that(9_i32..1_i32).has_length(8);
+                assert_that(9_i32..=1_i32).has_length(9);
+
+                // negative range
+                assert_that(-9_i32..-1_i32).has_length(8);
+                assert_that(-9_i32..=-1_i32).has_length(9);
+
+                // across zero
+                assert_that(-4_i32..4_i32).has_length(8);
+                assert_that(-4_i32..=4_i32).has_length(9);
             }
         }
 
@@ -420,8 +396,20 @@ mod tests {
 
             #[test]
             fn works_on_range_and_inclusive_range() {
-                assert_that(0_i64..9_i64).has_length(8);
-                assert_that(0_i64..=9_i64).has_length(9);
+                assert_that(1_i64..9_i64).has_length(8);
+                assert_that(1_i64..=9_i64).has_length(9);
+
+                // inverted range
+                assert_that(9_i64..1_i64).has_length(8);
+                assert_that(9_i64..=1_i64).has_length(9);
+                
+                // negative range
+                assert_that(-9_i64..-1_i64).has_length(8);
+                assert_that(-9_i64..=-1_i64).has_length(9);
+                
+                // across zero
+                assert_that(-4_i64..4_i64).has_length(8);
+                assert_that(-4_i64..=4_i64).has_length(9);
             }
         }
     }
