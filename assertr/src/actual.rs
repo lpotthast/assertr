@@ -9,7 +9,7 @@ pub enum Actual<'t, T> {
 impl<'t, T> Actual<'t, T> {
     pub fn unwrap_owned(self) -> T {
         match self {
-            Actual::Borrowed(_t) => panic!("borrowed"),
+            Actual::Borrowed(_t) => panic!("Cannot `unwrap_owned` a borrowed value."),
             Actual::Owned(t) => t,
         }
     }

@@ -269,21 +269,6 @@ pub struct AssertThat<'t, T, M: Mode> {
     mode: RefCell<M>,
 }
 
-/*
-// TODO: Consider this
-pub struct DerivedAssertThat<'t, T> {
-    // Derived assertions can be created. Calling `.fail*` on them should propagate to the root assertion!
-    parent: Option<&'t dyn DynAssertThat>,
-
-    actual: Actual<'t, T>,
-
-    subject_name: Option<String>,
-    detail_messages: RefCell<Vec<String>>,
-
-    num_assertions: RefCell<NumAssertions>,
-}
-*/
-
 pub(crate) trait DynAssertThat: Fallible + WithDetail + AssertionTracking {}
 impl<T, M: Mode> DynAssertThat for AssertThat<'_, T, M> {}
 
@@ -323,8 +308,33 @@ impl<'t, T> AssertThat<'t, T, Capture> {
 }
 
 impl<T> AssertThat<'_, T, Capture> {
+    /// Extracts all assertion failures captured until now.
+    ///
+    /// Allows this `AssertThat` to be dropped again without raising a panic.
+    ///
+    /// ```rust
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that(42)
+    ///     .with_capture()
+    ///     .is_negative()
+    ///     .is_equal_to(43)
+    ///     .capture_failures()
+    ///     .assert_that_it()
+    ///     .has_length(2);
+    /// ```
     #[must_use]
-    pub fn capture_failures(self) -> Vec<String> {
+    pub fn capture_failures(mut self) -> Vec<String> {
+        self.take_failures()
+    }
+
+    /// Extracts all assertion failures captured until now.
+    ///
+    /// Allows this `AssertThat` to be dropped again without raising a panic.
+    ///
+    /// **Prefer `capture_failures` if you don't require ownership after extraction.**
+    #[must_use]
+    pub fn take_failures(&mut self) -> Vec<String> {
         let mut mode = self.mode.borrow_mut();
         assert!(
             !mode.captured,
@@ -488,7 +498,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
-    /// Gives the `actual` value contain in this assertion a descriptive name.
+    /// Gives the `actual` value contained in this assertion a descriptive name.
     /// This name will be part of panic messages when set.
     #[allow(dead_code)]
     pub fn with_subject_name(mut self, subject_name: impl Into<String>) -> Self {
@@ -496,14 +506,27 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
+    /// Control whether the location (file, line and column) is shown on assertion failure.
+    ///
+    /// It can be helpful to call `.with_location(false)` when you want to test a panic message
+    /// for exact equality and do not want to be bothered by constantly differing line and column
+    /// numbers for the assert-location.
+    #[allow(dead_code)]
+    pub fn with_location(mut self, value: bool) -> Self {
+        self.print_location = value;
+        self
+    }
+}
+
+/* Mode changes */
+
+impl<'t, T> AssertThat<'t, T, Panic> {
     /// Control whether the location is shown on assertion failure.
     ///
     /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
     #[allow(dead_code)]
     pub fn with_capture(self) -> AssertThat<'t, T, Capture> {
-        *self.mode.borrow_mut() = M::default();
-
         AssertThat {
             parent: self.parent,
             actual: self.actual,
@@ -518,16 +541,63 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             }),
         }
     }
+}
 
-    /// Control whether the location (file, line and column) is shown on assertion failure.
+impl<'t, T> AssertThat<'t, T, Capture> {
+    /// Switch to non-capturing mode.
     ///
-    /// It can be helpful to call `.with_location(false)` when you want to test a panic message
-    /// for exact equality and do not want to be bothered by constantly differing line and column
-    /// numbers for the assert-location.
-    #[allow(dead_code)]
-    pub fn with_location(mut self, value: bool) -> Self {
-        self.print_location = value;
-        self
+    /// Panics if assertion failures were already captured!
+    // TODO: Add an easy woy in which users can check if assertion failures were recorded.
+    //  Or that none were recorded!
+    pub fn without_capture(mut self) -> AssertThat<'t, T, Panic> {
+        // Take out all assertion failures, marking the `Capture` as "captured".
+        // Assert that no failures exist.
+        use crate::assertions::core::length::LengthAssertions;
+        assert_that(self.take_failures())
+            .with_location(self.print_location)
+            .with_subject_name("Assertion failures")
+            .with_detail_message(
+                "You cannot unwrap the inner value if assertion failures were already recorded!",
+            )
+            .is_empty();
+
+        AssertThat {
+            parent: self.parent,
+            actual: self.actual,
+            subject_name: self.subject_name,
+            detail_messages: self.detail_messages,
+            print_location: self.print_location,
+            number_of_assertions: self.number_of_assertions,
+            failures: self.failures,
+            mode: RefCell::new(Panic {
+                derived: self.mode.borrow().derived,
+            }),
+        }
+    }
+}
+
+/* Unwrapping */
+
+impl<'t, T> AssertThat<'t, T, Panic> {
+    /// **Panics** Panics if the actual value was not owned.
+    // TODO: We could relax this by having `AssertThat` be generic over the type of actual value.
+    #[track_caller]
+    pub fn unwrap_inner(self) -> T {
+        self.actual.unwrap_owned()
+    }
+}
+
+impl<'t, T> AssertThat<'t, T, Capture> {
+    /// **Panics**
+    /// - If assertion errors are present.
+    /// - If the actual value is not owned.
+    // TODO: We could relax this by having `AssertThat` be generic over the type of actual value.
+    #[track_caller]
+    pub fn unwrap_inner(self) -> T {
+        // Switch to panicking behaviour, asserting that no failures were recorded.
+        let panicking = self.without_capture();
+
+        panicking.actual.unwrap_owned()
     }
 }
 
@@ -631,7 +701,9 @@ impl<T1: AssertrPartialEq<T2>, T2> AssertrPartialEq<[T2]> for [T1] {
 
 // Note: T does not necessarily need to be `PartialEq`.
 // T might itself be a type we want to compare using AssertrEq instead of PartialEq!
+#[derive(Default)]
 pub enum Eq<T> {
+    #[default]
     Any,
     Eq(T),
 }
@@ -700,6 +772,123 @@ mod tests {
         assert_that_panic_by(move || drop(assert))
             .has_type::<&str>()
             .is_equal_to("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!");
+    }
+
+    #[test]
+    fn without_capture_switches_to_panic_mode() {
+        let assert_capturing = assert_that(42)
+            .with_location(false)
+            .with_capture()
+            // Without this assertion, we would see a panic due to zero assertions being made.
+            .is_equal_to(42);
+
+        let _assert_panicking = assert_capturing.without_capture();
+    }
+
+    #[test]
+    fn without_capture_panics_when_assertion_failures_were_already_recorded() {
+        let assert_capturing = assert_that(42)
+            .with_location(false)
+            .with_capture()
+            // This records a failure.
+            .is_equal_to(43);
+
+        assert_that_panic_by(move || assert_capturing.without_capture())
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Subject: Assertion failures
+
+                Actual: alloc::vec::Vec<alloc::string::String> [
+                    "-------- assertr --------\nExpected: 43\n\n  Actual: 42\n-------- assertr --------\n",
+                ]
+
+                was expected to be empty, but it is not!
+
+                Details: [
+                    You cannot unwrap the inner value if assertion failures were already recorded!,
+                ]
+                -------- assertr --------
+            "#});
+    }
+
+    mod unwrap_inner {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn panics_on_borrowed_value_in_panic_mode() {
+            let value = String::from("foo");
+            let assert = assert_that_ref(&value)
+                .with_location(false)
+                // Avoid "number-of-assertions not greater 0" panic.
+                .is_equal_to("foo");
+
+            assert_that_panic_by(move || assert.unwrap_inner())
+                .has_type::<&str>()
+                .is_equal_to(formatdoc! {r#"Cannot `unwrap_owned` a borrowed value."#});
+        }
+
+        #[test]
+        fn panics_on_borrowed_value_in_capture_mode() {
+            let value = String::from("foo");
+            let assert = assert_that_ref(&value)
+                .with_location(false)
+                .with_capture()
+                // Avoid "number-of-assertions not greater 0" panic.
+                .is_equal_to("foo");
+
+            assert_that_panic_by(move || assert.unwrap_inner())
+                .has_type::<&str>()
+                .is_equal_to(formatdoc! {r#"Cannot `unwrap_owned` a borrowed value."#});
+        }
+
+        #[test]
+        fn succeeds_on_owned_value_in_panic_mode() {
+            let assert = assert_that(42)
+                .with_location(false)
+                // Avoid "number-of-assertions not greater 0" panic.
+                .is_equal_to(42);
+            let actual = assert.unwrap_inner();
+            assert_that(actual).is_equal_to(42);
+        }
+
+        #[test]
+        fn succeeds_on_owned_value_in_capture_mode_when_no_failures_were_recorded() {
+            let assert = assert_that(42)
+                .with_location(false)
+                .with_capture()
+                .has_display_value("42");
+            let actual = assert.unwrap_inner();
+            assert_that(actual).is_equal_to(42);
+        }
+
+        #[test]
+        fn panics_on_owned_value_in_capture_mode_when_failures_were_recorded() {
+            let assert = assert_that(42)
+                .with_location(false)
+                .with_capture()
+                // This records a failure.
+                .is_equal_to(43);
+
+            assert_that_panic_by(move || assert.unwrap_inner())
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Subject: Assertion failures
+
+                Actual: alloc::vec::Vec<alloc::string::String> [
+                    "-------- assertr --------\nExpected: 43\n\n  Actual: 42\n-------- assertr --------\n",
+                ]
+
+                was expected to be empty, but it is not!
+
+                Details: [
+                    You cannot unwrap the inner value if assertion failures were already recorded!,
+                ]
+                -------- assertr --------
+            "#});
+        }
     }
 
     #[test]

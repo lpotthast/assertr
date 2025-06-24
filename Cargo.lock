@@ -38,7 +38,7 @@ dependencies = [
 
 [[package]]
 name = "assertr"
-version = "0.3.1"
+version = "0.3.4"
 dependencies = [
  "assertr",
  "assertr-derive",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "assertr-derive"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "assertr",
  "darling",
