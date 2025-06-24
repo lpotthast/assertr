@@ -52,8 +52,13 @@ impl<T, M: Mode> AssertThat<'_, T, M> {
         let mut detail_messages = Vec::new();
         self.collect_messages(&mut detail_messages);
 
-        let msg = build_failure_message(self.print_location, detail_messages, failure)
-            .expect("no write error");
+        let msg = build_failure_message(
+            self.print_location,
+            self.subject_name.as_deref(),
+            detail_messages,
+            failure,
+        )
+        .expect("no write error");
 
         // TODO: Check is_capture in root! Do not allow with_capture() on derived asserts.
         match self.mode.borrow().is_capture() {
@@ -66,6 +71,7 @@ impl<T, M: Mode> AssertThat<'_, T, M> {
 #[track_caller]
 fn build_failure_message(
     print_location: bool,
+    subject_name: Option<&str>,
     detail_messages: Vec<String>,
     failure: impl Failure,
 ) -> Result<String, core::fmt::Error> {
@@ -81,6 +87,10 @@ fn build_failure_message(
             line = caller_location.line(),
             column = caller_location.column(),
         ));
+    }
+
+    if let Some(subject_name) = subject_name {
+        err.write_fmt(format_args!("Subject: {}\n\n", subject_name))?;
     }
 
     failure.write_to(&mut err)?;
