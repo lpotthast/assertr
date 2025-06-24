@@ -19,13 +19,29 @@ pub trait NumAssertions<T: Num> {
 
     fn is_multiplicative_identity(self) -> Self;
 
+    fn be_negative(self) -> Self
+    where
+        T: Signed;
+
     fn is_negative(self) -> Self
+    where
+        T: Signed,
+        Self: Sized,
+    {
+        self.be_negative()
+    }
+
+    fn be_positive(self) -> Self
     where
         T: Signed;
 
     fn is_positive(self) -> Self
     where
-        T: Signed;
+        T: Signed,
+        Self: Sized,
+    {
+        self.be_positive()
+    }
 
     /// Fails if actual is not in the range
     /// `[expected - allowed_deviation, expected + allowed_deviation]`.
@@ -107,7 +123,7 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
     }
 
     #[track_caller]
-    fn is_negative(self) -> Self
+    fn be_negative(self) -> Self
     where
         T: Signed,
     {
@@ -126,7 +142,7 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
     }
 
     #[track_caller]
-    fn is_positive(self) -> Self
+    fn be_positive(self) -> Self
     where
         T: Signed,
     {

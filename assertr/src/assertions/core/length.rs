@@ -11,7 +11,14 @@ pub trait LengthAssertions {
 
     fn is_not_empty(self) -> Self;
 
-    fn has_length(self, expected: usize) -> Self;
+    fn have_length(self, expected: usize) -> Self;
+
+    fn has_length(self, expected: usize) -> Self
+    where
+        Self: Sized,
+    {
+        self.have_length(expected)
+    }
 }
 
 impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
@@ -50,7 +57,7 @@ impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
     }
 
     #[track_caller]
-    fn has_length(self, expected: usize) -> Self {
+    fn have_length(self, expected: usize) -> Self {
         self.track_assertion();
         let actual_len = self.actual().length();
         if actual_len != expected {

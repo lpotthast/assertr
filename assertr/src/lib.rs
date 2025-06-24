@@ -315,13 +315,12 @@ impl<T> AssertThat<'_, T, Capture> {
     /// ```rust
     /// use assertr::prelude::*;
     ///
-    /// assert_that(42)
-    ///     .with_capture()
-    ///     .is_negative()
-    ///     .is_equal_to(43)
-    ///     .capture_failures()
-    ///     .assert_that_it()
-    ///     .has_length(2);
+    /// let failures = 42.should()
+    ///     .be_negative()
+    ///     .be_equal_to(43)
+    ///     .capture_failures();
+    /// 
+    /// failures.must().have_length(2);
     /// ```
     #[must_use]
     pub fn capture_failures(mut self) -> Vec<String> {
