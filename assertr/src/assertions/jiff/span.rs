@@ -8,10 +8,32 @@ use std::fmt::Write;
 pub trait SpanAssertions {
     fn is_zero(self) -> Self;
 
+    fn be_zero(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_zero()
+    }
+
     fn is_negative(self) -> Self;
+
+    fn be_negative(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_negative()
+    }
 
     /// Unlike the is_positive assertions on numerics, this fails for a span of 0!
     fn is_positive(self) -> Self;
+
+    /// Unlike the is_positive assertions on numerics, this fails for a span of 0!
+    fn be_positive(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_positive()
+    }
 }
 
 impl<M: Mode> SpanAssertions for AssertThat<'_, Span, M> {
@@ -79,14 +101,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(Span::new()).is_zero();
+            Span::new().must().be_zero();
         }
 
         #[test]
         fn panics_when_not_zero() {
             let duration: Span = 2.hours().minutes(30);
 
-            assert_that_panic_by(|| assert_that(duration).with_location(false).is_zero())
+            assert_that_panic_by(|| duration.assert().with_location(false).is_zero())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -109,14 +131,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(-2.hours().minutes(30)).is_negative();
+            (-2).hours().minutes(30).must().be_negative();
         }
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| assert_that(0.seconds()).with_location(false).is_negative())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                0.seconds().assert().with_location(false).is_negative();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected value to be negative. But was
 
@@ -128,9 +152,11 @@ mod tests {
         #[test]
         fn panics_when_positive() {
             assert_that_panic_by(|| {
-                assert_that(2.hours().minutes(30))
+                2.hours()
+                    .minutes(30)
+                    .assert()
                     .with_location(false)
-                    .is_negative()
+                    .is_negative();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -150,14 +176,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_positive() {
-            assert_that(2.hours().minutes(30)).is_positive();
+            2.hours().minutes(30).must().be_positive();
         }
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| assert_that(0.seconds()).with_location(false).is_positive())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                0.seconds().assert().with_location(false).is_positive();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected value to be positive. But was
 
@@ -169,9 +197,11 @@ mod tests {
         #[test]
         fn panics_when_negative() {
             assert_that_panic_by(|| {
-                assert_that(-2.hours().minutes(30))
+                (-2).hours()
+                    .minutes(30)
+                    .assert()
                     .with_location(false)
-                    .is_positive()
+                    .is_positive();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

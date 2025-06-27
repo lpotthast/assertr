@@ -29,5 +29,5 @@ fn main() {
     // This must compile without errors.
     // It should only compile when AssertrPartialEq
     // was not only implemented for Bar, but also for &Bar!
-    assert_that(bars_refs).contains(BarAssertrEq { id: any() });
+    bars_refs.must().contain(BarAssertrEq { id: any() });
 }

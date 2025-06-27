@@ -7,9 +7,30 @@ use crate::{AssertThat, Mode};
 pub trait StringAssertions {
     fn contains(self, expected: impl AsRef<str>) -> Self;
 
+    fn contain(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.contains(expected)
+    }
+
     fn starts_with(self, expected: impl AsRef<str>) -> Self;
 
+    fn start_with(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.starts_with(expected)
+    }
+
     fn ends_with(self, expected: impl AsRef<str>) -> Self;
+
+    fn end_with(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.ends_with(expected)
+    }
 }
 
 impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
@@ -40,15 +61,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_contained() {
-            assert_that(String::from("foobar")).contains("foo");
-            assert_that(String::from("foobar")).contains("bar");
-            assert_that(String::from("foobar")).contains("oob");
+            String::from("foobar").must().contain("foo");
+            String::from("foobar").must().contain("bar");
+            String::from("foobar").must().contain("oob");
         }
 
         #[test]
         fn panics_when_expected_is_not_contained() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                assert_that!(String::from("foo bar baz"))
                     .with_location(false)
                     .contains("42");
             })
@@ -71,13 +92,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_matches() {
-            assert_that(String::from("foo bar baz")).starts_with("foo b");
+            String::from("foo bar baz").must().start_with("foo b");
         }
 
         #[test]
         fn panics_when_start_is_different() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                assert_that!(String::from("foo bar baz"))
                     .with_location(false)
                     .starts_with("oo");
             })
@@ -100,13 +121,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_matches() {
-            assert_that(String::from("foo bar baz")).ends_with("r baz");
+            String::from("foo bar baz").must().end_with("r baz");
         }
 
         #[test]
         fn panics_when_start_is_different() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                assert_that!(String::from("foo bar baz"))
                     .with_location(false)
                     .ends_with("raz");
             })

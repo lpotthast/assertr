@@ -23,10 +23,25 @@ pub struct Panic {
     pub(crate) derived: bool,
 }
 
+impl Panic {
+    pub(crate) const fn const_default() -> Self {
+        Self { derived: false }
+    }
+}
+
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Capture {
     pub(crate) derived: bool,
     pub(crate) captured: bool,
+}
+
+impl Capture {
+    pub(crate) const fn const_default() -> Self {
+        Self {
+            derived: false,
+            captured: false,
+        }
+    }
 }
 
 impl Mode for Panic {

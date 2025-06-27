@@ -22,9 +22,10 @@ async fn is_able_to_access_derived_properties_without_breaking_the_call_chain() 
         meta: Metadata { alive: true },
     };
 
-    assert_that(person)
+    person
+        .must_owned()
         .map_async(|it| it.unwrap_owned().to_metadata())
         .await
         .map(|it| it.borrowed().alive.into())
-        .is_equal_to(true);
+        .be_equal_to(true);
 }

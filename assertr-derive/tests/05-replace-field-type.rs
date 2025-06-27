@@ -21,12 +21,12 @@ fn main() {
         bar: Bar { id: 42 },
     };
 
-    assert_that_ref(&foo).is_equal_to(FooAssertrEq {
+    foo.must().be_equal_to(FooAssertrEq {
         id: any(),
         bar: any(),
     });
 
-    assert_that_ref(&foo).is_equal_to(FooAssertrEq {
+    foo.must().be_equal_to(FooAssertrEq {
         id: eq(1),
         bar: eq(BarAssertrEq { id: eq(42) }),
     });

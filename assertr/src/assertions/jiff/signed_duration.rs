@@ -7,12 +7,36 @@ use std::fmt::Write;
 
 pub trait SignedDurationAssertions {
     fn is_zero(self) -> Self;
+    fn be_zero(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_zero()
+    }
 
     fn is_negative(self) -> Self;
+    fn be_negative(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_negative()
+    }
 
     fn is_positive(self) -> Self;
+    fn be_positive(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_positive()
+    }
 
     fn is_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self;
+    fn be_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_close_to(expected, allowed_deviation)
+    }
 }
 
 impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
@@ -102,16 +126,18 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(SignedDuration::ZERO).is_zero();
+            SignedDuration::ZERO.must().be_zero();
         }
 
         #[test]
         fn panics_when_not_zero() {
             let duration: SignedDuration = "2h 30m".parse().unwrap();
 
-            assert_that_panic_by(|| assert_that(duration).with_location(false).is_zero())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                duration.assert().with_location(false).is_zero();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected: 0s
 
@@ -133,12 +159,13 @@ mod tests {
         #[test]
         fn panics_when_below_allowed_range() {
             assert_that_panic_by(|| {
-                assert_that(SignedDuration::from_secs_f32(0.3319))
+                SignedDuration::from_secs_f32(0.3319)
+                    .assert()
                     .with_location(false)
                     .is_close_to(
                         SignedDuration::from_secs_f32(0.333),
                         SignedDuration::from_secs_f32(0.001),
-                    )
+                    );
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -154,15 +181,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_actual_is_in_allowed_range() {
-            assert_that(SignedDuration::from_secs_f32(0.332)).is_close_to(
+            SignedDuration::from_secs_f32(0.332).must().be_close_to(
                 SignedDuration::from_secs_f32(0.333),
                 SignedDuration::from_secs_f32(0.001),
             );
-            assert_that(SignedDuration::from_secs_f32(0.333)).is_close_to(
+            SignedDuration::from_secs_f32(0.333).must().be_close_to(
                 SignedDuration::from_secs_f32(0.333),
                 SignedDuration::from_secs_f32(0.001),
             );
-            assert_that(SignedDuration::from_secs_f32(0.334)).is_close_to(
+            SignedDuration::from_secs_f32(0.334).must().be_close_to(
                 SignedDuration::from_secs_f32(0.333),
                 SignedDuration::from_secs_f32(0.001),
             );
@@ -171,12 +198,13 @@ mod tests {
         #[test]
         fn panics_when_above_allowed_range() {
             assert_that_panic_by(|| {
-                assert_that(SignedDuration::from_secs_f32(0.3341))
+                SignedDuration::from_secs_f32(0.3341)
+                    .assert()
                     .with_location(false)
                     .is_close_to(
                         SignedDuration::from_secs_f32(0.333),
                         SignedDuration::from_secs_f32(0.001),
-                    )
+                    );
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

@@ -5,6 +5,10 @@ use indoc::writedoc;
 /// Static memory assertions for any type.
 pub trait MemAssertions {
     fn needs_drop(self) -> Self;
+    
+    fn need_drop(self) -> Self where Self: Sized {
+        self.needs_drop()
+    }
 }
 
 impl<T, M: Mode> MemAssertions for AssertThat<'_, Type<T>, M> {

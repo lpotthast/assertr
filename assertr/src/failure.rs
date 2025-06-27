@@ -90,7 +90,7 @@ fn build_failure_message(
     }
 
     if let Some(subject_name) = subject_name {
-        err.write_fmt(format_args!("Subject: {}\n\n", subject_name))?;
+        err.write_fmt(format_args!("Subject: {subject_name}\n\n"))?;
     }
 
     failure.write_to(&mut err)?;

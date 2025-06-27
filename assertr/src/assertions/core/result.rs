@@ -7,10 +7,28 @@ pub trait ResultAssertions<'t, M: Mode, T, E> {
         T: Debug,
         E: Debug;
 
+    fn be_ok(self) -> AssertThat<'t, T, M>
+    where
+        T: Debug,
+        E: Debug,
+        Self: Sized,
+    {
+        self.is_ok()
+    }
+
     fn is_err(self) -> AssertThat<'t, E, M>
     where
         T: Debug,
         E: Debug;
+
+    fn be_err(self) -> AssertThat<'t, E, M>
+    where
+        T: Debug,
+        E: Debug,
+        Self: Sized,
+    {
+        self.is_err()
+    }
 
     fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
@@ -18,11 +36,31 @@ pub trait ResultAssertions<'t, M: Mode, T, E> {
         E: Debug,
         A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
 
+    fn be_ok_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>),
+        Self: Sized,
+    {
+        self.is_ok_satisfying(assertions)
+    }
+
     fn is_err_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
         A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
+
+    fn be_err_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>),
+        Self: Sized,
+    {
+        self.is_err_satisfying(assertions)
+    }
 }
 
 // Assertions for generic result values.
@@ -126,15 +164,16 @@ mod tests {
 
     #[test]
     fn is_ok_succeeds_when_ok() {
-        assert_that(Result::<(), ()>::Ok(())).is_ok();
+        Result::<(), ()>::Ok(()).must().be_ok();
     }
 
     #[test]
     fn is_ok_panics_when_error() {
         assert_that_panic_by(|| {
-            assert_that(Result::<i32, String>::Err("someError".to_owned()))
+            Result::<i32, String>::Err("someError".to_owned())
+                .must()
                 .with_location(false)
-                .is_ok();
+                .be_ok();
         })
         .has_type::<String>()
         .is_equal_to(formatdoc! {r#"
@@ -150,13 +189,14 @@ mod tests {
 
     #[test]
     fn is_err_succeeds_when_error() {
-        assert_that(Result::<(), ()>::Err(())).is_err();
+        Result::<(), ()>::Err(()).must().be_err();
     }
 
     #[test]
     fn is_err_panics_when_ok() {
         assert_that_panic_by(|| {
-            assert_that(Result::<i32, String>::Ok(42))
+            Result::<i32, String>::Ok(42)
+                .assert()
                 .with_location(false)
                 .is_err();
         })
@@ -174,14 +214,14 @@ mod tests {
 
     #[test]
     fn is_ok_satisfying_succeeds_when_ok() {
-        assert_that(Result::<i32, ()>::Ok(42))
+        Result::<i32, ()>::Ok(42)
+            .should()
             .with_location(false)
-            .with_capture()
             .is_ok_satisfying(|ok_value| {
                 ok_value.is_greater_than(&9000);
             })
             .capture_failures()
-            .assert_that_it()
+            .assert()
             .contains_exactly::<String>([formatdoc! {"
                 -------- assertr --------
                 Actual: 42

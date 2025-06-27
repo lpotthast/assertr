@@ -9,9 +9,30 @@ use indoc::writedoc;
 pub trait LengthAssertions {
     fn is_empty(self) -> Self;
 
+    fn be_empty(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_empty()
+    }
+
     fn is_not_empty(self) -> Self;
 
+    fn not_be_empty(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_not_empty()
+    }
+
     fn has_length(self, expected: usize) -> Self;
+
+    fn have_length(self, expected: usize) -> Self
+    where
+        Self: Sized,
+    {
+        self.has_length(expected)
+    }
 }
 
 impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
@@ -79,12 +100,12 @@ mod tests {
         #[test]
         fn succeeds_when_empty() {
             let arr: [i32; 0] = [];
-            assert_that(arr).is_empty();
+            arr.must().be_empty();
         }
 
         #[test]
         fn panics_when_not_empty() {
-            assert_that_panic_by(|| assert_that([1, 2, 3]).with_location(false).is_empty())
+            assert_that_panic_by(|| [1, 2, 3].assert().with_location(false).is_empty())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -108,13 +129,13 @@ mod tests {
         #[test]
         fn with_slice_succeeds_when_empty() {
             let slice: &[i32] = [].as_slice();
-            assert_that(slice).is_empty();
+            slice.must().be_empty();
         }
 
         #[test]
         fn with_slice_panics_when_not_empty() {
             assert_that_panic_by(|| {
-                assert_that([42].as_slice()).with_location(false).is_empty();
+                [42].as_slice().assert().with_location(false).is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -135,13 +156,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_empty() {
-            assert_that("").is_empty();
+            "".must().be_empty();
         }
 
         #[test]
         fn panics_when_not_empty() {
             assert_that_panic_by(|| {
-                assert_that("foo").with_location(false).is_empty();
+                "foo".assert().with_location(false).is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -160,15 +181,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_empty() {
-            assert_that(String::from("")).is_empty();
+            String::from("").must().be_empty();
         }
 
         #[test]
         fn panics_when_not_empty() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo"))
-                    .with_location(false)
-                    .is_empty();
+                String::from("foo").assert().with_location(false).is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -192,13 +211,13 @@ mod tests {
         #[test]
         fn with_slice_succeeds_when_empty() {
             let vec = Vec::<i32>::new();
-            assert_that(vec).is_empty();
+            vec.must().be_empty();
         }
 
         #[test]
         fn with_slice_panics_when_not_empty() {
             assert_that_panic_by(|| {
-                assert_that(vec![42]).with_location(false).is_empty();
+                vec![42].assert().with_location(false).is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -223,7 +242,7 @@ mod tests {
         #[test]
         fn succeeds_when_map_is_empty() {
             let map = HashMap::<(), ()>::new();
-            assert_that(map).is_empty();
+            map.must().be_empty();
         }
 
         #[test]
@@ -231,7 +250,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map).with_location(false).is_empty();
+                map.assert().with_location(false).is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -257,14 +276,14 @@ mod tests {
         fn succeeds_when_map_is_empty() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            assert_that(map).is_not_empty();
+            map.must().not_be_empty();
         }
 
         #[test]
         fn panics_when_map_is_empty() {
             assert_that_panic_by(|| {
                 let map = HashMap::<(), ()>::new();
-                assert_that(map).with_location(false).is_not_empty();
+                map.assert().with_location(false).is_not_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -283,21 +302,21 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_length_matches() {
-            assert_that("foo bar").has_length(7);
+            "foo bar".must().have_length(7);
         }
 
         #[test]
         fn panics_when_expected_length_does_not_match() {
             assert_that_panic_by(|| {
-                assert_that("foo bar").with_location(false).has_length(42);
+                "foo bar".assert().with_location(false).has_length(42);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: &str "foo bar"
-    
+
                     does not have the correct length
-    
+
                     Expected: 42
                       Actual: 7
                     -------- assertr --------
@@ -311,13 +330,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_length_matches() {
-            assert_that(String::from("foo bar")).has_length(7);
+            String::from("foo bar").must().have_length(7);
         }
 
         #[test]
         fn panics_when_expected_length_does_not_match() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar"))
+                String::from("foo bar")
+                    .assert()
                     .with_location(false)
                     .has_length(42);
             })
@@ -336,27 +356,24 @@ mod tests {
     }
 
     mod has_length_on_slice {
-        use indoc::formatdoc;
-
         use crate::prelude::*;
+        use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {
             let slice: &[i32] = [].as_slice();
-            assert_that(slice).has_length(0);
+            slice.must().have_length(0);
         }
         #[test]
         fn succeeds_when_length_matches_and_non_empty() {
             let slice: &[i32] = [1, 2, 3].as_slice();
-            assert_that(slice).has_length(3);
+            slice.must().have_length(3);
         }
 
         #[test]
         fn panics_when_length_does_not_match() {
             assert_that_panic_by(|| {
-                assert_that([42].as_slice())
-                    .with_location(false)
-                    .has_length(2);
+                [42].as_slice().must().with_location(false).have_length(2);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -381,19 +398,17 @@ mod tests {
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {
-            let vec = Vec::<i32>::new();
-            assert_that(vec).has_length(0);
+            Vec::<i32>::new().must().have_length(0);
         }
         #[test]
         fn succeeds_when_length_matches_and_non_empty() {
-            let vec = vec![1, 2, 3];
-            assert_that(vec).has_length(3);
+            vec![1, 2, 3].must().have_length(3);
         }
 
         #[test]
         fn panics_when_length_does_not_match() {
             assert_that_panic_by(|| {
-                assert_that(vec![42]).with_location(false).has_length(2);
+                vec![42].assert().with_location(false).has_length(2);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -419,8 +434,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {
-            let map = HashMap::<(), ()>::new();
-            assert_that(map).has_length(0);
+            HashMap::<(), ()>::new().must().have_length(0);
         }
 
         #[test]
@@ -429,7 +443,7 @@ mod tests {
             map.insert("foo", "bar");
             map.insert("bar", "baz");
             map.insert("baz", "foo");
-            assert_that(map).has_length(3);
+            map.must().have_length(3);
         }
 
         #[test]
@@ -437,7 +451,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map).with_location(false).has_length(2);
+                map.assert().with_location(false).has_length(2);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

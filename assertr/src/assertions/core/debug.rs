@@ -8,8 +8,24 @@ pub trait DebugAssertions {
     /// Test that actual has the `expected` `Debug` representation.
     fn has_debug_string(self, expected: impl AsRef<str>) -> Self;
 
+    /// Test that actual has the `expected` `Debug` representation.
+    fn have_debug_string(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.has_debug_string(expected)
+    }
+
     /// Test that actual and expected have the same `Debug` representation.
     fn has_debug_value(self, expected: impl Debug) -> Self;
+
+    /// Test that actual and expected have the same `Debug` representation.
+    fn have_debug_value(self, expected: impl Debug) -> Self
+    where
+        Self: Sized,
+    {
+        self.has_debug_value(expected)
+    }
 }
 
 impl<T: Debug, M: Mode> DebugAssertions for AssertThat<'_, T, M> {
@@ -63,15 +79,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal() {
-            assert_that(42).has_debug_string("42");
-            assert_that(42).has_debug_string(&"42");
-            assert_that(42).has_debug_string("42".to_string());
-            assert_that(42).has_debug_string(&"42".to_string());
+            42.must().have_debug_string("42");
+            42.must().have_debug_string(&"42");
+            42.must().have_debug_string("42".to_string());
+            42.must().have_debug_string(&"42".to_string());
         }
 
         #[test]
         fn succeeds_when_equal_on_static_string_containing_escaped_characters() {
-            assert_that("\n").has_debug_string(r#"\n"#);
+            "\n".must().have_debug_string(r#"\n"#);
         }
 
         #[test]
@@ -79,12 +95,12 @@ mod tests {
             #[derive(Debug)]
             struct Data(#[expect(unused)] &'static str);
 
-            assert_that(Data("\n")).has_debug_string(r#"Data("\n")"#);
+            Data("\n").must().have_debug_string(r#"Data("\n")"#);
         }
 
         #[test]
         fn panics_when_not_equal() {
-            assert_that_panic_by(|| assert_that(42).with_location(false).has_debug_string("foo"))
+            assert_that_panic_by(|| 42.must().with_location(false).have_debug_string("foo"))
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -103,22 +119,22 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_same_value() {
-                assert_that(42).has_debug_value(42);
-                assert_that(42).has_debug_value(&42);
+                42.must().have_debug_value(42);
+                42.must().have_debug_value(&42);
             }
 
             // Although `has_debug_string` should be used instead!
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(42).has_debug_value("42");
-                assert_that(42).has_debug_value(&"42");
-                assert_that(42).has_debug_value("42".to_string());
-                assert_that(42).has_debug_value(&"42".to_string());
+                42.must().have_debug_value("42");
+                42.must().have_debug_value(&"42");
+                42.must().have_debug_value("42".to_string());
+                42.must().have_debug_value(&"42".to_string());
             }
 
             #[test]
             fn panics_when_not_equal() {
-                assert_that_panic_by(|| assert_that(42).with_location(false).has_debug_value(43))
+                assert_that_panic_by(|| 42.must().with_location(false).have_debug_value(43))
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -138,13 +154,9 @@ mod tests {
             #[test]
             fn panics_when_trying_to_compare_with_string_containing_escaped_characters_although_user_would_expect_this_to_be_successful()
              {
-                assert_that_panic_by(|| {
-                    assert_that("\n")
-                        .with_location(false)
-                        .has_debug_value(r#"\n"#)
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| "\n".must().with_location(false).have_debug_value(r#"\n"#))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected: "\\\\n"
 
@@ -167,11 +179,12 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_value() {
-                assert_that(Person {
+                Person {
                     age: 42,
                     alive: true,
-                })
-                .has_debug_value(Person {
+                }
+                .must_owned()
+                .have_debug_value(Person {
                     age: 42,
                     alive: true,
                 });
@@ -179,35 +192,37 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_borrowed_value() {
-                let expected = Person {
+                Person {
                     age: 42,
                     alive: true,
-                };
-                assert_that(Person {
+                }
+                .must_owned()
+                .have_debug_value(&Person {
                     age: 42,
                     alive: true,
-                })
-                .has_debug_value(&expected);
+                });
             }
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(Person {
+                Person {
                     age: 42,
                     alive: true,
-                })
-                .has_debug_string("Person { age: 42, alive: true }");
+                }
+                .must_owned()
+                .have_debug_string("Person { age: 42, alive: true }");
             }
 
             #[test]
             fn panics_when_not_equal() {
                 assert_that_panic_by(|| {
-                    assert_that(Person {
+                    Person {
                         age: 42,
                         alive: true,
-                    })
+                    }
+                    .must_owned()
                     .with_location(false)
-                    .has_debug_string("foo")
+                    .have_debug_string("foo")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"

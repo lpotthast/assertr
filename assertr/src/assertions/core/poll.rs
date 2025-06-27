@@ -10,7 +10,21 @@ use crate::tracking::AssertionTracking;
 pub trait PollAssertions<'t, T, M: Mode> {
     fn is_pending(self) -> Self;
 
+    fn be_pending(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_pending()
+    }
+
     fn is_ready(self) -> AssertThat<'t, T, M>;
+
+    fn be_ready(self) -> AssertThat<'t, T, M>
+    where
+        Self: Sized,
+    {
+        self.is_ready()
+    }
 }
 
 impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>, M> {
@@ -71,17 +85,19 @@ mod tests {
 
         #[test]
         fn succeeds_when_ready() {
-            assert_that(Poll::Ready(Foo { val: 42 }))
-                .is_ready()
-                .is_equal_to(Foo { val: 42 });
+            Poll::Ready(Foo { val: 42 })
+                .must()
+                .be_ready()
+                .be_equal_to(Foo { val: 42 });
         }
 
         #[test]
         fn panics_when_not_ready() {
             assert_that_panic_by(|| {
-                assert_that(Poll::<Foo>::Pending)
+                Poll::<Foo>::Pending
+                    .assert()
                     .with_location(false)
-                    .is_ready()
+                    .is_ready();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -102,15 +118,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_pending() {
-            assert_that(Poll::<Foo>::Pending).is_pending();
+            Poll::<Foo>::Pending.must().be_pending();
         }
 
         #[test]
         fn panics_when_ready() {
             assert_that_panic_by(|| {
-                assert_that(Poll::Ready(Foo { val: 42 }))
+                Poll::Ready(Foo { val: 42 })
+                    .assert()
                     .with_location(false)
-                    .is_pending()
+                    .is_pending();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

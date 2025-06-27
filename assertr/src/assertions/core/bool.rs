@@ -3,7 +3,21 @@ use crate::{AssertThat, Mode, tracking::AssertionTracking};
 /// Assertions for boolean values.
 pub trait BoolAssertions {
     fn is_true(self) -> Self;
+    fn be_true(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_true()
+    }
+
     fn is_false(self) -> Self;
+
+    fn be_false(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_false()
+    }
 }
 
 impl<M: Mode> BoolAssertions for AssertThat<'_, bool, M> {
@@ -43,12 +57,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_true() {
-            assert_that(true).is_true();
+            true.must().be_true();
         }
 
         #[test]
         fn panics_when_false() {
-            assert_that_panic_by(|| assert_that(false).with_location(false).is_true())
+            assert_that_panic_by(|| false.must().with_location(false).be_true())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -66,12 +80,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_false() {
-            assert_that(false).is_false();
+            false.must().be_false();
         }
 
         #[test]
         fn panics_when_true() {
-            assert_that_panic_by(|| assert_that(true).with_location(false).is_false())
+            assert_that_panic_by(|| true.must().with_location(false).be_false())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

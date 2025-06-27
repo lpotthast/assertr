@@ -44,7 +44,7 @@ fn is_able_to_use_custom_has_age_assertion() {
         meta: Metadata { alive: true },
     };
 
-    assert_that(person)
+    assert_that(&person)
         .is_equal_to(Person {
             age: 30,
             meta: Metadata { alive: true },

@@ -13,12 +13,35 @@ pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
         't: 'u;
 
     /// This is a terminal assertion, as it must consume the underlying iterator.
+    fn contain<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
+    where
+        E: Debug,
+        T: AssertrPartialEq<E>,
+        't: 'u,
+        Self: Sized,
+    {
+        self.contains(expected)
+    }
+
+    /// This is a terminal assertion, as it must consume the underlying iterator.
     fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M>
     where
         E: Debug,
         T: PartialEq<E>,
         T: AssertrPartialEq<E> + Debug,
         't: 'u;
+
+    /// This is a terminal assertion, as it must consume the underlying iterator.
+    fn contain_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M>
+    where
+        E: Debug,
+        T: PartialEq<E>,
+        T: AssertrPartialEq<E> + Debug,
+        't: 'u,
+        Self: Sized,
+    {
+        self.contains_exactly(expected)
+    }
 }
 
 impl<'t, T, I, M: Mode> IteratorAssertions<'t, T, M> for AssertThat<'t, I, M>
@@ -34,6 +57,7 @@ where
         't: 'u,
     {
         self.track_assertion();
+        // Any iterator can only be iterated once! Take it.
         let (actual, this) = self.replace_actual_with(Actual::Owned(()));
 
         let actual = actual.unwrap_owned().collect::<Vec<_>>();
@@ -189,13 +213,15 @@ mod tests {
             fn succeeds_when_value_is_present() {
                 let values = [1, 2, 3];
                 let iter = values.iter();
-                assert_that(iter).contains(&1);
+                // TODO: We could also call must() which would lead to a panic, as we cannot
+                //  "unwrap_owned" an owned Iterator anymore.
+                iter.must_owned().contain(&1);
             }
 
             #[test]
             fn compiles_for_comparable_but_different_type() {
                 let values = vec!["foo"];
-                assert_that(values).into_iter_contains("foo".to_string());
+                values.must().into_iter_contains("foo".to_string());
             }
         }
     }
@@ -208,7 +234,7 @@ mod tests {
             #[test]
             fn succeeds_when_value_is_present() {
                 let values = vec![1, 2, 3, 42];
-                assert_that(values)
+                assert_that_owned(values)
                     .into_iter_contains(1)
                     .into_iter_contains(42)
                     .into_iter_contains(3)
@@ -218,7 +244,7 @@ mod tests {
             #[test]
             fn compiles_for_comparable_but_different_type() {
                 let values = vec!["foo"];
-                assert_that(values).into_iter_contains("foo".to_string());
+                assert_that_owned(values).into_iter_contains("foo".to_string());
             }
         }
     }

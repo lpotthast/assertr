@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn panics_on_drop_when_no_assertions_were_made() {
-        assert_that_panic_by(|| assert_that(42).with_location(false))
+        assert_that_panic_by(|| 42.must().with_location(false))
             .has_type::<&str>()
             .is_equal_to(
                 "An AssertThat was dropped without performing any actual assertions on it!",
@@ -50,13 +50,28 @@ mod tests {
 
     #[test]
     fn number_of_assertions_are_tracked() {
-        let initial_assertions = assert_that(42).is_equal_to(42).is_positive();
+        let initial_assertions = 42.must().be_equal_to(42).be_positive();
 
-        assert_that(initial_assertions.number_of_assertions.borrow().0).is_equal_to(2);
+        initial_assertions
+            .number_of_assertions
+            .borrow()
+            .0
+            .must()
+            .be_equal_to(2);
 
-        let derived_assertions = initial_assertions.derive(|it| it * 2).is_equal_to(84);
+        let derived_assertions = initial_assertions.derive(|it| it * 2).be_equal_to(84);
 
-        assert_that(initial_assertions.number_of_assertions.borrow().0).is_equal_to(3);
-        assert_that(derived_assertions.number_of_assertions.borrow().0).is_equal_to(1);
+        initial_assertions
+            .number_of_assertions
+            .borrow()
+            .0
+            .must()
+            .be_equal_to(3);
+        derived_assertions
+            .number_of_assertions
+            .borrow()
+            .0
+            .must()
+            .be_equal_to(1);
     }
 }
