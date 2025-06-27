@@ -47,7 +47,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_that(response).has_status_code(reqwest::StatusCode::OK);
+            assert_that!(response).has_status_code(reqwest::StatusCode::OK);
         }
     }
 }

@@ -11,9 +11,26 @@ pub trait FnOnceAssertions<'t, R, M: Mode> {
     fn panics(self) -> AssertThat<'t, PanicValue, M>;
 
     #[cfg(feature = "std")]
+    fn panic(self) -> AssertThat<'t, PanicValue, M>
+    where
+        Self: Sized,
+    {
+        self.panics()
+    }
+
+    #[cfg(feature = "std")]
     fn does_not_panic(self) -> AssertThat<'t, R, M>
     where
         R: Debug;
+
+    #[cfg(feature = "std")]
+    fn not_panic(self) -> AssertThat<'t, R, M>
+    where
+        R: Debug,
+        Self: Sized,
+    {
+        self.does_not_panic()
+    }
 }
 
 impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat<'t, F, M> {
@@ -87,7 +104,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_panic_occurs() {
-            assert_that(|| unimplemented!())
+            assert_that_owned(|| unimplemented!())
                 .panics()
                 .has_type::<&str>()
                 .is_equal_to("not implemented");
@@ -95,7 +112,7 @@ mod tests {
 
         #[test]
         fn panics_when_no_panic_occurs() {
-            assert_that_panic_by(|| assert_that(|| 42).with_location(false).panics())
+            assert_that_panic_by(|| assert_that_owned(|| 42).with_location(false).panics())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -113,13 +130,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_no_panic_occurs() {
-            assert_that(|| 42).does_not_panic();
+            assert_that_owned(|| 42).does_not_panic();
         }
 
         #[test]
         fn fails_when_panic_occurs() {
             assert_that_panic_by(|| {
-                assert_that(|| unimplemented!())
+                assert_that_owned(|| unimplemented!())
                     .with_location(false)
                     .does_not_panic()
             })

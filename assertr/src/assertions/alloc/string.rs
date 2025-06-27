@@ -5,49 +5,49 @@ use crate::{AssertThat, Mode};
 
 /// Assertions for heap-allocated, owned [String]s.
 pub trait StringAssertions {
-    fn contain(self, expected: impl AsRef<str>) -> Self;
+    fn contains(self, expected: impl AsRef<str>) -> Self;
 
-    fn contains(self, expected: impl AsRef<str>) -> Self
+    fn contain(self, expected: impl AsRef<str>) -> Self
     where
         Self: Sized,
     {
-        self.contain(expected)
+        self.contains(expected)
     }
 
-    fn start_with(self, expected: impl AsRef<str>) -> Self;
+    fn starts_with(self, expected: impl AsRef<str>) -> Self;
 
-    fn starts_with(self, expected: impl AsRef<str>) -> Self
+    fn start_with(self, expected: impl AsRef<str>) -> Self
     where
         Self: Sized,
     {
-        self.start_with(expected)
+        self.starts_with(expected)
     }
 
-    fn end_with(self, expected: impl AsRef<str>) -> Self;
+    fn ends_with(self, expected: impl AsRef<str>) -> Self;
 
-    fn ends_with(self, expected: impl AsRef<str>) -> Self
+    fn end_with(self, expected: impl AsRef<str>) -> Self
     where
         Self: Sized,
     {
-        self.end_with(expected)
+        self.ends_with(expected)
     }
 }
 
 impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
     #[track_caller]
-    fn contain(self, expected: impl AsRef<str>) -> Self {
+    fn contains(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).contains(expected);
         self
     }
 
     #[track_caller]
-    fn start_with(self, expected: impl AsRef<str>) -> Self {
+    fn starts_with(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).starts_with(expected);
         self
     }
 
     #[track_caller]
-    fn end_with(self, expected: impl AsRef<str>) -> Self {
+    fn ends_with(self, expected: impl AsRef<str>) -> Self {
         self.derive(|actual| actual.as_str()).ends_with(expected);
         self
     }
@@ -55,7 +55,7 @@ impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
 
 #[cfg(test)]
 mod tests {
-    mod contain {
+    mod contains {
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -69,7 +69,7 @@ mod tests {
         #[test]
         fn panics_when_expected_is_not_contained() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                assert_that!(String::from("foo bar baz"))
                     .with_location(false)
                     .contains("42");
             })
@@ -86,7 +86,7 @@ mod tests {
         }
     }
 
-    mod start_with {
+    mod starts_with {
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -98,7 +98,7 @@ mod tests {
         #[test]
         fn panics_when_start_is_different() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                assert_that!(String::from("foo bar baz"))
                     .with_location(false)
                     .starts_with("oo");
             })
@@ -115,7 +115,7 @@ mod tests {
         }
     }
 
-    mod end_with {
+    mod ends_with {
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -127,7 +127,7 @@ mod tests {
         #[test]
         fn panics_when_start_is_different() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                assert_that!(String::from("foo bar baz"))
                     .with_location(false)
                     .ends_with("raz");
             })

@@ -10,9 +10,30 @@ pub trait TokioWatchReceiverAssertions<T: Debug> {
     where
         T: PartialEq;
 
+    fn have_current_value(self, expected: impl Borrow<T>) -> Self
+    where
+        T: PartialEq,
+        Self: Sized,
+    {
+        self.has_current_value(expected)
+    }
+
     fn has_changed(self) -> Self;
 
+    fn have_changed(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.has_changed()
+    }
+
     fn has_not_changed(self) -> Self;
+    fn have_not_changed(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.has_not_changed()
+    }
 }
 
 impl<T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
@@ -66,7 +87,7 @@ mod tests {
             })
             .unwrap();
 
-            assert_that(rx).has_current_value(Person {
+            rx.must().have_current_value(Person {
                 name: "kevin".into(),
             });
         }
@@ -76,11 +97,9 @@ mod tests {
             let (_tx, rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
 
             assert_that_panic_by(|| {
-                assert_that(rx)
-                    .with_location(false)
-                    .has_current_value(Person {
-                        name: "alice".into(),
-                    })
+                rx.assert().with_location(false).has_current_value(Person {
+                    name: "alice".into(),
+                })
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -107,7 +126,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_changed();
 
-            assert_that(rx).has_changed();
+            rx.must().have_changed();
         }
 
         #[tokio::test]
@@ -115,7 +134,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_unchanged();
 
-            assert_that_panic_by(|| assert_that(rx).with_location(false).has_changed())
+            assert_that_panic_by(|| rx.assert().with_location(false).has_changed())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -141,7 +160,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_unchanged();
 
-            assert_that(rx).has_not_changed();
+            rx.must().have_not_changed();
         }
 
         #[tokio::test]
@@ -149,7 +168,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_changed();
 
-            assert_that_panic_by(|| assert_that(rx).with_location(false).has_not_changed())
+            assert_that_panic_by(|| rx.assert().with_location(false).has_not_changed())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

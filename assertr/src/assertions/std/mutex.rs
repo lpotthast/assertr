@@ -10,9 +10,27 @@ pub trait MutexAssertions {
     /// Note that implementations may try to acquire the lock in order to check its state.
     fn is_locked(self) -> Self;
 
+    /// Asserts that this mutex is locked.
+    /// Note that implementations may try to acquire the lock in order to check its state.
+    fn be_locked(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_locked()
+    }
+
     /// Asserts that this mutex is not locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
     fn is_not_locked(self) -> Self;
+
+    /// Asserts that this mutex is not locked.
+    /// Note that implementations may try to acquire the lock in order to check its state.
+    fn not_be_locked(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_not_locked()
+    }
 
     /// Asserts that this mutex is not locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
@@ -23,6 +41,17 @@ pub trait MutexAssertions {
         Self: Sized,
     {
         self.is_not_locked()
+    }
+
+    /// Asserts that this mutex is not locked.
+    /// Note that implementations may try to acquire the lock in order to check its state.
+    ///
+    /// Synonym for [Self::is_not_locked].
+    fn be_free(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_free()
     }
 }
 
@@ -64,16 +93,15 @@ impl<T: Debug, M: Mode> MutexAssertions for AssertThat<'_, Mutex<T>, M> {
 mod tests {
 
     mod is_locked {
+        use crate::prelude::*;
         use indoc::formatdoc;
         use std::sync::Mutex;
-
-        use crate::prelude::*;
 
         #[test]
         fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
-            mutex.assert_ref().is_locked();
+            mutex.must().be_locked();
             drop(guard);
         }
 
@@ -93,22 +121,21 @@ mod tests {
     }
 
     mod is_not_locked {
+        use crate::prelude::*;
         use indoc::formatdoc;
         use std::sync::Mutex;
-
-        use crate::prelude::*;
 
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that(mutex).is_not_locked();
+            mutex.must().not_be_locked();
         }
 
         #[test]
         fn panics_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
-            assert_that_panic_by(|| mutex.assert_ref().with_location(false).is_not_locked())
+            assert_that_panic_by(|| mutex.assert().with_location(false).is_not_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -122,14 +149,13 @@ mod tests {
     }
 
     mod is_free {
-        use std::sync::Mutex;
-
         use crate::prelude::*;
+        use std::sync::Mutex;
 
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that(mutex).is_free();
+            mutex.must().be_free();
         }
     }
 }

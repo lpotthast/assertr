@@ -8,13 +8,48 @@ use crate::tracking::AssertionTracking;
 pub trait CharAssertions {
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self;
 
+    fn be_equal_to_ignoring_ascii_case(self, expected: char) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_equal_to_ignoring_ascii_case(expected)
+    }
+
     fn is_lowercase(self) -> Self;
+
+    fn be_lowercase(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_lowercase()
+    }
 
     fn is_uppercase(self) -> Self;
 
+    fn be_uppercase(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_uppercase()
+    }
+
     fn is_ascii_lowercase(self) -> Self;
 
+    fn be_ascii_lowercase(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_ascii_lowercase()
+    }
+
     fn is_ascii_uppercase(self) -> Self;
+
+    fn be_ascii_uppercase(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_ascii_uppercase()
+    }
 
     //fn is_ascii(self) -> Self;
     //fn is_whitespace(self) -> Self;
@@ -107,13 +142,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal_ignoring_ascii_case() {
-            assert_that('a').is_equal_to_ignoring_ascii_case('A');
+            assert_that!('a').is_equal_to_ignoring_ascii_case('A');
         }
 
         #[test]
         fn panics_when_not_equal_to_ignoring_ascii_case() {
             assert_that_panic_by(|| {
-                assert_that('a')
+                assert_that!('a')
                     .with_location(false)
                     .is_equal_to_ignoring_ascii_case('B')
             })

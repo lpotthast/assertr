@@ -2,64 +2,64 @@ use crate::{AssertThat, actual::Actual, mode::Mode, tracking::AssertionTracking}
 use core::fmt::Debug;
 
 pub trait ResultAssertions<'t, M: Mode, T, E> {
-    fn be_ok(self) -> AssertThat<'t, T, M>
+    fn is_ok(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
         E: Debug;
 
-    fn is_ok(self) -> AssertThat<'t, T, M>
+    fn be_ok(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
         E: Debug,
         Self: Sized,
     {
-        self.be_ok()
+        self.is_ok()
     }
-
-    fn be_err(self) -> AssertThat<'t, E, M>
-    where
-        T: Debug,
-        E: Debug;
 
     fn is_err(self) -> AssertThat<'t, E, M>
     where
         T: Debug,
+        E: Debug;
+
+    fn be_err(self) -> AssertThat<'t, E, M>
+    where
+        T: Debug,
         E: Debug,
         Self: Sized,
     {
-        self.be_err()
+        self.is_err()
     }
 
-    fn be_ok_satisfying<A>(self, assertions: A) -> Self
+    fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
         A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
 
-    fn is_ok_satisfying<A>(self, assertions: A) -> Self
+    fn be_ok_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
         A: for<'a> FnOnce(AssertThat<'a, &'a T, M>),
         Self: Sized,
     {
-        self.be_ok_satisfying(assertions)
+        self.is_ok_satisfying(assertions)
     }
 
-    fn be_err_satisfying<A>(self, assertions: A) -> Self
+    fn is_err_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
         A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
 
-    fn is_err_satisfying<A>(self, assertions: A) -> Self
+    fn be_err_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
         A: for<'a> FnOnce(AssertThat<'a, &'a E, M>),
         Self: Sized,
     {
-        self.be_err_satisfying(assertions)
+        self.is_err_satisfying(assertions)
     }
 }
 
@@ -69,7 +69,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
     #[track_caller]
-    fn be_ok(self) -> AssertThat<'t, T, M>
+    fn is_ok(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
         E: Debug,
@@ -94,7 +94,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained error value.
     #[track_caller]
-    fn be_err(self) -> AssertThat<'t, E, M>
+    fn is_err(self) -> AssertThat<'t, E, M>
     where
         T: Debug,
         E: Debug,
@@ -116,7 +116,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     }
 
     #[track_caller]
-    fn be_ok_satisfying<A>(self, assertions: A) -> Self
+    fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
@@ -136,7 +136,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     }
 
     #[track_caller]
-    fn be_err_satisfying<A>(self, assertions: A) -> Self
+    fn is_err_satisfying<A>(self, assertions: A) -> Self
     where
         T: Debug,
         E: Debug,
@@ -195,7 +195,8 @@ mod tests {
     #[test]
     fn is_err_panics_when_ok() {
         assert_that_panic_by(|| {
-            assert_that(Result::<i32, String>::Ok(42))
+            Result::<i32, String>::Ok(42)
+                .assert()
                 .with_location(false)
                 .is_err();
         })

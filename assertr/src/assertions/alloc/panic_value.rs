@@ -11,8 +11,20 @@ use super::boxed::BoxAssertions;
 pub trait PanicValueAssertions<'t, M: Mode> {
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, M>;
 
+    fn have_type<E: 'static>(self) -> AssertThat<'t, E, M>
+    where
+        Self: Sized,
+    {
+        self.has_type()
+    }
+
     /// NOTE: If this fails in capturing mode, a panic is raised!
     fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M>;
+
+    /// NOTE: If this fails in capturing mode, a panic is raised!
+    fn have_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M> {
+        self.has_type_ref()
+    }
 }
 
 impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> {
@@ -72,13 +84,13 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual = PanicValue(Box::new(String::from("foo")));
 
-            assert_that_ref(&actual)
-                .has_type::<String>()
-                .is_equal_to(String::from("foo"));
+            actual.must()
+                .have_type::<String>()
+                .be_equal_to(String::from("foo"));
 
-            assert_that(actual)
-                .has_type::<String>()
-                .is_equal_to(String::from("foo"));
+            actual.must()
+                .have_type::<String>()
+                .be_equal_to(String::from("foo"));
         }
 
         #[test]
@@ -86,7 +98,7 @@ mod tests {
             let actual = PanicValue(Box::new(String::from("foo")));
 
             assert_that_panic_by(|| {
-                assert_that(actual).with_location(false).has_type::<u32>();
+                actual.must().with_location(false).have_type::<u32>();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -107,7 +119,7 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual = PanicValue(Box::new(String::from("foo")));
 
-            assert_that(actual)
+            assert_that!(actual)
                 .has_type_ref::<String>()
                 .is_equal_to(&String::from("foo"));
         }
@@ -117,7 +129,7 @@ mod tests {
             let actual = PanicValue(Box::new(String::from("foo")));
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
@@ -136,7 +148,7 @@ mod tests {
             let actual = PanicValue(Box::new("foo"));
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
@@ -156,7 +168,7 @@ mod tests {
             let actual = PanicValue(Box::new(Foo {}));
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })

@@ -10,14 +10,50 @@ pub trait StrSliceAssertions {
     /// `White_Space`.
     fn is_blank(self) -> Self;
 
+    /// Tests whether this string is empty or only containing whitespace characters.
+    /// 'Whitespace' is defined according to the terms of the Unicode Derived Core Property
+    /// `White_Space`.
+    fn be_blank(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_blank()
+    }
+
     /// Tests whether this string is empty or only containing ascii-whitespace characters.
     fn is_blank_ascii(self) -> Self;
 
+    /// Tests whether this string is empty or only containing ascii-whitespace characters.
+    fn be_blank_ascii(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_blank_ascii()
+    }
+
     fn contains(self, expected: impl AsRef<str>) -> Self;
+    fn contain(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.contains(expected)
+    }
 
     fn starts_with(self, expected: impl AsRef<str>) -> Self;
+    fn start_with(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.starts_with(expected)
+    }
 
     fn ends_with(self, expected: impl AsRef<str>) -> Self;
+    fn end_with(self, expected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.ends_with(expected)
+    }
 }
 
 impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
@@ -29,9 +65,9 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Actual: {actual:?}
-                    
+
                     contains non-whitespace characters.
-                    
+
                     Expected it to be empty or only containing whitespace.
                 "#, actual = self.actual()}
             });
@@ -47,9 +83,9 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Actual: {actual:?}
-                    
+
                     contains non-whitespace characters.
-                    
+
                     Expected it to be empty or only containing whitespace.
                 "#, actual = self.actual()}
             });
@@ -108,15 +144,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_blank() {
-            assert_that("").is_blank();
-            assert_that(" ").is_blank();
-            assert_that("\t \n").is_blank();
+            "".must().be_blank();
+            " ".must().be_blank();
+            "\t \n".must().be_blank();
         }
 
         #[test]
         fn panics_when_expected_is_not_blank() {
             assert_that_panic_by(|| {
-                assert_that("a").with_location(false).is_blank();
+                "a".must().with_location(false).be_blank();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -136,16 +172,16 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        fn succeeds_when_expected_is_blank() {
-            assert_that("").is_blank_ascii();
-            assert_that(" ").is_blank_ascii();
-            assert_that("\t \n").is_blank_ascii();
+        fn succeeds_when_blank() {
+            "".must().be_blank_ascii();
+            " ".must().be_blank_ascii();
+            "\t \n".must().be_blank_ascii();
         }
 
         #[test]
-        fn panics_when_expected_is_not_blank() {
+        fn panics_when_not_blank() {
             assert_that_panic_by(|| {
-                assert_that("a").with_location(false).is_blank_ascii();
+                "a".must().with_location(false).be_blank_ascii();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -166,17 +202,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_contained() {
-            assert_that("foobar").contains("foo");
-            assert_that("foobar").contains("bar");
-            assert_that("foobar").contains("oob");
+            "foobar".must().contain("foo");
+            "foobar".must().contain("bar");
+            "foobar".must().contain("oob");
         }
 
         #[test]
         fn panics_when_expected_is_not_contained() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
-                    .with_location(false)
-                    .contains("42");
+                "foo bar baz".must().with_location(false).contain("42");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -197,15 +231,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_matches() {
-            assert_that("foo bar baz").starts_with("foo b");
+            "foo bar baz".must().start_with("foo b");
         }
 
         #[test]
         fn panics_when_start_is_different() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
-                    .with_location(false)
-                    .starts_with("oo");
+                "foo bar baz".must().with_location(false).start_with("oo");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -226,15 +258,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_matches() {
-            assert_that("foo bar baz").ends_with("r baz");
+            "foo bar baz".must().end_with("r baz");
         }
 
         #[test]
         fn panics_when_start_is_different() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
-                    .with_location(false)
-                    .ends_with("raz");
+                "foo bar baz".must().with_location(false).end_with("raz");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

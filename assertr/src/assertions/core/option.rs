@@ -8,7 +8,7 @@ pub trait OptionAssertions<'t, T, M: Mode> {
     /// This is a terminal operation on the contained `Option`,
     /// as there is nothing meaningful to do with the option if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
-    fn be_some(self) -> AssertThat<'t, T, M>
+    fn is_some(self) -> AssertThat<'t, T, M>
     where
         T: Debug;
 
@@ -16,36 +16,36 @@ pub trait OptionAssertions<'t, T, M: Mode> {
     /// This is a terminal operation on the contained `Option`,
     /// as there is nothing meaningful to do with the option if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
-    fn is_some(self) -> AssertThat<'t, T, M>
+    fn be_some(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
         Self: Sized,
     {
-        self.be_some()
+        self.is_some()
     }
-
-    /// Test if this option is of the `None` variant.
-    /// This is a terminal operation on the contained `Option`,
-    /// as there is nothing meaningful to do with the option after its variant was ensured.
-    fn be_none(self) -> AssertThat<'t, (), M>
-    where
-        T: Debug;
 
     /// Test if this option is of the `None` variant.
     /// This is a terminal operation on the contained `Option`,
     /// as there is nothing meaningful to do with the option after its variant was ensured.
     fn is_none(self) -> AssertThat<'t, (), M>
     where
+        T: Debug;
+
+    /// Test if this option is of the `None` variant.
+    /// This is a terminal operation on the contained `Option`,
+    /// as there is nothing meaningful to do with the option after its variant was ensured.
+    fn be_none(self) -> AssertThat<'t, (), M>
+    where
         T: Debug,
         Self: Sized,
     {
-        self.be_none()
+        self.is_none()
     }
 }
 
 impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M> {
     #[track_caller]
-    fn be_some(self) -> AssertThat<'t, T, M>
+    fn is_some(self) -> AssertThat<'t, T, M>
     where
         T: Debug,
     {
@@ -65,7 +65,7 @@ impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M>
     }
 
     #[track_caller]
-    fn be_none(self) -> AssertThat<'t, (), M>
+    fn is_none(self) -> AssertThat<'t, (), M>
     where
         T: Debug,
     {
@@ -95,13 +95,9 @@ mod tests {
 
         #[test]
         fn panics_when_none() {
-            assert_that_panic_by(|| {
-                assert_that(Option::<i32>::None)
-                    .with_location(false)
-                    .is_some()
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
+            assert_that_panic_by(|| Option::<i32>::None.assert().with_location(false).is_some())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Actual: None
 
@@ -118,16 +114,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_none() {
-            assert_that(Option::<i32>::None).is_none();
+            Option::<i32>::None.must().be_none();
         }
 
         #[test]
         fn panics_when_some() {
             assert_that_panic_by(|| {
                 Option::<i32>::Some(42)
-                    .must()
+                    .assert()
                     .with_location(false)
-                    .be_none()
+                    .is_none()
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {"

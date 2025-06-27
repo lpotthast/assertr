@@ -8,14 +8,32 @@ use tokio::sync::Mutex;
 /// Assertions for tokio's [Mutex] type.
 pub trait TokioMutexAssertions<T: Debug> {
     fn is_locked(self) -> Self;
+    fn be_locked(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_locked()
+    }
 
     fn is_not_locked(self) -> Self;
+    fn not_be_locked(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_not_locked()
+    }
 
     fn is_free(self) -> Self
     where
         Self: Sized,
     {
         self.is_not_locked()
+    }
+    fn be_free(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_free()
     }
 }
 
@@ -66,14 +84,14 @@ mod tests {
         async fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock().await;
-            assert_that_ref(&mutex).is_locked();
+            mutex.must().be_locked();
             drop(guard);
         }
 
         #[test]
         fn panics_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that_panic_by(|| assert_that(mutex).with_location(false).is_locked())
+            assert_that_panic_by(|| mutex.must().with_location(false).be_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -94,14 +112,14 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that(mutex).is_not_locked();
+            mutex.must().not_be_locked();
         }
 
         #[tokio::test]
         async fn panics_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock().await;
-            assert_that_panic_by(|| assert_that_ref(&mutex).with_location(false).is_not_locked())
+            assert_that_panic_by(|| mutex.must().with_location(false).not_be_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -122,7 +140,7 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that(mutex).is_free();
+            mutex.must().be_free();
         }
     }
 }

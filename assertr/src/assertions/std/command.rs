@@ -28,7 +28,7 @@ mod tests {
             let mut cmd = Command::new("foo");
             cmd.arg("--bar").arg("--baz");
 
-            assert_that(cmd).has_arg("--bar").has_arg("--baz");
+            assert_that!(cmd).has_arg("--bar").has_arg("--baz");
         }
 
         #[test]
@@ -37,7 +37,7 @@ mod tests {
             cmd.arg("--bar");
 
             assert_that_panic_by(|| {
-                assert_that(cmd).with_location(false).has_arg("help");
+                assert_that!(cmd).with_location(false).has_arg("help");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
