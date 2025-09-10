@@ -18,7 +18,7 @@ fn main() {
     };
 
     assert_that(foo).is_equal_to(FooAssertrEq {
-        field_1: eq(1), 
+        field_1: eq(1),
         ..Default::default()
     });
 }

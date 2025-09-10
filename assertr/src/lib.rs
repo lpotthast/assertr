@@ -99,7 +99,7 @@ pub fn assert_that<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
 
 #[track_caller]
 #[must_use]
-pub fn assert_that_ref<T>(actual: &T) -> AssertThat<T, Panic> {
+pub fn assert_that_ref<T>(actual: &T) -> AssertThat<'_, T, Panic> {
     AssertThat::new(Actual::Borrowed(actual))
 }
 
@@ -164,11 +164,11 @@ impl<T> AssertingThat for T {
 pub trait AssertingThatRef {
     type Owned;
 
-    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<U, Panic>
+    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<'_, U, Panic>
     where
         Self: Sized;
 
-    fn assert_that_it(&self) -> AssertThat<Self::Owned, Panic>
+    fn assert_that_it(&self) -> AssertThat<'_, Self::Owned, Panic>
     where
         Self: Sized;
 }
@@ -176,14 +176,14 @@ pub trait AssertingThatRef {
 impl<T> AssertingThatRef for &T {
     type Owned = T;
 
-    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<U, Panic>
+    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<'_, U, Panic>
     where
         Self: Sized,
     {
         assert_that_ref(map(self))
     }
 
-    fn assert_that_it(&self) -> AssertThat<Self::Owned, Panic>
+    fn assert_that_it(&self) -> AssertThat<'_, Self::Owned, Panic>
     where
         Self: Sized,
     {
