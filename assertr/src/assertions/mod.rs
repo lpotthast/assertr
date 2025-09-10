@@ -5,6 +5,8 @@ use ::std::ops::RangeInclusive;
 pub mod alloc;
 pub mod condition;
 pub mod core;
+#[cfg(feature = "http")]
+pub mod http;
 #[cfg(feature = "jiff")]
 pub mod jiff;
 #[cfg(feature = "num")]

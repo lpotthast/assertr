@@ -38,10 +38,11 @@ dependencies = [
 
 [[package]]
 name = "assertr"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "assertr",
  "assertr-derive",
+ "http",
  "indoc",
  "jiff",
  "libm",
