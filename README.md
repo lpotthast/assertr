@@ -20,14 +20,14 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ```tome
 [dependencies]
-assertr = "0.3.5"
+assertr = "0.3.8"
 ```
 
 or
 
 ```tome
 [dependencies]
-assertr = { version = "0.3.5", features = ["derive"] }
+assertr = { version = "0.3.8", features = ["derive"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
@@ -207,10 +207,10 @@ Instead of immediately panicking on assertion failure, you can capture failures 
 
 ```rust
 let failures = assert_that(3)
-    .with_capture()
-    .is_equal_to(4)
-    .is_less_than(2)
-    .capture_failures();
+.with_capture()
+.is_equal_to(4)
+.is_less_than(2)
+.capture_failures();
 
 assert_that(failures).has_length(2);
 ```
@@ -243,14 +243,14 @@ fn test() {
         age: 30,
         data: (100, 998)
     };
-    
+
     // We can still perform a standard (full) equality check.
     assert_that_ref(&alice).is_equal_to(Person {
         name: "Alice".to_owned(),
         age: 30,
         data: (100, 998),
     });
-    
+
     // But we can also do a partial equality check!
     assert_that_ref(&alice).is_equal_to(PersonAssertrEq {
         name: eq("Alice".to_owned()),
@@ -316,7 +316,6 @@ assert_that("foobar")
 
 - Partial equality assertions (meaning that only some fields of a struct are compared, while some are ignored).
   Add the `AssertrEq` annotation to one of your struct to enable this.
-
 
 ## Compared to other assertion styles
 
