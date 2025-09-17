@@ -84,8 +84,22 @@ pub trait PathAssertions {
     {
         self.has_extension(expected)
     }
+
     fn starts_with(self, expected: impl AsRef<Path>) -> Self;
+    fn start_with(self, expected: impl AsRef<Path>) -> Self
+    where
+        Self: Sized,
+    {
+        self.starts_with(expected)
+    }
+
     fn ends_with(self, expected: impl AsRef<Path>) -> Self;
+    fn end_with(self, expected: impl AsRef<Path>) -> Self
+    where
+        Self: Sized,
+    {
+        self.ends_with(expected)
+    }
 }
 
 impl<M: Mode> PathAssertions for AssertThat<'_, PathBuf, M> {
@@ -692,17 +706,15 @@ mod tests {
             #[test]
             fn succeeds_when_prefix() {
                 let path = Path::new(file!());
-                assert_that(path).starts_with("assertr/src");
+                path.must().start_with("assertr/src");
             }
 
             #[test]
             fn panics_when_not_a_prefix() {
                 let path = Path::new(file!());
-                assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).starts_with("foobar")
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| path.must().with_location(false).start_with("foobar"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
 
@@ -718,11 +730,9 @@ mod tests {
             #[test]
             fn panics_when_not_a_whole_segment_prefix() {
                 let path = Path::new(file!());
-                assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).starts_with("assert")
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| path.must().with_location(false).start_with("assert"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
 
@@ -744,13 +754,13 @@ mod tests {
             #[test]
             fn succeeds_when_postfix() {
                 let path = Path::new(file!());
-                assert_that(path).ends_with("std/path.rs");
+                path.must().end_with("std/path.rs");
             }
 
             #[test]
             fn panics_when_not_a_postfix() {
                 let path = Path::new(file!());
-                assert_that_panic_by(|| assert_that(path).with_location(false).ends_with("foobar"))
+                assert_that_panic_by(|| path.must().with_location(false).end_with("foobar"))
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -768,7 +778,7 @@ mod tests {
             #[test]
             fn panics_when_not_a_whole_segment_postfix() {
                 let path = Path::new(file!());
-                assert_that_panic_by(|| assert_that(path).with_location(false).ends_with("ath.rs"))
+                assert_that_panic_by(|| path.must().with_location(false).end_with("ath.rs"))
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -1075,17 +1085,15 @@ mod tests {
             #[test]
             fn succeeds_when_prefix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that(path).starts_with("assertr/src");
+                path.must().start_with("assertr/src");
             }
 
             #[test]
             fn panics_when_not_a_prefix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).starts_with("foobar")
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| path.must().with_location(false).start_with("foobar"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
 
@@ -1101,11 +1109,9 @@ mod tests {
             #[test]
             fn panics_when_not_a_whole_segment_prefix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).starts_with("assert")
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| path.must().with_location(false).start_with("assert"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
 
@@ -1127,13 +1133,13 @@ mod tests {
             #[test]
             fn succeeds_when_postfix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that(path).ends_with("std/path.rs");
+                path.must().end_with("std/path.rs");
             }
 
             #[test]
             fn panics_when_not_a_postfix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that_panic_by(|| assert_that(path).with_location(false).ends_with("foobar"))
+                assert_that_panic_by(|| path.must().with_location(false).end_with("foobar"))
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -1151,7 +1157,7 @@ mod tests {
             #[test]
             fn panics_when_not_a_whole_segment_postfix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that_panic_by(|| assert_that(path).with_location(false).ends_with("ath.rs"))
+                assert_that_panic_by(|| path.must().with_location(false).end_with("ath.rs"))
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
