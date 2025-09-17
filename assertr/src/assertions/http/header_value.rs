@@ -32,7 +32,7 @@ pub trait HttpHeaderValueAssertions<'t, M: Mode> {
     where
         Self: Sized,
     {
-        self.is_sensitive()
+        self.is_insensitive()
     }
 
     fn is_ascii(self) -> AssertThat<'t, String, M>;
@@ -78,7 +78,7 @@ impl<'t, M: Mode> HttpHeaderValueAssertions<'t, M>
     fn is_ascii(self) -> AssertThat<'t, String, M> {
         use crate::prelude::ResultAssertions;
 
-        self.map(|it| it.unwrap_owned().to_str().map(|it| it.to_owned()).into())
+        self.map(|it| it.borrowed().to_str().map(|it| it.to_owned()).into())
             .is_ok()
     }
 }
