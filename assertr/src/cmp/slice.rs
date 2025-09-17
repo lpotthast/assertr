@@ -87,8 +87,8 @@ mod test {
 
         let mut ctx = EqContext::new();
 
-        assert_that(compare(&slice1, &slice2, Some(&mut ctx))).is_true();
-        assert_that(compare(&slice1, &slice3, Some(&mut ctx))).is_false();
+        assert_that!(compare(&slice1, &slice2, Some(&mut ctx))).is_true();
+        assert_that!(compare(&slice1, &slice3, Some(&mut ctx))).is_false();
     }
 
     #[test]
@@ -100,8 +100,8 @@ mod test {
 
         let result = compare(&slice1, &slice2, Some(&mut ctx));
 
-        assert_that(result).is_true();
-        assert_that(ctx.differences.differences).is_empty();
+        assert_that!(result).is_true();
+        assert_that!(ctx.differences.differences).is_empty();
     }
 
     #[test]
@@ -113,8 +113,8 @@ mod test {
 
         let result = compare(&slice1, &slice2, Some(&mut ctx));
 
-        assert_that(result).is_false();
-        assert_that(ctx.differences.differences).contains_exactly(&[
+        assert_that!(result).is_false();
+        assert_that!(ctx.differences.differences).contains_exactly(&[
             "Elements not expected: [\n    1,\n]".to_string(),
             "Elements not found: [\n    4,\n]".to_string(),
         ]);
@@ -129,8 +129,8 @@ mod test {
 
         let result = compare(&slice1, &slice2, Some(&mut ctx));
 
-        assert_that(result).is_false();
-        assert_that(ctx.differences.differences).contains_exactly(&[
+        assert_that!(result).is_false();
+        assert_that!(ctx.differences.differences).contains_exactly(&[
             "Slices only differ in their element-order. A:[\n    1,\n    2,\n    3,\n] and B:[\n    1,\n    3,\n    2,\n]".to_string(),
         ]);
     }
@@ -144,8 +144,8 @@ mod test {
 
         let result = compare(&slice1, &slice2, Some(&mut ctx));
 
-        assert_that(result).is_false();
-        assert_that(ctx.differences.differences).contains_exactly(&[
+        assert_that!(result).is_false();
+        assert_that!(ctx.differences.differences).contains_exactly(&[
             "Slices are not of the same length. A:3 and B:4".to_string(),
             "Elements not found: [\n    4,\n]".to_string(),
         ]);

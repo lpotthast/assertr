@@ -17,7 +17,7 @@ fn main() {
         field_3: 3,
     };
 
-    assert_that(foo).is_equal_to(FooAssertrEq {
+    foo.must().be_equal_to(FooAssertrEq {
         field_1: eq(1),
         ..Default::default()
     });

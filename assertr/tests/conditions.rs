@@ -57,7 +57,7 @@ fn is_able_to_use_custom_conditions_using_is_and_has() {
     };
     let alive = IsAlive {};
     let name_bob = HasName { expected: "Bob" };
-    assert_that(bob).is(alive).has(name_bob);
+    assert_that!(bob).is(alive).has(name_bob);
 }
 
 #[test]
@@ -73,5 +73,5 @@ fn is_able_to_use_custom_conditions_on_an_iterable_using_are_and_have() {
     let people = vec![bob, kevin];
     let alive = IsAlive {};
     let not_name_otto = HasNotName { unexpected: "Otto" };
-    assert_that(people).are(alive).have(not_name_otto);
+    assert_that!(people).are(alive).have(not_name_otto);
 }

@@ -9,15 +9,42 @@ pub trait VecAssertions<'t, T: Debug> {
         E: Debug,
         T: AssertrPartialEq<E> + Debug;
 
+    fn contain<E>(self, expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E> + Debug,
+        Self: Sized,
+    {
+        self.contains(expected)
+    }
+
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         E: Debug + 't,
         T: AssertrPartialEq<E> + Debug;
 
+    fn contain_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
+    where
+        E: Debug + 't,
+        T: AssertrPartialEq<E> + Debug,
+        Self: Sized,
+    {
+        self.contains_exactly(expected)
+    }
+
     /// [P] - Predicate
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool;
+
+    /// [P] - Predicate
+    fn contain_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
+    where
+        P: Fn(&T) -> bool,
+        Self: Sized,
+    {
+        self.contains_exactly_matching_in_any_order(expected)
+    }
 }
 
 impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
@@ -62,6 +89,6 @@ mod tests {
     fn assert_vec_contains_exactly() {
         let vec = vec![1, 2, 3];
 
-        assert_that(vec).into_iter_contains_exactly([1, 2, 3]);
+        assert_that_owned(vec).into_iter_contains_exactly([1, 2, 3]);
     }
 }

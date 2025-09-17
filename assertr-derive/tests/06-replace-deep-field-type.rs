@@ -33,13 +33,13 @@ fn main() {
         bars2: HashMap::new(),
     };
 
-    assert_that_ref(&foo).is_equal_to(FooAssertrEq {
+    foo.must().be_equal_to(FooAssertrEq {
         id: any(),
         bars: any(),
         bars2: any(),
     });
 
-    assert_that_ref(&foo).is_equal_to(FooAssertrEq {
+    foo.must().be_equal_to(FooAssertrEq {
         id: eq(1),
         bars: eq(vec![BarAssertrEq { id: eq(42) }]),
         bars2: eq(HashMap::new()),

@@ -12,20 +12,64 @@ pub trait NumAssertions<T: Num> {
     /// Fails if actual is not equal to the additive identity.
     fn is_zero(self) -> Self;
 
+    /// Fails if actual is not equal to the additive identity.
+    fn be_zero(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_zero()
+    }
+
     fn is_additive_identity(self) -> Self;
+    fn be_additive_identity(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_additive_identity()
+    }
 
     /// Fails if actual is not equal to the multiplicative identity.
     fn is_one(self) -> Self;
 
+    /// Fails if actual is not equal to the multiplicative identity.
+    fn be_one(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_one()
+    }
+
     fn is_multiplicative_identity(self) -> Self;
+    fn be_multiplicative_identity(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_multiplicative_identity()
+    }
 
     fn is_negative(self) -> Self
     where
         T: Signed;
 
+    fn be_negative(self) -> Self
+    where
+        T: Signed,
+        Self: Sized,
+    {
+        self.is_negative()
+    }
+
     fn is_positive(self) -> Self
     where
         T: Signed;
+
+    fn be_positive(self) -> Self
+    where
+        T: Signed,
+        Self: Sized,
+    {
+        self.is_positive()
+    }
 
     /// Fails if actual is not in the range
     /// `[expected - allowed_deviation, expected + allowed_deviation]`.
@@ -34,20 +78,55 @@ pub trait NumAssertions<T: Num> {
         T: PartialOrd,
         T: Clone;
 
+    /// Fails if actual is not in the range
+    /// `[expected - allowed_deviation, expected + allowed_deviation]`.
+    fn be_close_to(self, expected: T, allowed_deviation: T) -> Self
+    where
+        T: PartialOrd,
+        T: Clone,
+        Self: Sized,
+    {
+        self.is_close_to(expected, allowed_deviation)
+    }
+
     #[cfg(any(feature = "std", feature = "libm"))]
     fn is_nan(self) -> Self
     where
         T: Float;
+    #[cfg(any(feature = "std", feature = "libm"))]
+    fn be_nan(self) -> Self
+    where
+        T: Float,
+        Self: Sized,
+    {
+        self.is_nan()
+    }
 
     #[cfg(any(feature = "std", feature = "libm"))]
     fn is_finite(self) -> Self
     where
         T: Float;
+    #[cfg(any(feature = "std", feature = "libm"))]
+    fn be_finite(self) -> Self
+    where
+        T: Float,
+        Self: Sized,
+    {
+        self.is_finite()
+    }
 
     #[cfg(any(feature = "std", feature = "libm"))]
     fn is_infinite(self) -> Self
     where
         T: Float;
+    #[cfg(any(feature = "std", feature = "libm"))]
+    fn be_infinite(self) -> Self
+    where
+        T: Float,
+        Self: Sized,
+    {
+        self.is_infinite()
+    }
 
     // TODO: is_normal
     // TODO: is_subnormal
@@ -238,50 +317,50 @@ mod tests {
         use crate::prelude::*;
         use ::num::Float;
 
-        assert_that(0u8).is_zero();
-        assert_that(0i8).is_zero();
-        assert_that(0u16).is_zero();
-        assert_that(0i16).is_zero();
-        assert_that(0u32).is_zero();
-        assert_that(0i32).is_zero();
-        assert_that(0u64).is_zero();
-        assert_that(0i64).is_zero();
-        assert_that(0u128).is_zero();
-        assert_that(0i128).is_zero();
-        assert_that(0.0f32).is_zero();
-        assert_that(0.0f64).is_zero();
+        0u8.must().be_zero();
+        0i8.must().be_zero();
+        0u16.must().be_zero();
+        0i16.must().be_zero();
+        0u32.must().be_zero();
+        0i32.must().be_zero();
+        0u64.must().be_zero();
+        0i64.must().be_zero();
+        0u128.must().be_zero();
+        0i128.must().be_zero();
+        0.0f32.must().be_zero();
+        0.0f64.must().be_zero();
 
-        assert_that(1u8).is_one();
-        assert_that(1i8).is_one();
-        assert_that(1u16).is_one();
-        assert_that(1i16).is_one();
-        assert_that(1u32).is_one();
-        assert_that(1i32).is_one();
-        assert_that(1u64).is_one();
-        assert_that(1i64).is_one();
-        assert_that(1u128).is_one();
-        assert_that(1i128).is_one();
-        assert_that(1.0f32).is_one();
-        assert_that(1.0f64).is_one();
+        1u8.must().be_one();
+        1i8.must().be_one();
+        1u16.must().be_one();
+        1i16.must().be_one();
+        1u32.must().be_one();
+        1i32.must().be_one();
+        1u64.must().be_one();
+        1i64.must().be_one();
+        1u128.must().be_one();
+        1i128.must().be_one();
+        1.0f32.must().be_one();
+        1.0f64.must().be_one();
 
-        assert_that(42u8).is_close_to(42, 0);
-        assert_that(42i8).is_close_to(42, 0);
-        assert_that(42u16).is_close_to(42, 0);
-        assert_that(42i16).is_close_to(42, 0);
-        assert_that(42u32).is_close_to(42, 0);
-        assert_that(42i32).is_close_to(42, 0);
-        assert_that(42u64).is_close_to(42, 0);
-        assert_that(42i64).is_close_to(42, 0);
-        assert_that(42u128).is_close_to(42, 0);
-        assert_that(42i128).is_close_to(42, 0);
-        assert_that(0.2f32 + 0.1f32).is_close_to(0.3, 0.0001);
-        assert_that(0.2f64 + 0.1f64).is_close_to(0.3, 0.0001);
+        42u8.must().be_close_to(42, 0);
+        42i8.must().be_close_to(42, 0);
+        42u16.must().be_close_to(42, 0);
+        42i16.must().be_close_to(42, 0);
+        42u32.must().be_close_to(42, 0);
+        42i32.must().be_close_to(42, 0);
+        42u64.must().be_close_to(42, 0);
+        42i64.must().be_close_to(42, 0);
+        42u128.must().be_close_to(42, 0);
+        42i128.must().be_close_to(42, 0);
+        (0.2f32 + 0.1f32).must().be_close_to(0.3, 0.0001);
+        (0.2f64 + 0.1f64).must().be_close_to(0.3, 0.0001);
 
-        assert_that(f32::nan()).is_nan();
-        assert_that(f64::nan()).is_nan();
+        f32::nan().must().be_nan();
+        f64::nan().must().be_nan();
 
-        assert_that(f32::infinity()).is_infinite();
-        assert_that(f64::infinity()).is_infinite();
+        f32::infinity().must().be_infinite();
+        f64::infinity().must().be_infinite();
     }
 
     mod is_zero {
@@ -290,12 +369,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(0).is_zero();
+            0.must().be_zero();
         }
 
         #[test]
         fn panics_when_not_zero() {
-            assert_that_panic_by(|| assert_that(3).with_location(false).is_zero())
+            assert_that_panic_by(|| 3.must().with_location(false).be_zero())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -317,12 +396,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_one() {
-            assert_that(1).is_one();
+            1.must().be_one();
         }
 
         #[test]
         fn panics_when_not_one() {
-            assert_that_panic_by(|| assert_that(3).with_location(false).is_one())
+            assert_that_panic_by(|| 3.must().with_location(false).be_one())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -344,12 +423,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(-0.01).is_negative();
+            (-0.01).must().be_negative();
         }
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| assert_that(0.0).with_location(false).is_negative())
+            assert_that_panic_by(|| 0.0.must().with_location(false).be_negative())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -362,7 +441,7 @@ mod tests {
 
         #[test]
         fn panics_when_positive() {
-            assert_that_panic_by(|| assert_that(1.23).with_location(false).is_negative())
+            assert_that_panic_by(|| 1.23.must().with_location(false).be_negative())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -380,17 +459,17 @@ mod tests {
 
         #[test]
         fn succeeds_when_positive() {
-            assert_that(0.01).is_positive();
+            0.01.must().be_positive();
         }
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(0.0).is_positive();
+            0.0.must().be_positive();
         }
 
         #[test]
         fn panics_when_negative() {
-            assert_that_panic_by(|| assert_that(-1.23).with_location(false).is_positive())
+            assert_that_panic_by(|| (-1.23).must().with_location(false).be_positive())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -408,13 +487,9 @@ mod tests {
 
         #[test]
         fn panics_when_below_allowed_range() {
-            assert_that_panic_by(|| {
-                assert_that(0.3319)
-                    .with_location(false)
-                    .is_close_to(0.333, 0.001)
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| 0.3319.must().with_location(false).be_close_to(0.333, 0.001))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected value to be close to: 0.333,
                      with allowed deviation being: 0.001,
@@ -427,20 +502,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_actual_is_in_allowed_range() {
-            assert_that(0.332).is_close_to(0.333, 0.001);
-            assert_that(0.333).is_close_to(0.333, 0.001);
-            assert_that(0.334).is_close_to(0.333, 0.001);
+            0.332.must().be_close_to(0.333, 0.001);
+            0.333.must().be_close_to(0.333, 0.001);
+            0.334.must().be_close_to(0.333, 0.001);
         }
 
         #[test]
         fn panics_when_above_allowed_range() {
-            assert_that_panic_by(|| {
-                assert_that(0.3341)
-                    .with_location(false)
-                    .is_close_to(0.333, 0.001)
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| 0.3341.must().with_location(false).be_close_to(0.333, 0.001))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected value to be close to: 0.333,
                      with allowed deviation being: 0.001,
@@ -459,12 +530,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_nan() {
-            assert_that(f32::nan()).is_nan();
+            f32::nan().must().be_nan();
         }
 
         #[test]
         fn panics_when_not_nan() {
-            assert_that_panic_by(|| assert_that(1.23).with_location(false).is_nan())
+            assert_that_panic_by(|| 1.23.must().with_location(false).be_nan())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -483,15 +554,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_finite() {
-            assert_that(0.3f32).is_finite();
+            0.3f32.must().be_finite();
         }
 
         #[test]
         fn panics_when_positive_infinity() {
             assert_that_panic_by(|| {
-                assert_that(f32::infinity())
-                    .with_location(false)
-                    .is_finite()
+                f32::infinity().must().with_location(false).be_finite();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -506,9 +575,7 @@ mod tests {
         #[test]
         fn panics_when_negative_infinity() {
             assert_that_panic_by(|| {
-                assert_that(f32::neg_infinity())
-                    .with_location(false)
-                    .is_finite()
+                f32::neg_infinity().must().with_location(false).be_finite();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -528,17 +595,17 @@ mod tests {
 
         #[test]
         fn succeeds_when_positive_infinity() {
-            assert_that(f32::infinity()).is_infinite();
+            f32::infinity().must().be_infinite();
         }
 
         #[test]
         fn succeeds_when_negative_infinity() {
-            assert_that(f32::neg_infinity()).is_infinite();
+            f32::neg_infinity().must().be_infinite();
         }
 
         #[test]
         fn panics_when_not_infinity() {
-            assert_that_panic_by(|| assert_that(1.23).with_location(false).is_infinite())
+            assert_that_panic_by(|| 1.23.must().with_location(false).be_infinite())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

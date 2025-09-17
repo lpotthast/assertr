@@ -6,6 +6,13 @@ use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 pub trait DisplayAssertions {
     fn has_display_value(self, expected: impl Display) -> Self;
+
+    fn have_display_value(self, expected: impl Display) -> Self
+    where
+        Self: Sized,
+    {
+        self.has_display_value(expected)
+    }
 }
 
 impl<T: Display, M: Mode> DisplayAssertions for AssertThat<'_, T, M> {
@@ -14,7 +21,7 @@ impl<T: Display, M: Mode> DisplayAssertions for AssertThat<'_, T, M> {
         self.track_assertion();
 
         let actual_string = format!("{}", self.actual());
-        let expected_string = format!("{}", expected);
+        let expected_string = format!("{expected}");
 
         let actual_str = strip_quotation_marks(actual_string.as_str());
         let expected_str = strip_quotation_marks(expected_string.as_str());
@@ -39,23 +46,19 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_same_value() {
-                assert_that(42).has_display_value(42);
+                42.must().have_display_value(42);
             }
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(42).has_display_value("42");
+                42.must().have_display_value("42");
             }
 
             #[test]
             fn panics_when_not_equal() {
-                assert_that_panic_by(|| {
-                    assert_that(42)
-                        .with_location(false)
-                        .has_display_value("foo")
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| 42.must().with_location(false).have_display_value("foo"))
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected: "foo"
 
@@ -71,15 +74,16 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that("foo:bar").has_display_value("foo:bar");
+                "foo:bar".must().have_display_value("foo:bar");
             }
 
             #[test]
             fn panics_when_not_equal() {
                 assert_that_panic_by(|| {
-                    assert_that("foo:bar")
+                    "foo:bar"
+                        .must()
                         .with_location(false)
-                        .has_display_value("foo:baz")
+                        .have_display_value("foo:baz")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -115,22 +119,24 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(Person {
+                Person {
                     age: 42,
                     alive: true,
-                })
-                .has_display_value("PERSON<AGE=42,ALIVE=true>");
+                }
+                .must()
+                .have_display_value("PERSON<AGE=42,ALIVE=true>");
             }
 
             #[test]
             fn panics_when_not_equal() {
                 assert_that_panic_by(|| {
-                    assert_that(Person {
+                    Person {
                         age: 42,
                         alive: true,
-                    })
+                    }
+                    .must()
                     .with_location(false)
-                    .has_display_value("foo")
+                    .have_display_value("foo")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"

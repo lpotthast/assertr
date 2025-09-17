@@ -9,20 +9,56 @@ pub trait PartialOrdAssertions<T> {
         E: Debug,
         T: PartialOrd<E>;
 
+    fn be_less_than<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>,
+        Self: Sized,
+    {
+        self.is_less_than(expected)
+    }
+
     fn is_greater_than<E>(self, expected: impl Borrow<E>) -> Self
     where
         E: Debug,
         T: PartialOrd<E>;
+
+    fn be_greater_than<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>,
+        Self: Sized,
+    {
+        self.is_greater_than(expected)
+    }
 
     fn is_less_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
     where
         E: Debug,
         T: PartialOrd<E>;
 
+    fn be_less_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>,
+        Self: Sized,
+    {
+        self.is_less_or_equal_to(expected)
+    }
+
     fn is_greater_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
     where
         E: Debug,
         T: PartialOrd<E>;
+
+    fn be_greater_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    where
+        E: Debug,
+        T: PartialOrd<E>,
+        Self: Sized,
+    {
+        self.is_greater_or_equal_to(expected)
+    }
 }
 
 impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
@@ -115,37 +151,37 @@ mod tests {
 
     #[test]
     fn is_less_than_succeeds_when_less() {
-        assert_that(3).is_less_than(4);
-        assert_that(3).is_less_than(&4);
+        3.must().be_less_than(4);
+        3.must().be_less_than(&4);
     }
 
     #[test]
     fn is_greater_than_succeeds_when_greater() {
-        assert_that(7).is_greater_than(6);
-        assert_that(7).is_greater_than(&6);
+        7.must().be_greater_than(6);
+        7.must().be_greater_than(&6);
     }
 
     #[test]
     fn is_less_or_equal_to_than_succeeds_when_less() {
-        assert_that(3).is_less_or_equal_to(4);
-        assert_that(3).is_less_or_equal_to(&4);
+        3.must().be_less_or_equal_to(4);
+        3.must().be_less_or_equal_to(&4);
     }
 
     #[test]
     fn is_less_or_equal_to_than_succeeds_when_equal() {
-        assert_that(3).is_less_or_equal_to(3);
-        assert_that(3).is_less_or_equal_to(&3);
+        3.must().be_less_or_equal_to(3);
+        3.must().be_less_or_equal_to(&3);
     }
 
     #[test]
     fn is_greater_or_equal_to_succeeds_when_greater() {
-        assert_that(7).is_greater_or_equal_to(6);
-        assert_that(7).is_greater_or_equal_to(&6);
+        7.must().be_greater_or_equal_to(6);
+        7.must().be_greater_or_equal_to(&6);
     }
 
     #[test]
     fn is_greater_or_equal_to_succeeds_when_equal() {
-        assert_that(7).is_greater_or_equal_to(7);
-        assert_that(7).is_greater_or_equal_to(&7);
+        7.must().be_greater_or_equal_to(7);
+        7.must().be_greater_or_equal_to(&7);
     }
 }

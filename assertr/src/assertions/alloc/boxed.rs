@@ -13,7 +13,20 @@ pub trait BoxAssertions<'t, M: Mode> {
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, M>;
 
     /// If this fails in capturing mode, a panic is raised!
+    fn have_type<E: 'static>(self) -> AssertThat<'t, E, M>
+    where
+        Self: Sized,
+    {
+        self.has_type()
+    }
+
+    /// If this fails in capturing mode, a panic is raised!
     fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M>;
+
+    /// If this fails in capturing mode, a panic is raised!
+    fn have_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M> {
+        self.has_type_ref()
+    }
 }
 
 impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
@@ -197,7 +210,11 @@ mod tests {
         fn succeeds_when_type_of_contained_value_matches_expected_type() {
             let boxed_any: Box<dyn Any> = Box::new("foo");
 
-            assert_that(boxed_any).has_type::<&str>().is_equal_to("foo");
+            boxed_any
+                .must()
+                .have_type::<&str>()
+                .and()
+                .be_equal_to("foo");
         }
 
         #[test]
@@ -205,7 +222,7 @@ mod tests {
             let boxed_any: Box<dyn Any> = Box::new("foo");
 
             assert_that_panic_by(|| {
-                assert_that(boxed_any)
+                assert_that_owned(boxed_any)
                     .with_location(false)
                     .has_type::<u32>();
             })
@@ -229,7 +246,7 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual: Box<dyn Any> = Box::new(String::from("foo"));
 
-            assert_that(actual)
+            assert_that_owned(actual)
                 .has_type_ref::<String>()
                 .is_equal_to(&String::from("foo"));
         }
@@ -239,7 +256,7 @@ mod tests {
             let actual: Box<dyn Any> = Box::new(String::from("foo"));
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that_owned(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
@@ -258,7 +275,7 @@ mod tests {
             let actual: Box<dyn Any> = Box::new("foo");
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that_owned(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
@@ -278,7 +295,7 @@ mod tests {
             let actual: Box<dyn Any> = Box::new(Foo {});
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that_owned(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
