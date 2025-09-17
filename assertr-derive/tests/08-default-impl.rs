@@ -16,9 +16,9 @@ fn main() {
         field_2: 2,
         field_3: 3,
     };
-    
+
     foo.must().be_equal_to(FooAssertrEq {
-        field_1: eq(1), 
+        field_1: eq(1),
         ..Default::default()
     });
 }

@@ -48,6 +48,8 @@ pub mod prelude {
     pub use crate::assertions::condition::ConditionAssertions;
     pub use crate::assertions::condition::IterableConditionAssertions;
     pub use crate::assertions::core::prelude::*;
+    #[cfg(feature = "http")]
+    pub use crate::assertions::http::prelude::*;
     #[cfg(feature = "jiff")]
     pub use crate::assertions::jiff::prelude::*;
     #[cfg(feature = "num")]
@@ -96,7 +98,7 @@ pub fn assert_that_owned<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
 
 #[track_caller]
 #[must_use]
-pub fn assert_that<T>(actual: &T) -> AssertThat<T, Panic> {
+pub fn assert_that<T>(actual: &T) -> AssertThat<'_, T, Panic> {
     AssertThat::new_panicking(Actual::Borrowed(actual))
 }
 
