@@ -4,14 +4,44 @@ use crate::prelude::{BoolAssertions, PartialEqAssertions, PartialOrdAssertions};
 
 pub trait HttpHeaderValueAssertions<'t, M: Mode> {
     fn is_empty(self) -> Self;
+    fn be_empty(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_empty()
+    }
 
     fn is_not_empty(self) -> Self;
+    fn not_be_empty(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_not_empty()
+    }
 
     fn is_sensitive(self) -> Self;
+    fn be_sensitive(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_sensitive()
+    }
 
     fn is_insensitive(self) -> Self;
+    fn be_insensitive(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.is_sensitive()
+    }
 
     fn is_ascii(self) -> AssertThat<'t, String, M>;
+    fn be_ascii(self) -> AssertThat<'t, String, M>
+    where
+        Self: Sized,
+    {
+        self.is_ascii()
+    }
 }
 
 impl<'t, M: Mode> HttpHeaderValueAssertions<'t, M>
@@ -63,7 +93,7 @@ mod tests {
         async fn succeeds_when_matching() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that(actual).has_debug_value("http/1.1");
+            actual.must().have_debug_value("http/1.1");
         }
     }
 
@@ -76,14 +106,14 @@ mod tests {
         fn succeeds_when_empty() {
             let actual = HeaderValue::from_str("").expect("valid header value");
 
-            assert_that(actual).is_empty();
+            actual.must().be_empty();
         }
 
         #[test]
         fn panics_when_not_empty() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_empty())
+            assert_that_panic_by(|| actual.must().with_location(false).be_empty())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -108,14 +138,14 @@ mod tests {
         fn succeeds_when_not_empty() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that(actual).is_not_empty();
+            actual.must().not_be_empty();
         }
 
         #[test]
         fn panics_when_empty() {
             let actual = HeaderValue::from_str("").expect("valid header value");
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_not_empty())
+            assert_that_panic_by(|| actual.must().with_location(false).not_be_empty())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -143,7 +173,7 @@ mod tests {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(true);
 
-            assert_that(actual).is_sensitive();
+            actual.must().be_sensitive();
         }
 
         #[test]
@@ -151,7 +181,7 @@ mod tests {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(false);
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_sensitive())
+            assert_that_panic_by(|| actual.must().with_location(false).be_sensitive())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -176,7 +206,7 @@ mod tests {
         fn not_sensitive_by_default() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that(actual).is_insensitive();
+            actual.must().be_insensitive();
         }
 
         #[test]
@@ -184,7 +214,7 @@ mod tests {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(false);
 
-            assert_that(actual).is_insensitive();
+            actual.must().be_insensitive();
         }
 
         #[test]
@@ -192,7 +222,7 @@ mod tests {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(true);
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_insensitive())
+            assert_that_panic_by(|| actual.must().with_location(false).be_insensitive())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -217,21 +247,21 @@ mod tests {
         async fn succeeds_when_constructed_from_visible_ascii_characters_through_str() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that(actual).is_ascii().is_equal_to("http/1.1");
+            actual.must().be_ascii().be_equal_to("http/1.1");
         }
 
         #[tokio::test]
         async fn succeeds_when_constructed_from_visible_ascii_characters_through_bytes() {
             let actual = HeaderValue::from_bytes(&[32, 33, 34]).expect("valid header value");
 
-            assert_that(actual).is_ascii().is_equal_to(" !\"");
+            actual.must().be_ascii().be_equal_to(" !\"");
         }
 
         #[tokio::test]
         async fn panics_when_constructed_from_non_ascii_characters_through_str() {
             let actual = HeaderValue::from_str("Ä").expect("valid header value");
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_ascii())
+            assert_that_panic_by(|| actual.must().with_location(false).be_ascii())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -250,7 +280,7 @@ mod tests {
         async fn panics_when_constructed_from_non_ascii_characters_through_bytes() {
             let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_ascii())
+            assert_that_panic_by(|| actual.must().with_location(false).be_ascii())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
