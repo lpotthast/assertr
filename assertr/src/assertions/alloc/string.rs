@@ -15,6 +15,12 @@ pub trait StringAssertions {
     }
 
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self;
+    fn not_contain(self, unexpected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.does_not_contain(unexpected)
+    }
 
     fn starts_with(self, expected: impl AsRef<str>) -> Self;
 
@@ -27,6 +33,13 @@ pub trait StringAssertions {
 
     fn does_not_start_with(self, unexpected: impl AsRef<str>) -> Self;
 
+    fn not_start_with(self, unexpected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.does_not_start_with(unexpected)
+    }
+
     fn ends_with(self, expected: impl AsRef<str>) -> Self;
 
     fn end_with(self, expected: impl AsRef<str>) -> Self
@@ -37,6 +50,13 @@ pub trait StringAssertions {
     }
 
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self;
+
+    fn not_end_with(self, unexpected: impl AsRef<str>) -> Self
+    where
+        Self: Sized,
+    {
+        self.does_not_end_with(unexpected)
+    }
 }
 
 impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
@@ -119,15 +139,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_not_contained() {
-            assert_that(String::from("foobar")).does_not_contain("hello");
+            String::from("foobar").must().not_contain("hello");
         }
 
         #[test]
         fn panics_when_expected_is_contained() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                String::from("foo bar baz")
+                    .must()
                     .with_location(false)
-                    .does_not_contain("ar b");
+                    .not_contain("ar b");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -177,15 +198,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_does_not_match() {
-            assert_that(String::from("foo bar baz")).starts_with("fo");
+            String::from("foo bar baz").must().does_not_start_with("of");
         }
 
         #[test]
         fn panics_when_start_matches() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                String::from("foo bar baz")
+                    .must()
                     .with_location(false)
-                    .does_not_start_with("foo bar ba");
+                    .not_start_with("foo bar ba");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -235,15 +257,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_end_does_not_matches() {
-            assert_that(String::from("foo bar baz")).does_not_end_with("bar");
+            String::from("foo bar baz").must().not_end_with("bar");
         }
 
         #[test]
         fn panics_when_end_matches() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar baz"))
+                String::from("foo bar baz")
+                    .must()
                     .with_location(false)
-                    .does_not_end_with(" baz");
+                    .not_end_with(" baz");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
