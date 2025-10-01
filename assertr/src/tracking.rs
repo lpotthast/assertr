@@ -48,6 +48,16 @@ mod tests {
             );
     }
 
+    #[tokio::test]
+    async fn panics_on_drop_when_no_assertions_were_made_async() {
+        assert_that_panic_by_async(async || assert_that(42).with_location(false))
+            .await
+            .has_type::<&str>()
+            .is_equal_to(
+                "An AssertThat was dropped without performing any actual assertions on it!",
+            );
+    }
+
     #[test]
     fn number_of_assertions_are_tracked() {
         let initial_assertions = assert_that(42).is_equal_to(42).is_positive();

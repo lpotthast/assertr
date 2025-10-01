@@ -11,8 +11,8 @@ impl<T, M: Mode> MemAssertions for AssertThat<'_, Type<T>, M> {
     #[track_caller]
     fn needs_drop(self) -> Self {
         self.track_assertion();
-
-        if !std::mem::needs_drop::<T>() {
+        let actual = self.actual();
+        if !actual.needs_drop() {
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Type {actual:#?} was expected to need drop,
@@ -20,7 +20,7 @@ impl<T, M: Mode> MemAssertions for AssertThat<'_, Type<T>, M> {
                     but dropping it is guaranteed to have no side effect.
 
                     You may forgot to `impl Drop` for this type.
-                "#, actual = self.actual().get_type_name()}
+                "#, actual = actual.get_type_name()}
             });
         }
         self

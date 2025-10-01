@@ -80,7 +80,6 @@ impl<M: Mode> PathAssertions for AssertThat<'_, PathBuf, M> {
         self
     }
     #[track_caller]
-
     fn starts_with(self, expected: impl AsRef<Path>) -> Self {
         self.derive(|it| it.as_path()).starts_with(expected);
         self
