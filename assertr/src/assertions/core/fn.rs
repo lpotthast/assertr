@@ -121,7 +121,7 @@ where
 
         // Execute the user function
         let this: AssertThat<Result<(), Box<dyn Any + Send>>, M> = self
-            .map_async2(async |it| match it {
+            .map_async(async |it| match it {
                 Actual::Borrowed(_) => {
                     panic!("panics_async() can only be called on an owned FnOnce!")
                 }
@@ -166,7 +166,7 @@ where
         self.track_assertion();
 
         let this: AssertThat<Result<R, Box<dyn Any + Send + 'static>>, M> = self
-            .map_async2(async |it| match it {
+            .map_async(async |it| match it {
                 Actual::Borrowed(_) => {
                     panic!("does_not_panic_async() can only be called on an owned FnOnce!")
                 }

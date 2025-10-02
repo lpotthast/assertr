@@ -382,7 +382,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub async fn map_async2<'u, U: 'u>(
+    pub async fn map_async<'u, U: 'u>(
         self,
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
         // requiring only one type, which is the type we want to map to.
@@ -403,18 +403,19 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub async fn map_async<U: 't, Fut>(
+    pub async fn map_async_owned<'u, U: 'u>(
         self,
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
         // requiring only one type, which is the type we want to map to.
-        mapper: impl FnOnce(Actual<T>) -> Fut,
-    ) -> AssertThat<'t, U, M>
+        mapper: impl AsyncFnOnce(<T as ToOwned>::Owned) -> U,
+    ) -> AssertThat<'u, U, M>
     where
-        Fut: Future<Output = U>,
+        T: ToOwned,
+        't: 'u,
     {
         AssertThat {
             parent: self.parent,
-            actual: mapper(self.actual).await.into(),
+            actual: Actual::Owned(mapper(self.actual.borrowed().to_owned()).await),
             subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: self.detail_messages,
             print_location: self.print_location,
