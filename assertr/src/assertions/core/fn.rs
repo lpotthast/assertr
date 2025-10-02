@@ -27,9 +27,18 @@ impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat
         let this: AssertThat<Result<(), Box<dyn Any + Send + 'static>>, M> =
             self.map(|it| match it {
                 Actual::Borrowed(_) => panic!("panics() can only be called on an owned FnOnce!"),
-                Actual::Owned(f) => Actual::Owned(
-                    std::panic::catch_unwind(core::panic::AssertUnwindSafe(f)).map(|it| ()),
-                ),
+                Actual::Owned(f) => {
+                    // First, call the closure, receiving its output.
+                    let res = std::panic::catch_unwind(core::panic::AssertUnwindSafe(f));
+
+                    // Then, we drop the output,
+                    // while catching any panics resulting from the `Drop` implementation.
+                    let res = std::panic::catch_unwind(core::panic::AssertUnwindSafe(move || {
+                        res.map(|value| drop(value))
+                    }));
+
+                    Actual::Owned(res.flatten())
+                }
             });
 
         if this.actual().is_ok() {
@@ -63,7 +72,15 @@ impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat
                     panic!("does_not_panic() can only be called on an owned FnOnce!")
                 }
                 Actual::Owned(f) => {
-                    Actual::Owned(std::panic::catch_unwind(core::panic::AssertUnwindSafe(f)))
+                    // Only capture the closures output while catching panics.
+                    // We do not expect ANY panics, so just put the output in the returned
+                    // assertion context. Should a `Drop` impl of R lead to a panic,
+                    // the asserting code will see that panic.
+                    // We cannot test for drop panics in a more deliberate way hare,
+                    // e.g. by actually trying to drop the value, because we want the
+                    // user to be a ble to issue further assertions on value of `R`.
+                    let res = std::panic::catch_unwind(core::panic::AssertUnwindSafe(f));
+                    Actual::Owned(res)
                 }
             });
 
@@ -108,7 +125,18 @@ where
                 Actual::Borrowed(_) => {
                     panic!("panics_async() can only be called on an owned FnOnce!")
                 }
-                Actual::Owned(f) => Actual::Owned(f().catch_unwind().await.map(|_| ())),
+                Actual::Owned(f) => {
+                    // First, we await the future, receiving its output.
+                    let res = f().catch_unwind().await;
+
+                    // Then, we drop the output,
+                    // while catching any panics resulting from the `Drop` implementation.
+                    let res = std::panic::catch_unwind(core::panic::AssertUnwindSafe(move || {
+                        res.map(|value| drop(value))
+                    }));
+
+                    Actual::Owned(res.flatten())
+                }
             })
             .await;
 
@@ -143,7 +171,15 @@ where
                     panic!("does_not_panic_async() can only be called on an owned FnOnce!")
                 }
                 Actual::Owned(f) => {
-                    Actual::Owned(core::panic::AssertUnwindSafe(f()).catch_unwind().await)
+                    // Only await the futures output while catching panics.
+                    // We do not expect ANY panics, so just put the output in the returned
+                    // assertion context. Should a `Drop` impl of R lead to a panic,
+                    // the asserting code will see that panic.
+                    // We cannot test for drop panics in a more deliberate way hare,
+                    // e.g. by actually trying to drop the value, because we want the
+                    // user to be a ble to issue further assertions on value of `R`.
+                    let res = f().catch_unwind().await;
+                    Actual::Owned(res)
                 }
             })
             .await;
