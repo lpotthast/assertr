@@ -42,6 +42,8 @@ pub mod prelude {
     pub use crate::assert_that;
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by;
+    #[cfg(feature = "std")]
+    pub use crate::assert_that_panic_by_async;
     pub use crate::assert_that_ref;
     pub use crate::assert_that_type;
     pub use crate::assertions::HasLength;
@@ -112,6 +114,19 @@ pub fn assert_that_panic_by<'t, R>(
     use crate::prelude::FnOnceAssertions;
 
     assert_that(fun).panics()
+}
+
+// #[track_caller] // This is implied in the default async desugaring.
+#[must_use]
+#[cfg(feature = "std")]
+pub async fn assert_that_panic_by_async<'t, F, Fut, R>(fun: F) -> AssertThat<'t, PanicValue, Panic>
+where
+    F: FnOnce() -> Fut + 't,
+    Fut: Future<Output = R> + UnwindSafe,
+{
+    use crate::prelude::AsyncFnOnceAssertions;
+
+    assert_that(fun).panics_async().await
 }
 
 pub struct Type<T> {
@@ -237,7 +252,10 @@ pub struct AssertThat<'t, T, M: Mode> {
     mode: RefCell<M>,
 }
 
-pub(crate) trait DynAssertThat: Fallible + WithDetail + AssertionTracking {}
+pub(crate) trait DynAssertThat:
+    Fallible + WithDetail + AssertionTracking + UnwindSafe + RefUnwindSafe
+{
+}
 impl<T, M: Mode> DynAssertThat for AssertThat<'_, T, M> {}
 
 impl<T, M: Mode> UnwindSafe for AssertThat<'_, T, M> {}
@@ -364,18 +382,40 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub async fn map_async<U: 't, Fut>(
+    pub async fn map_async<'u, U: 'u>(
         self,
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
         // requiring only one type, which is the type we want to map to.
-        mapper: impl FnOnce(Actual<T>) -> Fut,
-    ) -> AssertThat<'t, U, M>
+        mapper: impl AsyncFnOnce(Actual<T>) -> Actual<'u, U>,
+    ) -> AssertThat<'u, U, M>
     where
-        Fut: Future<Output = U>,
+        't: 'u,
     {
         AssertThat {
             parent: self.parent,
-            actual: mapper(self.actual).await.into(),
+            actual: mapper(self.actual).await,
+            subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: self.detail_messages,
+            print_location: self.print_location,
+            number_of_assertions: self.number_of_assertions,
+            failures: self.failures,
+            mode: self.mode,
+        }
+    }
+
+    pub async fn map_async_owned<'u, U: 'u>(
+        self,
+        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
+        // requiring only one type, which is the type we want to map to.
+        mapper: impl AsyncFnOnce(<T as ToOwned>::Owned) -> U,
+    ) -> AssertThat<'u, U, M>
+    where
+        T: ToOwned,
+        't: 'u,
+    {
+        AssertThat {
+            parent: self.parent,
+            actual: Actual::Owned(mapper(self.actual.borrowed().to_owned()).await),
             subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: self.detail_messages,
             print_location: self.print_location,

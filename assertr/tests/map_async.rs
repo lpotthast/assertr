@@ -23,7 +23,7 @@ async fn is_able_to_access_derived_properties_without_breaking_the_call_chain() 
     };
 
     assert_that(person)
-        .map_async(|it| it.unwrap_owned().to_metadata())
+        .map_async(async |it| it.unwrap_owned().to_metadata().await.into())
         .await
         .map(|it| it.borrowed().alive.into())
         .is_equal_to(true);

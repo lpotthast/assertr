@@ -20,14 +20,14 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ```tome
 [dependencies]
-assertr = "0.3.8"
+assertr = "0.4.0"
 ```
 
 or
 
 ```tome
 [dependencies]
-assertr = { version = "0.3.8", features = ["derive"] }
+assertr = { version = "0.4.0", features = ["derive"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
