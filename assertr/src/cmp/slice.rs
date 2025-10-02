@@ -31,26 +31,26 @@ where
 {
     let cmp_result = crate::util::slice::compare_with_context(slice1, slice2, ctx.as_deref_mut());
 
-    if let Some(ctx) = ctx {
-        if !cmp_result.strictly_equal {
-            if !cmp_result.same_length {
-                ctx.add_difference(format!(
-                    "Slices are not of the same length. A:{} and B:{}",
-                    slice1.len(),
-                    slice2.len()
-                ));
-            }
-            if cmp_result.only_differing_in_order() {
-                ctx.add_difference(format!(
-                    "Slices only differ in their element-order. A:{slice1:#?} and B:{slice2:#?}"
-                ));
-            }
-            if !cmp_result.not_in_b.is_empty() {
-                ctx.add_difference(format!("Elements not expected: {:#?}", cmp_result.not_in_b));
-            }
-            if !cmp_result.not_in_a.is_empty() {
-                ctx.add_difference(format!("Elements not found: {:#?}", cmp_result.not_in_a));
-            }
+    if let Some(ctx) = ctx
+        && !cmp_result.strictly_equal
+    {
+        if !cmp_result.same_length {
+            ctx.add_difference(format!(
+                "Slices are not of the same length. A:{} and B:{}",
+                slice1.len(),
+                slice2.len()
+            ));
+        }
+        if cmp_result.only_differing_in_order() {
+            ctx.add_difference(format!(
+                "Slices only differ in their element-order. A:{slice1:#?} and B:{slice2:#?}"
+            ));
+        }
+        if !cmp_result.not_in_b.is_empty() {
+            ctx.add_difference(format!("Elements not expected: {:#?}", cmp_result.not_in_b));
+        }
+        if !cmp_result.not_in_a.is_empty() {
+            ctx.add_difference(format!("Elements not found: {:#?}", cmp_result.not_in_a));
         }
     }
 

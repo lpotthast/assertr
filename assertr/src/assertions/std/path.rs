@@ -240,17 +240,17 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         let actual = self.actual();
         let actual_file_name = actual.file_name();
         let expected_file_name = expected.as_ref();
-        if let Some(actual_file_name) = actual_file_name {
-            if actual_file_name != expected_file_name {
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
-                        Path: {actual:?}
+        if let Some(actual_file_name) = actual_file_name
+            && actual_file_name != expected_file_name
+        {
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
+                    Path: {actual:?}
 
-                        Expected filename: {expected_file_name:#?}
-                          Actual filename: {actual_file_name:#?}
-                    "#}
-                });
-            }
+                    Expected filename: {expected_file_name:#?}
+                      Actual filename: {actual_file_name:#?}
+                "#}
+            });
         }
         self
     }
@@ -261,17 +261,17 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         let actual = self.actual();
         let actual_file_stem = actual.file_stem();
         let expected_file_stem = expected.as_ref();
-        if let Some(actual_file_stem) = actual_file_stem {
-            if actual_file_stem != expected_file_stem {
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
+        if let Some(actual_file_stem) = actual_file_stem
+            && actual_file_stem != expected_file_stem
+        {
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
                         Path: {actual:?}
 
                         Expected filestem: {expected_file_stem:#?}
                           Actual filestem: {actual_file_stem:#?}
                     "#}
-                });
-            }
+            });
         }
         self
     }
@@ -282,17 +282,17 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         let actual = self.actual();
         let actual_extension = actual.extension();
         let expected_extension = expected.as_ref();
-        if let Some(actual_extension) = actual_extension {
-            if actual_extension != expected_extension {
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
+        if let Some(actual_extension) = actual_extension
+            && actual_extension != expected_extension
+        {
+            self.fail(|w: &mut String| {
+                writedoc! {w, r#"
                         Path: {actual:?}
 
                         Expected extension: {expected_extension:#?}
                           Actual extension: {actual_extension:#?}
                     "#}
-                });
-            }
+            });
         }
         self
     }
