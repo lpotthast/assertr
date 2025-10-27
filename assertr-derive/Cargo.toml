@@ -16,12 +16,8 @@ keywords = ["assertions", "assert", "assert-that", "testing"]
 [lib]
 proc-macro = true
 
-[[test]]
-name = "tests"
-path = "tests/progress.rs"
-
 [dependencies]
-darling = "0.20.10"
+darling = "0.21.3"
 proc-macro2 = "1.0.95"
 quote = "1.0.40"
 syn = { version = "2.0.101", features = ["extra-traits"] }
@@ -30,3 +26,7 @@ syn = { version = "2.0.101", features = ["extra-traits"] }
 assertr = { path = "../assertr", features = ["std", "derive"] }
 indoc = "2.0.5"
 trybuild = { version = "1.0.103", features = ["diff"] }
+
+[[test]]
+name = "tests"
+path = "tests/progress.rs"

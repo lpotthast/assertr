@@ -7,3 +7,11 @@ msrv:
     cargo install cargo-msrv
     cargo msrv find --path assertr
     cargo msrv find --path assertr-derive
+
+tidy:
+    cargo update --workspace
+    cargo sort --workspace
+    cargo fmt
+    cargo check --all
+    cargo clippy --all
+    cargo test --all

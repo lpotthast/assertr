@@ -57,6 +57,12 @@ pub mod prelude {
     pub use crate::assertions::jiff::prelude::*;
     #[cfg(feature = "num")]
     pub use crate::assertions::num::NumAssertions;
+    #[cfg(feature = "program")]
+    pub use crate::assertions::program::Program;
+    #[cfg(feature = "program")]
+    pub use crate::assertions::program::ProgramAssertions;
+    #[cfg(feature = "program")]
+    pub use crate::assertions::program::ProgramAssertionsRequiringPanicMode;
     #[cfg(feature = "reqwest")]
     pub use crate::assertions::reqwest::prelude::*;
     #[cfg(feature = "std")]
