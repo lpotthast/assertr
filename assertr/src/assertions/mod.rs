@@ -11,6 +11,8 @@ pub mod http;
 pub mod jiff;
 #[cfg(feature = "num")]
 pub mod num;
+#[cfg(feature = "program")]
+pub mod program;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 #[cfg(feature = "std")]
