@@ -3,7 +3,7 @@ use crate::mode::{Mode, Panic};
 use crate::tracking::AssertionTracking;
 use alloc::borrow::Cow;
 use indoc::writedoc;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -12,6 +12,7 @@ use std::path::PathBuf;
 pub struct Program<'a>(Cow<'a, OsStr>);
 
 impl<'a> Program<'a> {
+    /// Prefer calling `Program::from` instead.
     pub fn new(program: impl Into<Cow<'a, OsStr>>) -> Self {
         Program(program.into())
     }
@@ -20,6 +21,33 @@ impl<'a> Program<'a> {
 impl<'a> From<&'a str> for Program<'a> {
     fn from(value: &'a str) -> Self {
         Self(Cow::Borrowed(OsStr::new(value)))
+    }
+}
+
+impl<'a> From<String> for Program<'a> {
+    fn from(value: String) -> Self {
+        Self(Cow::Owned(OsString::from(value)))
+    }
+}
+
+impl<'a> From<&'a OsStr> for Program<'a> {
+    fn from(value: &'a OsStr) -> Self {
+        Self(Cow::Borrowed(value))
+    }
+}
+
+impl<'a> From<OsString> for Program<'a> {
+    fn from(value: OsString) -> Self {
+        Self(Cow::Owned(value))
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for Program<'a> {
+    fn from(value: Cow<'a, str>) -> Self {
+        match value {
+            Cow::Borrowed(v) => Self::from(v),
+            Cow::Owned(v) => Self::from(v),
+        }
     }
 }
 
@@ -93,6 +121,53 @@ impl<'t, 'a> ProgramAssertionsRequiringPanicMode<'t> for AssertThat<'t, Program<
 
 #[cfg(test)]
 mod tests {
+    mod program_construction {
+        use crate::prelude::*;
+        use alloc::borrow::Cow;
+        use std::ffi::OsStr;
+        use std::ffi::OsString;
+
+        #[test]
+        fn new_os_str() {
+            let _ = Program::new(OsStr::new("ls"));
+        }
+
+        #[test]
+        fn new_os_string() {
+            let _ = Program::new(OsString::from("ls"));
+        }
+
+        #[test]
+        fn from_str() {
+            let _ = Program::from("ls");
+        }
+
+        #[test]
+        fn from_string() {
+            let _ = Program::from(String::from("ls"));
+        }
+
+        #[test]
+        fn from_os_str() {
+            let _ = Program::from(OsStr::new("ls"));
+        }
+
+        #[test]
+        fn from_os_string() {
+            let _ = Program::from(OsString::from("ls"));
+        }
+
+        #[test]
+        fn from_cow_str() {
+            let _ = Program::from(Cow::Borrowed("ls"));
+        }
+
+        #[test]
+        fn from_cow_string() {
+            let _ = Program::from(Cow::Owned("ls".to_owned()));
+        }
+    }
+
     mod exists {
         use crate::prelude::*;
         use indoc::formatdoc;
