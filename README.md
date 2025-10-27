@@ -20,22 +20,27 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ```tome
 [dependencies]
-assertr = "0.4.0"
+assertr = "0.4.2"
 ```
 
 or
 
 ```tome
 [dependencies]
-assertr = { version = "0.4.0", features = ["derive"] }
+assertr = { version = "0.4.2", features = ["full"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
-field-by-field value. More on that later.
+field-by-field value or support for assertions on types of other crates. More on that later.
 
 - You may disable the default features for no-std environments.
 
 - You may activate any of the following features:
+
+| feature-group | description                                                         |
+|---------------|---------------------------------------------------------------------|
+| default       | Small set of features, enabling support for `std` types an numbers. |
+| full          | Enables all features listed below.                                  |
 
 | feature | description                                                           | default feature |
 |---------|-----------------------------------------------------------------------|-----------------|
@@ -45,8 +50,10 @@ field-by-field value. More on that later.
 | libm    | Use fallback implementations for Rust's float math functions in core. | no              |
 | serde   | Assertions for serializable types (supporting json and toml).         | no              |
 | jiff    | Assertions for types from the `jiff` crate.                           | no              |
+| http    | Assertions for types from the `http` crate.                           | no              |
 | tokio   | Assertions for types from the `tokio` crate.                          | no              |
 | reqwest | Assertions for types from the `reqwest` crate.                        | no              |
+| program | Assertions for the provided `Program` type.                           | no              |
 
 ## Quick start
 
