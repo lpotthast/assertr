@@ -241,9 +241,9 @@ mod tests {
                     -------- assertr --------
                     Expected: "/some/unexpected/location/ls"
 
-                      Actual: "/bin/ls"
+                      Actual: "{}"
                     -------- assertr --------
-                "#});
+                "#, expected_ls_location()});
 
             drop(rw_lock_write_guard);
         }

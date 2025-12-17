@@ -77,6 +77,7 @@ impl<B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertThat<'_
 }
 
 impl<B, M: Mode> RangeAssertions<B> for AssertThat<'_, B, M> {
+    #[track_caller]
     fn is_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug,
@@ -99,6 +100,7 @@ impl<B, M: Mode> RangeAssertions<B> for AssertThat<'_, B, M> {
         self
     }
 
+    #[track_caller]
     fn is_not_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug,
