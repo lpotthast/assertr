@@ -11,11 +11,11 @@ fn is_able_to_use_json_conversion() {
 
     let expected = r#"{"age":42}"#;
 
-    assert_that(person.clone())
+    assert_that!(person.clone())
         .map(json())
         .is_equal_to(expected);
 
-    assert_that(person).as_json().is_equal_to(expected);
+    assert_that!(person).as_json().is_equal_to(expected);
 }
 
 #[test]
@@ -31,14 +31,14 @@ fn is_able_to_use_toml_conversion() {
         list: vec![1, 2],
     };
 
-    assert_that(config.clone())
+    assert_that!(config.clone())
         .map(toml())
         .is_equal_to(indoc::formatdoc! {r#"
         value = 42
         list = [1, 2]
     "#});
 
-    assert_that(config)
+    assert_that!(config)
         .as_toml()
         .is_equal_to(indoc::formatdoc! {r#"
         value = 42

@@ -79,12 +79,12 @@ mod tests {
         #[test]
         fn succeeds_when_empty() {
             let arr: [i32; 0] = [];
-            assert_that(arr).is_empty();
+            assert_that!(arr).is_empty();
         }
 
         #[test]
         fn panics_when_not_empty() {
-            assert_that_panic_by(|| assert_that([1, 2, 3]).with_location(false).is_empty())
+            assert_that_panic_by(|| assert_that!([1, 2, 3]).with_location(false).is_empty())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -108,13 +108,15 @@ mod tests {
         #[test]
         fn with_slice_succeeds_when_empty() {
             let slice: &[i32] = [].as_slice();
-            assert_that(slice).is_empty();
+            assert_that!(slice).is_empty();
         }
 
         #[test]
         fn with_slice_panics_when_not_empty() {
             assert_that_panic_by(|| {
-                assert_that([42].as_slice()).with_location(false).is_empty();
+                assert_that!([42].as_slice())
+                    .with_location(false)
+                    .is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -135,13 +137,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_empty() {
-            assert_that("").is_empty();
+            assert_that!("").is_empty();
         }
 
         #[test]
         fn panics_when_not_empty() {
             assert_that_panic_by(|| {
-                assert_that("foo").with_location(false).is_empty();
+                assert_that!("foo").with_location(false).is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -160,13 +162,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_empty() {
-            assert_that(String::from("")).is_empty();
+            assert_that!(String::from("")).is_empty();
         }
 
         #[test]
         fn panics_when_not_empty() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo"))
+                assert_that!(String::from("foo"))
                     .with_location(false)
                     .is_empty();
             })
@@ -192,13 +194,13 @@ mod tests {
         #[test]
         fn with_slice_succeeds_when_empty() {
             let vec = Vec::<i32>::new();
-            assert_that(vec).is_empty();
+            assert_that!(vec).is_empty();
         }
 
         #[test]
         fn with_slice_panics_when_not_empty() {
             assert_that_panic_by(|| {
-                assert_that(vec![42]).with_location(false).is_empty();
+                assert_that!(vec![42]).with_location(false).is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -223,7 +225,7 @@ mod tests {
         #[test]
         fn succeeds_when_map_is_empty() {
             let map = HashMap::<(), ()>::new();
-            assert_that(map).is_empty();
+            assert_that!(map).is_empty();
         }
 
         #[test]
@@ -231,7 +233,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map).with_location(false).is_empty();
+                assert_that!(map).with_location(false).is_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -257,14 +259,14 @@ mod tests {
         fn succeeds_when_map_is_empty() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            assert_that(map).is_not_empty();
+            assert_that!(map).is_not_empty();
         }
 
         #[test]
         fn panics_when_map_is_empty() {
             assert_that_panic_by(|| {
                 let map = HashMap::<(), ()>::new();
-                assert_that(map).with_location(false).is_not_empty();
+                assert_that!(map).with_location(false).is_not_empty();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -283,13 +285,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_length_matches() {
-            assert_that("foo bar").has_length(7);
+            assert_that!("foo bar").has_length(7);
         }
 
         #[test]
         fn panics_when_expected_length_does_not_match() {
             assert_that_panic_by(|| {
-                assert_that("foo bar").with_location(false).has_length(42);
+                assert_that!("foo bar").with_location(false).has_length(42);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -311,13 +313,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_length_matches() {
-            assert_that(String::from("foo bar")).has_length(7);
+            assert_that!(String::from("foo bar")).has_length(7);
         }
 
         #[test]
         fn panics_when_expected_length_does_not_match() {
             assert_that_panic_by(|| {
-                assert_that(String::from("foo bar"))
+                assert_that!(String::from("foo bar"))
                     .with_location(false)
                     .has_length(42);
             })
@@ -343,18 +345,18 @@ mod tests {
         #[test]
         fn succeeds_when_length_matches_and_empty() {
             let slice: &[i32] = [].as_slice();
-            assert_that(slice).has_length(0);
+            assert_that!(slice).has_length(0);
         }
         #[test]
         fn succeeds_when_length_matches_and_non_empty() {
             let slice: &[i32] = [1, 2, 3].as_slice();
-            assert_that(slice).has_length(3);
+            assert_that!(slice).has_length(3);
         }
 
         #[test]
         fn panics_when_length_does_not_match() {
             assert_that_panic_by(|| {
-                assert_that([42].as_slice())
+                assert_that!([42].as_slice())
                     .with_location(false)
                     .has_length(2);
             })
@@ -382,18 +384,18 @@ mod tests {
         #[test]
         fn succeeds_when_length_matches_and_empty() {
             let vec = Vec::<i32>::new();
-            assert_that(vec).has_length(0);
+            assert_that!(vec).has_length(0);
         }
         #[test]
         fn succeeds_when_length_matches_and_non_empty() {
             let vec = vec![1, 2, 3];
-            assert_that(vec).has_length(3);
+            assert_that!(vec).has_length(3);
         }
 
         #[test]
         fn panics_when_length_does_not_match() {
             assert_that_panic_by(|| {
-                assert_that(vec![42]).with_location(false).has_length(2);
+                assert_that!(vec![42]).with_location(false).has_length(2);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -420,7 +422,7 @@ mod tests {
         #[test]
         fn succeeds_when_length_matches_and_empty() {
             let map = HashMap::<(), ()>::new();
-            assert_that(map).has_length(0);
+            assert_that!(map).has_length(0);
         }
 
         #[test]
@@ -429,7 +431,7 @@ mod tests {
             map.insert("foo", "bar");
             map.insert("bar", "baz");
             map.insert("baz", "foo");
-            assert_that(map).has_length(3);
+            assert_that!(map).has_length(3);
         }
 
         #[test]
@@ -437,7 +439,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map).with_location(false).has_length(2);
+                assert_that!(map).with_location(false).has_length(2);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

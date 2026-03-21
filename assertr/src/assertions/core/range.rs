@@ -154,18 +154,18 @@ mod tests {
 
         #[test]
         fn succeeds_when_element_is_contained() {
-            assert_that("aa"..="zz").contains_element("aa");
-            assert_that("aa"..="zz").contains_element("ab");
-            assert_that("aa"..="zz").contains_element("ac");
-            assert_that("aa"..="zz").contains_element("zx");
-            assert_that("aa"..="zz").contains_element("zy");
-            assert_that("aa"..="zz").contains_element("zz");
+            assert_that!("aa"..="zz").contains_element("aa");
+            assert_that!("aa"..="zz").contains_element("ab");
+            assert_that!("aa"..="zz").contains_element("ac");
+            assert_that!("aa"..="zz").contains_element("zx");
+            assert_that!("aa"..="zz").contains_element("zy");
+            assert_that!("aa"..="zz").contains_element("zz");
         }
 
         #[test]
         fn panics_when_element_is_not_contained() {
             assert_that_panic_by(|| {
-                assert_that("aa".."zz")
+                assert_that!("aa".."zz")
                     .with_location(false)
                     .contains_element("zz")
             })
@@ -186,14 +186,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_element_is_not_contained() {
-            assert_that("aa"..="zz").does_not_contain_element("a");
-            assert_that("aa"..="zz").does_not_contain_element("AA");
+            assert_that!("aa"..="zz").does_not_contain_element("a");
+            assert_that!("aa"..="zz").does_not_contain_element("AA");
         }
 
         #[test]
         fn panics_when_element_is_contained() {
             assert_that_panic_by(|| {
-                assert_that("aa".."zz")
+                assert_that!("aa".."zz")
                     .with_location(false)
                     .does_not_contain_element("cc")
             })
@@ -214,16 +214,20 @@ mod tests {
 
         #[test]
         fn succeeds_when_in_range() {
-            assert_that('a').is_in_range('a'..='z');
-            assert_that('p').is_in_range('a'..='z');
-            assert_that('z').is_in_range('a'..='z');
+            assert_that!('a').is_in_range('a'..='z');
+            assert_that!('p').is_in_range('a'..='z');
+            assert_that!('z').is_in_range('a'..='z');
         }
 
         #[test]
         fn panics_when_not_in_range() {
-            assert_that_panic_by(|| assert_that('A').with_location(false).is_in_range('a'..='z'))
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that!('A')
+                    .with_location(false)
+                    .is_in_range('a'..='z')
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: 'A'
                     is not in range: 'a'..='z'
@@ -238,14 +242,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_not_in_range() {
-            assert_that(-1).is_not_in_range(0..=7);
-            assert_that(8).is_not_in_range(0..=7);
-            assert_that(9).is_not_in_range(0..=7);
+            assert_that!(-1).is_not_in_range(0..=7);
+            assert_that!(8).is_not_in_range(0..=7);
+            assert_that!(9).is_not_in_range(0..=7);
         }
 
         #[test]
         fn panics_when_in_range() {
-            assert_that_panic_by(|| assert_that(5).with_location(false).is_not_in_range(0..=7))
+            assert_that_panic_by(|| assert_that!(5).with_location(false).is_not_in_range(0..=7))
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

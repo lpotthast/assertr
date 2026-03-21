@@ -106,44 +106,44 @@ mod tests {
         fn returns_equal_on_equal_input_using_refs() {
             let result = compare(&[&1, &2, &3], &[&1, &2, &3]);
 
-            assert_that(result.only_differing_in_order()).is_false();
-            assert_that(result.strictly_equal).is_true();
-            assert_that(result.same_length).is_true();
-            assert_that(result.not_in_a).is_empty();
-            assert_that(result.not_in_b).is_empty();
+            assert_that!(result.only_differing_in_order()).is_false();
+            assert_that!(result.strictly_equal).is_true();
+            assert_that!(result.same_length).is_true();
+            assert_that!(result.not_in_a).is_empty();
+            assert_that!(result.not_in_b).is_empty();
         }
 
         #[test]
         fn returns_equal_on_equal_input() {
             let result = compare(&[1, 2, 3], &[1, 2, 3]);
 
-            assert_that(result.only_differing_in_order()).is_false();
-            assert_that(result.strictly_equal).is_true();
-            assert_that(result.same_length).is_true();
-            assert_that(result.not_in_a).is_empty();
-            assert_that(result.not_in_b).is_empty();
+            assert_that!(result.only_differing_in_order()).is_false();
+            assert_that!(result.strictly_equal).is_true();
+            assert_that!(result.same_length).is_true();
+            assert_that!(result.not_in_a).is_empty();
+            assert_that!(result.not_in_b).is_empty();
         }
 
         #[test]
         fn returns_not_equal_on_equal_but_rearranged_input() {
             let result = compare(&[1, 2, 3], &[3, 2, 1]);
 
-            assert_that(result.only_differing_in_order()).is_true();
-            assert_that(result.strictly_equal).is_false();
-            assert_that(result.same_length).is_true();
-            assert_that(result.not_in_a).is_empty();
-            assert_that(result.not_in_b).is_empty();
+            assert_that!(result.only_differing_in_order()).is_true();
+            assert_that!(result.strictly_equal).is_false();
+            assert_that!(result.same_length).is_true();
+            assert_that!(result.not_in_a).is_empty();
+            assert_that!(result.not_in_b).is_empty();
         }
 
         #[test]
         fn returns_not_equal_and_lists_differences_on_differing_input() {
             let result = compare(&[1, 5, 7], &[5, 3, 4, 42]);
 
-            assert_that(result.only_differing_in_order()).is_false();
-            assert_that(result.strictly_equal).is_false();
-            assert_that(result.same_length).is_false();
-            assert_that(result.not_in_a).contains_exactly([&3, &4, &42]);
-            assert_that(result.not_in_b).contains_exactly([&1, &7]);
+            assert_that!(result.only_differing_in_order()).is_false();
+            assert_that!(result.strictly_equal).is_false();
+            assert_that!(result.same_length).is_false();
+            assert_that!(result.not_in_a).contains_exactly([&3, &4, &42]);
+            assert_that!(result.not_in_b).contains_exactly([&1, &7]);
         }
     }
 
@@ -163,7 +163,7 @@ mod tests {
                 .as_slice(),
             );
 
-            assert_that(result.not_matched).is_empty();
+            assert_that!(result.not_matched).is_empty();
         }
 
         #[test]
@@ -178,7 +178,7 @@ mod tests {
                 .as_slice(),
             );
 
-            assert_that(result.not_matched).is_empty();
+            assert_that!(result.not_matched).is_empty();
         }
 
         #[test]
@@ -194,7 +194,7 @@ mod tests {
                 .as_slice(),
             );
 
-            assert_that(result.not_matched).contains_exactly([&1, &7]);
+            assert_that!(result.not_matched).contains_exactly([&1, &7]);
         }
     }
 }

@@ -71,7 +71,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_ready() {
-            assert_that(Poll::Ready(Foo { val: 42 }))
+            assert_that!(Poll::Ready(Foo { val: 42 }))
                 .is_ready()
                 .is_equal_to(Foo { val: 42 });
         }
@@ -79,7 +79,7 @@ mod tests {
         #[test]
         fn panics_when_not_ready() {
             assert_that_panic_by(|| {
-                assert_that(Poll::<Foo>::Pending)
+                assert_that!(Poll::<Foo>::Pending)
                     .with_location(false)
                     .is_ready()
             })
@@ -102,13 +102,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_pending() {
-            assert_that(Poll::<Foo>::Pending).is_pending();
+            assert_that!(Poll::<Foo>::Pending).is_pending();
         }
 
         #[test]
         fn panics_when_ready() {
             assert_that_panic_by(|| {
-                assert_that(Poll::Ready(Foo { val: 42 }))
+                assert_that!(Poll::Ready(Foo { val: 42 }))
                     .with_location(false)
                     .is_pending()
             })

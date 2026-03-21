@@ -37,7 +37,6 @@ mod tests {
 
     mod has_status_code {
         use super::MockServer;
-        use crate::assert_that;
         use crate::prelude::*;
 
         #[tokio::test]
@@ -47,7 +46,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_that(response).has_status_code(reqwest::StatusCode::OK);
+            assert_that!(response).has_status_code(reqwest::StatusCode::OK);
         }
     }
 }

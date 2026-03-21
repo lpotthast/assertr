@@ -66,14 +66,14 @@ mod tests {
         async fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock().await;
-            assert_that_ref(&mutex).is_locked();
+            assert_that!(&mutex).is_locked();
             drop(guard);
         }
 
         #[test]
         fn panics_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that_panic_by(|| assert_that(mutex).with_location(false).is_locked())
+            assert_that_panic_by(|| assert_that!(mutex).with_location(false).is_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -94,14 +94,14 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that(mutex).is_not_locked();
+            assert_that!(mutex).is_not_locked();
         }
 
         #[tokio::test]
         async fn panics_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock().await;
-            assert_that_panic_by(|| assert_that_ref(&mutex).with_location(false).is_not_locked())
+            assert_that_panic_by(|| assert_that!(&mutex).with_location(false).is_not_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -122,7 +122,7 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that(mutex).is_free();
+            assert_that!(mutex).is_free();
         }
     }
 }

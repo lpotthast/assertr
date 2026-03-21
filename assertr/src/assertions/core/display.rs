@@ -39,18 +39,18 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_same_value() {
-                assert_that(42).has_display_value(42);
+                assert_that!(42).has_display_value(42);
             }
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(42).has_display_value("42");
+                assert_that!(42).has_display_value("42");
             }
 
             #[test]
             fn panics_when_not_equal() {
                 assert_that_panic_by(|| {
-                    assert_that(42)
+                    assert_that!(42)
                         .with_location(false)
                         .has_display_value("foo")
                 })
@@ -71,13 +71,13 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that("foo:bar").has_display_value("foo:bar");
+                assert_that!("foo:bar").has_display_value("foo:bar");
             }
 
             #[test]
             fn panics_when_not_equal() {
                 assert_that_panic_by(|| {
-                    assert_that("foo:bar")
+                    assert_that!("foo:bar")
                         .with_location(false)
                         .has_display_value("foo:baz")
                 })
@@ -115,7 +115,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(Person {
+                assert_that!(Person {
                     age: 42,
                     alive: true,
                 })
@@ -125,7 +125,7 @@ mod tests {
             #[test]
             fn panics_when_not_equal() {
                 assert_that_panic_by(|| {
-                    assert_that(Person {
+                    assert_that!(Person {
                         age: 42,
                         alive: true,
                     })

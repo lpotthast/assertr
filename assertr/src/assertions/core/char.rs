@@ -107,13 +107,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal_ignoring_ascii_case() {
-            assert_that('a').is_equal_to_ignoring_ascii_case('A');
+            assert_that!('a').is_equal_to_ignoring_ascii_case('A');
         }
 
         #[test]
         fn panics_when_not_equal_to_ignoring_ascii_case() {
             assert_that_panic_by(|| {
-                assert_that('a')
+                assert_that!('a')
                     .with_location(false)
                     .is_equal_to_ignoring_ascii_case('B')
             })

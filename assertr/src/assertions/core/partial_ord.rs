@@ -115,37 +115,37 @@ mod tests {
 
     #[test]
     fn is_less_than_succeeds_when_less() {
-        assert_that(3).is_less_than(4);
-        assert_that(3).is_less_than(&4);
+        assert_that!(3).is_less_than(4);
+        assert_that!(3).is_less_than(&4);
     }
 
     #[test]
     fn is_greater_than_succeeds_when_greater() {
-        assert_that(7).is_greater_than(6);
-        assert_that(7).is_greater_than(&6);
+        assert_that!(7).is_greater_than(6);
+        assert_that!(7).is_greater_than(&6);
     }
 
     #[test]
     fn is_less_or_equal_to_than_succeeds_when_less() {
-        assert_that(3).is_less_or_equal_to(4);
-        assert_that(3).is_less_or_equal_to(&4);
+        assert_that!(3).is_less_or_equal_to(4);
+        assert_that!(3).is_less_or_equal_to(&4);
     }
 
     #[test]
     fn is_less_or_equal_to_than_succeeds_when_equal() {
-        assert_that(3).is_less_or_equal_to(3);
-        assert_that(3).is_less_or_equal_to(&3);
+        assert_that!(3).is_less_or_equal_to(3);
+        assert_that!(3).is_less_or_equal_to(&3);
     }
 
     #[test]
     fn is_greater_or_equal_to_succeeds_when_greater() {
-        assert_that(7).is_greater_or_equal_to(6);
-        assert_that(7).is_greater_or_equal_to(&6);
+        assert_that!(7).is_greater_or_equal_to(6);
+        assert_that!(7).is_greater_or_equal_to(&6);
     }
 
     #[test]
     fn is_greater_or_equal_to_succeeds_when_equal() {
-        assert_that(7).is_greater_or_equal_to(7);
-        assert_that(7).is_greater_or_equal_to(&7);
+        assert_that!(7).is_greater_or_equal_to(7);
+        assert_that!(7).is_greater_or_equal_to(&7);
     }
 }

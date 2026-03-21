@@ -67,7 +67,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_some() {
-            assert_that(Option::<i32>::Some(42))
+            assert_that!(Option::<i32>::Some(42))
                 .is_some()
                 .is_equal_to(42);
         }
@@ -75,7 +75,7 @@ mod tests {
         #[test]
         fn panics_when_none() {
             assert_that_panic_by(|| {
-                assert_that(Option::<i32>::None)
+                assert_that!(Option::<i32>::None)
                     .with_location(false)
                     .is_some()
             })
@@ -97,13 +97,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_none() {
-            assert_that(Option::<i32>::None).is_none();
+            assert_that!(Option::<i32>::None).is_none();
         }
 
         #[test]
         fn panics_when_some() {
             assert_that_panic_by(|| {
-                assert_that(Option::<i32>::Some(42))
+                assert_that!(Option::<i32>::Some(42))
                     .with_location(false)
                     .is_none()
             })

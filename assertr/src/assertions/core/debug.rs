@@ -63,15 +63,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal() {
-            assert_that(42).has_debug_string("42");
-            assert_that(42).has_debug_string(&"42");
-            assert_that(42).has_debug_string("42".to_string());
-            assert_that(42).has_debug_string(&"42".to_string());
+            assert_that!(42).has_debug_string("42");
+            assert_that!(42).has_debug_string(&"42");
+            assert_that!(42).has_debug_string("42".to_string());
+            assert_that!(42).has_debug_string(&"42".to_string());
         }
 
         #[test]
         fn succeeds_when_equal_on_static_string_containing_escaped_characters() {
-            assert_that("\n").has_debug_string(r#"\n"#);
+            assert_that!("\n").has_debug_string(r#"\n"#);
         }
 
         #[test]
@@ -79,14 +79,18 @@ mod tests {
             #[derive(Debug)]
             struct Data(#[expect(unused)] &'static str);
 
-            assert_that(Data("\n")).has_debug_string(r#"Data("\n")"#);
+            assert_that!(Data("\n")).has_debug_string(r#"Data("\n")"#);
         }
 
         #[test]
         fn panics_when_not_equal() {
-            assert_that_panic_by(|| assert_that(42).with_location(false).has_debug_string("foo"))
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that!(42)
+                    .with_location(false)
+                    .has_debug_string("foo")
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expected: "foo"
 
@@ -103,22 +107,22 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_same_value() {
-                assert_that(42).has_debug_value(42);
-                assert_that(42).has_debug_value(&42);
+                assert_that!(42).has_debug_value(42);
+                assert_that!(42).has_debug_value(&42);
             }
 
             // Although `has_debug_string` should be used instead!
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(42).has_debug_value("42");
-                assert_that(42).has_debug_value(&"42");
-                assert_that(42).has_debug_value("42".to_string());
-                assert_that(42).has_debug_value(&"42".to_string());
+                assert_that!(42).has_debug_value("42");
+                assert_that!(42).has_debug_value(&"42");
+                assert_that!(42).has_debug_value("42".to_string());
+                assert_that!(42).has_debug_value(&"42".to_string());
             }
 
             #[test]
             fn panics_when_not_equal() {
-                assert_that_panic_by(|| assert_that(42).with_location(false).has_debug_value(43))
+                assert_that_panic_by(|| assert_that!(42).with_location(false).has_debug_value(43))
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -139,7 +143,7 @@ mod tests {
             fn panics_when_trying_to_compare_with_string_containing_escaped_characters_although_user_would_expect_this_to_be_successful()
              {
                 assert_that_panic_by(|| {
-                    assert_that("\n")
+                    assert_that!("\n")
                         .with_location(false)
                         .has_debug_value(r#"\n"#)
                 })
@@ -167,7 +171,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_value() {
-                assert_that(Person {
+                assert_that!(Person {
                     age: 42,
                     alive: true,
                 })
@@ -183,7 +187,7 @@ mod tests {
                     age: 42,
                     alive: true,
                 };
-                assert_that(Person {
+                assert_that!(Person {
                     age: 42,
                     alive: true,
                 })
@@ -192,7 +196,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that(Person {
+                assert_that!(Person {
                     age: 42,
                     alive: true,
                 })
@@ -202,7 +206,7 @@ mod tests {
             #[test]
             fn panics_when_not_equal() {
                 assert_that_panic_by(|| {
-                    assert_that(Person {
+                    assert_that!(Person {
                         age: 42,
                         alive: true,
                     })

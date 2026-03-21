@@ -80,14 +80,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal() {
-            assert_that("foo").is_equal_to("foo");
-            assert_that("foo".to_owned()).is_equal_to("foo".to_owned());
-            assert_that::<&String>(&"foo".to_owned()).is_equal_to(&"foo".to_owned());
+            assert_that!("foo").is_equal_to("foo");
+            assert_that!("foo".to_owned()).is_equal_to("foo".to_owned());
+            assert_that!(&"foo".to_owned()).is_equal_to("foo".to_owned());
         }
 
         #[test]
         fn panics_when_not_equal() {
-            assert_that_panic_by(|| assert_that("foo").with_location(false).is_equal_to("bar"))
+            assert_that_panic_by(|| assert_that!("foo").with_location(false).is_equal_to("bar"))
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -112,7 +112,7 @@ mod tests {
                 }
             }
 
-            assert_that(Foo {}).is_equal_to(Bar {});
+            assert_that!(Foo {}).is_equal_to(Bar {});
         }
     }
 }

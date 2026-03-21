@@ -66,7 +66,7 @@ mod tests {
             })
             .unwrap();
 
-            assert_that(rx).has_current_value(Person {
+            assert_that!(rx).has_current_value(Person {
                 name: "kevin".into(),
             });
         }
@@ -76,7 +76,7 @@ mod tests {
             let (_tx, rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
 
             assert_that_panic_by(|| {
-                assert_that(rx)
+                assert_that!(rx)
                     .with_location(false)
                     .has_current_value(Person {
                         name: "alice".into(),
@@ -107,7 +107,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_changed();
 
-            assert_that(rx).has_changed();
+            assert_that!(rx).has_changed();
         }
 
         #[tokio::test]
@@ -115,7 +115,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_unchanged();
 
-            assert_that_panic_by(|| assert_that(rx).with_location(false).has_changed())
+            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_changed())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -141,7 +141,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_unchanged();
 
-            assert_that(rx).has_not_changed();
+            assert_that!(rx).has_not_changed();
         }
 
         #[tokio::test]
@@ -149,7 +149,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_changed();
 
-            assert_that_panic_by(|| assert_that(rx).with_location(false).has_not_changed())
+            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_not_changed())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

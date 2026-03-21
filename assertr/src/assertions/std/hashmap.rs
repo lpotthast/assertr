@@ -155,7 +155,7 @@ mod tests {
         fn succeeds_when_key_is_present() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            assert_that(map).contains_key("foo");
+            assert_that!(map).contains_key("foo");
         }
 
         #[test]
@@ -163,7 +163,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map).with_location(false).contains_key("baz");
+                assert_that!(map).with_location(false).contains_key("baz");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -189,7 +189,7 @@ mod tests {
         fn succeeds_when_key_is_absent() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            assert_that(map).does_not_contain_key("baz");
+            assert_that!(map).does_not_contain_key("baz");
         }
 
         #[test]
@@ -197,7 +197,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map)
+                assert_that!(map)
                     .with_location(false)
                     .does_not_contain_key("foo");
             })
@@ -225,7 +225,7 @@ mod tests {
         fn succeeds_when_value_is_present() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            assert_that(map).contains_value("bar");
+            assert_that!(map).contains_value("bar");
         }
 
         #[test]
@@ -233,7 +233,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map).with_location(false).contains_value("baz");
+                assert_that!(map).with_location(false).contains_value("baz");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -251,7 +251,7 @@ mod tests {
         fn compiles_with_any_type_comparable_to_the_actual_value_type() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            assert_that(map).contains_value("bar".to_string());
+            assert_that!(map).contains_value("bar".to_string());
         }
     }
 
@@ -267,7 +267,7 @@ mod tests {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
             // TODO: Can we get rid of the requirement to explicitly define E as `&str` here?
-            assert_that(map).contains_entry::<&str>("foo", "bar");
+            assert_that!(map).contains_entry::<&str>("foo", "bar");
         }
 
         #[test]
@@ -278,9 +278,9 @@ mod tests {
             }
             let mut map = HashMap::<&str, Person>::new();
             map.insert("foo", Person { age: 42 });
-            assert_that_ref(&map).contains_entry("foo", &Person { age: 42 });
-            assert_that_ref(&map).contains_entry("foo", Person { age: 42 });
-            assert_that_ref(&map).contains_entry("foo", Box::new(Person { age: 42 }));
+            assert_that!(&map).contains_entry("foo", &Person { age: 42 });
+            assert_that!(&map).contains_entry("foo", Person { age: 42 });
+            assert_that!(&map).contains_entry("foo", Box::new(Person { age: 42 }));
         }
 
         #[test]
@@ -288,7 +288,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map)
+                assert_that!(map)
                     .with_location(false)
                     .contains_entry::<&str>("baz", "someValue");
             })
@@ -309,7 +309,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                assert_that(map)
+                assert_that!(map)
                     .with_location(false)
                     .contains_entry::<&str>("foo", "someValue");
             })
