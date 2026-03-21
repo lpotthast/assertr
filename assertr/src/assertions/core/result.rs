@@ -126,13 +126,13 @@ mod tests {
 
     #[test]
     fn is_ok_succeeds_when_ok() {
-        assert_that(Result::<(), ()>::Ok(())).is_ok();
+        assert_that!(Result::<(), ()>::Ok(())).is_ok();
     }
 
     #[test]
     fn is_ok_panics_when_error() {
         assert_that_panic_by(|| {
-            assert_that(Result::<i32, String>::Err("someError".to_owned()))
+            assert_that!(Result::<i32, String>::Err("someError".to_owned()))
                 .with_location(false)
                 .is_ok();
         })
@@ -150,13 +150,13 @@ mod tests {
 
     #[test]
     fn is_err_succeeds_when_error() {
-        assert_that(Result::<(), ()>::Err(())).is_err();
+        assert_that!(Result::<(), ()>::Err(())).is_err();
     }
 
     #[test]
     fn is_err_panics_when_ok() {
         assert_that_panic_by(|| {
-            assert_that(Result::<i32, String>::Ok(42))
+            assert_that!(Result::<i32, String>::Ok(42))
                 .with_location(false)
                 .is_err();
         })
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn is_ok_satisfying_succeeds_when_ok() {
-        assert_that(Result::<i32, ()>::Ok(42))
+        assert_that!(Result::<i32, ()>::Ok(42))
             .with_location(false)
             .with_capture()
             .is_ok_satisfying(|ok_value| {

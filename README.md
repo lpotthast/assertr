@@ -64,7 +64,7 @@ use assertr::prelude::*;
 
 #[test]
 fn test() {
-    assert_that("hello, world!")
+    assert_that!("hello, world!")
         .starts_with("hello")
         .ends_with("!");
 }
@@ -213,13 +213,16 @@ case an assertion is violated. We chose to not explicitly list these bounds in t
 Instead of immediately panicking on assertion failure, you can capture failures for later analysis:
 
 ```rust
-let failures = assert_that(3)
-.with_capture()
-.is_equal_to(4)
-.is_less_than(2)
-.capture_failures();
+#[test]
+fn test() {
+  let failures = assert_that!(3)
+          .with_capture()
+          .is_equal_to(4)
+          .is_less_than(2)
+          .capture_failures();
 
-assert_that(failures).has_length(2);
+  assert_that!(failures).has_length(2);
+}
 ```
 
 ### Partial equality assertions
@@ -252,14 +255,14 @@ fn test() {
     };
 
     // We can still perform a standard (full) equality check.
-    assert_that_ref(&alice).is_equal_to(Person {
+    assert_that!(&alice).is_equal_to(Person {
         name: "Alice".to_owned(),
         age: 30,
         data: (100, 998),
     });
 
     // But we can also do a partial equality check!
-    assert_that_ref(&alice).is_equal_to(PersonAssertrEq {
+    assert_that!(&alice).is_equal_to(PersonAssertrEq {
         name: eq("Alice".to_owned()),
         age: any(), // Match any age
         data: any() // Match any data
@@ -287,7 +290,7 @@ impl<M: Mode> PersonAssertions for AssertThat<'_, Person, M> {
 
 #[test]
 fn test() {
-    assert_that(Person { age: 30 })
+    assert_that!(Person { age: 30 })
         .has_age(30);
 }
 ```
@@ -308,13 +311,13 @@ assert_that_type::<MyType>()
 
 ```rust
 // Assertions that read like English.
-assert_that("foobar").starts_with("foo").contains("ooba");
-assert_that(vec![1, 2, 3]).has_length(3).contains(2);
-assert_that((Ok(42)).is_ok().is_equal_to(42);
-assert_that(Person { id: 42 }).has_debug_string("Person { id: 42 }");
+assert_that!("foobar").starts_with("foo").contains("ooba");
+assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
+assert_that!((Ok(42)).is_ok().is_equal_to(42);
+assert_that!(Person { id: 42 }).has_debug_string("Person { id: 42 }");
 
 // Chainable,
-assert_that("foobar")
+assert_that!("foobar")
 .is_not_empty()
 .starts_with("foo")
 .ends_with("bar")
@@ -363,7 +366,7 @@ assert!(vec.contains(&2));
 Versus the fluent style:
 
 ```rust
-assert_that(vec![1, 2, 3]).has_length(3).contains(2);
+assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
 ```
 
 ## Technical decisions
@@ -375,9 +378,8 @@ assert_that(vec![1, 2, 3]).has_length(3).contains(2);
 - Assertions to be defined on common traits as often as possible. Allowing, for example, all types implementing `Eq`
   to allow `is_equal_to`, `PartialOrd` types to allow `is_greater_than` assertions and all types implementing the
   `HasLength` trait to support the `has_length` assertion.
-- No requirement to use macros for simple assertions. An
-  `assert_that(...)` suffices to get into an assertion context. Use `assert_that_ref(&val)` if you cant give up
-  ownership and instead want to assert on a reference.
+- A single `assert_that!(...)` macro suffices to get into an assertion context. It handles both owned values
+  and references automatically — pass `assert_that!(value)` for owned values or `assert_that!(&value)` to borrow.
 - One import should be enough to access all possible assertions through **autocomplete**.
   `use assertr::prelude::*;`
 
@@ -402,11 +404,6 @@ Run all tests using
 
 - Many assertions require `std::fmt::Debug`, limiting usability to types implementing Debug.
   Can we implement fallback rendering? Will probably require the currently unstable specialization feature.
-
-- The differentiation between `assert_that` for owned values and `assert_that_ref` for references is not ideal.
-  One `assert_that` function, not being a macro and accepting both owned values and references would be much preferred.
-  But that would probably also require the specialization feature to be able to detect the use of a reference type at
-  compiletime.
 
 ## Contributing
 

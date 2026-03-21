@@ -18,7 +18,7 @@ fn is_able_to_access_derived_properties_without_breaking_the_call_chain() {
         meta: Metadata { alive: true },
     };
 
-    assert_that(person)
+    assert_that!(person)
         .is_equal_to(Person {
             age: 30,
             meta: Metadata { alive: true },

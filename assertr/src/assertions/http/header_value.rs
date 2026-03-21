@@ -63,7 +63,7 @@ mod tests {
         async fn succeeds_when_matching() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that(actual).has_debug_value("http/1.1");
+            assert_that!(actual).has_debug_value("http/1.1");
         }
     }
 
@@ -76,14 +76,14 @@ mod tests {
         fn succeeds_when_empty() {
             let actual = HeaderValue::from_str("").expect("valid header value");
 
-            assert_that(actual).is_empty();
+            assert_that!(actual).is_empty();
         }
 
         #[test]
         fn panics_when_not_empty() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_empty())
+            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_empty())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -108,14 +108,14 @@ mod tests {
         fn succeeds_when_not_empty() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that(actual).is_not_empty();
+            assert_that!(actual).is_not_empty();
         }
 
         #[test]
         fn panics_when_empty() {
             let actual = HeaderValue::from_str("").expect("valid header value");
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_not_empty())
+            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_not_empty())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -143,7 +143,7 @@ mod tests {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(true);
 
-            assert_that(actual).is_sensitive();
+            assert_that!(actual).is_sensitive();
         }
 
         #[test]
@@ -151,7 +151,7 @@ mod tests {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(false);
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_sensitive())
+            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_sensitive())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -176,7 +176,7 @@ mod tests {
         fn not_sensitive_by_default() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that(actual).is_insensitive();
+            assert_that!(actual).is_insensitive();
         }
 
         #[test]
@@ -184,7 +184,7 @@ mod tests {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(false);
 
-            assert_that(actual).is_insensitive();
+            assert_that!(actual).is_insensitive();
         }
 
         #[test]
@@ -192,7 +192,7 @@ mod tests {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(true);
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_insensitive())
+            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_insensitive())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -217,21 +217,21 @@ mod tests {
         async fn succeeds_when_constructed_from_visible_ascii_characters_through_str() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
-            assert_that(actual).is_ascii().is_equal_to("http/1.1");
+            assert_that!(actual).is_ascii().is_equal_to("http/1.1");
         }
 
         #[tokio::test]
         async fn succeeds_when_constructed_from_visible_ascii_characters_through_bytes() {
             let actual = HeaderValue::from_bytes(&[32, 33, 34]).expect("valid header value");
 
-            assert_that(actual).is_ascii().is_equal_to(" !\"");
+            assert_that!(actual).is_ascii().is_equal_to(" !\"");
         }
 
         #[tokio::test]
         async fn panics_when_constructed_from_non_ascii_characters_through_str() {
             let actual = HeaderValue::from_str("Ä").expect("valid header value");
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_ascii())
+            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_ascii())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -250,7 +250,7 @@ mod tests {
         async fn panics_when_constructed_from_non_ascii_characters_through_bytes() {
             let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
 
-            assert_that_panic_by(|| assert_that(actual).with_location(false).is_ascii())
+            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_ascii())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

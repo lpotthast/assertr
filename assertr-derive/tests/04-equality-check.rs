@@ -20,20 +20,20 @@ fn main() {
         data: (42, 100),
     };
 
-    assert_that_ref(&foo).is_equal_to(FooAssertrEq {
+    assert_that!(&foo).is_equal_to(FooAssertrEq {
         id: any(),
         name: any(),
         data: any(),
     });
 
-    assert_that_ref(&foo).is_equal_to(FooAssertrEq {
+    assert_that!(&foo).is_equal_to(FooAssertrEq {
         id: eq(1),
         name: eq("bob".to_string()),
         data: any(),
     });
 
     assert_that_panic_by(|| {
-        assert_that_ref(&foo)
+        assert_that!(&foo)
             .with_location(false)
             .is_equal_to(FooAssertrEq {
                 id: eq(1),

@@ -43,12 +43,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_true() {
-            assert_that(true).is_true();
+            assert_that!(true).is_true();
         }
 
         #[test]
         fn panics_when_false() {
-            assert_that_panic_by(|| assert_that(false).with_location(false).is_true())
+            assert_that_panic_by(|| assert_that!(false).with_location(false).is_true())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -66,12 +66,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_false() {
-            assert_that(false).is_false();
+            assert_that!(false).is_false();
         }
 
         #[test]
         fn panics_when_true() {
-            assert_that_panic_by(|| assert_that(true).with_location(false).is_false())
+            assert_that_panic_by(|| assert_that!(true).with_location(false).is_false())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

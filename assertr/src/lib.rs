@@ -21,6 +21,8 @@ use std::marker::PhantomData;
 use tracking::{AssertionTracking, NumberOfAssertions};
 
 pub mod actual;
+#[doc(hidden)]
+pub mod assert_that_macro;
 pub mod assertions;
 pub mod cmp;
 pub mod condition;
@@ -39,11 +41,13 @@ pub mod prelude {
     pub use crate::AssertingThat;
     pub use crate::AssertingThatRef;
     pub use crate::any;
+    #[allow(deprecated)]
     pub use crate::assert_that;
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by;
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by_async;
+    #[allow(deprecated)]
     pub use crate::assert_that_ref;
     pub use crate::assert_that_type;
     pub use crate::assertions::HasLength;
@@ -80,31 +84,61 @@ pub mod prelude {
 
 pub struct PanicValue(Box<dyn Any>);
 
-/// The main entrypoint in an assertion context.
+/// The main entrypoint in an assertion context, usable with both owned and borrowed values.
+///
+/// This macro uses autoref specialization to automatically detect whether the provided
+/// value is a reference to a `Sized` type or an owned value, and creates the appropriate
+/// [`AssertThat`] instance:
+///
+/// - For references (`&value` where the target is `Sized`): Creates `AssertThat` with `Actual::Borrowed`.
+/// - For owned values (or references to unsized targets like `&str`): Creates `AssertThat` with `Actual::Owned`.
 ///
 /// #### Example Usage
 /// ```rust,no_run
 /// use assertr::prelude::*;
 ///
-/// // This will panic with a descriptive message and a pointer to the actual line of the assertion.
-/// assert_that(3).is_equal_to(4);
+/// // Owned value - this will panic with a descriptive message.
+/// assert_that!(3).is_equal_to(4);
 ///
-/// // This instead captures the assertion failure for later inspection.
-/// let failures = assert_that(3)
+/// // Borrowed value - value is not moved.
+/// let value = String::from("hello");
+/// assert_that!(&value).starts_with("hel");
+/// // `value` is still usable here.
+///
+/// // Capture mode works too.
+/// let failures = assert_that!(3)
 ///     .with_capture()
-///     .is_equal_to(4) // This will collect a failure instead of panicking.
+///     .is_equal_to(4)
 ///     .capture_failures();
 ///
-/// assert_that(failures)
+/// assert_that!(failures)
 ///     .has_length(1)
 ///     .contains("");
 /// ```
+#[macro_export]
+macro_rules! assert_that {
+    ($e:expr) => {
+        $crate::assert_that_macro::Wrap {
+            inner: $crate::assert_that_macro::Fallback(core::cell::Cell::new(Some($e))),
+        }
+        .into_assert_that()
+    };
+}
+
+/// Entrypoint for asserting on owned values.
+///
+/// **Deprecated**: Use the [`assert_that!`] macro instead, which handles both owned and borrowed values.
+#[deprecated(since = "0.5.0", note = "Use the `assert_that!()` macro instead")]
 #[track_caller]
 #[must_use]
 pub fn assert_that<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
     AssertThat::new(Actual::Owned(actual))
 }
 
+/// Entrypoint for asserting on borrowed values.
+///
+/// **Deprecated**: Use the [`assert_that!`] macro instead, which handles both owned and borrowed values.
+#[deprecated(since = "0.5.0", note = "Use the `assert_that!()` macro instead")]
 #[track_caller]
 #[must_use]
 pub fn assert_that_ref<T>(actual: &T) -> AssertThat<'_, T, Panic> {
@@ -114,6 +148,7 @@ pub fn assert_that_ref<T>(actual: &T) -> AssertThat<'_, T, Panic> {
 #[track_caller]
 #[must_use]
 #[cfg(feature = "std")]
+#[allow(deprecated)]
 pub fn assert_that_panic_by<'t, R>(
     fun: impl FnOnce() -> R + 't,
 ) -> AssertThat<'t, PanicValue, Panic> {
@@ -125,6 +160,7 @@ pub fn assert_that_panic_by<'t, R>(
 // #[track_caller] // This is implied in the default async desugaring.
 #[must_use]
 #[cfg(feature = "std")]
+#[allow(deprecated)]
 pub async fn assert_that_panic_by_async<'t, F, Fut, R>(fun: F) -> AssertThat<'t, PanicValue, Panic>
 where
     F: FnOnce() -> Fut + 't,
@@ -169,6 +205,7 @@ pub trait AssertingThat {
         Self: Sized;
 }
 
+#[allow(deprecated)]
 impl<T> AssertingThat for T {
     fn assert_that<'t, U>(self, map: impl Fn(T) -> U) -> AssertThat<'t, U, Panic>
     where
@@ -194,6 +231,7 @@ pub trait AssertingThatRef {
         Self: Sized;
 }
 
+#[allow(deprecated)]
 impl<T> AssertingThatRef for &T {
     type Owned = T;
 
@@ -547,6 +585,7 @@ impl<'t, T> AssertThat<'t, T, Capture> {
     /// Panics if assertion failures were already captured!
     // TODO: Add an easy woy in which users can check if assertion failures were recorded.
     //  Or that none were recorded!
+    #[allow(deprecated)]
     pub fn without_capture(mut self) -> AssertThat<'t, T, Panic> {
         // Take out all assertion failures, marking the `Capture` as "captured".
         // Assert that no failures exist.
@@ -732,17 +771,15 @@ mod tests {
 
     #[test]
     fn with_capture_yields_failures_and_does_not_panic() {
-        let failures = assert_that(42)
+        let failures = assert_that!(42)
             .with_location(false)
             .with_capture()
             .is_greater_than(100)
             .is_equal_to(1)
             .capture_failures();
 
-        assert_that(failures.as_slice())
-            .has_length(2)
-            .contains_exactly([
-                formatdoc! {"
+        assert_that!(failures).has_length(2).contains_exactly([
+            formatdoc! {"
                     -------- assertr --------
                     Actual: 42
 
@@ -751,19 +788,19 @@ mod tests {
                     Expected: 100
                     -------- assertr --------
                 "},
-                formatdoc! {"
+            formatdoc! {"
                     -------- assertr --------
                     Expected: 1
 
                       Actual: 42
                     -------- assertr --------
                 "},
-            ]);
+        ]);
     }
 
     #[test]
     fn dropping_a_capturing_assert_panics_when_failures_occurred_which_were_not_captured() {
-        let assert = assert_that(42)
+        let assert = assert_that!(42)
             .with_location(false)
             .with_capture()
             .is_equal_to(43);
@@ -774,7 +811,7 @@ mod tests {
 
     #[test]
     fn without_capture_switches_to_panic_mode() {
-        let assert_capturing = assert_that(42)
+        let assert_capturing = assert_that!(42)
             .with_location(false)
             .with_capture()
             // Without this assertion, we would see a panic due to zero assertions being made.
@@ -785,7 +822,7 @@ mod tests {
 
     #[test]
     fn without_capture_panics_when_assertion_failures_were_already_recorded() {
-        let assert_capturing = assert_that(42)
+        let assert_capturing = assert_that!(42)
             .with_location(false)
             .with_capture()
             // This records a failure.
@@ -817,7 +854,7 @@ mod tests {
         #[test]
         fn panics_on_borrowed_value_in_panic_mode() {
             let value = String::from("foo");
-            let assert = assert_that_ref(&value)
+            let assert = assert_that!(&value)
                 .with_location(false)
                 // Avoid "number-of-assertions not greater 0" panic.
                 .is_equal_to("foo");
@@ -830,7 +867,7 @@ mod tests {
         #[test]
         fn panics_on_borrowed_value_in_capture_mode() {
             let value = String::from("foo");
-            let assert = assert_that_ref(&value)
+            let assert = assert_that!(&value)
                 .with_location(false)
                 .with_capture()
                 // Avoid "number-of-assertions not greater 0" panic.
@@ -843,27 +880,27 @@ mod tests {
 
         #[test]
         fn succeeds_on_owned_value_in_panic_mode() {
-            let assert = assert_that(42)
+            let assert = assert_that!(42)
                 .with_location(false)
                 // Avoid "number-of-assertions not greater 0" panic.
                 .is_equal_to(42);
             let actual = assert.unwrap_inner();
-            assert_that(actual).is_equal_to(42);
+            assert_that!(actual).is_equal_to(42);
         }
 
         #[test]
         fn succeeds_on_owned_value_in_capture_mode_when_no_failures_were_recorded() {
-            let assert = assert_that(42)
+            let assert = assert_that!(42)
                 .with_location(false)
                 .with_capture()
                 .has_display_value("42");
             let actual = assert.unwrap_inner();
-            assert_that(actual).is_equal_to(42);
+            assert_that!(actual).is_equal_to(42);
         }
 
         #[test]
         fn panics_on_owned_value_in_capture_mode_when_failures_were_recorded() {
-            let assert = assert_that(42)
+            let assert = assert_that!(42)
                 .with_location(false)
                 .with_capture()
                 // This records a failure.

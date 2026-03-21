@@ -238,50 +238,50 @@ mod tests {
         use crate::prelude::*;
         use ::num::Float;
 
-        assert_that(0u8).is_zero();
-        assert_that(0i8).is_zero();
-        assert_that(0u16).is_zero();
-        assert_that(0i16).is_zero();
-        assert_that(0u32).is_zero();
-        assert_that(0i32).is_zero();
-        assert_that(0u64).is_zero();
-        assert_that(0i64).is_zero();
-        assert_that(0u128).is_zero();
-        assert_that(0i128).is_zero();
-        assert_that(0.0f32).is_zero();
-        assert_that(0.0f64).is_zero();
+        assert_that!(0u8).is_zero();
+        assert_that!(0i8).is_zero();
+        assert_that!(0u16).is_zero();
+        assert_that!(0i16).is_zero();
+        assert_that!(0u32).is_zero();
+        assert_that!(0i32).is_zero();
+        assert_that!(0u64).is_zero();
+        assert_that!(0i64).is_zero();
+        assert_that!(0u128).is_zero();
+        assert_that!(0i128).is_zero();
+        assert_that!(0.0f32).is_zero();
+        assert_that!(0.0f64).is_zero();
 
-        assert_that(1u8).is_one();
-        assert_that(1i8).is_one();
-        assert_that(1u16).is_one();
-        assert_that(1i16).is_one();
-        assert_that(1u32).is_one();
-        assert_that(1i32).is_one();
-        assert_that(1u64).is_one();
-        assert_that(1i64).is_one();
-        assert_that(1u128).is_one();
-        assert_that(1i128).is_one();
-        assert_that(1.0f32).is_one();
-        assert_that(1.0f64).is_one();
+        assert_that!(1u8).is_one();
+        assert_that!(1i8).is_one();
+        assert_that!(1u16).is_one();
+        assert_that!(1i16).is_one();
+        assert_that!(1u32).is_one();
+        assert_that!(1i32).is_one();
+        assert_that!(1u64).is_one();
+        assert_that!(1i64).is_one();
+        assert_that!(1u128).is_one();
+        assert_that!(1i128).is_one();
+        assert_that!(1.0f32).is_one();
+        assert_that!(1.0f64).is_one();
 
-        assert_that(42u8).is_close_to(42, 0);
-        assert_that(42i8).is_close_to(42, 0);
-        assert_that(42u16).is_close_to(42, 0);
-        assert_that(42i16).is_close_to(42, 0);
-        assert_that(42u32).is_close_to(42, 0);
-        assert_that(42i32).is_close_to(42, 0);
-        assert_that(42u64).is_close_to(42, 0);
-        assert_that(42i64).is_close_to(42, 0);
-        assert_that(42u128).is_close_to(42, 0);
-        assert_that(42i128).is_close_to(42, 0);
-        assert_that(0.2f32 + 0.1f32).is_close_to(0.3, 0.0001);
-        assert_that(0.2f64 + 0.1f64).is_close_to(0.3, 0.0001);
+        assert_that!(42u8).is_close_to(42, 0);
+        assert_that!(42i8).is_close_to(42, 0);
+        assert_that!(42u16).is_close_to(42, 0);
+        assert_that!(42i16).is_close_to(42, 0);
+        assert_that!(42u32).is_close_to(42, 0);
+        assert_that!(42i32).is_close_to(42, 0);
+        assert_that!(42u64).is_close_to(42, 0);
+        assert_that!(42i64).is_close_to(42, 0);
+        assert_that!(42u128).is_close_to(42, 0);
+        assert_that!(42i128).is_close_to(42, 0);
+        assert_that!(0.2f32 + 0.1f32).is_close_to(0.3, 0.0001);
+        assert_that!(0.2f64 + 0.1f64).is_close_to(0.3, 0.0001);
 
-        assert_that(f32::nan()).is_nan();
-        assert_that(f64::nan()).is_nan();
+        assert_that!(f32::nan()).is_nan();
+        assert_that!(f64::nan()).is_nan();
 
-        assert_that(f32::infinity()).is_infinite();
-        assert_that(f64::infinity()).is_infinite();
+        assert_that!(f32::infinity()).is_infinite();
+        assert_that!(f64::infinity()).is_infinite();
     }
 
     mod is_zero {
@@ -290,12 +290,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(0).is_zero();
+            assert_that!(0).is_zero();
         }
 
         #[test]
         fn panics_when_not_zero() {
-            assert_that_panic_by(|| assert_that(3).with_location(false).is_zero())
+            assert_that_panic_by(|| assert_that!(3).with_location(false).is_zero())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -317,12 +317,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_one() {
-            assert_that(1).is_one();
+            assert_that!(1).is_one();
         }
 
         #[test]
         fn panics_when_not_one() {
-            assert_that_panic_by(|| assert_that(3).with_location(false).is_one())
+            assert_that_panic_by(|| assert_that!(3).with_location(false).is_one())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -344,12 +344,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(-0.01).is_negative();
+            assert_that!(-0.01).is_negative();
         }
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| assert_that(0.0).with_location(false).is_negative())
+            assert_that_panic_by(|| assert_that!(0.0).with_location(false).is_negative())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -362,7 +362,7 @@ mod tests {
 
         #[test]
         fn panics_when_positive() {
-            assert_that_panic_by(|| assert_that(1.23).with_location(false).is_negative())
+            assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_negative())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -380,17 +380,17 @@ mod tests {
 
         #[test]
         fn succeeds_when_positive() {
-            assert_that(0.01).is_positive();
+            assert_that!(0.01).is_positive();
         }
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(0.0).is_positive();
+            assert_that!(0.0).is_positive();
         }
 
         #[test]
         fn panics_when_negative() {
-            assert_that_panic_by(|| assert_that(-1.23).with_location(false).is_positive())
+            assert_that_panic_by(|| assert_that!(-1.23).with_location(false).is_positive())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -409,7 +409,7 @@ mod tests {
         #[test]
         fn panics_when_below_allowed_range() {
             assert_that_panic_by(|| {
-                assert_that(0.3319)
+                assert_that!(0.3319)
                     .with_location(false)
                     .is_close_to(0.333, 0.001)
             })
@@ -427,15 +427,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_actual_is_in_allowed_range() {
-            assert_that(0.332).is_close_to(0.333, 0.001);
-            assert_that(0.333).is_close_to(0.333, 0.001);
-            assert_that(0.334).is_close_to(0.333, 0.001);
+            assert_that!(0.332).is_close_to(0.333, 0.001);
+            assert_that!(0.333).is_close_to(0.333, 0.001);
+            assert_that!(0.334).is_close_to(0.333, 0.001);
         }
 
         #[test]
         fn panics_when_above_allowed_range() {
             assert_that_panic_by(|| {
-                assert_that(0.3341)
+                assert_that!(0.3341)
                     .with_location(false)
                     .is_close_to(0.333, 0.001)
             })
@@ -459,12 +459,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_nan() {
-            assert_that(f32::nan()).is_nan();
+            assert_that!(f32::nan()).is_nan();
         }
 
         #[test]
         fn panics_when_not_nan() {
-            assert_that_panic_by(|| assert_that(1.23).with_location(false).is_nan())
+            assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_nan())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -483,13 +483,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_finite() {
-            assert_that(0.3f32).is_finite();
+            assert_that!(0.3f32).is_finite();
         }
 
         #[test]
         fn panics_when_positive_infinity() {
             assert_that_panic_by(|| {
-                assert_that(f32::infinity())
+                assert_that!(f32::infinity())
                     .with_location(false)
                     .is_finite()
             })
@@ -506,7 +506,7 @@ mod tests {
         #[test]
         fn panics_when_negative_infinity() {
             assert_that_panic_by(|| {
-                assert_that(f32::neg_infinity())
+                assert_that!(f32::neg_infinity())
                     .with_location(false)
                     .is_finite()
             })
@@ -528,17 +528,17 @@ mod tests {
 
         #[test]
         fn succeeds_when_positive_infinity() {
-            assert_that(f32::infinity()).is_infinite();
+            assert_that!(f32::infinity()).is_infinite();
         }
 
         #[test]
         fn succeeds_when_negative_infinity() {
-            assert_that(f32::neg_infinity()).is_infinite();
+            assert_that!(f32::neg_infinity()).is_infinite();
         }
 
         #[test]
         fn panics_when_not_infinity() {
-            assert_that_panic_by(|| assert_that(1.23).with_location(false).is_infinite())
+            assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_infinite())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

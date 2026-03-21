@@ -189,13 +189,13 @@ mod tests {
             fn succeeds_when_value_is_present() {
                 let values = [1, 2, 3];
                 let iter = values.iter();
-                assert_that(iter).contains(&1);
+                assert_that!(iter).contains(&1);
             }
 
             #[test]
             fn compiles_for_comparable_but_different_type() {
                 let values = vec!["foo"];
-                assert_that(values).into_iter_contains("foo".to_string());
+                assert_that!(values).into_iter_contains("foo".to_string());
             }
         }
     }
@@ -208,7 +208,7 @@ mod tests {
             #[test]
             fn succeeds_when_value_is_present() {
                 let values = vec![1, 2, 3, 42];
-                assert_that(values)
+                assert_that!(values)
                     .into_iter_contains(1)
                     .into_iter_contains(42)
                     .into_iter_contains(3)
@@ -218,7 +218,7 @@ mod tests {
             #[test]
             fn compiles_for_comparable_but_different_type() {
                 let values = vec!["foo"];
-                assert_that(values).into_iter_contains("foo".to_string());
+                assert_that!(values).into_iter_contains("foo".to_string());
             }
         }
     }

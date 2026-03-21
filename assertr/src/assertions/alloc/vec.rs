@@ -62,6 +62,6 @@ mod tests {
     fn assert_vec_contains_exactly() {
         let vec = vec![1, 2, 3];
 
-        assert_that(vec).into_iter_contains_exactly([1, 2, 3]);
+        assert_that!(vec).into_iter_contains_exactly([1, 2, 3]);
     }
 }

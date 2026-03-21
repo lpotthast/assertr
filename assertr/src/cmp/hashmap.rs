@@ -73,7 +73,7 @@ mod test {
 
         let mut ctx = EqContext::new();
 
-        assert_that(compare(&m1, &m2, Some(&mut ctx))).is_true();
-        assert_that(compare(&m1, &m3, Some(&mut ctx))).is_false();
+        assert_that!(compare(&m1, &m2, Some(&mut ctx))).is_true();
+        assert_that!(compare(&m1, &m3, Some(&mut ctx))).is_false();
     }
 }

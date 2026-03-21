@@ -72,11 +72,11 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual = PanicValue(Box::new(String::from("foo")));
 
-            assert_that_ref(&actual)
+            assert_that!(&actual)
                 .has_type::<String>()
                 .is_equal_to(String::from("foo"));
 
-            assert_that(actual)
+            assert_that!(actual)
                 .has_type::<String>()
                 .is_equal_to(String::from("foo"));
         }
@@ -86,7 +86,7 @@ mod tests {
             let actual = PanicValue(Box::new(String::from("foo")));
 
             assert_that_panic_by(|| {
-                assert_that(actual).with_location(false).has_type::<u32>();
+                assert_that!(actual).with_location(false).has_type::<u32>();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -107,7 +107,7 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual = PanicValue(Box::new(String::from("foo")));
 
-            assert_that(actual)
+            assert_that!(actual)
                 .has_type_ref::<String>()
                 .is_equal_to(&String::from("foo"));
         }
@@ -117,7 +117,7 @@ mod tests {
             let actual = PanicValue(Box::new(String::from("foo")));
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
@@ -136,7 +136,7 @@ mod tests {
             let actual = PanicValue(Box::new("foo"));
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
@@ -156,7 +156,7 @@ mod tests {
             let actual = PanicValue(Box::new(Foo {}));
 
             assert_that_panic_by(|| {
-                assert_that(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })

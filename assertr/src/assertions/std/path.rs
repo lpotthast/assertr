@@ -346,7 +346,7 @@ mod tests {
             #[test]
             fn succeeds_when_present() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-                assert_that(path.as_path())
+                assert_that!(path.as_path())
                     .exists()
                     .map(|it| it.borrowed().to_str().unwrap_or_default().into())
                     .ends_with("src/assertions/std/path.rs");
@@ -355,7 +355,7 @@ mod tests {
             #[test]
             fn panics_when_absent() {
                 let path = Path::new("src/assertions/std/some-non-existing-file.rs");
-                assert_that_panic_by(|| assert_that(path).with_location(false).exists())
+                assert_that_panic_by(|| assert_that!(path).with_location(false).exists())
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -375,14 +375,14 @@ mod tests {
             #[test]
             fn succeeds_when_absent() {
                 let path = Path::new("../../foo/bar/baz.rs");
-                assert_that(path).does_not_exist();
+                assert_that!(path).does_not_exist();
             }
 
             #[test]
             fn panics_when_present() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
                 assert_that_panic_by(|| {
-                    assert_that(path.as_path())
+                    assert_that!(path.as_path())
                         .with_location(false)
                         .does_not_exist()
                 })
@@ -401,7 +401,7 @@ mod tests {
             #[test]
             fn succeeds_when_file() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-                assert_that(path.as_path()).is_a_file();
+                assert_that!(path.as_path()).is_a_file();
             }
 
             #[test]
@@ -409,7 +409,7 @@ mod tests {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
                 let dir = path.parent().unwrap();
                 assert_that_panic_by(|| {
-                    assert_that(dir)
+                    assert_that!(dir)
                         .with_location(false)
                         .exists() // Sanity-check. Non-existing paths would also not be files!
                         .is_a_file()
@@ -435,14 +435,14 @@ mod tests {
                     .parent()
                     .unwrap()
                     .join(Path::new(file!()).parent().expect("present"));
-                assert_that(path.as_path()).is_a_directory();
+                assert_that!(path.as_path()).is_a_directory();
             }
 
             #[test]
             fn panics_when_not_a_directory() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
                 assert_that_panic_by(|| {
-                    assert_that(path.as_path())
+                    assert_that!(path.as_path())
                         .with_location(false)
                         .exists() // Sanity-check. Non-existing paths would also not be files!
                         .is_a_directory()
@@ -463,7 +463,7 @@ mod tests {
             #[test]
             fn is_symlink_succeeds_when_directory() {
                 let path = Path::new(file!());
-                assert_that(path).is_symlink();
+                assert_that!(path).is_symlink();
             }
             */
         }
@@ -476,13 +476,13 @@ mod tests {
             #[test]
             fn succeeds_when_root() {
                 let path = Path::new("/foo/bar/baz.rs");
-                assert_that(path).has_a_root();
+                assert_that!(path).has_a_root();
             }
 
             #[test]
             fn panics_when_relative() {
                 let path = Path::new("foo/bar/baz.rs");
-                assert_that_panic_by(|| assert_that(path).with_location(false).has_a_root())
+                assert_that_panic_by(|| assert_that!(path).with_location(false).has_a_root())
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -502,13 +502,13 @@ mod tests {
             #[test]
             fn succeeds_when_relative() {
                 let path = Path::new("foo/bar/baz.rs");
-                assert_that(path).is_relative();
+                assert_that!(path).is_relative();
             }
 
             #[test]
             fn panics_when_absolute() {
                 let path = Path::new("/foo/bar/baz.rs");
-                assert_that_panic_by(|| assert_that(path).with_location(false).is_relative())
+                assert_that_panic_by(|| assert_that!(path).with_location(false).is_relative())
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -528,14 +528,14 @@ mod tests {
             #[test]
             fn succeeds_when_equal() {
                 let path = Path::new(file!());
-                assert_that(path).has_file_name("path.rs");
+                assert_that!(path).has_file_name("path.rs");
             }
 
             #[test]
             fn panics_when_different() {
                 let path = Path::new(file!());
                 assert_that_panic_by(|| {
-                    assert_that(path)
+                    assert_that!(path)
                         .with_location(false)
                         .has_file_name("some.json")
                 })
@@ -559,14 +559,16 @@ mod tests {
             #[test]
             fn succeeds_when_equal() {
                 let path = Path::new(file!());
-                assert_that(path).has_file_stem("path");
+                assert_that!(path).has_file_stem("path");
             }
 
             #[test]
             fn panics_when_different() {
                 let path = Path::new(file!());
                 assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).has_file_stem("some")
+                    assert_that!(path)
+                        .with_location(false)
+                        .has_file_stem("some")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -588,14 +590,16 @@ mod tests {
             #[test]
             fn succeeds_when_equal() {
                 let path = Path::new(file!());
-                assert_that(path).has_extension("rs");
+                assert_that!(path).has_extension("rs");
             }
 
             #[test]
             fn panics_when_different() {
                 let path = Path::new(file!());
                 assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).has_extension("json")
+                    assert_that!(path)
+                        .with_location(false)
+                        .has_extension("json")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -617,14 +621,16 @@ mod tests {
             #[test]
             fn succeeds_when_prefix() {
                 let path = Path::new(file!());
-                assert_that(path).starts_with("assertr/src");
+                assert_that!(path).starts_with("assertr/src");
             }
 
             #[test]
             fn panics_when_not_a_prefix() {
                 let path = Path::new(file!());
                 assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).starts_with("foobar")
+                    assert_that!(path)
+                        .with_location(false)
+                        .starts_with("foobar")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -644,7 +650,9 @@ mod tests {
             fn panics_when_not_a_whole_segment_prefix() {
                 let path = Path::new(file!());
                 assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).starts_with("assert")
+                    assert_that!(path)
+                        .with_location(false)
+                        .starts_with("assert")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -669,15 +677,17 @@ mod tests {
             #[test]
             fn succeeds_when_postfix() {
                 let path = Path::new(file!());
-                assert_that(path).ends_with("std/path.rs");
+                assert_that!(path).ends_with("std/path.rs");
             }
 
             #[test]
             fn panics_when_not_a_postfix() {
                 let path = Path::new(file!());
-                assert_that_panic_by(|| assert_that(path).with_location(false).ends_with("foobar"))
-                    .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| {
+                    assert_that!(path).with_location(false).ends_with("foobar")
+                })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
 
@@ -693,9 +703,11 @@ mod tests {
             #[test]
             fn panics_when_not_a_whole_segment_postfix() {
                 let path = Path::new(file!());
-                assert_that_panic_by(|| assert_that(path).with_location(false).ends_with("ath.rs"))
-                    .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| {
+                    assert_that!(path).with_location(false).ends_with("ath.rs")
+                })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
 
@@ -725,7 +737,7 @@ mod tests {
                     .unwrap()
                     .join(file!())
                     .to_owned();
-                assert_that(path)
+                assert_that!(path)
                     .exists()
                     .map(|it| it.unwrap_owned().display().to_string().into())
                     .ends_with("src/assertions/std/path.rs");
@@ -734,7 +746,7 @@ mod tests {
             #[test]
             fn panics_when_absent() {
                 let path = Path::new("src/assertions/std/some-non-existing-file.rs").to_owned();
-                assert_that_panic_by(|| assert_that(path).with_location(false).exists())
+                assert_that_panic_by(|| assert_that!(path).with_location(false).exists())
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -754,13 +766,13 @@ mod tests {
             #[test]
             fn succeeds_when_absent() {
                 let path = Path::new("../../foo/bar/baz.rs").to_owned();
-                assert_that(path).does_not_exist();
+                assert_that!(path).does_not_exist();
             }
 
             #[test]
             fn panics_when_present() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-                assert_that_panic_by(|| assert_that(path).with_location(false).does_not_exist())
+                assert_that_panic_by(|| assert_that!(path).with_location(false).does_not_exist())
                     .has_type::<String>()
                     .contains("-------- assertr --------")
                     .contains("Expected: \"")
@@ -776,7 +788,7 @@ mod tests {
             #[test]
             fn succeeds_when_file() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
-                assert_that(path).is_a_file();
+                assert_that!(path).is_a_file();
             }
 
             #[test]
@@ -784,7 +796,7 @@ mod tests {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
                 let dir = path.parent().unwrap().to_owned();
                 assert_that_panic_by(|| {
-                    assert_that(dir)
+                    assert_that!(dir)
                         .with_location(false)
                         .exists() // Sanity-check. Non-existing paths would also not be files!
                         .is_a_file()
@@ -810,14 +822,14 @@ mod tests {
                     .parent()
                     .unwrap()
                     .join(Path::new(file!()).parent().expect("present"));
-                assert_that(path).is_a_directory();
+                assert_that!(path).is_a_directory();
             }
 
             #[test]
             fn panics_when_not_a_directory() {
                 let path = env::current_dir().unwrap().parent().unwrap().join(file!());
                 assert_that_panic_by(|| {
-                    assert_that(path)
+                    assert_that!(path)
                         .with_location(false)
                         .exists() // Sanity-check. Non-existing paths would also not be files!
                         .is_a_directory()
@@ -838,7 +850,7 @@ mod tests {
             #[test]
             fn is_symlink_succeeds_when_directory() {
                 let path = Path::new(file!());
-                assert_that(path).is_symlink();
+                assert_that!(path).is_symlink();
             }
             */
         }
@@ -851,13 +863,13 @@ mod tests {
             #[test]
             fn succeeds_when_root() {
                 let path = Path::new("/foo/bar/baz.rs").to_owned();
-                assert_that(path).has_a_root();
+                assert_that!(path).has_a_root();
             }
 
             #[test]
             fn panics_when_relative() {
                 let path = Path::new("foo/bar/baz.rs").to_owned();
-                assert_that_panic_by(|| assert_that(path).with_location(false).has_a_root())
+                assert_that_panic_by(|| assert_that!(path).with_location(false).has_a_root())
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -877,13 +889,13 @@ mod tests {
             #[test]
             fn succeeds_when_relative() {
                 let path = Path::new("foo/bar/baz.rs").to_owned();
-                assert_that(path).is_relative();
+                assert_that!(path).is_relative();
             }
 
             #[test]
             fn panics_when_absolute() {
                 let path = Path::new("/foo/bar/baz.rs").to_owned();
-                assert_that_panic_by(|| assert_that(path).with_location(false).is_relative())
+                assert_that_panic_by(|| assert_that!(path).with_location(false).is_relative())
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -903,14 +915,14 @@ mod tests {
             #[test]
             fn succeeds_when_equal() {
                 let path = Path::new(file!()).to_owned();
-                assert_that(path).has_file_name("path.rs");
+                assert_that!(path).has_file_name("path.rs");
             }
 
             #[test]
             fn panics_when_different() {
                 let path = Path::new(file!()).to_owned();
                 assert_that_panic_by(|| {
-                    assert_that(path)
+                    assert_that!(path)
                         .with_location(false)
                         .has_file_name("some.json")
                 })
@@ -934,14 +946,16 @@ mod tests {
             #[test]
             fn succeeds_when_equal() {
                 let path = Path::new(file!()).to_owned();
-                assert_that(path).has_file_stem("path");
+                assert_that!(path).has_file_stem("path");
             }
 
             #[test]
             fn panics_when_different() {
                 let path = Path::new(file!()).to_owned();
                 assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).has_file_stem("some")
+                    assert_that!(path)
+                        .with_location(false)
+                        .has_file_stem("some")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -963,14 +977,16 @@ mod tests {
             #[test]
             fn succeeds_when_equal() {
                 let path = Path::new(file!()).to_owned();
-                assert_that(path).has_extension("rs");
+                assert_that!(path).has_extension("rs");
             }
 
             #[test]
             fn panics_when_different() {
                 let path = Path::new(file!()).to_owned();
                 assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).has_extension("json")
+                    assert_that!(path)
+                        .with_location(false)
+                        .has_extension("json")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -992,14 +1008,16 @@ mod tests {
             #[test]
             fn succeeds_when_prefix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that(path).starts_with("assertr/src");
+                assert_that!(path).starts_with("assertr/src");
             }
 
             #[test]
             fn panics_when_not_a_prefix() {
                 let path = Path::new(file!()).to_owned();
                 assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).starts_with("foobar")
+                    assert_that!(path)
+                        .with_location(false)
+                        .starts_with("foobar")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -1019,7 +1037,9 @@ mod tests {
             fn panics_when_not_a_whole_segment_prefix() {
                 let path = Path::new(file!()).to_owned();
                 assert_that_panic_by(|| {
-                    assert_that(path).with_location(false).starts_with("assert")
+                    assert_that!(path)
+                        .with_location(false)
+                        .starts_with("assert")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
@@ -1044,15 +1064,17 @@ mod tests {
             #[test]
             fn succeeds_when_postfix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that(path).ends_with("std/path.rs");
+                assert_that!(path).ends_with("std/path.rs");
             }
 
             #[test]
             fn panics_when_not_a_postfix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that_panic_by(|| assert_that(path).with_location(false).ends_with("foobar"))
-                    .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| {
+                    assert_that!(path).with_location(false).ends_with("foobar")
+                })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
 
@@ -1068,9 +1090,11 @@ mod tests {
             #[test]
             fn panics_when_not_a_whole_segment_postfix() {
                 let path = Path::new(file!()).to_owned();
-                assert_that_panic_by(|| assert_that(path).with_location(false).ends_with("ath.rs"))
-                    .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
+                assert_that_panic_by(|| {
+                    assert_that!(path).with_location(false).ends_with("ath.rs")
+                })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Path: "assertr/src/assertions/std/path.rs"
 

@@ -102,14 +102,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(SignedDuration::ZERO).is_zero();
+            assert_that!(SignedDuration::ZERO).is_zero();
         }
 
         #[test]
         fn panics_when_not_zero() {
             let duration: SignedDuration = "2h 30m".parse().unwrap();
 
-            assert_that_panic_by(|| assert_that(duration).with_location(false).is_zero())
+            assert_that_panic_by(|| assert_that!(duration).with_location(false).is_zero())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -133,7 +133,7 @@ mod tests {
         #[test]
         fn panics_when_below_allowed_range() {
             assert_that_panic_by(|| {
-                assert_that(SignedDuration::from_secs_f32(0.3319))
+                assert_that!(SignedDuration::from_secs_f32(0.3319))
                     .with_location(false)
                     .is_close_to(
                         SignedDuration::from_secs_f32(0.333),
@@ -154,15 +154,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_actual_is_in_allowed_range() {
-            assert_that(SignedDuration::from_secs_f32(0.332)).is_close_to(
+            assert_that!(SignedDuration::from_secs_f32(0.332)).is_close_to(
                 SignedDuration::from_secs_f32(0.333),
                 SignedDuration::from_secs_f32(0.001),
             );
-            assert_that(SignedDuration::from_secs_f32(0.333)).is_close_to(
+            assert_that!(SignedDuration::from_secs_f32(0.333)).is_close_to(
                 SignedDuration::from_secs_f32(0.333),
                 SignedDuration::from_secs_f32(0.001),
             );
-            assert_that(SignedDuration::from_secs_f32(0.334)).is_close_to(
+            assert_that!(SignedDuration::from_secs_f32(0.334)).is_close_to(
                 SignedDuration::from_secs_f32(0.333),
                 SignedDuration::from_secs_f32(0.001),
             );
@@ -171,7 +171,7 @@ mod tests {
         #[test]
         fn panics_when_above_allowed_range() {
             assert_that_panic_by(|| {
-                assert_that(SignedDuration::from_secs_f32(0.3341))
+                assert_that!(SignedDuration::from_secs_f32(0.3341))
                     .with_location(false)
                     .is_close_to(
                         SignedDuration::from_secs_f32(0.333),

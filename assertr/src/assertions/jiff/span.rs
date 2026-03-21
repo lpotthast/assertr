@@ -79,14 +79,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(Span::new()).is_zero();
+            assert_that!(Span::new()).is_zero();
         }
 
         #[test]
         fn panics_when_not_zero() {
             let duration: Span = 2.hours().minutes(30);
 
-            assert_that_panic_by(|| assert_that(duration).with_location(false).is_zero())
+            assert_that_panic_by(|| assert_that!(duration).with_location(false).is_zero())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -109,12 +109,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that(-2.hours().minutes(30)).is_negative();
+            assert_that!(-2.hours().minutes(30)).is_negative();
         }
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| assert_that(0.seconds()).with_location(false).is_negative())
+            assert_that_panic_by(|| assert_that!(0.seconds()).with_location(false).is_negative())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -128,7 +128,7 @@ mod tests {
         #[test]
         fn panics_when_positive() {
             assert_that_panic_by(|| {
-                assert_that(2.hours().minutes(30))
+                assert_that!(2.hours().minutes(30))
                     .with_location(false)
                     .is_negative()
             })
@@ -150,12 +150,12 @@ mod tests {
 
         #[test]
         fn succeeds_when_positive() {
-            assert_that(2.hours().minutes(30)).is_positive();
+            assert_that!(2.hours().minutes(30)).is_positive();
         }
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| assert_that(0.seconds()).with_location(false).is_positive())
+            assert_that_panic_by(|| assert_that!(0.seconds()).with_location(false).is_positive())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -169,7 +169,7 @@ mod tests {
         #[test]
         fn panics_when_negative() {
             assert_that_panic_by(|| {
-                assert_that(-2.hours().minutes(30))
+                assert_that!(-2.hours().minutes(30))
                     .with_location(false)
                     .is_positive()
             })

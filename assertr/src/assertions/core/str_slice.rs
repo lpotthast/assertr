@@ -186,15 +186,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_blank() {
-            assert_that("").is_blank();
-            assert_that(" ").is_blank();
-            assert_that("\t \n").is_blank();
+            assert_that!("").is_blank();
+            assert_that!(" ").is_blank();
+            assert_that!("\t \n").is_blank();
         }
 
         #[test]
         fn panics_when_expected_is_not_blank() {
             assert_that_panic_by(|| {
-                assert_that("a").with_location(false).is_blank();
+                assert_that!("a").with_location(false).is_blank();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -215,15 +215,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_blank() {
-            assert_that("").is_blank_ascii();
-            assert_that(" ").is_blank_ascii();
-            assert_that("\t \n").is_blank_ascii();
+            assert_that!("").is_blank_ascii();
+            assert_that!(" ").is_blank_ascii();
+            assert_that!("\t \n").is_blank_ascii();
         }
 
         #[test]
         fn panics_when_expected_is_not_blank() {
             assert_that_panic_by(|| {
-                assert_that("a").with_location(false).is_blank_ascii();
+                assert_that!("a").with_location(false).is_blank_ascii();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -244,15 +244,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_contained() {
-            assert_that("foobar").contains("foo");
-            assert_that("foobar").contains("bar");
-            assert_that("foobar").contains("oob");
+            assert_that!("foobar").contains("foo");
+            assert_that!("foobar").contains("bar");
+            assert_that!("foobar").contains("oob");
         }
 
         #[test]
         fn panics_when_expected_is_not_contained() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
+                assert_that!("foo bar baz")
                     .with_location(false)
                     .contains("42");
             })
@@ -275,13 +275,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_not_contained() {
-            assert_that("foobar").does_not_contain("baz");
+            assert_that!("foobar").does_not_contain("baz");
         }
 
         #[test]
         fn panics_when_expected_is_contained() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
+                assert_that!("foo bar baz")
                     .with_location(false)
                     .does_not_contain("o b");
             })
@@ -304,13 +304,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_matches() {
-            assert_that("foo bar baz").starts_with("foo b");
+            assert_that!("foo bar baz").starts_with("foo b");
         }
 
         #[test]
         fn panics_when_start_is_different() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
+                assert_that!("foo bar baz")
                     .with_location(false)
                     .starts_with("oo");
             })
@@ -333,13 +333,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_does_not_match() {
-            assert_that("foo bar baz").does_not_start_with("oo");
+            assert_that!("foo bar baz").does_not_start_with("oo");
         }
 
         #[test]
         fn panics_when_start_matches() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
+                assert_that!("foo bar baz")
                     .with_location(false)
                     .does_not_start_with("foo");
             })
@@ -362,13 +362,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_end_matches() {
-            assert_that("foo bar baz").ends_with("r baz");
+            assert_that!("foo bar baz").ends_with("r baz");
         }
 
         #[test]
         fn panics_when_end_is_different() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
+                assert_that!("foo bar baz")
                     .with_location(false)
                     .ends_with("raz");
             })
@@ -391,13 +391,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_end_does_match() {
-            assert_that("foo bar baz").does_not_end_with("y");
+            assert_that!("foo bar baz").does_not_end_with("y");
         }
 
         #[test]
         fn panics_when_end_is_matches() {
             assert_that_panic_by(|| {
-                assert_that("foo bar baz")
+                assert_that!("foo bar baz")
                     .with_location(false)
                     .does_not_end_with("z");
             })

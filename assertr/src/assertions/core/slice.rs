@@ -163,28 +163,28 @@ mod tests {
 
         #[test]
         fn succeeds_when_exact_match() {
-            assert_that([1, 2, 3].as_slice()).contains_exactly([1, 2, 3]);
+            assert_that!([1, 2, 3].as_slice()).contains_exactly([1, 2, 3]);
         }
 
         #[test]
         fn compiles_for_different_type_combinations() {
-            assert_that(["foo".to_owned()].as_slice()).contains_exactly(["foo"]);
-            assert_that(["foo"].as_slice()).contains_exactly(["foo"]);
-            assert_that(["foo"].as_slice()).contains_exactly(["foo".to_owned()]);
-            assert_that(["foo"].as_slice()).contains_exactly(vec!["foo".to_owned()]);
-            assert_that(vec!["foo"].as_slice())
+            assert_that!(["foo".to_owned()].as_slice()).contains_exactly(["foo"]);
+            assert_that!(["foo"].as_slice()).contains_exactly(["foo"]);
+            assert_that!(["foo"].as_slice()).contains_exactly(["foo".to_owned()]);
+            assert_that!(["foo"].as_slice()).contains_exactly(vec!["foo".to_owned()]);
+            assert_that!(vec!["foo"].as_slice())
                 .contains_exactly(vec!["foo".to_owned()].into_iter());
         }
 
         #[test]
         fn succeeds_when_exact_match_provided_as_slice() {
-            assert_that([1, 2, 3].as_slice()).contains_exactly(&[1, 2, 3]);
+            assert_that!([1, 2, 3].as_slice()).contains_exactly(&[1, 2, 3]);
         }
 
         #[test]
         fn panics_when_not_exact_match() {
             assert_that_panic_by(|| {
-                assert_that([1, 2, 3].as_slice())
+                assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly([2, 3, 4])
             })
@@ -220,7 +220,7 @@ mod tests {
         #[test]
         fn panics_with_detail_message_when_only_differing_in_order() {
             assert_that_panic_by(|| {
-                assert_that([1, 2, 3].as_slice())
+                assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly([3, 2, 1])
             })
@@ -256,13 +256,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_slices_match() {
-            assert_that([1, 2, 3].as_slice()).contains_exactly_in_any_order([2, 3, 1]);
+            assert_that!([1, 2, 3].as_slice()).contains_exactly_in_any_order([2, 3, 1]);
         }
 
         #[test]
         fn panics_when_slice_contains_unknown_data() {
             assert_that_panic_by(|| {
-                assert_that([1, 2, 3].as_slice())
+                assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly_in_any_order([2, 3, 4])
             })
@@ -300,7 +300,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_slices_match() {
-            assert_that([1, 2, 3].as_slice()).contains_exactly_matching_in_any_order(
+            assert_that!([1, 2, 3].as_slice()).contains_exactly_matching_in_any_order(
                 [
                     move |it: &i32| *it == 1,
                     move |it: &i32| *it == 2,
@@ -312,7 +312,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_slices_match_in_different_order() {
-            assert_that([1, 2, 3].as_slice()).contains_exactly_matching_in_any_order(
+            assert_that!([1, 2, 3].as_slice()).contains_exactly_matching_in_any_order(
                 [
                     move |it: &i32| *it == 3,
                     move |it: &i32| *it == 1,
@@ -325,7 +325,7 @@ mod tests {
         #[test]
         fn panics_when_slice_contains_non_matching_data() {
             assert_that_panic_by(|| {
-                assert_that([1, 2, 3].as_slice())
+                assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly_matching_in_any_order(
                         [
