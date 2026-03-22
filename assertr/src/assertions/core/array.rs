@@ -20,8 +20,7 @@ impl<T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'_, [T
     where
         T: PartialEq,
     {
-        self.derive(<[T; N]>::as_slice)
-            .contains_exactly(expected);
+        self.derive(<[T; N]>::as_slice).contains_exactly(expected);
         self
     }
 

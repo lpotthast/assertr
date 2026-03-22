@@ -49,16 +49,14 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                     Cow::Borrowed(std::any::type_name_of_val(borrowed_boxed_any))
                 };
 
-                borrowed_boxed_any
-                    .downcast_ref::<E>()
-                    .map_or_else(
-                        || CastResult::Err {
-                            err: String::from("asd"),
-                            actual_type_name,
-                            actual_type_name_will_be_any,
-                        },
-                        CastResult::Ref,
-                    )
+                borrowed_boxed_any.downcast_ref::<E>().map_or_else(
+                    || CastResult::Err {
+                        err: String::from("asd"),
+                        actual_type_name,
+                        actual_type_name_will_be_any,
+                    },
+                    CastResult::Ref,
+                )
             }
             crate::actual::Actual::Owned(owned_box_any) => {
                 let is_str = owned_box_any.downcast_ref::<&str>().is_some();
@@ -75,16 +73,14 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                     Cow::Borrowed(std::any::type_name_of_val(&*owned_box_any))
                 };
 
-                owned_box_any
-                    .downcast::<E>()
-                    .map_or_else(
-                        |err| CastResult::Err {
-                            err: format!("{err:#?}"),
-                            actual_type_name,
-                            actual_type_name_will_be_any,
-                        },
-                        CastResult::Owned,
-                    )
+                owned_box_any.downcast::<E>().map_or_else(
+                    |err| CastResult::Err {
+                        err: format!("{err:#?}"),
+                        actual_type_name,
+                        actual_type_name_will_be_any,
+                    },
+                    CastResult::Owned,
+                )
             }
         };
 

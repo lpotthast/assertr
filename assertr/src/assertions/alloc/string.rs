@@ -28,8 +28,7 @@ impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
 
     #[track_caller]
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self {
-        self.derive(String::as_str)
-            .does_not_contain(unexpected);
+        self.derive(String::as_str).does_not_contain(unexpected);
         self
     }
 
@@ -41,8 +40,7 @@ impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
 
     #[track_caller]
     fn does_not_start_with(self, unexpected: impl AsRef<str>) -> Self {
-        self.derive(String::as_str)
-            .does_not_start_with(unexpected);
+        self.derive(String::as_str).does_not_start_with(unexpected);
         self
     }
 
@@ -54,8 +52,7 @@ impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
 
     #[track_caller]
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self {
-        self.derive(String::as_str)
-            .does_not_end_with(unexpected);
+        self.derive(String::as_str).does_not_end_with(unexpected);
         self
     }
 }
