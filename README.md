@@ -18,16 +18,16 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ## Installation
 
-```tome
+```toml
 [dependencies]
-assertr = "0.4.2"
+assertr = "0.4.4"
 ```
 
 or
 
-```tome
+```toml
 [dependencies]
-assertr = { version = "0.4.2", features = ["full"] }
+assertr = { version = "0.4.4", features = ["full"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
@@ -215,13 +215,13 @@ Instead of immediately panicking on assertion failure, you can capture failures 
 ```rust
 #[test]
 fn test() {
-  let failures = assert_that!(3)
-          .with_capture()
-          .is_equal_to(4)
-          .is_less_than(2)
-          .capture_failures();
+    let failures = assert_that!(3)
+        .with_capture()
+        .is_equal_to(4)
+        .is_less_than(2)
+        .capture_failures();
 
-  assert_that!(failures).has_length(2);
+    assert_that!(failures).has_length(2);
 }
 ```
 
@@ -299,29 +299,35 @@ fn test() {
 
 Test properties of types:
 
-``` rust
-assert_that_type::<MyType>()
-    .needs_drop()
-    .satisfies(|it| it.size(), |size| {
-        size.is_equal_to(32);
-    });
+```rust
+#[test]
+fn test() {
+    assert_that_type::<MyType>()
+        .needs_drop()
+        .satisfies(|it| it.size(), |size| {
+            size.is_equal_to(32);
+        });
+}
 ```
 
 ## Goals
 
 ```rust
-// Assertions that read like English.
-assert_that!("foobar").starts_with("foo").contains("ooba");
-assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
-assert_that!((Ok(42)).is_ok().is_equal_to(42);
-assert_that!(Person { id: 42 }).has_debug_string("Person { id: 42 }");
+#[test]
+fn test() {
+    // Assertions that read like English.
+    assert_that!("foobar").starts_with("foo").contains("ooba");
+    assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
+    assert_that!((Ok(42)).is_ok().is_equal_to(42);
+    assert_that!(Person { id: 42 }).has_debug_string("Person { id: 42 }");
 
-// Chainable,
-assert_that!("foobar")
-.is_not_empty()
-.starts_with("foo")
-.ends_with("bar")
-.has_length(6);
+    // Chainable,
+    assert_that!("foobar")
+        .is_not_empty()
+        .starts_with("foo")
+        .ends_with("bar")
+        .has_length(6);
+}
 ```
 
 - Partial equality assertions (meaning that only some fields of a struct are compared, while some are ignored).
@@ -358,15 +364,21 @@ descriptions of the expected vs actual values. Descriptive messages can be colle
 With traditional assert macros, you often need to reference the same value multiple times:
 
 ```rust
-let vec = vec![1, 2, 3];
-assert_eq!(vec.len(), 3);
-assert!(vec.contains(&2));
+#[test]
+fn test() {
+    let vec = vec![1, 2, 3];
+    assert_eq!(vec.len(), 3);
+    assert!(vec.contains(&2));
+}
 ```
 
 Versus the fluent style:
 
 ```rust
-assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
+#[test]
+fn test() {
+    assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
+}
 ```
 
 ## Technical decisions
@@ -399,6 +411,7 @@ Run all tests using
 
 - As of `0.1.0` the MSRV is `1.76.0`
 - As of `0.2.0` the MSRV is `1.85.0`
+- As of `0.4.0` the MSRV is `1.89.0`
 
 ## Open questions
 
