@@ -128,7 +128,7 @@ macro_rules! assert_that {
 /// Entrypoint for asserting on owned values.
 ///
 /// **Deprecated**: Use the [`assert_that!`] macro instead, which handles both owned and borrowed values.
-#[deprecated(since = "0.5.0", note = "Use the `assert_that!()` macro instead")]
+#[deprecated(since = "0.4.4", note = "Use the `assert_that!()` macro instead")]
 #[track_caller]
 #[must_use]
 pub fn assert_that<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
@@ -138,7 +138,7 @@ pub fn assert_that<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
 /// Entrypoint for asserting on borrowed values.
 ///
 /// **Deprecated**: Use the [`assert_that!`] macro instead, which handles both owned and borrowed values.
-#[deprecated(since = "0.5.0", note = "Use the `assert_that!()` macro instead")]
+#[deprecated(since = "0.4.4", note = "Use the `assert_that!()` macro instead")]
 #[track_caller]
 #[must_use]
 pub fn assert_that_ref<T>(actual: &T) -> AssertThat<'_, T, Panic> {
