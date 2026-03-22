@@ -7,6 +7,7 @@ use crate::actual::Actual;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait PollAssertions<'t, T, M: Mode> {
     fn is_pending(self) -> Self;
 
@@ -34,12 +35,12 @@ impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>,
         let actual = self.actual();
         if !actual.is_pending() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:#?}
 
                     is not pending.
-                "#}
-            })
+                "}
+            });
         }
         self
     }
@@ -50,12 +51,12 @@ impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>,
         let actual = self.actual();
         if !actual.is_ready() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:#?}
 
                     is not yet ready.
-                "#}
-            })
+                "}
+            });
         }
         self.map(|it| match it {
             Actual::Owned(p) => Actual::Owned(match p {

@@ -3,6 +3,7 @@ use core::fmt::Debug;
 
 use crate::{AssertThat, AssertrPartialEq, Mode, prelude::SliceAssertions};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait VecAssertions<'t, T: Debug> {
     fn contains<E>(self, expected: E) -> Self
     where
@@ -54,7 +55,7 @@ impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
         E: Debug,
         T: AssertrPartialEq<E> + Debug,
     {
-        self.derive(|it| it.as_slice()).contains(expected);
+        self.derive(std::vec::Vec::as_slice).contains(expected);
         self
     }
 
@@ -64,7 +65,8 @@ impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
         E: Debug + 't,
         T: AssertrPartialEq<E> + Debug,
     {
-        self.derive(|it| it.as_slice()).contains_exactly(expected);
+        self.derive(std::vec::Vec::as_slice)
+            .contains_exactly(expected);
         self
     }
 
@@ -73,7 +75,7 @@ impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
     where
         P: Fn(&T) -> bool, // predicate
     {
-        self.derive(|it| it.as_slice())
+        self.derive(std::vec::Vec::as_slice)
             .contains_exactly_matching_in_any_order(expected);
         self
     }

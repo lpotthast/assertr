@@ -7,7 +7,7 @@ use std::fmt::Write;
 
 use super::boxed::BoxAssertions;
 
-/// Assertions for PanicValue's, the output of a panic occurred within an `assert_that_panic_by`.
+/// Assertions for `PanicValue`'s, the output of a panic occurred within an `assert_that_panic_by`.
 pub trait PanicValueAssertions<'t, M: Mode> {
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, M>;
 
@@ -43,33 +43,32 @@ impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> 
         self.track_assertion();
 
         let any = &self.actual().0;
-        match any.downcast_ref::<E>() {
-            Some(casted) => self.derive(|_actual| casted),
-            None => {
-                let expected_type_name = type_name::<E>();
+        if let Some(casted) = any.downcast_ref::<E>() {
+            self.derive(|_actual| casted)
+        } else {
+            let expected_type_name = type_name::<E>();
 
-                let is_str = any.downcast_ref::<&str>().is_some();
-                let is_string = any.downcast_ref::<String>().is_some();
+            let is_str = any.downcast_ref::<&str>().is_some();
+            let is_string = any.downcast_ref::<String>().is_some();
 
-                let actual_type_name = if is_str {
-                    Cow::Borrowed("&str")
-                } else if is_string {
-                    Cow::Borrowed("String")
-                } else {
-                    // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
-                    self.add_detail_message("The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.");
-                    Cow::Borrowed(std::any::type_name_of_val(&*self.actual().0))
-                };
+            let actual_type_name = if is_str {
+                Cow::Borrowed("&str")
+            } else if is_string {
+                Cow::Borrowed("String")
+            } else {
+                // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
+                self.add_detail_message("The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.");
+                Cow::Borrowed(std::any::type_name_of_val(&*self.actual().0))
+            };
 
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
-                        Expected panic value type: {expected_type_name}
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Expected panic value type: {expected_type_name}
 
-                          Actual panic value type: {actual_type_name}
-                    "#}
-                });
-                panic!("Cannot continue in capturing mode!"); // Consider typestates!
-            }
+                      Actual panic value type: {actual_type_name}
+                "}
+            });
+            panic!("Cannot continue in capturing mode!"); // Consider typestates!
         }
     }
 }

@@ -1,6 +1,7 @@
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for boolean values.
+#[allow(clippy::return_self_not_must_use)]
 pub trait BoolAssertions {
     fn is_true(self) -> Self;
     fn be_true(self) -> Self

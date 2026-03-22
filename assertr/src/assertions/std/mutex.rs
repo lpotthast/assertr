@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait MutexAssertions {
     /// Asserts that this mutex is locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
@@ -35,7 +36,7 @@ pub trait MutexAssertions {
     /// Asserts that this mutex is not locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
     ///
-    /// Synonym for [Self::is_not_locked].
+    /// Synonym for [`Self::is_not_locked`].
     fn is_free(self) -> Self
     where
         Self: Sized,
@@ -46,7 +47,7 @@ pub trait MutexAssertions {
     /// Asserts that this mutex is not locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
     ///
-    /// Synonym for [Self::is_not_locked].
+    /// Synonym for [`Self::is_not_locked`].
     fn be_free(self) -> Self
     where
         Self: Sized,
@@ -62,11 +63,11 @@ impl<T: Debug, M: Mode> MutexAssertions for AssertThat<'_, Mutex<T>, M> {
         let actual = self.actual();
         if let Ok(guard) = actual.try_lock() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: Mutex {{ data: {guard:#?}, poisoned: {poisoned} }}
 
                     to be locked, but it wasn't!
-                "#, poisoned = actual.is_poisoned()}
+                ", poisoned = actual.is_poisoned()}
             });
         }
         self
@@ -78,11 +79,11 @@ impl<T: Debug, M: Mode> MutexAssertions for AssertThat<'_, Mutex<T>, M> {
         let actual = self.actual();
         if let Err(_err) = actual.try_lock() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: Mutex {{ data: <locked>, poisoned: {poisoned} }}
 
                     to not be locked, but it was!
-                "#, poisoned = actual.is_poisoned()}
+                ", poisoned = actual.is_poisoned()}
             });
         }
         self

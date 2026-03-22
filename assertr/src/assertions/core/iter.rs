@@ -4,6 +4,7 @@ use core::fmt::Debug;
 use crate::actual::Actual;
 use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
     /// This is a terminal assertion, as it must consume the underlying iterator.
     fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
@@ -115,6 +116,7 @@ where
 ///
 /// Assertions are prefixed to distinguish these assertions from more concrete implementations
 /// on the actual type, like `Vec` for example.
+#[allow(clippy::return_self_not_must_use)]
 pub trait IntoIteratorAssertions<T: Debug> {
     fn into_iter_contains<E>(self, expected: E) -> Self
     where

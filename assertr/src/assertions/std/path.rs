@@ -4,6 +4,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::{ffi::OsStr, path::Path};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait PathAssertions {
     fn exists(self) -> Self;
     fn exist(self) -> Self
@@ -105,73 +106,76 @@ pub trait PathAssertions {
 impl<M: Mode> PathAssertions for AssertThat<'_, PathBuf, M> {
     #[track_caller]
     fn exists(self) -> Self {
-        self.derive(|it| it.as_path()).exists();
+        self.derive(std::path::PathBuf::as_path).exists();
         self
     }
 
     #[track_caller]
     fn does_not_exist(self) -> Self {
-        self.derive(|it| it.as_path()).does_not_exist();
+        self.derive(std::path::PathBuf::as_path).does_not_exist();
         self
     }
 
     #[track_caller]
     fn is_a_file(self) -> Self {
-        self.derive(|it| it.as_path()).is_a_file();
+        self.derive(std::path::PathBuf::as_path).is_a_file();
         self
     }
 
     #[track_caller]
     fn is_a_directory(self) -> Self {
-        self.derive(|it| it.as_path()).is_a_directory();
+        self.derive(std::path::PathBuf::as_path).is_a_directory();
         self
     }
 
     #[track_caller]
     fn is_a_symlink(self) -> Self {
-        self.derive(|it| it.as_path()).is_a_symlink();
+        self.derive(std::path::PathBuf::as_path).is_a_symlink();
         self
     }
 
     #[track_caller]
     fn has_a_root(self) -> Self {
-        self.derive(|it| it.as_path()).has_a_root();
+        self.derive(std::path::PathBuf::as_path).has_a_root();
         self
     }
 
     #[track_caller]
     fn is_relative(self) -> Self {
-        self.derive(|it| it.as_path()).is_relative();
+        self.derive(std::path::PathBuf::as_path).is_relative();
         self
     }
 
     #[track_caller]
     fn has_file_name(self, expected: impl AsRef<OsStr>) -> Self {
-        self.derive(|it| it.as_path()).has_file_name(expected);
+        self.derive(std::path::PathBuf::as_path)
+            .has_file_name(expected);
         self
     }
 
     #[track_caller]
     fn has_file_stem(self, expected: impl AsRef<OsStr>) -> Self {
-        self.derive(|it| it.as_path()).has_file_stem(expected);
+        self.derive(std::path::PathBuf::as_path)
+            .has_file_stem(expected);
         self
     }
 
     #[track_caller]
     fn has_extension(self, expected: impl AsRef<OsStr>) -> Self {
-        self.derive(|it| it.as_path()).has_extension(expected);
+        self.derive(std::path::PathBuf::as_path)
+            .has_extension(expected);
         self
     }
     #[track_caller]
-
     fn starts_with(self, expected: impl AsRef<Path>) -> Self {
-        self.derive(|it| it.as_path()).starts_with(expected);
+        self.derive(std::path::PathBuf::as_path)
+            .starts_with(expected);
         self
     }
 
     #[track_caller]
     fn ends_with(self, expected: impl AsRef<Path>) -> Self {
-        self.derive(|it| it.as_path()).ends_with(expected);
+        self.derive(std::path::PathBuf::as_path).ends_with(expected);
         self
     }
 }
@@ -185,22 +189,22 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
             Ok(true) => {}
             Ok(false) => {
                 self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
+                    writedoc! {w, r"
                         Expected: {actual:#?}
 
                         to exist, but it does not!
-                    "#}
+                    "}
                 });
             }
             Err(err) => {
                 self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
+                    writedoc! {w, r"
                         Expected: {actual:#?}
 
                         to exist, but it does not!
 
                         Encountered std::io::Error: {err:#?}
-                    "#}
+                    "}
                 });
             }
         }
@@ -215,11 +219,11 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         match actual.try_exists() {
             Ok(true) => {
                 self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
+                    writedoc! {w, r"
                         Expected: {actual:#?}
 
                         to not exist, but it does!
-                    "#}
+                    "}
                 });
             }
             Ok(false) => {}
@@ -236,14 +240,14 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
             let exists = actual.exists();
             let is_dir = actual.is_dir();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {actual:#?}
 
                     to be a file, but it is not!
 
                     The path exists: {exists}
                     The path is a directory: {is_dir}
-                "#}
+                "}
             });
         }
         self
@@ -257,14 +261,14 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
             let exists = actual.exists();
             let is_file = actual.is_file();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {actual:#?}
 
                     to be a directory, but it is not!
 
                     The path exists: {exists}
                     The path is a file: {is_file}
-                "#}
+                "}
             });
         }
         self
@@ -276,11 +280,11 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         let actual = self.actual();
         if !actual.is_symlink() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {actual:#?}
 
                     to be a symlink, but it is not!
-                "#}
+                "}
             });
         }
         self
@@ -292,11 +296,11 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         let actual = self.actual();
         if !actual.has_root() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {actual:#?}
 
                     to be a root-path, but it is not!
-                "#}
+                "}
             });
         }
         self
@@ -308,11 +312,11 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         let actual = self.actual();
         if !actual.is_relative() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {actual:#?}
 
                     to be a relative path, but it is not!
-                "#}
+                "}
             });
         }
         self
@@ -327,12 +331,12 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         if let Some(actual_file_name) = actual_file_name {
             if actual_file_name != expected_file_name {
                 self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
+                    writedoc! {w, r"
                         Path: {actual:?}
 
                         Expected filename: {expected_file_name:#?}
                           Actual filename: {actual_file_name:#?}
-                    "#}
+                    "}
                 });
             }
         }
@@ -348,12 +352,12 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         if let Some(actual_file_stem) = actual_file_stem {
             if actual_file_stem != expected_file_stem {
                 self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
+                    writedoc! {w, r"
                         Path: {actual:?}
 
                         Expected filestem: {expected_file_stem:#?}
                           Actual filestem: {actual_file_stem:#?}
-                    "#}
+                    "}
                 });
             }
         }
@@ -369,12 +373,12 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         if let Some(actual_extension) = actual_extension {
             if actual_extension != expected_extension {
                 self.fail(|w: &mut String| {
-                    writedoc! {w, r#"
+                    writedoc! {w, r"
                         Path: {actual:?}
 
                         Expected extension: {expected_extension:#?}
                           Actual extension: {actual_extension:#?}
-                    "#}
+                    "}
                 });
             }
         }
@@ -389,11 +393,11 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         if !actual.starts_with(expected_prefix) {
             self.add_detail_message("Only whole path components are matched!");
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Path: {actual:?}
 
                     Did not start with expected prefix: {expected_prefix:#?}
-                "#}
+                "}
             });
         }
         self
@@ -407,11 +411,11 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         if !actual.ends_with(expected_postfix) {
             self.add_detail_message("Only whole path components are matched!");
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Path: {actual:?}
 
                     Did not end with expected postfix: {expected_postfix:#?}
-                "#}
+                "}
             });
         }
         self

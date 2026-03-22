@@ -233,9 +233,10 @@ pub struct Type<T> {
 }
 
 impl<T> Type<T> {
+    #[must_use]
     pub fn new() -> Self {
         Self {
-            phantom: Default::default(),
+            phantom: PhantomData,
         }
     }
 
@@ -378,6 +379,10 @@ impl<T> AssertThat<'_, T, Capture> {
     /// Allows this `AssertThat` to be dropped again without raising a panic.
     ///
     /// **Prefer `capture_failures` if you don't require ownership after extraction.**
+    ///
+    /// # Panics
+    ///
+    /// Panics if failures have already been captured.
     #[must_use]
     pub fn take_failures(&mut self) -> Vec<String> {
         let mut mode = self.mode.borrow_mut();
@@ -526,6 +531,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     // - we can replace () with some type R (return), letting the user write more succinct closures.
 
     #[allow(clippy::return_self_not_must_use)]
+    #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
@@ -535,6 +541,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
+    #[allow(clippy::return_self_not_must_use)]
     pub fn satisfy<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
@@ -577,7 +584,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
 
 /* Fluent connect */
 
-impl<'t, T, M: Mode> AssertThat<'t, T, M> {
+impl<T, M: Mode> AssertThat<'_, T, M> {
     /// Filler that allows you to add an "and" inside your assertion chain.
     ///
     /// This is completely optional (noop).
@@ -591,7 +598,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     /// 42.assert().is_positive().and().is_less_than(100);
     /// 42.assert().is_positive().is_less_than(100);
     /// ```
-    #[inline(always)]
+    #[inline]
+    #[allow(clippy::return_self_not_must_use)]
     pub fn and(self) -> Self {
         self
     }
@@ -657,7 +665,7 @@ impl<'t, T> AssertThat<'t, T, Capture> {
 
 /* Unwrapping */
 
-impl<'t, T> AssertThat<'t, T, Panic> {
+impl<T> AssertThat<'_, T, Panic> {
     /// **Panics** Panics if the actual value was not owned.
     // TODO: We could relax this by having `AssertThat` be generic over the type of actual value.
     #[track_caller]
@@ -666,7 +674,7 @@ impl<'t, T> AssertThat<'t, T, Panic> {
     }
 }
 
-impl<'t, T> AssertThat<'t, T, Capture> {
+impl<T> AssertThat<'_, T, Capture> {
     /// **Panics**
     /// - If assertion errors are present.
     /// - If the actual value is not owned.
@@ -691,6 +699,7 @@ impl Default for Differences {
 }
 
 impl Differences {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             differences: Vec::new(),
@@ -717,6 +726,7 @@ impl Default for EqContext {
 }
 
 impl EqContext {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             differences: Differences::default(),
@@ -791,6 +801,7 @@ pub fn eq<T>(v: T) -> Eq<T> {
     Eq::Eq(v)
 }
 
+#[must_use]
 pub fn any<T>() -> Eq<T> {
     Eq::Any
 }

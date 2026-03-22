@@ -5,6 +5,7 @@ use indoc::writedoc;
 
 use crate::{AssertThat, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait PartialEqAssertions<T> {
     fn is_equal_to<E>(self, expected: E) -> Self
     where
@@ -54,11 +55,11 @@ impl<T, M: Mode> PartialEqAssertions<T> for AssertThat<'_, T, M> {
                 self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
             }
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {expected:#?}
                     
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self
