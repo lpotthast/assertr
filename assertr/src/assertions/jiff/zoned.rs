@@ -7,6 +7,7 @@ use jiff::Zoned;
 use jiff::tz::TimeZone;
 use std::fmt::Write;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait ZonedAssertions {
     fn is_in_time_zone(self, expected: impl Borrow<TimeZone>) -> Self;
 
@@ -26,22 +27,20 @@ impl<M: Mode> ZonedAssertions for AssertThat<'_, Zoned, M> {
                 .actual()
                 .time_zone()
                 .iana_name()
-                .map(|it| it.to_owned())
-                .unwrap_or_else(|| format!("{expected:?}"));
+                .map_or_else(|| format!("{expected:?}"), ToOwned::to_owned);
 
             let expected = expected
                 .iana_name()
-                .map(|it| it.to_owned())
-                .unwrap_or_else(|| format!("{expected:?}"));
+                .map_or_else(|| format!("{expected:?}"), ToOwned::to_owned);
 
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {expected}
 
                       Actual: {actual}
 
                       Object: {zdt:#?}
-                "#}
+                "}
             });
         }
         self
@@ -56,22 +55,22 @@ impl<M: Mode> ZonedAssertions for AssertThat<'_, Zoned, M> {
 
         match actual {
             None => self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: '{expected}'
 
                       Actual: Zoned without a named time zone.
 
                       Object: {:#?}
-                "#, self.actual()}
+                ", self.actual()}
             }),
             Some(actual) if actual != expected => self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {expected}
 
                       Actual: {actual}
 
                       Object: {:#?}
-                "#, self.actual()}
+                ", self.actual()}
             }),
             _ => {}
         }

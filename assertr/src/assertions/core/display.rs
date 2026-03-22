@@ -4,6 +4,7 @@ use core::fmt::Display;
 use crate::assertions::core::strip_quotation_marks;
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait DisplayAssertions {
     fn has_display_value(self, expected: impl Display) -> Self;
 }
@@ -14,7 +15,7 @@ impl<T: Display, M: Mode> DisplayAssertions for AssertThat<'_, T, M> {
         self.track_assertion();
 
         let actual_string = format!("{}", self.actual());
-        let expected_string = format!("{}", expected);
+        let expected_string = format!("{expected}");
 
         let actual_str = strip_quotation_marks(actual_string.as_str());
         let expected_str = strip_quotation_marks(expected_string.as_str());

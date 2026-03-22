@@ -1,6 +1,7 @@
 use crate::{AssertThat, actual::Actual, mode::Mode, tracking::AssertionTracking};
 use core::fmt::Debug;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait ResultAssertions<'t, M: Mode, T, E> {
     fn is_ok(self) -> AssertThat<'t, T, M>
     where

@@ -4,7 +4,8 @@ use core::ops::Deref;
 
 use crate::prelude::*;
 
-/// Assertions for the tokio::sync::watch::Receiver type.
+/// Assertions for the `tokio::sync::watch::Receiver` type.
+#[allow(clippy::return_self_not_must_use)]
 pub trait TokioWatchReceiverAssertions<T: Debug> {
     fn has_current_value(self, expected: impl Borrow<T>) -> Self
     where
@@ -24,13 +25,13 @@ impl<T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
         T: PartialEq,
     {
         self.derive(|it| it.borrow())
-            .derive(|it| it.deref())
+            .derive(Deref::deref)
             .is_equal_to(expected.borrow());
         self
     }
 
     fn has_changed(self) -> Self {
-        self.derive(|it| it.has_changed())
+        self.derive(tokio::sync::watch::Receiver::has_changed)
             .with_detail_message("Expected a tokio `watch` channel to have changed.")
             .is_ok()
             .is_true();
@@ -38,7 +39,7 @@ impl<T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
     }
 
     fn has_not_changed(self) -> Self {
-        self.derive(|it| it.has_changed())
+        self.derive(tokio::sync::watch::Receiver::has_changed)
             .with_detail_message("Expected a tokio `watch` channel to have not changed.")
             .is_ok()
             .is_false();

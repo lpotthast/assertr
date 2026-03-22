@@ -2,6 +2,7 @@ use crate::AssertThat;
 use crate::mode::Mode;
 use crate::prelude::{BoolAssertions, PartialEqAssertions, PartialOrdAssertions};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait HttpHeaderValueAssertions<'t, M: Mode> {
     fn is_empty(self) -> Self;
 
@@ -18,28 +19,28 @@ impl<'t, M: Mode> HttpHeaderValueAssertions<'t, M>
     for AssertThat<'t, http::header::HeaderValue, M>
 {
     fn is_empty(self) -> Self {
-        self.derive(|it| it.len())
+        self.derive(http::HeaderValue::len)
             .with_detail_message("Expected an empty header value.")
             .is_equal_to(0);
         self
     }
 
     fn is_not_empty(self) -> Self {
-        self.derive(|it| it.len())
+        self.derive(http::HeaderValue::len)
             .with_detail_message("Expected a non-empty header value.")
             .is_greater_than(0);
         self
     }
 
     fn is_sensitive(self) -> Self {
-        self.derive(|it| it.is_sensitive())
+        self.derive(http::HeaderValue::is_sensitive)
             .with_detail_message("Expected a sensitive header value. You might have forgotten to call `set_sensitive(true)` on the header value.")
             .is_true();
         self
     }
 
     fn is_insensitive(self) -> Self {
-        self.derive(|it| it.is_sensitive())
+        self.derive(http::HeaderValue::is_sensitive)
             .with_detail_message("Expected an insensitive header value. You might have forgotten to call `set_sensitive(false)` on the header value.")
             .is_false();
         self
@@ -48,7 +49,7 @@ impl<'t, M: Mode> HttpHeaderValueAssertions<'t, M>
     fn is_ascii(self) -> AssertThat<'t, String, M> {
         use crate::prelude::ResultAssertions;
 
-        self.map(|it| it.unwrap_owned().to_str().map(|it| it.to_owned()).into())
+        self.map(|it| it.unwrap_owned().to_str().map(ToOwned::to_owned).into())
             .is_ok()
     }
 }

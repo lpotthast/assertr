@@ -5,6 +5,7 @@ use core::fmt::Debug;
 
 use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait SliceAssertions<'t, T> {
     fn contains<E>(self, expected: E) -> Self
     where
@@ -101,7 +102,7 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
         let mut elements_not_found: Vec<&T> = Vec::new();
         let mut elements_not_expected = Vec::new();
 
-        for e in expected.iter() {
+        for e in expected {
             let found = actual.as_ref().iter().find(|it| *it == e);
 
             match found {
@@ -110,7 +111,7 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
             }
         }
 
-        for e in actual.iter() {
+        for e in actual {
             match elements_found.iter().find(|it| **it == e) {
                 Some(_) => {}
                 None => elements_not_expected.push(e),
@@ -120,8 +121,6 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
         if !elements_not_found.is_empty() || !elements_not_expected.is_empty() {
             self.fail(format_args!(
                 "Actual: {actual:#?},\n\nElements expected: {expected:#?}\n\nElements not found: {elements_not_found:#?}\n\nElements not expected: {elements_not_expected:#?}\n",
-                actual = actual,
-                expected = expected
             ));
         }
         self

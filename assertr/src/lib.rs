@@ -176,22 +176,26 @@ pub struct Type<T> {
 }
 
 impl<T> Type<T> {
+    #[must_use]
     pub fn get_type_name(&self) -> &'static str {
         std::any::type_name::<T>()
     }
 
+    #[must_use]
     pub fn needs_drop(&self) -> bool {
         std::mem::needs_drop::<T>()
     }
 
+    #[must_use]
     pub fn size(&self) -> usize {
         size_of::<T>()
     }
 }
 
+#[must_use]
 pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
     AssertThat::new(Actual::Owned(Type {
-        phantom: Default::default(),
+        phantom: PhantomData,
     }))
 }
 
@@ -347,6 +351,10 @@ impl<T> AssertThat<'_, T, Capture> {
     /// Allows this `AssertThat` to be dropped again without raising a panic.
     ///
     /// **Prefer `capture_failures` if you don't require ownership after extraction.**
+    ///
+    /// # Panics
+    ///
+    /// Panics if the assertion failures have already been captured.
     #[must_use]
     pub fn take_failures(&mut self) -> Vec<String> {
         let mut mode = self.mode.borrow_mut();
@@ -516,6 +524,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     //   telling the compiler that the returned values live shorter than the input.
     // - we can replace () with some type R (return), letting the user write more succinct closures.
 
+    #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
@@ -525,6 +534,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
+    #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies_ref<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> &'a U,
@@ -537,6 +547,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     /// Gives the `actual` value contained in this assertion a descriptive name.
     /// This name will be part of panic messages when set.
     #[allow(dead_code)]
+    #[must_use]
     pub fn with_subject_name(mut self, subject_name: impl Into<String>) -> Self {
         self.subject_name = Some(subject_name.into());
         self
@@ -548,6 +559,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     /// for exact equality and do not want to be bothered by constantly differing line and column
     /// numbers for the assert-location.
     #[allow(dead_code)]
+    #[must_use]
     pub fn with_location(mut self, value: bool) -> Self {
         self.print_location = value;
         self
@@ -615,7 +627,7 @@ impl<'t, T> AssertThat<'t, T, Capture> {
 
 /* Unwrapping */
 
-impl<'t, T> AssertThat<'t, T, Panic> {
+impl<T> AssertThat<'_, T, Panic> {
     /// **Panics** Panics if the actual value was not owned.
     // TODO: We could relax this by having `AssertThat` be generic over the type of actual value.
     #[track_caller]
@@ -624,7 +636,7 @@ impl<'t, T> AssertThat<'t, T, Panic> {
     }
 }
 
-impl<'t, T> AssertThat<'t, T, Capture> {
+impl<T> AssertThat<'_, T, Capture> {
     /// **Panics**
     /// - If assertion errors are present.
     /// - If the actual value is not owned.
@@ -649,6 +661,7 @@ impl Default for Differences {
 }
 
 impl Differences {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             differences: Vec::new(),
@@ -675,6 +688,7 @@ impl Default for EqContext {
 }
 
 impl EqContext {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             differences: Differences::default(),
@@ -749,6 +763,7 @@ pub fn eq<T>(v: T) -> Eq<T> {
     Eq::Eq(v)
 }
 
+#[must_use]
 pub fn any<T>() -> Eq<T> {
     Eq::Any
 }

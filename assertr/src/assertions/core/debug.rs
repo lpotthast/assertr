@@ -4,6 +4,7 @@ use alloc::format;
 use core::fmt::Debug;
 
 /// Assertions for values implementing [Debug].
+#[allow(clippy::return_self_not_must_use)]
 pub trait DebugAssertions {
     /// Test that actual has the `expected` `Debug` representation.
     fn has_debug_string(self, expected: impl AsRef<str>) -> Self;

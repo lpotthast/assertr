@@ -6,6 +6,7 @@ use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait LengthAssertions {
     fn is_empty(self) -> Self;
 
@@ -22,11 +23,11 @@ impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
             let actual = self.actual();
             let type_name = core::any::type_name::<T>();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {type_name} {actual:#?}
 
                     was expected to be empty, but it is not!
-                "#}
+                "}
             });
         }
         self
@@ -39,11 +40,11 @@ impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
             let actual = self.actual();
             let type_name = core::any::type_name::<T>();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {type_name} {actual:#?}
 
                     was expected not to be empty, but it is!
-                "#}
+                "}
             });
         }
         self
@@ -56,14 +57,14 @@ impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
         if actual_len != expected {
             let type_name = core::any::type_name::<T>();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {type_name} {actual:#?}
 
                     does not have the correct length
 
                     Expected: {expected:?}
                       Actual: {actual_len:?}
-                "#,actual = self.actual()}
+                ",actual = self.actual()}
             });
         }
         self

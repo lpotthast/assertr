@@ -20,6 +20,7 @@ pub trait RangeBoundAssertions<B, R: RangeBounds<B>> {
 }
 
 /// Assertions for any type `B` that can interact with a range `R` (using bound type `B`).
+#[allow(clippy::return_self_not_must_use)]
 pub trait RangeAssertions<B> {
     fn is_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
@@ -48,12 +49,12 @@ impl<B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertThat<'_
         self.track_assertion();
         if !self.actual().contains(&expected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual range: {actual:#?}
 
                     Does not contain expected: {expected:#?}
-                "#,actual = self.actual()}
-            })
+                ",actual = self.actual()}
+            });
         }
     }
 
@@ -66,12 +67,12 @@ impl<B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertThat<'_
         self.track_assertion();
         if self.actual().contains(&expected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual range: {actual:#?}
 
                     Contains element expected not to be contained: {expected:#?}
-                "#,actual = self.actual()}
-            })
+                ",actual = self.actual()}
+            });
         }
     }
 }
@@ -90,10 +91,10 @@ impl<B, M: Mode> RangeAssertions<B> for AssertThat<'_, B, M> {
             let mut range = String::new();
             render_range(&mut range, expected);
             self.fail(|err: &mut String| {
-                writedoc! {err, r#"
+                writedoc! {err, r"
                     Actual: {actual:#?}
                     is not in range: {range}
-                "#}
+                "}
             });
         }
 
@@ -113,10 +114,10 @@ impl<B, M: Mode> RangeAssertions<B> for AssertThat<'_, B, M> {
             let mut range = String::new();
             render_range(&mut range, expected);
             self.fail(|err: &mut String| {
-                writedoc! {err, r#"
+                writedoc! {err, r"
                     Actual: {actual:#?}
                     was not expected to be in range: {range}
-                "#}
+                "}
             });
         }
 
@@ -126,14 +127,13 @@ impl<B, M: Mode> RangeAssertions<B> for AssertThat<'_, B, M> {
 
 fn render_range<B: Debug>(w: &mut impl Write, range: impl RangeBounds<B>) {
     fn write_bound<W: Write, B: Debug>(to: &mut W, bound: &B) {
-        to.write_fmt(format_args!("{bound:?}")).unwrap()
+        to.write_fmt(format_args!("{bound:?}")).unwrap();
     }
 
     match range.start_bound() {
-        Bound::Included(b) => write_bound(w, b),
-        Bound::Excluded(b) => write_bound(w, b),
+        Bound::Included(b) | Bound::Excluded(b) => write_bound(w, b),
         Bound::Unbounded => {}
-    };
+    }
     w.write_str("..").unwrap();
     match range.end_bound() {
         Bound::Included(b) => {
@@ -142,7 +142,7 @@ fn render_range<B: Debug>(w: &mut impl Write, range: impl RangeBounds<B>) {
         }
         Bound::Excluded(b) => write_bound(w, b),
         Bound::Unbounded => {}
-    };
+    }
 }
 
 #[cfg(test)]

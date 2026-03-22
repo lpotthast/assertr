@@ -1,7 +1,7 @@
 use crate::{AssertrPartialEq, EqContext};
 use core::fmt::Debug;
 
-/// PartialEq like comparison on slices, but with an `EqContext`, tracking human-readable differences.
+/// `PartialEq` like comparison on slices, but with an `EqContext`, tracking human-readable differences.
 ///
 /// This function is supposed to be used when deriving `AssertrEq` and having a slice-like type:
 /// ```

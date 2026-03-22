@@ -1,6 +1,6 @@
 use crate::{AssertrPartialEq, EqContext};
 use std::collections::HashMap;
-use std::hash::Hash;
+use std::hash::{BuildHasher, Hash};
 
 ///
 /// This function is supposed to be used when deriving `AssertrEq`:
@@ -23,14 +23,16 @@ use std::hash::Hash;
 ///     pub bars: Vec<Bar>,
 /// }
 /// ```
-pub fn compare<K, V1, V2>(
-    map1: &HashMap<K, V1>,
-    map2: &HashMap<K, V2>,
+pub fn compare<K, V1, V2, S1, S2>(
+    map1: &HashMap<K, V1, S1>,
+    map2: &HashMap<K, V2, S2>,
     mut ctx: Option<&mut EqContext>,
 ) -> bool
 where
     K: Eq + Hash,
     V1: AssertrPartialEq<V2>,
+    S1: BuildHasher,
+    S2: BuildHasher,
 {
     if map1.len() != map2.len() {
         return false;

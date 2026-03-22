@@ -4,6 +4,7 @@ use crate::prelude::StrSliceAssertions;
 use crate::{AssertThat, Mode};
 
 /// Assertions for heap-allocated, owned [String]s.
+#[allow(clippy::return_self_not_must_use)]
 pub trait StringAssertions {
     fn contains(self, expected: impl AsRef<str>) -> Self;
 
@@ -21,39 +22,39 @@ pub trait StringAssertions {
 impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
     #[track_caller]
     fn contains(self, expected: impl AsRef<str>) -> Self {
-        self.derive(|actual| actual.as_str()).contains(expected);
+        self.derive(String::as_str).contains(expected);
         self
     }
 
     #[track_caller]
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self {
-        self.derive(|actual| actual.as_str())
+        self.derive(String::as_str)
             .does_not_contain(unexpected);
         self
     }
 
     #[track_caller]
     fn starts_with(self, expected: impl AsRef<str>) -> Self {
-        self.derive(|actual| actual.as_str()).starts_with(expected);
+        self.derive(String::as_str).starts_with(expected);
         self
     }
 
     #[track_caller]
     fn does_not_start_with(self, unexpected: impl AsRef<str>) -> Self {
-        self.derive(|actual| actual.as_str())
+        self.derive(String::as_str)
             .does_not_start_with(unexpected);
         self
     }
 
     #[track_caller]
     fn ends_with(self, expected: impl AsRef<str>) -> Self {
-        self.derive(|actual| actual.as_str()).ends_with(expected);
+        self.derive(String::as_str).ends_with(expected);
         self
     }
 
     #[track_caller]
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self {
-        self.derive(|actual| actual.as_str())
+        self.derive(String::as_str)
             .does_not_end_with(unexpected);
         self
     }

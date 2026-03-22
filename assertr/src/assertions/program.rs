@@ -24,7 +24,7 @@ impl<'a> From<&'a str> for Program<'a> {
     }
 }
 
-impl<'a> From<String> for Program<'a> {
+impl From<String> for Program<'_> {
     fn from(value: String) -> Self {
         Self(Cow::Owned(OsString::from(value)))
     }
@@ -36,7 +36,7 @@ impl<'a> From<&'a OsStr> for Program<'a> {
     }
 }
 
-impl<'a> From<OsString> for Program<'a> {
+impl From<OsString> for Program<'_> {
     fn from(value: OsString) -> Self {
         Self(Cow::Owned(value))
     }
@@ -95,7 +95,7 @@ impl<'a, 't, M: Mode> ProgramAssertions<'t, 'a, M> for AssertThat<'t, Program<'a
     }
 }
 
-impl<'t, 'a> ProgramAssertionsRequiringPanicMode<'t> for AssertThat<'t, Program<'a>, Panic> {
+impl<'t> ProgramAssertionsRequiringPanicMode<'t> for AssertThat<'t, Program<'_>, Panic> {
     #[track_caller]
     fn exists_and(self) -> AssertThat<'t, PathBuf, Panic> {
         self.track_assertion();
