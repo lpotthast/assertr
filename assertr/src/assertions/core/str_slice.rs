@@ -4,6 +4,7 @@ use std::fmt::Write;
 
 /// Special assertions for `&str` (string slices) not covered by other general-purpose assertions,
 /// like our `PartialEqAssertions`.
+#[allow(clippy::return_self_not_must_use)]
 pub trait StrSliceAssertions {
     /// Tests whether this string is empty or only containing whitespace characters.
     /// 'Whitespace' is defined according to the terms of the Unicode Derived Core Property
@@ -33,13 +34,13 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
         // This iterator will yield no entries if the string is empty or all whitespace!
         if self.actual().split_whitespace().next().is_some() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:?}
-                    
+
                     contains non-whitespace characters.
-                    
+
                     Expected it to be empty or only containing whitespace.
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
         self
@@ -51,13 +52,13 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
         // This iterator will yield no entries if the string is empty or all whitespace!
         if self.actual().split_ascii_whitespace().next().is_some() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:?}
-                    
+
                     contains non-whitespace characters.
-                    
+
                     Expected it to be empty or only containing whitespace.
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
         self
@@ -70,13 +71,13 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
         let expected = expected.as_ref();
         if !actual.contains(expected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:?}
 
                     does not contain
 
                     Expected: {expected:?}
-                "#}
+                "}
             });
         }
         self
@@ -89,13 +90,13 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
         let unexpected = unexpected.as_ref();
         if self.actual().contains(unexpected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:?}
 
                     contains
 
                     Unexpected: {unexpected:?}
-                "#}
+                "}
             });
         }
         self
@@ -108,13 +109,13 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
         let expected = expected.as_ref();
         if !actual.starts_with(expected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:?}
 
                     does not start with
 
                     Expected: {expected:?}
-                "#}
+                "}
             });
         }
         self
@@ -127,13 +128,13 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
         let unexpected = unexpected.as_ref();
         if self.actual().starts_with(unexpected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:?}
 
                     starts with
 
                     Unexpected: {unexpected:?}
-                "#}
+                "}
             });
         }
         self
@@ -146,13 +147,13 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
         let expected = expected.as_ref();
         if !actual.ends_with(expected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:?}
 
                     does not end with
 
                     Expected: {expected:?}
-                "#}
+                "}
             });
         }
         self
@@ -165,13 +166,13 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
         let unexpected = unexpected.as_ref();
         if self.actual().ends_with(unexpected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:?}
 
                     ends with
 
                     Unexpected: {unexpected:?}
-                "#}
+                "}
             });
         }
         self

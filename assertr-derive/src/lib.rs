@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
+#![allow(clippy::needless_continue)]
 
 use proc_macro::TokenStream;
 
-use darling::*;
+use darling::{Error, FromDeriveInput, FromField, ast};
 use proc_macro2::Span;
 use quote::quote;
 use syn::{DeriveInput, Ident, Path, Type, Visibility, parse_macro_input};
@@ -41,6 +42,11 @@ impl MyInputReceiver {
     }
 }
 
+/// Derive macro for `AssertrEq`.
+///
+/// # Panics
+///
+/// This proc macro will panic if applied to an enum, as only structs are supported.
 #[proc_macro_derive(AssertrEq, attributes(assertr_eq))]
 pub fn store(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -54,8 +60,7 @@ pub fn store(input: TokenStream) -> TokenStream {
 
     let filtered_fields = input.fields().iter().filter(|field| match field.vis {
         Visibility::Public(_) => true,
-        Visibility::Restricted(_) => false,
-        Visibility::Inherited => false,
+        Visibility::Restricted(_) | Visibility::Inherited => false,
     });
 
     let eq_struct_ident = Ident::new(

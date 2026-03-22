@@ -5,12 +5,13 @@ use indoc::writedoc;
 use jiff::Span;
 use std::fmt::Write;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait SpanAssertions {
     fn is_zero(self) -> Self;
 
     fn is_negative(self) -> Self;
 
-    /// Unlike the is_positive assertions on numerics, this fails for a span of 0!
+    /// Unlike the `is_positive` assertions on numerics, this fails for a span of 0!
     fn is_positive(self) -> Self;
 }
 
@@ -24,11 +25,11 @@ impl<M: Mode> SpanAssertions for AssertThat<'_, Span, M> {
 
             let expected = Span::new();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {expected:#?}
 
                       Actual: {actual:#?}
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
 
@@ -41,11 +42,11 @@ impl<M: Mode> SpanAssertions for AssertThat<'_, Span, M> {
 
         if !self.actual().is_negative() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected value to be negative. But was
 
                       Actual: {actual:#?}
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
 
@@ -58,11 +59,11 @@ impl<M: Mode> SpanAssertions for AssertThat<'_, Span, M> {
 
         if !self.actual().is_positive() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected value to be positive. But was
 
                       Actual: {actual} ({actual:#?})
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
 

@@ -5,14 +5,15 @@ use core::fmt::Debug;
 use indoc::writedoc;
 use std::fmt::Write;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait RefCellAssertions {
-    /// Check that the RefCell is immutably or mutably borrowed.
+    /// Check that the `RefCell` is immutably or mutably borrowed.
     fn is_borrowed(self) -> Self;
 
-    /// Check that the RefCell is mutably borrowed.
+    /// Check that the `RefCell` is mutably borrowed.
     fn is_mutably_borrowed(self) -> Self;
 
-    /// Check that the RefCell is not mutably borrowed, wither by being not borrowed at all, or only borrowed immutably.
+    /// Check that the `RefCell` is not mutably borrowed, wither by being not borrowed at all, or only borrowed immutably.
     fn is_not_mutably_borrowed(self) -> Self;
 }
 
@@ -23,11 +24,11 @@ impl<T: Debug, M: Mode> RefCellAssertions for AssertThat<'_, RefCell<T>, M> {
         let actual = self.actual();
         if actual.try_borrow_mut().is_ok() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:#?} is not borrowed.
 
                     Expected: RefCell to be borrowed (immutably) at least once.
-                "#,actual = self.actual()}
+                ",actual = self.actual()}
             });
         }
         self
@@ -39,11 +40,11 @@ impl<T: Debug, M: Mode> RefCellAssertions for AssertThat<'_, RefCell<T>, M> {
         let actual = self.actual();
         if actual.try_borrow().is_ok() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:#?} is not mutably borrowed.
 
                     Expected: RefCell to be borrowed mutably.
-                "#,actual = self.actual()}
+                ",actual = self.actual()}
             });
         }
         self
@@ -55,11 +56,11 @@ impl<T: Debug, M: Mode> RefCellAssertions for AssertThat<'_, RefCell<T>, M> {
         let actual = self.actual();
         if actual.try_borrow_mut().is_ok() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: {actual:#?} is mutably borrowed.
 
                     Expected: RefCell to not be borrowed mutably.
-                "#,actual = self.actual()}
+                ",actual = self.actual()}
             });
         }
         self

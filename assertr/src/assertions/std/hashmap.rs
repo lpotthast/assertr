@@ -5,7 +5,8 @@ use core::fmt::Write;
 use indoc::writedoc;
 use std::{collections::HashMap, hash::Hash};
 
-/// Assertions for generic [HashMap]s.
+/// Assertions for generic [`HashMap`]s.
+#[allow(clippy::return_self_not_must_use)]
 pub trait HashMapAssertions<K, V> {
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where
@@ -30,7 +31,9 @@ pub trait HashMapAssertions<K, V> {
         E: Debug;
 }
 
-impl<K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'_, HashMap<K, V>, M> {
+impl<K, V, S: std::hash::BuildHasher, M: Mode> HashMapAssertions<K, V>
+    for AssertThat<'_, HashMap<K, V, S>, M>
+{
     #[track_caller]
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where
@@ -43,11 +46,11 @@ impl<K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'_, HashMap<K, V>, M>
 
         if !self.actual().contains_key(expected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: HashMap {actual:#?}
 
                     does not contain expected key: {expected:#?}
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
         self
@@ -65,11 +68,11 @@ impl<K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'_, HashMap<K, V>, M>
 
         if self.actual().contains_key(not_expected) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: HashMap {actual:#?}
 
                     contains unexpected key: {not_expected:#?}
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
         self
@@ -90,11 +93,11 @@ impl<K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'_, HashMap<K, V>, M>
             .any(|it| AssertrPartialEq::eq(it, &expected, None))
         {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Actual: HashMap {actual:#?}
-                    
+
                     does not contain expected value: {expected:#?}
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
         self
@@ -124,14 +127,14 @@ impl<K, V, M: Mode> HashMapAssertions<K, V> for AssertThat<'_, HashMap<K, V>, M>
                         then.add_detail_message(format!("Differences: {:#?}", ctx.differences));
                     }
                     then.fail(|w: &mut String| {
-                        writedoc! {w, r#"
+                        writedoc! {w, r"
                             Actual: HashMap {actual:#?}
 
                             does not contain expected value at key: {expected_key:#?}
 
                             Expected value: {expected_value:#?}
                               Actual value: {actual_value:#?}
-                            "#,
+                            ",
                         }
                     });
                 }

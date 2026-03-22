@@ -43,11 +43,11 @@ impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat
 
         if this.actual().is_ok() {
             this.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: Function to panic when called.
 
                       Actual: No panic occurred!
-                "#}
+                "}
             });
         }
 
@@ -86,11 +86,11 @@ impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat
 
         if this.actual().is_err() {
             this.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!
-                "#}
+                "}
             });
         }
 
@@ -142,11 +142,11 @@ where
 
         if this.actual().is_ok() {
             this.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: Function to panic when called.
 
                       Actual: No panic occurred!
-                "#}
+                "}
             });
         }
 
@@ -186,11 +186,11 @@ where
 
         if this.actual().is_err() {
             this.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!
-                "#}
+                "}
             });
         }
 

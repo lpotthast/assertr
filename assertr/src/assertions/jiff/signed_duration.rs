@@ -5,6 +5,7 @@ use indoc::writedoc;
 use jiff::SignedDuration;
 use std::fmt::Write;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait SignedDurationAssertions {
     fn is_zero(self) -> Self;
 
@@ -25,11 +26,11 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
 
             let expected = SignedDuration::ZERO;
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {expected:#?}
 
                       Actual: {actual:#?}
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
 
@@ -42,11 +43,11 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
 
         if !self.actual().is_negative() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {actual:#?} to be negative,
 
                       Actual: {actual:#?},
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
 
@@ -59,11 +60,11 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
 
         if !self.actual().is_positive() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {actual:#?} to be negative,
 
                       Actual: {actual:#?},
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
 
@@ -79,13 +80,13 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
         let max = expected + allowed_deviation;
         if !(actual >= min && actual <= max) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected value to be close to: {expected:?},
                      with allowed deviation being: {allowed_deviation:?},
                       but value was outside range: [{min:?}, {max:?}]
 
                       Actual: {actual:?}
-                "#, actual = self.actual()}
+                ", actual = self.actual()}
             });
         }
 

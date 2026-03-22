@@ -7,7 +7,8 @@ use indoc::writedoc;
 use num::{Float, Num, Signed};
 
 /// Assertions for numeric values not already handled by
-/// [crate::prelude::PartialEqAssertions] and [crate::prelude::PartialOrdAssertions].
+/// [`PartialEqAssertions`](crate::prelude::PartialEqAssertions) and [`PartialOrdAssertions`](crate::prelude::PartialOrdAssertions).
+#[allow(clippy::return_self_not_must_use)]
 pub trait NumAssertions<T: Num> {
     /// Fails if actual is not equal to the additive identity.
     fn is_zero(self) -> Self;
@@ -65,11 +66,11 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
             ));
             let expected = T::zero();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {expected:#?}
 
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self
@@ -91,11 +92,11 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
             ));
             let expected = T::one();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {expected:#?}
 
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self
@@ -115,11 +116,11 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         if !actual.is_negative() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected value to be negative. But was
 
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self
@@ -134,11 +135,11 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         if !actual.is_positive() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected value to be positive. But was
 
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self
@@ -156,13 +157,13 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         let max = expected.clone() + allowed_deviation.clone();
         if !(actual >= &min && actual <= &max) {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected value to be close to: {expected:#?},
                      with allowed deviation being: {allowed_deviation:#?},
                       but value was outside range: [{min:?}, {max:?}]
 
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self
@@ -179,11 +180,11 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         if !actual.is_nan() {
             let nan = T::nan();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {nan:#?}
 
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self
@@ -199,11 +200,11 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         if !actual.is_finite() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected a finite value, but was
 
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self
@@ -220,11 +221,11 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         if !actual.is_infinite() {
             let inf = T::infinity();
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: +/- {inf:#?}
 
                       Actual: {actual:#?}
-                "#}
+                "}
             });
         }
         self

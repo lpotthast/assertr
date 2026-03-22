@@ -14,7 +14,7 @@ pub trait Mode: Default + Clone + 'static {
 
 /// Panic mode. When an assertion fails, a panic message is raised and the program terminates immediately.
 /// Subsequent assertions after a failure are therefore not executed.
-/// This is the default mode and allows an AssertThat to be mapped to a different type with a condition,
+/// This is the default mode and allows an `AssertThat` to be mapped to a different type with a condition,
 /// failing when that condition cannot be met.
 /// A good example for that is `assert_that(Err("foo")).is_err().is_equal_to("foo")`, where the `is_err`
 /// implementation can map the contained actual value to the results error value and allow for simpler chaining of assertions.
@@ -43,10 +43,9 @@ impl Mode for Capture {
 
 impl Drop for Capture {
     fn drop(&mut self) {
-        if !self.captured && !self.derived {
-            panic!(
-                "You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"
-            );
-        }
+        assert!(
+            self.captured || self.derived,
+            "You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"
+        );
     }
 }

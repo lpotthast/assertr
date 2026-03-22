@@ -3,6 +3,7 @@ use core::{borrow::Borrow, cmp::Ordering, fmt::Debug};
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for comparable values.
+#[allow(clippy::return_self_not_must_use)]
 pub trait PartialOrdAssertions<T> {
     fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
     where
@@ -39,7 +40,7 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
 
         if matches!(
             actual.partial_cmp(expected),
-            Some(Ordering::Equal) | Some(Ordering::Greater)
+            Some(Ordering::Equal | Ordering::Greater)
         ) {
             self.fail(format_args!(
                 "Actual: {actual:#?}\n\nis not less than\n\nExpected: {expected:#?}\n"
@@ -61,7 +62,7 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
 
         if matches!(
             actual.partial_cmp(expected),
-            Some(Ordering::Less) | Some(Ordering::Equal)
+            Some(Ordering::Less | Ordering::Equal)
         ) {
             self.fail(format_args!(
                 "Actual: {actual:#?}\n\nis not greater than\n\nExpected: {expected:#?}\n"

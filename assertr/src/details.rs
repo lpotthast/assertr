@@ -40,12 +40,14 @@ impl<T, M: Mode> WithDetail for AssertThat<'_, T, M> {
 
 impl<T, M: Mode> AssertThat<'_, T, M> {
     /// Add a message to be displayed on assertion failure.
+    #[must_use]
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {
         self.detail_messages.borrow_mut().push(message.into());
         self
     }
 
     /// Add a message to be displayed on assertion failure bound by the given condition.
+    #[must_use]
     pub fn with_conditional_detail_message<Message: Into<String>>(
         self,
         condition: impl Fn(&Self) -> bool,

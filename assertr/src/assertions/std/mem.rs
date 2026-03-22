@@ -3,6 +3,7 @@ use core::fmt::Write;
 use indoc::writedoc;
 
 /// Static memory assertions for any type.
+#[allow(clippy::return_self_not_must_use)]
 pub trait MemAssertions {
     fn needs_drop(self) -> Self;
 }
@@ -14,13 +15,13 @@ impl<T, M: Mode> MemAssertions for AssertThat<'_, Type<T>, M> {
         let actual = self.actual();
         if !actual.needs_drop() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Type {actual:#?} was expected to need drop,
-                    
+
                     but dropping it is guaranteed to have no side effect.
 
                     You may forgot to `impl Drop` for this type.
-                "#, actual = actual.get_type_name()}
+                ", actual = actual.get_type_name()}
             });
         }
         self

@@ -10,9 +10,10 @@ impl NumberOfAssertions {
 
 impl Drop for NumberOfAssertions {
     fn drop(&mut self) {
-        if self.0 == 0 {
-            panic!("An AssertThat was dropped without performing any actual assertions on it!");
-        }
+        assert!(
+            self.0 != 0,
+            "An AssertThat was dropped without performing any actual assertions on it!"
+        );
     }
 }
 
