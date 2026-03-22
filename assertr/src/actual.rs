@@ -7,6 +7,11 @@ pub enum Actual<'t, T> {
 }
 
 impl<'t, T> Actual<'t, T> {
+    /// Unwraps the owned value from this `Actual`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is borrowed rather than owned.
     pub fn unwrap_owned(self) -> T {
         match self {
             Actual::Borrowed(_t) => panic!("Cannot `unwrap_owned` a borrowed value."),

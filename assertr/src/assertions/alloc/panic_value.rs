@@ -84,11 +84,13 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual = PanicValue(Box::new(String::from("foo")));
 
-            actual.must()
+            actual
+                .must()
                 .have_type::<String>()
                 .be_equal_to(String::from("foo"));
 
-            actual.must()
+            actual
+                .must()
                 .have_type::<String>()
                 .be_equal_to(String::from("foo"));
         }

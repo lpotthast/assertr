@@ -33,13 +33,11 @@ fn main() {
     });
 
     assert_that_panic_by(|| {
-        foo.must()
-            .with_location(false)
-            .be_equal_to(FooAssertrEq {
-                id: eq(1),
-                name: eq("otto".to_string()),
-                data: any(),
-            })
+        foo.must().with_location(false).be_equal_to(FooAssertrEq {
+            id: eq(1),
+            name: eq("otto".to_string()),
+            data: any(),
+        })
     })
     .has_type::<String>()
     .is_equal_to(formatdoc! {r#"

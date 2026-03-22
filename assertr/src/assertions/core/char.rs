@@ -5,6 +5,7 @@ use crate::AssertThat;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait CharAssertions {
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self;
 
@@ -66,12 +67,12 @@ impl<M: Mode> CharAssertions for AssertThat<'_, char, M> {
         if !actual.eq_ignore_ascii_case(&expected) {
             self.add_detail_message("Actual is not equal to expected, even when ignoring casing.");
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: {expected:#?},
-                    
+
                       Actual: {actual:#?},
-                "#}
-            })
+                "}
+            });
         }
         self
     }
@@ -82,10 +83,10 @@ impl<M: Mode> CharAssertions for AssertThat<'_, char, M> {
         let actual = self.actual();
         if !actual.is_lowercase() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected {actual:#?} to be lowercase, but it is not.
-                "#}
-            })
+                "}
+            });
         }
         self
     }
@@ -96,10 +97,10 @@ impl<M: Mode> CharAssertions for AssertThat<'_, char, M> {
         let actual = self.actual();
         if !actual.is_uppercase() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected {actual:#?} to be uppercase, but it is not.
-                "#}
-            })
+                "}
+            });
         }
         self
     }
@@ -110,10 +111,10 @@ impl<M: Mode> CharAssertions for AssertThat<'_, char, M> {
         let actual = self.actual();
         if !actual.is_ascii_lowercase() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected {actual:#?} to be an ascii-lowercase char, but it is not.
-                "#}
-            })
+                "}
+            });
         }
         self
     }
@@ -124,10 +125,10 @@ impl<M: Mode> CharAssertions for AssertThat<'_, char, M> {
         let actual = self.actual();
         if !actual.is_ascii_uppercase() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected {actual:#?} to be an ascii-uppercase char, but it is not.
-                "#}
-            })
+                "}
+            });
         }
         self
     }

@@ -2,6 +2,7 @@ use core::fmt::Debug;
 
 use crate::{AssertThat, Mode, prelude::SliceAssertions};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait ArrayAssertions<T: Debug> {
     fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
     where
@@ -35,8 +36,7 @@ impl<T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'_, [T
     where
         T: PartialEq,
     {
-        self.derive(|actual| actual.as_slice())
-            .contains_exactly(expected);
+        self.derive(<[T; N]>::as_slice).contains_exactly(expected);
         self
     }
 
@@ -45,7 +45,7 @@ impl<T: Debug, const N: usize, M: Mode> ArrayAssertions<T> for AssertThat<'_, [T
     where
         T: PartialEq,
     {
-        self.derive(|actual| actual.as_slice())
+        self.derive(<[T; N]>::as_slice)
             .contains_exactly_in_any_order(expected);
         self
     }

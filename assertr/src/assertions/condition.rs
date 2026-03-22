@@ -1,5 +1,6 @@
 use crate::{AssertThat, Mode, condition::Condition, tracking::AssertionTracking};
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait ConditionAssertions<T> {
     fn is<C: Condition<T>>(self, condition: C) -> Self;
     fn has<C: Condition<T>>(self, condition: C) -> Self;
@@ -22,6 +23,7 @@ impl<T, M: Mode> ConditionAssertions<T> for AssertThat<'_, T, M> {
     }
 }
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait IterableConditionAssertions<T, I>
 where
     for<'any> &'any I: IntoIterator<Item = &'any T>,

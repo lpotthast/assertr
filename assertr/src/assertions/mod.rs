@@ -1,5 +1,7 @@
 use ::core::fmt::Debug;
 use ::core::ops::Range;
+#[cfg(feature = "std")]
+use ::std::hash::BuildHasher;
 use ::std::ops::RangeInclusive;
 
 pub mod alloc;
@@ -11,6 +13,8 @@ pub mod http;
 pub mod jiff;
 #[cfg(feature = "num")]
 pub mod num;
+#[cfg(feature = "program")]
+pub mod program;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 #[cfg(feature = "std")]
@@ -21,10 +25,12 @@ pub mod tokio;
 pub trait HasLength {
     fn length(&self) -> usize;
 
+    #[must_use]
     fn is_empty(&self) -> bool {
         self.length() == 0
     }
 
+    #[must_use]
     fn is_not_empty(&self) -> bool {
         !self.is_empty()
     }
@@ -93,7 +99,7 @@ impl<T> HasLength for &Vec<T> {
 }
 
 #[cfg(feature = "std")]
-impl<K: Debug, V: Debug> HasLength for ::std::collections::HashMap<K, V> {
+impl<K: Debug, V: Debug, S: BuildHasher> HasLength for ::std::collections::HashMap<K, V, S> {
     fn length(&self) -> usize {
         ::std::collections::HashMap::len(self)
     }
@@ -104,7 +110,7 @@ impl<K: Debug, V: Debug> HasLength for ::std::collections::HashMap<K, V> {
 }
 
 #[cfg(feature = "std")]
-impl<K: Debug, V: Debug> HasLength for &::std::collections::HashMap<K, V> {
+impl<K: Debug, V: Debug, S: BuildHasher> HasLength for &::std::collections::HashMap<K, V, S> {
     fn length(&self) -> usize {
         ::std::collections::HashMap::len(self)
     }
@@ -115,7 +121,7 @@ impl<K: Debug, V: Debug> HasLength for &::std::collections::HashMap<K, V> {
 }
 
 #[cfg(feature = "std")]
-impl<V: Debug> HasLength for ::std::collections::HashSet<V> {
+impl<V: Debug, S: BuildHasher> HasLength for ::std::collections::HashSet<V, S> {
     fn length(&self) -> usize {
         ::std::collections::HashSet::len(self)
     }
@@ -126,7 +132,7 @@ impl<V: Debug> HasLength for ::std::collections::HashSet<V> {
 }
 
 #[cfg(feature = "std")]
-impl<V: Debug> HasLength for &::std::collections::HashSet<V> {
+impl<V: Debug, S: BuildHasher> HasLength for &::std::collections::HashSet<V, S> {
     fn length(&self) -> usize {
         ::std::collections::HashSet::len(self)
     }
@@ -216,6 +222,7 @@ impl HasLength for RangeInclusive<u32> {
 }
 
 impl HasLength for Range<u64> {
+    #[allow(clippy::cast_possible_truncation)]
     fn length(&self) -> usize {
         if self.start < self.end {
             (self.end - self.start) as usize
@@ -227,6 +234,7 @@ impl HasLength for Range<u64> {
 
 impl HasLength for RangeInclusive<u64> {
     //noinspection DuplicatedCode
+    #[allow(clippy::cast_possible_truncation)]
     fn length(&self) -> usize {
         if self.start() < self.end() {
             (*self.end() - *self.start()) as usize + 1
@@ -237,6 +245,7 @@ impl HasLength for RangeInclusive<u64> {
 }
 
 impl HasLength for Range<i8> {
+    #[allow(clippy::cast_sign_loss)]
     fn length(&self) -> usize {
         if self.start < self.end {
             (self.end - self.start) as usize
@@ -258,6 +267,7 @@ impl HasLength for RangeInclusive<i8> {
 }
 
 impl HasLength for Range<i16> {
+    #[allow(clippy::cast_sign_loss)]
     fn length(&self) -> usize {
         if self.start < self.end {
             (self.end - self.start) as usize
@@ -279,6 +289,7 @@ impl HasLength for RangeInclusive<i16> {
 }
 
 impl HasLength for Range<i32> {
+    #[allow(clippy::cast_sign_loss)]
     fn length(&self) -> usize {
         if self.start < self.end {
             (self.end - self.start) as usize
@@ -300,6 +311,7 @@ impl HasLength for RangeInclusive<i32> {
 }
 
 impl HasLength for Range<i64> {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn length(&self) -> usize {
         if self.start < self.end {
             (self.end - self.start) as usize
@@ -311,6 +323,7 @@ impl HasLength for Range<i64> {
 
 impl HasLength for RangeInclusive<i64> {
     //noinspection DuplicatedCode
+    #[allow(clippy::cast_possible_truncation)]
     fn length(&self) -> usize {
         if self.start() < self.end() {
             (*self.end() - *self.start()).unsigned_abs() as usize + 1

@@ -5,6 +5,7 @@ use crate::AssertThat;
 use crate::mode::Mode;
 use crate::prelude::IteratorAssertions;
 
+#[allow(clippy::return_self_not_must_use)]
 pub trait CommandAssertions {
     fn has_arg(self, expected: impl AsRef<OsStr>) -> Self;
 }

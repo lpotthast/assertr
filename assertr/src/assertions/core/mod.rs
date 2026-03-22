@@ -22,6 +22,7 @@ pub mod prelude {
     pub use super::char::CharAssertions;
     pub use super::debug::DebugAssertions;
     pub use super::display::DisplayAssertions;
+    pub use super::r#fn::AsyncFnOnceAssertions;
     pub use super::r#fn::FnOnceAssertions;
     pub use super::iter::IntoIteratorAssertions;
     pub use super::iter::IteratorAssertions;

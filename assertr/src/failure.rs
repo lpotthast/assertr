@@ -9,6 +9,11 @@ use crate::{
 };
 
 pub trait Failure {
+    /// Writes the failure message to the target string.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `core::fmt::Error` if writing to the target string fails.
     fn write_to(self, target: &mut String) -> std::fmt::Result;
 }
 
@@ -42,11 +47,16 @@ impl<T, M: Mode> Fallible for AssertThat<'_, T, M> {
         match &self.parent {
             Some(parent) => parent.store_failure(failure),
             None => self.failures.borrow_mut().push(failure),
-        };
+        }
     }
 }
 
 impl<T, M: Mode> AssertThat<'_, T, M> {
+    /// Records or raises a failure message.
+    ///
+    /// # Panics
+    ///
+    /// Panics with the formatted failure message when not in capture mode.
     #[track_caller]
     pub fn fail(&self, failure: impl Failure) {
         let mut detail_messages = Vec::new();
@@ -55,16 +65,17 @@ impl<T, M: Mode> AssertThat<'_, T, M> {
         let msg = build_failure_message(
             self.print_location,
             self.subject_name.as_deref(),
-            detail_messages,
+            &detail_messages,
             failure,
         )
         .expect("no write error");
 
         // TODO: Check is_capture in root! Do not allow with_capture() on derived asserts.
-        match self.mode.borrow().is_capture() {
-            true => self.store_failure(msg),
-            false => panic!("{msg}"),
-        };
+        if self.mode.borrow().is_capture() {
+            self.store_failure(msg);
+        } else {
+            panic!("{msg}");
+        }
     }
 }
 
@@ -72,7 +83,7 @@ impl<T, M: Mode> AssertThat<'_, T, M> {
 fn build_failure_message(
     print_location: bool,
     subject_name: Option<&str>,
-    detail_messages: Vec<String>,
+    detail_messages: &[String],
     failure: impl Failure,
 ) -> Result<String, core::fmt::Error> {
     let mut err = String::new();
@@ -97,10 +108,8 @@ fn build_failure_message(
 
     if !detail_messages.is_empty() {
         err.write_str("\n")?;
-        err.write_fmt(format_args!(
-            "Details: {detail_messages:#?}\n",
-            detail_messages = DetailMessages(detail_messages.as_ref())
-        ))?;
+        let detail_messages = DetailMessages(detail_messages);
+        err.write_fmt(format_args!("Details: {detail_messages:#?}\n"))?;
     }
 
     err.write_str("-------- assertr --------\n")?;

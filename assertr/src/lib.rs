@@ -42,6 +42,8 @@ pub mod prelude {
     pub use crate::assert_that_owned;
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by;
+    #[cfg(feature = "std")]
+    pub use crate::assert_that_panic_by_async;
     pub use crate::assert_that_type;
     pub use crate::assertions::HasLength;
     pub use crate::assertions::alloc::prelude::*;
@@ -54,6 +56,12 @@ pub mod prelude {
     pub use crate::assertions::jiff::prelude::*;
     #[cfg(feature = "num")]
     pub use crate::assertions::num::NumAssertions;
+    #[cfg(feature = "program")]
+    pub use crate::assertions::program::Program;
+    #[cfg(feature = "program")]
+    pub use crate::assertions::program::ProgramAssertions;
+    #[cfg(feature = "program")]
+    pub use crate::assertions::program::ProgramAssertionsRequiringPanicMode;
     #[cfg(feature = "reqwest")]
     pub use crate::assertions::reqwest::prelude::*;
     #[cfg(feature = "std")]
@@ -207,6 +215,19 @@ pub fn assert_that_panic_by<'t, R>(
     assert_that_owned(fun).panics()
 }
 
+// #[track_caller] // This is implied in the default async desugaring.
+#[must_use]
+#[cfg(feature = "std")]
+pub async fn assert_that_panic_by_async<'t, F, Fut, R>(fun: F) -> AssertThat<'t, PanicValue, Panic>
+where
+    F: FnOnce() -> Fut + 't,
+    Fut: Future<Output = R> + UnwindSafe,
+{
+    use crate::prelude::AsyncFnOnceAssertions;
+
+    assert_that_owned(fun).panics_async().await
+}
+
 pub struct Type<T> {
     phantom: PhantomData<T>,
 }
@@ -218,14 +239,17 @@ impl<T> Type<T> {
         }
     }
 
+    #[must_use]
     pub fn get_type_name(&self) -> &'static str {
         std::any::type_name::<T>()
     }
 
+    #[must_use]
     pub fn needs_drop(&self) -> bool {
         std::mem::needs_drop::<T>()
     }
 
+    #[must_use]
     pub fn size(&self) -> usize {
         size_of::<T>()
     }
@@ -237,6 +261,7 @@ impl<T> Default for Type<T> {
     }
 }
 
+#[must_use]
 pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
     AssertThat::new_panicking(Actual::Owned(Type::<T>::new()))
 }
@@ -287,7 +312,10 @@ pub struct AssertThat<'t, T, M: Mode> {
     mode: RefCell<M>,
 }
 
-pub(crate) trait DynAssertThat: Fallible + WithDetail + AssertionTracking {}
+pub(crate) trait DynAssertThat:
+    Fallible + WithDetail + AssertionTracking + UnwindSafe + RefUnwindSafe
+{
+}
 impl<T, M: Mode> DynAssertThat for AssertThat<'_, T, M> {}
 
 impl<T, M: Mode> UnwindSafe for AssertThat<'_, T, M> {}
@@ -497,6 +525,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     //   telling the compiler that the returned values live shorter than the input.
     // - we can replace () with some type R (return), letting the user write more succinct closures.
 
+    #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
@@ -514,6 +543,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self.satisfies(mapper, assertions)
     }
 
+    #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies_ref<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> &'a U,
@@ -526,6 +556,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     /// Gives the `actual` value contained in this assertion a descriptive name.
     /// This name will be part of panic messages when set.
     #[allow(dead_code)]
+    #[must_use]
     pub fn with_subject_name(mut self, subject_name: impl Into<String>) -> Self {
         self.subject_name = Some(subject_name.into());
         self
@@ -537,6 +568,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     /// for exact equality and do not want to be bothered by constantly differing line and column
     /// numbers for the assert-location.
     #[allow(dead_code)]
+    #[must_use]
     pub fn with_location(mut self, value: bool) -> Self {
         self.print_location = value;
         self

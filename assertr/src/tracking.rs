@@ -10,9 +10,10 @@ impl NumberOfAssertions {
 
 impl Drop for NumberOfAssertions {
     fn drop(&mut self) {
-        if self.0 == 0 {
-            panic!("An AssertThat was dropped without performing any actual assertions on it!");
-        }
+        assert!(
+            self.0 != 0,
+            "An AssertThat was dropped without performing any actual assertions on it!"
+        );
     }
 }
 
@@ -42,6 +43,16 @@ mod tests {
     #[test]
     fn panics_on_drop_when_no_assertions_were_made() {
         assert_that_panic_by(|| 42.must().with_location(false))
+            .has_type::<&str>()
+            .is_equal_to(
+                "An AssertThat was dropped without performing any actual assertions on it!",
+            );
+    }
+
+    #[tokio::test]
+    async fn panics_on_drop_when_no_assertions_were_made_async() {
+        assert_that_panic_by_async(async || 42.must().with_location(false))
+            .await
             .has_type::<&str>()
             .is_equal_to(
                 "An AssertThat was dropped without performing any actual assertions on it!",
