@@ -8,7 +8,7 @@ struct Person {
 
 #[test]
 fn test() {
-    let failures = assert_that_owned(Person { age: 42 })
+    let failures = assert_that!(Person { age: 42 })
         .with_location(false)
         .with_capture()
         .with_detail_message("Checking person...")

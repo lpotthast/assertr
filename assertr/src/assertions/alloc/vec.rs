@@ -29,7 +29,7 @@ impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
         E: Debug,
         T: AssertrPartialEq<E> + Debug,
     {
-        self.derive(std::vec::Vec::as_slice).contains(expected);
+        self.derive(Vec::as_slice).contains(expected);
         self
     }
 
@@ -39,8 +39,7 @@ impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
         E: Debug + 't,
         T: AssertrPartialEq<E> + Debug,
     {
-        self.derive(std::vec::Vec::as_slice)
-            .contains_exactly(expected);
+        self.derive(Vec::as_slice).contains_exactly(expected);
         self
     }
 
@@ -49,7 +48,7 @@ impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
     where
         P: Fn(&T) -> bool, // predicate
     {
-        self.derive(std::vec::Vec::as_slice)
+        self.derive(Vec::as_slice)
             .contains_exactly_matching_in_any_order(expected);
         self
     }
@@ -65,6 +64,6 @@ mod tests {
     fn assert_vec_contains_exactly() {
         let vec = vec![1, 2, 3];
 
-        assert_that_owned(vec).into_iter_contains_exactly([1, 2, 3]);
+        assert_that!(vec).into_iter_contains_exactly([1, 2, 3]);
     }
 }

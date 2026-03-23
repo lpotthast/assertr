@@ -147,9 +147,13 @@ mod tests {
         fn panics_when_mutably_borrowed() {
             let cell = RefCell::new(42);
             let borrow = cell.borrow_mut();
-            assert_that_panic_by(|| assert_that!(&cell).with_location(false).is_not_mutably_borrowed())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that!(&cell)
+                    .with_location(false)
+                    .is_not_mutably_borrowed()
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: RefCell {{
                         value: <borrowed>,

@@ -197,7 +197,7 @@ mod tests {
         fn succeeds_when_type_of_contained_value_matches_expected_type() {
             let boxed_any: Box<dyn Any> = Box::new("foo");
 
-            assert_that_owned(boxed_any)
+            assert_that!(boxed_any)
                 .has_type::<&str>()
                 .is_equal_to("foo");
         }
@@ -207,7 +207,7 @@ mod tests {
             let boxed_any: Box<dyn Any> = Box::new("foo");
 
             assert_that_panic_by(|| {
-                assert_that_owned(boxed_any)
+                assert_that!(boxed_any)
                     .with_location(false)
                     .has_type::<u32>();
             })
@@ -231,7 +231,7 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual: Box<dyn Any> = Box::new(String::from("foo"));
 
-            assert_that_owned(actual)
+            assert_that!(actual)
                 .has_type_ref::<String>()
                 .is_equal_to(&String::from("foo"));
         }
@@ -241,7 +241,7 @@ mod tests {
             let actual: Box<dyn Any> = Box::new(String::from("foo"));
 
             assert_that_panic_by(|| {
-                assert_that_owned(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
@@ -260,7 +260,7 @@ mod tests {
             let actual: Box<dyn Any> = Box::new("foo");
 
             assert_that_panic_by(|| {
-                assert_that_owned(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })
@@ -280,7 +280,7 @@ mod tests {
             let actual: Box<dyn Any> = Box::new(Foo {});
 
             assert_that_panic_by(|| {
-                assert_that_owned(actual)
+                assert_that!(actual)
                     .with_location(false)
                     .has_type_ref::<u32>();
             })

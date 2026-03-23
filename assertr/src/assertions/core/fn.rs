@@ -221,7 +221,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_panic_occurs() {
-                assert_that_owned(|| unimplemented!())
+                assert_that!(|| unimplemented!())
                     .panics()
                     .has_type::<&str>()
                     .is_equal_to("not implemented");
@@ -229,7 +229,7 @@ mod tests {
 
             #[test]
             fn panics_when_no_panic_occurs() {
-                assert_that_panic_by(|| assert_that_owned(|| 42).with_location(false).panics())
+                assert_that_panic_by(|| assert_that!(|| 42).with_location(false).panics())
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -247,13 +247,13 @@ mod tests {
 
             #[test]
             fn succeeds_when_no_panic_occurs() {
-                assert_that_owned(|| 42).does_not_panic();
+                assert_that!(|| 42).does_not_panic();
             }
 
             #[test]
             fn fails_when_panic_occurs() {
                 assert_that_panic_by(|| {
-                    assert_that_owned(|| unimplemented!())
+                    assert_that!(|| unimplemented!())
                         .with_location(false)
                         .does_not_panic()
                 })
@@ -277,7 +277,7 @@ mod tests {
 
             #[tokio::test]
             async fn succeeds_when_panic_occurs() {
-                assert_that_owned(async || unimplemented!())
+                assert_that!(async || unimplemented!())
                     .panics_async()
                     .await
                     .has_type::<&str>()
@@ -287,7 +287,7 @@ mod tests {
             #[tokio::test]
             async fn panics_when_no_panic_occurs() {
                 assert_that_panic_by_async(async || {
-                    assert_that_owned(async || 42)
+                    assert_that!(async || 42)
                         .with_location(false)
                         .panics_async()
                         .await
@@ -311,13 +311,13 @@ mod tests {
 
             #[tokio::test]
             async fn succeeds_when_no_panic_occurs() {
-                assert_that_owned(|| 42).does_not_panic();
+                assert_that!(|| 42).does_not_panic();
             }
 
             #[tokio::test]
             async fn fails_when_panic_occurs() {
                 assert_that_panic_by_async(async || {
-                    assert_that_owned(async || unimplemented!())
+                    assert_that!(async || unimplemented!())
                         .with_location(false)
                         .does_not_panic_async()
                         .await

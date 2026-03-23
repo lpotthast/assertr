@@ -173,7 +173,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_value() {
-                assert_that_owned(Person {
+                assert_that!(Person {
                     age: 42,
                     alive: true,
                 })
@@ -185,7 +185,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_borrowed_value() {
-                assert_that_owned(Person {
+                assert_that!(Person {
                     age: 42,
                     alive: true,
                 })
@@ -197,7 +197,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
-                assert_that_owned(Person {
+                assert_that!(Person {
                     age: 42,
                     alive: true,
                 })
@@ -207,7 +207,7 @@ mod tests {
             #[test]
             fn panics_when_not_equal() {
                 assert_that_panic_by(|| {
-                    assert_that_owned(Person {
+                    assert_that!(Person {
                         age: 42,
                         alive: true,
                     })
