@@ -62,7 +62,7 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
         if !self.actual().is_positive() {
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                    Expected: {actual:#?} to be negative,
+                    Expected: {actual:#?} to be positive,
 
                       Actual: {actual:#?},
                 ", actual = self.actual()}
@@ -124,6 +124,96 @@ mod tests {
                     Details: [
                         Actual was not zero.,
                     ]
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod is_negative {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+        use jiff::SignedDuration;
+
+        #[test]
+        fn succeeds_when_negative() {
+            assert_that!(SignedDuration::from_secs(-5)).is_negative();
+        }
+
+        #[test]
+        fn panics_when_zero() {
+            assert_that_panic_by(|| {
+                assert_that!(SignedDuration::ZERO)
+                    .with_location(false)
+                    .is_negative();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: 0s to be negative,
+
+                      Actual: 0s,
+                    -------- assertr --------
+                "#});
+        }
+
+        #[test]
+        fn panics_when_positive() {
+            assert_that_panic_by(|| {
+                assert_that!(SignedDuration::from_secs(5))
+                    .with_location(false)
+                    .is_negative();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: 5s to be negative,
+
+                      Actual: 5s,
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod is_positive {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+        use jiff::SignedDuration;
+
+        #[test]
+        fn succeeds_when_positive() {
+            assert_that!(SignedDuration::from_secs(5)).is_positive();
+        }
+
+        #[test]
+        fn panics_when_zero() {
+            assert_that_panic_by(|| {
+                assert_that!(SignedDuration::ZERO)
+                    .with_location(false)
+                    .is_positive();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: 0s to be positive,
+
+                      Actual: 0s,
+                    -------- assertr --------
+                "#});
+        }
+
+        #[test]
+        fn panics_when_negative() {
+            assert_that_panic_by(|| {
+                assert_that!(SignedDuration::from_secs(-5))
+                    .with_location(false)
+                    .is_positive();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: -5s to be positive,
+
+                      Actual: -5s,
                     -------- assertr --------
                 "#});
         }

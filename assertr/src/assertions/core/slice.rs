@@ -140,9 +140,7 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
         let result = crate::util::slice::test_matching_any(actual, expected);
 
         if !result.not_matched.is_empty() {
-            if !result.not_matched.is_empty() {
-                self.add_detail_message(format!("Elements not matched: {:#?}", result.not_matched));
-            }
+            self.add_detail_message(format!("Elements not matched: {:#?}", result.not_matched));
 
             let actual = self.actual();
 

@@ -56,7 +56,7 @@ impl<T: Debug, M: Mode> RefCellAssertions for AssertThat<'_, RefCell<T>, M> {
     fn is_not_mutably_borrowed(self) -> Self {
         self.track_assertion();
         let actual = self.actual();
-        if actual.try_borrow_mut().is_ok() {
+        if actual.try_borrow().is_err() {
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?} is mutably borrowed.
@@ -126,14 +126,13 @@ mod tests {
 
     mod is_not_mutably_borrowed {
         use crate::prelude::*;
+        use indoc::formatdoc;
         use std::cell::RefCell;
 
         #[test]
         fn succeeds_when_not_borrowed_at_all() {
             let cell = RefCell::new(42);
-            let borrow = cell.borrow();
             assert_that!(&cell).is_not_mutably_borrowed();
-            drop(borrow);
         }
 
         #[test]
@@ -141,6 +140,24 @@ mod tests {
             let cell = RefCell::new(42);
             let borrow = cell.borrow();
             assert_that!(&cell).is_not_mutably_borrowed();
+            drop(borrow);
+        }
+
+        #[test]
+        fn panics_when_mutably_borrowed() {
+            let cell = RefCell::new(42);
+            let borrow = cell.borrow_mut();
+            assert_that_panic_by(|| assert_that!(&cell).with_location(false).is_not_mutably_borrowed())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: RefCell {{
+                        value: <borrowed>,
+                    }} is mutably borrowed.
+
+                    Expected: RefCell to not be borrowed mutably.
+                    -------- assertr --------
+                "#});
             drop(borrow);
         }
     }
