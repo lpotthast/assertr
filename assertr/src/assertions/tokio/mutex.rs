@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 
 // TODO: Add possibility to easily assert on the contained value (when the lock can be acquired).
 /// Assertions for tokio's [Mutex] type.
+#[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait TokioMutexAssertions<T: Debug> {
     fn is_locked(self) -> Self;
@@ -28,11 +29,11 @@ impl<T: Debug, M: Mode> TokioMutexAssertions<T> for AssertThat<'_, Mutex<T>, M> 
         let actual = self.actual();
         if let Ok(guard) = actual.try_lock() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: Mutex {{ data: {guard:#?} }}
 
                     to be locked, but it wasn't!
-                "#}
+                "}
             });
         }
         self
@@ -44,11 +45,11 @@ impl<T: Debug, M: Mode> TokioMutexAssertions<T> for AssertThat<'_, Mutex<T>, M> 
         let actual = self.actual();
         if let Err(_err) = actual.try_lock() {
             self.fail(|w: &mut String| {
-                writedoc! {w, r#"
+                writedoc! {w, r"
                     Expected: Mutex {{ data: <locked> }}
 
                     to not be locked, but it was!
-                "#}
+                "}
             });
         }
         self

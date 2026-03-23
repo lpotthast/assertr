@@ -8,6 +8,9 @@ use crate::mode::Mode;
 /// A conversion function that can be used with `map` to easily convert any `serde::Serialize`able
 /// type into its JSON representation for further checks.
 /// Uses `serde_json` to perform the conversion.
+///
+/// # Panics
+///
 /// Panics when the conversion fails.
 ///
 /// ```
@@ -36,6 +39,9 @@ pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
 /// A conversion function that can be used with `map` to easily convert any `serde::Serialize`able
 /// type into its TOML representation for further checks.
 /// Uses `toml` to perform the conversion.
+///
+/// # Panics
+///
 /// Panics when the conversion fails.
 ///
 /// ```

@@ -9,6 +9,7 @@ use crate::tracking::AssertionTracking;
 
 /// Non-extracting assertions for `Poll` values.
 /// These work in any mode (Panic or Capture).
+#[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PollAssertions<'t, T, M: Mode> {
     fn is_pending(self) -> Self;

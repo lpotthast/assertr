@@ -1,7 +1,9 @@
 use crate::AssertThat;
 use crate::mode::{Mode, Panic};
 use crate::prelude::{BoolAssertions, PartialEqAssertions, PartialOrdAssertions};
+use alloc::borrow::ToOwned;
 
+#[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait HttpHeaderValueAssertions<'t, M: Mode> {
     fn is_empty(self) -> Self;
@@ -22,28 +24,28 @@ impl<'t, M: Mode> HttpHeaderValueAssertions<'t, M>
     for AssertThat<'t, http::header::HeaderValue, M>
 {
     fn is_empty(self) -> Self {
-        self.derive(|it| it.len())
+        self.derive(http::HeaderValue::len)
             .with_detail_message("Expected an empty header value.")
             .is_equal_to(0);
         self
     }
 
     fn is_not_empty(self) -> Self {
-        self.derive(|it| it.len())
+        self.derive(http::HeaderValue::len)
             .with_detail_message("Expected a non-empty header value.")
             .is_greater_than(0);
         self
     }
 
     fn is_sensitive(self) -> Self {
-        self.derive(|it| it.is_sensitive())
+        self.derive(http::HeaderValue::is_sensitive)
             .with_detail_message("Expected a sensitive header value. You might have forgotten to call `set_sensitive(true)` on the header value.")
             .is_true();
         self
     }
 
     fn is_insensitive(self) -> Self {
-        self.derive(|it| it.is_sensitive())
+        self.derive(http::HeaderValue::is_sensitive)
             .with_detail_message("Expected an insensitive header value. You might have forgotten to call `set_sensitive(false)` on the header value.")
             .is_false();
         self
@@ -80,7 +82,7 @@ impl<'t> HttpHeaderValueExtractAssertions<'t> for AssertThat<'t, http::header::H
     fn is_ascii(self) -> AssertThat<'t, String, Panic> {
         use crate::prelude::ResultExtractAssertions;
 
-        self.map(|it| it.borrowed().to_str().map(|it| it.to_owned()).into())
+        self.map(|it| it.borrowed().to_str().map(ToOwned::to_owned).into())
             .is_ok()
     }
 }

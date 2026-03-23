@@ -16,7 +16,7 @@ pub trait VecAssertions<'t, T: Debug> {
         E: Debug + 't,
         T: AssertrPartialEq<E> + Debug;
 
-    /// [P] - Predicate
+    /// `P` - Predicate
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool;
