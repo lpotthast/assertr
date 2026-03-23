@@ -22,10 +22,9 @@ async fn is_able_to_access_derived_properties_without_breaking_the_call_chain() 
         meta: Metadata { alive: true },
     };
 
-    person
-        .must()
+    assert_that!(person)
         .derive_async(|it| it.get_metadata())
         .await
         .derive(|it| it.alive)
-        .be_equal_to(true);
+        .is_equal_to(true);
 }

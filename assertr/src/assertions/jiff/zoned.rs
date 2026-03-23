@@ -7,24 +7,11 @@ use jiff::Zoned;
 use jiff::tz::TimeZone;
 use std::fmt::Write;
 
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait ZonedAssertions {
     fn is_in_time_zone(self, expected: impl Borrow<TimeZone>) -> Self;
 
-    fn be_in_time_zone(self, expected: impl Borrow<TimeZone>) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_in_time_zone(expected)
-    }
-
     fn is_in_time_zone_named(self, expected: impl AsRef<str>) -> Self;
-
-    fn be_in_time_zone_named(self, expected: impl AsRef<str>) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_in_time_zone_named(expected)
-    }
 }
 
 impl<M: Mode> ZonedAssertions for AssertThat<'_, Zoned, M> {
@@ -105,7 +92,7 @@ mod tests {
         fn succeeds_when_matches() {
             let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
             let tz = TimeZone::get("America/New_York").expect("valid");
-            zdt.must().be_in_time_zone(tz);
+            assert_that!(zdt).is_in_time_zone(tz);
         }
 
         #[test]
@@ -114,7 +101,7 @@ mod tests {
             let tz = TimeZone::get("Europe/Berlin").expect("valid");
 
             assert_that_panic_by(|| {
-                zdt.assert().with_location(false).is_in_time_zone(tz);
+                assert_that!(zdt).with_location(false).is_in_time_zone(tz);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -137,14 +124,14 @@ mod tests {
         #[test]
         fn succeeds_when_matches() {
             let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
-            zdt.must().be_in_time_zone_named("America/New_York");
+            assert_that!(zdt).is_in_time_zone_named("America/New_York");
         }
 
         #[test]
         fn panics_when_in_different_time_zone() {
             let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
             assert_that_panic_by(|| {
-                zdt.assert()
+                assert_that!(zdt)
                     .with_location(false)
                     .is_in_time_zone_named("Europe/Berlin");
             })

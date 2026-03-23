@@ -7,60 +7,31 @@ use indoc::writedoc;
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for any type `R` representing a range (using bound type `B`).
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait RangeBoundAssertions<B, R: RangeBounds<B>> {
     fn contains_element(&self, expected: B)
     where
         R: Debug,
         B: PartialOrd + Debug;
 
-    fn contain_element(&self, expected: B)
-    where
-        R: Debug,
-        B: PartialOrd + Debug,
-    {
-        self.contains_element(expected);
-    }
-
     fn does_not_contain_element(&self, expected: B)
     where
         R: Debug,
         B: PartialOrd + Debug;
-
-    fn not_contain_element(&self, expected: B)
-    where
-        R: Debug,
-        B: PartialOrd + Debug,
-    {
-        self.does_not_contain_element(expected);
-    }
 }
 
 /// Assertions for any type `B` that can interact with a range `R` (using bound type `B`).
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait RangeAssertions<B> {
     fn is_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug;
 
-    fn be_in_range(self, expected: impl RangeBounds<B>) -> Self
-    where
-        B: PartialOrd + Debug,
-        Self: Sized,
-    {
-        self.is_in_range(expected)
-    }
-
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_in_range"))]
     fn is_not_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug;
-
-    fn not_be_in_range(self, expected: impl RangeBounds<B>) -> Self
-    where
-        B: PartialOrd + Debug,
-        Self: Sized,
-    {
-        self.is_not_in_range(expected)
-    }
 
     fn is_outside_of_range(self, expected: impl RangeBounds<B>) -> Self
     where
@@ -68,14 +39,6 @@ pub trait RangeAssertions<B> {
         B: PartialOrd + Debug,
     {
         self.is_not_in_range(expected)
-    }
-
-    fn be_outside_of_range(self, expected: impl RangeBounds<B>) -> Self
-    where
-        Self: Sized,
-        B: PartialOrd + Debug,
-    {
-        self.is_outside_of_range(expected)
     }
 }
 
@@ -192,19 +155,18 @@ mod tests {
 
         #[test]
         fn succeeds_when_element_is_contained() {
-            ("aa"..="zz").must().contain_element("aa");
-            ("aa"..="zz").must().contain_element("ab");
-            ("aa"..="zz").must().contain_element("ac");
-            ("aa"..="zz").must().contain_element("zx");
-            ("aa"..="zz").must().contain_element("zy");
-            ("aa"..="zz").must().contain_element("zz");
+            assert_that!("aa"..="zz").contains_element("aa");
+            assert_that!("aa"..="zz").contains_element("ab");
+            assert_that!("aa"..="zz").contains_element("ac");
+            assert_that!("aa"..="zz").contains_element("zx");
+            assert_that!("aa"..="zz").contains_element("zy");
+            assert_that!("aa"..="zz").contains_element("zz");
         }
 
         #[test]
         fn panics_when_element_is_not_contained() {
             assert_that_panic_by(|| {
-                ("aa".."zz")
-                    .assert()
+                assert_that!("aa".."zz")
                     .with_location(false)
                     .contains_element("zz")
             })
@@ -225,15 +187,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_element_is_not_contained() {
-            ("aa"..="zz").must().not_contain_element("a");
-            ("aa"..="zz").must().not_contain_element("AA");
+            assert_that!("aa"..="zz").does_not_contain_element("a");
+            assert_that!("aa"..="zz").does_not_contain_element("AA");
         }
 
         #[test]
         fn panics_when_element_is_contained() {
             assert_that_panic_by(|| {
-                ("aa".."zz")
-                    .assert()
+                assert_that!("aa".."zz")
                     .with_location(false)
                     .does_not_contain_element("cc")
             })
@@ -254,16 +215,20 @@ mod tests {
 
         #[test]
         fn succeeds_when_in_range() {
-            'a'.must().be_in_range('a'..='z');
-            'p'.must().be_in_range('a'..='z');
-            'z'.must().be_in_range('a'..='z');
+            assert_that!('a').is_in_range('a'..='z');
+            assert_that!('p').is_in_range('a'..='z');
+            assert_that!('z').is_in_range('a'..='z');
         }
 
         #[test]
         fn panics_when_not_in_range() {
-            assert_that_panic_by(|| 'A'.assert().with_location(false).is_in_range('a'..='z'))
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that!('A')
+                    .with_location(false)
+                    .is_in_range('a'..='z')
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: 'A'
                     is not in range: 'a'..='z'
@@ -278,14 +243,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_not_in_range() {
-            (-1).must().not_be_in_range(0..=7);
-            8.must().not_be_in_range(0..=7);
-            9.must().not_be_in_range(0..=7);
+            assert_that!(-1).is_not_in_range(0..=7);
+            assert_that!(8).is_not_in_range(0..=7);
+            assert_that!(9).is_not_in_range(0..=7);
         }
 
         #[test]
         fn panics_when_in_range() {
-            assert_that_panic_by(|| 5.assert().with_location(false).is_not_in_range(0..=7))
+            assert_that_panic_by(|| assert_that!(5).with_location(false).is_not_in_range(0..=7))
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

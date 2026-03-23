@@ -7,34 +7,17 @@ use std::{collections::HashMap, hash::BuildHasher, hash::Hash};
 
 /// Assertions for generic [`HashMap`]s.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait HashMapAssertions<K, V> {
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where
         K: Eq + Hash + Debug,
         V: Debug;
 
-    fn contain_key(self, expected: impl Borrow<K>) -> Self
-    where
-        K: Eq + Hash + Debug,
-        V: Debug,
-        Self: Sized,
-    {
-        self.contains_key(expected)
-    }
-
     fn does_not_contain_key(self, not_expected: impl Borrow<K>) -> Self
     where
         K: Eq + Hash + Debug,
         V: Debug;
-
-    fn not_contain_key(self, not_expected: impl Borrow<K>) -> Self
-    where
-        K: Eq + Hash + Debug,
-        V: Debug,
-        Self: Sized,
-    {
-        self.does_not_contain_key(not_expected)
-    }
 
     fn contains_value<E>(self, expected: E) -> Self
     where
@@ -42,31 +25,11 @@ pub trait HashMapAssertions<K, V> {
         V: AssertrPartialEq<E> + Debug,
         E: Debug;
 
-    fn contain_value<E>(self, expected: E) -> Self
-    where
-        K: Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug,
-        Self: Sized,
-    {
-        self.contains_value(expected)
-    }
-
     fn contains_entry<E>(self, key: impl Borrow<K>, value: impl Borrow<E>) -> Self
     where
         K: Eq + Hash + Debug,
         V: AssertrPartialEq<E> + Debug,
         E: Debug;
-
-    fn contain_entry<E>(self, key: impl Borrow<K>, value: impl Borrow<E>) -> Self
-    where
-        K: Eq + Hash + Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug,
-        Self: Sized,
-    {
-        self.contains_entry(key, value)
-    }
 }
 
 impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
@@ -196,7 +159,7 @@ mod tests {
         fn succeeds_when_key_is_present() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            map.must().contain_key("foo");
+            assert_that!(map).contains_key("foo");
         }
 
         #[test]
@@ -204,7 +167,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                map.must().with_location(false).contain_key("baz");
+                assert_that!(map).with_location(false).contains_key("baz");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -230,7 +193,7 @@ mod tests {
         fn succeeds_when_key_is_absent() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            map.must().not_contain_key("baz");
+            assert_that!(map).does_not_contain_key("baz");
         }
 
         #[test]
@@ -238,7 +201,9 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                map.must().with_location(false).not_contain_key("foo");
+                assert_that!(map)
+                    .with_location(false)
+                    .does_not_contain_key("foo");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -256,7 +221,6 @@ mod tests {
     mod contains_value {
         use std::collections::HashMap;
 
-        use crate::IntoAssertContext;
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -264,7 +228,7 @@ mod tests {
         fn succeeds_when_value_is_present() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            map.must().contain_value("bar");
+            assert_that!(map).contains_value("bar");
         }
 
         #[test]
@@ -272,7 +236,7 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                map.must().with_location(false).contains_value("baz");
+                assert_that!(map).with_location(false).contains_value("baz");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -290,7 +254,7 @@ mod tests {
         fn compiles_with_any_type_comparable_to_the_actual_value_type() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
-            map.must().contain_value("bar".to_string());
+            assert_that!(map).contains_value("bar".to_string());
         }
 
         #[test]
@@ -302,13 +266,12 @@ mod tests {
 
             let mut map = HashMap::new();
             map.insert("foo", Data { data: 0 });
-            map.must().contain_value(Data { data: 0 });
-            map.must().contain_value(Data { data: 0 });
+            assert_that!(&map).contains_value(Data { data: 0 });
+            assert_that!(&map).contains_value(Data { data: 0 });
         }
     }
 
     mod contains_entry {
-        use crate::IntoAssertContext;
         use crate::prelude::*;
         use indoc::formatdoc;
         use std::collections::HashMap;
@@ -318,7 +281,7 @@ mod tests {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
             // TODO: Can we get rid of the requirement to explicitly define E as `&str` here?
-            map.must().contains_entry::<&str>("foo", "bar");
+            assert_that!(map).contains_entry::<&str>("foo", "bar");
         }
 
         #[test]
@@ -329,10 +292,9 @@ mod tests {
             }
             let mut map = HashMap::<&str, Person>::new();
             map.insert("foo", Person { age: 42 });
-            map.must().contain_entry("foo", &Person { age: 42 });
-            map.must().contain_entry("foo", Person { age: 42 });
-            map.must()
-                .contain_entry("foo", Box::new(Person { age: 42 }));
+            assert_that!(&map).contains_entry("foo", &Person { age: 42 });
+            assert_that!(&map).contains_entry("foo", Person { age: 42 });
+            assert_that!(&map).contains_entry("foo", Box::new(Person { age: 42 }));
         }
 
         #[test]
@@ -340,9 +302,9 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                map.must()
+                assert_that!(map)
                     .with_location(false)
-                    .contain_entry::<&str>("baz", "someValue");
+                    .contains_entry::<&str>("baz", "someValue");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -361,9 +323,9 @@ mod tests {
             assert_that_panic_by(|| {
                 let mut map = HashMap::new();
                 map.insert("foo", "bar");
-                map.must()
+                assert_that!(map)
                     .with_location(false)
-                    .contain_entry::<&str>("foo", "someValue");
+                    .contains_entry::<&str>("foo", "someValue");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

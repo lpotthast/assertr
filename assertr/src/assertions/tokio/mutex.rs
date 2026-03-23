@@ -6,34 +6,18 @@ use tokio::sync::Mutex;
 
 // TODO: Add possibility to easily assert on the contained value (when the lock can be acquired).
 /// Assertions for tokio's [Mutex] type.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait TokioMutexAssertions<T: Debug> {
     fn is_locked(self) -> Self;
-    fn be_locked(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_locked()
-    }
 
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
     fn is_not_locked(self) -> Self;
-    fn not_be_locked(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_not_locked()
-    }
 
     fn is_free(self) -> Self
     where
         Self: Sized,
     {
         self.is_not_locked()
-    }
-    fn be_free(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_free()
     }
 }
 
@@ -84,14 +68,14 @@ mod tests {
         async fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock().await;
-            mutex.must().be_locked();
+            assert_that!(&mutex).is_locked();
             drop(guard);
         }
 
         #[test]
         fn panics_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that_panic_by(|| mutex.must().with_location(false).be_locked())
+            assert_that_panic_by(|| assert_that!(mutex).with_location(false).is_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -112,14 +96,14 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            mutex.must().not_be_locked();
+            assert_that!(mutex).is_not_locked();
         }
 
         #[tokio::test]
         async fn panics_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock().await;
-            assert_that_panic_by(|| mutex.must().with_location(false).not_be_locked())
+            assert_that_panic_by(|| assert_that!(&mutex).with_location(false).is_not_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -140,7 +124,7 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            mutex.must().be_free();
+            assert_that!(mutex).is_free();
         }
     }
 }

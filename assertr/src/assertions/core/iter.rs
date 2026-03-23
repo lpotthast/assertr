@@ -5,6 +5,7 @@ use crate::actual::Actual;
 use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
     /// This is a terminal assertion, as it must consume the underlying iterator.
     fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
@@ -14,35 +15,12 @@ pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
         't: 'u;
 
     /// This is a terminal assertion, as it must consume the underlying iterator.
-    fn contain<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
-    where
-        E: Debug,
-        T: AssertrPartialEq<E>,
-        't: 'u,
-        Self: Sized,
-    {
-        self.contains(expected)
-    }
-
-    /// This is a terminal assertion, as it must consume the underlying iterator.
     fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M>
     where
         E: Debug,
         T: PartialEq<E>,
         T: AssertrPartialEq<E> + Debug,
         't: 'u;
-
-    /// This is a terminal assertion, as it must consume the underlying iterator.
-    fn contain_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M>
-    where
-        E: Debug,
-        T: PartialEq<E>,
-        T: AssertrPartialEq<E> + Debug,
-        't: 'u,
-        Self: Sized,
-    {
-        self.contains_exactly(expected)
-    }
 }
 
 impl<'t, T, I, M: Mode> IteratorAssertions<'t, T, M> for AssertThat<'t, I, M>
@@ -215,15 +193,13 @@ mod tests {
             fn succeeds_when_value_is_present() {
                 let values = [1, 2, 3];
                 let iter = values.iter();
-                // TODO: We could also call must() which would lead to a panic, as we cannot
-                //  "unwrap_owned" an owned Iterator anymore.
-                iter.must_owned().contain(&1);
+                assert_that_owned(iter).contains(&1);
             }
 
             #[test]
             fn compiles_for_comparable_but_different_type() {
                 let values = vec!["foo"];
-                values.must().into_iter_contains("foo".to_string());
+                assert_that!(values).into_iter_contains("foo".to_string());
             }
         }
     }

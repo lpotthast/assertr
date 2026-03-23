@@ -1,6 +1,6 @@
 use crate::actual::Actual;
-use crate::mode::Mode;
-use crate::prelude::ResultAssertions;
+use crate::mode::Panic;
+use crate::prelude::ResultExtractAssertions;
 use crate::tracking::AssertionTracking;
 use crate::{AssertThat, PanicValue};
 use core::fmt::{Debug, Write};
@@ -9,39 +9,27 @@ use indoc::writedoc;
 use std::any::Any;
 use std::panic::UnwindSafe;
 
-pub trait FnOnceAssertions<'t, R, M: Mode> {
+/// Data-extracting assertions for `FnOnce` values.
+/// Only available in Panic mode, as these transform the assertion subject type.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait FnOnceAssertions<'t, R> {
     #[cfg(feature = "std")]
-    fn panics(self) -> AssertThat<'t, PanicValue, M>;
+    #[cfg_attr(feature = "fluent", fluent_alias("panic"))]
+    fn panics(self) -> AssertThat<'t, PanicValue, Panic>;
 
     #[cfg(feature = "std")]
-    fn panic(self) -> AssertThat<'t, PanicValue, M>
-    where
-        Self: Sized,
-    {
-        self.panics()
-    }
-
-    #[cfg(feature = "std")]
-    fn does_not_panic(self) -> AssertThat<'t, R, M>
+    #[cfg_attr(feature = "fluent", fluent_alias("not_panic"))]
+    fn does_not_panic(self) -> AssertThat<'t, R, Panic>
     where
         R: Debug;
-
-    #[cfg(feature = "std")]
-    fn not_panic(self) -> AssertThat<'t, R, M>
-    where
-        R: Debug,
-        Self: Sized,
-    {
-        self.does_not_panic()
-    }
 }
 
-impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat<'t, F, M> {
+impl<'t, R, F: FnOnce() -> R> FnOnceAssertions<'t, R> for AssertThat<'t, F, Panic> {
     #[track_caller]
-    fn panics(self) -> AssertThat<'t, PanicValue, M> {
+    fn panics(self) -> AssertThat<'t, PanicValue, Panic> {
         self.track_assertion();
 
-        let this: AssertThat<Result<(), Box<dyn Any + Send + 'static>>, M> =
+        let this: AssertThat<Result<(), Box<dyn Any + Send + 'static>>, Panic> =
             self.map(|it| match it {
                 Actual::Borrowed(_) => panic!("panics() can only be called on an owned FnOnce!"),
                 Actual::Owned(f) => {
@@ -77,13 +65,13 @@ impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat
     }
 
     #[track_caller]
-    fn does_not_panic(self) -> AssertThat<'t, R, M>
+    fn does_not_panic(self) -> AssertThat<'t, R, Panic>
     where
         R: Debug,
     {
         self.track_assertion();
 
-        let this: AssertThat<Result<R, Box<dyn Any + Send + 'static>>, M> =
+        let this: AssertThat<Result<R, Box<dyn Any + Send + 'static>>, Panic> =
             self.map(|it| match it {
                 Actual::Borrowed(_) => {
                     panic!("does_not_panic() can only be called on an owned FnOnce!")
@@ -117,27 +105,29 @@ impl<'t, R, F: FnOnce() -> R, M: Mode> FnOnceAssertions<'t, R, M> for AssertThat
     }
 }
 
-pub trait AsyncFnOnceAssertions<'t, R, M: Mode> {
+/// Data-extracting assertions for async `FnOnce` values.
+/// Only available in Panic mode.
+pub trait AsyncFnOnceAssertions<'t, R> {
     #[cfg(feature = "std")]
-    fn panics_async(self) -> impl Future<Output = AssertThat<'t, PanicValue, M>>;
+    fn panics_async(self) -> impl Future<Output = AssertThat<'t, PanicValue, Panic>>;
 
     #[cfg(feature = "std")]
-    fn does_not_panic_async(self) -> impl Future<Output = AssertThat<'t, R, M>>
+    fn does_not_panic_async(self) -> impl Future<Output = AssertThat<'t, R, Panic>>
     where
         R: Debug + 't;
 }
 
-impl<'t, Fut, R, F, M: Mode> AsyncFnOnceAssertions<'t, R, M> for AssertThat<'t, F, M>
+impl<'t, Fut, R, F> AsyncFnOnceAssertions<'t, R> for AssertThat<'t, F, Panic>
 where
     F: FnOnce() -> Fut + 't,
     Fut: Future<Output = R> + UnwindSafe,
 {
     // #[track_caller] // This is implied in the default async desugaring.
-    async fn panics_async(self) -> AssertThat<'t, PanicValue, M> {
+    async fn panics_async(self) -> AssertThat<'t, PanicValue, Panic> {
         self.track_assertion();
 
         // Execute the user function
-        let this: AssertThat<Result<(), Box<dyn Any + Send>>, M> = self
+        let this: AssertThat<Result<(), Box<dyn Any + Send>>, Panic> = self
             .map_async(|it| {
                 let f = match it {
                     Actual::Borrowed(_) => {
@@ -179,13 +169,13 @@ where
     }
 
     // #[track_caller] // This is implied in the default async desugaring.
-    async fn does_not_panic_async(self) -> AssertThat<'t, R, M>
+    async fn does_not_panic_async(self) -> AssertThat<'t, R, Panic>
     where
         R: Debug + 't,
     {
         self.track_assertion();
 
-        let this: AssertThat<Result<R, Box<dyn Any + Send + 'static>>, M> = self
+        let this: AssertThat<Result<R, Box<dyn Any + Send + 'static>>, Panic> = self
             .map_async(|it| {
                 let f = match it {
                     Actual::Borrowed(_) => {

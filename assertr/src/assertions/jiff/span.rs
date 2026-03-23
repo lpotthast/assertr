@@ -5,35 +5,14 @@ use indoc::writedoc;
 use jiff::Span;
 use std::fmt::Write;
 
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait SpanAssertions {
     fn is_zero(self) -> Self;
 
-    fn be_zero(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_zero()
-    }
-
     fn is_negative(self) -> Self;
-
-    fn be_negative(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_negative()
-    }
 
     /// Unlike the is_positive assertions on numerics, this fails for a span of 0!
     fn is_positive(self) -> Self;
-
-    /// Unlike the is_positive assertions on numerics, this fails for a span of 0!
-    fn be_positive(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_positive()
-    }
 }
 
 impl<M: Mode> SpanAssertions for AssertThat<'_, Span, M> {
@@ -101,14 +80,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            Span::new().must().be_zero();
+            assert_that!(Span::new()).is_zero();
         }
 
         #[test]
         fn panics_when_not_zero() {
             let duration: Span = 2.hours().minutes(30);
 
-            assert_that_panic_by(|| duration.assert().with_location(false).is_zero())
+            assert_that_panic_by(|| assert_that!(duration).with_location(false).is_zero())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -131,13 +110,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            (-2).hours().minutes(30).must().be_negative();
+            assert_that!((-2).hours().minutes(30)).is_negative();
         }
 
         #[test]
         fn panics_when_zero() {
             assert_that_panic_by(|| {
-                0.seconds().assert().with_location(false).is_negative();
+                assert_that!(0.seconds()).with_location(false).is_negative();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -152,9 +131,7 @@ mod tests {
         #[test]
         fn panics_when_positive() {
             assert_that_panic_by(|| {
-                2.hours()
-                    .minutes(30)
-                    .assert()
+                assert_that!(2.hours().minutes(30))
                     .with_location(false)
                     .is_negative();
             })
@@ -176,13 +153,13 @@ mod tests {
 
         #[test]
         fn succeeds_when_positive() {
-            2.hours().minutes(30).must().be_positive();
+            assert_that!(2.hours().minutes(30)).is_positive();
         }
 
         #[test]
         fn panics_when_zero() {
             assert_that_panic_by(|| {
-                0.seconds().assert().with_location(false).is_positive();
+                assert_that!(0.seconds()).with_location(false).is_positive();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -197,9 +174,7 @@ mod tests {
         #[test]
         fn panics_when_negative() {
             assert_that_panic_by(|| {
-                (-2).hours()
-                    .minutes(30)
-                    .assert()
+                assert_that!((-2).hours().minutes(30))
                     .with_location(false)
                     .is_positive();
             })

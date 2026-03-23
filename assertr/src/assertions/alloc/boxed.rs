@@ -1,4 +1,4 @@
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, mode::Panic, tracking::AssertionTracking};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
@@ -7,33 +7,19 @@ use core::any::{Any, type_name};
 use indoc::writedoc;
 use std::fmt::Write;
 
-/// Assertions for boxed values.
-#[allow(clippy::return_self_not_must_use)]
-pub trait BoxAssertions<'t, M: Mode> {
-    /// If this fails in capturing mode, a panic is raised!
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, M>;
+/// Data-extracting assertions for boxed values.
+/// Only available in Panic mode, as the extracted type cannot be produced when the downcast fails.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait BoxAssertions<'t> {
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic>;
 
-    /// If this fails in capturing mode, a panic is raised!
-    fn have_type<E: 'static>(self) -> AssertThat<'t, E, M>
-    where
-        Self: Sized,
-    {
-        self.has_type()
-    }
-
-    /// If this fails in capturing mode, a panic is raised!
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M>;
-
-    /// If this fails in capturing mode, a panic is raised!
-    fn have_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M> {
-        self.has_type_ref()
-    }
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic>;
 }
 
-impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
+impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
     #[track_caller]
     #[allow(clippy::too_many_lines)]
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, M> {
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic> {
         enum CastResult<'c, C> {
             Owned(Box<C>),
             Ref(&'c C),
@@ -151,13 +137,13 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                           Actual value type: {actual_type_name}
                     "}
                 });
-                panic!("Cannot continue in capturing mode!"); // TODO: Consider typestates!
+                unreachable!("Panic mode always panics on fail")
             }
         }
     }
 
     #[track_caller]
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M> {
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic> {
         self.track_assertion();
 
         let any = &self.actual();
@@ -186,7 +172,7 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
                       Actual value type: {actual_type_name}
                 "}
             });
-            panic!("Cannot continue in capturing mode!"); // Consider typestates!
+            unreachable!("Panic mode always panics on fail")
         }
     }
 }
@@ -194,9 +180,9 @@ impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, Box<dyn Any>, M> {
 /*
 TODO: implement for &Box?
 impl<'t, M: Mode> BoxAssertions<'t, M> for AssertThat<'t, &Box<dyn Any>, M> {
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, M> {}
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic> {}
 
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M> {}
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic> {}
 }
 */
 
@@ -211,11 +197,9 @@ mod tests {
         fn succeeds_when_type_of_contained_value_matches_expected_type() {
             let boxed_any: Box<dyn Any> = Box::new("foo");
 
-            boxed_any
-                .must()
-                .have_type::<&str>()
-                .and()
-                .be_equal_to("foo");
+            assert_that_owned(boxed_any)
+                .has_type::<&str>()
+                .is_equal_to("foo");
         }
 
         #[test]

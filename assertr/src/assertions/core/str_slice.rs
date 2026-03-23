@@ -5,80 +5,27 @@ use std::fmt::Write;
 /// Special assertions for `&str` (string slices) not covered by other general-purpose assertions,
 /// like our `PartialEqAssertions`.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait StrSliceAssertions {
     /// Tests whether this string is empty or only containing whitespace characters.
     /// 'Whitespace' is defined according to the terms of the Unicode Derived Core Property
     /// `White_Space`.
     fn is_blank(self) -> Self;
 
-    /// Tests whether this string is empty or only containing whitespace characters.
-    /// 'Whitespace' is defined according to the terms of the Unicode Derived Core Property
-    /// `White_Space`.
-    fn be_blank(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_blank()
-    }
-
     /// Tests whether this string is empty or only containing ascii-whitespace characters.
     fn is_blank_ascii(self) -> Self;
 
-    /// Tests whether this string is empty or only containing ascii-whitespace characters.
-    fn be_blank_ascii(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_blank_ascii()
-    }
-
     fn contains(self, expected: impl AsRef<str>) -> Self;
-    fn contain(self, expected: impl AsRef<str>) -> Self
-    where
-        Self: Sized,
-    {
-        self.contains(expected)
-    }
 
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self;
-    fn not_contain(self, unexpected: impl AsRef<str>) -> Self
-    where
-        Self: Sized,
-    {
-        self.does_not_contain(unexpected)
-    }
 
     fn starts_with(self, expected: impl AsRef<str>) -> Self;
-    fn start_with(self, expected: impl AsRef<str>) -> Self
-    where
-        Self: Sized,
-    {
-        self.starts_with(expected)
-    }
 
     fn does_not_start_with(self, unexpected: impl AsRef<str>) -> Self;
-    fn not_start_with(self, unexpected: impl AsRef<str>) -> Self
-    where
-        Self: Sized,
-    {
-        self.does_not_start_with(unexpected)
-    }
 
     fn ends_with(self, expected: impl AsRef<str>) -> Self;
-    fn end_with(self, expected: impl AsRef<str>) -> Self
-    where
-        Self: Sized,
-    {
-        self.ends_with(expected)
-    }
 
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self;
-    fn not_end_with(self, unexpected: impl AsRef<str>) -> Self
-    where
-        Self: Sized,
-    {
-        self.does_not_end_with(unexpected)
-    }
 }
 
 impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
@@ -241,15 +188,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_blank() {
-            "".must().be_blank();
-            " ".must().be_blank();
-            "\t \n".must().be_blank();
+            assert_that!("").is_blank();
+            assert_that!(" ").is_blank();
+            assert_that!("\t \n").is_blank();
         }
 
         #[test]
         fn panics_when_expected_is_not_blank() {
             assert_that_panic_by(|| {
-                "a".must().with_location(false).be_blank();
+                assert_that!("a").with_location(false).is_blank();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -270,15 +217,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_blank() {
-            "".must().be_blank_ascii();
-            " ".must().be_blank_ascii();
-            "\t \n".must().be_blank_ascii();
+            assert_that!("").is_blank_ascii();
+            assert_that!(" ").is_blank_ascii();
+            assert_that!("\t \n").is_blank_ascii();
         }
 
         #[test]
         fn panics_when_not_blank() {
             assert_that_panic_by(|| {
-                "a".must().with_location(false).be_blank_ascii();
+                assert_that!("a").with_location(false).is_blank_ascii();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -299,15 +246,17 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_contained() {
-            "foobar".must().contain("foo");
-            "foobar".must().contain("bar");
-            "foobar".must().contain("oob");
+            assert_that!("foobar").contains("foo");
+            assert_that!("foobar").contains("bar");
+            assert_that!("foobar").contains("oob");
         }
 
         #[test]
         fn panics_when_expected_is_not_contained() {
             assert_that_panic_by(|| {
-                "foo bar baz".must().with_location(false).contain("42");
+                assert_that!("foo bar baz")
+                    .with_location(false)
+                    .contains("42");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -328,13 +277,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_expected_is_not_contained() {
-            "foobar".must().not_contain("baz");
+            assert_that!("foobar").does_not_contain("baz");
         }
 
         #[test]
         fn panics_when_expected_is_contained() {
             assert_that_panic_by(|| {
-                "foo bar baz".must().with_location(false).not_contain("o b");
+                assert_that!("foo bar baz")
+                    .with_location(false)
+                    .does_not_contain("o b");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -355,13 +306,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_matches() {
-            "foo bar baz".must().start_with("foo b");
+            assert_that!("foo bar baz").starts_with("foo b");
         }
 
         #[test]
         fn panics_when_start_is_different() {
             assert_that_panic_by(|| {
-                "foo bar baz".must().with_location(false).start_with("oo");
+                assert_that!("foo bar baz")
+                    .with_location(false)
+                    .starts_with("oo");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -382,16 +335,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_does_not_match() {
-            "foo bar baz".must().not_start_with("oo");
+            assert_that!("foo bar baz").does_not_start_with("oo");
         }
 
         #[test]
         fn panics_when_start_matches() {
             assert_that_panic_by(|| {
-                "foo bar baz"
-                    .must()
+                assert_that!("foo bar baz")
                     .with_location(false)
-                    .not_start_with("foo");
+                    .does_not_start_with("foo");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -412,13 +364,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_end_matches() {
-            "foo bar baz".must().end_with("r baz");
+            assert_that!("foo bar baz").ends_with("r baz");
         }
 
         #[test]
         fn panics_when_end_is_different() {
             assert_that_panic_by(|| {
-                "foo bar baz".must().with_location(false).end_with("raz");
+                assert_that!("foo bar baz")
+                    .with_location(false)
+                    .ends_with("raz");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -439,13 +393,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_end_does_match() {
-            "foo bar baz".must().not_end_with("y");
+            assert_that!("foo bar baz").does_not_end_with("y");
         }
 
         #[test]
         fn panics_when_end_is_matches() {
             assert_that_panic_by(|| {
-                "foo bar baz".must().with_location(false).not_end_with("z");
+                assert_that!("foo bar baz")
+                    .with_location(false)
+                    .does_not_end_with("z");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

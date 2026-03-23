@@ -3,14 +3,10 @@ use core::fmt::Debug;
 use tokio::sync::RwLock;
 
 /// Assertions for tokio's [RwLock] type.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait TokioRwLockAssertions<T: Debug> {
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
     fn is_not_locked(self) -> Self;
-    fn not_be_locked(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_not_locked()
-    }
 
     fn is_free(self) -> Self
     where
@@ -18,29 +14,10 @@ pub trait TokioRwLockAssertions<T: Debug> {
     {
         self.is_not_locked()
     }
-    fn be_free(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_free()
-    }
 
     fn is_read_locked(self) -> Self;
 
-    fn be_read_locked(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_read_locked()
-    }
-
     fn is_write_locked(self) -> Self;
-    fn be_write_locked(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_write_locked()
-    }
 }
 
 impl<T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'_, RwLock<T>, M> {
@@ -129,7 +106,7 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let rw_lock = RwLock::new(42);
-            rw_lock.must().not_be_locked();
+            assert_that!(rw_lock).is_not_locked();
         }
 
         #[tokio::test]
@@ -137,7 +114,7 @@ mod tests {
             let rw_lock = RwLock::new(42);
             let rw_lock_write_guard = rw_lock.write().await;
 
-            assert_that_panic_by(|| rw_lock.must().with_location(false).not_be_locked())
+            assert_that_panic_by(|| assert_that!(&rw_lock).with_location(false).is_not_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -157,7 +134,7 @@ mod tests {
             let rw_lock = RwLock::new(42);
             let rw_lock_read_guard = rw_lock.read().await;
 
-            assert_that_panic_by(|| rw_lock.must().with_location(false).not_be_locked())
+            assert_that_panic_by(|| assert_that!(&rw_lock).with_location(false).is_not_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -174,7 +151,6 @@ mod tests {
     }
 
     mod is_read_locked {
-        use crate::IntoAssertContext;
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
@@ -183,7 +159,7 @@ mod tests {
         async fn succeeds_when_read_locked() {
             let rw_lock = RwLock::new(42);
             let rw_lock_read_guard = rw_lock.read().await;
-            rw_lock.must().be_read_locked();
+            assert_that!(&rw_lock).is_read_locked();
             drop(rw_lock_read_guard);
         }
 
@@ -192,7 +168,7 @@ mod tests {
             let rw_lock = RwLock::new(42);
             let rw_lock_write_guard = rw_lock.write().await;
 
-            assert_that_panic_by(|| rw_lock.must().with_location(false).be_read_locked())
+            assert_that_panic_by(|| assert_that!(&rw_lock).with_location(false).is_read_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -211,7 +187,7 @@ mod tests {
         fn panics_when_not_locked_at_all() {
             let rw_lock = RwLock::new(42);
 
-            assert_that_panic_by(|| rw_lock.must().with_location(false).be_read_locked())
+            assert_that_panic_by(|| assert_that!(rw_lock).with_location(false).is_read_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -226,7 +202,6 @@ mod tests {
     }
 
     mod is_write_locked {
-        use crate::IntoAssertContext;
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
@@ -235,7 +210,7 @@ mod tests {
         async fn succeeds_when_write_locked() {
             let rw_lock = RwLock::new(42);
             let rw_lock_write_guard = rw_lock.write().await;
-            rw_lock.must().be_write_locked();
+            assert_that!(&rw_lock).is_write_locked();
             drop(rw_lock_write_guard);
         }
 
@@ -244,9 +219,13 @@ mod tests {
             let rw_lock = RwLock::new(42);
             let rw_lock_read_guard = rw_lock.read().await;
 
-            assert_that_panic_by(|| rw_lock.must().with_location(false).be_write_locked())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that!(&rw_lock)
+                    .with_location(false)
+                    .is_write_locked()
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: RwLock {{ data: 42 }}
 
@@ -263,7 +242,7 @@ mod tests {
         fn panics_when_not_write_locked() {
             let rw_lock = RwLock::new(42);
 
-            assert_that_panic_by(|| rw_lock.must().with_location(false).be_write_locked())
+            assert_that_panic_by(|| assert_that!(rw_lock).with_location(false).is_write_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

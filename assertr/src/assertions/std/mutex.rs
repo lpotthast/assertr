@@ -6,32 +6,16 @@ use std::sync::Mutex;
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait MutexAssertions {
     /// Asserts that this mutex is locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
     fn is_locked(self) -> Self;
 
-    /// Asserts that this mutex is locked.
-    /// Note that implementations may try to acquire the lock in order to check its state.
-    fn be_locked(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_locked()
-    }
-
     /// Asserts that this mutex is not locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
     fn is_not_locked(self) -> Self;
-
-    /// Asserts that this mutex is not locked.
-    /// Note that implementations may try to acquire the lock in order to check its state.
-    fn not_be_locked(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_not_locked()
-    }
 
     /// Asserts that this mutex is not locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
@@ -42,17 +26,6 @@ pub trait MutexAssertions {
         Self: Sized,
     {
         self.is_not_locked()
-    }
-
-    /// Asserts that this mutex is not locked.
-    /// Note that implementations may try to acquire the lock in order to check its state.
-    ///
-    /// Synonym for [`Self::is_not_locked`].
-    fn be_free(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_free()
     }
 }
 
@@ -102,14 +75,14 @@ mod tests {
         fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
-            mutex.must().be_locked();
+            assert_that!(&mutex).is_locked();
             drop(guard);
         }
 
         #[test]
         fn panics_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that_panic_by(|| mutex.assert().with_location(false).is_locked())
+            assert_that_panic_by(|| assert_that!(mutex).with_location(false).is_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -129,14 +102,14 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            mutex.must().not_be_locked();
+            assert_that!(mutex).is_not_locked();
         }
 
         #[test]
         fn panics_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
-            assert_that_panic_by(|| mutex.assert().with_location(false).is_not_locked())
+            assert_that_panic_by(|| assert_that!(&mutex).with_location(false).is_not_locked())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -156,7 +129,7 @@ mod tests {
         #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
-            mutex.must().be_free();
+            assert_that!(mutex).is_free();
         }
     }
 }

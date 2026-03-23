@@ -2,38 +2,16 @@ use core::borrow::Borrow;
 use core::fmt::Debug;
 use core::ops::Deref;
 
+use crate::mode::Panic;
 use crate::prelude::*;
 
-/// Assertions for the tokio::sync::watch::Receiver type.
+/// Non-extracting assertions for the tokio::sync::watch::Receiver type.
+/// These work in any mode (Panic or Capture).
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait TokioWatchReceiverAssertions<T: Debug> {
     fn has_current_value(self, expected: impl Borrow<T>) -> Self
     where
         T: PartialEq;
-
-    fn have_current_value(self, expected: impl Borrow<T>) -> Self
-    where
-        T: PartialEq,
-        Self: Sized,
-    {
-        self.has_current_value(expected)
-    }
-
-    fn has_changed(self) -> Self;
-
-    fn have_changed(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.has_changed()
-    }
-
-    fn has_not_changed(self) -> Self;
-    fn have_not_changed(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.has_not_changed()
-    }
 }
 
 impl<T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
@@ -49,7 +27,20 @@ impl<T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
             .is_equal_to(expected.borrow());
         self
     }
+}
 
+/// Assertions for tokio watch receivers that use data-extracting operations internally.
+/// Only available in Panic mode.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait TokioWatchReceiverExtractAssertions<T: Debug> {
+    fn has_changed(self) -> Self;
+
+    fn has_not_changed(self) -> Self;
+}
+
+impl<T: Debug> TokioWatchReceiverExtractAssertions<T>
+    for AssertThat<'_, tokio::sync::watch::Receiver<T>, Panic>
+{
     fn has_changed(self) -> Self {
         self.derive(|it| it.has_changed())
             .with_detail_message("Expected a tokio `watch` channel to have changed.")
@@ -87,7 +78,7 @@ mod tests {
             })
             .unwrap();
 
-            rx.must().have_current_value(Person {
+            assert_that!(rx).has_current_value(Person {
                 name: "kevin".into(),
             });
         }
@@ -97,9 +88,11 @@ mod tests {
             let (_tx, rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
 
             assert_that_panic_by(|| {
-                rx.assert().with_location(false).has_current_value(Person {
-                    name: "alice".into(),
-                })
+                assert_that!(rx)
+                    .with_location(false)
+                    .has_current_value(Person {
+                        name: "alice".into(),
+                    })
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -126,7 +119,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_changed();
 
-            rx.must().have_changed();
+            assert_that!(rx).has_changed();
         }
 
         #[tokio::test]
@@ -134,7 +127,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_unchanged();
 
-            assert_that_panic_by(|| rx.assert().with_location(false).has_changed())
+            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_changed())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -160,7 +153,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_unchanged();
 
-            rx.must().have_not_changed();
+            assert_that!(rx).has_not_changed();
         }
 
         #[tokio::test]
@@ -168,7 +161,7 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_changed();
 
-            assert_that_panic_by(|| rx.assert().with_location(false).has_not_changed())
+            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_not_changed())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

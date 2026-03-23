@@ -6,34 +6,17 @@ use indoc::writedoc;
 use crate::{AssertThat, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PartialEqAssertions<T> {
     fn is_equal_to<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E> + Debug,
         E: Debug;
 
-    fn be_equal_to<E>(self, expected: E) -> Self
-    where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug,
-        Self: Sized,
-    {
-        self.is_equal_to(expected)
-    }
-
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E> + Debug,
         E: Debug;
-
-    fn be_not_equal_to<E>(self, expected: E) -> Self
-    where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug,
-        Self: Sized,
-    {
-        self.is_not_equal_to(expected)
-    }
 }
 
 impl<T, M: Mode> PartialEqAssertions<T> for AssertThat<'_, T, M> {
@@ -99,14 +82,14 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal() {
-            "foo".must().be_equal_to("foo");
-            "foo".to_string().must().be_equal_to("foo".to_string());
-            "foo".to_string().must().be_equal_to("foo");
+            assert_that!("foo").is_equal_to("foo");
+            assert_that!("foo".to_string()).is_equal_to("foo".to_string());
+            assert_that!("foo".to_string()).is_equal_to("foo");
         }
 
         #[test]
         fn panics_when_not_equal() {
-            assert_that_panic_by(|| "foo".assert().with_location(false).is_equal_to("bar"))
+            assert_that_panic_by(|| assert_that!("foo").with_location(false).is_equal_to("bar"))
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -131,7 +114,7 @@ mod tests {
                 }
             }
 
-            Foo {}.must().be_equal_to(Bar {});
+            assert_that!(Foo {}).is_equal_to(Bar {});
         }
     }
 }

@@ -1,4 +1,3 @@
-use assertr::IntoAssertContext;
 use assertr::prelude::*;
 use indoc::formatdoc;
 
@@ -9,7 +8,7 @@ struct Person {
 
 #[test]
 fn test() {
-    assert_that_owned(Person { age: 42 })
+    let failures = assert_that_owned(Person { age: 42 })
         .with_location(false)
         .with_capture()
         .with_detail_message("Checking person...")
@@ -21,10 +20,10 @@ fn test() {
                     .is_greater_than(9000);
             },
         )
-        .capture_failures()
-        .assert()
-        .contains_exactly::<String>([
-            formatdoc! {r#"
+        .capture_failures();
+
+    assert_that!(failures).contains_exactly::<String>([
+        formatdoc! {r#"
                 -------- assertr --------
                 Expected: Person {{
                     age: 30,
@@ -39,7 +38,7 @@ fn test() {
                 ]
                 -------- assertr --------
             "#},
-            formatdoc! {r#"
+        formatdoc! {r#"
                 -------- assertr --------
                 Actual: 42
 
@@ -53,5 +52,5 @@ fn test() {
                 ]
                 -------- assertr --------
             "#},
-        ]);
+    ]);
 }

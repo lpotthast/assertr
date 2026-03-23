@@ -2,12 +2,14 @@
 #![deny(clippy::unwrap_used)]
 #![allow(clippy::needless_continue)]
 
+mod fluent_aliases;
+
 use proc_macro::TokenStream;
 
 use darling::{Error, FromDeriveInput, FromField, ast};
 use proc_macro2::Span;
 use quote::quote;
-use syn::{DeriveInput, Ident, Path, Type, Visibility, parse_macro_input};
+use syn::{DeriveInput, Ident, ItemTrait, Path, Type, Visibility, parse_macro_input};
 
 #[derive(Debug, FromField)]
 #[darling(attributes(assertr_eq))]
@@ -129,4 +131,18 @@ pub fn store(input: TokenStream) -> TokenStream {
             }
         }
     })
+}
+
+/// Attribute macro that generates fluent aliases for assertion trait methods.
+///
+/// Place on a trait definition to auto-generate `be_*` aliases for `is_*` methods
+/// and `have_*` aliases for `has_*` methods. Generated aliases are gated behind
+/// `#[cfg(feature = "fluent")]`.
+///
+/// Use `#[fluent_alias("custom_name")]` on a method for a custom alias name.
+/// Use `#[no_fluent_alias]` on a method to skip alias generation.
+#[proc_macro_attribute]
+pub fn fluent_aliases(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let trait_def = parse_macro_input!(item as ItemTrait);
+    fluent_aliases::fluent_aliases_impl(trait_def).into()
 }

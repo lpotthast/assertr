@@ -18,18 +18,17 @@ fn is_able_to_access_derived_properties_without_breaking_the_call_chain() {
         meta: Metadata { alive: true },
     };
 
-    person
-        .must()
-        .be_equal_to(Person {
+    assert_that!(person)
+        .is_equal_to(Person {
             age: 30,
             meta: Metadata { alive: true },
         })
-        .satisfy(
+        .satisfies(
             |it| it.age,
             |age| {
                 age.is_greater_than(18);
             },
         )
         .derive(|it| it.meta.alive)
-        .be_equal_to(true);
+        .is_equal_to(true);
 }

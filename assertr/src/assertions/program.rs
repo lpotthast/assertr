@@ -175,7 +175,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_existent() {
-            Program::from("ls").assert_owned().exists();
+            assert_that!(Program::from("ls")).exists();
         }
 
         #[tokio::test]
@@ -184,8 +184,7 @@ mod tests {
             let rw_lock_write_guard = rw_lock.write().await;
 
             assert_that_panic_by(|| {
-                Program::from("someNonexistentProgram")
-                    .assert_owned()
+                assert_that!(Program::from("someNonexistentProgram"))
                     .with_location(false)
                     .exists()
             })
@@ -221,8 +220,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_existent() {
-            Program::from("ls")
-                .assert_owned()
+            assert_that!(Program::from("ls"))
                 .exists_and()
                 .has_debug_value(expected_ls_location());
         }
@@ -233,8 +231,7 @@ mod tests {
             let rw_lock_write_guard = rw_lock.write().await;
 
             assert_that_panic_by(|| {
-                Program::from("ls")
-                    .assert_owned()
+                assert_that!(Program::from("ls"))
                     .with_location(false)
                     .exists_and()
                     .has_debug_value("/some/unexpected/location/ls");

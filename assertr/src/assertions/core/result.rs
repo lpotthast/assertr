@@ -1,76 +1,34 @@
-use crate::{AssertThat, actual::Actual, mode::Mode, tracking::AssertionTracking};
+use crate::{
+    AssertThat,
+    actual::Actual,
+    mode::{Mode, Panic},
+    tracking::AssertionTracking,
+};
 use core::fmt::Debug;
 
-#[allow(clippy::return_self_not_must_use)]
-pub trait ResultAssertions<'t, M: Mode, T, E> {
-    fn is_ok(self) -> AssertThat<'t, T, M>
+/// Data-extracting assertions for `Result` values.
+/// These change the assertion subject type and are only available in Panic mode,
+/// as they cannot produce a valid value of the extracted type when the assertion fails.
+/// Use `ResultAssertions::is_ok_satisfying` / `is_err_satisfying` for capture mode.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait ResultExtractAssertions<'t, T, E> {
+    fn is_ok(self) -> AssertThat<'t, T, Panic>
     where
         T: Debug,
         E: Debug;
 
-    fn be_ok(self) -> AssertThat<'t, T, M>
-    where
-        T: Debug,
-        E: Debug,
-        Self: Sized,
-    {
-        self.is_ok()
-    }
-
-    fn is_err(self) -> AssertThat<'t, E, M>
+    fn is_err(self) -> AssertThat<'t, E, Panic>
     where
         T: Debug,
         E: Debug;
-
-    fn be_err(self) -> AssertThat<'t, E, M>
-    where
-        T: Debug,
-        E: Debug,
-        Self: Sized,
-    {
-        self.is_err()
-    }
-
-    fn is_ok_satisfying<A>(self, assertions: A) -> Self
-    where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
-
-    fn be_ok_satisfying<A>(self, assertions: A) -> Self
-    where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>),
-        Self: Sized,
-    {
-        self.is_ok_satisfying(assertions)
-    }
-
-    fn is_err_satisfying<A>(self, assertions: A) -> Self
-    where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
-
-    fn be_err_satisfying<A>(self, assertions: A) -> Self
-    where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>),
-        Self: Sized,
-    {
-        self.is_err_satisfying(assertions)
-    }
 }
 
-// Assertions for generic result values.
-impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<T, E>, M> {
+impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>, Panic> {
     /// This is a terminal operation on the contained `Result`,
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
     #[track_caller]
-    fn is_ok(self) -> AssertThat<'t, T, M>
+    fn is_ok(self) -> AssertThat<'t, T, Panic>
     where
         T: Debug,
         E: Debug,
@@ -95,7 +53,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained error value.
     #[track_caller]
-    fn is_err(self) -> AssertThat<'t, E, M>
+    fn is_err(self) -> AssertThat<'t, E, Panic>
     where
         T: Debug,
         E: Debug,
@@ -115,7 +73,27 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
             Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap_err()),
         })
     }
+}
 
+/// Non-extracting assertions for `Result` values.
+/// These work in any mode (Panic or Capture).
+#[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait ResultAssertions<'t, M: Mode, T, E> {
+    fn is_ok_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
+
+    fn is_err_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
+}
+
+impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<T, E>, M> {
     #[track_caller]
     fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
@@ -165,16 +143,15 @@ mod tests {
 
     #[test]
     fn is_ok_succeeds_when_ok() {
-        Result::<(), ()>::Ok(()).must().be_ok();
+        assert_that!(Result::<(), ()>::Ok(())).is_ok();
     }
 
     #[test]
     fn is_ok_panics_when_error() {
         assert_that_panic_by(|| {
-            Result::<i32, String>::Err("someError".to_owned())
-                .must()
+            assert_that!(Result::<i32, String>::Err("someError".to_owned()))
                 .with_location(false)
-                .be_ok();
+                .is_ok();
         })
         .has_type::<String>()
         .is_equal_to(formatdoc! {r#"
@@ -190,14 +167,13 @@ mod tests {
 
     #[test]
     fn is_err_succeeds_when_error() {
-        Result::<(), ()>::Err(()).must().be_err();
+        assert_that!(Result::<(), ()>::Err(())).is_err();
     }
 
     #[test]
     fn is_err_panics_when_ok() {
         assert_that_panic_by(|| {
-            Result::<i32, String>::Ok(42)
-                .assert()
+            assert_that!(Result::<i32, String>::Ok(42))
                 .with_location(false)
                 .is_err();
         })
@@ -215,15 +191,14 @@ mod tests {
 
     #[test]
     fn is_ok_satisfying_succeeds_when_ok() {
-        Result::<i32, ()>::Ok(42)
-            .should()
+        let failures = assert_that!(Result::<i32, ()>::Ok(42))
+            .with_capture()
             .with_location(false)
             .is_ok_satisfying(|ok_value| {
                 ok_value.is_greater_than(&9000);
             })
-            .capture_failures()
-            .assert()
-            .contains_exactly::<String>([formatdoc! {"
+            .capture_failures();
+        assert_that!(failures).contains_exactly::<String>([formatdoc! {"
                 -------- assertr --------
                 Actual: 42
 

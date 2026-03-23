@@ -6,51 +6,17 @@ use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait CharAssertions {
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self;
 
-    fn be_equal_to_ignoring_ascii_case(self, expected: char) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_equal_to_ignoring_ascii_case(expected)
-    }
-
     fn is_lowercase(self) -> Self;
-
-    fn be_lowercase(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_lowercase()
-    }
 
     fn is_uppercase(self) -> Self;
 
-    fn be_uppercase(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_uppercase()
-    }
-
     fn is_ascii_lowercase(self) -> Self;
 
-    fn be_ascii_lowercase(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_ascii_lowercase()
-    }
-
     fn is_ascii_uppercase(self) -> Self;
-
-    fn be_ascii_uppercase(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.is_ascii_uppercase()
-    }
 
     //fn is_ascii(self) -> Self;
     //fn is_whitespace(self) -> Self;

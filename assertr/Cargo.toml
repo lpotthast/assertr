@@ -17,6 +17,7 @@ keywords = ["assertions", "assert", "assert-that", "testing"]
 default = ["std", "num"]
 full = [
     "derive",
+    "fluent",
     "http",
     "jiff",
     "libm",
@@ -29,6 +30,7 @@ full = [
 ]
 std = ["num/std"]
 derive = ["dep:assertr-derive"]
+fluent = ["dep:assertr-derive"]
 num = ["dep:num"]
 http = ["dep:http"]
 jiff = ["dep:jiff"]

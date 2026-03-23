@@ -16,14 +16,12 @@ fn is_able_to_access_derived_properties_without_breaking_the_call_chain() {
         meta: Metadata { alive: true },
     };
 
-    person
-        .must()
+    assert_that!(person)
         .map(|it| it.borrowed().meta.alive.into())
-        .be_equal_to(true);
+        .is_equal_to(true);
 
-    (-1.23)
-        .must()
+    assert_that!(-1.23)
         .map_owned(|it| it.to_string())
         .has_length(5)
-        .be_equal_to("-1.23".to_owned());
+        .is_equal_to("-1.23".to_owned());
 }

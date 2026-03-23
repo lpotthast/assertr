@@ -28,13 +28,16 @@ pub mod prelude {
     pub use super::iter::IteratorAssertions;
     pub use super::length::LengthAssertions;
     pub use super::option::OptionAssertions;
+    pub use super::option::OptionExtractAssertions;
     pub use super::partial_eq::PartialEqAssertions;
     pub use super::partial_ord::PartialOrdAssertions;
     pub use super::poll::PollAssertions;
+    pub use super::poll::PollExtractAssertions;
     pub use super::range::RangeAssertions;
     pub use super::range::RangeBoundAssertions;
     pub use super::ref_cell::RefCellAssertions;
     pub use super::result::ResultAssertions;
+    pub use super::result::ResultExtractAssertions;
     pub use super::slice::SliceAssertions;
     pub use super::str_slice::StrSliceAssertions;
 }

@@ -6,20 +6,12 @@ use core::fmt::Debug;
 use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait SliceAssertions<'t, T> {
     fn contains<E>(self, expected: E) -> Self
     where
         E: Debug,
         T: AssertrPartialEq<E> + Debug;
-
-    fn contain<E>(self, expected: E) -> Self
-    where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug,
-        Self: Sized,
-    {
-        self.contains(expected)
-    }
 
     /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
     ///
@@ -32,48 +24,15 @@ pub trait SliceAssertions<'t, T> {
         EE: AsRef<[E]>,
         T: AssertrPartialEq<E> + Debug;
 
-    /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
-    ///
-    /// - [T]: Original subject type. The "actual value" is of type `&[T]` (slice T).
-    /// - [E]: Type of elements in our "expected value" slice.
-    /// - [EE]: The "expected value". Anything that can be seen as `&[E]` (slice E). Having this extra type, instead of directly accepting `&[E]` allows us to be generic over the input in both the element type and collection type.
-    fn contain_exactly<E, EE>(self, expected: EE) -> Self
-    where
-        E: Debug + 't,
-        EE: AsRef<[E]>,
-        T: AssertrPartialEq<E> + Debug,
-        Self: Sized,
-    {
-        self.contains_exactly(expected)
-    }
-
     fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
     where
         T: PartialEq + Debug;
-
-    fn contain_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
-    where
-        T: PartialEq + Debug,
-        Self: Sized,
-    {
-        self.contains_exactly_in_any_order(expected)
-    }
 
     /// [P] - Predicate
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         T: Debug,
         P: Fn(&T) -> bool;
-
-    /// [P] - Predicate
-    fn contain_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
-    where
-        T: Debug,
-        P: Fn(&T) -> bool,
-        Self: Sized,
-    {
-        self.contains_exactly_matching_in_any_order(expected)
-    }
 }
 
 impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
@@ -203,43 +162,30 @@ mod tests {
 
         #[test]
         fn succeeds_when_exact_match() {
-            [1, 2, 3].as_slice().must().contain_exactly([1, 2, 3]);
+            assert_that!([1, 2, 3].as_slice()).contains_exactly([1, 2, 3]);
         }
 
         #[test]
         fn compiles_for_different_type_combinations() {
-            ["foo".to_owned()]
-                .as_slice()
-                .must()
-                .contain_exactly(["foo"]);
-            ["foo"].as_slice().must().contain_exactly(["foo"]);
-            ["foo"]
-                .as_slice()
-                .must()
-                .contain_exactly(["foo".to_owned()]);
-            ["foo"]
-                .as_slice()
-                .must()
-                .contain_exactly(vec!["foo".to_owned()]);
-            vec!["foo"]
-                .as_slice()
-                .must()
-                .contain_exactly(vec!["foo".to_owned()].into_iter());
+            assert_that!(["foo".to_owned()].as_slice()).contains_exactly(["foo"]);
+            assert_that!(["foo"].as_slice()).contains_exactly(["foo"]);
+            assert_that!(["foo"].as_slice()).contains_exactly(["foo".to_owned()]);
+            assert_that!(["foo"].as_slice()).contains_exactly(vec!["foo".to_owned()]);
+            assert_that!(vec!["foo"].as_slice())
+                .contains_exactly(vec!["foo".to_owned()].into_iter());
         }
 
         #[test]
         fn succeeds_when_exact_match_provided_as_slice() {
-            [1, 2, 3].as_slice().must().contain_exactly(&[1, 2, 3]);
+            assert_that!([1, 2, 3].as_slice()).contains_exactly(&[1, 2, 3]);
         }
 
         #[test]
         fn panics_when_not_exact_match() {
             assert_that_panic_by(|| {
-                [1, 2, 3]
-                    .as_slice()
-                    .must()
+                assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contain_exactly([2, 3, 4]);
+                    .contains_exactly([2, 3, 4]);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -273,11 +219,9 @@ mod tests {
         #[test]
         fn panics_with_detail_message_when_only_differing_in_order() {
             assert_that_panic_by(|| {
-                [1, 2, 3]
-                    .as_slice()
-                    .must()
+                assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contain_exactly([3, 2, 1]);
+                    .contains_exactly([3, 2, 1]);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -310,20 +254,15 @@ mod tests {
 
         #[test]
         fn succeeds_when_slices_match() {
-            [1, 2, 3]
-                .as_slice()
-                .must()
-                .contain_exactly_in_any_order([2, 3, 1]);
+            assert_that!([1, 2, 3].as_slice()).contains_exactly_in_any_order([2, 3, 1]);
         }
 
         #[test]
         fn panics_when_slice_contains_unknown_data() {
             assert_that_panic_by(|| {
-                [1, 2, 3]
-                    .as_slice()
-                    .must()
+                assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contain_exactly_in_any_order([2, 3, 4]);
+                    .contains_exactly_in_any_order([2, 3, 4]);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
@@ -358,42 +297,34 @@ mod tests {
 
         #[test]
         fn succeeds_when_slices_match() {
-            [1, 2, 3]
-                .as_slice()
-                .must()
-                .contain_exactly_matching_in_any_order(
-                    [
-                        move |it: &i32| *it == 1,
-                        move |it: &i32| *it == 2,
-                        move |it: &i32| *it == 3,
-                    ]
-                    .as_slice(),
-                );
+            assert_that!([1, 2, 3].as_slice()).contains_exactly_matching_in_any_order(
+                [
+                    move |it: &i32| *it == 1,
+                    move |it: &i32| *it == 2,
+                    move |it: &i32| *it == 3,
+                ]
+                .as_slice(),
+            );
         }
 
         #[test]
         fn succeeds_when_slices_match_in_different_order() {
-            [1, 2, 3]
-                .as_slice()
-                .must()
-                .contain_exactly_matching_in_any_order(
-                    [
-                        move |it: &i32| *it == 3,
-                        move |it: &i32| *it == 1,
-                        move |it: &i32| *it == 2,
-                    ]
-                    .as_slice(),
-                );
+            assert_that!([1, 2, 3].as_slice()).contains_exactly_matching_in_any_order(
+                [
+                    move |it: &i32| *it == 3,
+                    move |it: &i32| *it == 1,
+                    move |it: &i32| *it == 2,
+                ]
+                .as_slice(),
+            );
         }
 
         #[test]
         fn panics_when_slice_contains_non_matching_data() {
             assert_that_panic_by(|| {
-                [1, 2, 3]
-                    .as_slice()
-                    .must()
+                assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contain_exactly_matching_in_any_order(
+                    .contains_exactly_matching_in_any_order(
                         [
                             move |it: &i32| *it == 2,
                             move |it: &i32| *it == 3,
