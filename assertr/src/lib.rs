@@ -41,7 +41,9 @@ pub mod prelude {
     #[cfg(feature = "fluent")]
     pub use crate::IntoAssertContext;
     pub use crate::any;
+    #[allow(deprecated)]
     pub use crate::assert_that;
+    #[allow(deprecated)]
     pub use crate::assert_that_owned;
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by;
@@ -82,7 +84,7 @@ pub mod prelude {
 
 pub struct PanicValue(Box<dyn Any>);
 
-/// The main entrypoint into an assertion context.
+/// The main entrypoint into an assertion context for borrowed values.
 ///
 /// Borrows the value, allowing it to be used after the assertion.
 ///
@@ -103,6 +105,10 @@ pub struct PanicValue(Box<dyn Any>);
 ///     .has_length(1)
 ///     .contains("");
 /// ```
+#[deprecated(
+    since = "0.4.4",
+    note = "Use the `assert_that!()` macro or the fluent `.must()` / `.verify()` entry points instead."
+)]
 #[track_caller]
 #[must_use]
 pub fn assert_that<T>(actual: &T) -> AssertThat<'_, T, Panic> {
@@ -113,6 +119,10 @@ pub fn assert_that<T>(actual: &T) -> AssertThat<'_, T, Panic> {
 ///
 /// Use this when the assertion requires ownership (e.g. `FnOnce` assertions).
 /// For most cases, prefer [`assert_that()`] which borrows instead.
+#[deprecated(
+    since = "0.4.4",
+    note = "Use the `assert_that!()` macro or the fluent `.must_owned()` / `.verify_owned()` entry points instead."
+)]
 #[track_caller]
 #[must_use]
 pub fn assert_that_owned<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
@@ -201,6 +211,7 @@ impl<'t, T> IntoAssertContext<'t, T> for &'t mut T {
 #[track_caller]
 #[must_use]
 #[cfg(feature = "std")]
+#[allow(deprecated)]
 pub fn assert_that_panic_by<'t, R>(
     fun: impl FnOnce() -> R + 't,
 ) -> AssertThat<'t, PanicValue, Panic> {
@@ -212,6 +223,7 @@ pub fn assert_that_panic_by<'t, R>(
 // #[track_caller] // This is implied in the default async desugaring.
 #[must_use]
 #[cfg(feature = "std")]
+#[allow(deprecated)]
 pub async fn assert_that_panic_by_async<'t, F, Fut, R>(fun: F) -> AssertThat<'t, PanicValue, Panic>
 where
     F: FnOnce() -> Fut + 't,
@@ -632,6 +644,7 @@ impl<'t, T> AssertThat<'t, T, Capture> {
     /// Panics if assertion failures were already captured!
     // TODO: Add an easy woy in which users can check if assertion failures were recorded.
     //  Or that none were recorded!
+    #[allow(deprecated)]
     pub fn without_capture(mut self) -> AssertThat<'t, T, Panic> {
         // Take out all assertion failures, marking the `Capture` as "captured".
         // Assert that no failures exist.
@@ -812,6 +825,7 @@ impl<T: Debug> Debug for Eq<T> {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use alloc::format;
     use indoc::formatdoc;
