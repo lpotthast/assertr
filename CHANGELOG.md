@@ -27,17 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Breaking:** `assert_that()` function now takes `&T` (borrowed) instead of `T` (owned). Use `assert_that_owned()`
   for the previous owned-value behavior, or prefer the `assert_that!()` macro which handles both transparently.
-- **Breaking:** Removed `assert_that_ref()` function. The new `assert_that()` function now borrows by default.
-- **Breaking:** Removed `AssertingThat` and `AssertingThatRef` traits from the public API and prelude.
-- **Breaking:** Renamed internal constructor `AssertThat::new()` to `AssertThat::new_panicking()`.
-- Updated `map_async` signature to use explicit `Fut` generic and simplified lifetime bounds.
+- **Breaking:** Updated `map_async` signature to use explicit `Fut` generic and simplified lifetime bounds.
+- Renamed internal constructor `AssertThat::new()` to `AssertThat::new_panicking()`.
 - Updated dependencies.
 - Fix all pedantic clippy lints.
 
 ### Removed
 
-- Deprecated `assert_that()` function (owned variant) and `assert_that_ref()`.
-- `AssertingThat` and `AssertingThatRef` traits.
+- **Breaking:** `assert_that_ref()` - The (still deprecated) `assert_that()` now takes its input by reference.
+- **Breaking:** `AssertingThat` and `AssertingThatRef` traits.
 
 ### Fixed
 
