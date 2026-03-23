@@ -8,6 +8,9 @@ use crate::mode::Mode;
 /// A conversion function that can be used with `map` to easily convert any `serde::Serialize`able
 /// type into its JSON representation for further checks.
 /// Uses `serde_json` to perform the conversion.
+///
+/// # Panics
+///
 /// Panics when the conversion fails.
 ///
 /// ```
@@ -20,7 +23,7 @@ use crate::mode::Mode;
 ///
 /// let person = Person { age: 42 };
 ///
-/// assert_that(person)
+/// assert_that(&person)
 ///     .map(json())
 ///     .is_equal_to(r#"{"age":42}"#);
 /// ```
@@ -36,6 +39,9 @@ pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
 /// A conversion function that can be used with `map` to easily convert any `serde::Serialize`able
 /// type into its TOML representation for further checks.
 /// Uses `toml` to perform the conversion.
+///
+/// # Panics
+///
 /// Panics when the conversion fails.
 ///
 /// ```
@@ -48,7 +54,7 @@ pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
 ///
 /// let config = Config { value: 42 };
 ///
-/// assert_that(config)
+/// assert_that(&config)
 ///     .map(toml())
 ///     .is_equal_to("value = 42\n");
 /// ```

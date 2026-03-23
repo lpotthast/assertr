@@ -5,6 +5,7 @@ use std::fmt::Write;
 /// Special assertions for `&str` (string slices) not covered by other general-purpose assertions,
 /// like our `PartialEqAssertions`.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait StrSliceAssertions {
     /// Tests whether this string is empty or only containing whitespace characters.
     /// 'Whitespace' is defined according to the terms of the Unicode Derived Core Property
@@ -215,14 +216,14 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        fn succeeds_when_expected_is_blank() {
+        fn succeeds_when_blank() {
             assert_that!("").is_blank_ascii();
             assert_that!(" ").is_blank_ascii();
             assert_that!("\t \n").is_blank_ascii();
         }
 
         #[test]
-        fn panics_when_expected_is_not_blank() {
+        fn panics_when_not_blank() {
             assert_that_panic_by(|| {
                 assert_that!("a").with_location(false).is_blank_ascii();
             })

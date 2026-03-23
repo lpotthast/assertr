@@ -4,7 +4,9 @@ use tokio::sync::RwLock;
 
 /// Assertions for tokio's [`RwLock`] type.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait TokioRwLockAssertions<T: Debug> {
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
     fn is_not_locked(self) -> Self;
 
     fn is_free(self) -> Self

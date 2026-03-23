@@ -6,6 +6,7 @@ use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait CharAssertions {
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self;
 

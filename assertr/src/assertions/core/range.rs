@@ -7,6 +7,7 @@ use indoc::writedoc;
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for any type `R` representing a range (using bound type `B`).
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait RangeBoundAssertions<B, R: RangeBounds<B>> {
     fn contains_element(&self, expected: B)
     where
@@ -21,11 +22,13 @@ pub trait RangeBoundAssertions<B, R: RangeBounds<B>> {
 
 /// Assertions for any type `B` that can interact with a range `R` (using bound type `B`).
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait RangeAssertions<B> {
     fn is_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug;
 
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_in_range"))]
     fn is_not_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug;
@@ -78,7 +81,6 @@ impl<B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertThat<'_
 }
 
 impl<B, M: Mode> RangeAssertions<B> for AssertThat<'_, B, M> {
-    #[track_caller]
     fn is_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug,
@@ -101,7 +103,6 @@ impl<B, M: Mode> RangeAssertions<B> for AssertThat<'_, B, M> {
         self
     }
 
-    #[track_caller]
     fn is_not_in_range(self, expected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd + Debug,

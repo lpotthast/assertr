@@ -6,6 +6,7 @@ use jiff::Span;
 use std::fmt::Write;
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait SpanAssertions {
     fn is_zero(self) -> Self;
 
@@ -110,14 +111,16 @@ mod tests {
 
         #[test]
         fn succeeds_when_zero() {
-            assert_that!(-2.hours().minutes(30)).is_negative();
+            assert_that!((-2).hours().minutes(30)).is_negative();
         }
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| assert_that!(0.seconds()).with_location(false).is_negative())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that!(0.seconds()).with_location(false).is_negative();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected value to be negative. But was
 
@@ -131,7 +134,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(2.hours().minutes(30))
                     .with_location(false)
-                    .is_negative()
+                    .is_negative();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -156,9 +159,11 @@ mod tests {
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| assert_that!(0.seconds()).with_location(false).is_positive())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that!(0.seconds()).with_location(false).is_positive();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected value to be positive. But was
 
@@ -170,9 +175,9 @@ mod tests {
         #[test]
         fn panics_when_negative() {
             assert_that_panic_by(|| {
-                assert_that!(-2.hours().minutes(30))
+                assert_that!((-2).hours().minutes(30))
                     .with_location(false)
-                    .is_positive()
+                    .is_positive();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

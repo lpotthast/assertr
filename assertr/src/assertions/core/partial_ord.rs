@@ -4,6 +4,7 @@ use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for comparable values.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PartialOrdAssertions<T> {
     fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
     where

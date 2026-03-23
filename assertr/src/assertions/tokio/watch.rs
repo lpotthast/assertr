@@ -1,19 +1,17 @@
+use crate::mode::Panic;
+use crate::prelude::*;
 use core::borrow::Borrow;
 use core::fmt::Debug;
-use core::ops::Deref;
+use std::ops::Deref;
 
-use crate::prelude::*;
-
-/// Assertions for the `tokio::sync::watch::Receiver` type.
+/// Non-extracting assertions for the `tokio::sync::watch::Receiver` type.
+/// These work in any mode (Panic or Capture).
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait TokioWatchReceiverAssertions<T: Debug> {
     fn has_current_value(self, expected: impl Borrow<T>) -> Self
     where
         T: PartialEq;
-
-    fn has_changed(self) -> Self;
-
-    fn has_not_changed(self) -> Self;
 }
 
 impl<T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
@@ -29,7 +27,21 @@ impl<T: Debug, M: Mode> TokioWatchReceiverAssertions<T>
             .is_equal_to(expected.borrow());
         self
     }
+}
 
+/// Assertions for tokio watch receivers that use data-extracting operations internally.
+/// Only available in Panic mode.
+#[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait TokioWatchReceiverExtractAssertions<T: Debug> {
+    fn has_changed(self) -> Self;
+
+    fn has_not_changed(self) -> Self;
+}
+
+impl<T: Debug> TokioWatchReceiverExtractAssertions<T>
+    for AssertThat<'_, tokio::sync::watch::Receiver<T>, Panic>
+{
     fn has_changed(self) -> Self {
         self.derive(tokio::sync::watch::Receiver::has_changed)
             .with_detail_message("Expected a tokio `watch` channel to have changed.")

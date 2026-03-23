@@ -2,8 +2,10 @@ use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for boolean values.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait BoolAssertions {
     fn is_true(self) -> Self;
+
     fn is_false(self) -> Self;
 }
 

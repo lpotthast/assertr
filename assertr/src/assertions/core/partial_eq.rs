@@ -6,6 +6,7 @@ use indoc::writedoc;
 use crate::{AssertThat, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PartialEqAssertions<T> {
     fn is_equal_to<E>(self, expected: E) -> Self
     where
@@ -39,7 +40,7 @@ impl<T, M: Mode> PartialEqAssertions<T> for AssertThat<'_, T, M> {
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
-
+                    
                       Actual: {actual:#?}
                 "}
             });
@@ -82,8 +83,8 @@ mod tests {
         #[test]
         fn succeeds_when_equal() {
             assert_that!("foo").is_equal_to("foo");
-            assert_that!("foo".to_owned()).is_equal_to("foo".to_owned());
-            assert_that!(&"foo".to_owned()).is_equal_to("foo".to_owned());
+            assert_that!("foo".to_string()).is_equal_to("foo".to_string());
+            assert_that!("foo".to_string()).is_equal_to("foo");
         }
 
         #[test]

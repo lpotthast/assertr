@@ -7,9 +7,11 @@ use core::fmt::Write;
 use indoc::writedoc;
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait LengthAssertions {
     fn is_empty(self) -> Self;
 
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_empty"))]
     fn is_not_empty(self) -> Self;
 
     fn has_length(self, expected: usize) -> Self;
@@ -298,9 +300,9 @@ mod tests {
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: &str "foo bar"
-    
+
                     does not have the correct length
-    
+
                     Expected: 42
                       Actual: 7
                     -------- assertr --------
@@ -339,9 +341,8 @@ mod tests {
     }
 
     mod has_length_on_slice {
-        use indoc::formatdoc;
-
         use crate::prelude::*;
+        use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {
@@ -384,13 +385,11 @@ mod tests {
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {
-            let vec = Vec::<i32>::new();
-            assert_that!(vec).has_length(0);
+            assert_that!(Vec::<i32>::new()).has_length(0);
         }
         #[test]
         fn succeeds_when_length_matches_and_non_empty() {
-            let vec = vec![1, 2, 3];
-            assert_that!(vec).has_length(3);
+            assert_that!(vec![1, 2, 3]).has_length(3);
         }
 
         #[test]
@@ -422,8 +421,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {
-            let map = HashMap::<(), ()>::new();
-            assert_that!(map).has_length(0);
+            assert_that!(HashMap::<(), ()>::new()).has_length(0);
         }
 
         #[test]

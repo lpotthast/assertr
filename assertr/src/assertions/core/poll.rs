@@ -4,14 +4,15 @@ use indoc::writedoc;
 
 use crate::AssertThat;
 use crate::actual::Actual;
-use crate::mode::Mode;
+use crate::mode::{Mode, Panic};
 use crate::tracking::AssertionTracking;
 
+/// Non-extracting assertions for `Poll` values.
+/// These work in any mode (Panic or Capture).
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PollAssertions<'t, T, M: Mode> {
     fn is_pending(self) -> Self;
-
-    fn is_ready(self) -> AssertThat<'t, T, M>;
 }
 
 impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>, M> {
@@ -30,9 +31,18 @@ impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>,
         }
         self
     }
+}
 
+/// Data-extracting assertion for `Poll` values.
+/// Only available in Panic mode, as the extracted `T` cannot be produced when the poll is pending.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait PollExtractAssertions<'t, T> {
+    fn is_ready(self) -> AssertThat<'t, T, Panic>;
+}
+
+impl<'t, T: Debug> PollExtractAssertions<'t, T> for AssertThat<'t, Poll<T>, Panic> {
     #[track_caller]
-    fn is_ready(self) -> AssertThat<'t, T, M> {
+    fn is_ready(self) -> AssertThat<'t, T, Panic> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_ready() {
@@ -82,7 +92,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(Poll::<Foo>::Pending)
                     .with_location(false)
-                    .is_ready()
+                    .is_ready();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -111,7 +121,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(Poll::Ready(Foo { val: 42 }))
                     .with_location(false)
-                    .is_pending()
+                    .is_pending();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

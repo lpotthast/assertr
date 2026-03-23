@@ -38,17 +38,17 @@ pub mod prelude {
     pub use assertr_derive::AssertrEq;
 
     pub use crate::AssertThat;
-    pub use crate::AssertingThat;
-    pub use crate::AssertingThatRef;
+    #[cfg(feature = "fluent")]
+    pub use crate::IntoAssertContext;
     pub use crate::any;
     #[allow(deprecated)]
     pub use crate::assert_that;
+    #[allow(deprecated)]
+    pub use crate::assert_that_owned;
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by;
     #[cfg(feature = "std")]
     pub use crate::assert_that_panic_by_async;
-    #[allow(deprecated)]
-    pub use crate::assert_that_ref;
     pub use crate::assert_that_type;
     pub use crate::assertions::HasLength;
     pub use crate::assertions::alloc::prelude::*;
@@ -84,37 +84,56 @@ pub mod prelude {
 
 pub struct PanicValue(Box<dyn Any>);
 
-/// The main entrypoint in an assertion context, usable with both owned and borrowed values.
+/// The main entrypoint into an assertion context for borrowed values.
 ///
-/// This macro uses autoref specialization to automatically detect whether the provided
-/// value is a reference to a `Sized` type or an owned value, and creates the appropriate
-/// [`AssertThat`] instance:
-///
-/// - For references (`&value` where the target is `Sized`): Creates `AssertThat` with `Actual::Borrowed`.
-/// - For owned values (or references to unsized targets like `&str`): Creates `AssertThat` with `Actual::Owned`.
+/// Borrows the value, allowing it to be used after the assertion.
 ///
 /// #### Example Usage
 /// ```rust,no_run
 /// use assertr::prelude::*;
 ///
-/// // Owned value - this will panic with a descriptive message.
-/// assert_that!(3).is_equal_to(4);
+/// // This will panic with a descriptive message and a pointer to the actual line of the assertion.
+/// assert_that(&3).is_equal_to(4);
 ///
-/// // Borrowed value - value is not moved.
-/// let value = String::from("hello");
-/// assert_that!(&value).starts_with("hel");
-/// // `value` is still usable here.
-///
-/// // Capture mode works too.
-/// let failures = assert_that!(3)
+/// // This instead captures the assertion failure for later inspection.
+/// let failures = assert_that(&3)
 ///     .with_capture()
-///     .is_equal_to(4)
+///     .is_equal_to(4) // This will collect a failure instead of panicking.
 ///     .capture_failures();
 ///
-/// assert_that!(failures)
+/// assert_that(&failures)
 ///     .has_length(1)
 ///     .contains("");
 /// ```
+#[deprecated(
+    since = "0.4.4",
+    note = "Use the `assert_that!()` macro or the fluent `.must()` / `.verify()` entry points instead."
+)]
+#[track_caller]
+#[must_use]
+pub fn assert_that<T>(actual: &T) -> AssertThat<'_, T, Panic> {
+    AssertThat::new_panicking(Actual::Borrowed(actual))
+}
+
+/// Entrypoint into an assertion context that takes ownership of the value.
+///
+/// Use this when the assertion requires ownership (e.g. `FnOnce` assertions).
+/// For most cases, prefer [`assert_that()`] which borrows instead.
+#[deprecated(
+    since = "0.4.4",
+    note = "Use the `assert_that!()` macro or the fluent `.must_owned()` / `.verify_owned()` entry points instead."
+)]
+#[track_caller]
+#[must_use]
+pub fn assert_that_owned<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
+    AssertThat::new_panicking(Actual::Owned(actual))
+}
+
+/// Ergonomic macro entrypoint that handles both owned values and references.
+///
+/// Uses autoref specialization to transparently handle both
+/// `assert_that!(owned_value)` and `assert_that!(&borrowed_value)` without
+/// requiring the user to think about ownership.
 #[macro_export]
 macro_rules! assert_that {
     ($e:expr) => {
@@ -125,24 +144,68 @@ macro_rules! assert_that {
     };
 }
 
-/// Entrypoint for asserting on owned values.
-///
-/// **Deprecated**: Use the [`assert_that!`] macro instead, which handles both owned and borrowed values.
-#[deprecated(since = "0.4.4", note = "Use the `assert_that!()` macro instead")]
-#[track_caller]
-#[must_use]
-pub fn assert_that<'t, T>(actual: T) -> AssertThat<'t, T, Panic> {
-    AssertThat::new(Actual::Owned(actual))
+#[cfg(feature = "fluent")]
+pub trait IntoAssertContext<'t, T> {
+    #[must_use]
+    fn must(&'t self) -> AssertThat<'t, T, Panic>;
+    #[must_use]
+    fn must_owned(self) -> AssertThat<'t, T, Panic>;
+
+    #[must_use]
+    fn verify(&'t self) -> AssertThat<'t, T, Capture>;
+    #[must_use]
+    fn verify_owned(self) -> AssertThat<'t, T, Capture>;
 }
 
-/// Entrypoint for asserting on borrowed values.
-///
-/// **Deprecated**: Use the [`assert_that!`] macro instead, which handles both owned and borrowed values.
-#[deprecated(since = "0.4.4", note = "Use the `assert_that!()` macro instead")]
-#[track_caller]
-#[must_use]
-pub fn assert_that_ref<T>(actual: &T) -> AssertThat<'_, T, Panic> {
-    AssertThat::new(Actual::Borrowed(actual))
+#[cfg(feature = "fluent")]
+impl<'t, T> IntoAssertContext<'t, T> for T {
+    fn must(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+    fn must_owned(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Owned(self))
+    }
+
+    fn verify(&'t self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
+    fn verify_owned(self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Owned(self))
+    }
+}
+
+#[cfg(feature = "fluent")]
+impl<'t, T> IntoAssertContext<'t, T> for &'t T {
+    fn must(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+    fn must_owned(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+
+    fn verify(&'t self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
+    fn verify_owned(self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
+}
+
+#[cfg(feature = "fluent")]
+impl<'t, T> IntoAssertContext<'t, T> for &'t mut T {
+    fn must(&'t self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+    fn must_owned(self) -> AssertThat<'t, T, Panic> {
+        AssertThat::new_panicking(Actual::Borrowed(self))
+    }
+
+    fn verify(&'t self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
+    fn verify_owned(self) -> AssertThat<'t, T, Capture> {
+        AssertThat::new_capturing(Actual::Borrowed(self))
+    }
 }
 
 #[track_caller]
@@ -154,7 +217,7 @@ pub fn assert_that_panic_by<'t, R>(
 ) -> AssertThat<'t, PanicValue, Panic> {
     use crate::prelude::FnOnceAssertions;
 
-    assert_that(fun).panics()
+    assert_that_owned(fun).panics()
 }
 
 // #[track_caller] // This is implied in the default async desugaring.
@@ -168,7 +231,7 @@ where
 {
     use crate::prelude::AsyncFnOnceAssertions;
 
-    assert_that(fun).panics_async().await
+    assert_that_owned(fun).panics_async().await
 }
 
 pub struct Type<T> {
@@ -176,6 +239,13 @@ pub struct Type<T> {
 }
 
 impl<T> Type<T> {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
+    }
+
     #[must_use]
     pub fn get_type_name(&self) -> &'static str {
         std::any::type_name::<T>()
@@ -192,66 +262,15 @@ impl<T> Type<T> {
     }
 }
 
+impl<T> Default for Type<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[must_use]
 pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
-    AssertThat::new(Actual::Owned(Type {
-        phantom: PhantomData,
-    }))
-}
-
-pub trait AssertingThat {
-    fn assert_that<'t, U>(self, map: impl Fn(Self) -> U) -> AssertThat<'t, U, Panic>
-    where
-        Self: Sized;
-
-    fn assert_that_it<'t>(self) -> AssertThat<'t, Self, Panic>
-    where
-        Self: Sized;
-}
-
-#[allow(deprecated)]
-impl<T> AssertingThat for T {
-    fn assert_that<'t, U>(self, map: impl Fn(T) -> U) -> AssertThat<'t, U, Panic>
-    where
-        Self: Sized,
-    {
-        assert_that(map(self))
-    }
-
-    fn assert_that_it<'t>(self) -> AssertThat<'t, Self, Panic> {
-        assert_that(self)
-    }
-}
-
-pub trait AssertingThatRef {
-    type Owned;
-
-    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<'_, U, Panic>
-    where
-        Self: Sized;
-
-    fn assert_that_it(&self) -> AssertThat<'_, Self::Owned, Panic>
-    where
-        Self: Sized;
-}
-
-#[allow(deprecated)]
-impl<T> AssertingThatRef for &T {
-    type Owned = T;
-
-    fn assert_that<U>(&self, map: impl Fn(&Self) -> &U) -> AssertThat<'_, U, Panic>
-    where
-        Self: Sized,
-    {
-        assert_that_ref(map(self))
-    }
-
-    fn assert_that_it(&self) -> AssertThat<'_, Self::Owned, Panic>
-    where
-        Self: Sized,
-    {
-        assert_that_ref(self)
-    }
+    AssertThat::new_panicking(Actual::Owned(Type::<T>::new()))
 }
 
 /// `AssertThat` is the core structure used for assertions. It allows developers to perform
@@ -311,7 +330,7 @@ impl<T, M: Mode> RefUnwindSafe for AssertThat<'_, T, M> {}
 
 impl<'t, T> AssertThat<'t, T, Panic> {
     #[track_caller]
-    pub(crate) const fn new(actual: Actual<'t, T>) -> Self {
+    pub(crate) const fn new_panicking(actual: Actual<'t, T>) -> Self {
         AssertThat {
             parent: None,
             actual,
@@ -320,7 +339,24 @@ impl<'t, T> AssertThat<'t, T, Panic> {
             print_location: true,
             number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
-            mode: RefCell::new(Panic { derived: false }),
+            mode: RefCell::new(Panic::DEFAULT),
+        }
+    }
+}
+
+#[cfg(feature = "fluent")]
+impl<'t, T> AssertThat<'t, T, Capture> {
+    #[track_caller]
+    pub(crate) const fn new_capturing(actual: Actual<'t, T>) -> Self {
+        AssertThat {
+            parent: None,
+            actual,
+            subject_name: None,
+            detail_messages: RefCell::new(Vec::new()),
+            print_location: true,
+            number_of_assertions: RefCell::new(NumberOfAssertions::new()),
+            failures: RefCell::new(Vec::new()),
+            mode: RefCell::new(Capture::DEFAULT),
         }
     }
 }
@@ -333,13 +369,12 @@ impl<T> AssertThat<'_, T, Capture> {
     /// ```rust
     /// use assertr::prelude::*;
     ///
-    /// assert_that(42)
-    ///     .with_capture()
-    ///     .is_negative()
-    ///     .is_equal_to(43)
-    ///     .capture_failures()
-    ///     .assert_that_it()
-    ///     .has_length(2);
+    /// let failures = 42.verify()
+    ///     .be_negative()
+    ///     .be_equal_to(43)
+    ///     .capture_failures();
+    ///
+    /// failures.must().have_length(2);
     /// ```
     #[must_use]
     pub fn capture_failures(mut self) -> Vec<String> {
@@ -354,7 +389,7 @@ impl<T> AssertThat<'_, T, Capture> {
     ///
     /// # Panics
     ///
-    /// Panics if the assertion failures have already been captured.
+    /// Panics if failures have already been captured.
     #[must_use]
     pub fn take_failures(&mut self) -> Vec<String> {
         let mut mode = self.mode.borrow_mut();
@@ -434,40 +469,18 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         }
     }
 
-    pub async fn map_async<'u, U: 'u>(
+    pub async fn map_async<U: 't, Fut>(
         self,
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
         // requiring only one type, which is the type we want to map to.
-        mapper: impl AsyncFnOnce(Actual<T>) -> Actual<'u, U>,
-    ) -> AssertThat<'u, U, M>
+        mapper: impl FnOnce(Actual<T>) -> Fut,
+    ) -> AssertThat<'t, U, M>
     where
-        't: 'u,
+        Fut: Future<Output = U>,
     {
         AssertThat {
             parent: self.parent,
-            actual: mapper(self.actual).await,
-            subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
-            detail_messages: self.detail_messages,
-            print_location: self.print_location,
-            number_of_assertions: self.number_of_assertions,
-            failures: self.failures,
-            mode: self.mode,
-        }
-    }
-
-    pub async fn map_async_owned<'u, U: 'u>(
-        self,
-        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
-        // requiring only one type, which is the type we want to map to.
-        mapper: impl AsyncFnOnce(<T as ToOwned>::Owned) -> U,
-    ) -> AssertThat<'u, U, M>
-    where
-        T: ToOwned,
-        't: 'u,
-    {
-        AssertThat {
-            parent: self.parent,
-            actual: Actual::Owned(mapper(self.actual.borrowed().to_owned()).await),
+            actual: mapper(self.actual).await.into(),
             subject_name: self.subject_name, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
             detail_messages: self.detail_messages,
             print_location: self.print_location,
@@ -525,6 +538,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     // - we can replace () with some type R (return), letting the user write more succinct closures.
 
     #[allow(clippy::return_self_not_must_use)]
+    #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
@@ -534,8 +548,18 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self
     }
 
+    #[cfg(feature = "fluent")]
     #[allow(clippy::return_self_not_must_use)]
-    pub fn satisfies_ref<U, F, A>(self, mapper: F, assertions: A) -> Self
+    pub fn satisfy<U, F, A>(self, mapper: F, assertions: A) -> Self
+    where
+        for<'a> F: FnOnce(&'a T) -> U,
+        for<'a> A: FnOnce(AssertThat<'a, U, M>),
+    {
+        self.satisfies(mapper, assertions)
+    }
+
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn satisfies_ref<U: ?Sized, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> &'a U,
         for<'a> A: FnOnce(AssertThat<'a, &'a U, M>),
@@ -562,6 +586,29 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     #[must_use]
     pub fn with_location(mut self, value: bool) -> Self {
         self.print_location = value;
+        self
+    }
+}
+
+/* Fluent connect */
+
+impl<T, M: Mode> AssertThat<'_, T, M> {
+    /// Filler that allows you to add an "and" inside your assertion chain.
+    ///
+    /// This is completely optional (noop).
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// 42.must().be_positive().and().be_less_than(100);
+    /// 42.must().be_positive().be_less_than(100);
+    ///
+    /// assert_that!(42).is_positive().and().is_less_than(100);
+    /// assert_that!(42).is_positive().is_less_than(100);
+    /// ```
+    #[inline]
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn and(self) -> Self {
         self
     }
 }
@@ -602,7 +649,7 @@ impl<'t, T> AssertThat<'t, T, Capture> {
         // Take out all assertion failures, marking the `Capture` as "captured".
         // Assert that no failures exist.
         use crate::assertions::core::length::LengthAssertions;
-        assert_that(self.take_failures())
+        assert_that_owned(self.take_failures())
             .with_location(self.print_location)
             .with_subject_name("Assertion failures")
             .with_detail_message(
@@ -778,6 +825,7 @@ impl<T: Debug> Debug for Eq<T> {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use alloc::format;
     use indoc::formatdoc;
@@ -786,15 +834,17 @@ mod tests {
 
     #[test]
     fn with_capture_yields_failures_and_does_not_panic() {
-        let failures = assert_that!(42)
+        let failures = 42
+            .verify()
             .with_location(false)
-            .with_capture()
-            .is_greater_than(100)
-            .is_equal_to(1)
+            .be_greater_than(100)
+            .be_equal_to(1)
             .capture_failures();
 
-        assert_that!(failures).has_length(2).contains_exactly([
-            formatdoc! {"
+        assert_that!(failures.as_slice())
+            .has_length(2)
+            .contains_exactly([
+                formatdoc! {"
                     -------- assertr --------
                     Actual: 42
 
@@ -803,22 +853,19 @@ mod tests {
                     Expected: 100
                     -------- assertr --------
                 "},
-            formatdoc! {"
+                formatdoc! {"
                     -------- assertr --------
                     Expected: 1
 
                       Actual: 42
                     -------- assertr --------
                 "},
-        ]);
+            ]);
     }
 
     #[test]
     fn dropping_a_capturing_assert_panics_when_failures_occurred_which_were_not_captured() {
-        let assert = assert_that!(42)
-            .with_location(false)
-            .with_capture()
-            .is_equal_to(43);
+        let assert = 42.verify().with_location(false).be_equal_to(43);
         assert_that_panic_by(move || drop(assert))
             .has_type::<&str>()
             .is_equal_to("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!");
@@ -826,7 +873,7 @@ mod tests {
 
     #[test]
     fn without_capture_switches_to_panic_mode() {
-        let assert_capturing = assert_that!(42)
+        let assert_capturing = assert_that_owned(42)
             .with_location(false)
             .with_capture()
             // Without this assertion, we would see a panic due to zero assertions being made.
@@ -837,7 +884,7 @@ mod tests {
 
     #[test]
     fn without_capture_panics_when_assertion_failures_were_already_recorded() {
-        let assert_capturing = assert_that!(42)
+        let assert_capturing = assert_that_owned(42)
             .with_location(false)
             .with_capture()
             // This records a failure.
@@ -869,7 +916,7 @@ mod tests {
         #[test]
         fn panics_on_borrowed_value_in_panic_mode() {
             let value = String::from("foo");
-            let assert = assert_that!(&value)
+            let assert = assert_that(&value)
                 .with_location(false)
                 // Avoid "number-of-assertions not greater 0" panic.
                 .is_equal_to("foo");
@@ -882,7 +929,7 @@ mod tests {
         #[test]
         fn panics_on_borrowed_value_in_capture_mode() {
             let value = String::from("foo");
-            let assert = assert_that!(&value)
+            let assert = assert_that(&value)
                 .with_location(false)
                 .with_capture()
                 // Avoid "number-of-assertions not greater 0" panic.
@@ -895,27 +942,27 @@ mod tests {
 
         #[test]
         fn succeeds_on_owned_value_in_panic_mode() {
-            let assert = assert_that!(42)
+            let assert = assert_that_owned(42)
                 .with_location(false)
                 // Avoid "number-of-assertions not greater 0" panic.
                 .is_equal_to(42);
             let actual = assert.unwrap_inner();
-            assert_that!(actual).is_equal_to(42);
+            actual.must().be_equal_to(42);
         }
 
         #[test]
         fn succeeds_on_owned_value_in_capture_mode_when_no_failures_were_recorded() {
-            let assert = assert_that!(42)
+            let assert = assert_that_owned(42)
                 .with_location(false)
                 .with_capture()
                 .has_display_value("42");
             let actual = assert.unwrap_inner();
-            assert_that!(actual).is_equal_to(42);
+            actual.must().be_equal_to(42);
         }
 
         #[test]
         fn panics_on_owned_value_in_capture_mode_when_failures_were_recorded() {
-            let assert = assert_that!(42)
+            let assert = assert_that_owned(42)
                 .with_location(false)
                 .with_capture()
                 // This records a failure.
@@ -941,8 +988,38 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "fluent")]
     #[test]
-    fn asserting_that_this_allows_entering_assertion_context() {
-        42.assert_that_it().is_equal_to(42);
+    fn allows_fluent_entry_into_assertion_context() {
+        42.must().be_equal_to(42);
+        42.must_owned().be_equal_to(42);
+
+        42.verify()
+            .be_equal_to(42)
+            .capture_failures()
+            .must()
+            .be_empty();
+        42.verify_owned()
+            .be_equal_to(42)
+            .capture_failures()
+            .must()
+            .be_empty();
+
+        assert_that(&42).is_equal_to(42);
+        assert_that_owned(42).is_equal_to(42);
+
+        let failures = assert_that(&42)
+            .with_capture()
+            .is_equal_to(42)
+            .capture_failures();
+        assert_that!(failures).is_empty();
+        let failures = assert_that_owned(42)
+            .with_capture()
+            .is_equal_to(42)
+            .capture_failures();
+        assert_that!(failures).is_empty();
+
+        assert_that!(&42).is_equal_to(42);
+        assert_that!(42).is_equal_to(42);
     }
 }

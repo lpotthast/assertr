@@ -5,6 +5,7 @@ use crate::{AssertThat, Mode};
 
 /// Assertions for heap-allocated, owned [String]s.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait StringAssertions {
     fn contains(self, expected: impl AsRef<str>) -> Self;
 
@@ -154,7 +155,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_start_does_not_match() {
-            assert_that!(String::from("foo bar baz")).starts_with("fo");
+            assert_that!(String::from("foo bar baz")).does_not_start_with("of");
         }
 
         #[test]

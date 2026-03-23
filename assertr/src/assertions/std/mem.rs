@@ -6,6 +6,13 @@ use indoc::writedoc;
 #[allow(clippy::return_self_not_must_use)]
 pub trait MemAssertions {
     fn needs_drop(self) -> Self;
+
+    fn need_drop(self) -> Self
+    where
+        Self: Sized,
+    {
+        self.needs_drop()
+    }
 }
 
 impl<T, M: Mode> MemAssertions for AssertThat<'_, Type<T>, M> {

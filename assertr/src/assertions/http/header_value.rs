@@ -1,18 +1,23 @@
 use crate::AssertThat;
-use crate::mode::Mode;
+use crate::mode::{Mode, Panic};
 use crate::prelude::{BoolAssertions, PartialEqAssertions, PartialOrdAssertions};
+use alloc::borrow::ToOwned;
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait HttpHeaderValueAssertions<'t, M: Mode> {
     fn is_empty(self) -> Self;
 
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_empty"))]
     fn is_not_empty(self) -> Self;
 
     fn is_sensitive(self) -> Self;
 
     fn is_insensitive(self) -> Self;
 
-    fn is_ascii(self) -> AssertThat<'t, String, M>;
+    fn is_ascii_satisfying<A>(self, assertions: A) -> Self
+    where
+        A: for<'a> FnOnce(AssertThat<'a, &'a str, M>);
 }
 
 impl<'t, M: Mode> HttpHeaderValueAssertions<'t, M>
@@ -46,10 +51,38 @@ impl<'t, M: Mode> HttpHeaderValueAssertions<'t, M>
         self
     }
 
-    fn is_ascii(self) -> AssertThat<'t, String, M> {
-        use crate::prelude::ResultAssertions;
+    fn is_ascii_satisfying<A>(self, assertions: A) -> Self
+    where
+        A: for<'a> FnOnce(AssertThat<'a, &'a str, M>),
+    {
+        use crate::tracking::AssertionTracking;
 
-        self.map(|it| it.unwrap_owned().to_str().map(ToOwned::to_owned).into())
+        self.track_assertion();
+
+        if self.actual().to_str().is_ok() {
+            self.satisfies_ref(|hv| hv.to_str().expect("already checked"), assertions)
+        } else {
+            self.fail(format_args!(
+                "Actual: {actual:?}\n\nis not valid ASCII\n",
+                actual = self.actual()
+            ));
+            self
+        }
+    }
+}
+
+/// Data-extracting assertion for `HeaderValue`.
+/// Only available in Panic mode, as the extracted `String` cannot be produced when the value is not ASCII.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait HttpHeaderValueExtractAssertions<'t> {
+    fn is_ascii(self) -> AssertThat<'t, String, Panic>;
+}
+
+impl<'t> HttpHeaderValueExtractAssertions<'t> for AssertThat<'t, http::header::HeaderValue, Panic> {
+    fn is_ascii(self) -> AssertThat<'t, String, Panic> {
+        use crate::prelude::ResultExtractAssertions;
+
+        self.map(|it| it.borrowed().to_str().map(ToOwned::to_owned).into())
             .is_ok()
     }
 }
@@ -264,6 +297,74 @@ mod tests {
                     is not of expected variant: Result:Ok
                     -------- assertr --------
                 "#});
+        }
+    }
+
+    mod is_ascii_satisfying {
+        use crate::prelude::*;
+        use http::header::HeaderValue;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_ascii_and_assertions_pass() {
+            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+
+            assert_that!(actual).is_ascii_satisfying(|s| {
+                s.starts_with("http");
+            });
+        }
+
+        #[test]
+        fn collects_failure_in_capture_mode_when_ascii_but_assertion_fails() {
+            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+
+            let failures = assert_that!(actual)
+                .with_capture()
+                .with_location(false)
+                .is_ascii_satisfying(|s| {
+                    s.starts_with("ftp");
+                })
+                .capture_failures();
+            assert_that!(failures).has_length(1);
+        }
+
+        #[test]
+        fn collects_failure_in_capture_mode_when_not_ascii() {
+            let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
+
+            let failures = assert_that!(actual)
+                .with_capture()
+                .with_location(false)
+                .is_ascii_satisfying(|s| {
+                    s.starts_with("http");
+                })
+                .capture_failures();
+            assert_that!(&failures).has_length(1);
+            assert_that!(failures.first())
+                .is_some()
+                .map(|it| it.borrowed().as_str().into())
+                .contains("is not valid ASCII");
+        }
+
+        #[test]
+        fn panics_when_not_ascii_in_panic_mode() {
+            let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
+
+            assert_that_panic_by(|| {
+                assert_that!(actual)
+                    .with_location(false)
+                    .is_ascii_satisfying(|s| {
+                        s.starts_with("http");
+                    })
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Actual: " !\xff"
+
+                is not valid ASCII
+                -------- assertr --------
+            "#});
         }
     }
 }

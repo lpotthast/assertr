@@ -7,8 +7,9 @@ use indoc::writedoc;
 use num::{Float, Num, Signed};
 
 /// Assertions for numeric values not already handled by
-/// [`PartialEqAssertions`](crate::prelude::PartialEqAssertions) and [`PartialOrdAssertions`](crate::prelude::PartialOrdAssertions).
+/// [`crate::prelude::PartialEqAssertions`] and [`crate::prelude::PartialOrdAssertions`].
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait NumAssertions<T: Num> {
     /// Fails if actual is not equal to the additive identity.
     fn is_zero(self) -> Self;
@@ -492,7 +493,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(f32::infinity())
                     .with_location(false)
-                    .is_finite()
+                    .is_finite();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -509,7 +510,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(f32::neg_infinity())
                     .with_location(false)
-                    .is_finite()
+                    .is_finite();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

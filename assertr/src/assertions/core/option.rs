@@ -1,28 +1,23 @@
-use crate::{AssertThat, Mode, actual::Actual, tracking::AssertionTracking};
+use crate::{AssertThat, Mode, actual::Actual, mode::Panic, tracking::AssertionTracking};
 use core::fmt::Debug;
 use core::option::Option;
 
-/// Assertions for generic optional values.
-pub trait OptionAssertions<'t, T, M: Mode> {
+/// Data-extracting assertion for `Option` values.
+/// Only available in Panic mode, as the extracted `T` cannot be produced when the value is `None`.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait OptionExtractAssertions<'t, T> {
     /// Test if this option is of the `Some` variant.
     /// This is a terminal operation on the contained `Option`,
     /// as there is nothing meaningful to do with the option if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
-    fn is_some(self) -> AssertThat<'t, T, M>
-    where
-        T: Debug;
-
-    /// Test if this option is of the `None` variant.
-    /// This is a terminal operation on the contained `Option`,
-    /// as there is nothing meaningful to do with the option after its variant was ensured.
-    fn is_none(self) -> AssertThat<'t, (), M>
+    fn is_some(self) -> AssertThat<'t, T, Panic>
     where
         T: Debug;
 }
 
-impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M> {
+impl<'t, T> OptionExtractAssertions<'t, T> for AssertThat<'t, Option<T>, Panic> {
     #[track_caller]
-    fn is_some(self) -> AssertThat<'t, T, M>
+    fn is_some(self) -> AssertThat<'t, T, Panic>
     where
         T: Debug,
     {
@@ -40,7 +35,21 @@ impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M>
             Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap()),
         })
     }
+}
 
+/// Non-extracting assertions for `Option` values.
+/// These work in any mode (Panic or Capture).
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait OptionAssertions<'t, T, M: Mode> {
+    /// Test if this option is of the `None` variant.
+    /// This is a terminal operation on the contained `Option`,
+    /// as there is nothing meaningful to do with the option after its variant was ensured.
+    fn is_none(self) -> AssertThat<'t, (), M>
+    where
+        T: Debug;
+}
+
+impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M> {
     #[track_caller]
     fn is_none(self) -> AssertThat<'t, (), M>
     where

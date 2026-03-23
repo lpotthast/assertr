@@ -5,6 +5,7 @@ use crate::assertions::core::strip_quotation_marks;
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait DisplayAssertions {
     fn has_display_value(self, expected: impl Display) -> Self;
 }

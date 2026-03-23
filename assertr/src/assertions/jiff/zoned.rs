@@ -1,6 +1,7 @@
 use crate::AssertThat;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
+use alloc::borrow::ToOwned;
 use core::borrow::Borrow;
 use indoc::writedoc;
 use jiff::Zoned;
@@ -8,6 +9,7 @@ use jiff::tz::TimeZone;
 use std::fmt::Write;
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait ZonedAssertions {
     fn is_in_time_zone(self, expected: impl Borrow<TimeZone>) -> Self;
 
@@ -98,9 +100,11 @@ mod tests {
             let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
             let tz = TimeZone::get("Europe/Berlin").expect("valid");
 
-            assert_that_panic_by(|| assert_that!(zdt).with_location(false).is_in_time_zone(tz))
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+            assert_that_panic_by(|| {
+                assert_that!(zdt).with_location(false).is_in_time_zone(tz);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expected: Europe/Berlin
 
@@ -129,7 +133,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(zdt)
                     .with_location(false)
-                    .is_in_time_zone_named("Europe/Berlin")
+                    .is_in_time_zone_named("Europe/Berlin");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"

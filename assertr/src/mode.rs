@@ -23,10 +23,24 @@ pub struct Panic {
     pub(crate) derived: bool,
 }
 
+impl Panic {
+    /// Matches the outcome of `Panic::default()` but is usable in const contexts.
+    pub(crate) const DEFAULT: Self = Self { derived: false };
+}
+
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Capture {
     pub(crate) derived: bool,
     pub(crate) captured: bool,
+}
+
+impl Capture {
+    /// Matches the outcome of `Capture::default()` but is usable in const contexts.
+    #[cfg(feature = "fluent")]
+    pub(crate) const DEFAULT: Self = Self {
+        derived: false,
+        captured: false,
+    };
 }
 
 impl Mode for Panic {

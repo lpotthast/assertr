@@ -5,18 +5,30 @@ use std::path::PathBuf;
 use std::{ffi::OsStr, path::Path};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PathAssertions {
     fn exists(self) -> Self;
+
     fn does_not_exist(self) -> Self;
+
     fn is_a_file(self) -> Self;
+
     fn is_a_directory(self) -> Self;
+
     fn is_a_symlink(self) -> Self;
+
     fn has_a_root(self) -> Self;
+
     fn is_relative(self) -> Self;
+
     fn has_file_name(self, expected: impl AsRef<OsStr>) -> Self;
+
     fn has_file_stem(self, expected: impl AsRef<OsStr>) -> Self;
+
     fn has_extension(self, expected: impl AsRef<OsStr>) -> Self;
+
     fn starts_with(self, expected: impl AsRef<Path>) -> Self;
+
     fn ends_with(self, expected: impl AsRef<Path>) -> Self;
 }
 
@@ -80,7 +92,6 @@ impl<M: Mode> PathAssertions for AssertThat<'_, PathBuf, M> {
         self.derive(PathBuf::as_path).has_extension(expected);
         self
     }
-
     #[track_caller]
     fn starts_with(self, expected: impl AsRef<Path>) -> Self {
         self.derive(PathBuf::as_path).starts_with(expected);
@@ -268,11 +279,11 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         {
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                        Path: {actual:?}
+                    Path: {actual:?}
 
-                        Expected filestem: {expected_file_stem:#?}
-                          Actual filestem: {actual_file_stem:#?}
-                    "}
+                    Expected filestem: {expected_file_stem:#?}
+                      Actual filestem: {actual_file_stem:#?}
+                "}
             });
         }
         self
@@ -289,11 +300,11 @@ impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
         {
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                        Path: {actual:?}
+                    Path: {actual:?}
 
-                        Expected extension: {expected_extension:#?}
-                          Actual extension: {actual_extension:#?}
-                    "}
+                    Expected extension: {expected_extension:#?}
+                      Actual extension: {actual_extension:#?}
+                "}
             });
         }
         self
@@ -386,7 +397,7 @@ mod tests {
                 assert_that_panic_by(|| {
                     assert_that!(path.as_path())
                         .with_location(false)
-                        .does_not_exist()
+                        .does_not_exist();
                 })
                 .has_type::<String>()
                 .contains("-------- assertr --------")
@@ -447,7 +458,7 @@ mod tests {
                     assert_that!(path.as_path())
                         .with_location(false)
                         .exists() // Sanity-check. Non-existing paths would also not be files!
-                        .is_a_directory()
+                        .is_a_directory();
                 })
                 .has_type::<String>()
                 .contains("-------- assertr --------")
@@ -801,7 +812,7 @@ mod tests {
                     assert_that!(dir)
                         .with_location(false)
                         .exists() // Sanity-check. Non-existing paths would also not be files!
-                        .is_a_file()
+                        .is_a_file();
                 })
                 .has_type::<String>()
                 .contains("-------- assertr --------")
@@ -852,7 +863,7 @@ mod tests {
             #[test]
             fn is_symlink_succeeds_when_directory() {
                 let path = Path::new(file!());
-                assert_that!(path).is_symlink();
+                assert_that(path).is_symlink();
             }
             */
         }

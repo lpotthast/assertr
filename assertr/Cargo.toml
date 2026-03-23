@@ -1,6 +1,6 @@
 [package]
 name = "assertr"
-version = "0.4.4"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.89.0"
 authors = ["Lukas Potthast <privat@lukas-potthast.de>"]
@@ -14,10 +14,10 @@ categories = ["development-tools::testing", "no-std"]
 keywords = ["assertions", "assert", "assert-that", "testing"]
 
 [features]
-# Aggregates
 default = ["std", "num"]
 full = [
     "derive",
+    "fluent",
     "http",
     "jiff",
     "libm",
@@ -28,17 +28,17 @@ full = [
     "std",
     "tokio",
 ]
-# Concrete
+std = ["num/std"]
 derive = ["dep:assertr-derive"]
+fluent = ["dep:assertr-derive"]
+num = ["dep:num"]
 http = ["dep:http"]
 jiff = ["dep:jiff"]
-libm = ["dep:libm", "num/libm"]
-num = ["dep:num"]
+tokio = ["dep:tokio"]
+serde = ["dep:serde", "dep:serde_json", "dep:toml"]
 program = ["dep:which"]
 reqwest = ["dep:reqwest"]
-serde = ["dep:serde", "dep:serde_json", "dep:toml"]
-std = ["num/std"]
-tokio = ["dep:tokio"]
+libm = ["dep:libm", "num/libm"]
 
 [dependencies]
 assertr-derive = { version = "0.2.0", optional = true, path = "../assertr-derive" }
@@ -52,7 +52,7 @@ reqwest = { version = "0.12.12", optional = true }
 serde = { version = "1.0.218", optional = true, features = ["derive"] }
 serde_json = { version = "1.0.140", optional = true }
 tokio = { version = "1.43.0", optional = true, features = ["full"] }
-toml = { version = "0.9.7", optional = true }
+toml = { version = "0.8.20", optional = true }
 which = { version = "8.0.0", optional = true, default-features = false, features = ["real-sys"] }
 
 [dev-dependencies]

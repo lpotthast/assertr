@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait MutexAssertions {
     /// Asserts that this mutex is locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
@@ -13,6 +14,7 @@ pub trait MutexAssertions {
 
     /// Asserts that this mutex is not locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
     fn is_not_locked(self) -> Self;
 
     /// Asserts that this mutex is not locked.
@@ -65,10 +67,9 @@ impl<T: Debug, M: Mode> MutexAssertions for AssertThat<'_, Mutex<T>, M> {
 mod tests {
 
     mod is_locked {
+        use crate::prelude::*;
         use indoc::formatdoc;
         use std::sync::Mutex;
-
-        use crate::prelude::*;
 
         #[test]
         fn succeeds_when_locked() {
@@ -94,10 +95,9 @@ mod tests {
     }
 
     mod is_not_locked {
+        use crate::prelude::*;
         use indoc::formatdoc;
         use std::sync::Mutex;
-
-        use crate::prelude::*;
 
         #[test]
         fn succeeds_when_not_locked() {
@@ -123,9 +123,8 @@ mod tests {
     }
 
     mod is_free {
-        use std::sync::Mutex;
-
         use crate::prelude::*;
+        use std::sync::Mutex;
 
         #[test]
         fn succeeds_when_not_locked() {

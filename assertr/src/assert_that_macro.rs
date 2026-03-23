@@ -33,7 +33,7 @@ impl<'a, T> Wrap<&'a T> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, T, Panic> {
-        AssertThat::new(Actual::Borrowed(
+        AssertThat::new_panicking(Actual::Borrowed(
             self.inner
                 .0
                 .take()
@@ -64,7 +64,7 @@ impl<T> Fallback<T> {
     where
         T: 't,
     {
-        AssertThat::new(Actual::Owned(
+        AssertThat::new_panicking(Actual::Owned(
             self.0.take().expect("assertr: value already consumed"),
         ))
     }

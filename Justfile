@@ -13,6 +13,7 @@ tidy:
     cargo update --workspace
     cargo sort --workspace
     cargo fmt
-    cargo check --all
-    cargo clippy --all -- -W clippy::pedantic
-    cargo test --all
+    cargo check --all --all-features
+    cargo clippy --all --all-features -- -W clippy::pedantic
+    cargo test --all --all-features
+    cargo doc --no-deps --all-features

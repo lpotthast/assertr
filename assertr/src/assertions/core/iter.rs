@@ -4,6 +4,8 @@ use core::fmt::Debug;
 use crate::actual::Actual;
 use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
+#[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
     /// This is a terminal assertion, as it must consume the underlying iterator.
     fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
@@ -34,6 +36,7 @@ where
         't: 'u,
     {
         self.track_assertion();
+        // Any iterator can only be iterated once! Take it.
         let (actual, this) = self.replace_actual_with(Actual::Owned(()));
 
         let actual = actual.unwrap_owned().collect::<Vec<_>>();

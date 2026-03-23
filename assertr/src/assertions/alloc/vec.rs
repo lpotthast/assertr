@@ -4,6 +4,7 @@ use core::fmt::Debug;
 use crate::{AssertThat, AssertrPartialEq, Mode, prelude::SliceAssertions};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait VecAssertions<'t, T: Debug> {
     fn contains<E>(self, expected: E) -> Self
     where
@@ -15,7 +16,7 @@ pub trait VecAssertions<'t, T: Debug> {
         E: Debug + 't,
         T: AssertrPartialEq<E> + Debug;
 
-    /// [P] - Predicate
+    /// `P` - Predicate
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool;

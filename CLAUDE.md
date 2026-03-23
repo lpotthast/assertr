@@ -1,0 +1,85 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Build & Test Commands
+
+This is a Cargo workspace with two crates: `assertr` (main library) and `assertr-derive` (proc macro).
+
+```bash
+# Build all
+cargo build --all
+
+# Test all (default features)
+cargo test --all
+
+# Test with all features enabled
+cargo test --all-features
+
+# Test a single test
+cargo test --all-features <test_name>
+
+# Lint & format
+cargo fmt
+cargo clippy --all -- -W clippy::pedantic
+
+# Full tidy (update deps, sort, fmt, check, clippy pedantic, test, doc)
+just tidy
+```
+
+## Architecture
+
+**assertr** is a fluent assertion library for Rust with `no_std` support. The core API:
+
+```rust
+assert_that!(value).is_equal_to(expected).has_length(5);
+assert_that!(&value).starts_with("hello");
+```
+
+### Core types (in `assertr/src/`)
+
+- **`assert_that!` macro** (`assert_that_macro.rs`) — Uses autoref specialization to handle both borrowed (`&T → Actual::Borrowed`) and owned (`T → Actual::Owned`) values transparently.
+- **`AssertThat<'t, T, M>`** (`lib.rs`) — The central struct. `T` is the value type, `M` is the mode (`Panic` or `Capture`). All assertion methods are implemented as trait impls on this type. Methods return `Self` for chaining.
+- **`Actual<'t, T>`** (`actual.rs`) — Enum holding either `Borrowed(&'t T)` or `Owned(T)`.
+- **`Mode` trait** (`mode.rs`) — `Panic` (fail immediately) vs `Capture` (collect failures for batch inspection).
+- **`Failure`/`Fallible` traits** (`failure.rs`) — Failure message construction with location tracking, subject names, and detail messages.
+- **`Condition<T>` trait** (`condition.rs`) — Reusable predicates used with `.is()` and `.has()`.
+- **`AssertrPartialEq<Rhs>`** (`lib.rs`) — Custom equality trait with `EqContext` for field-by-field difference reporting.
+- **Tracking** (`tracking.rs`) — Counts assertions per chain; panics if `AssertThat` is dropped with zero assertions (catches forgotten assertions).
+
+### Assertion modules (`assertr/src/assertions/`)
+
+Assertions are organized by type category, each in its own module with a trait:
+- `core/` — Fundamental types: `PartialEq`, `PartialOrd`, `bool`, `char`, `str`, `Option`, `Result`, `Iterator`, `Array`, `Slice`, `Tuple`
+- `alloc/` — Heap types: `String`, `Vec`, `Box`, `PanicValue`
+- `std/` — Std types: `Path`, `Command`, `HashMap`, `Mutex`, `Type`
+- `num/` — Numeric: `is_zero`, `is_positive`, `is_close_to`, `is_nan`, etc.
+- `program.rs`, `http/`, `jiff/`, `tokio/`, `reqwest/` — Feature-gated external crate integrations
+
+### Derive macro (`assertr-derive/`)
+
+`#[derive(AssertrEq)]` generates a `{StructName}AssertrEq` companion struct with `Eq<FieldType>` fields for field-level partial equality. Supports `#[assertr_eq(map_type = "...")]` and `#[assertr_eq(compare_with = "...")]` attributes. Only processes public fields. Uses `darling` for attribute parsing.
+
+Compile-fail tests use `trybuild` in `assertr-derive/tests/`.
+
+### Key patterns for adding assertions
+
+New assertion traits follow this pattern:
+1. Define a trait (e.g., `FooAssertions`) with methods returning `Self`
+2. Annotate the trait with `#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]` to auto-generate fluent aliases (e.g., `is_true` → `be_true`, `has_length` → `have_length`)
+3. Implement it for `AssertThat<'_, Foo, M>` where `M: Mode`
+4. Use `self.track_assertion()` at the start of each method
+5. On failure, call `self.fail(...)` with a formatted message
+6. Annotate all assertion methods with `#[track_caller]`
+
+## Features
+
+- **default**: `["std", "num"]`
+- **full**: All features (`derive`, `fluent`, `http`, `jiff`, `libm`, `num`, `program`, `reqwest`, `serde`, `std`, `tokio`)
+- **fluent**: Enables `IntoAssertContext` trait on all types, providing `.must()` (Panic mode) and `.verify()` (Capture mode) entry points, plus fluent aliases like `be_equal_to`, `have_length`
+- Library supports `no_std` when `std` feature is disabled
+- MSRV: `assertr` 1.89.0, `assertr-derive` 1.85.0
+
+## Linting
+
+Both crates forbid `unsafe_code` and deny `clippy::unwrap_used`.

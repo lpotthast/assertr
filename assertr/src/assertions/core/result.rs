@@ -1,38 +1,34 @@
-use crate::{AssertThat, actual::Actual, mode::Mode, tracking::AssertionTracking};
+use crate::{
+    AssertThat,
+    actual::Actual,
+    mode::{Mode, Panic},
+    tracking::AssertionTracking,
+};
 use core::fmt::Debug;
 
-#[allow(clippy::return_self_not_must_use)]
-pub trait ResultAssertions<'t, M: Mode, T, E> {
-    fn is_ok(self) -> AssertThat<'t, T, M>
+/// Data-extracting assertions for `Result` values.
+/// These change the assertion subject type and are only available in Panic mode,
+/// as they cannot produce a valid value of the extracted type when the assertion fails.
+/// Use `ResultAssertions::is_ok_satisfying` / `is_err_satisfying` for capture mode.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait ResultExtractAssertions<'t, T, E> {
+    fn is_ok(self) -> AssertThat<'t, T, Panic>
     where
         T: Debug,
         E: Debug;
 
-    fn is_err(self) -> AssertThat<'t, E, M>
+    fn is_err(self) -> AssertThat<'t, E, Panic>
     where
         T: Debug,
         E: Debug;
-
-    fn is_ok_satisfying<A>(self, assertions: A) -> Self
-    where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
-
-    fn is_err_satisfying<A>(self, assertions: A) -> Self
-    where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
 }
 
-// Assertions for generic result values.
-impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<T, E>, M> {
+impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>, Panic> {
     /// This is a terminal operation on the contained `Result`,
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
     #[track_caller]
-    fn is_ok(self) -> AssertThat<'t, T, M>
+    fn is_ok(self) -> AssertThat<'t, T, Panic>
     where
         T: Debug,
         E: Debug,
@@ -57,7 +53,7 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained error value.
     #[track_caller]
-    fn is_err(self) -> AssertThat<'t, E, M>
+    fn is_err(self) -> AssertThat<'t, E, Panic>
     where
         T: Debug,
         E: Debug,
@@ -77,7 +73,27 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
             Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap_err()),
         })
     }
+}
 
+/// Non-extracting assertions for `Result` values.
+/// These work in any mode (Panic or Capture).
+#[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait ResultAssertions<'t, M: Mode, T, E> {
+    fn is_ok_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
+
+    fn is_err_satisfying<A>(self, assertions: A) -> Self
+    where
+        T: Debug,
+        E: Debug,
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
+}
+
+impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<T, E>, M> {
     #[track_caller]
     fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
@@ -175,15 +191,14 @@ mod tests {
 
     #[test]
     fn is_ok_satisfying_succeeds_when_ok() {
-        assert_that!(Result::<i32, ()>::Ok(42))
-            .with_location(false)
+        let failures = assert_that!(Result::<i32, ()>::Ok(42))
             .with_capture()
+            .with_location(false)
             .is_ok_satisfying(|ok_value| {
                 ok_value.is_greater_than(&9000);
             })
-            .capture_failures()
-            .assert_that_it()
-            .contains_exactly::<String>([formatdoc! {"
+            .capture_failures();
+        assert_that!(failures).contains_exactly::<String>([formatdoc! {"
                 -------- assertr --------
                 Actual: 42
 

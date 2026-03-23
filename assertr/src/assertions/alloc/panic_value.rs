@@ -1,4 +1,4 @@
-use crate::{AssertThat, Mode, PanicValue, actual::Actual, tracking::AssertionTracking};
+use crate::{AssertThat, PanicValue, actual::Actual, mode::Panic, tracking::AssertionTracking};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use core::any::{Any, type_name};
@@ -7,19 +7,18 @@ use std::fmt::Write;
 
 use super::boxed::BoxAssertions;
 
-/// Assertions for `PanicValue`s, the output of a panic occurred within an `assert_that_panic_by`.
-#[allow(clippy::return_self_not_must_use)]
-pub trait PanicValueAssertions<'t, M: Mode> {
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, M>;
+/// Data-extracting assertions for `PanicValue`'s, the output of a panic occurred within an `assert_that_panic_by`.
+/// Only available in Panic mode, as the extracted type cannot be produced when the downcast fails.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait PanicValueAssertions<'t> {
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic>;
 
-    /// NOTE: If this fails in capturing mode, a panic is raised!
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M>;
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic>;
 }
 
-impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> {
-    /// If this fails in capturing mode, a panic is raised!
+impl<'t> PanicValueAssertions<'t> for AssertThat<'t, PanicValue, Panic> {
     #[track_caller]
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, M> {
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic> {
         self.map::<Box<dyn Any>>(|it| match it {
             Actual::Borrowed(b) => Actual::Borrowed(&b.0),
             Actual::Owned(o) => Actual::Owned(o.0),
@@ -28,7 +27,7 @@ impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> 
     }
 
     #[track_caller]
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, M> {
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic> {
         self.track_assertion();
 
         let any = &self.actual().0;
@@ -57,7 +56,7 @@ impl<'t, M: Mode> PanicValueAssertions<'t, M> for AssertThat<'t, PanicValue, M> 
                       Actual panic value type: {actual_type_name}
                 "}
             });
-            panic!("Cannot continue in capturing mode!"); // Consider typestates!
+            unreachable!("Panic mode always panics on fail")
         }
     }
 }
@@ -72,9 +71,11 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual = PanicValue(Box::new(String::from("foo")));
 
-            assert_that!(&actual)
+            assert_that!(actual)
                 .has_type::<String>()
                 .is_equal_to(String::from("foo"));
+
+            let actual = PanicValue(Box::new(String::from("foo")));
 
             assert_that!(actual)
                 .has_type::<String>()

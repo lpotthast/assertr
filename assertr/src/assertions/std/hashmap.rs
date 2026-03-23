@@ -3,10 +3,11 @@ use core::borrow::Borrow;
 use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::BuildHasher, hash::Hash};
 
 /// Assertions for generic [`HashMap`]s.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait HashMapAssertions<K, V> {
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where
@@ -31,7 +32,7 @@ pub trait HashMapAssertions<K, V> {
         E: Debug;
 }
 
-impl<K, V, S: std::hash::BuildHasher, M: Mode> HashMapAssertions<K, V>
+impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
     for AssertThat<'_, HashMap<K, V, S>, M>
 {
     #[track_caller]
@@ -95,7 +96,7 @@ impl<K, V, S: std::hash::BuildHasher, M: Mode> HashMapAssertions<K, V>
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashMap {actual:#?}
-
+                    
                     does not contain expected value: {expected:#?}
                 ", actual = self.actual()}
             });
@@ -220,9 +221,8 @@ mod tests {
     mod contains_value {
         use std::collections::HashMap;
 
-        use indoc::formatdoc;
-
         use crate::prelude::*;
+        use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_value_is_present() {
@@ -256,14 +256,25 @@ mod tests {
             map.insert("foo", "bar");
             assert_that!(map).contains_value("bar".to_string());
         }
+
+        #[test]
+        fn can_check_for_derived_type() {
+            #[derive(Debug, PartialEq, AssertrEq)]
+            struct Data {
+                data: u32,
+            }
+
+            let mut map = HashMap::new();
+            map.insert("foo", Data { data: 0 });
+            assert_that!(&map).contains_value(Data { data: 0 });
+            assert_that!(&map).contains_value(Data { data: 0 });
+        }
     }
 
     mod contains_entry {
-        use std::collections::HashMap;
-
-        use indoc::formatdoc;
-
         use crate::prelude::*;
+        use indoc::formatdoc;
+        use std::collections::HashMap;
 
         #[test]
         fn succeeds_when_value_is_present() {

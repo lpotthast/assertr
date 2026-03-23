@@ -6,6 +6,7 @@ use core::fmt::Debug;
 use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait SliceAssertions<'t, T> {
     fn contains<E>(self, expected: E) -> Self
     where
@@ -14,9 +15,9 @@ pub trait SliceAssertions<'t, T> {
 
     /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
     ///
-    /// - [T]: Original subject type. The "actual value" is of type `&[T]` (slice T).
-    /// - [E]: Type of elements in our "expected value" slice.
-    /// - [EE]: The "expected value". Anything that can be seen as `&[E]` (slice E). Having this extra type, instead of directly accepting `&[E]` allows us to be generic over the input in both the element type and collection type.
+    /// - `T`: Original subject type. The "actual value" is of type `&[T]` (slice T).
+    /// - `E`: Type of elements in our "expected value" slice.
+    /// - `EE`: The "expected value". Anything that can be seen as `&[E]` (slice E). Having this extra type, instead of directly accepting `&[E]` allows us to be generic over the input in both the element type and collection type.
     fn contains_exactly<E, EE>(self, expected: EE) -> Self
     where
         E: Debug + 't,
@@ -27,7 +28,7 @@ pub trait SliceAssertions<'t, T> {
     where
         T: PartialEq + Debug;
 
-    /// [P] - Predicate
+    /// `P` - Predicate
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         T: Debug,
@@ -139,9 +140,7 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
         let result = crate::util::slice::test_matching_any(actual, expected);
 
         if !result.not_matched.is_empty() {
-            if !result.not_matched.is_empty() {
-                self.add_detail_message(format!("Elements not matched: {:#?}", result.not_matched));
-            }
+            self.add_detail_message(format!("Elements not matched: {:#?}", result.not_matched));
 
             let actual = self.actual();
 
@@ -156,9 +155,8 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
 #[cfg(test)]
 mod tests {
     mod contains_exactly {
-        use indoc::formatdoc;
-
         use crate::prelude::*;
+        use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_exact_match() {
@@ -185,7 +183,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly([2, 3, 4])
+                    .contains_exactly([2, 3, 4]);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -221,7 +219,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly([3, 2, 1])
+                    .contains_exactly([3, 2, 1]);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -249,9 +247,8 @@ mod tests {
     }
 
     mod contains_exactly_in_any_order {
-        use indoc::formatdoc;
-
         use crate::prelude::*;
+        use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_slices_match() {
@@ -263,7 +260,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly_in_any_order([2, 3, 4])
+                    .contains_exactly_in_any_order([2, 3, 4]);
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
@@ -293,9 +290,8 @@ mod tests {
     }
 
     mod contains_exactly_matching_in_any_order {
-        use indoc::formatdoc;
-
         use crate::prelude::*;
+        use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_slices_match() {
@@ -333,7 +329,7 @@ mod tests {
                             move |it: &i32| *it == 4,
                         ]
                         .as_slice(),
-                    )
+                    );
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {"

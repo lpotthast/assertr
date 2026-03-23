@@ -3,6 +3,7 @@ use core::fmt::Debug;
 use crate::{AssertThat, Mode, prelude::SliceAssertions};
 
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait ArrayAssertions<T: Debug> {
     fn contains_exactly<E: AsRef<[T]>>(self, expected: E) -> Self
     where

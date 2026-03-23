@@ -7,9 +7,11 @@ use tokio::sync::Mutex;
 // TODO: Add possibility to easily assert on the contained value (when the lock can be acquired).
 /// Assertions for tokio's [Mutex] type.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait TokioMutexAssertions<T: Debug> {
     fn is_locked(self) -> Self;
 
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
     fn is_not_locked(self) -> Self;
 
     fn is_free(self) -> Self

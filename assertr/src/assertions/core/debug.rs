@@ -5,6 +5,7 @@ use core::fmt::Debug;
 
 /// Assertions for values implementing [Debug].
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait DebugAssertions {
     /// Test that actual has the `expected` `Debug` representation.
     fn has_debug_string(self, expected: impl AsRef<str>) -> Self;
@@ -184,15 +185,14 @@ mod tests {
 
             #[test]
             fn succeeds_when_equal_using_borrowed_value() {
-                let expected = Person {
-                    age: 42,
-                    alive: true,
-                };
                 assert_that!(Person {
                     age: 42,
                     alive: true,
                 })
-                .has_debug_value(&expected);
+                .has_debug_value(&Person {
+                    age: 42,
+                    alive: true,
+                });
             }
 
             #[test]
