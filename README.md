@@ -318,7 +318,7 @@ fn test() {
     // Assertions that read like English.
     assert_that!("foobar").starts_with("foo").contains("ooba");
     assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
-    assert_that!((Ok(42)).is_ok().is_equal_to(42);
+    assert_that!(Ok(42)).is_ok().is_equal_to(42);
     assert_that!(Person { id: 42 }).has_debug_string("Person { id: 42 }");
 
     // Chainable,

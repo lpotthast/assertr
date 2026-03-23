@@ -642,7 +642,7 @@ impl<'t, T> AssertThat<'t, T, Capture> {
     /// Switch to non-capturing mode.
     ///
     /// Panics if assertion failures were already captured!
-    // TODO: Add an easy woy in which users can check if assertion failures were recorded.
+    // TODO: Add an easy way in which users can check if assertion failures were recorded.
     //  Or that none were recorded!
     #[allow(deprecated)]
     pub fn without_capture(mut self) -> AssertThat<'t, T, Panic> {
