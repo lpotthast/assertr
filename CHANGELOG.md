@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Type::new()` constructor.
 - CLAUDE.md, LLM instructions.
 - CHANGELOG.md.
+- `assertr-derive`: `#[fluent_aliases]` proc-macro attribute for auto-generating fluent assertion aliases.
 
 ### Changed
 
@@ -31,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Renamed internal constructor `AssertThat::new()` to `AssertThat::new_panicking()`.
 - Updated dependencies.
 - Fix all pedantic clippy lints.
+- `assertr-derive`: Bumped to 0.2.4.
 
 ### Removed
 
