@@ -43,7 +43,7 @@ rootcause = ["dep:rootcause"]
 libm = ["dep:libm", "num/libm"]
 
 [dependencies]
-assertr-derive = { version = "0.2.4", optional = true, path = "../assertr-derive" }
+assertr-derive = { version = "0.2.5", optional = true, path = "../assertr-derive" }
 futures = "0.3.31"
 http = { version = "1.3.1", optional = true }
 indoc = "2.0.5"
