@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{ToTokens, quote};
-use syn::{Attribute, FnArg, ItemTrait, Pat, TraitItem, TraitItemFn};
+use syn::{Attribute, FnArg, GenericParam, ItemTrait, Pat, TraitItem, TraitItemFn};
 
 pub fn fluent_aliases_impl(mut trait_def: ItemTrait) -> TokenStream {
     let mut new_items: Vec<TraitItem> = Vec::new();
@@ -167,6 +167,17 @@ fn generate_alias(original: &TraitItemFn, alias_name: &str) -> TraitItemFn {
 
     // Generate the delegation body: `{ self.original_name(arg1, arg2, ...) }`.
     let original_name = &original.sig.ident;
+    let generics: Vec<TokenStream> = original
+        .sig
+        .generics
+        .params
+        .iter()
+        .map(|param| match param {
+            GenericParam::Lifetime(param) => param.lifetime.to_token_stream(),
+            GenericParam::Type(param) => param.ident.to_token_stream(),
+            GenericParam::Const(param) => param.ident.to_token_stream(),
+        })
+        .collect();
     let args: Vec<&Ident> = original
         .sig
         .inputs
@@ -183,9 +194,15 @@ fn generate_alias(original: &TraitItemFn, alias_name: &str) -> TraitItemFn {
         })
         .collect();
 
-    alias.default = Some(syn::parse_quote! {
-        { self.#original_name(#(#args),*) }
-    });
+    alias.default = if generics.is_empty() {
+        Some(syn::parse_quote! {
+            { self.#original_name(#(#args),*) }
+        })
+    } else {
+        Some(syn::parse_quote! {
+            { self.#original_name::<#(#generics),*>(#(#args),*) }
+        })
+    };
     alias.semi_token = None;
 
     alias

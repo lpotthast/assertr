@@ -42,18 +42,19 @@ field-by-field value or support for assertions on types of other crates. More on
 | default       | Small set of features, enabling support for `std` types an numbers. |
 | full          | Enables all features listed below.                                  |
 
-| feature | description                                                           | default feature |
-|---------|-----------------------------------------------------------------------|-----------------|
-| std     | Assertions for types from the standard library.                       | yes             |
-| derive  | Enables the `AssertrEq` derive macro.                                 | no              |
-| num     | Assertions for numeric types.                                         | yes             |
-| libm    | Use fallback implementations for Rust's float math functions in core. | no              |
-| serde   | Assertions for serializable types (supporting json and toml).         | no              |
-| jiff    | Assertions for types from the `jiff` crate.                           | no              |
-| http    | Assertions for types from the `http` crate.                           | no              |
-| tokio   | Assertions for types from the `tokio` crate.                          | no              |
-| reqwest | Assertions for types from the `reqwest` crate.                        | no              |
-| program | Assertions for the provided `Program` type.                           | no              |
+| feature   | description                                                         | default feature |
+|-----------|---------------------------------------------------------------------|-----------------|
+| std       | Assertions for types from the standard library.                     | yes             |
+| derive    | Enables the `AssertrEq` derive macro.                               | no              |
+| num       | Assertions for numeric types.                                       | yes             |
+| libm      | Use fallback implementations for Rust's float math functions in core. | no              |
+| serde     | Assertions for serializable types (supporting json and toml).       | no              |
+| jiff      | Assertions for types from the `jiff` crate.                         | no              |
+| http      | Assertions for types from the `http` crate.                         | no              |
+| tokio     | Assertions for types from the `tokio` crate.                        | no              |
+| reqwest   | Assertions for types from the `reqwest` crate.                      | no              |
+| rootcause | Assertions for types from the `rootcause` crate.                    | no              |
+| program   | Assertions for the provided `Program` type.                         | no              |
 
 ## Quick start
 
@@ -188,6 +189,17 @@ currently writing an assertion on.
 | `tokio::sync::watch::Receiver<T>`  | `has_changed()`                                    |                               | tokio             |
 | `tokio::sync::watch::Receiver<T>`  | `has_not_changed()`                                |                               | tokio             |
 | `reqwest::Response`                | `has_status_code(expected)`                        |                               | reqwest           |
+| `rootcause::ReportCollection<C,T>` | `is_empty()`                                       | via `HasLength`               | rootcause         |
+| `rootcause::ReportCollection<C,T>` | `is_not_empty()`                                   | via `HasLength`               | rootcause         |
+| `rootcause::ReportCollection<C,T>` | `has_length(expected)`                             | via `HasLength`               | rootcause         |
+| `rootcause::Report<C,O,T>`         | `has_child_count(expected)`                        |                               | rootcause         |
+| `rootcause::Report<C,O,T>`         | `has_attachment_count(expected)`                   |                               | rootcause         |
+| `rootcause::Report<C,O,T>`         | `has_current_context_type::<Expected>()`           |                               | rootcause         |
+| `rootcause::Report<C,O,T>`         | `has_current_context_display_value(expected)`      |                               | rootcause         |
+| `rootcause::Report<C,O,T>`         | `has_current_context_debug_string(expected)`       |                               | rootcause         |
+| `rootcause::Report<Dynamic,O,T>`   | `has_current_context_satisfying::<Expected>(...)`  |                               | rootcause         |
+| `rootcause::Report<Dynamic,O,T>`   | `has_current_context::<Expected>()`                | Panic mode only               | rootcause         |
+| `rootcause::ReportRef<'a,C,O,T>`   | same as `rootcause::Report<C,O,T>`                 |                               | rootcause         |
 | `jiff::SignedDuration`             | `is_zero()`                                        |                               | jiff              |
 | `jiff::SignedDuration`             | `is_negative()`                                    |                               | jiff              |
 | `jiff::SignedDuration`             | `is_positive()`                                    |                               | jiff              |

@@ -17,6 +17,8 @@ pub mod num;
 pub mod program;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
+#[cfg(feature = "rootcause")]
+pub mod rootcause;
 #[cfg(feature = "std")]
 pub mod std;
 #[cfg(feature = "tokio")]

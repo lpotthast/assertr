@@ -69,6 +69,8 @@ pub mod prelude {
     pub use crate::assertions::program::ProgramAssertionsRequiringPanicMode;
     #[cfg(feature = "reqwest")]
     pub use crate::assertions::reqwest::prelude::*;
+    #[cfg(feature = "rootcause")]
+    pub use crate::assertions::rootcause::prelude::*;
     #[cfg(feature = "std")]
     pub use crate::assertions::std::prelude::*;
     #[cfg(feature = "tokio")]

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Optional `rootcause` feature with `ReportCollection`/`ReportAttachments` length support, report context/count
+  assertions, and dynamic current-context extraction.
+- Support for deriving fluent alternative functions for functions with generic parameters.
+
 ## [0.5.0] - 2026-03-23
 
 ### Added
