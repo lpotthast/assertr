@@ -20,14 +20,14 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ```toml
 [dependencies]
-assertr = "0.5.1"
+assertr = "0.5.2"
 ```
 
 or with assertions supporting various rust-ecosystem crates
 
 ```toml
 [dependencies]
-assertr = { version = "0.5.1", features = ["full"] }
+assertr = { version = "0.5.2", features = ["full"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
@@ -245,7 +245,7 @@ by annotating it with the `#[derive(AssertrEq)`.
 **Make sure that this crates `derive` feature is active!**
 
 ```toml
-assertr = { version = "0.5.1", features = ["derive"] }
+assertr = { version = "0.5.2", features = ["derive"] }
 ```
 
 ```rust

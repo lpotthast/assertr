@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-04-13
+
+### Added
+
+- Capture-mode compatible `OptionAssertions::is_some_satisfying` and `PollAssertions::is_ready_satisfying` assertions.
+
+### Changed
+
+- Reworked `Option` and `Poll` assertion failure formatting to use the newer `writedoc!` builder style.
+
 ## [0.5.1] - 2026-04-13
 
 ### Added
@@ -200,7 +210,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.2...HEAD
+
+[0.5.2]: https://github.com/lpotthast/assertr/compare/v0.5.1...v0.5.2
 
 [0.5.1]: https://github.com/lpotthast/assertr/compare/v0.5.0...v0.5.1
 
