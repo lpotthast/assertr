@@ -129,10 +129,12 @@ currently writing an assertion on.
 | `T: Num + Float`                   | `is_nan()`                                         |                               | num               |
 | `T: Num + Float`                   | `is_finite()`                                      |                               | num               |
 | `T: Num + Float`                   | `is_infinite()`                                    |                               | num               |
-| `Option<T>`                        | `is_some()`                                        |                               |                   |
+| `Option<T>`                        | `is_some()`                                        | Panic mode only               |                   |
+| `Option<T>`                        | `is_some_satisfying(assertions)`                   |                               |                   |
 | `Option<T>`                        | `is_none()`                                        |                               |                   |
 | `Poll<T>`                          | `is_pending()`                                     |                               |                   |
-| `Poll<T>`                          | `is_ready()`                                       |                               |                   |
+| `Poll<T>`                          | `is_ready()`                                       | Panic mode only               |                   |
+| `Poll<T>`                          | `is_ready_satisfying(assertions)`                  |                               |                   |
 | `R: RangeBounds<B>, B: PartialOrd` | `contains_element(expected)`                       |                               |                   |
 | `R: RangeBounds<B>, B: PartialOrd` | `does_not_contain_element(expected)`               |                               |                   |
 | `B: PartialOrd`                    | `is_in_range(expected)`                            |                               |                   |
@@ -144,8 +146,8 @@ currently writing an assertion on.
 | `Mutex<T>`                         | `is_locked()`                                      |                               |                   |
 | `Mutex<T>`                         | `is_not_locked()`                                  |                               |                   |
 | `Mutex<T>`                         | `is_free()`                                        | Synonym for`is_not_locked`    |                   |
-| `Result<T, E>`                     | `is_ok()`                                          |                               |                   |
-| `Result<T, E>`                     | `is_err()`                                         |                               |                   |
+| `Result<T, E>`                     | `is_ok()`                                          | Panic mode only               |                   |
+| `Result<T, E>`                     | `is_err()`                                         | Panic mode only               |                   |
 | `Result<T, E>`                     | `is_ok_satisfying(assertions)`                     |                               |                   |
 | `Result<T, E>`                     | `is_err_satisfying(assertions)`                    |                               |                   |
 | `PathBuf`                          | `exists()`                                         |                               | std               |
