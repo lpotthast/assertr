@@ -20,14 +20,14 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ```toml
 [dependencies]
-assertr = "0.5.0"
+assertr = "0.5.1"
 ```
 
-or
+or with assertions supporting various rust-ecosystem crates
 
 ```toml
 [dependencies]
-assertr = { version = "0.5.0", features = ["full"] }
+assertr = { version = "0.5.1", features = ["full"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
@@ -42,19 +42,19 @@ field-by-field value or support for assertions on types of other crates. More on
 | default       | Small set of features, enabling support for `std` types an numbers. |
 | full          | Enables all features listed below.                                  |
 
-| feature   | description                                                         | default feature |
-|-----------|---------------------------------------------------------------------|-----------------|
-| std       | Assertions for types from the standard library.                     | yes             |
-| derive    | Enables the `AssertrEq` derive macro.                               | no              |
-| num       | Assertions for numeric types.                                       | yes             |
+| feature   | description                                                           | default feature |
+|-----------|-----------------------------------------------------------------------|-----------------|
+| std       | Assertions for types from the standard library.                       | yes             |
+| derive    | Enables the `AssertrEq` derive macro.                                 | no              |
+| num       | Assertions for numeric types.                                         | yes             |
 | libm      | Use fallback implementations for Rust's float math functions in core. | no              |
-| serde     | Assertions for serializable types (supporting json and toml).       | no              |
-| jiff      | Assertions for types from the `jiff` crate.                         | no              |
-| http      | Assertions for types from the `http` crate.                         | no              |
-| tokio     | Assertions for types from the `tokio` crate.                        | no              |
-| reqwest   | Assertions for types from the `reqwest` crate.                      | no              |
-| rootcause | Assertions for types from the `rootcause` crate.                    | no              |
-| program   | Assertions for the provided `Program` type.                         | no              |
+| serde     | Assertions for serializable types (supporting json and toml).         | no              |
+| jiff      | Assertions for types from the `jiff` crate.                           | no              |
+| http      | Assertions for types from the `http` crate.                           | no              |
+| tokio     | Assertions for types from the `tokio` crate.                          | no              |
+| reqwest   | Assertions for types from the `reqwest` crate.                        | no              |
+| rootcause | Assertions for types from the `rootcause` crate.                      | no              |
+| program   | Assertions for the provided `Program` type.                           | no              |
 
 ## Quick start
 
