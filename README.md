@@ -245,7 +245,7 @@ by annotating it with the `#[derive(AssertrEq)`.
 **Make sure that this crates `derive` feature is active!**
 
 ```toml
-assertr = { version = "0.5.0", features = ["derive"] }
+assertr = { version = "0.5.1", features = ["derive"] }
 ```
 
 ```rust

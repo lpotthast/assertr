@@ -5,13 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.1] - 2026-04-13
 
 ### Added
 
 - Optional `rootcause` feature with `ReportCollection`/`ReportAttachments` length support, report context/count
   assertions, and dynamic current-context extraction.
 - Support for deriving fluent alternative functions for functions with generic parameters.
+
+### Changed
+
+- `assertr-derive`: Bumped to 0.2.5.
 
 ## [0.5.0] - 2026-03-23
 
@@ -196,7 +200,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.1...HEAD
+
+[0.5.1]: https://github.com/lpotthast/assertr/compare/v0.5.0...v0.5.1
 
 [0.5.0]: https://github.com/lpotthast/assertr/compare/v0.4.4...v0.5.0
 
