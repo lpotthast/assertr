@@ -20,14 +20,14 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ```toml
 [dependencies]
-assertr = "0.5.2"
+assertr = "0.5.3"
 ```
 
 or with assertions supporting various rust-ecosystem crates
 
 ```toml
 [dependencies]
-assertr = { version = "0.5.2", features = ["full"] }
+assertr = { version = "0.5.3", features = ["full"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
@@ -105,9 +105,11 @@ currently writing an assertion on.
 | `&[T]`                             | `contains_exactly_matching_in_any_order(expected)` |                               |                   |
 | `[T; N]`                           | `contains(expected)`                               |                               |                   |
 | `[T; N]`                           | `contains_exactly(expected)`                       |                               |                   |
+| `[T; N]`                           | `contains_exactly_in_any_order(expected)`          |                               |                   |
 | `[T; N]`                           | `contains_exactly_matching_in_any_order(expected)` |                               |                   |
 | `Vec<T>`                           | `contains(expected)`                               |                               | alloc             |
 | `Vec<T>`                           | `contains_exactly(expected)`                       |                               | alloc             |
+| `Vec<T>`                           | `contains_exactly_in_any_order(expected)`          |                               | alloc             |
 | `Vec<T>`                           | `contains_exactly_matching_in_any_order(expected)` |                               | alloc             |
 | `T: Debug`                         | `has_debug_string(expected)`                       |                               |                   |
 | `T: Debug`                         | `has_debug_value(expected)`                        |                               |                   |

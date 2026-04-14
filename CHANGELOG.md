@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] - 2026-04-14
+
+### Added
+
+- `Vec<T>::contains_exactly_in_any_order` for direct parity with slice assertions.
+- Array assertions for `contains` and `contains_exactly_matching_in_any_order`.
+
+### Changed
+
+- Aligned `[T; N]`, `&[T]`, and `Vec<T>` collection assertion coverage in the README.
+- Broadened array `contains_exactly` to support comparable expected element types via `AssertrPartialEq`, matching
+  slice and `Vec` behavior.
+- Expanded `Vec<T>` and `[T; N]` collection assertion tests.
+
 ## [0.5.2] - 2026-04-13
 
 ### Added
