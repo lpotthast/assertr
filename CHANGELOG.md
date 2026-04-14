@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.5.4] - Unreleased
+## [Unreleased]
 
 ### Added
 
@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Aligned the README's string assertion coverage with the new `&str` and `String` APIs.
+
+## [0.5.4] - 2026-04-14
+
+### Added
+
+- `HashSet<T>` assertions for membership, bulk membership, subset, superset, and disjoint-set checks.
 
 ## [0.5.3] - 2026-04-14
 
