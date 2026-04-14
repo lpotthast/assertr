@@ -11,6 +11,11 @@ pub trait VecAssertions<'t, T: Debug> {
         E: Debug,
         T: AssertrPartialEq<E> + Debug;
 
+    fn does_not_contain<E>(self, not_expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E> + Debug;
+
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         E: Debug + 't,
@@ -34,6 +39,16 @@ impl<'t, T: Debug, M: Mode> VecAssertions<'t, T> for AssertThat<'t, Vec<T>, M> {
         T: AssertrPartialEq<E> + Debug,
     {
         self.derive(Vec::as_slice).contains(expected);
+        self
+    }
+
+    #[track_caller]
+    fn does_not_contain<E>(self, not_expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E> + Debug,
+    {
+        self.derive(Vec::as_slice).does_not_contain(not_expected);
         self
     }
 
@@ -102,6 +117,43 @@ mod tests {
                     ]
 
                     does not contain expected: 4
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod does_not_contain {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_expected_is_not_contained() {
+            assert_that!(vec![1, 2, 3]).does_not_contain(4);
+        }
+
+        #[test]
+        fn compiles_for_comparable_but_different_type() {
+            assert_that!(vec!["foo"]).does_not_contain("bar".to_owned());
+            assert_that!(vec!["foo".to_owned()]).does_not_contain("bar");
+        }
+
+        #[test]
+        fn panics_when_expected_is_contained() {
+            assert_that_panic_by(|| {
+                assert_that!(vec![1, 2, 3])
+                    .with_location(false)
+                    .does_not_contain(2);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    contains unexpected: 2
                     -------- assertr --------
                 "});
         }

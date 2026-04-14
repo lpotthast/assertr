@@ -13,6 +13,11 @@ pub trait SliceAssertions<'t, T> {
         E: Debug,
         T: AssertrPartialEq<E> + Debug;
 
+    fn does_not_contain<E>(self, not_expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E> + Debug;
+
     /// Test that the subject contains exactly the expected elements. Order is important. Lengths must be identical.
     ///
     /// - `T`: Original subject type. The "actual value" is of type `&[T]` (slice T).
@@ -52,6 +57,26 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
         {
             self.fail(format_args!(
                 "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}\n",
+            ));
+        }
+        self
+    }
+
+    #[track_caller]
+    fn does_not_contain<E>(self, not_expected: E) -> Self
+    where
+        E: Debug,
+        T: Debug + AssertrPartialEq<E>,
+    {
+        self.track_assertion();
+        let actual = self.actual().iter().collect::<Vec<_>>();
+
+        if actual
+            .iter()
+            .any(|it| AssertrPartialEq::eq(*it, &not_expected, None))
+        {
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\ncontains unexpected: {not_expected:#?}\n",
             ));
         }
         self
@@ -154,6 +179,37 @@ impl<'t, T, M: Mode> SliceAssertions<'t, T> for AssertThat<'t, &[T], M> {
 
 #[cfg(test)]
 mod tests {
+    mod does_not_contain {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_value_is_absent() {
+            assert_that!([1, 2, 3].as_slice()).does_not_contain(4);
+        }
+
+        #[test]
+        fn panics_when_value_is_present() {
+            assert_that_panic_by(|| {
+                assert_that!([1, 2, 3].as_slice())
+                    .with_location(false)
+                    .does_not_contain(2);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    contains unexpected: 2
+                    -------- assertr --------
+                "});
+        }
+    }
+
     mod contains_exactly {
         use crate::prelude::*;
         use indoc::formatdoc;

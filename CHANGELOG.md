@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - `HashSet<T>` assertions for membership, bulk membership, subset, superset, and disjoint-set checks.
+- Negative collection membership assertions via `does_not_contain()` for `&[T]`, `[T; N]`, `Vec<T>`, and iterators.
+- Expanded `HashMap<K, V>` assertions with `does_not_contain_value()`, `does_not_contain_entry()`,
+  `contains_keys()`, and `contains_exactly_entries()`.
 - String blankness parity via `is_not_blank()` for both `&str` and `String`.
 - ASCII case-insensitive equality assertions for `&str` and `String`.
 

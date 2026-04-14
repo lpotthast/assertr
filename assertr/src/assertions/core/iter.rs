@@ -15,6 +15,13 @@ pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
         't: 'u;
 
     /// This is a terminal assertion, as it must consume the underlying iterator.
+    fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M>
+    where
+        E: Debug,
+        T: AssertrPartialEq<E>,
+        't: 'u;
+
+    /// This is a terminal assertion, as it must consume the underlying iterator.
     fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M>
     where
         E: Debug,
@@ -47,6 +54,29 @@ where
         {
             this.fail(format_args!(
                 "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}\n",
+            ));
+        }
+        this
+    }
+
+    #[track_caller]
+    fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M>
+    where
+        E: Debug,
+        T: Debug + AssertrPartialEq<E>,
+        't: 'u,
+    {
+        self.track_assertion();
+
+        let (actual, this) = self.replace_actual_with(Actual::Owned(()));
+        let actual = actual.unwrap_owned().collect::<Vec<_>>();
+
+        if actual
+            .iter()
+            .any(|it| AssertrPartialEq::eq(it, &not_expected, None))
+        {
+            this.fail(format_args!(
+                "Actual: {actual:#?}\n\ncontains unexpected: {not_expected:#?}\n",
             ));
         }
         this
@@ -101,6 +131,11 @@ pub trait IntoIteratorAssertions<T: Debug> {
         E: Debug,
         T: AssertrPartialEq<E>;
 
+    fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E>;
+
     fn into_iter_contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         E: Debug,
@@ -131,6 +166,26 @@ where
         {
             self.fail(format_args!(
                 "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}\n",
+            ));
+        }
+        self
+    }
+
+    #[track_caller]
+    fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
+    where
+        E: Debug,
+        T: Debug + AssertrPartialEq<E>,
+    {
+        self.track_assertion();
+        let actual = self.actual().into_iter().collect::<Vec<_>>();
+
+        if actual
+            .iter()
+            .any(|it| AssertrPartialEq::eq(*it, &not_expected, None))
+        {
+            self.fail(format_args!(
+                "Actual: {actual:#?}\n\ncontains unexpected: {not_expected:#?}\n",
             ));
         }
         self
@@ -202,6 +257,39 @@ mod tests {
                 assert_that!(values).into_iter_contains("foo".to_string());
             }
         }
+
+        mod does_not_contain {
+            use crate::prelude::*;
+            use indoc::formatdoc;
+
+            #[test]
+            fn succeeds_when_value_is_absent() {
+                let values = [1, 2, 3];
+                let iter = values.iter();
+                assert_that!(iter).does_not_contain(&4);
+            }
+
+            #[test]
+            fn panics_when_value_is_present() {
+                assert_that_panic_by(|| {
+                    let values = [1, 2, 3];
+                    let iter = values.iter();
+                    assert_that!(iter).with_location(false).does_not_contain(&2);
+                })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {"
+                        -------- assertr --------
+                        Actual: [
+                            1,
+                            2,
+                            3,
+                        ]
+
+                        contains unexpected: 2
+                        -------- assertr --------
+                    "});
+            }
+        }
     }
 
     mod into_iterator_assertions {
@@ -223,6 +311,47 @@ mod tests {
             fn compiles_for_comparable_but_different_type() {
                 let values = vec!["foo"];
                 assert_that!(values).into_iter_contains("foo".to_string());
+            }
+        }
+
+        mod does_not_contain {
+            use crate::prelude::*;
+            use indoc::formatdoc;
+
+            #[test]
+            fn succeeds_when_value_is_absent() {
+                let values = vec![1, 2, 3, 42];
+                assert_that!(values)
+                    .into_iter_does_not_contain(5)
+                    .into_iter_does_not_contain(99);
+            }
+
+            #[test]
+            fn compiles_for_comparable_but_different_type() {
+                let values = vec!["foo"];
+                assert_that!(values).into_iter_does_not_contain("bar".to_string());
+            }
+
+            #[test]
+            fn panics_when_value_is_present() {
+                assert_that_panic_by(|| {
+                    let values = vec![1, 2, 3];
+                    assert_that!(values)
+                        .with_location(false)
+                        .into_iter_does_not_contain(2);
+                })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {"
+                        -------- assertr --------
+                        Actual: [
+                            1,
+                            2,
+                            3,
+                        ]
+
+                        contains unexpected: 2
+                        -------- assertr --------
+                    "});
             }
         }
     }
