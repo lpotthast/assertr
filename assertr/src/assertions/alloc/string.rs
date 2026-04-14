@@ -7,6 +7,11 @@ use crate::{AssertThat, Mode};
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait StringAssertions {
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_blank"))]
+    fn is_not_blank(self) -> Self;
+
+    fn is_equal_to_ignoring_ascii_case(self, expected: impl AsRef<str>) -> Self;
+
     fn contains(self, expected: impl AsRef<str>) -> Self;
 
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self;
@@ -21,6 +26,19 @@ pub trait StringAssertions {
 }
 
 impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
+    #[track_caller]
+    fn is_not_blank(self) -> Self {
+        self.derive(String::as_str).is_not_blank();
+        self
+    }
+
+    #[track_caller]
+    fn is_equal_to_ignoring_ascii_case(self, expected: impl AsRef<str>) -> Self {
+        self.derive(String::as_str)
+            .is_equal_to_ignoring_ascii_case(expected);
+        self
+    }
+
     #[track_caller]
     fn contains(self, expected: impl AsRef<str>) -> Self {
         self.derive(String::as_str).contains(expected);
@@ -60,6 +78,66 @@ impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
 
 #[cfg(test)]
 mod tests {
+    mod is_not_blank {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_not_blank() {
+            assert_that!(String::from("hello")).is_not_blank();
+        }
+
+        #[test]
+        fn panics_when_blank() {
+            assert_that_panic_by(|| {
+                assert_that!(String::from(" \t"))
+                    .with_location(false)
+                    .is_not_blank();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Actual: " \t"
+
+                is blank.
+
+                Expected it to contain at least one non-whitespace character.
+                -------- assertr --------
+            "#});
+        }
+    }
+
+    mod is_equal_to_ignoring_ascii_case {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_equal_ignoring_ascii_case() {
+            assert_that!(String::from("FoObAr")).is_equal_to_ignoring_ascii_case("fOoBaR");
+        }
+
+        #[test]
+        fn panics_when_not_equal_to_ignoring_ascii_case() {
+            assert_that_panic_by(|| {
+                assert_that!(String::from("foo"))
+                    .with_location(false)
+                    .is_equal_to_ignoring_ascii_case("bar");
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expected: "bar"
+
+                  Actual: "foo"
+
+                Details: [
+                    Actual is not equal to expected, even when ignoring ASCII casing.,
+                ]
+                -------- assertr --------
+            "#});
+        }
+    }
+
     mod contains {
         use crate::prelude::*;
         use indoc::formatdoc;

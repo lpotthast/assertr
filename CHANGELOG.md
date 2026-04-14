@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - `HashSet<T>` assertions for membership, bulk membership, subset, superset, and disjoint-set checks.
+- String blankness parity via `is_not_blank()` for both `&str` and `String`.
+- ASCII case-insensitive equality assertions for `&str` and `String`.
 
 ## [0.5.3] - 2026-04-14
 
