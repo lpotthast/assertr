@@ -20,14 +20,14 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ```toml
 [dependencies]
-assertr = "0.5.3"
+assertr = "0.5.4"
 ```
 
 or with assertions supporting various rust-ecosystem crates
 
 ```toml
 [dependencies]
-assertr = { version = "0.5.3", features = ["full"] }
+assertr = { version = "0.5.4", features = ["full"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
@@ -176,6 +176,12 @@ currently writing an assertion on.
 | `HashMap<K, V>`                    | `does_not_contain_key(not_expected)`               |                               | std               |
 | `HashMap<K, V>`                    | `contains_value(expected)`                         |                               | std               |
 | `HashMap<K, V>`                    | `contains_entry(expected_key, expected_value)`     |                               | std               |
+| `HashSet<T>`                       | `contains(expected)`                               |                               | std               |
+| `HashSet<T>`                       | `does_not_contain(not_expected)`                   |                               | std               |
+| `HashSet<T>`                       | `contains_all(expected)`                           |                               | std               |
+| `HashSet<T>`                       | `is_subset_of(expected_superset)`                  |                               | std               |
+| `HashSet<T>`                       | `is_superset_of(expected_subset)`                  |                               | std               |
+| `HashSet<T>`                       | `is_disjoint_from(other)`                          |                               | std               |
 | `Command`                          | `has_arg(expected)`                                |                               | std               |
 | `Type<T>`                          | `needs_drop()`                                     |                               | std               |
 | `Box<dyn Any>`                     | `has_type::<Expected>()`                           |                               | alloc             |
@@ -249,7 +255,7 @@ by annotating it with the `#[derive(AssertrEq)`.
 **Make sure that this crates `derive` feature is active!**
 
 ```toml
-assertr = { version = "0.5.2", features = ["derive"] }
+assertr = { version = "0.5.4", features = ["derive"] }
 ```
 
 ```rust
