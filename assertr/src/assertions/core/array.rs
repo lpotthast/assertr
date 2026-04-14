@@ -10,6 +10,11 @@ pub trait ArrayAssertions<'t, T: Debug> {
         E: Debug,
         T: AssertrPartialEq<E> + Debug;
 
+    fn does_not_contain<E>(self, not_expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E> + Debug;
+
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         E: Debug + 't,
@@ -34,6 +39,17 @@ impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<'t, T> for AssertTha
         T: AssertrPartialEq<E> + Debug,
     {
         self.derive(<[T; N]>::as_slice).contains(expected);
+        self
+    }
+
+    #[track_caller]
+    fn does_not_contain<E>(self, not_expected: E) -> Self
+    where
+        E: Debug,
+        T: AssertrPartialEq<E> + Debug,
+    {
+        self.derive(<[T; N]>::as_slice)
+            .does_not_contain(not_expected);
         self
     }
 
@@ -94,6 +110,37 @@ mod tests {
                     ]
 
                     does not contain expected: 4
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod does_not_contain {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_value_is_absent() {
+            assert_that!([1, 2, 3]).does_not_contain(4);
+        }
+
+        #[test]
+        fn panics_when_value_is_present() {
+            assert_that_panic_by(|| {
+                assert_that!([1, 2, 3])
+                    .with_location(false)
+                    .does_not_contain(2);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    contains unexpected: 2
                     -------- assertr --------
                 "});
         }

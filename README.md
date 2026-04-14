@@ -104,14 +104,17 @@ currently writing an assertion on.
 | `String`                           | `starts_with(expected)`                            |                               | alloc             |
 | `String`                           | `ends_with(expected)`                              |                               | alloc             |
 | `&[T]`                             | `contains(expected)`                               |                               |                   |
+| `&[T]`                             | `does_not_contain(not_expected)`                   |                               |                   |
 | `&[T]`                             | `contains_exactly(expected)`                       |                               |                   |
 | `&[T]`                             | `contains_exactly_in_any_order(expected)`          |                               |                   |
 | `&[T]`                             | `contains_exactly_matching_in_any_order(expected)` |                               |                   |
 | `[T; N]`                           | `contains(expected)`                               |                               |                   |
+| `[T; N]`                           | `does_not_contain(not_expected)`                   |                               |                   |
 | `[T; N]`                           | `contains_exactly(expected)`                       |                               |                   |
 | `[T; N]`                           | `contains_exactly_in_any_order(expected)`          |                               |                   |
 | `[T; N]`                           | `contains_exactly_matching_in_any_order(expected)` |                               |                   |
 | `Vec<T>`                           | `contains(expected)`                               |                               | alloc             |
+| `Vec<T>`                           | `does_not_contain(not_expected)`                   |                               | alloc             |
 | `Vec<T>`                           | `contains_exactly(expected)`                       |                               | alloc             |
 | `Vec<T>`                           | `contains_exactly_in_any_order(expected)`          |                               | alloc             |
 | `Vec<T>`                           | `contains_exactly_matching_in_any_order(expected)` |                               | alloc             |
@@ -121,6 +124,7 @@ currently writing an assertion on.
 | `F: FnOnce -> R`                   | `panics()`                                         |                               |                   |
 | `F: FnOnce -> R`                   | `does_not_panic()`                                 |                               |                   |
 | `I: Iterator<Item = T>`            | `contains(expected)`                               |                               |                   |
+| `I: Iterator<Item = T>`            | `does_not_contain(not_expected)`                   |                               |                   |
 | `I: Iterator<Item = T>`            | `contains_exactly(expected)`                       |                               |                   |
 | `T: HasLength`                     | `is_empty()`                                       | implemented for: ``           |                   |
 | `T: HasLength`                     | `is_not_empty()`                                   | implemented for: ``           |                   |
@@ -179,7 +183,11 @@ currently writing an assertion on.
 | `HashMap<K, V>`                    | `contains_key(expected)`                           |                               | std               |
 | `HashMap<K, V>`                    | `does_not_contain_key(not_expected)`               |                               | std               |
 | `HashMap<K, V>`                    | `contains_value(expected)`                         |                               | std               |
+| `HashMap<K, V>`                    | `does_not_contain_value(not_expected)`             |                               | std               |
 | `HashMap<K, V>`                    | `contains_entry(expected_key, expected_value)`     |                               | std               |
+| `HashMap<K, V>`                    | `does_not_contain_entry(unexpected_key, unexpected_value)` |                         | std               |
+| `HashMap<K, V>`                    | `contains_keys(expected)`                          |                               | std               |
+| `HashMap<K, V>`                    | `contains_exactly_entries(expected)`               |                               | std               |
 | `HashSet<T>`                       | `contains(expected)`                               |                               | std               |
 | `HashSet<T>`                       | `does_not_contain(not_expected)`                   |                               | std               |
 | `HashSet<T>`                       | `contains_all(expected)`                           |                               | std               |
