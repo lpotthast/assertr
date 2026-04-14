@@ -92,10 +92,14 @@ currently writing an assertion on.
 | `char`                             | `is_ascii_lowercase()`                             |                               |                   |
 | `char`                             | `is_ascii_uppercase()`                             |                               |                   |
 | `&str`                             | `is_blank()`                                       |                               |                   |
+| `&str`                             | `is_not_blank()`                                   |                               |                   |
 | `&str`                             | `is_blank_ascii()`                                 |                               |                   |
+| `&str`                             | `is_equal_to_ignoring_ascii_case(expected)`        |                               |                   |
 | `&str`                             | `contains(expected)`                               |                               |                   |
 | `&str`                             | `starts_with(expected)`                            |                               |                   |
 | `&str`                             | `ends_with(expected)`                              |                               |                   |
+| `String`                           | `is_not_blank()`                                   |                               | alloc             |
+| `String`                           | `is_equal_to_ignoring_ascii_case(expected)`        |                               | alloc             |
 | `String`                           | `contains(expected)`                               |                               | alloc             |
 | `String`                           | `starts_with(expected)`                            |                               | alloc             |
 | `String`                           | `ends_with(expected)`                              |                               | alloc             |

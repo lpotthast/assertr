@@ -12,8 +12,13 @@ pub trait StrSliceAssertions {
     /// `White_Space`.
     fn is_blank(self) -> Self;
 
+    #[cfg_attr(feature = "fluent", fluent_alias("not_be_blank"))]
+    fn is_not_blank(self) -> Self;
+
     /// Tests whether this string is empty or only containing ascii-whitespace characters.
     fn is_blank_ascii(self) -> Self;
+
+    fn is_equal_to_ignoring_ascii_case(self, expected: impl AsRef<str>) -> Self;
 
     fn contains(self, expected: impl AsRef<str>) -> Self;
 
@@ -48,6 +53,23 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
     }
 
     #[track_caller]
+    fn is_not_blank(self) -> Self {
+        self.track_assertion();
+        if self.actual().split_whitespace().next().is_none() {
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:?}
+
+                    is blank.
+
+                    Expected it to contain at least one non-whitespace character.
+                ", actual = self.actual()}
+            });
+        }
+        self
+    }
+
+    #[track_caller]
     fn is_blank_ascii(self) -> Self {
         self.track_assertion();
         // This iterator will yield no entries if the string is empty or all whitespace!
@@ -60,6 +82,26 @@ impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
 
                     Expected it to be empty or only containing whitespace.
                 ", actual = self.actual()}
+            });
+        }
+        self
+    }
+
+    #[track_caller]
+    fn is_equal_to_ignoring_ascii_case(self, expected: impl AsRef<str>) -> Self {
+        self.track_assertion();
+        let actual = *self.actual();
+        let expected = expected.as_ref();
+        if !actual.eq_ignore_ascii_case(expected) {
+            self.add_detail_message(
+                "Actual is not equal to expected, even when ignoring ASCII casing.",
+            );
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Expected: {expected:?}
+
+                      Actual: {actual:?}
+                "}
             });
         }
         self
@@ -237,6 +279,76 @@ mod tests {
                 Expected it to be empty or only containing whitespace.
                 -------- assertr --------
             "#});
+        }
+    }
+
+    mod is_not_blank {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_not_blank() {
+            assert_that!("a").is_not_blank();
+            assert_that!(" \n a \t").is_not_blank();
+        }
+
+        #[test]
+        fn panics_when_blank() {
+            assert_that_panic_by(|| {
+                assert_that!("\t \n").with_location(false).is_not_blank();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Actual: "\t \n"
+
+                is blank.
+
+                Expected it to contain at least one non-whitespace character.
+                -------- assertr --------
+            "#});
+        }
+    }
+
+    mod is_equal_to_ignoring_ascii_case {
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_equal_ignoring_ascii_case() {
+            assert_that!("FoObAr").is_equal_to_ignoring_ascii_case("fOoBaR");
+        }
+
+        #[test]
+        fn panics_when_not_equal_to_ignoring_ascii_case() {
+            assert_that_panic_by(|| {
+                assert_that!("foo")
+                    .with_location(false)
+                    .is_equal_to_ignoring_ascii_case("bar");
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expected: "bar"
+
+                  Actual: "foo"
+
+                Details: [
+                    Actual is not equal to expected, even when ignoring ASCII casing.,
+                ]
+                -------- assertr --------
+            "#});
+        }
+
+        #[test]
+        fn does_not_fold_non_ascii_case_differences() {
+            assert_that_panic_by(|| {
+                assert_that!("straße")
+                    .with_location(false)
+                    .is_equal_to_ignoring_ascii_case("STRAẞE");
+            })
+            .has_type::<String>()
+            .contains("ignoring ASCII casing");
         }
     }
 
