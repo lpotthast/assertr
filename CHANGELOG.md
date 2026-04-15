@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Aligned the README assertion table with the actual prelude exports, including feature gates, panic-only extract
   assertions, and recently added string, path, HTTP header, program, async function, and rootcause entries.
+- Reworked the README installation and usage guidance to document the `fluent` feature, clarify `no_std` setup,
+  clean up examples, and improve the reference sections for conditions, derived assertions, testing, and MSRV.
 
 ## [0.5.5] - 2026-04-15
 

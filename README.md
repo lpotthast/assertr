@@ -1,7 +1,7 @@
 # assertr
 
-A fluent assertion library for Rust that enables clear, intuitive, and readable test code\
-with detailed failure messages to help pinpoint issues quickly.
+A fluent assertion library for Rust that enables clear, readable test code with detailed failure
+messages that help pinpoint issues quickly.
 
 ## Features
 
@@ -9,7 +9,7 @@ with detailed failure messages to help pinpoint issues quickly.
   Fluent assertions provide better IDE support through method chaining. The IDE can show you exactly what
   assertions are available for your specific type, making it hard to write invalid assertions and easier to discover
   available checks.
-- 🎯 **Type-specific Assertions**: Specialized checks for many Rust types as well as a broad generic type coverage.
+- 🎯 **Type-specific Assertions**: Specialized checks for many Rust types, plus broad generic coverage.
 - 📝 **Detailed Error Messages**: Clear, context-rich failure messages. Any assertion can extend the context with
   additional descriptive output.
 - 🔄 **Capture Mode**: Collect assertion failures for manual inspection instead of immediately panicking.
@@ -18,34 +18,62 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ## Installation
 
+### Default setup
+
 ```toml
 [dependencies]
 assertr = "0.5.5"
 ```
 
-or with assertions supporting various rust-ecosystem crates
+### Common feature sets
+
+All optional features are additive. Some common setups:
+
+Use the full feature set, including third-party integrations and ergonomic helpers:
 
 ```toml
 [dependencies]
 assertr = { version = "0.5.5", features = ["full"] }
 ```
 
-if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
-field-by-field value or support for assertions on types of other crates. More on that later.
+Enable `#[derive(AssertrEq)]` for partial struct equality assertions:
 
-- You may disable the default features for no-std environments.
+```toml
+[dependencies]
+assertr = { version = "0.5.5", features = ["derive"] }
+```
 
-- You may activate any of the following features:
+Enable fluent entry points and aliases such as `.must()`, `.verify()`, `.be_equal_to()`, and `.have_length()`:
 
-| feature-group | description                                                         |
-|---------------|---------------------------------------------------------------------|
-| default       | Small set of features, enabling support for `std` types an numbers. |
-| full          | Enables all features listed below.                                  |
+```toml
+[dependencies]
+assertr = { version = "0.5.5", features = ["fluent"] }
+```
+
+### `no_std`
+
+Disable the default features in `no_std` environments:
+
+```toml
+[dependencies]
+assertr = { version = "0.5.5", default-features = false }
+```
+
+If you still want numeric assertions in `no_std`, enable `num`. For floating-point classification
+helpers such as `is_nan()`, `is_finite()`, or `is_infinite()` without `std`, also enable `libm`.
+
+Available feature groups and individual features:
+
+| feature-group | description                                                          |
+|---------------|----------------------------------------------------------------------|
+| default       | Small set of features, enabling support for `std` types and numbers. |
+| full          | Enables all features listed below.                                   |
 
 | feature   | description                                                           | default feature |
 |-----------|-----------------------------------------------------------------------|-----------------|
 | std       | Assertions for types from the standard library.                       | yes             |
 | derive    | Enables the `AssertrEq` derive macro.                                 | no              |
+| fluent    | Enables `.must()` / `.verify()` entry points and fluent aliases.      | no              |
 | num       | Assertions for numeric types.                                         | yes             |
 | libm      | Use fallback implementations for Rust's float math functions in core. | no              |
 | serde     | Assertions for serializable types (supporting json and toml).         | no              |
@@ -58,7 +86,7 @@ field-by-field value or support for assertions on types of other crates. More on
 
 ## Quick start
 
-Always prefer importing the entire prelude, as in:
+Always prefer importing the entire prelude:
 
 ```rust
 use assertr::prelude::*;
@@ -71,10 +99,39 @@ fn test() {
 }
 ```
 
-This way, you are ensured to get full IDE autocompletion and always see all available assertions for the type you are
-currently writing an assertion on.
+This gives you full IDE autocomplete for the assertions available on the current subject type.
+
+If the `fluent` feature is enabled, you can also enter assertion contexts directly from values:
+
+```rust
+use assertr::prelude::*;
+
+#[test]
+fn test() {
+    "hello, world!"
+        .must()
+        .start_with("hello")
+        .end_with("!");
+
+    let failures = 3
+        .verify()
+        .be_equal_to(4)
+        .capture_failures();
+
+    assert_that!(failures).have_length(1);
+}
+```
 
 ## Available Assertions
+
+This table is meant as a reference. In day-to-day use, `use assertr::prelude::*;` plus IDE
+autocomplete is usually the fastest way to discover what is available.
+
+Roughly, the table is grouped like this:
+
+- Core assertions and collection/string helpers first
+- `std` assertions next
+- Optional integrations (`http`, `tokio`, `reqwest`, `program`, `rootcause`, `jiff`) last
 
 | type / required bounds                    | assertion                                                     | note                                                                                                                                     | required features |
 |-------------------------------------------|---------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
@@ -261,16 +318,41 @@ currently writing an assertion on.
 | `jiff::Zoned`                             | `is_in_time_zone(expected)`                                   |                                                                                                                                          | jiff              |
 | `jiff::Zoned`                             | `is_in_time_zone_named(expected)`                             |                                                                                                                                          | jiff              |
 
-*The generic types (`T`, `E`, ...) nearly always also require to be `Debug`. Otherwise, we could not print values in
-case an assertion is violated. We chose to not explicitly list these bounds in the table above.
+*The generic types (`T`, `E`, ...) nearly always also require `Debug`. Otherwise the library could
+not print useful failure output. We chose not to list those bounds everywhere in the table above.
 
 For `PartialOrd` assertions, unordered comparisons fail. That matters most for floating-point values like `NaN`, where
 `partial_cmp()` returns `None`.
 
-### Conditional Assertions
+### Conditions
 
-- `satisfies(condition)`: Asserts that a value satisfies a condition
-- `satisfies_ref(condition)`: Asserts that a referenced value satisfies a condition
+- `is(condition)` / `has(condition)`: Assert that a value satisfies a reusable `Condition<T>`.
+- `are(condition)` / `have(condition)`: Assert that every element of an iterable satisfies a condition.
+
+### Derived Assertions
+
+Use derived assertions to map the current subject to one of its fields or views and then keep
+asserting on the derived value:
+
+```rust
+use assertr::prelude::*;
+
+#[derive(Debug)]
+struct Person {
+    age: u32,
+}
+
+#[test]
+fn test() {
+    assert_that!(Person { age: 30 }).satisfies(
+        |person| person.age,
+        |age| age.is_greater_or_equal_to(18),
+    );
+}
+```
+
+- `satisfies(mapper, assertions)`: Derive an owned view for nested assertions.
+- `satisfies_ref(mapper, assertions)`: Derive a borrowed view for nested assertions.
 
 ## Advanced Features
 
@@ -291,20 +373,23 @@ fn test() {
 }
 ```
 
+With the `fluent` feature enabled, the same pattern can start from `.verify()` instead of
+`assert_that!(...).with_capture()`.
+
 ### Partial equality assertions
 
-You can derive a helper struct, allowing you to perform partial equality comparisons, for any owned struct type
-by annotating it with the `#[derive(AssertrEq)`.
+You can derive a helper struct for partial equality comparisons by annotating an owned struct with
+`#[derive(AssertrEq)]`.
 
-**Make sure that this crates `derive` feature is active!**
+**Make sure this crate's `derive` feature is enabled.**
 
 ```toml
 assertr = { version = "0.5.5", features = ["derive"] }
 ```
 
 ```rust
-// Deriving `AssertrEq` provides us an additional `PersonAssertrEq` type.
-// Deriving `Debug` is necessary, as we want to actually use `Foo` in an assertion.
+// Deriving `AssertrEq` provides an additional `PersonAssertrEq` type.
+// Deriving `Debug` is necessary because `Person` is used as an assertion subject.
 #[derive(Debug, AssertrEq)]
 pub struct Person {
     pub name: String,
@@ -338,26 +423,35 @@ fn test() {
 
 ### Write assertions for your own types.
 
+Good custom assertions add domain-specific value. In practice, the most maintainable way to build
+them is often to delegate to existing assertions so you keep the same failure formatting,
+capture-mode behavior, and chaining style.
+
 ```rust
-#[derive(Debug, PartialEq)]
+use assertr::prelude::*;
+
+#[derive(Debug)]
 struct Person {
     age: u32,
 }
 
 trait PersonAssertions {
-    fn has_age(self, expected: u32) -> Self;
+    fn is_adult(self) -> Self;
 }
 
 impl<M: Mode> PersonAssertions for AssertThat<'_, Person, M> {
-    fn has_age(self, expected: u32) -> Self {
-        self.satisfies(|p| p.age, |age| { age.is_equal_to(expected); })
+    #[track_caller]
+    fn is_adult(self) -> Self {
+        self.satisfies(|person| person.age, |age| {
+            age.is_greater_or_equal_to(18);
+        })
     }
 }
 
 #[test]
 fn test() {
     assert_that!(Person { age: 30 })
-        .has_age(30);
+        .is_adult();
 }
 ```
 
@@ -376,7 +470,7 @@ fn test() {
 }
 ```
 
-## Goals
+## Examples
 
 ```rust
 #[test]
@@ -385,9 +479,9 @@ fn test() {
     assert_that!("foobar").starts_with("foo").contains("ooba");
     assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
     assert_that!(Ok(42)).is_ok().is_equal_to(42);
-    assert_that!(Person { id: 42 }).has_debug_string("Person { id: 42 }");
+    assert_that!(Some(42)).has_debug_string("Some(42)");
 
-    // Chainable,
+    // Chainable.
     assert_that!("foobar")
         .is_not_empty()
         .starts_with("foo")
@@ -397,7 +491,7 @@ fn test() {
 ```
 
 - Partial equality assertions (meaning that only some fields of a struct are compared, while some are ignored).
-  Add the `AssertrEq` annotation to one of your struct to enable this.
+  Add the `AssertrEq` annotation to one of your structs to enable this.
 
 ## Compared to other assertion styles
 
@@ -413,7 +507,7 @@ The fluent interface allows you to chain multiple assertions naturally, followin
 properties. Instead of writing multiple separate assertions, you can express related checks in a single, flowing
 statement that reads almost like natural language.
 
-Additionally, having a concrete entrance into the assertion context using a function like `assert_that` with assertions
+Additionally, having a concrete entrance into the assertion context using the `assert_that!` macro with assertions
 coming after makes it totally obvious which value is the "actual" and which is the "expected" value. This provides
 a clear schema for how assertions are written, compared to an assertion macro, like std's `assert_eq!`, in which the
 order of arguments can be chosen freely, making it non-obvious when coming into a new codebase which style
@@ -461,23 +555,54 @@ fn test() {
 - One import should be enough to access all possible assertions through **autocomplete**.
   `use assertr::prelude::*;`
 
+## Dev
+
+Useful workspace commands:
+
+```bash
+cargo fmt
+```
+
+Format all crates.
+
+```bash
+cargo clippy --all -- -W clippy::pedantic
+```
+
+Run the configured lints across the workspace.
+
+```bash
+just tidy
+```
+
+Run the full maintenance pipeline, including formatting, checks, clippy, tests, and docs.
+
 ## Testing
 
-To test all crates, run with --all when in root
+To test all crates from the workspace root:
 
-    cargo test --all
+```bash
+cargo test --all
+```
 
-This crate uses features. Some tests are declared under conditional compilation.
+Some assertions are feature-gated. To run the full test suite, enable all features:
 
-Run all tests using
-
-    cargo test --all-features
+```bash
+cargo test --all-features
+```
 
 ## MSRV
 
-- As of `0.1.0` the MSRV is `1.76.0`
-- As of `0.2.0` the MSRV is `1.85.0`
-- As of `0.4.0` the MSRV is `1.89.0`
+Current MSRV:
+
+- `assertr`: `1.89.0`
+- `assertr-derive`: `1.85.0`
+
+Previous MSRV values:
+
+- As of `0.1.0`, the MSRV was `1.76.0`
+- As of `0.2.0`, the MSRV was `1.85.0`
+- As of `0.4.0`, the MSRV was `1.89.0`
 
 ## Open questions
 
