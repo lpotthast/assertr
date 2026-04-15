@@ -20,14 +20,14 @@ with detailed failure messages to help pinpoint issues quickly.
 
 ```toml
 [dependencies]
-assertr = "0.5.4"
+assertr = "0.5.5"
 ```
 
 or with assertions supporting various rust-ecosystem crates
 
 ```toml
 [dependencies]
-assertr = { version = "0.5.4", features = ["full"] }
+assertr = { version = "0.5.5", features = ["full"] }
 ```
 
 if you want the `AssertrEq` derive macro allowing you to perform partial equality assertions on struct value on a
@@ -235,6 +235,9 @@ currently writing an assertion on.
 *The generic types (`T`, `E`, ...) nearly always also require to be `Debug`. Otherwise, we could not print values in
 case an assertion is violated. We chose to not explicitly list these bounds in the table above.
 
+For `PartialOrd` assertions, unordered comparisons fail. That matters most for floating-point values like `NaN`, where
+`partial_cmp()` returns `None`.
+
 ### Conditional Assertions
 
 - `satisfies(condition)`: Asserts that a value satisfies a condition
@@ -267,7 +270,7 @@ by annotating it with the `#[derive(AssertrEq)`.
 **Make sure that this crates `derive` feature is active!**
 
 ```toml
-assertr = { version = "0.5.4", features = ["derive"] }
+assertr = { version = "0.5.5", features = ["derive"] }
 ```
 
 ```rust

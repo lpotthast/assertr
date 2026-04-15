@@ -39,10 +39,7 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         let expected = expected.borrow();
 
-        if matches!(
-            actual.partial_cmp(expected),
-            Some(Ordering::Equal | Ordering::Greater)
-        ) {
+        if !matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
             self.fail(format_args!(
                 "Actual: {actual:#?}\n\nis not less than\n\nExpected: {expected:#?}\n"
             ));
@@ -61,10 +58,7 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         let expected = expected.borrow();
 
-        if matches!(
-            actual.partial_cmp(expected),
-            Some(Ordering::Less | Ordering::Equal)
-        ) {
+        if !matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
             self.fail(format_args!(
                 "Actual: {actual:#?}\n\nis not greater than\n\nExpected: {expected:#?}\n"
             ));
@@ -83,7 +77,10 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         let expected = expected.borrow();
 
-        if matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
+        if !matches!(
+            actual.partial_cmp(expected),
+            Some(Ordering::Less | Ordering::Equal)
+        ) {
             self.fail(format_args!(
                 "Actual: {actual:#?}\n\nis not less or equal to\n\nExpected: {expected:#?}\n"
             ));
@@ -102,7 +99,10 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         let expected = expected.borrow();
 
-        if matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
+        if !matches!(
+            actual.partial_cmp(expected),
+            Some(Ordering::Greater | Ordering::Equal)
+        ) {
             self.fail(format_args!(
                 "Actual: {actual:#?}\n\nis not greater or equal to\n\nExpected: {expected:#?}\n"
             ));
@@ -114,6 +114,7 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
+    use indoc::formatdoc;
 
     #[test]
     fn is_less_than_succeeds_when_less() {
@@ -149,5 +150,81 @@ mod tests {
     fn is_greater_or_equal_to_succeeds_when_equal() {
         assert_that!(7).is_greater_or_equal_to(7);
         assert_that!(7).is_greater_or_equal_to(&7);
+    }
+
+    #[test]
+    fn is_less_than_panics_when_values_are_not_comparable() {
+        assert_that_panic_by(|| {
+            assert_that!(f32::NAN)
+                .with_location(false)
+                .is_less_than(0.0)
+        })
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
+            -------- assertr --------
+            Actual: NaN
+
+            is not less than
+
+            Expected: 0.0
+            -------- assertr --------
+        "#});
+    }
+
+    #[test]
+    fn is_greater_than_panics_when_values_are_not_comparable() {
+        assert_that_panic_by(|| {
+            assert_that!(f32::NAN)
+                .with_location(false)
+                .is_greater_than(0.0)
+        })
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
+            -------- assertr --------
+            Actual: NaN
+
+            is not greater than
+
+            Expected: 0.0
+            -------- assertr --------
+        "#});
+    }
+
+    #[test]
+    fn is_less_or_equal_to_panics_when_values_are_not_comparable() {
+        assert_that_panic_by(|| {
+            assert_that!(f32::NAN)
+                .with_location(false)
+                .is_less_or_equal_to(0.0)
+        })
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
+            -------- assertr --------
+            Actual: NaN
+
+            is not less or equal to
+
+            Expected: 0.0
+            -------- assertr --------
+        "#});
+    }
+
+    #[test]
+    fn is_greater_or_equal_to_panics_when_values_are_not_comparable() {
+        assert_that_panic_by(|| {
+            assert_that!(f32::NAN)
+                .with_location(false)
+                .is_greater_or_equal_to(0.0)
+        })
+        .has_type::<String>()
+        .is_equal_to(formatdoc! {r#"
+            -------- assertr --------
+            Actual: NaN
+
+            is not greater or equal to
+
+            Expected: 0.0
+            -------- assertr --------
+        "#});
     }
 }
