@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Aligned the README assertion table with the actual prelude exports, including feature gates, panic-only extract
+  assertions, and recently added string, path, HTTP header, program, async function, and rootcause entries.
+
 ## [0.5.5] - 2026-04-15
 
 ### Fixed
