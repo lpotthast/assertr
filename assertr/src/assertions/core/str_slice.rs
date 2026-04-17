@@ -1,6 +1,7 @@
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use alloc::string::String;
+use core::fmt::Write;
 use indoc::writedoc;
-use std::fmt::Write;
 
 /// Special assertions for `&str` (string slices) not covered by other general-purpose assertions,
 /// like our `PartialEqAssertions`.

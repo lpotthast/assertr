@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Restored `--no-default-features` / no-std compatibility by using `core`/`alloc` paths in core assertions and keeping.
 - Aligned the README assertion table with the actual prelude exports, including feature gates, panic-only extract
   assertions, and recently added string, path, HTTP header, program, async function, and rootcause entries.
 - Reworked the README installation and usage guidance to document the `fluent` feature, clarify `no_std` setup,

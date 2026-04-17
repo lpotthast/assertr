@@ -1,8 +1,9 @@
+use ::alloc::{string::String, vec::Vec};
+#[cfg(feature = "std")]
 use ::core::fmt::Debug;
-use ::core::ops::Range;
+use ::core::ops::{Range, RangeInclusive};
 #[cfg(feature = "std")]
 use ::std::hash::BuildHasher;
-use ::std::ops::RangeInclusive;
 
 pub mod alloc;
 pub mod condition;

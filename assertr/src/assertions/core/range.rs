@@ -1,3 +1,4 @@
+use alloc::string::String;
 use core::fmt::Debug;
 use core::fmt::Write;
 use core::ops::Bound;

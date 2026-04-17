@@ -14,7 +14,7 @@ pub trait Failure {
     /// # Errors
     ///
     /// Returns a `core::fmt::Error` if writing to the target string fails.
-    fn write_to(self, target: &mut String) -> std::fmt::Result;
+    fn write_to(self, target: &mut String) -> core::fmt::Result;
 }
 
 impl Failure for &str {

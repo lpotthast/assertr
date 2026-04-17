@@ -2,6 +2,7 @@ use crate::AssertThat;
 use crate::assertions::HasLength;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
+use alloc::string::String;
 use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;

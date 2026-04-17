@@ -1,4 +1,5 @@
 use alloc::format;
+use alloc::string::String;
 use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;

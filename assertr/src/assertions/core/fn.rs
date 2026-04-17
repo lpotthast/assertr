@@ -3,11 +3,12 @@ use crate::mode::Panic;
 use crate::prelude::ResultExtractAssertions;
 use crate::tracking::AssertionTracking;
 use crate::{AssertThat, PanicValue};
+use alloc::{boxed::Box, string::String};
+use core::any::Any;
 use core::fmt::{Debug, Write};
+use core::panic::UnwindSafe;
 use futures::FutureExt;
 use indoc::writedoc;
-use std::any::Any;
-use std::panic::UnwindSafe;
 
 /// Data-extracting assertions for `FnOnce` values.
 /// Only available in Panic mode, as these transform the assertion subject type.
@@ -26,6 +27,7 @@ pub trait FnOnceAssertions<'t, R> {
 
 impl<'t, R, F: FnOnce() -> R> FnOnceAssertions<'t, R> for AssertThat<'t, F, Panic> {
     #[track_caller]
+    #[cfg(feature = "std")]
     fn panics(self) -> AssertThat<'t, PanicValue, Panic> {
         self.track_assertion();
 
@@ -65,6 +67,7 @@ impl<'t, R, F: FnOnce() -> R> FnOnceAssertions<'t, R> for AssertThat<'t, F, Pani
     }
 
     #[track_caller]
+    #[cfg(feature = "std")]
     fn does_not_panic(self) -> AssertThat<'t, R, Panic>
     where
         R: Debug,
@@ -123,6 +126,7 @@ where
     Fut: Future<Output = R> + UnwindSafe,
 {
     // #[track_caller] // This is implied in the default async desugaring.
+    #[cfg(feature = "std")]
     async fn panics_async(self) -> AssertThat<'t, PanicValue, Panic> {
         self.track_assertion();
 
@@ -169,6 +173,7 @@ where
     }
 
     // #[track_caller] // This is implied in the default async desugaring.
+    #[cfg(feature = "std")]
     async fn does_not_panic_async(self) -> AssertThat<'t, R, Panic>
     where
         R: Debug + 't,

@@ -8,16 +8,17 @@ extern crate core;
 use actual::Actual;
 use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
 use core::{
-    any::Any,
+    any::{Any, type_name},
     cell::RefCell,
     fmt::{Debug, Formatter},
     future::Future,
+    marker::PhantomData,
+    mem::needs_drop,
     panic::{RefUnwindSafe, UnwindSafe},
 };
 use details::WithDetail;
 use failure::Fallible;
 use mode::{Capture, Mode, Panic};
-use std::marker::PhantomData;
 use tracking::{AssertionTracking, NumberOfAssertions};
 
 pub mod actual;
@@ -250,12 +251,12 @@ impl<T> Type<T> {
 
     #[must_use]
     pub fn get_type_name(&self) -> &'static str {
-        std::any::type_name::<T>()
+        type_name::<T>()
     }
 
     #[must_use]
     pub fn needs_drop(&self) -> bool {
-        std::mem::needs_drop::<T>()
+        needs_drop::<T>()
     }
 
     #[must_use]

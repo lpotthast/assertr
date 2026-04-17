@@ -1,4 +1,5 @@
 use crate::{AssertrPartialEq, EqContext};
+use alloc::format;
 use core::fmt::Debug;
 
 /// `PartialEq` like comparison on slices, but with an `EqContext`, tracking human-readable differences.

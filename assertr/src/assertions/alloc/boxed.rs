@@ -3,9 +3,9 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
-use core::any::{Any, type_name};
+use core::any::{Any, type_name, type_name_of_val};
+use core::fmt::Write;
 use indoc::writedoc;
-use std::fmt::Write;
 
 /// Data-extracting assertions for boxed values.
 /// Only available in Panic mode, as the extracted type cannot be produced when the downcast fails.
@@ -45,7 +45,7 @@ impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
                 } else {
                     // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
                     actual_type_name_will_be_any = true;
-                    Cow::Borrowed(std::any::type_name_of_val(borrowed_boxed_any))
+                    Cow::Borrowed(type_name_of_val(borrowed_boxed_any))
                 };
 
                 borrowed_boxed_any.downcast_ref::<E>().map_or_else(
@@ -69,7 +69,7 @@ impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
                 } else {
                     // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
                     actual_type_name_will_be_any = true;
-                    Cow::Borrowed(std::any::type_name_of_val(&*owned_box_any))
+                    Cow::Borrowed(type_name_of_val(&*owned_box_any))
                 };
 
                 owned_box_any.downcast::<E>().map_or_else(
@@ -162,7 +162,7 @@ impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
             } else {
                 // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
                 self.add_detail_message("A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.");
-                Cow::Borrowed(std::any::type_name_of_val(&**self.actual()))
+                Cow::Borrowed(type_name_of_val(&**self.actual()))
             };
 
             self.fail(|w: &mut String| {

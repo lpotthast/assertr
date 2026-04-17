@@ -1,9 +1,10 @@
 use crate::AssertThat;
 use crate::{Mode, tracking::AssertionTracking};
+use alloc::string::String;
 use core::cell::RefCell;
 use core::fmt::Debug;
+use core::fmt::Write;
 use indoc::writedoc;
-use std::fmt::Write;
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
