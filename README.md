@@ -22,52 +22,12 @@ messages that help pinpoint issues quickly.
 
 ```toml
 [dependencies]
-assertr = "0.5.5"
+assertr = "0.5.6"
 ```
 
-### Common feature sets
+### Cargo features
 
-All optional features are additive. Some common setups:
-
-Use the full feature set, including third-party integrations and ergonomic helpers:
-
-```toml
-[dependencies]
-assertr = { version = "0.5.5", features = ["full"] }
-```
-
-Enable `#[derive(AssertrEq)]` for partial struct equality assertions:
-
-```toml
-[dependencies]
-assertr = { version = "0.5.5", features = ["derive"] }
-```
-
-Enable fluent entry points and aliases such as `.must()`, `.verify()`, `.be_equal_to()`, and `.have_length()`:
-
-```toml
-[dependencies]
-assertr = { version = "0.5.5", features = ["fluent"] }
-```
-
-### `no_std`
-
-Disable the default features in `no_std` environments:
-
-```toml
-[dependencies]
-assertr = { version = "0.5.5", default-features = false }
-```
-
-If you still want numeric assertions in `no_std`, enable `num`. For floating-point classification
-helpers such as `is_nan()`, `is_finite()`, or `is_infinite()` without `std`, also enable `libm`.
-
-Available feature groups and individual features:
-
-| feature-group | description                                                          |
-|---------------|----------------------------------------------------------------------|
-| default       | Small set of features, enabling support for `std` types and numbers. |
-| full          | Enables all features listed below.                                   |
+Available individual features and feature groups:
 
 | feature   | description                                                           | default feature |
 |-----------|-----------------------------------------------------------------------|-----------------|
@@ -83,6 +43,25 @@ Available feature groups and individual features:
 | reqwest   | Assertions for types from the `reqwest` crate.                        | no              |
 | rootcause | Assertions for types from the `rootcause` crate.                      | no              |
 | program   | Assertions for the provided `Program` type.                           | no              |
+
+| feature-group | description                                                          |
+|---------------|----------------------------------------------------------------------|
+| default       | Small set of features, enabling support for `std` types and numbers. |
+| full          | Enables all features listed above.                                   |
+
+All optional features are additive.
+
+### no_std
+
+Disable the default features in `no_std` environments:
+
+```toml
+[dependencies]
+assertr = { version = "0.5.6", default-features = false }
+```
+
+If you still want numeric assertions in `no_std`, enable `num`. For floating-point classification
+helpers such as `is_nan()`, `is_finite()`, or `is_infinite()` without `std`, also enable `libm`.
 
 ## Quick start
 
@@ -384,7 +363,7 @@ You can derive a helper struct for partial equality comparisons by annotating an
 **Make sure this crate's `derive` feature is enabled.**
 
 ```toml
-assertr = { version = "0.5.5", features = ["derive"] }
+assertr = { version = "0.5.6", features = ["derive"] }
 ```
 
 ```rust
@@ -557,27 +536,14 @@ fn test() {
 
 ## Dev
 
-Useful workspace commands:
-
-```bash
-cargo fmt
-```
-
-Format all crates.
-
-```bash
-cargo clippy --all -- -W clippy::pedantic
-```
-
-Run the configured lints across the workspace.
+Run the full maintenance pipeline, including formatting, checks, clippy, tests, and docs with:
+(This will run checks and tests with default features, no default features and all features enabled.)
 
 ```bash
 just tidy
 ```
 
-Run the full maintenance pipeline, including formatting, checks, clippy, tests, and docs.
-
-## Testing
+### Testing
 
 To test all crates from the workspace root:
 

@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-04-17
+
 ### Fixed
 
-- Restored `--no-default-features` / no-std compatibility by using `core`/`alloc` paths in core assertions and keeping.
+- Restored `--no-default-features` / no-std compatibility by using `core`/`alloc` paths in core assertions.
 - Aligned the README assertion table with the actual prelude exports, including feature gates, panic-only extract
   assertions, and recently added string, path, HTTP header, program, async function, and rootcause entries.
 - Reworked the README installation and usage guidance to document the `fluent` feature, clarify `no_std` setup,
@@ -252,11 +254,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.6...HEAD
+
+[0.5.6]: https://github.com/lpotthast/assertr/compare/v0.5.5...v0.5.6
 
 [0.5.5]: https://github.com/lpotthast/assertr/compare/v0.5.4...v0.5.5
 
 [0.5.4]: https://github.com/lpotthast/assertr/compare/v0.5.3...v0.5.4
+
+[0.5.3]: https://github.com/lpotthast/assertr/compare/v0.5.2...v0.5.3
 
 [0.5.2]: https://github.com/lpotthast/assertr/compare/v0.5.1...v0.5.2
 
