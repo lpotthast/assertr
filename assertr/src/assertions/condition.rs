@@ -1,3 +1,7 @@
+use alloc::string::String;
+use core::fmt::Write;
+use indoc::writedoc;
+
 use crate::{AssertThat, Mode, condition::Condition, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
@@ -12,7 +16,13 @@ impl<T, M: Mode> ConditionAssertions<T> for AssertThat<'_, T, M> {
         self.track_assertion();
         match condition.test(self.actual()) {
             Ok(()) => {}
-            Err(err) => self.fail(format_args!("Condition did not match:\n\n{err}\n")),
+            Err(err) => self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Condition did not match:
+
+                    {err}
+                "}
+            }),
         }
         self
     }
@@ -43,7 +53,13 @@ where
         for actual in iter {
             match condition.test(actual) {
                 Ok(()) => {}
-                Err(err) => self.fail(format_args!("Condition did not match:\n\n{err}\n")),
+                Err(err) => self.fail(|w: &mut String| {
+                    writedoc! {w, r"
+                        Condition did not match:
+
+                        {err}
+                    "}
+                }),
             }
         }
         self

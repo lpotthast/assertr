@@ -4,7 +4,9 @@ use crate::{
     mode::{Mode, Panic},
     tracking::AssertionTracking,
 };
-use core::fmt::Debug;
+use alloc::string::String;
+use core::fmt::{Debug, Write};
+use indoc::writedoc;
 
 /// Data-extracting assertions for `Result` values.
 /// These change the assertion subject type and are only available in Panic mode,
@@ -36,10 +38,14 @@ impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>
         self.track_assertion();
 
         if self.actual().is_err() {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nis not of expected variant: Result:Ok\n",
-                actual = self.actual()
-            ));
+            let actual = self.actual();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    is not of expected variant: Result:Ok
+                "}
+            });
         }
 
         // Calling `unwrap` is safe here, as we would have seen a panic when the error is not present!
@@ -61,10 +67,14 @@ impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>
         self.track_assertion();
 
         if self.actual().is_ok() {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nis not of expected variant: Result:Err\n",
-                actual = self.actual()
-            ));
+            let actual = self.actual();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    is not of expected variant: Result:Err
+                "}
+            });
         }
 
         // Calling `unwrap_err` is safe here, as we would have seen a panic when the error is not present!
@@ -106,10 +116,14 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
         if self.actual().is_ok() {
             self.satisfies_ref(|it| it.as_ref().unwrap(), assertions)
         } else {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nis not of expected variant: Result:Ok\n",
-                actual = self.actual()
-            ));
+            let actual = self.actual();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    is not of expected variant: Result:Ok
+                "}
+            });
             self
         }
     }
@@ -126,10 +140,14 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
         if self.actual().is_err() {
             self.satisfies_ref(|it| it.as_ref().unwrap_err(), assertions)
         } else {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nis not of expected variant: Result:Err\n",
-                actual = self.actual()
-            ));
+            let actual = self.actual();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    is not of expected variant: Result:Err
+                "}
+            });
             self
         }
     }

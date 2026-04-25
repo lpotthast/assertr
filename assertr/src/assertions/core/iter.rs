@@ -1,7 +1,9 @@
 use alloc::borrow::ToOwned;
 use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::Debug;
+use core::fmt::{Debug, Write};
+use indoc::writedoc;
 
 use crate::actual::Actual;
 use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
@@ -54,9 +56,13 @@ where
             .iter()
             .any(|it| AssertrPartialEq::eq(it, &expected, None))
         {
-            this.fail(format_args!(
-                "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}\n",
-            ));
+            this.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    does not contain expected: {expected:#?}
+                "}
+            });
         }
         this
     }
@@ -77,9 +83,13 @@ where
             .iter()
             .any(|it| AssertrPartialEq::eq(it, &not_expected, None))
         {
-            this.fail(format_args!(
-                "Actual: {actual:#?}\n\ncontains unexpected: {not_expected:#?}\n",
-            ));
+            this.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    contains unexpected: {not_expected:#?}
+                "}
+            });
         }
         this
     }
@@ -112,9 +122,15 @@ where
                 this.add_detail_message("The order of elements does not match!".to_owned());
             }
 
-            this.fail(format_args!(
-                "Actual: {actual:#?},\n\ndid not exactly match\n\nExpected: {expected:#?}\n",
-            ));
+            this.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?},
+
+                    did not exactly match
+
+                    Expected: {expected:#?}
+                "}
+            });
         }
         this
     }
@@ -166,9 +182,13 @@ where
             .into_iter()
             .any(|it| AssertrPartialEq::eq(it, &expected, None))
         {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\ndoes not contain expected: {expected:#?}\n",
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    does not contain expected: {expected:#?}
+                "}
+            });
         }
         self
     }
@@ -186,9 +206,13 @@ where
             .iter()
             .any(|it| AssertrPartialEq::eq(*it, &not_expected, None))
         {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\ncontains unexpected: {not_expected:#?}\n",
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    contains unexpected: {not_expected:#?}
+                "}
+            });
         }
         self
     }
@@ -217,9 +241,15 @@ where
                 self.add_detail_message("The order of elements does not match!".to_owned());
             }
 
-            self.fail(format_args!(
-                "Actual: {actual:#?},\n\ndid not exactly match\n\nExpected: {expected:#?}\n",
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?},
+
+                    did not exactly match
+
+                    Expected: {expected:#?}
+                "}
+            });
         }
         self
     }
@@ -230,10 +260,13 @@ where
         self.track_assertion();
         if self.actual().into_iter().count() != 0 {
             let actual = self.actual().into_iter().collect::<Vec<_>>();
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nIs not empty!\n",
-                //actual = self.actual_ref(),
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    Is not empty!
+                "}
+            });
         }
         self
     }

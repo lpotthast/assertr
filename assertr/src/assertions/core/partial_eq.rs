@@ -66,9 +66,13 @@ impl<T, M: Mode> PartialEqAssertions<T> for AssertThat<'_, T, M> {
             if !ctx.differences.differences.is_empty() {
                 self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
             }
-            self.fail(format_args!(
-                "Expected: {expected:#?}\n\n  Actual: {actual:#?}",
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Expected: {expected:#?}
+
+                      Actual: {actual:#?}
+                "}
+            });
         }
         self
     }

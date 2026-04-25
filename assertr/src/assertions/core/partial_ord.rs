@@ -1,4 +1,10 @@
-use core::{borrow::Borrow, cmp::Ordering, fmt::Debug};
+use alloc::string::String;
+use core::{
+    borrow::Borrow,
+    cmp::Ordering,
+    fmt::{Debug, Write},
+};
+use indoc::writedoc;
 
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
@@ -40,9 +46,15 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
         let expected = expected.borrow();
 
         if !matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nis not less than\n\nExpected: {expected:#?}\n"
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    is not less than
+
+                    Expected: {expected:#?}
+                "}
+            });
         }
         self
     }
@@ -59,9 +71,15 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
         let expected = expected.borrow();
 
         if !matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nis not greater than\n\nExpected: {expected:#?}\n"
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    is not greater than
+
+                    Expected: {expected:#?}
+                "}
+            });
         }
         self
     }
@@ -81,9 +99,15 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
             actual.partial_cmp(expected),
             Some(Ordering::Less | Ordering::Equal)
         ) {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nis not less or equal to\n\nExpected: {expected:#?}\n"
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    is not less or equal to
+
+                    Expected: {expected:#?}
+                "}
+            });
         }
         self
     }
@@ -103,9 +127,15 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
             actual.partial_cmp(expected),
             Some(Ordering::Greater | Ordering::Equal)
         ) {
-            self.fail(format_args!(
-                "Actual: {actual:#?}\n\nis not greater or equal to\n\nExpected: {expected:#?}\n"
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:#?}
+
+                    is not greater or equal to
+
+                    Expected: {expected:#?}
+                "}
+            });
         }
         self
     }

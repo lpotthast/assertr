@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-04-25
+
+### Added
+
+- `VecDeque<T>` assertions for membership, negative membership, ordered exact contents, unordered exact contents,
+  predicate matching, and length checks, matching existing `Vec<T` assertions.
+
+### Changed
+
+- Switched remaining places to use `self.fail(|w: &mut String| { writedoc! {w, r"..."} })` over `format_args!` style
+  assertion violation reporting, improving readability and maintainability of user-facing messages.
+
 ## [0.5.6] - 2026-04-17
 
 ### Fixed
@@ -254,7 +266,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.7...HEAD
+
+[0.5.7]: https://github.com/lpotthast/assertr/compare/v0.5.6...v0.5.7
 
 [0.5.6]: https://github.com/lpotthast/assertr/compare/v0.5.5...v0.5.6
 

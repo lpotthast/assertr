@@ -252,6 +252,37 @@ mod tests {
         }
     }
 
+    mod is_empty_on_vec_deque {
+        use alloc::collections::VecDeque;
+
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_empty() {
+            assert_that!(VecDeque::<i32>::new()).is_empty();
+        }
+
+        #[test]
+        fn panics_when_not_empty() {
+            assert_that_panic_by(|| {
+                assert_that!(VecDeque::from([42]))
+                    .with_location(false)
+                    .is_empty();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: alloc::collections::vec_deque::VecDeque<i32> [
+                        42,
+                    ]
+
+                    was expected to be empty, but it is not!
+                    -------- assertr --------
+                "#});
+        }
+    }
+
     mod is_not_empty_on_hashmap {
         use std::collections::HashMap;
 
@@ -276,6 +307,42 @@ mod tests {
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: std::collections::hash::map::HashMap<(), ()> {{}}
+
+                    was expected not to be empty, but it is!
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod is_not_empty_on_vec_deque {
+        use alloc::collections::VecDeque;
+
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_not_empty() {
+            assert_that!(VecDeque::from([42])).is_not_empty();
+        }
+
+        #[test]
+        fn succeeds_for_borrowed_vec_deque() {
+            let deque = VecDeque::from([42]);
+
+            assert_that!(&deque).is_not_empty();
+        }
+
+        #[test]
+        fn panics_when_empty() {
+            assert_that_panic_by(|| {
+                assert_that!(VecDeque::<i32>::new())
+                    .with_location(false)
+                    .is_not_empty();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: alloc::collections::vec_deque::VecDeque<i32> []
 
                     was expected not to be empty, but it is!
                     -------- assertr --------
@@ -402,6 +469,45 @@ mod tests {
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Actual: alloc::vec::Vec<i32> [
+                        42,
+                    ]
+
+                    does not have the correct length
+
+                    Expected: 2
+                      Actual: 1
+                    -------- assertr --------
+                "#});
+        }
+    }
+
+    mod has_length_on_vec_deque {
+        use alloc::collections::VecDeque;
+
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        fn succeeds_when_length_matches_and_empty() {
+            assert_that!(VecDeque::<i32>::new()).has_length(0);
+        }
+
+        #[test]
+        fn succeeds_when_length_matches_and_non_empty() {
+            assert_that!(VecDeque::from([1, 2, 3])).has_length(3);
+        }
+
+        #[test]
+        fn panics_when_length_does_not_match() {
+            assert_that_panic_by(|| {
+                assert_that!(VecDeque::from([42]))
+                    .with_location(false)
+                    .has_length(2);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Actual: alloc::collections::vec_deque::VecDeque<i32> [
                         42,
                     ]
 

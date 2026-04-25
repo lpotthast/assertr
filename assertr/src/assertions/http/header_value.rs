@@ -2,6 +2,9 @@ use crate::AssertThat;
 use crate::mode::{Mode, Panic};
 use crate::prelude::{BoolAssertions, PartialEqAssertions, PartialOrdAssertions};
 use alloc::borrow::ToOwned;
+use alloc::string::String;
+use core::fmt::Write;
+use indoc::writedoc;
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
@@ -62,10 +65,14 @@ impl<'t, M: Mode> HttpHeaderValueAssertions<'t, M>
         if self.actual().to_str().is_ok() {
             self.satisfies_ref(|hv| hv.to_str().expect("already checked"), assertions)
         } else {
-            self.fail(format_args!(
-                "Actual: {actual:?}\n\nis not valid ASCII\n",
-                actual = self.actual()
-            ));
+            let actual = self.actual();
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: {actual:?}
+
+                    is not valid ASCII
+                "}
+            });
             self
         }
     }

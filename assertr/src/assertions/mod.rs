@@ -1,4 +1,4 @@
-use ::alloc::{string::String, vec::Vec};
+use ::alloc::{collections::VecDeque, string::String, vec::Vec};
 #[cfg(feature = "std")]
 use ::core::fmt::Debug;
 use ::core::ops::{Range, RangeInclusive};
@@ -98,6 +98,26 @@ impl<T> HasLength for &Vec<T> {
 
     fn is_empty(&self) -> bool {
         Vec::is_empty(self)
+    }
+}
+
+impl<T> HasLength for VecDeque<T> {
+    fn length(&self) -> usize {
+        VecDeque::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        VecDeque::is_empty(self)
+    }
+}
+
+impl<T> HasLength for &VecDeque<T> {
+    fn length(&self) -> usize {
+        VecDeque::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        VecDeque::is_empty(self)
     }
 }
 

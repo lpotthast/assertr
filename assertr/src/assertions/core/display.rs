@@ -1,5 +1,8 @@
 use alloc::format;
+use alloc::string::String;
 use core::fmt::Display;
+use core::fmt::Write;
+use indoc::writedoc;
 
 use crate::assertions::core::strip_quotation_marks;
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
@@ -22,9 +25,13 @@ impl<T: Display, M: Mode> DisplayAssertions for AssertThat<'_, T, M> {
         let expected_str = strip_quotation_marks(expected_string.as_str());
 
         if actual_str != expected_str {
-            self.fail(format_args!(
-                "Expected: {expected_str:?}\n\n  Actual: {actual_str:?}\n"
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Expected: {expected_str:?}
+
+                      Actual: {actual_str:?}
+                "}
+            });
         }
         self
     }

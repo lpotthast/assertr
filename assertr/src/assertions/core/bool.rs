@@ -1,3 +1,7 @@
+use alloc::string::String;
+use core::fmt::Write;
+use indoc::writedoc;
+
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
 /// Assertions for boolean values.
@@ -16,9 +20,13 @@ impl<M: Mode> BoolAssertions for AssertThat<'_, bool, M> {
         let actual = self.actual();
         let expected = &true;
         if actual != expected {
-            self.fail(format_args!(
-                "Expected: {expected:#?}\n\n  Actual: {actual:#?}\n",
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Expected: {expected:#?}
+
+                      Actual: {actual:#?}
+                "}
+            });
         }
         self
     }
@@ -29,9 +37,13 @@ impl<M: Mode> BoolAssertions for AssertThat<'_, bool, M> {
         let actual = self.actual();
         let expected = &false;
         if actual != expected {
-            self.fail(format_args!(
-                "Expected: {expected:#?}\n\n  Actual: {actual:#?}\n",
-            ));
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Expected: {expected:#?}
+
+                      Actual: {actual:#?}
+                "}
+            });
         }
         self
     }

@@ -31,8 +31,11 @@ just tidy
 
 Use `## [Unreleased]` in `CHANGELOG.md` as the default landing place for change entries while work is in progress:
 
-1. Add every change to the appropriate section under `## [Unreleased]` in `CHANGELOG.md`.
-2. Evaluate the SemVer impact of each change when you add it.
+1. Record the net release-notable effect of each change under the appropriate section in `## [Unreleased]`.
+   Before adding a new item, inspect existing `Unreleased` entries for the same feature, fix, or design area.
+   Update, merge, or remove related entries so the changelog describes the final current behavior, not intermediary
+   iterations.
+2. Re-evaluate the SemVer impact of the resulting changelog entry when you add or revise it.
 3. If a change is SemVer-breaking, start its markdown list item with `- **Breaking:** ...`.
 4. Do not bump crate versions or README dependency snippets for ordinary in-progress changes.
 
@@ -58,19 +61,26 @@ assert_that!(&value).starts_with("hello");
 
 ### Core types (in `assertr/src/`)
 
-- **`assert_that!` macro** (`assert_that_macro.rs`) — Uses autoref specialization to handle both borrowed (`&T → Actual::Borrowed`) and owned (`T → Actual::Owned`) values transparently.
-- **`AssertThat<'t, T, M>`** (`lib.rs`) — The central struct. `T` is the value type, `M` is the mode (`Panic` or `Capture`). All assertion methods are implemented as trait impls on this type. Methods return `Self` for chaining.
+- **`assert_that!` macro** (`assert_that_macro.rs`) — Uses autoref specialization to handle both borrowed (
+  `&T → Actual::Borrowed`) and owned (`T → Actual::Owned`) values transparently.
+- **`AssertThat<'t, T, M>`** (`lib.rs`) — The central struct. `T` is the value type, `M` is the mode (`Panic` or
+  `Capture`). All assertion methods are implemented as trait impls on this type. Methods return `Self` for chaining.
 - **`Actual<'t, T>`** (`actual.rs`) — Enum holding either `Borrowed(&'t T)` or `Owned(T)`.
 - **`Mode` trait** (`mode.rs`) — `Panic` (fail immediately) vs `Capture` (collect failures for batch inspection).
-- **`Failure`/`Fallible` traits** (`failure.rs`) — Failure message construction with location tracking, subject names, and detail messages.
+- **`Failure`/`Fallible` traits** (`failure.rs`) — Failure message construction with location tracking, subject names,
+  and detail messages.
 - **`Condition<T>` trait** (`condition.rs`) — Reusable predicates used with `.is()` and `.has()`.
-- **`AssertrPartialEq<Rhs>`** (`lib.rs`) — Custom equality trait with `EqContext` for field-by-field difference reporting.
-- **Tracking** (`tracking.rs`) — Counts assertions per chain; panics if `AssertThat` is dropped with zero assertions (catches forgotten assertions).
+- **`AssertrPartialEq<Rhs>`** (`lib.rs`) — Custom equality trait with `EqContext` for field-by-field difference
+  reporting.
+- **Tracking** (`tracking.rs`) — Counts assertions per chain; panics if `AssertThat` is dropped with zero assertions (
+  catches forgotten assertions).
 
 ### Assertion modules (`assertr/src/assertions/`)
 
 Assertions are organized by type category, each in its own module with a trait:
-- `core/` — Fundamental types: `PartialEq`, `PartialOrd`, `bool`, `char`, `str`, `Option`, `Result`, `Iterator`, `Array`, `Slice`, `Tuple`
+
+- `core/` — Fundamental types: `PartialEq`, `PartialOrd`, `bool`, `char`, `str`, `Option`, `Result`, `Iterator`,
+  `Array`, `Slice`, `Tuple`
 - `alloc/` — Heap types: `String`, `Vec`, `Box`, `PanicValue`
 - `std/` — Std types: `Path`, `Command`, `HashMap`, `Mutex`, `Type`
 - `num/` — Numeric: `is_zero`, `is_positive`, `is_close_to`, `is_nan`, etc.
@@ -78,15 +88,19 @@ Assertions are organized by type category, each in its own module with a trait:
 
 ### Derive macro (`assertr-derive/`)
 
-`#[derive(AssertrEq)]` generates a `{StructName}AssertrEq` companion struct with `Eq<FieldType>` fields for field-level partial equality. Supports `#[assertr_eq(map_type = "...")]` and `#[assertr_eq(compare_with = "...")]` attributes. Only processes public fields. Uses `darling` for attribute parsing.
+`#[derive(AssertrEq)]` generates a `{StructName}AssertrEq` companion struct with `Eq<FieldType>` fields for field-level
+partial equality. Supports `#[assertr_eq(map_type = "...")]` and `#[assertr_eq(compare_with = "...")]` attributes. Only
+processes public fields. Uses `darling` for attribute parsing.
 
 Compile-fail tests use `trybuild` in `assertr-derive/tests/`.
 
 ### Key patterns for adding assertions
 
 New assertion traits follow this pattern:
+
 1. Define a trait (e.g., `FooAssertions`) with methods returning `Self`
-2. Annotate the trait with `#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]` to auto-generate fluent aliases (e.g., `is_true` → `be_true`, `has_length` → `have_length`)
+2. Annotate the trait with `#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]` to auto-generate fluent
+   aliases (e.g., `is_true` → `be_true`, `has_length` → `have_length`)
 3. Implement it for `AssertThat<'_, Foo, M>` where `M: Mode`
 4. Use `self.track_assertion()` at the start of each method
 5. On failure, call `self.fail(...)` with a formatted message
@@ -95,8 +109,10 @@ New assertion traits follow this pattern:
 ## Features
 
 - **default**: `["std", "num"]`
-- **full**: All features (`derive`, `fluent`, `http`, `jiff`, `libm`, `num`, `program`, `reqwest`, `serde`, `std`, `tokio`)
-- **fluent**: Enables `IntoAssertContext` trait on all types, providing `.must()` (Panic mode) and `.verify()` (Capture mode) entry points, plus fluent aliases like `be_equal_to`, `have_length`
+- **full**: All features (`derive`, `fluent`, `http`, `jiff`, `libm`, `num`, `program`, `reqwest`, `serde`, `std`,
+  `tokio`)
+- **fluent**: Enables `IntoAssertContext` trait on all types, providing `.must()` (Panic mode) and `.verify()` (Capture
+  mode) entry points, plus fluent aliases like `be_equal_to`, `have_length`
 - Library supports `no_std` when `std` feature is disabled
 - MSRV: `assertr` 1.89.0, `assertr-derive` 1.85.0
 
