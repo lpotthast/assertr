@@ -42,7 +42,7 @@ pub(crate) trait Fallible {
     fn store_failure(&self, failure: String);
 }
 
-impl<T, M: Mode> Fallible for AssertThat<'_, T, M> {
+impl<T, M: Mode, R> Fallible for AssertThat<'_, T, M, R> {
     fn store_failure(&self, failure: String) {
         match &self.parent {
             Some(parent) => parent.store_failure(failure),
@@ -51,7 +51,7 @@ impl<T, M: Mode> Fallible for AssertThat<'_, T, M> {
     }
 }
 
-impl<T, M: Mode> AssertThat<'_, T, M> {
+impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Records or raises a failure message.
     ///
     /// # Panics

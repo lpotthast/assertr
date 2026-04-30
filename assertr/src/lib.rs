@@ -10,7 +10,8 @@ use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
 use core::{
     any::{Any, type_name},
     cell::RefCell,
-    fmt::{Debug, Formatter},
+    fmt,
+    fmt::Debug,
     future::Future,
     marker::PhantomData,
     mem::needs_drop,
@@ -31,14 +32,18 @@ mod conversion;
 pub mod details;
 pub mod failure;
 pub mod mode;
+pub mod renderer;
 pub mod tracking;
 pub mod util;
+
+pub use renderer::{
+    AssertionRenderer, CustomRenderer, DebugRenderer, Renderable, RenderableValues,
+};
 
 pub mod prelude {
     #[cfg(feature = "derive")]
     pub use assertr_derive::AssertrEq;
 
-    pub use crate::AssertThat;
     #[cfg(feature = "fluent")]
     pub use crate::IntoAssertContext;
     pub use crate::any;
@@ -83,6 +88,7 @@ pub mod prelude {
     pub use crate::conversion::toml;
     pub use crate::eq;
     pub use crate::mode::Mode;
+    pub use crate::{AssertThat, AssertionRenderer, DebugRenderer};
 }
 
 pub struct PanicValue(Box<dyn Any>);
@@ -306,7 +312,7 @@ pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
 /// ### Notes
 /// - When using `Capture` mode, failures must be captured explicitly.
 /// - This struct is designed to handle both simple and complex assertion chaining scenarios.
-pub struct AssertThat<'t, T, M: Mode> {
+pub struct AssertThat<'t, T, M: Mode, R = DebugRenderer> {
     // Derived assertions can be created. Calling `.fail*` on them should propagate to the root assertion!
     parent: Option<&'t dyn DynAssertThat>,
 
@@ -320,16 +326,17 @@ pub struct AssertThat<'t, T, M: Mode> {
     failures: RefCell<Vec<String>>,
 
     mode: RefCell<M>,
+    renderer: R,
 }
 
 pub(crate) trait DynAssertThat:
     Fallible + WithDetail + AssertionTracking + UnwindSafe + RefUnwindSafe
 {
 }
-impl<T, M: Mode> DynAssertThat for AssertThat<'_, T, M> {}
+impl<T, M: Mode, R> DynAssertThat for AssertThat<'_, T, M, R> {}
 
-impl<T, M: Mode> UnwindSafe for AssertThat<'_, T, M> {}
-impl<T, M: Mode> RefUnwindSafe for AssertThat<'_, T, M> {}
+impl<T, M: Mode, R> UnwindSafe for AssertThat<'_, T, M, R> {}
+impl<T, M: Mode, R> RefUnwindSafe for AssertThat<'_, T, M, R> {}
 
 impl<'t, T> AssertThat<'t, T, Panic> {
     #[track_caller]
@@ -343,6 +350,7 @@ impl<'t, T> AssertThat<'t, T, Panic> {
             number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
             mode: RefCell::new(Panic::DEFAULT),
+            renderer: DebugRenderer,
         }
     }
 }
@@ -360,11 +368,12 @@ impl<'t, T> AssertThat<'t, T, Capture> {
             number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
             mode: RefCell::new(Capture::DEFAULT),
+            renderer: DebugRenderer,
         }
     }
 }
 
-impl<T> AssertThat<'_, T, Capture> {
+impl<T, R> AssertThat<'_, T, Capture, R> {
     /// Extracts all assertion failures captured until now.
     ///
     /// Allows this `AssertThat` to be dropped again without raising a panic.
@@ -405,9 +414,27 @@ impl<T> AssertThat<'_, T, Capture> {
     }
 }
 
-impl<'t, T, M: Mode> AssertThat<'t, T, M> {
+impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     pub fn actual(&self) -> &T {
         self.actual.borrowed()
+    }
+
+    pub fn render_value<'a, U: ?Sized>(&'a self, value: &'a U) -> Renderable<'a, U, R> {
+        Renderable {
+            value,
+            renderer: &self.renderer,
+        }
+    }
+
+    pub fn render_values<'a, U>(&'a self, values: &'a [&'a U]) -> RenderableValues<'a, U, R> {
+        RenderableValues {
+            values,
+            renderer: &self.renderer,
+        }
+    }
+
+    pub(crate) fn eq_context(&self) -> EqContext<'_, R> {
+        EqContext::with_renderer(&self.renderer)
     }
 
     pub(crate) fn replace_actual_with<'u, U>(
@@ -415,7 +442,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
         // requiring only one type, which is the type we want to map to.
         new_actual: Actual<'u, U>,
-    ) -> (Actual<'t, T>, AssertThat<'u, U, M>)
+    ) -> (Actual<'t, T>, AssertThat<'u, U, M, R>)
     where
         't: 'u,
     {
@@ -429,6 +456,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: self.mode,
+            renderer: self.renderer,
         };
         (previous_actual, mapped)
     }
@@ -438,7 +466,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
         // requiring only one type, which is the type we want to map to.
         mapper: impl FnOnce(Actual<T>) -> Actual<U>,
-    ) -> AssertThat<'t, U, M> {
+    ) -> AssertThat<'t, U, M, R> {
         AssertThat {
             parent: self.parent,
             actual: mapper(self.actual),
@@ -448,6 +476,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: self.mode,
+            renderer: self.renderer,
         }
     }
 
@@ -456,7 +485,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
         // requiring only one type, which is the type we want to map to.
         mapper: impl FnOnce(<T as ToOwned>::Owned) -> U,
-    ) -> AssertThat<'t, U, M>
+    ) -> AssertThat<'t, U, M, R>
     where
         T: ToOwned,
     {
@@ -469,6 +498,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: self.mode,
+            renderer: self.renderer,
         }
     }
 
@@ -477,7 +507,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
         // requiring only one type, which is the type we want to map to.
         mapper: impl FnOnce(Actual<T>) -> Fut,
-    ) -> AssertThat<'t, U, M>
+    ) -> AssertThat<'t, U, M, R>
     where
         Fut: Future<Output = U>,
     {
@@ -490,12 +520,14 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: self.mode,
+            renderer: self.renderer,
         }
     }
 
-    pub fn derive<'u, U: 'u>(&'t self, mapper: impl FnOnce(&'t T) -> U) -> AssertThat<'u, U, M>
+    pub fn derive<'u, U: 'u>(&'t self, mapper: impl FnOnce(&'t T) -> U) -> AssertThat<'u, U, M, R>
     where
         't: 'u,
+        R: Clone,
     {
         let mut mode = self.mode.replace(M::default());
         mode.set_derived();
@@ -509,15 +541,17 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
             mode: RefCell::new(mode),
+            renderer: self.renderer.clone(),
         }
     }
 
     pub async fn derive_async<'u, U: 'u, Fut: Future<Output = U>>(
         &'t self,
         mapper: impl FnOnce(&'t T) -> Fut,
-    ) -> AssertThat<'u, U, M>
+    ) -> AssertThat<'u, U, M, R>
     where
         't: 'u,
+        R: Clone,
     {
         let mut mode = self.mode.replace(M::default());
         mode.set_derived();
@@ -531,6 +565,7 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
             number_of_assertions: RefCell::new(NumberOfAssertions::new()),
             failures: RefCell::new(Vec::new()),
             mode: RefCell::new(mode),
+            renderer: self.renderer.clone(),
         }
     }
 
@@ -545,7 +580,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
-        for<'a> A: FnOnce(AssertThat<'a, U, M>),
+        for<'a> A: FnOnce(AssertThat<'a, U, M, R>),
+        R: Clone,
     {
         assertions(self.derive(mapper));
         self
@@ -556,7 +592,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     pub fn satisfy<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
-        for<'a> A: FnOnce(AssertThat<'a, U, M>),
+        for<'a> A: FnOnce(AssertThat<'a, U, M, R>),
+        R: Clone,
     {
         self.satisfies(mapper, assertions)
     }
@@ -565,7 +602,8 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
     pub fn satisfies_ref<U: ?Sized, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> &'a U,
-        for<'a> A: FnOnce(AssertThat<'a, &'a U, M>),
+        for<'a> A: FnOnce(AssertThat<'a, &'a U, M, R>),
+        R: Clone,
     {
         assertions(self.derive(mapper));
         self
@@ -591,11 +629,34 @@ impl<'t, T, M: Mode> AssertThat<'t, T, M> {
         self.print_location = value;
         self
     }
+
+    #[must_use]
+    pub fn with_debug_format<F>(self, renderer: F) -> AssertThat<'t, T, M, CustomRenderer<F>>
+    where
+        F: Fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result,
+    {
+        self.with_renderer(CustomRenderer(renderer))
+    }
+
+    #[must_use]
+    pub fn with_renderer<R2>(self, renderer: R2) -> AssertThat<'t, T, M, R2> {
+        AssertThat {
+            parent: self.parent,
+            actual: self.actual,
+            subject_name: self.subject_name,
+            detail_messages: self.detail_messages,
+            print_location: self.print_location,
+            number_of_assertions: self.number_of_assertions,
+            failures: self.failures,
+            mode: self.mode,
+            renderer,
+        }
+    }
 }
 
 /* Fluent connect */
 
-impl<T, M: Mode> AssertThat<'_, T, M> {
+impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Filler that allows you to add an "and" inside your assertion chain.
     ///
     /// This is completely optional (noop).
@@ -618,13 +679,13 @@ impl<T, M: Mode> AssertThat<'_, T, M> {
 
 /* Mode changes */
 
-impl<'t, T> AssertThat<'t, T, Panic> {
+impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     /// Control whether the location is shown on assertion failure.
     ///
     /// It can be helpful to call `.with_location(false)` when you want to test the panic message for exact equality
     /// and do not want to be bothered by constantly differing line and column numbers fo the assert-location.
     #[allow(dead_code)]
-    pub fn with_capture(self) -> AssertThat<'t, T, Capture> {
+    pub fn with_capture(self) -> AssertThat<'t, T, Capture, R> {
         AssertThat {
             parent: self.parent,
             actual: self.actual,
@@ -637,18 +698,19 @@ impl<'t, T> AssertThat<'t, T, Panic> {
                 derived: false,
                 captured: false,
             }),
+            renderer: self.renderer,
         }
     }
 }
 
-impl<'t, T> AssertThat<'t, T, Capture> {
+impl<'t, T, R> AssertThat<'t, T, Capture, R> {
     /// Switch to non-capturing mode.
     ///
     /// Panics if assertion failures were already captured!
     // TODO: Add an easy way in which users can check if assertion failures were recorded.
     //  Or that none were recorded!
     #[allow(deprecated)]
-    pub fn without_capture(mut self) -> AssertThat<'t, T, Panic> {
+    pub fn without_capture(mut self) -> AssertThat<'t, T, Panic, R> {
         // Take out all assertion failures, marking the `Capture` as "captured".
         // Assert that no failures exist.
         use crate::assertions::core::length::LengthAssertions;
@@ -671,13 +733,14 @@ impl<'t, T> AssertThat<'t, T, Capture> {
             mode: RefCell::new(Panic {
                 derived: self.mode.borrow().derived,
             }),
+            renderer: self.renderer,
         }
     }
 }
 
 /* Unwrapping */
 
-impl<T> AssertThat<'_, T, Panic> {
+impl<T, R> AssertThat<'_, T, Panic, R> {
     /// **Panics** Panics if the actual value was not owned.
     // TODO: We could relax this by having `AssertThat` be generic over the type of actual value.
     #[track_caller]
@@ -686,7 +749,7 @@ impl<T> AssertThat<'_, T, Panic> {
     }
 }
 
-impl<T> AssertThat<'_, T, Capture> {
+impl<T, R> AssertThat<'_, T, Capture, R> {
     /// **Panics**
     /// - If assertion errors are present.
     /// - If the actual value is not owned.
@@ -720,33 +783,111 @@ impl Differences {
 }
 
 impl Debug for Differences {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list()
             .entries(self.differences.iter().map(|it| details::DisplayString(it)))
             .finish()
     }
 }
 
-pub struct EqContext {
+pub struct EqContext<'r, R = DebugRenderer> {
     differences: Differences,
+    renderer: &'r R,
 }
 
-impl Default for EqContext {
+impl Default for EqContext<'static, DebugRenderer> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl EqContext {
+impl EqContext<'static, DebugRenderer> {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_renderer(&DebugRenderer)
+    }
+}
+
+impl<'r, R> EqContext<'r, R> {
+    #[must_use]
+    pub fn with_renderer(renderer: &'r R) -> Self {
         Self {
             differences: Differences::default(),
+            renderer,
         }
     }
 
     pub fn add_difference(&mut self, difference: String) {
         self.differences.differences.push(difference);
+    }
+
+    pub fn add_field_difference_without_values(&mut self, field_name: &str) {
+        self.differences
+            .differences
+            .push(format!("\"{field_name}\": values are not equal"));
+    }
+
+    pub fn add_field_difference_rendered<A: ?Sized, E: ?Sized>(
+        &mut self,
+        field_name: &str,
+        expected: &E,
+        actual: &A,
+    ) where
+        R: AssertionRenderer<A> + AssertionRenderer<E>,
+    {
+        let expected = self.render_value(expected);
+        let actual = self.render_value(actual);
+        self.differences.differences.push(format!(
+            "\"{field_name}\": expected {expected:#?}, but was {actual:#?}"
+        ));
+    }
+
+    // The `FnOnce` closures are stored in `RefCell<Option<F>>` and consumed by the first
+    // `Debug::fmt` call. The single `format!` below renders each value exactly once, so the
+    // single-format invariant holds. If a future caller wraps the resulting `RenderedWith`
+    // in a context that double-formats, the second call yields `fmt::Error`; switch to `Fn`
+    // bounds first.
+    #[doc(hidden)]
+    pub fn add_field_difference_rendered_with<A: ?Sized, E: ?Sized, FA, FE>(
+        &mut self,
+        field_name: &str,
+        expected: &E,
+        actual: &A,
+        render_expected: FE,
+        render_actual: FA,
+    ) where
+        FE: FnOnce(&R, &E, &mut fmt::Formatter<'_>) -> fmt::Result,
+        FA: FnOnce(&R, &A, &mut fmt::Formatter<'_>) -> fmt::Result,
+    {
+        struct RenderedWith<'a, T: ?Sized, R, F> {
+            renderer: &'a R,
+            value: &'a T,
+            render: RefCell<Option<F>>,
+        }
+
+        impl<T: ?Sized, R, F> Debug for RenderedWith<'_, T, R, F>
+        where
+            F: FnOnce(&R, &T, &mut fmt::Formatter<'_>) -> fmt::Result,
+        {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let render = self.render.borrow_mut().take().ok_or(fmt::Error)?;
+                render(self.renderer, self.value, f)
+            }
+        }
+
+        let expected = RenderedWith {
+            renderer: self.renderer,
+            value: expected,
+            render: RefCell::new(Some(render_expected)),
+        };
+        let actual = RenderedWith {
+            renderer: self.renderer,
+            value: actual,
+            render: RefCell::new(Some(render_actual)),
+        };
+        self.differences.differences.push(format!(
+            "\"{field_name}\": expected {expected:#?}, but was {actual:#?}"
+        ));
     }
 
     pub fn add_field_difference(
@@ -759,34 +900,51 @@ impl EqContext {
             "\"{field_name}\": expected {expected:#?}, but was {actual:#?}"
         ));
     }
+
+    pub fn render_value<'a, T: ?Sized>(&'a self, value: &'a T) -> Renderable<'a, T, R> {
+        Renderable {
+            value,
+            renderer: self.renderer,
+        }
+    }
+
+    pub fn render_values<'a, T>(&'a self, values: &'a [&'a T]) -> RenderableValues<'a, T, R> {
+        RenderableValues {
+            values,
+            renderer: self.renderer,
+        }
+    }
 }
 
-pub trait AssertrPartialEq<Rhs: ?Sized = Self> {
+pub trait AssertrPartialEq<Rhs: ?Sized = Self, R = DebugRenderer> {
     /// This method tests for `self` and `other` values to be equal.
     #[must_use]
-    fn eq(&self, other: &Rhs, ctx: Option<&mut EqContext>) -> bool;
+    fn eq(&self, other: &Rhs, ctx: Option<&mut EqContext<'_, R>>) -> bool;
 
     /// This method tests for `!=`. The default implementation is almost always
     /// sufficient, and should not be overridden without very good reason.
     #[must_use]
-    fn ne(&self, other: &Rhs, ctx: Option<&mut EqContext>) -> bool {
+    fn ne(&self, other: &Rhs, ctx: Option<&mut EqContext<'_, R>>) -> bool {
         !self.eq(other, ctx)
     }
 }
 
 // AssertrPartialEq must be implemented for each type already being PartialEq,
 // so that we can solely rely on, and call, this ctx-enabled version in our assertions.
-impl<Rhs: ?Sized, T: PartialEq<Rhs>> AssertrPartialEq<Rhs> for T {
-    fn eq(&self, other: &Rhs, _ctx: Option<&mut EqContext>) -> bool {
+impl<Rhs: ?Sized, T: PartialEq<Rhs>, R> AssertrPartialEq<Rhs, R> for T {
+    fn eq(&self, other: &Rhs, _ctx: Option<&mut EqContext<'_, R>>) -> bool {
         PartialEq::eq(self, other)
     }
-    fn ne(&self, other: &Rhs, _ctx: Option<&mut EqContext>) -> bool {
+    fn ne(&self, other: &Rhs, _ctx: Option<&mut EqContext<'_, R>>) -> bool {
         PartialEq::ne(self, other)
     }
 }
 
-impl<T1: AssertrPartialEq<T2>, T2> AssertrPartialEq<[T2]> for [T1] {
-    fn eq(&self, other: &[T2], mut ctx: Option<&mut EqContext>) -> bool {
+impl<T1, T2, R> AssertrPartialEq<[T2], R> for [T1]
+where
+    T1: AssertrPartialEq<T2, R>,
+{
+    fn eq(&self, other: &[T2], mut ctx: Option<&mut EqContext<'_, R>>) -> bool {
         self.len() == other.len()
             && self.iter().enumerate().all(|(i, t1)| {
                 other
@@ -795,7 +953,7 @@ impl<T1: AssertrPartialEq<T2>, T2> AssertrPartialEq<[T2]> for [T1] {
             })
     }
 
-    fn ne(&self, other: &[T2], ctx: Option<&mut EqContext>) -> bool {
+    fn ne(&self, other: &[T2], ctx: Option<&mut EqContext<'_, R>>) -> bool {
         !Self::eq(self, other, ctx)
     }
 }
@@ -819,7 +977,7 @@ pub fn any<T>() -> Eq<T> {
 }
 
 impl<T: Debug> Debug for Eq<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Eq::Any => f.write_str("Eq::Any"),
             Eq::Eq(v) => f.write_fmt(format_args!("Eq::Eq({v:?})")),
@@ -926,7 +1084,7 @@ mod tests {
 
             assert_that_panic_by(move || assert.unwrap_inner())
                 .has_type::<&str>()
-                .is_equal_to(formatdoc! {r#"Cannot `unwrap_owned` a borrowed value."#});
+                .is_equal_to(formatdoc! {r"Cannot `unwrap_owned` a borrowed value."});
         }
 
         #[test]
@@ -940,7 +1098,7 @@ mod tests {
 
             assert_that_panic_by(move || assert.unwrap_inner())
                 .has_type::<&str>()
-                .is_equal_to(formatdoc! {r#"Cannot `unwrap_owned` a borrowed value."#});
+                .is_equal_to(formatdoc! {r"Cannot `unwrap_owned` a borrowed value."});
         }
 
         #[test]

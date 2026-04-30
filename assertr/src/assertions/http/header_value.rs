@@ -126,7 +126,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_empty())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 0
 
@@ -136,7 +136,7 @@ mod tests {
                         Expected an empty header value.,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -158,7 +158,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_not_empty())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: 0
 
@@ -170,7 +170,7 @@ mod tests {
                         Expected a non-empty header value.,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -194,7 +194,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_sensitive())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: true
 
@@ -204,7 +204,7 @@ mod tests {
                         Expected a sensitive header value. You might have forgotten to call `set_sensitive(true)` on the header value.,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -235,7 +235,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_insensitive())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: false
 
@@ -245,7 +245,7 @@ mod tests {
                         Expected an insensitive header value. You might have forgotten to call `set_sensitive(false)` on the header value.,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -274,7 +274,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_ascii())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: Err(
                         ToStrError {{
@@ -284,7 +284,7 @@ mod tests {
 
                     is not of expected variant: Result:Ok
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[tokio::test]
@@ -293,7 +293,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_ascii())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: Err(
                         ToStrError {{
@@ -303,7 +303,7 @@ mod tests {
 
                     is not of expected variant: Result:Ok
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 

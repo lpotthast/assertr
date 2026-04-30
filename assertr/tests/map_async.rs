@@ -11,7 +11,8 @@ struct Metadata {
 }
 
 impl Person {
-    async fn to_metadata(self) -> Metadata {
+    #[allow(clippy::unused_async)]
+    async fn into_metadata(self) -> Metadata {
         self.meta
     }
 }
@@ -23,7 +24,7 @@ async fn is_able_to_access_derived_properties_without_breaking_the_call_chain() 
     };
 
     assert_that!(person)
-        .map_async(|it| it.unwrap_owned().to_metadata())
+        .map_async(|it| it.unwrap_owned().into_metadata())
         .await
         .map(|it| it.borrowed().alive.into())
         .is_equal_to(true);

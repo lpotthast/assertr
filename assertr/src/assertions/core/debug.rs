@@ -17,7 +17,7 @@ pub trait DebugAssertions {
     fn has_debug_value(self, expected: impl Debug) -> Self;
 }
 
-impl<T: Debug, M: Mode> DebugAssertions for AssertThat<'_, T, M> {
+impl<T: Debug, M: Mode, R> DebugAssertions for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn has_debug_string(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();
@@ -77,14 +77,14 @@ mod tests {
         #[test]
         fn succeeds_when_equal() {
             assert_that!(42).has_debug_string("42");
-            assert_that!(42).has_debug_string(&"42");
-            assert_that!(42).has_debug_string("42".to_string());
-            assert_that!(42).has_debug_string(&"42".to_string());
+            assert_that!(42).has_debug_string("42");
+            assert_that!(42).has_debug_string("42");
+            assert_that!(42).has_debug_string("42");
         }
 
         #[test]
         fn succeeds_when_equal_on_static_string_containing_escaped_characters() {
-            assert_that!("\n").has_debug_string(r#"\n"#);
+            assert_that!("\n").has_debug_string(r"\n");
         }
 
         #[test]
@@ -121,16 +121,16 @@ mod tests {
             #[test]
             fn succeeds_when_equal_using_same_value() {
                 assert_that!(42).has_debug_value(42);
-                assert_that!(42).has_debug_value(&42);
+                assert_that!(42).has_debug_value(42);
             }
 
             // Although `has_debug_string` should be used instead!
             #[test]
             fn succeeds_when_equal_using_string_representation() {
                 assert_that!(42).has_debug_value("42");
-                assert_that!(42).has_debug_value(&"42");
+                assert_that!(42).has_debug_value("42");
                 assert_that!(42).has_debug_value("42".to_string());
-                assert_that!(42).has_debug_value(&"42".to_string());
+                assert_that!(42).has_debug_value("42".to_string());
             }
 
             #[test]
@@ -158,7 +158,7 @@ mod tests {
                 assert_that_panic_by(|| {
                     assert_that!("\n")
                         .with_location(false)
-                        .has_debug_value(r#"\n"#)
+                        .has_debug_value(r"\n")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"

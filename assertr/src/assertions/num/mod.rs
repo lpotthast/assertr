@@ -1,7 +1,7 @@
 use crate::AssertThat;
+use crate::AssertionRenderer;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
-use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 use num::{Float, Num, Signed};
@@ -55,7 +55,10 @@ pub trait NumAssertions<T: Num> {
     // TODO: is_subnormal
 }
 
-impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
+impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R>
+where
+    R: AssertionRenderer<T>,
+{
     #[track_caller]
     fn is_zero(self) -> Self {
         self.track_assertion();
@@ -66,6 +69,8 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
                 core::any::type_name::<T>()
             ));
             let expected = T::zero();
+            let expected = self.render_value(&expected);
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -92,6 +97,8 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
                 core::any::type_name::<T>()
             ));
             let expected = T::one();
+            let expected = self.render_value(&expected);
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -116,6 +123,7 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_negative() {
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be negative. But was
@@ -135,6 +143,7 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_positive() {
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be positive. But was
@@ -157,6 +166,11 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         let min = expected.clone() - allowed_deviation.clone();
         let max = expected.clone() + allowed_deviation.clone();
         if !(actual >= &min && actual <= &max) {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(&expected);
+            let allowed_deviation = self.render_value(&allowed_deviation);
+            let min = self.render_value(&min);
+            let max = self.render_value(&max);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be close to: {expected:#?},
@@ -180,6 +194,8 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         if !actual.is_nan() {
             let nan = T::nan();
+            let nan = self.render_value(&nan);
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {nan:#?}
@@ -200,6 +216,7 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_finite() {
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected a finite value, but was
@@ -221,6 +238,8 @@ impl<T: Num + Debug, M: Mode> NumAssertions<T> for AssertThat<'_, T, M> {
         let actual = self.actual();
         if !actual.is_infinite() {
             let inf = T::infinity();
+            let inf = self.render_value(&inf);
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: +/- {inf:#?}
@@ -299,7 +318,7 @@ mod tests {
         fn panics_when_not_zero() {
             assert_that_panic_by(|| assert_that!(3).with_location(false).is_zero())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 0
 
@@ -309,7 +328,7 @@ mod tests {
                         Expecting additive identity of type 'i32',
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -326,7 +345,7 @@ mod tests {
         fn panics_when_not_one() {
             assert_that_panic_by(|| assert_that!(3).with_location(false).is_one())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 1
 
@@ -336,7 +355,7 @@ mod tests {
                         Expecting multiplicative identity of type 'i32',
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -353,26 +372,26 @@ mod tests {
         fn panics_when_zero() {
             assert_that_panic_by(|| assert_that!(0.0).with_location(false).is_negative())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be negative. But was
 
                       Actual: 0.0
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
         fn panics_when_positive() {
             assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_negative())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be negative. But was
 
                       Actual: 1.23
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -394,13 +413,13 @@ mod tests {
         fn panics_when_negative() {
             assert_that_panic_by(|| assert_that!(-1.23).with_location(false).is_positive())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be positive. But was
 
                       Actual: -1.23
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -416,7 +435,7 @@ mod tests {
                     .is_close_to(0.333, 0.001)
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be close to: 0.333,
                      with allowed deviation being: 0.001,
@@ -424,7 +443,7 @@ mod tests {
 
                       Actual: 0.3319
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
@@ -442,7 +461,7 @@ mod tests {
                     .is_close_to(0.333, 0.001)
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be close to: 0.333,
                      with allowed deviation being: 0.001,
@@ -450,7 +469,7 @@ mod tests {
 
                       Actual: 0.3341
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -468,13 +487,13 @@ mod tests {
         fn panics_when_not_nan() {
             assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_nan())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: NaN
 
                       Actual: 1.23
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -496,13 +515,13 @@ mod tests {
                     .is_finite();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected a finite value, but was
 
                       Actual: inf
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
@@ -513,13 +532,13 @@ mod tests {
                     .is_finite();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected a finite value, but was
 
                       Actual: -inf
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -542,13 +561,13 @@ mod tests {
         fn panics_when_not_infinity() {
             assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_infinite())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: +/- inf
 
                       Actual: 1.23
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }

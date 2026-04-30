@@ -1,69 +1,82 @@
-use crate::AssertThat;
-use crate::{Mode, tracking::AssertionTracking};
+use crate::{AssertThat, AssertionRenderer, Mode, tracking::AssertionTracking};
 use alloc::string::String;
 use core::cell::RefCell;
-use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait RefCellAssertions {
+pub trait RefCellAssertions<T, R> {
     /// Check that the `RefCell` is immutably or mutably borrowed.
-    fn is_borrowed(self) -> Self;
+    fn is_borrowed(self) -> Self
+    where
+        R: AssertionRenderer<RefCell<T>>;
 
     /// Check that the `RefCell` is mutably borrowed.
-    fn is_mutably_borrowed(self) -> Self;
+    fn is_mutably_borrowed(self) -> Self
+    where
+        R: AssertionRenderer<RefCell<T>>;
 
     /// Check that the `RefCell` is not mutably borrowed, wither by being not borrowed at all, or only borrowed immutably.
     #[cfg_attr(feature = "fluent", fluent_alias("not_be_mutably_borrowed"))]
-    fn is_not_mutably_borrowed(self) -> Self;
+    fn is_not_mutably_borrowed(self) -> Self
+    where
+        R: AssertionRenderer<RefCell<T>>;
 }
 
-impl<T: Debug, M: Mode> RefCellAssertions for AssertThat<'_, RefCell<T>, M> {
+impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R> {
     #[track_caller]
-    fn is_borrowed(self) -> Self {
+    fn is_borrowed(self) -> Self
+    where
+        R: AssertionRenderer<RefCell<T>>,
+    {
         self.track_assertion();
-        let actual = self.actual();
-        if actual.try_borrow_mut().is_ok() {
+        if self.actual().try_borrow_mut().is_ok() {
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?} is not borrowed.
 
                     Expected: RefCell to be borrowed (immutably) at least once.
-                ",actual = self.actual()}
+                "}
             });
         }
         self
     }
 
     #[track_caller]
-    fn is_mutably_borrowed(self) -> Self {
+    fn is_mutably_borrowed(self) -> Self
+    where
+        R: AssertionRenderer<RefCell<T>>,
+    {
         self.track_assertion();
-        let actual = self.actual();
-        if actual.try_borrow().is_ok() {
+        if self.actual().try_borrow().is_ok() {
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?} is not mutably borrowed.
 
                     Expected: RefCell to be borrowed mutably.
-                ",actual = self.actual()}
+                "}
             });
         }
         self
     }
 
     #[track_caller]
-    fn is_not_mutably_borrowed(self) -> Self {
+    fn is_not_mutably_borrowed(self) -> Self
+    where
+        R: AssertionRenderer<RefCell<T>>,
+    {
         self.track_assertion();
-        let actual = self.actual();
-        if actual.try_borrow().is_err() {
+        if self.actual().try_borrow().is_err() {
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?} is mutably borrowed.
 
                     Expected: RefCell to not be borrowed mutably.
-                ",actual = self.actual()}
+                "}
             });
         }
         self
@@ -99,7 +112,7 @@ mod tests {
             let cell = RefCell::new(42);
             assert_that_panic_by(|| assert_that!(&cell).with_location(false).is_borrowed())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: RefCell {{
                         value: 42,
@@ -107,7 +120,7 @@ mod tests {
 
                     Expected: RefCell to be borrowed (immutably) at least once.
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -154,7 +167,7 @@ mod tests {
                     .is_not_mutably_borrowed()
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: RefCell {{
                         value: <borrowed>,
@@ -162,7 +175,7 @@ mod tests {
 
                     Expected: RefCell to not be borrowed mutably.
                     -------- assertr --------
-                "#});
+                "});
             drop(borrow);
         }
     }

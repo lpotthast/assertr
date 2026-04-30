@@ -10,16 +10,18 @@ use indoc::writedoc;
 /// Data-extracting assertions for boxed values.
 /// Only available in Panic mode, as the extracted type cannot be produced when the downcast fails.
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait BoxAssertions<'t> {
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic>;
+pub trait BoxAssertions<'t, R> {
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R>;
 
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic>;
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
+    where
+        R: Clone;
 }
 
-impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
+impl<'t, R> BoxAssertions<'t, R> for AssertThat<'t, Box<dyn Any>, Panic, R> {
     #[track_caller]
     #[allow(clippy::too_many_lines)]
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic> {
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
         enum CastResult<'c, C> {
             Owned(Box<C>),
             Ref(&'c C),
@@ -94,6 +96,7 @@ impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
                     number_of_assertions: self.number_of_assertions,
                     failures: self.failures,
                     mode: self.mode,
+                    renderer: self.renderer,
                 }
             }
             CastResult::Ref(casted) => {
@@ -106,6 +109,7 @@ impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
                     number_of_assertions: self.number_of_assertions,
                     failures: self.failures,
                     mode: self.mode,
+                    renderer: self.renderer,
                 }
             }
             CastResult::Err {
@@ -122,6 +126,7 @@ impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
                     number_of_assertions: self.number_of_assertions,
                     failures: self.failures,
                     mode: self.mode,
+                    renderer: self.renderer,
                 };
 
                 let expected_type_name = type_name::<E>();
@@ -143,7 +148,10 @@ impl<'t> BoxAssertions<'t> for AssertThat<'t, Box<dyn Any>, Panic> {
     }
 
     #[track_caller]
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic> {
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
+    where
+        R: Clone,
+    {
         self.track_assertion();
 
         let any = &self.actual();
@@ -212,13 +220,13 @@ mod tests {
                     .has_type::<u32>();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value type: u32
 
                       Actual value type: &str
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -246,13 +254,13 @@ mod tests {
                     .has_type_ref::<u32>();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expected value type: u32
 
                   Actual value type: String
                 -------- assertr --------
-            "#});
+            "});
         }
 
         #[test]
@@ -265,13 +273,13 @@ mod tests {
                     .has_type_ref::<u32>();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expected value type: u32
 
                   Actual value type: &str
                 -------- assertr --------
-            "#});
+            "});
         }
 
         #[test]
@@ -285,7 +293,7 @@ mod tests {
                     .has_type_ref::<u32>();
             })
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expected value type: u32
 
@@ -295,7 +303,7 @@ mod tests {
                     A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.,
                 ]
                 -------- assertr --------
-            "#});
+            "});
         }
     }
 }

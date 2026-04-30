@@ -1,49 +1,46 @@
 use alloc::borrow::ToOwned;
-use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::{Debug, Write};
+use core::fmt::Write;
 use indoc::writedoc;
 
 use crate::actual::Actual;
-use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, AssertionRenderer, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait IteratorAssertions<'t, T: Debug, M: Mode> {
+pub trait IteratorAssertions<'t, T, M: Mode, R> {
     /// This is a terminal assertion, as it must consume the underlying iterator.
-    fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
+    fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
     where
-        E: Debug,
-        T: AssertrPartialEq<E>,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<Vec<T>> + AssertionRenderer<E>,
         't: 'u;
 
     /// This is a terminal assertion, as it must consume the underlying iterator.
-    fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M>
+    fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M, R>
     where
-        E: Debug,
-        T: AssertrPartialEq<E>,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<Vec<T>> + AssertionRenderer<E>,
         't: 'u;
 
     /// This is a terminal assertion, as it must consume the underlying iterator.
-    fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M>
+    fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        E: Debug,
-        T: PartialEq<E>,
-        T: AssertrPartialEq<E> + Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<Vec<T>> + AssertionRenderer<[E]>,
         't: 'u;
 }
 
-impl<'t, T, I, M: Mode> IteratorAssertions<'t, T, M> for AssertThat<'t, I, M>
+impl<'t, T, I, M: Mode, R> IteratorAssertions<'t, T, M, R> for AssertThat<'t, I, M, R>
 where
-    T: Debug,
     I: Iterator<Item = T>,
 {
     #[track_caller]
-    fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M>
+    fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
     where
-        E: Debug,
-        T: Debug + AssertrPartialEq<E>,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<Vec<T>> + AssertionRenderer<E>,
         't: 'u,
     {
         self.track_assertion();
@@ -52,10 +49,12 @@ where
 
         let actual = actual.unwrap_owned().collect::<Vec<_>>();
         let expected = expected;
-        if !actual
-            .iter()
-            .any(|it| AssertrPartialEq::eq(it, &expected, None))
-        {
+        if !actual.iter().any(|it| {
+            let mut ctx = this.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &expected, Some(&mut ctx))
+        }) {
+            let actual = this.render_value(&actual);
+            let expected = this.render_value(&expected);
             this.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -68,10 +67,10 @@ where
     }
 
     #[track_caller]
-    fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M>
+    fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M, R>
     where
-        E: Debug,
-        T: Debug + AssertrPartialEq<E>,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<Vec<T>> + AssertionRenderer<E>,
         't: 'u,
     {
         self.track_assertion();
@@ -79,10 +78,12 @@ where
         let (actual, this) = self.replace_actual_with(Actual::Owned(()));
         let actual = actual.unwrap_owned().collect::<Vec<_>>();
 
-        if actual
-            .iter()
-            .any(|it| AssertrPartialEq::eq(it, &not_expected, None))
-        {
+        if actual.iter().any(|it| {
+            let mut ctx = this.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &not_expected, Some(&mut ctx))
+        }) {
+            let actual = this.render_value(&actual);
+            let not_expected = this.render_value(&not_expected);
             this.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -95,11 +96,10 @@ where
     }
 
     #[track_caller]
-    fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M>
+    fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        E: Debug,
-        T: PartialEq<E>, // TOOD: Why exactly do we need this bound? Can we get rid of it? It is required in order to util::slice::compare `&[&T]` with `&[&E]`...
-        T: AssertrPartialEq<E> + Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<Vec<T>> + AssertionRenderer<[E]>,
         't: 'u,
     {
         self.track_assertion();
@@ -109,18 +109,16 @@ where
         let actual = actual.unwrap_owned().collect::<Vec<_>>();
         let expected = expected.as_ref();
 
-        let result = crate::util::slice::compare(actual.as_slice(), expected);
+        let mut ctx = this.eq_context();
+        let result =
+            crate::util::slice::compare_with_context(actual.as_slice(), expected, Some(&mut ctx));
 
         if !result.strictly_equal {
-            if !result.not_in_b.is_empty() {
-                this.add_detail_message(format!("Elements not expected: {:#?}", result.not_in_b));
-            }
-            if !result.not_in_a.is_empty() {
-                this.add_detail_message(format!("Elements not found: {:#?}", result.not_in_a));
-            }
             if result.only_differing_in_order() {
                 this.add_detail_message("The order of elements does not match!".to_owned());
             }
+            let actual = this.render_value(&actual);
+            let expected = this.render_value(expected);
 
             this.fail(|w: &mut String| {
                 writedoc! {w, r"
@@ -143,45 +141,47 @@ where
 /// Assertions are prefixed to distinguish these assertions from more concrete implementations
 /// on the actual type, like `Vec` for example.
 #[allow(clippy::return_self_not_must_use)]
-pub trait IntoIteratorAssertions<T: Debug> {
+pub trait IntoIteratorAssertions<T, R> {
     fn into_iter_contains<E>(self, expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E>;
+        T: AssertrPartialEq<E, R>,
+        R: for<'a> AssertionRenderer<Vec<&'a T>> + AssertionRenderer<E>;
 
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E>;
+        T: AssertrPartialEq<E, R>,
+        R: for<'a> AssertionRenderer<Vec<&'a T>> + AssertionRenderer<E>;
 
     fn into_iter_contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: Debug,
         T: PartialEq<E>,
-        T: AssertrPartialEq<E> + Debug;
+        T: AssertrPartialEq<E, R>,
+        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>;
 
-    fn into_iter_iterator_is_empty(self) -> Self;
+    fn into_iter_iterator_is_empty(self) -> Self
+    where
+        R: for<'a> AssertionRenderer<Vec<&'a T>>;
 }
 
-impl<T, I, M: Mode> IntoIteratorAssertions<T> for AssertThat<'_, I, M>
+impl<T, I, M: Mode, R> IntoIteratorAssertions<T, R> for AssertThat<'_, I, M, R>
 where
-    T: Debug,
     for<'any> &'any I: IntoIterator<Item = &'any T>,
 {
     #[track_caller]
     fn into_iter_contains<E>(self, expected: E) -> Self
     where
-        E: Debug,
-        T: Debug + AssertrPartialEq<E>,
+        T: AssertrPartialEq<E, R>,
+        R: for<'a> AssertionRenderer<Vec<&'a T>> + AssertionRenderer<E>,
     {
         self.track_assertion();
         let actual = self.actual().into_iter().collect::<Vec<_>>();
         let expected = expected;
-        if !self
-            .actual()
-            .into_iter()
-            .any(|it| AssertrPartialEq::eq(it, &expected, None))
-        {
+        if !self.actual().into_iter().any(|it| {
+            let mut ctx = self.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &expected, Some(&mut ctx))
+        }) {
+            let actual = self.render_value(&actual);
+            let expected = self.render_value(&expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -196,16 +196,18 @@ where
     #[track_caller]
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
     where
-        E: Debug,
-        T: Debug + AssertrPartialEq<E>,
+        T: AssertrPartialEq<E, R>,
+        R: for<'a> AssertionRenderer<Vec<&'a T>> + AssertionRenderer<E>,
     {
         self.track_assertion();
         let actual = self.actual().into_iter().collect::<Vec<_>>();
 
-        if actual
-            .iter()
-            .any(|it| AssertrPartialEq::eq(*it, &not_expected, None))
-        {
+        if actual.iter().any(|it| {
+            let mut ctx = self.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(*it, &not_expected, Some(&mut ctx))
+        }) {
+            let actual = self.render_value(&actual);
+            let not_expected = self.render_value(&not_expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -220,26 +222,27 @@ where
     #[track_caller]
     fn into_iter_contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: Debug,
         T: PartialEq<E>, // TOOD: Why exactly do we need this bound? Can we get rid of it? It is required in order to util::slice::compare `&[&T]` with `&[&E]`...
-        T: AssertrPartialEq<E> + Debug,
+        T: AssertrPartialEq<E, R>,
+        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>,
     {
         self.track_assertion();
         let actual = self.actual().into_iter().collect::<Vec<_>>();
         let expected = expected.as_ref().iter().collect::<Vec<_>>();
 
-        let result = crate::util::slice::compare(actual.as_slice(), expected.as_slice());
+        let mut ctx = self.eq_context();
+        let result = crate::util::slice::compare_with_context(
+            actual.as_slice(),
+            expected.as_slice(),
+            Some(&mut ctx),
+        );
 
         if !result.strictly_equal {
-            if !result.not_in_b.is_empty() {
-                self.add_detail_message(format!("Elements not expected: {:#?}", result.not_in_b));
-            }
-            if !result.not_in_a.is_empty() {
-                self.add_detail_message(format!("Elements not found: {:#?}", result.not_in_a));
-            }
             if result.only_differing_in_order() {
                 self.add_detail_message("The order of elements does not match!".to_owned());
             }
+            let actual = self.render_value(&actual);
+            let expected = self.render_value(&expected);
 
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
@@ -256,10 +259,14 @@ where
 
     // TODO: Should this exist? Should we create is_empty() impl's for concrete collection types instead?
     #[track_caller]
-    fn into_iter_iterator_is_empty(self) -> Self {
+    fn into_iter_iterator_is_empty(self) -> Self
+    where
+        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+    {
         self.track_assertion();
         if self.actual().into_iter().count() != 0 {
             let actual = self.actual().into_iter().collect::<Vec<_>>();
+            let actual = self.render_value(&actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}

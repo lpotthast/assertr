@@ -91,13 +91,13 @@ mod tests {
                 assert_that!(actual).with_location(false).has_type::<u32>();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value type: u32
 
                       Actual value type: String
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -124,13 +124,13 @@ mod tests {
                     .has_type_ref::<u32>();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expected panic value type: u32
 
                   Actual panic value type: String
                 -------- assertr --------
-            "#});
+            "});
         }
 
         #[test]
@@ -143,13 +143,13 @@ mod tests {
                     .has_type_ref::<u32>();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expected panic value type: u32
 
                   Actual panic value type: &str
                 -------- assertr --------
-            "#});
+            "});
         }
 
         #[test]
@@ -163,7 +163,7 @@ mod tests {
                     .has_type_ref::<u32>();
             })
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expected panic value type: u32
 
@@ -173,7 +173,7 @@ mod tests {
                     The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.,
                 ]
                 -------- assertr --------
-            "#});
+            "});
         }
     }
 }

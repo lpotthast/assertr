@@ -26,7 +26,7 @@ pub trait CharAssertions {
     //fn is_numeric(self) -> Self;
 }
 
-impl<M: Mode> CharAssertions for AssertThat<'_, char, M> {
+impl<M: Mode, R> CharAssertions for AssertThat<'_, char, M, R> {
     #[track_caller]
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self {
         self.track_assertion();
@@ -121,7 +121,7 @@ mod tests {
                     .is_equal_to_ignoring_ascii_case('B')
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expected: 'B',
                 
@@ -131,7 +131,7 @@ mod tests {
                     Actual is not equal to expected, even when ignoring casing.,
                 ]
                 -------- assertr --------
-            "#});
+            "});
         }
     }
 }

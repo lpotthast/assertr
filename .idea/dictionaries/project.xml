@@ -2,6 +2,7 @@
   <dictionary name="project">
     <words>
       <w>assertr</w>
+      <w>autoref</w>
       <w>reqwest</w>
       <w>rootcause</w>
     </words>

@@ -1,6 +1,4 @@
 use ::alloc::{collections::VecDeque, string::String, vec::Vec};
-#[cfg(feature = "std")]
-use ::core::fmt::Debug;
 use ::core::ops::{Range, RangeInclusive};
 #[cfg(feature = "std")]
 use ::std::hash::BuildHasher;
@@ -122,7 +120,7 @@ impl<T> HasLength for &VecDeque<T> {
 }
 
 #[cfg(feature = "std")]
-impl<K: Debug, V: Debug, S: BuildHasher> HasLength for ::std::collections::HashMap<K, V, S> {
+impl<K, V, S: BuildHasher> HasLength for ::std::collections::HashMap<K, V, S> {
     fn length(&self) -> usize {
         ::std::collections::HashMap::len(self)
     }
@@ -133,7 +131,7 @@ impl<K: Debug, V: Debug, S: BuildHasher> HasLength for ::std::collections::HashM
 }
 
 #[cfg(feature = "std")]
-impl<K: Debug, V: Debug, S: BuildHasher> HasLength for &::std::collections::HashMap<K, V, S> {
+impl<K, V, S: BuildHasher> HasLength for &::std::collections::HashMap<K, V, S> {
     fn length(&self) -> usize {
         ::std::collections::HashMap::len(self)
     }
@@ -144,7 +142,7 @@ impl<K: Debug, V: Debug, S: BuildHasher> HasLength for &::std::collections::Hash
 }
 
 #[cfg(feature = "std")]
-impl<V: Debug, S: BuildHasher> HasLength for ::std::collections::HashSet<V, S> {
+impl<V, S: BuildHasher> HasLength for ::std::collections::HashSet<V, S> {
     fn length(&self) -> usize {
         ::std::collections::HashSet::len(self)
     }
@@ -155,7 +153,7 @@ impl<V: Debug, S: BuildHasher> HasLength for ::std::collections::HashSet<V, S> {
 }
 
 #[cfg(feature = "std")]
-impl<V: Debug, S: BuildHasher> HasLength for &::std::collections::HashSet<V, S> {
+impl<V, S: BuildHasher> HasLength for &::std::collections::HashSet<V, S> {
     fn length(&self) -> usize {
         ::std::collections::HashSet::len(self)
     }
@@ -358,6 +356,7 @@ impl HasLength for RangeInclusive<i64> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(clippy::reversed_empty_ranges)]
     mod has_length {
 
         mod on_usize_ranges {

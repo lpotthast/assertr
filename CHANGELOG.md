@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-30
+
+### Added
+
+- `#[assertr_eq(compare_bounds = "...")]` for `AssertrEq` fields using custom `compare_with` functions, letting the
+  derive macro stay agnostic about the comparison's trait bounds.
+
+### Changed
+
+- **Breaking:** Assertion traits now route diagnostics through an `AssertionRenderer<T>` (new type state on
+  `AssertThat`, defaulting to `DebugRenderer`) instead of requiring `T: Debug`. Use `.with_renderer(...)` or
+  `.with_debug_format(...)` to render non-`Debug` values. Some traits gained additional generics, notably
+  `HashSetAssertions` and `HashMapAssertions` now carry the hasher type`S`.
+- **Breaking:** Generated `AssertrEq` matcher structs now use a custom `Debug` implementation that prints
+  `<unrendered>` for fields whose type does not implement `Debug`.
+
+### Fixed
+
+- `AssertrEq` no longer emits renderer bounds for private fields, matching how those fields are excluded from
+  comparison.
+- Collection comparisons (`AssertrPartialEq` for slices and maps) now use the active assertion renderer instead of
+  always falling back to `DebugRenderer`.
+
 ## [0.5.7] - 2026-04-25
 
 ### Added
@@ -266,7 +289,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.5.7...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.6.0...HEAD
+
+[0.6.0]: https://github.com/lpotthast/assertr/compare/v0.5.7...v0.6.0
 
 [0.5.7]: https://github.com/lpotthast/assertr/compare/v0.5.6...v0.5.7
 

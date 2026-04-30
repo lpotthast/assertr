@@ -115,7 +115,7 @@ mod tests {
                 assert_that!(duration).with_location(false).is_zero();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 0s
 
@@ -125,7 +125,7 @@ mod tests {
                         Actual was not zero.,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -147,13 +147,13 @@ mod tests {
                     .is_negative();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 0s to be negative,
 
                       Actual: 0s,
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
@@ -164,13 +164,13 @@ mod tests {
                     .is_negative();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 5s to be negative,
 
                       Actual: 5s,
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -192,13 +192,13 @@ mod tests {
                     .is_positive();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 0s to be positive,
 
                       Actual: 0s,
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
@@ -209,13 +209,13 @@ mod tests {
                     .is_positive();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: -5s to be positive,
 
                       Actual: -5s,
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -235,7 +235,7 @@ mod tests {
                     );
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be close to: 333ms,
                      with allowed deviation being: 1ms,
@@ -243,7 +243,7 @@ mod tests {
 
                       Actual: 331ms 900µs
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
@@ -273,7 +273,7 @@ mod tests {
                     );
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be close to: 333ms,
                      with allowed deviation being: 1ms,
@@ -281,7 +281,7 @@ mod tests {
 
                       Actual: 334ms 100µs
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }

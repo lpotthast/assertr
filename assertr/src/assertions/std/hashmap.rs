@@ -1,84 +1,107 @@
-use crate::{AssertThat, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking};
+use crate::{
+    AssertThat, AssertionRenderer, AssertrPartialEq, Mode, Renderable, tracking::AssertionTracking,
+};
 use core::borrow::Borrow;
 use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 use std::{collections::HashMap, hash::BuildHasher, hash::Hash};
 
+struct RenderedKeyValuePair<'a, K: ?Sized, V: ?Sized, R>(
+    Renderable<'a, K, R>,
+    Renderable<'a, V, R>,
+);
+
+impl<K: ?Sized, V: ?Sized, R> Debug for RenderedKeyValuePair<'_, K, V, R>
+where
+    R: AssertionRenderer<K> + AssertionRenderer<V>,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("").field(&self.0).field(&self.1).finish()
+    }
+}
+
 /// Assertions for generic [`HashMap`]s.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait HashMapAssertions<K, V> {
+pub trait HashMapAssertions<K, V, S, R> {
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: Debug;
+        K: Eq + Hash,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<K>;
 
     fn does_not_contain_key(self, not_expected: impl Borrow<K>) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: Debug;
+        K: Eq + Hash,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<K>;
 
     fn contains_value<E>(self, expected: E) -> Self
     where
-        K: Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug;
+        V: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<E>;
 
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
-        K: Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug;
+        V: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<E>;
 
     fn contains_entry<E>(self, key: impl Borrow<K>, value: impl Borrow<E>) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug;
+        K: Eq + Hash,
+        V: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashMap<K, V, S>>
+            + AssertionRenderer<K>
+            + AssertionRenderer<V>
+            + AssertionRenderer<E>;
 
     fn does_not_contain_entry<E>(self, key: impl Borrow<K>, value: impl Borrow<E>) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug;
+        K: Eq + Hash,
+        V: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<K> + AssertionRenderer<E>;
 
     fn contains_keys<E, I>(self, expected: I) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: Debug,
-        E: Borrow<K> + Debug,
-        I: IntoIterator<Item = E>;
+        K: Eq + Hash,
+        E: Borrow<K>,
+        I: IntoIterator<Item = E>,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<E>;
 
     fn contains_exactly_entries<EK, EV, I>(self, expected: I) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: AssertrPartialEq<EV> + Debug,
-        EK: Borrow<K> + Debug,
-        EV: Debug,
-        I: IntoIterator<Item = (EK, EV)>;
+        K: Eq + Hash,
+        V: AssertrPartialEq<EV, R>,
+        EK: Borrow<K>,
+        I: IntoIterator<Item = (EK, EV)>,
+        R: AssertionRenderer<HashMap<K, V, S>>
+            + AssertionRenderer<K>
+            + AssertionRenderer<V>
+            + AssertionRenderer<EK>
+            + AssertionRenderer<EV>;
 }
 
-impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
-    for AssertThat<'_, HashMap<K, V, S>, M>
+impl<K, V, S: BuildHasher, M: Mode, R> HashMapAssertions<K, V, S, R>
+    for AssertThat<'_, HashMap<K, V, S>, M, R>
 {
     #[track_caller]
     fn contains_key(self, expected: impl Borrow<K>) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: Debug,
+        K: Eq + Hash,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<K>,
     {
         self.track_assertion();
 
         let expected = expected.borrow();
 
         if !self.actual().contains_key(expected) {
+            let actual = self.render_value(self.actual());
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashMap {actual:#?}
 
                     does not contain expected key: {expected:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
         self
@@ -87,20 +110,22 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
     #[track_caller]
     fn does_not_contain_key(self, not_expected: impl Borrow<K>) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: Debug,
+        K: Eq + Hash,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<K>,
     {
         self.track_assertion();
 
         let not_expected = not_expected.borrow();
 
         if self.actual().contains_key(not_expected) {
+            let actual = self.render_value(self.actual());
+            let not_expected = self.render_value(not_expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashMap {actual:#?}
 
                     contains unexpected key: {not_expected:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
         self
@@ -109,23 +134,23 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
     #[track_caller]
     fn contains_value<E>(self, expected: E) -> Self
     where
-        K: Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        V: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
-        if !self
-            .actual()
-            .values()
-            .any(|it| AssertrPartialEq::eq(it, &expected, None))
-        {
+        if !self.actual().values().any(|it| {
+            let mut ctx = self.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &expected, Some(&mut ctx))
+        }) {
+            let actual = self.render_value(self.actual());
+            let expected = self.render_value(&expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashMap {actual:#?}
-                    
+
                     does not contain expected value: {expected:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
         self
@@ -134,23 +159,23 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
     #[track_caller]
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
-        K: Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        V: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
-        if self
-            .actual()
-            .values()
-            .any(|it| AssertrPartialEq::eq(it, &not_expected, None))
-        {
+        if self.actual().values().any(|it| {
+            let mut ctx = self.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &not_expected, Some(&mut ctx))
+        }) {
+            let actual = self.render_value(self.actual());
+            let not_expected = self.render_value(&not_expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashMap {actual:#?}
 
                     contains unexpected value: {not_expected:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
         self
@@ -159,9 +184,12 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
     #[track_caller]
     fn contains_entry<E>(self, key: impl Borrow<K>, value: impl Borrow<E>) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        K: Eq + Hash,
+        V: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashMap<K, V, S>>
+            + AssertionRenderer<K>
+            + AssertionRenderer<V>
+            + AssertionRenderer<E>,
     {
         let then = self.contains_key(key.borrow());
 
@@ -174,11 +202,15 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
         match actual.get(expected_key) {
             None => { /* Ignored: contains_key() already created an error in this case... */ }
             Some(actual_value) => {
-                let mut ctx = EqContext::new();
+                let mut ctx = then.eq_context();
                 if !AssertrPartialEq::eq(actual_value, expected_value, Some(&mut ctx)) {
                     if !ctx.differences.differences.is_empty() {
                         then.add_detail_message(format!("Differences: {:#?}", ctx.differences));
                     }
+                    let actual = then.render_value(actual);
+                    let expected_key = then.render_value(expected_key);
+                    let expected_value = then.render_value(expected_value);
+                    let actual_value = then.render_value(actual_value);
                     then.fail(|w: &mut String| {
                         writedoc! {w, r"
                             Actual: HashMap {actual:#?}
@@ -200,9 +232,9 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
     #[track_caller]
     fn does_not_contain_entry<E>(self, key: impl Borrow<K>, value: impl Borrow<E>) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        K: Eq + Hash,
+        V: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<K> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
@@ -212,16 +244,22 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
         if self
             .actual()
             .get(unexpected_key)
-            .is_some_and(|actual_value| AssertrPartialEq::eq(actual_value, unexpected_value, None))
+            .is_some_and(|actual_value| {
+                let mut ctx = self.eq_context();
+                <_ as AssertrPartialEq<_, R>>::eq(actual_value, unexpected_value, Some(&mut ctx))
+            })
         {
+            let actual = self.render_value(self.actual());
+            let unexpected_key_rendered = self.render_value(unexpected_key);
+            let unexpected_value_rendered = self.render_value(unexpected_value);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashMap {actual:#?}
 
-                    contains unexpected entry at key: {unexpected_key:#?}
+                    contains unexpected entry at key: {unexpected_key_rendered:#?}
 
-                    Unexpected value: {unexpected_value:#?}
-                ", actual = self.actual()}
+                    Unexpected value: {unexpected_value_rendered:#?}
+                "}
             });
         }
         self
@@ -230,10 +268,10 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
     #[track_caller]
     fn contains_keys<E, I>(self, expected: I) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: Debug,
-        E: Borrow<K> + Debug,
+        K: Eq + Hash,
+        E: Borrow<K>,
         I: IntoIterator<Item = E>,
+        R: AssertionRenderer<HashMap<K, V, S>> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
@@ -244,16 +282,20 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
             .collect::<Vec<_>>();
 
         if !keys_not_found.is_empty() {
+            let expected_refs: Vec<&E> = expected.iter().collect();
+            let actual = self.render_value(self.actual());
+            let expected_rendered = self.render_values(expected_refs.as_slice());
+            let keys_not_found_rendered = self.render_values(keys_not_found.as_slice());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashMap {actual:#?}
 
                     does not contain all expected keys
 
-                    Expected keys: {expected:#?}
+                    Expected keys: {expected_rendered:#?}
 
-                    Keys not found: {keys_not_found:#?}
-                ", actual = self.actual()}
+                    Keys not found: {keys_not_found_rendered:#?}
+                "}
             });
         }
         self
@@ -262,11 +304,15 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
     #[track_caller]
     fn contains_exactly_entries<EK, EV, I>(self, expected: I) -> Self
     where
-        K: Eq + Hash + Debug,
-        V: AssertrPartialEq<EV> + Debug,
-        EK: Borrow<K> + Debug,
-        EV: Debug,
+        K: Eq + Hash,
+        V: AssertrPartialEq<EV, R>,
+        EK: Borrow<K>,
         I: IntoIterator<Item = (EK, EV)>,
+        R: AssertionRenderer<HashMap<K, V, S>>
+            + AssertionRenderer<K>
+            + AssertionRenderer<V>
+            + AssertionRenderer<EK>
+            + AssertionRenderer<EV>,
     {
         self.track_assertion();
 
@@ -278,12 +324,13 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
             match self.actual().get((*expected_key).borrow()) {
                 None => keys_not_found.push(expected_key),
                 Some(actual_value) => {
-                    let mut ctx = EqContext::new();
+                    let mut ctx = self.eq_context();
                     if !AssertrPartialEq::eq(actual_value, expected_value, Some(&mut ctx)) {
                         keys_with_unexpected_values.push(expected_key);
                         if !ctx.differences.differences.is_empty() {
+                            let expected_key_rendered = self.render_value(expected_key);
                             self.add_detail_message(format!(
-                                "Differences at key {expected_key:#?}: {:#?}",
+                                "Differences at key {expected_key_rendered:#?}: {:#?}",
                                 ctx.differences
                             ));
                         }
@@ -307,16 +354,34 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
             || !keys_with_unexpected_values.is_empty()
         {
             if !keys_not_found.is_empty() {
-                self.add_detail_message(format!("Keys not found: {keys_not_found:#?}"));
+                let keys_not_found_rendered = self.render_values(keys_not_found.as_slice());
+                self.add_detail_message(format!("Keys not found: {keys_not_found_rendered:#?}"));
             }
             if !unexpected_entries.is_empty() {
-                self.add_detail_message(format!("Unexpected entries: {unexpected_entries:#?}"));
-            }
-            if !keys_with_unexpected_values.is_empty() {
+                let unexpected_entries_rendered: Vec<RenderedKeyValuePair<'_, K, V, R>> =
+                    unexpected_entries
+                        .iter()
+                        .map(|(k, v)| {
+                            RenderedKeyValuePair(self.render_value(*k), self.render_value(*v))
+                        })
+                        .collect();
                 self.add_detail_message(format!(
-                    "Keys with unexpected values: {keys_with_unexpected_values:#?}"
+                    "Unexpected entries: {unexpected_entries_rendered:#?}"
                 ));
             }
+            if !keys_with_unexpected_values.is_empty() {
+                let keys_with_unexpected_values_rendered =
+                    self.render_values(keys_with_unexpected_values.as_slice());
+                self.add_detail_message(format!(
+                    "Keys with unexpected values: {keys_with_unexpected_values_rendered:#?}"
+                ));
+            }
+
+            let expected_rendered: Vec<RenderedKeyValuePair<'_, EK, EV, R>> = expected
+                .iter()
+                .map(|(k, v)| RenderedKeyValuePair(self.render_value(k), self.render_value(v)))
+                .collect();
+            let actual = self.render_value(self.actual());
 
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
@@ -324,8 +389,8 @@ impl<K, V, S: BuildHasher, M: Mode> HashMapAssertions<K, V>
 
                     does not exactly contain expected entries
 
-                    Expected entries: {expected:#?}
-                ", actual = self.actual()}
+                    Expected entries: {expected_rendered:#?}
+                "}
             });
         }
         self

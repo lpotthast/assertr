@@ -23,7 +23,7 @@ fn test() {
         .capture_failures();
 
     assert_that!(failures).contains_exactly::<String>([
-        formatdoc! {r#"
+        formatdoc! {r"
                 -------- assertr --------
                 Expected: Person {{
                     age: 30,
@@ -37,8 +37,8 @@ fn test() {
                     Checking person...,
                 ]
                 -------- assertr --------
-            "#},
-        formatdoc! {r#"
+            "},
+        formatdoc! {r"
                 -------- assertr --------
                 Actual: 42
 
@@ -51,6 +51,6 @@ fn test() {
                     Checking person...,
                 ]
                 -------- assertr --------
-            "#},
+            "},
     ]);
 }

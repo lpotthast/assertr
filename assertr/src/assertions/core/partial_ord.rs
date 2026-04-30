@@ -1,43 +1,39 @@
 use alloc::string::String;
-use core::{
-    borrow::Borrow,
-    cmp::Ordering,
-    fmt::{Debug, Write},
-};
+use core::{borrow::Borrow, cmp::Ordering, fmt::Write};
 use indoc::writedoc;
 
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, AssertionRenderer, Mode, tracking::AssertionTracking};
 
 /// Assertions for comparable values.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait PartialOrdAssertions<T> {
+pub trait PartialOrdAssertions<T, R> {
     fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
     where
-        E: Debug,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
         T: PartialOrd<E>;
 
     fn is_greater_than<E>(self, expected: impl Borrow<E>) -> Self
     where
-        E: Debug,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
         T: PartialOrd<E>;
 
     fn is_less_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
     where
-        E: Debug,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
         T: PartialOrd<E>;
 
     fn is_greater_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
     where
-        E: Debug,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
         T: PartialOrd<E>;
 }
 
-impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
+impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
     where
-        E: Debug,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
         T: PartialOrd<E>,
     {
         self.track_assertion();
@@ -46,6 +42,8 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
         let expected = expected.borrow();
 
         if !matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -62,7 +60,7 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
     fn is_greater_than<E>(self, expected: impl Borrow<E>) -> Self
     where
-        E: Debug,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
         T: PartialOrd<E>,
     {
         self.track_assertion();
@@ -71,6 +69,8 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
         let expected = expected.borrow();
 
         if !matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -87,7 +87,7 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
     fn is_less_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
     where
-        E: Debug,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
         T: PartialOrd<E>,
     {
         self.track_assertion();
@@ -99,6 +99,8 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
             actual.partial_cmp(expected),
             Some(Ordering::Less | Ordering::Equal)
         ) {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -115,7 +117,7 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
     fn is_greater_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
     where
-        E: Debug,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
         T: PartialOrd<E>,
     {
         self.track_assertion();
@@ -127,6 +129,8 @@ impl<T: Debug, M: Mode> PartialOrdAssertions<T> for AssertThat<'_, T, M> {
             actual.partial_cmp(expected),
             Some(Ordering::Greater | Ordering::Equal)
         ) {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -149,37 +153,37 @@ mod tests {
     #[test]
     fn is_less_than_succeeds_when_less() {
         assert_that!(3).is_less_than(4);
-        assert_that!(3).is_less_than(&4);
+        assert_that!(3).is_less_than(4);
     }
 
     #[test]
     fn is_greater_than_succeeds_when_greater() {
         assert_that!(7).is_greater_than(6);
-        assert_that!(7).is_greater_than(&6);
+        assert_that!(7).is_greater_than(6);
     }
 
     #[test]
     fn is_less_or_equal_to_than_succeeds_when_less() {
         assert_that!(3).is_less_or_equal_to(4);
-        assert_that!(3).is_less_or_equal_to(&4);
+        assert_that!(3).is_less_or_equal_to(4);
     }
 
     #[test]
     fn is_less_or_equal_to_than_succeeds_when_equal() {
         assert_that!(3).is_less_or_equal_to(3);
-        assert_that!(3).is_less_or_equal_to(&3);
+        assert_that!(3).is_less_or_equal_to(3);
     }
 
     #[test]
     fn is_greater_or_equal_to_succeeds_when_greater() {
         assert_that!(7).is_greater_or_equal_to(6);
-        assert_that!(7).is_greater_or_equal_to(&6);
+        assert_that!(7).is_greater_or_equal_to(6);
     }
 
     #[test]
     fn is_greater_or_equal_to_succeeds_when_equal() {
         assert_that!(7).is_greater_or_equal_to(7);
-        assert_that!(7).is_greater_or_equal_to(&7);
+        assert_that!(7).is_greater_or_equal_to(7);
     }
 
     #[test]
@@ -190,7 +194,7 @@ mod tests {
                 .is_less_than(0.0)
         })
         .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        .is_equal_to(formatdoc! {r"
             -------- assertr --------
             Actual: NaN
 
@@ -198,7 +202,7 @@ mod tests {
 
             Expected: 0.0
             -------- assertr --------
-        "#});
+        "});
     }
 
     #[test]
@@ -209,7 +213,7 @@ mod tests {
                 .is_greater_than(0.0)
         })
         .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        .is_equal_to(formatdoc! {r"
             -------- assertr --------
             Actual: NaN
 
@@ -217,7 +221,7 @@ mod tests {
 
             Expected: 0.0
             -------- assertr --------
-        "#});
+        "});
     }
 
     #[test]
@@ -228,7 +232,7 @@ mod tests {
                 .is_less_or_equal_to(0.0)
         })
         .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        .is_equal_to(formatdoc! {r"
             -------- assertr --------
             Actual: NaN
 
@@ -236,7 +240,7 @@ mod tests {
 
             Expected: 0.0
             -------- assertr --------
-        "#});
+        "});
     }
 
     #[test]
@@ -247,7 +251,7 @@ mod tests {
                 .is_greater_or_equal_to(0.0)
         })
         .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        .is_equal_to(formatdoc! {r"
             -------- assertr --------
             Actual: NaN
 
@@ -255,6 +259,6 @@ mod tests {
 
             Expected: 0.0
             -------- assertr --------
-        "#});
+        "});
     }
 }

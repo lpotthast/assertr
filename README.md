@@ -22,7 +22,7 @@ messages that help pinpoint issues quickly.
 
 ```toml
 [dependencies]
-assertr = "0.5.7"
+assertr = "0.6.0"
 ```
 
 ### Cargo features
@@ -360,6 +360,64 @@ fn test() {
 With the `fluent` feature enabled, the same pattern can start from `.verify()` instead of
 `assert_that!(...).with_capture()`.
 
+### Custom rendering for non-Debug types
+
+Assertion failure messages format the actual and expected values through an `AssertionRenderer`. By default, this is a
+`DebugRenderer`, which delegates to `Debug` and is why most assertion subjects need to / should derive `Debug`.
+
+The trait is a type-state on `AssertThat`, so you can swap in a renderer for any type, including types that do not
+implement `Debug`.
+
+For a one-off renderer, use `with_debug_format(...)` and pass a closure shaped like `fmt::Debug::fmt`:
+
+```rust
+use assertr::prelude::*;
+
+#[derive(PartialEq)]
+struct Secret(u32);
+
+#[test]
+fn test() {
+    assert_that!(Secret(1))
+        .with_debug_format(|value, f| f.write_fmt(format_args!("Secret({})", value.0)))
+        .is_equal_to(Secret(1));
+}
+```
+
+For something reusable, implement `AssertionRenderer<T>` on a (unit) struct and pass it via `with_renderer(...)`.
+Implement it once per type that needs to be rendered (the actual value, the expected value, slices, and any companion
+types involved in chained assertions):
+
+```rust
+use core::fmt;
+use assertr::prelude::*;
+
+#[derive(PartialEq)]
+struct Secret(u32);
+
+#[derive(Clone, Copy)]
+struct SecretRenderer;
+
+impl AssertionRenderer<Secret> for SecretRenderer {
+    fn fmt(&self, value: &Secret, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("Secret({})", value.0))
+    }
+}
+
+#[test]
+fn test() {
+    assert_that!(Secret(1))
+        .with_renderer(SecretRenderer)
+        .is_equal_to(Secret(1));
+}
+```
+
+Failure-message templates render values with `{value:#?}`, so renderers that want pretty vs. compact output should
+branch on `f.alternate()`. See
+[`AssertionRenderer`](https://docs.rs/assertr/latest/assertr/renderer/trait.AssertionRenderer.html) for the full API.
+Chained assertions (e.g. `.satisfies(...)`, `.is_some_satisfying(...)`, deep `Vec`/`Path` assertions) require the
+renderer to be `Clone`.
+
 ### Partial equality assertions
 
 You can derive a helper struct for partial equality comparisons by annotating an owned struct with
@@ -404,6 +462,82 @@ fn test() {
     });
 }
 ```
+
+For nested public fields, `map_type` lets the generated matcher use another generated matcher type:
+
+```rust
+use assertr::prelude::*;
+
+#[derive(Debug, AssertrEq)]
+pub struct Child {
+    pub id: i32,
+}
+
+#[derive(Debug, AssertrEq)]
+pub struct Parent {
+    #[assertr_eq(map_type = "ChildAssertrEq")]
+    pub child: Child,
+}
+
+#[test]
+fn test() {
+    assert_that!(Parent { 
+        child: Child { id: 1 }
+    }).is_equal_to(ParentAssertrEq {
+        child: eq(ChildAssertrEq { id: eq(1) }),
+    });
+}
+```
+
+For collection fields, `map_type` changes the expected field type and `compare_with` chooses the comparison function.
+Because the derive macro intentionally does not inspect field types, custom comparison functions that need additional
+generic bounds must declare them with `compare_bounds`.
+
+Use this recipe for ordered slice-like comparisons:
+
+```rust
+use assertr::prelude::*;
+
+#[derive(Debug, AssertrEq)]
+pub struct Child {
+    pub id: i32,
+}
+
+#[derive(Debug, AssertrEq)]
+pub struct Parent {
+    #[assertr_eq(
+        map_type = "Vec<ChildAssertrEq>",
+        compare_with = "::assertr::cmp::slice::compare",
+        compare_bounds = "Child: ::assertr::cmp::slice::CompareElement<ChildAssertrEq, R>"
+    )]
+    pub children: Vec<Child>,
+}
+```
+
+Use this recipe for `HashMap` value comparisons:
+
+```rust
+use std::collections::HashMap;
+use assertr::prelude::*;
+
+#[derive(Debug, AssertrEq)]
+pub struct Child {
+    pub id: i32,
+}
+
+#[derive(Debug, AssertrEq)]
+pub struct Parent {
+    #[assertr_eq(
+        map_type = "HashMap<String, ChildAssertrEq>",
+        compare_with = "::assertr::cmp::hashmap::compare",
+        compare_bounds = "Child: ::assertr::cmp::hashmap::CompareValue<ChildAssertrEq, R>"
+    )]
+    pub children: HashMap<String, Child>,
+}
+```
+
+`R` in `compare_bounds` is the active assertion renderer type. The built-in bound helper traits keep the common cases
+short. Custom comparison functions can use ordinary Rust where-predicate syntax in the same string.
 
 ### Write assertions for your own types.
 
@@ -574,11 +708,6 @@ Previous MSRV values:
 - As of `0.1.0`, the MSRV was `1.76.0`
 - As of `0.2.0`, the MSRV was `1.85.0`
 - As of `0.4.0`, the MSRV was `1.89.0`
-
-## Open questions
-
-- Many assertions require `std::fmt::Debug`, limiting usability to types implementing Debug.
-  Can we implement fallback rendering? Will probably require the currently unstable specialization feature.
 
 ## Contributing
 

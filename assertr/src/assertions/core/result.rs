@@ -1,11 +1,11 @@
 use crate::{
-    AssertThat,
+    AssertThat, AssertionRenderer,
     actual::Actual,
     mode::{Mode, Panic},
     tracking::AssertionTracking,
 };
 use alloc::string::String;
-use core::fmt::{Debug, Write};
+use core::fmt::Write;
 use indoc::writedoc;
 
 /// Data-extracting assertions for `Result` values.
@@ -13,32 +13,30 @@ use indoc::writedoc;
 /// as they cannot produce a valid value of the extracted type when the assertion fails.
 /// Use `ResultAssertions::is_ok_satisfying` / `is_err_satisfying` for capture mode.
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait ResultExtractAssertions<'t, T, E> {
-    fn is_ok(self) -> AssertThat<'t, T, Panic>
+pub trait ResultExtractAssertions<'t, T, E, R> {
+    fn is_ok(self) -> AssertThat<'t, T, Panic, R>
     where
-        T: Debug,
-        E: Debug;
+        R: AssertionRenderer<Result<T, E>>;
 
-    fn is_err(self) -> AssertThat<'t, E, Panic>
+    fn is_err(self) -> AssertThat<'t, E, Panic, R>
     where
-        T: Debug,
-        E: Debug;
+        R: AssertionRenderer<Result<T, E>>;
 }
 
-impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>, Panic> {
+impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result<T, E>, Panic, R> {
     /// This is a terminal operation on the contained `Result`,
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained success value.
     #[track_caller]
-    fn is_ok(self) -> AssertThat<'t, T, Panic>
+    fn is_ok(self) -> AssertThat<'t, T, Panic, R>
     where
-        T: Debug,
-        E: Debug,
+        R: AssertionRenderer<Result<T, E>>,
     {
         self.track_assertion();
 
         if self.actual().is_err() {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -50,8 +48,14 @@ impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>
 
         // Calling `unwrap` is safe here, as we would have seen a panic when the error is not present!
         self.map(|it| match it {
-            Actual::Owned(o) => Actual::Owned(o.unwrap()),
-            Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap()),
+            Actual::Owned(o) => Actual::Owned(match o {
+                Ok(ok) => ok,
+                Err(_) => unreachable!("already checked"),
+            }),
+            Actual::Borrowed(b) => Actual::Borrowed(match b.as_ref() {
+                Ok(ok) => ok,
+                Err(_) => unreachable!("already checked"),
+            }),
         })
     }
 
@@ -59,15 +63,15 @@ impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>
     /// as there is little meaningful to do with the result if its variant was ensured.
     /// This allows you to chain additional expectations on the contained error value.
     #[track_caller]
-    fn is_err(self) -> AssertThat<'t, E, Panic>
+    fn is_err(self) -> AssertThat<'t, E, Panic, R>
     where
-        T: Debug,
-        E: Debug,
+        R: AssertionRenderer<Result<T, E>>,
     {
         self.track_assertion();
 
         if self.actual().is_ok() {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -79,8 +83,14 @@ impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>
 
         // Calling `unwrap_err` is safe here, as we would have seen a panic when the error is not present!
         self.map(|it| match it {
-            Actual::Owned(o) => Actual::Owned(o.unwrap_err()),
-            Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap_err()),
+            Actual::Owned(o) => Actual::Owned(match o {
+                Ok(_) => unreachable!("already checked"),
+                Err(err) => err,
+            }),
+            Actual::Borrowed(b) => Actual::Borrowed(match b.as_ref() {
+                Ok(_) => unreachable!("already checked"),
+                Err(err) => err,
+            }),
         })
     }
 }
@@ -89,34 +99,38 @@ impl<'t, T, E> ResultExtractAssertions<'t, T, E> for AssertThat<'t, Result<T, E>
 /// These work in any mode (Panic or Capture).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait ResultAssertions<'t, M: Mode, T, E> {
+pub trait ResultAssertions<'t, M: Mode, T, E, R> {
     fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
+        R: AssertionRenderer<Result<T, E>> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M, R>);
 
     fn is_err_satisfying<A>(self, assertions: A) -> Self
     where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>);
+        R: AssertionRenderer<Result<T, E>> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, M, R>);
 }
 
-impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<T, E>, M> {
+impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, Result<T, E>, M, R> {
     #[track_caller]
     fn is_ok_satisfying<A>(self, assertions: A) -> Self
     where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>),
+        R: AssertionRenderer<Result<T, E>> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M, R>),
     {
         self.track_assertion();
 
         if self.actual().is_ok() {
-            self.satisfies_ref(|it| it.as_ref().unwrap(), assertions)
+            self.satisfies_ref(
+                |it| match it.as_ref() {
+                    Ok(ok) => ok,
+                    Err(_) => unreachable!("already checked"),
+                },
+                assertions,
+            )
         } else {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -131,16 +145,22 @@ impl<'t, M: Mode, T, E> ResultAssertions<'t, M, T, E> for AssertThat<'t, Result<
     #[track_caller]
     fn is_err_satisfying<A>(self, assertions: A) -> Self
     where
-        T: Debug,
-        E: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a E, M>),
+        R: AssertionRenderer<Result<T, E>> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, &'a E, M, R>),
     {
         self.track_assertion();
 
         if self.actual().is_err() {
-            self.satisfies_ref(|it| it.as_ref().unwrap_err(), assertions)
+            self.satisfies_ref(
+                |it| match it.as_ref() {
+                    Ok(_) => unreachable!("already checked"),
+                    Err(err) => err,
+                },
+                assertions,
+            )
         } else {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -196,7 +216,7 @@ mod tests {
                 .is_err();
         })
         .has_type::<String>()
-        .is_equal_to(formatdoc! {r#"
+        .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Actual: Ok(
                     42,
@@ -204,7 +224,7 @@ mod tests {
 
                 is not of expected variant: Result:Err
                 -------- assertr --------
-            "#});
+            "});
     }
 
     #[test]

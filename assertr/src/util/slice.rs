@@ -18,21 +18,14 @@ impl<A, B> CompareResult<'_, A, B> {
     }
 }
 
-pub(crate) fn compare<'t, A, B>(aa: &'t [A], bb: &'t [B]) -> CompareResult<'t, A, B>
-where
-    A: AssertrPartialEq<B>,
-{
-    compare_with_context(aa, bb, None)
-}
-
 // TODO: Move to cmp module and rename.
-pub(crate) fn compare_with_context<'t, A, B>(
+pub(crate) fn compare_with_context<'t, A, B, R>(
     aa: &'t [A],
     bb: &'t [B],
-    mut ctx: Option<&mut EqContext>,
+    mut ctx: Option<&mut EqContext<'_, R>>,
 ) -> CompareResult<'t, A, B>
 where
-    A: AssertrPartialEq<B>,
+    A: AssertrPartialEq<B, R>,
 {
     if AssertrPartialEq::eq(aa, bb, ctx.as_deref_mut()) {
         return CompareResult {
@@ -99,8 +92,16 @@ where
 #[cfg(test)]
 mod tests {
     mod compare {
+        use crate::AssertrPartialEq;
         use crate::prelude::*;
-        use crate::util::slice::compare;
+        use crate::util::slice::{CompareResult, compare_with_context};
+
+        pub(crate) fn compare<'t, A, B>(aa: &'t [A], bb: &'t [B]) -> CompareResult<'t, A, B>
+        where
+            A: AssertrPartialEq<B>,
+        {
+            compare_with_context::<A, B, DebugRenderer>(aa, bb, None)
+        }
 
         #[test]
         fn returns_equal_on_equal_input_using_refs() {

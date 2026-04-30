@@ -27,7 +27,7 @@ pub(crate) trait WithDetail {
     fn collect_messages(&self, collection: &mut Vec<String>);
 }
 
-impl<T, M: Mode> WithDetail for AssertThat<'_, T, M> {
+impl<T, M: Mode, R> WithDetail for AssertThat<'_, T, M, R> {
     fn collect_messages(&self, collection: &mut Vec<String>) {
         for m in self.detail_messages.borrow().iter() {
             collection.push(m.to_owned());
@@ -38,7 +38,7 @@ impl<T, M: Mode> WithDetail for AssertThat<'_, T, M> {
     }
 }
 
-impl<T, M: Mode> AssertThat<'_, T, M> {
+impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Add a message to be displayed on assertion failure.
     #[must_use]
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {

@@ -68,15 +68,15 @@ pub fn toml<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
 }
 
 #[cfg(feature = "serde")]
-impl<'t, T, M: Mode> AssertThat<'t, T, M>
+impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R>
 where
     T: serde::Serialize,
 {
-    pub fn as_json(self) -> AssertThat<'t, String, M> {
+    pub fn as_json(self) -> AssertThat<'t, String, M, R> {
         self.map(json())
     }
 
-    pub fn as_toml(self) -> AssertThat<'t, String, M> {
+    pub fn as_toml(self) -> AssertThat<'t, String, M, R> {
         self.map(toml())
     }
 }

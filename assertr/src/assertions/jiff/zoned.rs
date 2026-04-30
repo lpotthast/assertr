@@ -104,7 +104,7 @@ mod tests {
                 assert_that!(zdt).with_location(false).is_in_time_zone(tz);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: Europe/Berlin
 
@@ -112,7 +112,7 @@ mod tests {
 
                       Object: 2024-06-19T15:22:00-04:00[America/New_York]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -136,7 +136,7 @@ mod tests {
                     .is_in_time_zone_named("Europe/Berlin");
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: Europe/Berlin
 
@@ -144,7 +144,7 @@ mod tests {
 
                       Object: 2024-06-19T15:22:00-04:00[America/New_York]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }

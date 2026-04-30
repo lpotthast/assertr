@@ -30,15 +30,15 @@ fn is_able_to_use_toml_conversion() {
 
     assert_that!(&config)
         .map(toml())
-        .is_equal_to(indoc::formatdoc! {r#"
+        .is_equal_to(indoc::formatdoc! {r"
         value = 42
         list = [1, 2]
-    "#});
+    "});
 
     assert_that!(&config)
         .as_toml()
-        .is_equal_to(indoc::formatdoc! {r#"
+        .is_equal_to(indoc::formatdoc! {r"
         value = 42
         list = [1, 2]
-    "#});
+    "});
 }

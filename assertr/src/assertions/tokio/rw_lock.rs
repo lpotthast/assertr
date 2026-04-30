@@ -1,40 +1,47 @@
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, AssertionRenderer, Mode, tracking::AssertionTracking};
 use alloc::string::String;
-use core::fmt::{Debug, Write};
+use core::fmt::Write;
 use indoc::writedoc;
 use tokio::sync::RwLock;
 
 /// Assertions for tokio's [`RwLock`] type.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait TokioRwLockAssertions<T: Debug> {
+pub trait TokioRwLockAssertions<T, R> {
     #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
-    fn is_not_locked(self) -> Self;
+    fn is_not_locked(self) -> Self
+    where
+        R: AssertionRenderer<RwLock<T>>;
 
     fn is_free(self) -> Self
     where
         Self: Sized,
+        R: AssertionRenderer<RwLock<T>>,
     {
         self.is_not_locked()
     }
 
-    fn is_read_locked(self) -> Self;
+    fn is_read_locked(self) -> Self
+    where
+        R: AssertionRenderer<RwLock<T>>;
 
-    fn is_write_locked(self) -> Self;
+    fn is_write_locked(self) -> Self
+    where
+        R: AssertionRenderer<RwLock<T>>;
 }
 
-impl<T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'_, RwLock<T>, M> {
+impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M, R> {
     #[track_caller]
     fn is_not_locked(self) -> Self
     where
-        T: Debug,
+        R: AssertionRenderer<RwLock<T>>,
     {
         self.track_assertion();
         if self.actual().try_write().is_err() {
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_err() {
                 // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                let actual = self.actual();
+                let actual = self.render_value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -45,7 +52,7 @@ impl<T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'_, RwLock<T>, M
                     "}
                 });
             } else {
-                let actual = self.actual();
+                let actual = self.render_value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -63,12 +70,12 @@ impl<T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'_, RwLock<T>, M
     #[track_caller]
     fn is_read_locked(self) -> Self
     where
-        T: Debug,
+        R: AssertionRenderer<RwLock<T>>,
     {
         self.track_assertion();
         if self.actual().try_write().is_ok() {
             // Can be locked for writing, must have zero locks than!
-            let actual = self.actual();
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:?}
@@ -82,7 +89,7 @@ impl<T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'_, RwLock<T>, M
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_err() {
                 // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                let actual = self.actual();
+                let actual = self.render_value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -100,12 +107,12 @@ impl<T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'_, RwLock<T>, M
     #[track_caller]
     fn is_write_locked(self) -> Self
     where
-        T: Debug,
+        R: AssertionRenderer<RwLock<T>>,
     {
         self.track_assertion();
         if self.actual().try_write().is_ok() {
             // Can be locked for writing, must have zero locks than!
-            let actual = self.actual();
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:?}
@@ -117,7 +124,7 @@ impl<T: Debug, M: Mode> TokioRwLockAssertions<T> for AssertThat<'_, RwLock<T>, M
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_ok() {
                 // RwLock allows multiple readers, and we can read again, so existing lock must be read-lock!
-                let actual = self.actual();
+                let actual = self.render_value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -153,7 +160,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(&rw_lock).with_location(false).is_not_locked())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: RwLock {{ data: <locked> }}
 
@@ -161,7 +168,7 @@ mod tests {
 
                     It is currently write-locked!
                     -------- assertr --------
-                "#});
+                "});
 
             drop(rw_lock_write_guard);
         }
@@ -173,7 +180,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(&rw_lock).with_location(false).is_not_locked())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: RwLock {{ data: 42 }}
 
@@ -181,7 +188,7 @@ mod tests {
 
                     It is currently read-locked!
                     -------- assertr --------
-                "#});
+                "});
 
             drop(rw_lock_read_guard);
         }
@@ -207,7 +214,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(&rw_lock).with_location(false).is_read_locked())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: RwLock {{ data: <locked> }}
 
@@ -215,7 +222,7 @@ mod tests {
 
                     It is currently write-locked!
                     -------- assertr --------
-                "#});
+                "});
 
             drop(rw_lock_write_guard);
         }
@@ -226,7 +233,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(rw_lock).with_location(false).is_read_locked())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: RwLock {{ data: 42 }}
 
@@ -234,7 +241,7 @@ mod tests {
 
                     It is not locked at all!
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -262,7 +269,7 @@ mod tests {
                     .is_write_locked()
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: RwLock {{ data: 42 }}
 
@@ -270,7 +277,7 @@ mod tests {
 
                     It is currently read-locked!
                     -------- assertr --------
-                "#});
+                "});
 
             drop(rw_lock_read_guard);
         }
@@ -281,13 +288,13 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(rw_lock).with_location(false).is_write_locked())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: RwLock {{ data: 42 }}
 
                     was expected to be write-locked, but it is not!
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }

@@ -2,9 +2,20 @@ use crate::{AssertrPartialEq, EqContext};
 use std::collections::HashMap;
 use std::hash::{BuildHasher, Hash};
 
+/// Bound helper for `#[assertr_eq(compare_with = "::assertr::cmp::hashmap::compare")]`.
 ///
+/// This trait means an actual map value can be compared with an expected map value. Users normally
+/// only name this trait in `#[assertr_eq(compare_bounds = "...")]`.
+pub trait CompareValue<Expected, R>: AssertrPartialEq<Expected, R> {}
+
+impl<Actual, Expected, R> CompareValue<Expected, R> for Actual where
+    Actual: AssertrPartialEq<Expected, R>
+{
+}
+
 /// This function is supposed to be used when deriving `AssertrEq`:
 /// ```
+/// use std::collections::HashMap;
 /// use assertr::prelude::*;
 ///
 /// #[derive(Debug, AssertrEq)]
@@ -17,20 +28,21 @@ use std::hash::{BuildHasher, Hash};
 ///     pub id: i32,
 ///
 ///     #[assertr_eq(
-///         map_type = "Vec<BarAssertrEq>",
-///         compare_with = "::assertr::cmp::slice::compare"
+///         map_type = "HashMap<String, BarAssertrEq>",
+///         compare_with = "::assertr::cmp::hashmap::compare",
+///         compare_bounds = "Bar: ::assertr::cmp::hashmap::CompareValue<BarAssertrEq, R>"
 ///     )]
-///     pub bars: Vec<Bar>,
+///     pub bars: HashMap<String, Bar>,
 /// }
 /// ```
-pub fn compare<K, V1, V2, S1, S2>(
+pub fn compare<K, V1, V2, S1, S2, R>(
     map1: &HashMap<K, V1, S1>,
     map2: &HashMap<K, V2, S2>,
-    mut ctx: Option<&mut EqContext>,
+    mut ctx: Option<&mut EqContext<'_, R>>,
 ) -> bool
 where
     K: Eq + Hash,
-    V1: AssertrPartialEq<V2>,
+    V1: CompareValue<V2, R>,
     S1: BuildHasher,
     S2: BuildHasher,
 {

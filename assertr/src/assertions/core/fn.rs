@@ -236,13 +236,13 @@ mod tests {
             fn panics_when_no_panic_occurs() {
                 assert_that_panic_by(|| assert_that!(|| 42).with_location(false).panics())
                     .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
+                    .is_equal_to(formatdoc! {r"
                         -------- assertr --------
                         Expected: Function to panic when called.
 
                           Actual: No panic occurred!
                         -------- assertr --------
-                    "#});
+                    "});
             }
         }
 
@@ -263,13 +263,13 @@ mod tests {
                         .does_not_panic()
                 })
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!
                     -------- assertr --------
-                "#});
+                "});
             }
         }
     }
@@ -299,13 +299,13 @@ mod tests {
                 })
                 .await
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                         -------- assertr --------
                         Expected: Function to panic when called.
 
                           Actual: No panic occurred!
                         -------- assertr --------
-                    "#});
+                    "});
             }
         }
 
@@ -329,13 +329,13 @@ mod tests {
                 })
                 .await
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!
                     -------- assertr --------
-                "#});
+                "});
             }
         }
     }

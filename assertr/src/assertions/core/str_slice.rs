@@ -34,7 +34,7 @@ pub trait StrSliceAssertions {
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self;
 }
 
-impl<M: Mode> StrSliceAssertions for AssertThat<'_, &str, M> {
+impl<M: Mode, R> StrSliceAssertions for AssertThat<'_, &str, M, R> {
     #[track_caller]
     fn is_blank(self) -> Self {
         self.track_assertion();

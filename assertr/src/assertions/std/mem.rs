@@ -15,7 +15,7 @@ pub trait MemAssertions {
     }
 }
 
-impl<T, M: Mode> MemAssertions for AssertThat<'_, Type<T>, M> {
+impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
     #[track_caller]
     fn needs_drop(self) -> Self {
         self.track_assertion();

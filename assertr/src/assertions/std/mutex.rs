@@ -1,16 +1,17 @@
-use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 use std::sync::Mutex;
 
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, AssertionRenderer, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait MutexAssertions {
+pub trait MutexAssertions<T, R> {
     /// Asserts that this mutex is locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
-    fn is_locked(self) -> Self;
+    fn is_locked(self) -> Self
+    where
+        R: AssertionRenderer<T>;
 
     /// Asserts that this mutex is not locked.
     /// Note that implementations may try to acquire the lock in order to check its state.
@@ -29,15 +30,19 @@ pub trait MutexAssertions {
     }
 }
 
-impl<T: Debug, M: Mode> MutexAssertions for AssertThat<'_, Mutex<T>, M> {
+impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
     #[track_caller]
-    fn is_locked(self) -> Self {
+    fn is_locked(self) -> Self
+    where
+        R: AssertionRenderer<T>,
+    {
         self.track_assertion();
         let actual = self.actual();
         if let Ok(guard) = actual.try_lock() {
+            let data = self.render_value(&*guard);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                    Expected: Mutex {{ data: {guard:#?}, poisoned: {poisoned} }}
+                    Expected: Mutex {{ data: {data:#?}, poisoned: {poisoned} }}
 
                     to be locked, but it wasn't!
                 ", poisoned = actual.is_poisoned()}

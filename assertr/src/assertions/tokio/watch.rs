@@ -130,7 +130,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(rx).with_location(false).has_changed())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: true
 
@@ -140,7 +140,7 @@ mod tests {
                         Expected a tokio `watch` channel to have changed.,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -164,7 +164,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(rx).with_location(false).has_not_changed())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: false
 
@@ -174,7 +174,7 @@ mod tests {
                         Expected a tokio `watch` channel to have not changed.,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }

@@ -11,6 +11,7 @@ struct Metadata {
 }
 
 impl Person {
+    #[allow(clippy::unused_async)]
     async fn get_metadata(&self) -> &Metadata {
         &self.meta
     }
@@ -23,7 +24,7 @@ async fn is_able_to_access_derived_properties_without_breaking_the_call_chain() 
     };
 
     assert_that!(person)
-        .derive_async(|it| it.get_metadata())
+        .derive_async(Person::get_metadata)
         .await
         .derive(|it| it.alive)
         .is_equal_to(true);

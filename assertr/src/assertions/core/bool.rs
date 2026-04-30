@@ -13,7 +13,7 @@ pub trait BoolAssertions {
     fn is_false(self) -> Self;
 }
 
-impl<M: Mode> BoolAssertions for AssertThat<'_, bool, M> {
+impl<M: Mode, R> BoolAssertions for AssertThat<'_, bool, M, R> {
     #[track_caller]
     fn is_true(self) -> Self {
         self.track_assertion();
@@ -65,13 +65,13 @@ mod tests {
         fn panics_when_false() {
             assert_that_panic_by(|| assert_that!(false).with_location(false).is_true())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: true
 
                       Actual: false
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -88,13 +88,13 @@ mod tests {
         fn panics_when_true() {
             assert_that_panic_by(|| assert_that!(true).with_location(false).is_false())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: false
 
                       Actual: true
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }

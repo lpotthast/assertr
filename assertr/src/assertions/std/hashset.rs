@@ -1,6 +1,5 @@
 use alloc::vec::Vec;
 use core::borrow::Borrow;
-use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 use std::{
@@ -8,64 +7,76 @@ use std::{
     hash::{BuildHasher, Hash},
 };
 
-use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, AssertionRenderer, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
 /// Assertions for generic [`HashSet`]s.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait HashSetAssertions<T> {
+pub trait HashSetAssertions<T, S, R> {
     fn contains<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug;
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashSet<T, S>> + AssertionRenderer<E>;
 
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug;
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashSet<T, S>> + AssertionRenderer<E>;
 
     fn contains_all<E, I>(self, expected: I) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug,
-        I: IntoIterator<Item = E>;
+        T: AssertrPartialEq<E, R>,
+        I: IntoIterator<Item = E>,
+        R: AssertionRenderer<HashSet<T, S>> + AssertionRenderer<[E]> + AssertionRenderer<E>;
 
     fn is_subset_of<S2>(self, expected_superset: impl Borrow<HashSet<T, S2>>) -> Self
     where
-        T: Eq + Hash + Debug,
-        S2: BuildHasher;
+        T: Eq + Hash,
+        S2: BuildHasher,
+        R: AssertionRenderer<HashSet<T, S>>
+            + AssertionRenderer<HashSet<T, S2>>
+            + AssertionRenderer<T>;
 
     fn is_superset_of<S2>(self, expected_subset: impl Borrow<HashSet<T, S2>>) -> Self
     where
-        T: Eq + Hash + Debug,
-        S2: BuildHasher;
+        T: Eq + Hash,
+        S2: BuildHasher,
+        R: AssertionRenderer<HashSet<T, S>>
+            + AssertionRenderer<HashSet<T, S2>>
+            + AssertionRenderer<T>;
 
     fn is_disjoint_from<S2>(self, other: impl Borrow<HashSet<T, S2>>) -> Self
     where
-        T: Eq + Hash + Debug,
-        S2: BuildHasher;
+        T: Eq + Hash,
+        S2: BuildHasher,
+        R: AssertionRenderer<HashSet<T, S>>
+            + AssertionRenderer<HashSet<T, S2>>
+            + AssertionRenderer<T>;
 }
 
-impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet<T, S>, M> {
+impl<T, S: BuildHasher, M: Mode, R> HashSetAssertions<T, S, R>
+    for AssertThat<'_, HashSet<T, S>, M, R>
+{
     #[track_caller]
     fn contains<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashSet<T, S>> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
-        if !self
-            .actual()
-            .iter()
-            .any(|it| AssertrPartialEq::eq(it, &expected, None))
-        {
+        if !self.actual().iter().any(|it| {
+            let mut ctx = self.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &expected, Some(&mut ctx))
+        }) {
+            let actual = self.render_value(self.actual());
+            let expected = self.render_value(&expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashSet {actual:#?}
 
                     does not contain expected: {expected:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
         self
@@ -74,22 +85,23 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
     #[track_caller]
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<HashSet<T, S>> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
-        if self
-            .actual()
-            .iter()
-            .any(|it| AssertrPartialEq::eq(it, &not_expected, None))
-        {
+        if self.actual().iter().any(|it| {
+            let mut ctx = self.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &not_expected, Some(&mut ctx))
+        }) {
+            let actual = self.render_value(self.actual());
+            let not_expected = self.render_value(&not_expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashSet {actual:#?}
 
                     contains unexpected: {not_expected:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
         self
@@ -98,9 +110,9 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
     #[track_caller]
     fn contains_all<E, I>(self, expected: I) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        T: AssertrPartialEq<E, R>,
         I: IntoIterator<Item = E>,
+        R: AssertionRenderer<HashSet<T, S>> + AssertionRenderer<[E]> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
@@ -108,24 +120,27 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
         let elements_not_found = expected
             .iter()
             .filter(|expected| {
-                !self
-                    .actual()
-                    .iter()
-                    .any(|actual| AssertrPartialEq::eq(actual, expected, None))
+                !self.actual().iter().any(|actual| {
+                    let mut ctx = self.eq_context();
+                    <_ as AssertrPartialEq<_, R>>::eq(actual, expected, Some(&mut ctx))
+                })
             })
             .collect::<Vec<_>>();
 
         if !elements_not_found.is_empty() {
+            let actual = self.render_value(self.actual());
+            let expected_rendered = self.render_value(expected.as_slice());
+            let elements_rendered = self.render_values(elements_not_found.as_slice());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashSet {actual:#?}
 
                     does not contain all expected elements
 
-                    Expected: {expected:#?}
+                    Expected: {expected_rendered:#?}
 
-                    Elements not found: {elements_not_found:#?}
-                ", actual = self.actual()}
+                    Elements not found: {elements_rendered:#?}
+                "}
             });
         }
         self
@@ -134,8 +149,11 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
     #[track_caller]
     fn is_subset_of<S2>(self, expected_superset: impl Borrow<HashSet<T, S2>>) -> Self
     where
-        T: Eq + Hash + Debug,
+        T: Eq + Hash,
         S2: BuildHasher,
+        R: AssertionRenderer<HashSet<T, S>>
+            + AssertionRenderer<HashSet<T, S2>>
+            + AssertionRenderer<T>,
     {
         self.track_assertion();
 
@@ -147,16 +165,19 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
             .collect::<Vec<_>>();
 
         if !elements_not_in_expected.is_empty() {
+            let actual = self.render_value(self.actual());
+            let expected_superset_rendered = self.render_value(expected_superset);
+            let elements_rendered = self.render_values(elements_not_in_expected.as_slice());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashSet {actual:#?}
 
                     is not a subset of expected
 
-                    Expected superset: {expected_superset:#?}
+                    Expected superset: {expected_superset_rendered:#?}
 
-                    Elements not in expected: {elements_not_in_expected:#?}
-                ", actual = self.actual()}
+                    Elements not in expected: {elements_rendered:#?}
+                "}
             });
         }
         self
@@ -165,8 +186,11 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
     #[track_caller]
     fn is_superset_of<S2>(self, expected_subset: impl Borrow<HashSet<T, S2>>) -> Self
     where
-        T: Eq + Hash + Debug,
+        T: Eq + Hash,
         S2: BuildHasher,
+        R: AssertionRenderer<HashSet<T, S>>
+            + AssertionRenderer<HashSet<T, S2>>
+            + AssertionRenderer<T>,
     {
         self.track_assertion();
 
@@ -177,16 +201,19 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
             .collect::<Vec<_>>();
 
         if !elements_not_in_actual.is_empty() {
+            let actual = self.render_value(self.actual());
+            let expected_subset_rendered = self.render_value(expected_subset);
+            let elements_rendered = self.render_values(elements_not_in_actual.as_slice());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashSet {actual:#?}
 
                     is not a superset of expected
 
-                    Expected subset: {expected_subset:#?}
+                    Expected subset: {expected_subset_rendered:#?}
 
-                    Elements not in actual: {elements_not_in_actual:#?}
-                ", actual = self.actual()}
+                    Elements not in actual: {elements_rendered:#?}
+                "}
             });
         }
         self
@@ -195,8 +222,11 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
     #[track_caller]
     fn is_disjoint_from<S2>(self, other: impl Borrow<HashSet<T, S2>>) -> Self
     where
-        T: Eq + Hash + Debug,
+        T: Eq + Hash,
         S2: BuildHasher,
+        R: AssertionRenderer<HashSet<T, S>>
+            + AssertionRenderer<HashSet<T, S2>>
+            + AssertionRenderer<T>,
     {
         self.track_assertion();
 
@@ -208,16 +238,19 @@ impl<T, S: BuildHasher, M: Mode> HashSetAssertions<T> for AssertThat<'_, HashSet
             .collect::<Vec<_>>();
 
         if !overlapping_elements.is_empty() {
+            let actual = self.render_value(self.actual());
+            let other_rendered = self.render_value(other);
+            let elements_rendered = self.render_values(overlapping_elements.as_slice());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashSet {actual:#?}
 
                     is not disjoint from expected
 
-                    Expected disjoint set: {other:#?}
+                    Expected disjoint set: {other_rendered:#?}
 
-                    Overlapping elements: {overlapping_elements:#?}
-                ", actual = self.actual()}
+                    Overlapping elements: {elements_rendered:#?}
+                "}
             });
         }
         self

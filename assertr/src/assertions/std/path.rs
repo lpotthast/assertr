@@ -32,7 +32,7 @@ pub trait PathAssertions {
     fn ends_with(self, expected: impl AsRef<Path>) -> Self;
 }
 
-impl<M: Mode> PathAssertions for AssertThat<'_, PathBuf, M> {
+impl<M: Mode, R: Clone> PathAssertions for AssertThat<'_, PathBuf, M, R> {
     #[track_caller]
     fn exists(self) -> Self {
         self.derive(PathBuf::as_path).exists();
@@ -105,7 +105,7 @@ impl<M: Mode> PathAssertions for AssertThat<'_, PathBuf, M> {
     }
 }
 
-impl<M: Mode> PathAssertions for AssertThat<'_, &Path, M> {
+impl<M: Mode, R> PathAssertions for AssertThat<'_, &Path, M, R> {
     #[track_caller]
     fn exists(self) -> Self {
         self.track_assertion();
@@ -749,7 +749,7 @@ mod tests {
                     .parent()
                     .unwrap()
                     .join(file!())
-                    .to_owned();
+                    .clone();
                 assert_that!(path)
                     .exists()
                     .map(|it| it.unwrap_owned().display().to_string().into())

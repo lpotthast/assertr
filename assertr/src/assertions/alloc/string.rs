@@ -25,7 +25,7 @@ pub trait StringAssertions {
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self;
 }
 
-impl<M: Mode> StringAssertions for AssertThat<'_, String, M> {
+impl<M: Mode, R: Clone> StringAssertions for AssertThat<'_, String, M, R> {
     #[track_caller]
     fn is_not_blank(self) -> Self {
         self.derive(String::as_str).is_not_blank();

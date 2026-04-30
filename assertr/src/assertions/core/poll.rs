@@ -1,30 +1,35 @@
 use alloc::string::String;
-use core::fmt::{Debug, Write};
+use core::fmt::Write;
 use core::task::Poll;
 use indoc::writedoc;
 
-use crate::AssertThat;
 use crate::actual::Actual;
 use crate::mode::{Mode, Panic};
 use crate::tracking::AssertionTracking;
+use crate::{AssertThat, AssertionRenderer};
 
 /// Non-extracting assertions for `Poll` values.
 /// These work in any mode (Panic or Capture).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait PollAssertions<'t, T, M: Mode> {
+pub trait PollAssertions<'t, T, M: Mode, R> {
     fn is_ready_satisfying<A>(self, assertions: A) -> Self
     where
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
+        R: AssertionRenderer<Poll<T>> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M, R>);
 
     fn is_pending(self) -> Self;
 }
 
-impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>, M> {
+impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, M, R>
+where
+    R: AssertionRenderer<Poll<T>>,
+{
     #[track_caller]
     fn is_ready_satisfying<A>(self, assertions: A) -> Self
     where
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>),
+        R: AssertionRenderer<Poll<T>> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M, R>),
     {
         self.track_assertion();
         let actual = self.actual();
@@ -37,6 +42,7 @@ impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>,
                 assertions,
             )
         } else {
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -53,6 +59,7 @@ impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>,
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_pending() {
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -68,17 +75,23 @@ impl<'t, T: Debug, M: Mode> PollAssertions<'t, T, M> for AssertThat<'t, Poll<T>,
 /// Data-extracting assertion for `Poll` values.
 /// Only available in Panic mode, as the extracted `T` cannot be produced when the poll is pending.
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait PollExtractAssertions<'t, T> {
+pub trait PollExtractAssertions<'t, T, R> {
     /// Use `PollAssertions::is_ready_satisfying` for capture mode.
-    fn is_ready(self) -> AssertThat<'t, T, Panic>;
+    fn is_ready(self) -> AssertThat<'t, T, Panic, R>
+    where
+        R: AssertionRenderer<Poll<T>>;
 }
 
-impl<'t, T: Debug> PollExtractAssertions<'t, T> for AssertThat<'t, Poll<T>, Panic> {
+impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic, R> {
     #[track_caller]
-    fn is_ready(self) -> AssertThat<'t, T, Panic> {
+    fn is_ready(self) -> AssertThat<'t, T, Panic, R>
+    where
+        R: AssertionRenderer<Poll<T>>,
+    {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_ready() {
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -128,13 +141,13 @@ mod tests {
                     .is_ready();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Actual: Pending
                 
                 is not yet ready.
                 -------- assertr --------
-            "#});
+            "});
         }
     }
 
@@ -179,13 +192,13 @@ mod tests {
                 .is_ready_satisfying(|_| panic!("assertions should not run"))
                 .capture_failures();
 
-            assert_that!(failures).contains_exactly::<String>([formatdoc! {r#"
+            assert_that!(failures).contains_exactly::<String>([formatdoc! {r"
                 -------- assertr --------
                 Actual: Pending
                 
                 is not yet ready.
                 -------- assertr --------
-            "#}]);
+            "}]);
         }
 
         #[test]
@@ -196,13 +209,13 @@ mod tests {
                     .is_ready_satisfying(|_| panic!("assertions should not run"));
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Actual: Pending
                 
                 is not yet ready.
                 -------- assertr --------
-            "#});
+            "});
         }
     }
 
@@ -225,7 +238,7 @@ mod tests {
                     .is_pending();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Actual: Ready(
                     Foo {{
@@ -235,7 +248,7 @@ mod tests {
                 
                 is not pending.
                 -------- assertr --------
-            "#});
+            "});
         }
     }
 }

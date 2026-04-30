@@ -1,42 +1,47 @@
-use core::fmt::Debug;
-
-use crate::{AssertThat, AssertrPartialEq, Mode, prelude::SliceAssertions};
+use crate::{AssertThat, AssertionRenderer, AssertrPartialEq, Mode, prelude::SliceAssertions};
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait ArrayAssertions<'t, T: Debug> {
+pub trait ArrayAssertions<'t, T, R> {
     fn contains<E>(self, expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug;
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<[T]> + AssertionRenderer<E> + Clone;
 
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug;
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<[T]> + AssertionRenderer<E> + Clone;
 
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: Debug + 't,
-        T: AssertrPartialEq<E> + Debug;
+        E: 't,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<[T]>
+            + AssertionRenderer<[E]>
+            + AssertionRenderer<T>
+            + AssertionRenderer<E>
+            + Clone;
 
     fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
     where
-        T: PartialEq;
+        T: PartialEq,
+        R: AssertionRenderer<[T]> + AssertionRenderer<T> + Clone;
 
     /// `P` - Predicate
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
-        P: Fn(&T) -> bool;
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<[T]> + AssertionRenderer<T> + Clone;
 }
 
 /// Assertions for generic arrays.
-impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<'t, T> for AssertThat<'t, [T; N], M> {
+impl<'t, T, const N: usize, M: Mode, R> ArrayAssertions<'t, T, R> for AssertThat<'t, [T; N], M, R> {
     #[track_caller]
     fn contains<E>(self, expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<[T]> + AssertionRenderer<E> + Clone,
     {
         self.derive(<[T; N]>::as_slice).contains(expected);
         self
@@ -45,8 +50,8 @@ impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<'t, T> for AssertTha
     #[track_caller]
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<[T]> + AssertionRenderer<E> + Clone,
     {
         self.derive(<[T; N]>::as_slice)
             .does_not_contain(not_expected);
@@ -56,8 +61,13 @@ impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<'t, T> for AssertTha
     #[track_caller]
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: Debug + 't,
-        T: AssertrPartialEq<E> + Debug,
+        E: 't,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<[T]>
+            + AssertionRenderer<[E]>
+            + AssertionRenderer<T>
+            + AssertionRenderer<E>
+            + Clone,
     {
         self.derive(<[T; N]>::as_slice).contains_exactly(expected);
         self
@@ -67,6 +77,7 @@ impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<'t, T> for AssertTha
     fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
     where
         T: PartialEq,
+        R: AssertionRenderer<[T]> + AssertionRenderer<T> + Clone,
     {
         self.derive(<[T; N]>::as_slice)
             .contains_exactly_in_any_order(expected);
@@ -77,6 +88,7 @@ impl<'t, T: Debug, const N: usize, M: Mode> ArrayAssertions<'t, T> for AssertTha
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
+        R: AssertionRenderer<[T]> + AssertionRenderer<T> + Clone,
     {
         self.derive(<[T; N]>::as_slice)
             .contains_exactly_matching_in_any_order(expected);
@@ -153,7 +165,7 @@ mod tests {
         #[test]
         fn succeeds_when_exact_match() {
             assert_that!([1, 2, 3]).contains_exactly([1, 2, 3]);
-            assert_that!([1, 2, 3]).contains_exactly(&[1, 2, 3]);
+            assert_that!([1, 2, 3]).contains_exactly([1, 2, 3]);
             assert_that!(["foo".to_owned()]).contains_exactly(["foo"]);
         }
 
@@ -165,7 +177,7 @@ mod tests {
                     .contains_exactly([3, 4, 1])
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -190,7 +202,7 @@ mod tests {
                         ],
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 

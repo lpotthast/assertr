@@ -1,5 +1,4 @@
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
-use core::fmt::Debug;
+use crate::{AssertThat, AssertionRenderer, Mode, tracking::AssertionTracking};
 use indoc::writedoc;
 use std::fmt::Write;
 use tokio::sync::Mutex;
@@ -8,8 +7,10 @@ use tokio::sync::Mutex;
 /// Assertions for tokio's [Mutex] type.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait TokioMutexAssertions<T: Debug> {
-    fn is_locked(self) -> Self;
+pub trait TokioMutexAssertions<T, R> {
+    fn is_locked(self) -> Self
+    where
+        R: AssertionRenderer<T>;
 
     #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
     fn is_not_locked(self) -> Self;
@@ -22,15 +23,19 @@ pub trait TokioMutexAssertions<T: Debug> {
     }
 }
 
-impl<T: Debug, M: Mode> TokioMutexAssertions<T> for AssertThat<'_, Mutex<T>, M> {
+impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
     #[track_caller]
-    fn is_locked(self) -> Self {
+    fn is_locked(self) -> Self
+    where
+        R: AssertionRenderer<T>,
+    {
         self.track_assertion();
         let actual = self.actual();
         if let Ok(guard) = actual.try_lock() {
+            let data = self.render_value(&*guard);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                    Expected: Mutex {{ data: {guard:#?} }}
+                    Expected: Mutex {{ data: {data:#?} }}
 
                     to be locked, but it wasn't!
                 "}

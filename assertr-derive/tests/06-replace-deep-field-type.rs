@@ -15,13 +15,15 @@ pub struct Foo {
 
     #[assertr_eq(
         map_type = "Vec<BarAssertrEq>",
-        compare_with = "::assertr::cmp::slice::compare"
+        compare_with = "::assertr::cmp::slice::compare",
+        compare_bounds = "Bar: ::assertr::cmp::slice::CompareElement<BarAssertrEq, R>"
     )]
     pub bars: Vec<Bar>,
 
     #[assertr_eq(
         map_type = "HashMap<String, BarAssertrEq>",
-        compare_with = "::assertr::cmp::hashmap::compare"
+        compare_with = "::assertr::cmp::hashmap::compare",
+        compare_bounds = "Bar: ::assertr::cmp::hashmap::CompareValue<BarAssertrEq, R>"
     )]
     pub bars2: HashMap<String, Bar>,
 }

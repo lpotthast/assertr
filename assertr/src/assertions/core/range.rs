@@ -7,17 +7,17 @@ use indoc::writedoc;
 
 use crate::{AssertThat, Mode, tracking::AssertionTracking};
 
-/// Assertions for any type `R` representing a range (using bound type `B`).
+/// Assertions for any type `Range` representing a range (using bound type `B`).
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait RangeBoundAssertions<B, R: RangeBounds<B>> {
+pub trait RangeBoundAssertions<B, Range: RangeBounds<B>> {
     fn contains_element(&self, expected: B)
     where
-        R: Debug,
+        Range: Debug,
         B: PartialOrd + Debug;
 
     fn does_not_contain_element(&self, expected: B)
     where
-        R: Debug,
+        Range: Debug,
         B: PartialOrd + Debug;
 }
 
@@ -43,11 +43,13 @@ pub trait RangeAssertions<B> {
     }
 }
 
-impl<B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertThat<'_, R, M> {
+impl<B, Range: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, Range>
+    for AssertThat<'_, Range, M>
+{
     #[track_caller]
     fn contains_element(&self, expected: B)
     where
-        R: Debug,
+        Range: Debug,
         B: PartialOrd + Debug,
     {
         self.track_assertion();
@@ -65,7 +67,7 @@ impl<B, R: RangeBounds<B>, M: Mode> RangeBoundAssertions<B, R> for AssertThat<'_
     #[track_caller]
     fn does_not_contain_element(&self, expected: B)
     where
-        R: Debug,
+        Range: Debug,
         B: PartialOrd + Debug,
     {
         self.track_assertion();
@@ -169,7 +171,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!("aa".."zz")
                     .with_location(false)
-                    .contains_element("zz")
+                    .contains_element("zz");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -197,7 +199,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!("aa".."zz")
                     .with_location(false)
-                    .does_not_contain_element("cc")
+                    .does_not_contain_element("cc");
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
@@ -229,12 +231,12 @@ mod tests {
                     .is_in_range('a'..='z')
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: 'A'
                     is not in range: 'a'..='z'
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -253,12 +255,12 @@ mod tests {
         fn panics_when_in_range() {
             assert_that_panic_by(|| assert_that!(5).with_location(false).is_not_in_range(0..=7))
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: 5
                     was not expected to be in range: 0..=7
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }

@@ -1,9 +1,9 @@
 use crate::AssertThat;
+use crate::AssertionRenderer;
 use crate::assertions::HasLength;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
 use alloc::string::String;
-use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 
@@ -18,12 +18,16 @@ pub trait LengthAssertions {
     fn has_length(self, expected: usize) -> Self;
 }
 
-impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
+impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R>
+where
+    R: AssertionRenderer<T>,
+{
     #[track_caller]
     fn is_empty(self) -> Self {
         self.track_assertion();
         if !self.actual().is_empty() {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             let type_name = core::any::type_name::<T>();
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
@@ -41,6 +45,7 @@ impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
         self.track_assertion();
         if self.actual().is_empty() {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             let type_name = core::any::type_name::<T>();
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
@@ -59,6 +64,7 @@ impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
         let actual_len = self.actual().length();
         if actual_len != expected {
             let type_name = core::any::type_name::<T>();
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {type_name} {actual:#?}
@@ -67,7 +73,7 @@ impl<T: HasLength + Debug, M: Mode> LengthAssertions for AssertThat<'_, T, M> {
 
                     Expected: {expected:?}
                       Actual: {actual_len:?}
-                ",actual = self.actual()}
+                "}
             });
         }
         self
@@ -90,7 +96,7 @@ mod tests {
         fn panics_when_not_empty() {
             assert_that_panic_by(|| assert_that!([1, 2, 3]).with_location(false).is_empty())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Actual: [i32; 3] [
                     1,
@@ -100,7 +106,7 @@ mod tests {
 
                 was expected to be empty, but it is not!
                 -------- assertr --------
-            "#});
+            "});
         }
     }
 
@@ -123,7 +129,7 @@ mod tests {
                     .is_empty();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: &[i32] [
                         42,
@@ -131,7 +137,7 @@ mod tests {
 
                     was expected to be empty, but it is not!
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -166,7 +172,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_empty() {
-            assert_that!(String::from("")).is_empty();
+            assert_that!(String::new()).is_empty();
         }
 
         #[test]
@@ -207,7 +213,7 @@ mod tests {
                 assert_that!(vec![42]).with_location(false).is_empty();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: alloc::vec::Vec<i32> [
                         42,
@@ -215,10 +221,11 @@ mod tests {
 
                     was expected to be empty, but it is not!
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
+    #[allow(clippy::zero_sized_map_values)]
     mod is_empty_on_hashmap {
         use std::collections::HashMap;
 
@@ -271,7 +278,7 @@ mod tests {
                     .is_empty();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: alloc::collections::vec_deque::VecDeque<i32> [
                         42,
@@ -279,10 +286,11 @@ mod tests {
 
                     was expected to be empty, but it is not!
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
+    #[allow(clippy::zero_sized_map_values)]
     mod is_not_empty_on_hashmap {
         use std::collections::HashMap;
 
@@ -304,13 +312,13 @@ mod tests {
                 assert_that!(map).with_location(false).is_not_empty();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: std::collections::hash::map::HashMap<(), ()> {{}}
 
                     was expected not to be empty, but it is!
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -340,13 +348,13 @@ mod tests {
                     .is_not_empty();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: alloc::collections::vec_deque::VecDeque<i32> []
 
                     was expected not to be empty, but it is!
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -431,7 +439,7 @@ mod tests {
                     .has_length(2);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: &[i32] [
                         42,
@@ -442,7 +450,7 @@ mod tests {
                     Expected: 2
                       Actual: 1
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -466,7 +474,7 @@ mod tests {
                 assert_that!(vec![42]).with_location(false).has_length(2);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: alloc::vec::Vec<i32> [
                         42,
@@ -477,7 +485,7 @@ mod tests {
                     Expected: 2
                       Actual: 1
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -505,7 +513,7 @@ mod tests {
                     .has_length(2);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: alloc::collections::vec_deque::VecDeque<i32> [
                         42,
@@ -516,10 +524,11 @@ mod tests {
                     Expected: 2
                       Actual: 1
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
+    #[allow(clippy::zero_sized_map_values)]
     mod has_length_on_hashmap {
         use indoc::formatdoc;
         use std::collections::HashMap;

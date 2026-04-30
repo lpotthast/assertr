@@ -2,10 +2,12 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::fmt::{Debug, Write};
+use core::fmt::Write;
 use indoc::writedoc;
 
-use crate::{AssertThat, AssertrPartialEq, Mode, tracking::AssertionTracking};
+use crate::{
+    AssertThat, AssertionRenderer, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking,
+};
 
 struct CompareResult<'t, A, B> {
     strictly_equal: bool,
@@ -23,15 +25,19 @@ impl<A, B> CompareResult<'_, A, B> {
     }
 }
 
-fn compare<'t, A, B>(actual: &'t VecDeque<A>, expected: &'t [B]) -> CompareResult<'t, A, B>
+fn compare<'t, A, B, R>(
+    actual: &'t VecDeque<A>,
+    expected: &'t [B],
+    mut ctx: Option<&mut EqContext<'_, R>>,
+) -> CompareResult<'t, A, B>
 where
-    A: AssertrPartialEq<B>,
+    A: AssertrPartialEq<B, R>,
 {
     let strictly_equal = actual.len() == expected.len()
         && actual
             .iter()
             .zip(expected)
-            .all(|(actual, expected)| AssertrPartialEq::eq(actual, expected, None));
+            .all(|(actual, expected)| AssertrPartialEq::eq(actual, expected, ctx.as_deref_mut()));
 
     if strictly_equal {
         return CompareResult {
@@ -48,7 +54,7 @@ where
     for actual in actual {
         if !expected
             .iter()
-            .any(|expected| AssertrPartialEq::eq(actual, expected, None))
+            .any(|expected| AssertrPartialEq::eq(actual, expected, ctx.as_deref_mut()))
         {
             not_in_expected.push(actual);
         }
@@ -57,7 +63,7 @@ where
     for expected in expected {
         if !actual
             .iter()
-            .any(|actual| AssertrPartialEq::eq(actual, expected, None))
+            .any(|actual| AssertrPartialEq::eq(actual, expected, ctx.as_deref_mut()))
         {
             not_in_actual.push(expected);
         }
@@ -73,45 +79,53 @@ where
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait VecDequeAssertions<'t, T: Debug> {
+pub trait VecDequeAssertions<'t, T, R> {
     fn contains<E>(self, expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug;
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<E>;
 
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug;
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<E>;
 
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: Debug + 't,
-        T: AssertrPartialEq<E> + Debug;
+        E: 't,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<VecDeque<T>>
+            + AssertionRenderer<[E]>
+            + AssertionRenderer<T>
+            + AssertionRenderer<E>;
 
     fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
     where
-        T: PartialEq + Debug;
+        T: PartialEq,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<[T]> + AssertionRenderer<T>;
 
     /// `P` - Predicate
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
-        P: Fn(&T) -> bool;
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>;
 }
 
-impl<'t, T: Debug, M: Mode> VecDequeAssertions<'t, T> for AssertThat<'t, VecDeque<T>, M> {
+impl<'t, T, M: Mode, R> VecDequeAssertions<'t, T, R> for AssertThat<'t, VecDeque<T>, M, R> {
     #[track_caller]
     fn contains<E>(self, expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<E>,
     {
         self.track_assertion();
         let actual = self.actual();
-        if !actual
-            .iter()
-            .any(|it| AssertrPartialEq::eq(it, &expected, None))
-        {
+        if !actual.iter().any(|it| {
+            let mut ctx = self.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &expected, Some(&mut ctx))
+        }) {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(&expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -126,15 +140,17 @@ impl<'t, T: Debug, M: Mode> VecDequeAssertions<'t, T> for AssertThat<'t, VecDequ
     #[track_caller]
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
-        E: Debug,
-        T: AssertrPartialEq<E> + Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<E>,
     {
         self.track_assertion();
         let actual = self.actual();
-        if actual
-            .iter()
-            .any(|it| AssertrPartialEq::eq(it, &not_expected, None))
-        {
+        if actual.iter().any(|it| {
+            let mut ctx = self.eq_context();
+            <_ as AssertrPartialEq<_, R>>::eq(it, &not_expected, Some(&mut ctx))
+        }) {
+            let actual = self.render_value(actual);
+            let not_expected = self.render_value(&not_expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -149,28 +165,38 @@ impl<'t, T: Debug, M: Mode> VecDequeAssertions<'t, T> for AssertThat<'t, VecDequ
     #[track_caller]
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: Debug + 't,
-        T: AssertrPartialEq<E> + Debug,
+        E: 't,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<VecDeque<T>>
+            + AssertionRenderer<[E]>
+            + AssertionRenderer<T>
+            + AssertionRenderer<E>,
     {
         self.track_assertion();
         let actual = self.actual();
         let expected = expected.as_ref();
 
-        let result = compare(actual, expected);
+        let mut ctx = self.eq_context();
+        let result = compare(actual, expected, Some(&mut ctx));
 
         if !result.strictly_equal {
             if !result.not_in_expected.is_empty() {
                 self.add_detail_message(format!(
                     "Elements not expected: {:#?}",
-                    result.not_in_expected
+                    self.render_values(result.not_in_expected.as_slice())
                 ));
             }
             if !result.not_in_actual.is_empty() {
-                self.add_detail_message(format!("Elements not found: {:#?}", result.not_in_actual));
+                self.add_detail_message(format!(
+                    "Elements not found: {:#?}",
+                    self.render_values(result.not_in_actual.as_slice())
+                ));
             }
             if result.only_differing_in_order() {
                 self.add_detail_message("The order of elements does not match!".to_string());
             }
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
 
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
@@ -188,7 +214,8 @@ impl<'t, T: Debug, M: Mode> VecDequeAssertions<'t, T> for AssertThat<'t, VecDequ
     #[track_caller]
     fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
     where
-        T: PartialEq + Debug,
+        T: PartialEq,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<[T]> + AssertionRenderer<T>,
     {
         self.track_assertion();
         let actual = self.actual();
@@ -215,6 +242,10 @@ impl<'t, T: Debug, M: Mode> VecDequeAssertions<'t, T> for AssertThat<'t, VecDequ
         }
 
         if !elements_not_found.is_empty() || !elements_not_expected.is_empty() {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
+            let elements_not_found = self.render_values(elements_not_found.as_slice());
+            let elements_not_expected = self.render_values(elements_not_expected.as_slice());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?},
@@ -234,6 +265,7 @@ impl<'t, T: Debug, M: Mode> VecDequeAssertions<'t, T> for AssertThat<'t, VecDequ
     fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>,
     {
         self.track_assertion();
         let actual = self.actual();
@@ -245,7 +277,11 @@ impl<'t, T: Debug, M: Mode> VecDequeAssertions<'t, T> for AssertThat<'t, VecDequ
             .collect::<Vec<_>>();
 
         if !not_matched.is_empty() {
-            self.add_detail_message(format!("Elements not matched: {not_matched:#?}"));
+            self.add_detail_message(format!(
+                "Elements not matched: {:#?}",
+                self.render_values(not_matched.as_slice())
+            ));
+            let actual = self.render_value(actual);
 
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
@@ -276,7 +312,7 @@ mod tests {
         const FRONT: usize,
         const BACK: usize,
     >(
-        front_values: [T; FRONT],
+        front_values: &[T; FRONT],
         back_values: [T; BACK],
     ) -> VecDeque<T> {
         let mut deque = VecDeque::with_capacity(FRONT + BACK);
@@ -285,7 +321,7 @@ mod tests {
         while let Some(value) = deque.pop_front() {
             back_values.push(value);
         }
-        deque.extend(front_values.clone());
+        deque.extend(front_values.iter().cloned());
         deque.extend(back_values.clone());
         let (front, back) = deque.as_slices();
         assert_eq!(front.len(), FRONT);
@@ -392,7 +428,7 @@ mod tests {
 
         #[test]
         fn succeeds_for_non_contiguous_vec_deque_in_logical_order() {
-            assert_that!(non_contiguous_vec_deque([2, 3], [4, 5, 6]))
+            assert_that!(non_contiguous_vec_deque(&[2, 3], [4, 5, 6]))
                 .contains_exactly([2, 3, 4, 5, 6]);
         }
 
@@ -414,7 +450,7 @@ mod tests {
                     .contains_exactly([2, 3, 4]);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -439,7 +475,7 @@ mod tests {
                         ],
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
@@ -450,7 +486,7 @@ mod tests {
                     .contains_exactly([3, 2, 1]);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Actual: [
                         1,
@@ -470,7 +506,7 @@ mod tests {
                         The order of elements does not match!,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -486,7 +522,7 @@ mod tests {
 
         #[test]
         fn succeeds_for_non_contiguous_vec_deque() {
-            assert_that!(non_contiguous_vec_deque([2, 3], [4, 5, 6]))
+            assert_that!(non_contiguous_vec_deque(&[2, 3], [4, 5, 6]))
                 .contains_exactly_in_any_order([6, 5, 4, 3, 2]);
         }
 

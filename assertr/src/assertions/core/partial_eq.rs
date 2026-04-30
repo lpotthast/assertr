@@ -1,43 +1,44 @@
 use alloc::format;
 use alloc::string::String;
-use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 
-use crate::{AssertThat, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, AssertionRenderer, AssertrPartialEq, Mode, tracking::AssertionTracking};
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait PartialEqAssertions<T> {
+pub trait PartialEqAssertions<T, R> {
     fn is_equal_to<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug;
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<T> + AssertionRenderer<E>;
 
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug;
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<T> + AssertionRenderer<E>;
 }
 
-impl<T, M: Mode> PartialEqAssertions<T> for AssertThat<'_, T, M> {
+impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_equal_to<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
         let actual = self.actual();
         let expected = &expected;
 
-        let mut ctx = EqContext::default();
+        let mut ctx = self.eq_context();
 
         if !AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
             if !ctx.differences.differences.is_empty() {
                 self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
             }
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -52,20 +53,22 @@ impl<T, M: Mode> PartialEqAssertions<T> for AssertThat<'_, T, M> {
     #[track_caller]
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E> + Debug,
-        E: Debug,
+        T: AssertrPartialEq<E, R>,
+        R: AssertionRenderer<T> + AssertionRenderer<E>,
     {
         self.track_assertion();
 
         let actual = self.actual();
         let expected = &expected;
 
-        let mut ctx = EqContext::default();
+        let mut ctx = self.eq_context();
 
         if AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
             if !ctx.differences.differences.is_empty() {
                 self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
             }
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}

@@ -1,12 +1,14 @@
-use crate::{AssertThat, Mode, actual::Actual, mode::Panic, tracking::AssertionTracking};
+use crate::{
+    AssertThat, AssertionRenderer, Mode, actual::Actual, mode::Panic, tracking::AssertionTracking,
+};
 use alloc::string::String;
-use core::fmt::{Debug, Write};
+use core::fmt::Write;
 use core::option::Option;
 use indoc::writedoc;
 
 /// Data-extracting assertion for `Option` values.
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait OptionExtractAssertions<'t, T> {
+pub trait OptionExtractAssertions<'t, T, R> {
     /// Test if this option is of the `Some` variant.
     /// This is a terminal operation on the contained `Option`,
     /// as there is nothing meaningful to do with the option if its variant was ensured.
@@ -14,21 +16,22 @@ pub trait OptionExtractAssertions<'t, T> {
     ///
     /// Only available in `Panic` mode, as the extracted `T` cannot be produced when the value is
     /// `None`. Use `OptionAssertions::is_some_satisfying` for capture mode.
-    fn is_some(self) -> AssertThat<'t, T, Panic>
+    fn is_some(self) -> AssertThat<'t, T, Panic, R>
     where
-        T: Debug;
+        R: AssertionRenderer<Option<T>>;
 }
 
-impl<'t, T> OptionExtractAssertions<'t, T> for AssertThat<'t, Option<T>, Panic> {
+impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, Panic, R> {
     #[track_caller]
-    fn is_some(self) -> AssertThat<'t, T, Panic>
+    fn is_some(self) -> AssertThat<'t, T, Panic, R>
     where
-        T: Debug,
+        R: AssertionRenderer<Option<T>>,
     {
         self.track_assertion();
 
         if !self.actual().is_some() {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -49,27 +52,27 @@ impl<'t, T> OptionExtractAssertions<'t, T> for AssertThat<'t, Option<T>, Panic> 
 /// These work in any mode (Panic or Capture).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait OptionAssertions<'t, T, M: Mode> {
+pub trait OptionAssertions<'t, T, M: Mode, R> {
     /// Test if this option is of the `Some` variant, then run additional assertions on the contained value.
     fn is_some_satisfying<A>(self, assertions: A) -> Self
     where
-        T: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>);
+        R: AssertionRenderer<Option<T>> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M, R>);
 
     /// Test if this option is of the `None` variant.
     /// This is a terminal operation on the contained `Option`,
     /// as there is nothing meaningful to do with the option after its variant was ensured.
-    fn is_none(self) -> AssertThat<'t, (), M>
+    fn is_none(self) -> AssertThat<'t, (), M, R>
     where
-        T: Debug;
+        R: AssertionRenderer<Option<T>>;
 }
 
-impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M> {
+impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<T>, M, R> {
     #[track_caller]
     fn is_some_satisfying<A>(self, assertions: A) -> Self
     where
-        T: Debug,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M>),
+        R: AssertionRenderer<Option<T>> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, &'a T, M, R>),
     {
         self.track_assertion();
 
@@ -77,6 +80,7 @@ impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M>
             self.satisfies_ref(|it| it.as_ref().unwrap(), assertions)
         } else {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -89,14 +93,15 @@ impl<'t, T, M: Mode> OptionAssertions<'t, T, M> for AssertThat<'t, Option<T>, M>
     }
 
     #[track_caller]
-    fn is_none(self) -> AssertThat<'t, (), M>
+    fn is_none(self) -> AssertThat<'t, (), M, R>
     where
-        T: Debug,
+        R: AssertionRenderer<Option<T>>,
     {
         self.track_assertion();
 
         if !self.actual().is_none() {
             let actual = self.actual();
+            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}

@@ -90,7 +90,7 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(duration).with_location(false).is_zero())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 0s
 
@@ -100,7 +100,7 @@ mod tests {
                         Actual was not zero.,
                     ]
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -120,13 +120,13 @@ mod tests {
                 assert_that!(0.seconds()).with_location(false).is_negative();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be negative. But was
 
                       Actual: 0s
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
@@ -137,13 +137,13 @@ mod tests {
                     .is_negative();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be negative. But was
 
                       Actual: 2h 30m
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 
@@ -163,13 +163,13 @@ mod tests {
                 assert_that!(0.seconds()).with_location(false).is_positive();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be positive. But was
 
                       Actual: PT0S (0s)
                     -------- assertr --------
-                "#});
+                "});
         }
 
         #[test]
@@ -180,13 +180,13 @@ mod tests {
                     .is_positive();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected value to be positive. But was
 
                       Actual: -PT2H30M (2h 30m ago)
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }
