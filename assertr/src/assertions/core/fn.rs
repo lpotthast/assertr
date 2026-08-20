@@ -7,6 +7,7 @@ use alloc::{boxed::Box, string::String};
 use core::any::Any;
 use core::fmt::{Debug, Write};
 use core::panic::UnwindSafe;
+#[cfg(feature = "std")]
 use futures::FutureExt;
 use indoc::writedoc;
 

@@ -38,6 +38,9 @@ where
     }
 }
 
+/// Delimiter opening and closing every rendered failure message.
+pub(crate) const BANNER: &str = "-------- assertr --------\n";
+
 pub(crate) trait Fallible {
     fn store_failure(&self, failure: String);
 }
@@ -88,7 +91,7 @@ fn build_failure_message(
 ) -> Result<String, core::fmt::Error> {
     let mut err = String::new();
 
-    err.write_str("-------- assertr --------\n")?;
+    err.write_str(BANNER)?;
 
     if print_location {
         let caller_location = core::panic::Location::caller();
@@ -112,7 +115,7 @@ fn build_failure_message(
         err.write_fmt(format_args!("Details: {detail_messages:#?}\n"))?;
     }
 
-    err.write_str("-------- assertr --------\n")?;
+    err.write_str(BANNER)?;
 
     Ok(err)
 }

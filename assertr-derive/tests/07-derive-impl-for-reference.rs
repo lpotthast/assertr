@@ -20,12 +20,12 @@ pub struct Foo {
 }
 
 fn main() {
-    let foo = Foo {
+    let subject = Foo {
         id: 1,
         bars: vec![Bar { id: 42 }],
     };
 
-    let bars_refs = foo.bars.iter().collect::<Vec<_>>();
+    let bars_refs = subject.bars.iter().collect::<Vec<_>>();
 
     // This must compile without errors.
     // It should only compile when AssertrPartialEq

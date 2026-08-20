@@ -1,0 +1,15 @@
+[package]
+name = "assertr-no-std-tests"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89.0"
+publish = false
+
+[features]
+# Keep the fixture no-std by default. Workspace-wide commands exclude it so the dependency's
+# features cannot be unified with those selected for the main `assertr` package.
+default = []
+std = ["assertr/std"]
+
+[dependencies]
+assertr = { path = "../assertr", default-features = false }

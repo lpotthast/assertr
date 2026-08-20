@@ -1,4 +1,4 @@
 [workspace]
 resolver = "3"
-members = ["assertr", "assertr-derive"]
+members = ["assertr", "assertr-derive", "assertr-no-std-tests"]
 default-members = ["assertr"]

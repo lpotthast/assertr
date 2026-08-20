@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added `just` recipes for installing maintenance tools and running checks, Clippy, tests, or the full non-mutating
+  validation suite. `just tidy` now only updates dependencies, sorts manifests, and formats code.
+
+## [0.6.1] - 2026-08-20
+
+### Added
+
+- Added renderer-aware Rust pattern assertions via `is_matching(pattern!(...))` and
+  `is_not_matching(pattern!(...))`, including pattern guards and diagnostics that show both the pattern source and the
+  rendered actual value.
+- Added `is_poisoned()` and `is_not_poisoned()` to `MutexAssertions` for `std::sync::Mutex`.
+- Generic named-struct support in `#[derive(AssertrEq)]`, including lifetimes, type parameters, const generics, and
+  where-clauses. Generic matchers render field values in their `Debug` output whenever `DebugRenderer` supports the
+  field type, mirroring the bounds `#[derive(Debug)]` would require.
+- Predicate-based variants for all element-collection assertions (slices, arrays, `Vec`, `VecDeque`):
+  `contains_matching(predicate)` asserts that at least one element matches, `does_not_contain_matching(predicate)`
+  asserts that no element matches, and `contains_exactly_matching(predicates)` asserts a positional, length-exact
+  match. They complement the already existing order-independent `contains_exactly_in_any_order_matching(predicates)`.
+- Assertion-based `_satisfying` variants for all element-collection assertions (slices, arrays, `Vec`, `VecDeque`):
+  `contains_satisfying`, `does_not_contain_satisfying`, `contains_exactly_satisfying`, and
+  `contains_exactly_in_any_order_satisfying`. Instead of a boolean predicate, each closure receives a capture-mode
+  `AssertThat` borrowing an element, so all assertions implemented for the element type are applicable. An element
+  matches when the closure raises no assertion failure. The captured failures of unsatisfied elements are embedded
+  in the final assertion error.
+- `Capture` and `Panic` are now exported from the prelude, making it easy to type-annotate `_satisfying` closures
+  where inference needs help, e.g. `|it: AssertThat<i32, Capture>|` in closure arrays.
+- `satisfies_borrowed(mapper, assertions)` on `AssertThat`, completing the `satisfies_*` family: like
+  `satisfies_ref` it projects without cloning, but the closure receives a value-typed `AssertThat<U>` internally
+  holding the borrow (as `assert_that!(&value)` produces), so every assertion implemented for `U` is applicable.
+  Prefer it over `satisfies_ref` for all sized projection types. Fluent aliases `satisfy_borrowed` and `satisfy_ref`
+  were added for parity with the existing `satisfy`.
+- Documentation for the `derive`/`satisfies_*` family explaining why each variant exists, how they differ, and when
+  to use which, including a comparison table on `satisfies`.
+- Crate-level documentation presenting the mental model behind the API (ownership hidden inside `AssertThat<T>`,
+  derived assertions, the `satisfies_*` split, capture mode) and documentation for the fluent entry points,
+  explaining why `must()` / `must_owned()` and `verify()` / `verify_owned()` are separate functions and why the
+  borrowing variants carry the shorter names.
+- Continuous integration coverage for formatting, Clippy, tests, documentation, hosted and embedded `no_std`, and the
+  declared minimum supported Rust version, all respecting the lockfile.
+
+### Deprecated
+
+- `contains_exactly_matching_in_any_order` was renamed to `contains_exactly_in_any_order_matching` so that the
+  `_matching` suffix is applied consistently across all predicate-based collection assertions. The old method name and
+  its fluent alias remain available but are deprecated.
+
+### Fixed
+
+- Unordered exact collection assertions now compare multiplicities one-to-one. Predicate variants use maximum
+  bipartite matching so overlapping predicates are handled correctly and unmatched predicates are reported.
+- Inclusive numeric ranges now report a length of one for a singleton and range length calculations avoid signed
+  arithmetic overflow, with a clear panic when the mathematical length cannot fit in `usize`.
+- `is_close_to()` no longer overflows at integer boundaries, treats positive-infinite deviation as unbounded for
+  comparable non-NaN values, preserves equal infinities, and reports negative or NaN allowed deviations as assertion
+  failures.
+- Dropping an unused or uncaptured assertion during an existing panic no longer starts a second panic and aborts the
+  process. Without `std`, panic-on-drop completion checks are disabled because unwind state is unavailable.
+- `std::sync::Mutex` lock-state assertions now treat a poisoned but available mutex as unlocked rather than locked.
+- Embedded `no_std` builds no longer pull in the standard-library-only `futures` dependency.
+- Builds enabling the `num` feature without `std` or `libm` now compile. The float-classification assertions
+  (`is_nan()`, `is_finite()`, `is_infinite()`) remain gated behind `std` or `libm`, as documented.
+- `#[derive(AssertrEq)]` now accumulates all public-field differences, emits a normal diagnostic for unsupported tuple
+  structs, resolves renamed `assertr` dependencies, omits private-field-only generic dependencies, and avoids generated
+  helper-name collisions.
+- Deriving an assertion from an already derived assertion no longer resets the parent's internal mode state. In capture
+  mode, this previously raised a spurious "dropped without capturing" panic from the intermediate assertion even though
+  every failure propagated to the root and was captured there.
+
+### Changed
+
+- Aligned `assertr-derive`'s declared MSRV with `assertr` at Rust 1.89 and updated its parser stack to `darling` 0.24
+  and `syn` 3.
+- Updated stale README version examples and clarified renderer, exact collection, numeric tolerance, mutex, and derive
+  behavior.
+- All element-collection assertions (slices, arrays, `Vec` and `VecDeque`) now share one internal implementation, so
+  every collection type is guaranteed to produce identical failure messages.
+- Code generated by `#[derive(AssertrEq)]` now uses runtime support types from the hidden `assertr::__private` module
+  instead of emitting them per field, shrinking expansions. `assertr` and `assertr-derive` must be used in the versions
+  released together. `assertr` now enforces this with an exact `=` version requirement on `assertr-derive`.
+- `assertr-derive`: Bumped to 0.3.0.
+
 ## [0.6.0] - 2026-04-30
 
 ### Added
@@ -289,7 +372,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.6.1...HEAD
+
+[0.6.1]: https://github.com/lpotthast/assertr/compare/v0.6.0...v0.6.1
 
 [0.6.0]: https://github.com/lpotthast/assertr/compare/v0.5.7...v0.6.0
 

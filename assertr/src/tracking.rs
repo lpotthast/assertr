@@ -10,10 +10,12 @@ impl NumberOfAssertions {
 
 impl Drop for NumberOfAssertions {
     fn drop(&mut self) {
-        assert!(
-            self.0 != 0,
-            "An AssertThat was dropped without performing any actual assertions on it!"
-        );
+        if crate::enforce_drop_contracts() {
+            assert!(
+                self.0 != 0,
+                "An AssertThat was dropped without performing any actual assertions on it!"
+            );
+        }
     }
 }
 
@@ -41,8 +43,9 @@ mod tests {
     use crate::prelude::*;
 
     #[test]
+    #[cfg(feature = "std")]
     fn panics_on_drop_when_no_assertions_were_made() {
-        assert_that_panic_by(|| 42.must().with_location(false))
+        assert_that_panic_by(|| assert_that!(42).with_location(false))
             .has_type::<&str>()
             .is_equal_to(
                 "An AssertThat was dropped without performing any actual assertions on it!",
@@ -50,8 +53,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "std")]
     async fn panics_on_drop_when_no_assertions_were_made_async() {
-        assert_that_panic_by_async(async || 42.must().with_location(false))
+        assert_that_panic_by_async(async || assert_that!(42).with_location(false))
             .await
             .has_type::<&str>()
             .is_equal_to(
@@ -60,29 +64,24 @@ mod tests {
     }
 
     #[test]
+    fn dropping_an_unused_assert_during_unwinding_preserves_the_original_panic() {
+        assert_that_panic_by(|| {
+            let _assert = assert_that!(42);
+            panic!("original panic");
+        })
+        .has_type::<&str>()
+        .is_equal_to("original panic");
+    }
+
+    #[test]
     fn number_of_assertions_are_tracked() {
-        let initial_assertions = 42.must().be_equal_to(42).be_positive();
+        let initial_assertions = assert_that!(42).is_equal_to(42).is_not_equal_to(43);
 
-        initial_assertions
-            .number_of_assertions
-            .borrow()
-            .0
-            .must()
-            .be_equal_to(2);
+        assert_that!(initial_assertions.number_of_assertions.borrow().0).is_equal_to(2);
 
-        let derived_assertions = initial_assertions.derive(|it| it * 2).be_equal_to(84);
+        let derived_assertions = initial_assertions.derive(|it| it * 2).is_equal_to(84);
 
-        initial_assertions
-            .number_of_assertions
-            .borrow()
-            .0
-            .must()
-            .be_equal_to(3);
-        derived_assertions
-            .number_of_assertions
-            .borrow()
-            .0
-            .must()
-            .be_equal_to(1);
+        assert_that!(initial_assertions.number_of_assertions.borrow().0).is_equal_to(3);
+        assert_that!(derived_assertions.number_of_assertions.borrow().0).is_equal_to(1);
     }
 }

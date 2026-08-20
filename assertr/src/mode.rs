@@ -57,9 +57,11 @@ impl Mode for Capture {
 
 impl Drop for Capture {
     fn drop(&mut self) {
-        assert!(
-            self.captured || self.derived,
-            "You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"
-        );
+        if crate::enforce_drop_contracts() {
+            assert!(
+                self.captured || self.derived,
+                "You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"
+            );
+        }
     }
 }

@@ -1,8 +1,9 @@
 [package]
 name = "assertr-derive"
-version = "0.2.5"
+version = "0.3.0"
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.89.0"
+autotests = false
 authors = ["Lukas Potthast <privat@lukas-potthast.de>"]
 license = "MIT OR Apache-2.0"
 readme = "../README.md"
@@ -17,10 +18,11 @@ keywords = ["assertions", "assert", "assert-that", "testing"]
 proc-macro = true
 
 [dependencies]
-darling = "0.23.0"
-proc-macro2 = "1.0.95"
-quote = "1.0.40"
-syn = { version = "2.0.101", features = ["extra-traits"] }
+darling = "0.24.0"
+proc-macro-crate = "3.5.0"
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+syn = { version = "3.0.3", features = ["extra-traits", "visit"] }
 
 [dev-dependencies]
 assertr = { path = "../assertr", features = ["std", "derive", "fluent"] }

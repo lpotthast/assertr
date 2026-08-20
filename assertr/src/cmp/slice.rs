@@ -32,7 +32,9 @@ where
 ///
 /// This function is supposed to be used when deriving `AssertrEq` and having a slice-like type:
 /// ```
-/// use assertr::prelude::*;
+/// # #[cfg(feature = "derive")]
+/// # mod example {
+/// # use assertr::prelude::*;
 ///
 /// #[derive(Debug, AssertrEq)]
 /// pub struct Bar {
@@ -50,6 +52,7 @@ where
 ///     )]
 ///     pub bars: Vec<Bar>,
 /// }
+/// # }
 /// ```
 pub fn compare<V1, V2, R>(
     slice1: &[V1],
@@ -59,7 +62,7 @@ pub fn compare<V1, V2, R>(
 where
     V1: CompareElement<V2, R>,
 {
-    let cmp_result = crate::util::slice::compare_with_context(slice1, slice2, ctx.as_deref_mut());
+    let cmp_result = crate::assertions::collection::compare(slice1, slice2, ctx.as_deref_mut());
 
     if let Some(ctx) = ctx
         && !cmp_result.strictly_equal
@@ -80,16 +83,16 @@ where
                 V1::render_expected_values(ctx, slice2_values.as_slice())
             ));
         }
-        if !cmp_result.not_in_b.is_empty() {
+        if !cmp_result.not_in_expected.is_empty() {
             ctx.add_difference(format!(
                 "Elements not expected: {}",
-                V1::render_actual_values(ctx, cmp_result.not_in_b.as_slice())
+                V1::render_actual_values(ctx, cmp_result.not_in_expected.as_slice())
             ));
         }
-        if !cmp_result.not_in_a.is_empty() {
+        if !cmp_result.not_in_actual.is_empty() {
             ctx.add_difference(format!(
                 "Elements not found: {}",
-                V1::render_expected_values(ctx, cmp_result.not_in_a.as_slice())
+                V1::render_expected_values(ctx, cmp_result.not_in_actual.as_slice())
             ));
         }
     }

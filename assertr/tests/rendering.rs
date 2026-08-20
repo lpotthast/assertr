@@ -405,6 +405,7 @@ mod wrapper_renderer {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn hashset_assertion_uses_custom_renderer() {
         let actual: HashSet<Secret> = HashSet::from([Secret(1)]);
         let failures = assert_that!(actual)
@@ -424,6 +425,7 @@ mod wrapper_renderer {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn hashmap_contains_value_uses_custom_renderer() {
         let mut map: HashMap<&'static str, Secret> = HashMap::new();
         map.insert("alpha", Secret(1));
@@ -445,6 +447,7 @@ mod wrapper_renderer {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn mutex_is_locked_uses_custom_renderer() {
         let mutex = Mutex::new(Secret(11));
         let failures = assert_that!(mutex)

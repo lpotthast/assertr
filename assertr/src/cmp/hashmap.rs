@@ -15,6 +15,8 @@ impl<Actual, Expected, R> CompareValue<Expected, R> for Actual where
 
 /// This function is supposed to be used when deriving `AssertrEq`:
 /// ```
+/// # #[cfg(feature = "derive")]
+/// # mod example {
 /// use std::collections::HashMap;
 /// use assertr::prelude::*;
 ///
@@ -34,6 +36,7 @@ impl<Actual, Expected, R> CompareValue<Expected, R> for Actual where
 ///     )]
 ///     pub bars: HashMap<String, Bar>,
 /// }
+/// # }
 /// ```
 pub fn compare<K, V1, V2, S1, S2, R>(
     map1: &HashMap<K, V1, S1>,

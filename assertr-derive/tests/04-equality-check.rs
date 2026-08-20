@@ -14,36 +14,39 @@ pub struct Foo {
 }
 
 fn main() {
-    let foo = Foo {
+    let subject = Foo {
         id: 1,
         name: "bob".to_string(),
         data: (42, 100),
     };
 
-    foo.must().be_equal_to(FooAssertrEq {
+    subject.must().be_equal_to(FooAssertrEq {
         id: any(),
         name: any(),
         data: any(),
     });
 
-    foo.must().be_equal_to(FooAssertrEq {
+    subject.must().be_equal_to(FooAssertrEq {
         id: eq(1),
         name: eq("bob".to_string()),
         data: any(),
     });
 
     assert_that_panic_by(|| {
-        foo.must().with_location(false).be_equal_to(FooAssertrEq {
-            id: eq(1),
-            name: eq("otto".to_string()),
-            data: any(),
-        })
+        subject
+            .must()
+            .with_location(false)
+            .be_equal_to(FooAssertrEq {
+                id: eq(2),
+                name: eq("otto".to_string()),
+                data: any(),
+            })
     })
     .has_type::<String>()
     .is_equal_to(formatdoc! {r#"
             -------- assertr --------
             Expected: FooAssertrEq {{
-                id: Eq::Eq(1),
+                id: Eq::Eq(2),
                 name: Eq::Eq("otto"),
                 data: Eq::Any,
             }}
@@ -59,6 +62,7 @@ fn main() {
 
             Details: [
                 Differences: [
+                    "id": expected 2, but was 1,
                     "name": expected "otto", but was "bob",
                 ],
             ]

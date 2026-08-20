@@ -4,6 +4,7 @@ use ::core::ops::{Range, RangeInclusive};
 use ::std::hash::BuildHasher;
 
 pub mod alloc;
+pub(crate) mod collection;
 pub mod condition;
 pub mod core;
 #[cfg(feature = "http")]
@@ -163,196 +164,81 @@ impl<V, S: BuildHasher> HasLength for &::std::collections::HashSet<V, S> {
     }
 }
 
-impl HasLength for Range<usize> {
-    fn length(&self) -> usize {
-        self.len()
+/// Converts a range's mathematical length to `usize`, panicking when it does not fit.
+fn range_length<D>(difference: D) -> usize
+where
+    D: TryInto<usize>,
+{
+    difference
+        .try_into()
+        .unwrap_or_else(|_| panic!("range length exceeds usize::MAX"))
+}
+
+/// Length of a non-empty inclusive range, `difference + 1`, panicking when it does not fit.
+fn inclusive_range_length<D>(difference: D) -> usize
+where
+    D: TryInto<usize>,
+{
+    match range_length(difference).checked_add(1) {
+        Some(length) => length,
+        None => panic!("range length exceeds usize::MAX"),
     }
 }
 
-impl HasLength for RangeInclusive<usize> {
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            self.end() - self.start() + 1
-        } else {
-            0
-        }
-    }
+macro_rules! impl_has_length_for_unsigned_ranges {
+    ($($type:ty),+ $(,)?) => {
+        $(
+            impl HasLength for Range<$type> {
+                fn length(&self) -> usize {
+                    if self.start < self.end {
+                        range_length(self.end - self.start)
+                    } else {
+                        0
+                    }
+                }
+            }
+
+            impl HasLength for RangeInclusive<$type> {
+                fn length(&self) -> usize {
+                    if self.is_empty() {
+                        0
+                    } else {
+                        inclusive_range_length(*self.end() - *self.start())
+                    }
+                }
+            }
+        )+
+    };
 }
 
-impl HasLength for Range<u8> {
-    fn length(&self) -> usize {
-        if self.start < self.end {
-            (self.end - self.start) as usize
-        } else {
-            0
-        }
-    }
+macro_rules! impl_has_length_for_signed_ranges {
+    ($($type:ty),+ $(,)?) => {
+        $(
+            impl HasLength for Range<$type> {
+                fn length(&self) -> usize {
+                    if self.start < self.end {
+                        range_length(self.end.abs_diff(self.start))
+                    } else {
+                        0
+                    }
+                }
+            }
+
+            impl HasLength for RangeInclusive<$type> {
+                fn length(&self) -> usize {
+                    if self.is_empty() {
+                        0
+                    } else {
+                        inclusive_range_length(self.end().abs_diff(*self.start()))
+                    }
+                }
+            }
+        )+
+    };
 }
 
-impl HasLength for RangeInclusive<u8> {
-    //noinspection DuplicatedCode
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            (*self.end() - *self.start()) as usize + 1
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for Range<u16> {
-    fn length(&self) -> usize {
-        if self.start < self.end {
-            (self.end - self.start) as usize
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for RangeInclusive<u16> {
-    //noinspection DuplicatedCode
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            (*self.end() - *self.start()) as usize + 1
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for Range<u32> {
-    fn length(&self) -> usize {
-        if self.start < self.end {
-            (self.end - self.start) as usize
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for RangeInclusive<u32> {
-    //noinspection DuplicatedCode
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            (*self.end() - *self.start()) as usize + 1
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for Range<u64> {
-    #[allow(clippy::cast_possible_truncation)]
-    fn length(&self) -> usize {
-        if self.start < self.end {
-            (self.end - self.start) as usize
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for RangeInclusive<u64> {
-    //noinspection DuplicatedCode
-    #[allow(clippy::cast_possible_truncation)]
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            (*self.end() - *self.start()) as usize + 1
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for Range<i8> {
-    #[allow(clippy::cast_sign_loss)]
-    fn length(&self) -> usize {
-        if self.start < self.end {
-            (self.end - self.start) as usize
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for RangeInclusive<i8> {
-    //noinspection DuplicatedCode
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            (*self.end() - *self.start()).unsigned_abs() as usize + 1
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for Range<i16> {
-    #[allow(clippy::cast_sign_loss)]
-    fn length(&self) -> usize {
-        if self.start < self.end {
-            (self.end - self.start) as usize
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for RangeInclusive<i16> {
-    //noinspection DuplicatedCode
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            (*self.end() - *self.start()).unsigned_abs() as usize + 1
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for Range<i32> {
-    #[allow(clippy::cast_sign_loss)]
-    fn length(&self) -> usize {
-        if self.start < self.end {
-            (self.end - self.start) as usize
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for RangeInclusive<i32> {
-    //noinspection DuplicatedCode
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            (*self.end() - *self.start()).unsigned_abs() as usize + 1
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for Range<i64> {
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    fn length(&self) -> usize {
-        if self.start < self.end {
-            (self.end - self.start) as usize
-        } else {
-            0
-        }
-    }
-}
-
-impl HasLength for RangeInclusive<i64> {
-    //noinspection DuplicatedCode
-    #[allow(clippy::cast_possible_truncation)]
-    fn length(&self) -> usize {
-        if self.start() < self.end() {
-            (*self.end() - *self.start()).unsigned_abs() as usize + 1
-        } else {
-            0
-        }
-    }
-}
+impl_has_length_for_unsigned_ranges!(usize, u8, u16, u32, u64);
+impl_has_length_for_signed_ranges!(i8, i16, i32, i64);
 
 #[cfg(test)]
 mod tests {
@@ -366,10 +252,20 @@ mod tests {
             fn works_on_range_and_inclusive_range() {
                 assert_that!(1_usize..9_usize).has_length(8);
                 assert_that!(1_usize..=9_usize).has_length(9);
+                assert_that!(5_usize..=5_usize).has_length(1);
 
                 // inverted range
                 assert_that!(9_usize..1_usize).has_length(0);
                 assert_that!(9_usize..=1_usize).has_length(0);
+            }
+
+            #[test]
+            fn exhausted_inclusive_range_has_length_zero() {
+                let mut range = 5_usize..=5_usize;
+                assert_eq!(range.next(), Some(5));
+                assert!(range.is_empty());
+
+                assert_that!(range).has_length(0);
             }
         }
 
@@ -380,6 +276,7 @@ mod tests {
             fn works_on_range_and_inclusive_range() {
                 assert_that!(1_u8..9_u8).has_length(8);
                 assert_that!(1_u8..=9_u8).has_length(9);
+                assert_that!(u8::MIN..=u8::MAX).has_length(256);
 
                 // inverted range
                 assert_that!(9_u8..1_u8).has_length(0);
@@ -448,6 +345,19 @@ mod tests {
                 // across zero
                 assert_that!(-4_i8..4_i8).has_length(8);
                 assert_that!(-4_i8..=4_i8).has_length(9);
+
+                // full domain without intermediate signed overflow
+                assert_that!(i8::MIN..i8::MAX).has_length(255);
+                assert_that!(i8::MIN..=i8::MAX).has_length(256);
+            }
+
+            #[test]
+            fn exhausted_inclusive_range_has_length_zero() {
+                let mut range = 5_i8..=5_i8;
+                assert_eq!(range.next(), Some(5));
+                assert!(range.is_empty());
+
+                assert_that!(range).has_length(0);
             }
         }
 

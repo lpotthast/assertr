@@ -1,201 +1,173 @@
 use alloc::vec::Vec;
 
-use crate::{AssertrPartialEq, EqContext};
-
-pub(crate) struct CompareResult<'t, A, B> {
-    pub(crate) strictly_equal: bool,
-    pub(crate) same_length: bool,
-    pub(crate) not_in_a: Vec<&'t B>,
-    pub(crate) not_in_b: Vec<&'t A>,
+pub(crate) struct BipartiteMatchResult {
+    pub(crate) unmatched_actual: Vec<usize>,
+    pub(crate) unmatched_expected: Vec<usize>,
 }
 
-impl<A, B> CompareResult<'_, A, B> {
-    pub fn only_differing_in_order(&self) -> bool {
-        !self.strictly_equal
-            && self.same_length
-            && self.not_in_a.is_empty()
-            && self.not_in_b.is_empty()
+impl BipartiteMatchResult {
+    pub(crate) fn is_exact(&self) -> bool {
+        self.unmatched_actual.is_empty() && self.unmatched_expected.is_empty()
     }
 }
 
-// TODO: Move to cmp module and rename.
-pub(crate) fn compare_with_context<'t, A, B, R>(
-    aa: &'t [A],
-    bb: &'t [B],
-    mut ctx: Option<&mut EqContext<'_, R>>,
-) -> CompareResult<'t, A, B>
-where
-    A: AssertrPartialEq<B, R>,
-{
-    if AssertrPartialEq::eq(aa, bb, ctx.as_deref_mut()) {
-        return CompareResult {
-            strictly_equal: true,
-            same_length: true,
-            not_in_a: Vec::new(),
-            not_in_b: Vec::new(),
-        };
+/// Matches values one-to-one when `matches` represents an equivalence relation.
+///
+/// Unlike general predicate matching, equivalent values can be assigned greedily: any unmatched
+/// equivalent expected value is interchangeable with every other one. Skipping already matched
+/// expected values before comparing keeps the algorithm quadratic and avoids recursion.
+pub(crate) fn match_multiset(
+    actual_len: usize,
+    expected_len: usize,
+    matches: impl Fn(usize, usize) -> bool,
+) -> BipartiteMatchResult {
+    let mut matched_expected = alloc::vec![false; expected_len];
+    let mut unmatched_actual = Vec::new();
+
+    for actual_index in 0..actual_len {
+        let matched_index = (0..expected_len).find(|expected_index| {
+            !matched_expected[*expected_index] && matches(actual_index, *expected_index)
+        });
+
+        if let Some(expected_index) = matched_index {
+            matched_expected[expected_index] = true;
+        } else {
+            unmatched_actual.push(actual_index);
+        }
     }
 
-    let same_length = aa.len() == bb.len();
-
-    let mut not_in_a = Vec::new();
-    let mut not_in_b = Vec::new();
-
-    for a in aa {
-        if !bb
+    BipartiteMatchResult {
+        unmatched_actual,
+        unmatched_expected: matched_expected
             .iter()
-            .any(|b| AssertrPartialEq::eq(a, b, ctx.as_deref_mut()))
-        {
-            not_in_b.push(a);
+            .enumerate()
+            .filter_map(|(index, matched)| (!matched).then_some(index))
+            .collect(),
+    }
+}
+
+/// Finds a maximum one-to-one matching between actual and expected values.
+///
+/// A greedy matcher is insufficient when predicates overlap: an early actual value may match
+/// several expected predicates while a later value only matches one of them. The augmenting-path
+/// search below revisits earlier choices so an exact matching is found whenever one exists.
+///
+/// Recursion depth is bounded by `expected_len`; assertion inputs are small enough in practice
+/// that this cannot overflow the stack.
+pub(crate) fn match_bipartite(
+    actual_len: usize,
+    expected_len: usize,
+    matches: impl Fn(usize, usize) -> bool,
+) -> BipartiteMatchResult {
+    fn augment(
+        actual_index: usize,
+        expected_len: usize,
+        visited_expected: &mut [bool],
+        expected_to_actual: &mut [Option<usize>],
+        matches: &impl Fn(usize, usize) -> bool,
+    ) -> bool {
+        for expected_index in 0..expected_len {
+            if visited_expected[expected_index] || !matches(actual_index, expected_index) {
+                continue;
+            }
+
+            visited_expected[expected_index] = true;
+            let can_reassign = match expected_to_actual[expected_index] {
+                None => true,
+                Some(previous_actual) => augment(
+                    previous_actual,
+                    expected_len,
+                    visited_expected,
+                    expected_to_actual,
+                    matches,
+                ),
+            };
+
+            if can_reassign {
+                expected_to_actual[expected_index] = Some(actual_index);
+                return true;
+            }
         }
+
+        false
     }
 
-    for b in bb {
-        if !aa
+    let mut expected_to_actual = alloc::vec![None; expected_len];
+
+    for actual_index in 0..actual_len {
+        let mut visited_expected = alloc::vec![false; expected_len];
+        let _ = augment(
+            actual_index,
+            expected_len,
+            &mut visited_expected,
+            &mut expected_to_actual,
+            &matches,
+        );
+    }
+
+    let mut matched_actual = alloc::vec![false; actual_len];
+    for actual_index in expected_to_actual.iter().flatten() {
+        matched_actual[*actual_index] = true;
+    }
+
+    BipartiteMatchResult {
+        unmatched_actual: matched_actual
             .iter()
-            .any(|a| AssertrPartialEq::eq(a, b, ctx.as_deref_mut()))
-        {
-            not_in_a.push(b);
-        }
+            .enumerate()
+            .filter_map(|(index, matched)| (!matched).then_some(index))
+            .collect(),
+        unmatched_expected: expected_to_actual
+            .iter()
+            .enumerate()
+            .filter_map(|(index, actual)| actual.is_none().then_some(index))
+            .collect(),
     }
-
-    CompareResult {
-        strictly_equal: false,
-        same_length,
-        not_in_a,
-        not_in_b,
-    }
-}
-
-pub(crate) struct TestMatchingResult<'t, A> {
-    pub(crate) not_matched: Vec<&'t A>,
-}
-
-pub(crate) fn test_matching_any<'t, A, P>(
-    aa: &'t [A],
-    predicates: &'t [P],
-) -> TestMatchingResult<'t, A>
-where
-    P: Fn(&'t A) -> bool,
-{
-    let mut not_matched = Vec::new();
-
-    for a in aa {
-        if !predicates.iter().any(|p| p(a)) {
-            not_matched.push(a);
-        }
-    }
-
-    TestMatchingResult { not_matched }
 }
 
 #[cfg(test)]
 mod tests {
-    mod compare {
-        use crate::AssertrPartialEq;
-        use crate::prelude::*;
-        use crate::util::slice::{CompareResult, compare_with_context};
-
-        pub(crate) fn compare<'t, A, B>(aa: &'t [A], bb: &'t [B]) -> CompareResult<'t, A, B>
-        where
-            A: AssertrPartialEq<B>,
-        {
-            compare_with_context::<A, B, DebugRenderer>(aa, bb, None)
-        }
-
-        #[test]
-        fn returns_equal_on_equal_input_using_refs() {
-            let result = compare(&[&1, &2, &3], &[&1, &2, &3]);
-
-            result.only_differing_in_order().must().be_false();
-            result.strictly_equal.must().be_true();
-            result.same_length.must().be_true();
-            result.not_in_a.must().be_empty();
-            result.not_in_b.must().be_empty();
-        }
-
-        #[test]
-        fn returns_equal_on_equal_input() {
-            let result = compare(&[1, 2, 3], &[1, 2, 3]);
-
-            result.only_differing_in_order().must().be_false();
-            result.strictly_equal.must().be_true();
-            result.same_length.must().be_true();
-            result.not_in_a.must().be_empty();
-            result.not_in_b.must().be_empty();
-        }
-
-        #[test]
-        fn returns_not_equal_on_equal_but_rearranged_input() {
-            let result = compare(&[1, 2, 3], &[3, 2, 1]);
-
-            result.only_differing_in_order().must().be_true();
-            result.strictly_equal.must().be_false();
-            result.same_length.must().be_true();
-            result.not_in_a.must().be_empty();
-            result.not_in_b.must().be_empty();
-        }
-
-        #[test]
-        fn returns_not_equal_and_lists_differences_on_differing_input() {
-            let result = compare(&[1, 5, 7], &[5, 3, 4, 42]);
-
-            result.only_differing_in_order().must().be_false();
-            result.strictly_equal.must().be_false();
-            result.same_length.must().be_false();
-            result.not_in_a.must().contain_exactly([&3, &4, &42]);
-            result.not_in_b.must().contain_exactly([&1, &7]);
-        }
-    }
-
-    mod test_matching_any {
-        use crate::prelude::*;
-        use crate::util::slice::test_matching_any;
+    mod match_bipartite {
+        use crate::util::slice::match_bipartite;
 
         #[test]
         fn returns_equal_on_matching_input() {
-            let result = test_matching_any(
-                &[1, 2, 3],
-                [
-                    move |it: &i32| *it == 1,
-                    move |it: &i32| *it == 2,
-                    move |it: &i32| *it == 3,
-                ]
-                .as_slice(),
+            let actual = [1, 2, 3];
+            let predicates: [fn(&i32) -> bool; 3] = [|it| *it == 1, |it| *it == 2, |it| *it == 3];
+            let result = match_bipartite(
+                actual.len(),
+                predicates.len(),
+                |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
             );
 
-            result.not_matched.must().be_empty();
+            assert!(result.is_exact());
         }
 
         #[test]
-        fn returns_not_equal_on_matching_but_rearranged_input() {
-            let result = test_matching_any(
-                &[1, 2, 3],
-                [
-                    move |it: &i32| *it == 3,
-                    move |it: &i32| *it == 2,
-                    move |it: &i32| *it == 1,
-                ]
-                .as_slice(),
+        fn finds_exact_matching_when_predicates_overlap() {
+            let actual = [1, 2];
+            let predicates: [fn(&i32) -> bool; 2] = [|it| *it <= 2, |it| *it == 1];
+            let result = match_bipartite(
+                actual.len(),
+                predicates.len(),
+                |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
             );
 
-            result.not_matched.must().be_empty();
+            assert!(result.is_exact());
         }
 
         #[test]
-        fn returns_not_equal_and_lists_differences_on_non_matching_input() {
-            let result = test_matching_any(
-                &[1, 5, 7],
-                [
-                    move |it: &i32| *it == 5,
-                    move |it: &i32| *it == 3,
-                    move |it: &i32| *it == 4,
-                    move |it: &i32| *it == 42,
-                ]
-                .as_slice(),
+        fn reports_unmatched_actual_values_and_expected_predicates() {
+            let actual = [1, 5, 7];
+            let predicates: [fn(&i32) -> bool; 4] =
+                [|it| *it == 5, |it| *it == 3, |it| *it == 4, |it| *it == 42];
+            let result = match_bipartite(
+                actual.len(),
+                predicates.len(),
+                |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
             );
 
-            result.not_matched.must().contain_exactly([&1, &7]);
+            assert_eq!(result.unmatched_actual, [0, 2]);
+            assert_eq!(result.unmatched_expected, [1, 2, 3]);
         }
     }
 }

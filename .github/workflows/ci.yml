@@ -1,0 +1,86 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  # Clippy also performs a full `cargo check`, so no separate check job is needed.
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p assertr --all-targets --no-default-features --locked -- -D warnings -W clippy::pedantic
+      - run: cargo clippy -p assertr --all-targets --locked -- -D warnings -W clippy::pedantic
+      - run: cargo clippy -p assertr --all-targets --all-features --locked -- -D warnings -W clippy::pedantic
+      - run: cargo clippy -p assertr-derive --all-targets --locked -- -D warnings -W clippy::pedantic
+      - run: cargo clippy -p assertr-no-std-tests --all-targets --locked -- -D warnings -W clippy::pedantic
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p assertr --no-default-features --locked
+      - run: cargo test -p assertr --locked
+      - run: cargo test -p assertr --all-features --locked
+      - run: cargo test -p assertr-derive --locked
+
+  doc:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --exclude assertr-no-std-tests --all-features --no-deps --release --locked
+
+  no-std:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv8m.main-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p assertr-no-std-tests --locked
+      - run: cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf --locked
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.89.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p assertr --all-targets --all-features --locked
+      - run: cargo check -p assertr-derive --all-targets --locked
+      - run: cargo test -p assertr-no-std-tests --locked

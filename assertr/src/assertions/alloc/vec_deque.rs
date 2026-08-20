@@ -1,81 +1,8 @@
 use alloc::collections::VecDeque;
-use alloc::format;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
-use core::fmt::Write;
-use indoc::writedoc;
 
 use crate::{
-    AssertThat, AssertionRenderer, AssertrPartialEq, EqContext, Mode, tracking::AssertionTracking,
+    AssertThat, AssertionRenderer, AssertrPartialEq, Mode, assertions::collection, mode::Capture,
 };
-
-struct CompareResult<'t, A, B> {
-    strictly_equal: bool,
-    same_length: bool,
-    not_in_expected: Vec<&'t A>,
-    not_in_actual: Vec<&'t B>,
-}
-
-impl<A, B> CompareResult<'_, A, B> {
-    fn only_differing_in_order(&self) -> bool {
-        !self.strictly_equal
-            && self.same_length
-            && self.not_in_actual.is_empty()
-            && self.not_in_expected.is_empty()
-    }
-}
-
-fn compare<'t, A, B, R>(
-    actual: &'t VecDeque<A>,
-    expected: &'t [B],
-    mut ctx: Option<&mut EqContext<'_, R>>,
-) -> CompareResult<'t, A, B>
-where
-    A: AssertrPartialEq<B, R>,
-{
-    let strictly_equal = actual.len() == expected.len()
-        && actual
-            .iter()
-            .zip(expected)
-            .all(|(actual, expected)| AssertrPartialEq::eq(actual, expected, ctx.as_deref_mut()));
-
-    if strictly_equal {
-        return CompareResult {
-            strictly_equal: true,
-            same_length: true,
-            not_in_expected: Vec::new(),
-            not_in_actual: Vec::new(),
-        };
-    }
-
-    let mut not_in_expected = Vec::new();
-    let mut not_in_actual = Vec::new();
-
-    for actual in actual {
-        if !expected
-            .iter()
-            .any(|expected| AssertrPartialEq::eq(actual, expected, ctx.as_deref_mut()))
-        {
-            not_in_expected.push(actual);
-        }
-    }
-
-    for expected in expected {
-        if !actual
-            .iter()
-            .any(|actual| AssertrPartialEq::eq(actual, expected, ctx.as_deref_mut()))
-        {
-            not_in_actual.push(expected);
-        }
-    }
-
-    CompareResult {
-        strictly_equal: false,
-        same_length: actual.len() == expected.len(),
-        not_in_expected,
-        not_in_actual,
-    }
-}
 
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
@@ -85,10 +12,34 @@ pub trait VecDequeAssertions<'t, T, R> {
         T: AssertrPartialEq<E, R>,
         R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<E>;
 
+    /// Test that at least one element matches the given predicate.
+    fn contains_matching<P>(self, predicate: P) -> Self
+    where
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>>;
+
+    /// Test that at least one element satisfies the given assertions.
+    fn contains_satisfying<A>(self, assertions: A) -> Self
+    where
+        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+        R: AssertionRenderer<VecDeque<T>> + Clone;
+
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
         R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<E>;
+
+    /// Test that no element matches the given predicate.
+    fn does_not_contain_matching<P>(self, predicate: P) -> Self
+    where
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>;
+
+    /// Test that no element satisfies the given assertions.
+    fn does_not_contain_satisfying<A>(self, assertions: A) -> Self
+    where
+        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T> + Clone;
 
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
@@ -99,16 +50,70 @@ pub trait VecDequeAssertions<'t, T, R> {
             + AssertionRenderer<T>
             + AssertionRenderer<E>;
 
+    /// Tests that each element matches the predicate at the same position. Order is important.
+    /// The number of predicates must equal the number of elements.
+    fn contains_exactly_matching<P>(self, expected: impl AsRef<[P]>) -> Self
+    where
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>;
+
+    /// Tests that each element satisfies the assertions at the same position. Order is important.
+    /// The number of assertion closures must equal the number of elements.
+    fn contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
+    where
+        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+        R: AssertionRenderer<VecDeque<T>> + Clone;
+
+    /// Tests multiset equality, including identical duplicate counts.
     fn contains_exactly_in_any_order<E: AsRef<[T]>>(self, expected: E) -> Self
     where
         T: PartialEq,
         R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<[T]> + AssertionRenderer<T>;
 
-    /// `P` - Predicate
-    fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
+    /// Tests a one-to-one, order-independent match between predicates and actual elements.
+    fn contains_exactly_in_any_order_matching<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
         R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>;
+
+    /// Tests a one-to-one, order-independent match between assertion closures and actual
+    /// elements.
+    fn contains_exactly_in_any_order_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
+    where
+        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T> + Clone;
+
+    /// Deprecated name of [`VecDequeAssertions::contains_exactly_in_any_order_matching`].
+    #[deprecated(
+        since = "0.7.0",
+        note = "renamed to `contains_exactly_in_any_order_matching`"
+    )]
+    #[cfg_attr(feature = "fluent", no_fluent_alias)]
+    #[track_caller]
+    fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
+    where
+        Self: Sized,
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>,
+    {
+        self.contains_exactly_in_any_order_matching(expected)
+    }
+
+    /// Deprecated name of the `contain_exactly_in_any_order_matching` fluent alias.
+    #[cfg(feature = "fluent")]
+    #[deprecated(
+        since = "0.7.0",
+        note = "renamed to `contain_exactly_in_any_order_matching`"
+    )]
+    #[track_caller]
+    fn contain_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
+    where
+        Self: Sized,
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>,
+    {
+        self.contains_exactly_in_any_order_matching(expected)
+    }
 }
 
 impl<'t, T, M: Mode, R> VecDequeAssertions<'t, T, R> for AssertThat<'t, VecDeque<T>, M, R> {
@@ -118,22 +123,27 @@ impl<'t, T, M: Mode, R> VecDequeAssertions<'t, T, R> for AssertThat<'t, VecDeque
         T: AssertrPartialEq<E, R>,
         R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<E>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.iter().any(|it| {
-            let mut ctx = self.eq_context();
-            <_ as AssertrPartialEq<_, R>>::eq(it, &expected, Some(&mut ctx))
-        }) {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(&expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
+        collection::assert_contains(&self, &expected);
+        self
+    }
 
-                    does not contain expected: {expected:#?}
-                "}
-            });
-        }
+    #[track_caller]
+    fn contains_matching<P>(self, predicate: P) -> Self
+    where
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>>,
+    {
+        collection::assert_contains_matching(&self, &predicate);
+        self
+    }
+
+    #[track_caller]
+    fn contains_satisfying<A>(self, assertions: A) -> Self
+    where
+        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+        R: AssertionRenderer<VecDeque<T>> + Clone,
+    {
+        collection::assert_contains_satisfying(&self, &assertions);
         self
     }
 
@@ -143,22 +153,27 @@ impl<'t, T, M: Mode, R> VecDequeAssertions<'t, T, R> for AssertThat<'t, VecDeque
         T: AssertrPartialEq<E, R>,
         R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<E>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if actual.iter().any(|it| {
-            let mut ctx = self.eq_context();
-            <_ as AssertrPartialEq<_, R>>::eq(it, &not_expected, Some(&mut ctx))
-        }) {
-            let actual = self.render_value(actual);
-            let not_expected = self.render_value(&not_expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
+        collection::assert_does_not_contain(&self, &not_expected);
+        self
+    }
 
-                    contains unexpected: {not_expected:#?}
-                "}
-            });
-        }
+    #[track_caller]
+    fn does_not_contain_matching<P>(self, predicate: P) -> Self
+    where
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>,
+    {
+        collection::assert_does_not_contain_matching(&self, &predicate);
+        self
+    }
+
+    #[track_caller]
+    fn does_not_contain_satisfying<A>(self, assertions: A) -> Self
+    where
+        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T> + Clone,
+    {
+        collection::assert_does_not_contain_satisfying(&self, &assertions);
         self
     }
 
@@ -172,42 +187,27 @@ impl<'t, T, M: Mode, R> VecDequeAssertions<'t, T, R> for AssertThat<'t, VecDeque
             + AssertionRenderer<T>
             + AssertionRenderer<E>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        let expected = expected.as_ref();
+        collection::assert_contains_exactly(&self, expected.as_ref());
+        self
+    }
 
-        let mut ctx = self.eq_context();
-        let result = compare(actual, expected, Some(&mut ctx));
+    #[track_caller]
+    fn contains_exactly_matching<P>(self, expected: impl AsRef<[P]>) -> Self
+    where
+        P: Fn(&T) -> bool,
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>,
+    {
+        collection::assert_contains_exactly_matching(&self, expected.as_ref());
+        self
+    }
 
-        if !result.strictly_equal {
-            if !result.not_in_expected.is_empty() {
-                self.add_detail_message(format!(
-                    "Elements not expected: {:#?}",
-                    self.render_values(result.not_in_expected.as_slice())
-                ));
-            }
-            if !result.not_in_actual.is_empty() {
-                self.add_detail_message(format!(
-                    "Elements not found: {:#?}",
-                    self.render_values(result.not_in_actual.as_slice())
-                ));
-            }
-            if result.only_differing_in_order() {
-                self.add_detail_message("The order of elements does not match!".to_string());
-            }
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
-
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?},
-
-                    did not exactly match
-
-                    Expected: {expected:#?}
-                "}
-            });
-        }
+    #[track_caller]
+    fn contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
+    where
+        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+        R: AssertionRenderer<VecDeque<T>> + Clone,
+    {
+        collection::assert_contains_exactly_satisfying(&self, assertions.as_ref());
         self
     }
 
@@ -217,84 +217,34 @@ impl<'t, T, M: Mode, R> VecDequeAssertions<'t, T, R> for AssertThat<'t, VecDeque
         T: PartialEq,
         R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<[T]> + AssertionRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        let expected: &[T] = expected.as_ref();
-
-        let mut elements_found = Vec::new();
-        let mut elements_not_found: Vec<&T> = Vec::new();
-        let mut elements_not_expected = Vec::new();
-
-        for e in expected {
-            let found = actual.iter().find(|it| *it == e);
-
-            match found {
-                Some(_e) => elements_found.push(e),
-                None => elements_not_found.push(e),
-            }
-        }
-
-        for e in actual {
-            match elements_found.iter().find(|it| **it == e) {
-                Some(_) => {}
-                None => elements_not_expected.push(e),
-            }
-        }
-
-        if !elements_not_found.is_empty() || !elements_not_expected.is_empty() {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
-            let elements_not_found = self.render_values(elements_not_found.as_slice());
-            let elements_not_expected = self.render_values(elements_not_expected.as_slice());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?},
-
-                    Elements expected: {expected:#?}
-
-                    Elements not found: {elements_not_found:#?}
-
-                    Elements not expected: {elements_not_expected:#?}
-                "}
-            });
-        }
+        collection::assert_contains_exactly_in_any_order(&self, expected.as_ref());
         self
     }
 
     #[track_caller]
-    fn contains_exactly_matching_in_any_order<P>(self, expected: impl AsRef<[P]>) -> Self
+    fn contains_exactly_in_any_order_matching<P>(self, expected: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
         R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        let expected = expected.as_ref();
+        collection::assert_contains_exactly_in_any_order_matching(&self, expected.as_ref());
+        self
+    }
 
-        let not_matched = actual
-            .iter()
-            .filter(|actual| !expected.iter().any(|predicate| predicate(actual)))
-            .collect::<Vec<_>>();
-
-        if !not_matched.is_empty() {
-            self.add_detail_message(format!(
-                "Elements not matched: {:#?}",
-                self.render_values(not_matched.as_slice())
-            ));
-            let actual = self.render_value(actual);
-
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?},
-
-                    did not exactly match predicates in any order.
-                "}
-            });
-        }
+    #[track_caller]
+    fn contains_exactly_in_any_order_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
+    where
+        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+        R: AssertionRenderer<VecDeque<T>> + AssertionRenderer<T> + Clone,
+    {
+        collection::assert_contains_exactly_in_any_order_satisfying(&self, assertions.as_ref());
         self
     }
 }
 
+// These tests cover the delegation into `assertions::collection` and VecDeque-specific concerns
+// (e.g. non-contiguous buffers). Edge cases of the shared implementation itself, such as
+// multiplicity handling and overlapping predicates, are covered once in the slice tests.
 #[cfg(test)]
 mod tests {
     use alloc::collections::VecDeque;
@@ -378,6 +328,52 @@ mod tests {
         }
     }
 
+    mod contains_matching {
+        use super::vec_deque;
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_an_element_matches() {
+            assert_that!(vec_deque([1, 2, 3])).contains_matching(|it: &i32| *it % 2 == 0);
+        }
+
+        #[test]
+        fn panics_when_no_element_matches() {
+            assert_that_panic_by(|| {
+                assert_that!(vec_deque([1, 2, 3]))
+                    .with_location(false)
+                    .contains_matching(|it: &i32| *it > 7);
+            })
+            .has_type::<String>()
+            .contains("does not contain an element matching the given predicate.");
+        }
+    }
+
+    mod contains_satisfying {
+        use super::vec_deque;
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_an_element_satisfies() {
+            assert_that!(vec_deque([1, 2, 3])).contains_satisfying(|it| {
+                it.is_equal_to(2);
+            });
+        }
+
+        #[test]
+        fn panics_when_no_element_satisfies() {
+            assert_that_panic_by(|| {
+                assert_that!(vec_deque([1, 2, 3]))
+                    .with_location(false)
+                    .contains_satisfying(|it| {
+                        it.is_equal_to(7);
+                    });
+            })
+            .has_type::<String>()
+            .contains("does not contain an element satisfying the given assertions.");
+        }
+    }
+
     mod does_not_contain {
         use super::vec_deque;
         use crate::prelude::*;
@@ -413,6 +409,52 @@ mod tests {
                     contains unexpected: 2
                     -------- assertr --------
                 "});
+        }
+    }
+
+    mod does_not_contain_matching {
+        use super::vec_deque;
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_no_element_matches() {
+            assert_that!(vec_deque([1, 2, 3])).does_not_contain_matching(|it: &i32| *it > 7);
+        }
+
+        #[test]
+        fn panics_when_an_element_matches() {
+            assert_that_panic_by(|| {
+                assert_that!(vec_deque([1, 2, 3]))
+                    .with_location(false)
+                    .does_not_contain_matching(|it: &i32| *it % 2 == 0);
+            })
+            .has_type::<String>()
+            .contains("contains elements matching the given predicate");
+        }
+    }
+
+    mod does_not_contain_satisfying {
+        use super::vec_deque;
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_no_element_satisfies() {
+            assert_that!(vec_deque([1, 2, 3])).does_not_contain_satisfying(|it| {
+                it.is_equal_to(7);
+            });
+        }
+
+        #[test]
+        fn panics_when_an_element_satisfies() {
+            assert_that_panic_by(|| {
+                assert_that!(vec_deque([1, 2, 3]))
+                    .with_location(false)
+                    .does_not_contain_satisfying(|it| {
+                        it.is_equal_to(2);
+                    });
+            })
+            .has_type::<String>()
+            .contains("contains elements satisfying the given assertions");
         }
     }
 
@@ -510,6 +552,97 @@ mod tests {
         }
     }
 
+    mod contains_exactly_matching {
+        use super::{non_contiguous_vec_deque, vec_deque};
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_each_element_matches_its_predicate() {
+            assert_that!(vec_deque([1, 2, 3])).contains_exactly_matching([
+                |it: &i32| *it == 1,
+                |it: &i32| *it == 2,
+                |it: &i32| *it == 3,
+            ]);
+        }
+
+        #[test]
+        fn succeeds_for_non_contiguous_vec_deque_in_logical_order() {
+            assert_that!(non_contiguous_vec_deque(&[2, 3], [4, 5, 6])).contains_exactly_matching([
+                |it: &i32| *it == 2,
+                |it: &i32| *it == 3,
+                |it: &i32| *it == 4,
+                |it: &i32| *it == 5,
+                |it: &i32| *it == 6,
+            ]);
+        }
+
+        #[test]
+        fn panics_when_an_element_does_not_match_its_predicate() {
+            assert_that_panic_by(|| {
+                assert_that!(vec_deque([1, 2, 3]))
+                    .with_location(false)
+                    .contains_exactly_matching([
+                        |it: &i32| *it == 1,
+                        |it: &i32| *it == 3,
+                        |it: &i32| *it == 2,
+                    ]);
+            })
+            .has_type::<String>()
+            .contains("Element at index 1 does not match its predicate: 2");
+        }
+    }
+
+    mod contains_exactly_satisfying {
+        use super::{non_contiguous_vec_deque, vec_deque};
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_each_element_satisfies_its_assertions() {
+            assert_that!(vec_deque([1, 2])).contains_exactly_satisfying([
+                |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(1);
+                },
+                |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(2);
+                },
+            ]);
+        }
+
+        #[test]
+        fn succeeds_for_non_contiguous_vec_deque_in_logical_order() {
+            assert_that!(non_contiguous_vec_deque(&[2, 3], [4])).contains_exactly_satisfying([
+                |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(2);
+                },
+                |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(3);
+                },
+                |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(4);
+                },
+            ]);
+        }
+
+        #[test]
+        fn panics_when_an_element_does_not_satisfy_its_assertions() {
+            assert_that_panic_by(|| {
+                assert_that!(vec_deque([1, 2]))
+                    .with_location(false)
+                    .contains_exactly_satisfying([
+                        |it: AssertThat<i32, Capture>| {
+                            it.is_equal_to(2);
+                        },
+                        |it: AssertThat<i32, Capture>| {
+                            it.is_equal_to(1);
+                        },
+                    ]);
+            })
+            .has_type::<String>()
+            .contains("did not exactly satisfy the assertions.")
+            .contains("Element at index 0 does not satisfy its assertions:");
+        }
+    }
+
     mod contains_exactly_in_any_order {
         use super::{non_contiguous_vec_deque, vec_deque};
         use crate::prelude::*;
@@ -560,14 +693,14 @@ mod tests {
         }
     }
 
-    mod contains_exactly_matching_in_any_order {
+    mod contains_exactly_in_any_order_matching {
         use super::vec_deque;
         use crate::prelude::*;
         use indoc::formatdoc;
 
         #[test]
         fn succeeds_when_predicates_match() {
-            assert_that!(vec_deque([1, 2, 3])).contains_exactly_matching_in_any_order(
+            assert_that!(vec_deque([1, 2, 3])).contains_exactly_in_any_order_matching(
                 [
                     move |it: &i32| *it == 1,
                     move |it: &i32| *it == 2,
@@ -578,8 +711,15 @@ mod tests {
         }
 
         #[test]
+        #[allow(deprecated)]
+        fn deprecated_name_remains_available() {
+            assert_that!(vec_deque([1, 2]))
+                .contains_exactly_matching_in_any_order([|it: &i32| *it == 2, |it: &i32| *it == 1]);
+        }
+
+        #[test]
         fn succeeds_when_predicates_match_in_different_order() {
-            assert_that!(vec_deque([1, 2, 3])).contains_exactly_matching_in_any_order(
+            assert_that!(vec_deque([1, 2, 3])).contains_exactly_in_any_order_matching(
                 [
                     move |it: &i32| *it == 3,
                     move |it: &i32| *it == 1,
@@ -594,7 +734,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(vec_deque([1, 2, 3]))
                     .with_location(false)
-                    .contains_exactly_matching_in_any_order(
+                    .contains_exactly_in_any_order_matching(
                         [
                             move |it: &i32| *it == 2,
                             move |it: &i32| *it == 3,
@@ -618,9 +758,45 @@ mod tests {
                         Elements not matched: [
                             1,
                         ],
+                        Predicates not matched: 1,
                     ]
                     -------- assertr --------
                 "});
+        }
+    }
+
+    mod contains_exactly_in_any_order_satisfying {
+        use super::vec_deque;
+        use crate::prelude::*;
+
+        #[test]
+        fn succeeds_when_assertions_are_satisfied_in_different_order() {
+            assert_that!(vec_deque([1, 2])).contains_exactly_in_any_order_satisfying([
+                |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(2);
+                },
+                |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(1);
+                },
+            ]);
+        }
+
+        #[test]
+        fn panics_when_elements_are_unmatched() {
+            assert_that_panic_by(|| {
+                assert_that!(vec_deque([1, 2]))
+                    .with_location(false)
+                    .contains_exactly_in_any_order_satisfying([
+                        |it: AssertThat<i32, Capture>| {
+                            it.is_equal_to(2);
+                        },
+                        |it: AssertThat<i32, Capture>| {
+                            it.is_equal_to(3);
+                        },
+                    ]);
+            })
+            .has_type::<String>()
+            .contains("did not exactly satisfy the assertions in any order.");
         }
     }
 }

@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/assertr-derive/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/assertr-derive/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/assertr-no-std-tests/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

@@ -10,6 +10,7 @@ pub mod length;
 pub mod option;
 pub mod partial_eq;
 pub mod partial_ord;
+pub mod pattern;
 pub mod poll;
 pub mod range;
 pub mod ref_cell;
@@ -36,6 +37,7 @@ pub mod prelude {
     pub use super::option::OptionExtractAssertions;
     pub use super::partial_eq::PartialEqAssertions;
     pub use super::partial_ord::PartialOrdAssertions;
+    pub use super::pattern::PatternAssertions;
     pub use super::poll::PollAssertions;
     pub use super::poll::PollExtractAssertions;
     pub use super::range::RangeAssertions;

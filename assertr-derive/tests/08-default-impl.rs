@@ -11,13 +11,13 @@ pub struct Foo {
 }
 
 fn main() {
-    let foo = Foo {
+    let subject = Foo {
         field_1: 1,
         field_2: 2,
         field_3: 3,
     };
 
-    foo.must().be_equal_to(FooAssertrEq {
+    subject.must().be_equal_to(FooAssertrEq {
         field_1: eq(1),
         ..Default::default()
     });

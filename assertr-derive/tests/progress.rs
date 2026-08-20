@@ -10,4 +10,10 @@ fn tests() {
     t.pass("tests/07-derive-impl-for-reference.rs");
     t.pass("tests/08-default-impl.rs");
     t.pass("tests/09-custom-renderer-non-debug-field.rs");
+    t.pass("tests/10-generic-struct.rs");
+    t.compile_fail("tests/11-reject-tuple-struct.rs");
+    t.pass("tests/12-generic-private-field.rs");
+    t.pass("tests/13-generic-qualified-name-collision.rs");
+    t.pass("tests/14-renderer-name-collision.rs");
+    t.pass("tests/15-generic-bound-private-dependency.rs");
 }

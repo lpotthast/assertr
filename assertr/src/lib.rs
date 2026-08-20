@@ -1,9 +1,60 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![forbid(unsafe_code)]
 // Allow functions named `is_*`, taking self by value instead of taking self by mutable reference or reference.
 #![allow(clippy::wrong_self_convention)]
 
+//! Fluent assertions for Rust, with `no_std` support.
+//!
+//! ```
+//! use assertr::prelude::*;
+//!
+//! assert_that!([1, 2, 3]).contains(2).has_length(3);
+//! ```
+//!
+//! # Entry points
+//!
+//! - [`assert_that!`] handles owned values and references transparently: `assert_that!(&value)` borrows,
+//!   `assert_that!(value)` takes ownership.
+//! - With the `fluent` feature, [`IntoAssertContext`] provides `value.must()` and `value.verify()`, which borrow the
+//!   value and assert in panic mode (fail immediately) or capture mode (collect failures), plus `value.must_owned()`
+//!   and `value.verify_owned()`, which take ownership instead.
+//!
+//! The borrowing and owning entry points are separate functions because Rust has no specialization to unify them
+//! under one name. The borrowing variants deliberately carry the shorter, more prominent names: borrowing is the
+//! more useful default, since the value remains usable for further assertions and surrounding code. Real ownership
+//! is only rarely needed, e.g. for consuming assertions like `panics()`.
+//!
+//! # The mental model
+//!
+//! Four ideas explain this crate's design:
+//!
+//! 1. **[`AssertThat<T>`](AssertThat) is "an assertion about a `T`". Ownership is hidden inside.** The struct holds
+//!    an [`Actual<T>`](actual::Actual) that is either owned or borrowed, and assertion methods are looked up by `T`
+//!    alone. `assert_that!(&my_string)` therefore yields an `AssertThat<String>` holding a borrow, not an
+//!    `AssertThat<&String>`. Reference-typed subjects such as `AssertThat<&str>` or `AssertThat<&[T]>` appear only
+//!    where the target type itself is unsized.
+//!
+//! 2. **Derived assertions answer one question: "how do I assert on a part of my subject?"** A child `AssertThat`
+//!    over the part is created, linked to its parent so that failures propagate to the root assertion.
+//!    [`AssertThat::derive`] builds the child and hands it to you. The [`AssertThat::satisfies`] family builds it,
+//!    runs your closure against it, and returns the original subject for further chaining.
+//!
+//! 3. **Three `satisfies` spellings exist only because of how the part is produced.** Use
+//!    [`AssertThat::satisfies_borrowed`] when the part is borrowed from the subject (the common case),
+//!    [`AssertThat::satisfies`] when it is computed or cloned, and [`AssertThat::satisfies_ref`] when it is unsized
+//!    (`str`, `[T]`, ...). Conceptually this is one method. Rust cannot currently express a mapper that may either
+//!    return an owned value or borrow from its input, forcing the split.
+//!
+//! 4. **Capture mode turns "did these assertions pass?" into a value.** In panic mode failures panic immediately.
+//!    In capture mode (`verify()`, [`AssertThat::with_capture`]) they are collected and read out with
+//!    [`AssertThat::capture_failures`]. The collection `_satisfying` assertions build on this: your assertion
+//!    closure runs against each element in capture mode, and "no failures" is the matching criterion.
+
 extern crate alloc;
 extern crate core;
+extern crate self as assertr;
+#[cfg(all(test, not(feature = "std")))]
+extern crate std;
 
 use actual::Actual;
 use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
@@ -22,6 +73,8 @@ use failure::Fallible;
 use mode::{Capture, Mode, Panic};
 use tracking::{AssertionTracking, NumberOfAssertions};
 
+#[doc(hidden)]
+pub mod __private;
 pub mod actual;
 #[doc(hidden)]
 pub mod assert_that_macro;
@@ -41,6 +94,19 @@ pub use renderer::{
 };
 
 pub mod prelude {
+    // A `no_std` crate does not receive the standard prelude in its unit-test modules even though
+    // the hosted test harness links `std`. Re-export the alloc prelude pieces those tests use,
+    // without changing the production prelude or feature surface.
+    #[cfg(all(test, not(feature = "std")))]
+    pub(crate) use alloc::{
+        borrow::ToOwned,
+        boxed::Box,
+        format,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
+
     #[cfg(feature = "derive")]
     pub use assertr_derive::AssertrEq;
 
@@ -87,8 +153,23 @@ pub mod prelude {
     #[cfg(feature = "serde")]
     pub use crate::conversion::toml;
     pub use crate::eq;
-    pub use crate::mode::Mode;
+    pub use crate::mode::{Capture, Mode, Panic};
+    #[cfg(all(test, not(feature = "std")))]
+    pub(crate) use crate::no_std_test_support::assert_that_panic_by;
+    pub use crate::pattern;
     pub use crate::{AssertThat, AssertionRenderer, DebugRenderer};
+}
+
+pub(crate) fn enforce_drop_contracts() -> bool {
+    #[cfg(feature = "std")]
+    {
+        !std::thread::panicking()
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+        false
+    }
 }
 
 pub struct PanicValue(Box<dyn Any>);
@@ -153,15 +234,31 @@ macro_rules! assert_that {
     };
 }
 
+/// Fluent entry points into an assertion context, available on every value with the `fluent` feature.
+///
+/// `must()` and `verify()` borrow the value, `must_owned()` and `verify_owned()` take ownership. These are separate
+/// methods because Rust has no specialization to unify them under one name. The borrowing variants deliberately
+/// carry the shorter, more prominent names: borrowing is the more useful default, keeping the value usable for
+/// further assertions and surrounding code. Ownership is only rarely required, e.g. for consuming assertions such
+/// as `panics()`.
 #[cfg(feature = "fluent")]
 pub trait IntoAssertContext<'t, T> {
+    /// Borrows the value and starts a panic-mode assertion: failures panic immediately.
     #[must_use]
     fn must(&'t self) -> AssertThat<'t, T, Panic>;
+
+    /// Takes ownership of the value and starts a panic-mode assertion. Only needed when a consuming
+    /// assertion requires ownership; prefer [`IntoAssertContext::must`] otherwise.
     #[must_use]
     fn must_owned(self) -> AssertThat<'t, T, Panic>;
 
+    /// Borrows the value and starts a capture-mode assertion: failures are collected and must be
+    /// read with [`AssertThat::capture_failures`].
     #[must_use]
     fn verify(&'t self) -> AssertThat<'t, T, Capture>;
+
+    /// Takes ownership of the value and starts a capture-mode assertion. Only needed when a
+    /// consuming assertion requires ownership; prefer [`IntoAssertContext::verify`] otherwise.
     #[must_use]
     fn verify_owned(self) -> AssertThat<'t, T, Capture>;
 }
@@ -243,6 +340,29 @@ where
     assert_that_owned(fun).panics_async().await
 }
 
+#[cfg(all(test, not(feature = "std")))]
+mod no_std_test_support {
+    use super::{Actual, AssertThat, Panic, PanicValue};
+    use core::panic::AssertUnwindSafe;
+
+    /// Captures a panic for unit tests while the library itself is built without its `std` feature.
+    ///
+    /// The test harness is hosted and can therefore use `std`; this helper is crate-private and is
+    /// never present in a production build.
+    #[track_caller]
+    pub(crate) fn assert_that_panic_by<'t, R>(
+        fun: impl FnOnce() -> R + 't,
+    ) -> AssertThat<'t, PanicValue, Panic> {
+        let result = std::panic::catch_unwind(AssertUnwindSafe(fun));
+        let result = std::panic::catch_unwind(AssertUnwindSafe(move || result.map(drop)));
+        let panic = result
+            .flatten()
+            .expect_err("expected the tested function to panic");
+
+        AssertThat::new_panicking(Actual::Owned(PanicValue(panic)))
+    }
+}
+
 pub struct Type<T> {
     phantom: PhantomData<T>,
 }
@@ -286,6 +406,12 @@ pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
 /// assertions on actual values in a fluent and expressive manner, supporting detailed messages
 /// as well as different modes of operation, such as panic or capture modes.
 ///
+/// An `AssertThat<T>` is "an assertion about a `T`": whether the subject is owned or borrowed is
+/// hidden inside the contained [`Actual<T>`](actual::Actual), and assertion methods are looked up
+/// by `T` alone. `assert_that!(&value)` therefore yields an `AssertThat<Value>` holding a borrow,
+/// not an `AssertThat<&Value>`. Reference-typed subjects such as `AssertThat<&str>` or
+/// `AssertThat<&[T]>` appear only where the target type itself is unsized.
+///
 /// ### Type Parameters
 /// - `'t`: The lifetime of the actual value being asserted.
 /// - `T`: The type of the actual value being asserted.
@@ -311,6 +437,8 @@ pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
 ///
 /// ### Notes
 /// - When using `Capture` mode, failures must be captured explicitly.
+/// - Panic-on-drop checks for unused or uncaptured chains are disabled without the `std` feature,
+///   because active unwinding cannot be detected in `core`.
 /// - This struct is designed to handle both simple and complex assertion chaining scenarios.
 pub struct AssertThat<'t, T, M: Mode, R = DebugRenderer> {
     // Derived assertions can be created. Calling `.fail*` on them should propagate to the root assertion!
@@ -381,12 +509,13 @@ impl<T, R> AssertThat<'_, T, Capture, R> {
     /// ```rust
     /// use assertr::prelude::*;
     ///
-    /// let failures = 42.verify()
-    ///     .be_negative()
-    ///     .be_equal_to(43)
+    /// let failures = assert_that!(42)
+    ///     .with_capture()
+    ///     .is_less_than(0)
+    ///     .is_equal_to(43)
     ///     .capture_failures();
     ///
-    /// failures.must().have_length(2);
+    /// assert_that!(failures).has_length(2);
     /// ```
     #[must_use]
     pub fn capture_failures(mut self) -> Vec<String> {
@@ -524,12 +653,28 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         }
     }
 
+    /// Derives a new assertion from this one by mapping the actual value to an owned projection.
+    ///
+    /// The derived assertion stays linked to its parent: failures raised on it propagate to the
+    /// root assertion and are handled according to the root's mode, and its assertions count
+    /// towards the parent's tracking, so the parent is not considered unused. Dropping a derived
+    /// assertion is always allowed, even when failures were raised on it.
+    ///
+    /// The mapper receives the actual value by reference and must return an owned value. A
+    /// projection borrowing from the actual value cannot be expressed with this method.
+    ///
+    /// Use `derive` when you need the derived `AssertThat` itself, e.g. to store it or to keep
+    /// chaining on the projection. When you only want to run a group of assertions against a
+    /// projection and then continue with the original subject, use the `satisfies_*` family
+    /// instead. See [`AssertThat::satisfies`] for a comparison of its variants.
     pub fn derive<'u, U: 'u>(&'t self, mapper: impl FnOnce(&'t T) -> U) -> AssertThat<'u, U, M, R>
     where
         't: 'u,
         R: Clone,
     {
-        let mut mode = self.mode.replace(M::default());
+        // The parent's mode must stay untouched: swapping it out would strip a derived parent's
+        // own `derived` exemption and trip its drop contract when derivations are nested.
+        let mut mode = self.mode.borrow().clone();
         mode.set_derived();
 
         AssertThat {
@@ -545,6 +690,41 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         }
     }
 
+    /// Like [`AssertThat::derive`], but stores a borrow of the mapped value instead of owning it.
+    ///
+    /// The derived assertion is over `U` itself, not `&U`, matching what `assert_that!(&value)`
+    /// produces, so all assertion implementations for `U` are applicable.
+    ///
+    /// Intentionally private: [`AssertThat::satisfies_borrowed`] is the one public way to run
+    /// assertions against a borrowed projection. `derive` cannot subsume this method because its
+    /// `U` cannot borrow from the mapper's input.
+    fn derive_borrowed<'u, U>(
+        &'t self,
+        mapper: impl FnOnce(&'t T) -> &'u U,
+    ) -> AssertThat<'u, U, M, R>
+    where
+        't: 'u,
+        R: Clone,
+    {
+        // See `derive`: the parent's mode must stay untouched.
+        let mut mode = self.mode.borrow().clone();
+        mode.set_derived();
+
+        AssertThat {
+            parent: Some(self),
+            actual: Actual::Borrowed(mapper(self.actual())),
+            subject_name: None, // We cannot clone self.subject_name, as the mapper produces what has to be considered a "new" subject!
+            detail_messages: RefCell::new(Vec::new()),
+            print_location: self.print_location,
+            number_of_assertions: RefCell::new(NumberOfAssertions::new()),
+            failures: RefCell::new(Vec::new()),
+            mode: RefCell::new(mode),
+            renderer: self.renderer.clone(),
+        }
+    }
+
+    /// The async variant of [`AssertThat::derive`]: the mapper returns a future producing the
+    /// owned projection, which is awaited before the derived assertion is created.
     pub async fn derive_async<'u, U: 'u, Fut: Future<Output = U>>(
         &'t self,
         mapper: impl FnOnce(&'t T) -> Fut,
@@ -553,7 +733,8 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         't: 'u,
         R: Clone,
     {
-        let mut mode = self.mode.replace(M::default());
+        // See `derive`: the parent's mode must stay untouched.
+        let mut mode = self.mode.borrow().clone();
         mode.set_derived();
 
         AssertThat {
@@ -570,12 +751,54 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     }
 
     // It would be nice to optimize this, so that:
-    // - we do not need satisfies and satisfies_ref
+    // - we do not need separate satisfies, satisfies_borrowed and satisfies_ref methods
     // - we use a `for<'a: 'b, 'b>` (see https://users.rust-lang.org/t/why-cant-i-use-lifetime-bounds-in-hrtbs/97277/2) bound for F and A,
     //   telling the compiler that the returned values live shorter than the input.
     // - we can replace () with some type R (return), letting the user write more succinct closures.
 
-    #[allow(clippy::return_self_not_must_use)]
+    /// Runs the given assertions against an owned projection of the actual value.
+    ///
+    /// The `satisfies_*` family runs a group of nested assertions against a projection of the
+    /// actual value and then continues the current chain. Every variant derives a child
+    /// assertion (see [`AssertThat::derive`]) and hands it to the `assertions` closure: failures
+    /// raised inside the closure propagate to the root assertion, and the closure may freely
+    /// drop the child, even after failures. The closure must return `()`, so end each assertion
+    /// statement with a semicolon.
+    ///
+    /// The variants differ only in how the projection is obtained and typed:
+    ///
+    /// | Method | Mapper returns | Closure receives | Use when |
+    /// |---|---|---|---|
+    /// | [`satisfies`](AssertThat::satisfies) | owned `U` | `AssertThat<U>` | The projection is computed (or cloned), not borrowed from the subject. |
+    /// | [`satisfies_borrowed`](AssertThat::satisfies_borrowed) | `&U` | `AssertThat<U>` | The projection borrows from the subject and `U` is sized. |
+    /// | [`satisfies_ref`](AssertThat::satisfies_ref) | `&U` | `AssertThat<&U>` | `U` is unsized (`str`, `[T]`, ...). |
+    ///
+    /// `satisfies_borrowed` hands out a value-typed `AssertThat<U>` internally holding the
+    /// borrow, exactly as `assert_that!(&value)` does, so every assertion implemented for `U` is
+    /// applicable. Only fall back to `satisfies_ref` for unsized `U`, where a value-typed
+    /// assertion cannot exist and the assertion traits target the reference type itself (e.g.
+    /// `&str`, `&[T]`).
+    ///
+    /// Conceptually these variants are one method: the split exists only because Rust cannot
+    /// currently express a mapper that may either return an owned value or borrow from its input
+    /// (a higher-ranked trait bound limitation).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that!(("foo".to_owned(), 42))
+    ///     .satisfies(|it| it.0.len(), |len| {
+    ///         len.is_equal_to(3);
+    ///     })
+    ///     .satisfies_borrowed(|it| &it.0, |name| {
+    ///         name.contains("oo");
+    ///     })
+    ///     .satisfies_ref(|it| it.0.as_str(), |name| {
+    ///         name.starts_with("f");
+    ///     });
+    /// ```
     #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
@@ -587,6 +810,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         self
     }
 
+    /// Fluent alias of [`AssertThat::satisfies`].
     #[cfg(feature = "fluent")]
     #[allow(clippy::return_self_not_must_use)]
     pub fn satisfy<U, F, A>(self, mapper: F, assertions: A) -> Self
@@ -598,6 +822,47 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         self.satisfies(mapper, assertions)
     }
 
+    /// Runs the given assertions against a borrowed projection of the actual value.
+    ///
+    /// The closure receives a value-typed `AssertThat<U>` internally holding the borrow,
+    /// matching what `assert_that!(&value)` produces, so every assertion implemented for `U` is
+    /// applicable. Prefer this over [`AssertThat::satisfies`] whenever the projection borrows
+    /// from the subject and would otherwise need cloning, and over
+    /// [`AssertThat::satisfies_ref`] whenever `U` is sized.
+    ///
+    /// See [`AssertThat::satisfies`] for a comparison of the whole family and an example.
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn satisfies_borrowed<U, F, A>(self, mapper: F, assertions: A) -> Self
+    where
+        for<'a> F: FnOnce(&'a T) -> &'a U,
+        for<'a> A: FnOnce(AssertThat<'a, U, M, R>),
+        R: Clone,
+    {
+        assertions(self.derive_borrowed(mapper));
+        self
+    }
+
+    /// Fluent alias of [`AssertThat::satisfies_borrowed`].
+    #[cfg(feature = "fluent")]
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn satisfy_borrowed<U, F, A>(self, mapper: F, assertions: A) -> Self
+    where
+        for<'a> F: FnOnce(&'a T) -> &'a U,
+        for<'a> A: FnOnce(AssertThat<'a, U, M, R>),
+        R: Clone,
+    {
+        self.satisfies_borrowed(mapper, assertions)
+    }
+
+    /// Runs the given assertions against a borrowed, unsized projection of the actual value.
+    ///
+    /// The closure receives a reference-typed `AssertThat<&U>`. This is only appropriate when
+    /// `U` is unsized (`str`, `[T]`, ...): no value-typed `AssertThat<U>` can exist for such
+    /// types, and the assertion traits target the reference type itself (e.g. `&str`, `&[T]`).
+    /// For sized projections use [`AssertThat::satisfies_borrowed`], whose value-typed child
+    /// makes all assertions implemented for `U` applicable.
+    ///
+    /// See [`AssertThat::satisfies`] for a comparison of the whole family and an example.
     #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies_ref<U: ?Sized, F, A>(self, mapper: F, assertions: A) -> Self
     where
@@ -607,6 +872,42 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     {
         assertions(self.derive(mapper));
         self
+    }
+
+    /// Fluent alias of [`AssertThat::satisfies_ref`].
+    #[cfg(feature = "fluent")]
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn satisfy_ref<U: ?Sized, F, A>(self, mapper: F, assertions: A) -> Self
+    where
+        for<'a> F: FnOnce(&'a T) -> &'a U,
+        for<'a> A: FnOnce(AssertThat<'a, &'a U, M, R>),
+        R: Clone,
+    {
+        self.satisfies_ref(mapper, assertions)
+    }
+
+    /// Runs `assertions` against `element` on a capture-mode assertion, returning every failure
+    /// raised. An empty result means that the element satisfies the assertions.
+    ///
+    /// Used by the collection assertions treating per-element assertions as a matching criterion.
+    pub(crate) fn collect_element_failures<'e, U, A>(
+        &self,
+        element: &'e U,
+        assertions: &A,
+    ) -> Vec<String>
+    where
+        A: for<'a> Fn(AssertThat<'a, U, Capture, R>),
+        R: Clone,
+    {
+        // The closure consumes the assertion handed to it, so failures are collected in a
+        // capture-mode sink the closure never owns: `satisfies_borrowed` derives the handed-out
+        // assertion from the sink, letting its failures propagate there.
+        let mut sink = AssertThat::new_panicking(Actual::Borrowed(element))
+            .with_renderer(self.renderer.clone())
+            .with_location(self.print_location)
+            .with_capture()
+            .satisfies_borrowed(|it| it, assertions);
+        sink.take_failures()
     }
 
     /// Gives the `actual` value contained in this assertion a descriptive name.
@@ -664,11 +965,8 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// ```
     /// use assertr::prelude::*;
     ///
-    /// 42.must().be_positive().and().be_less_than(100);
-    /// 42.must().be_positive().be_less_than(100);
-    ///
-    /// assert_that!(42).is_positive().and().is_less_than(100);
-    /// assert_that!(42).is_positive().is_less_than(100);
+    /// assert_that!(42).is_greater_than(0).and().is_less_than(100);
+    /// assert_that!(42).is_greater_than(0).is_less_than(100);
     /// ```
     #[inline]
     #[allow(clippy::return_self_not_must_use)]
@@ -995,11 +1293,11 @@ mod tests {
 
     #[test]
     fn with_capture_yields_failures_and_does_not_panic() {
-        let failures = 42
-            .verify()
+        let failures = assert_that!(42)
+            .with_capture()
             .with_location(false)
-            .be_greater_than(100)
-            .be_equal_to(1)
+            .is_greater_than(100)
+            .is_equal_to(1)
             .capture_failures();
 
         assert_that!(failures.as_slice())
@@ -1025,11 +1323,90 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn dropping_a_capturing_assert_panics_when_failures_occurred_which_were_not_captured() {
-        let assert = 42.verify().with_location(false).be_equal_to(43);
+        let assert = assert_that!(42)
+            .with_capture()
+            .with_location(false)
+            .is_equal_to(43);
         assert_that_panic_by(move || drop(assert))
             .has_type::<&str>()
             .is_equal_to("You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!");
+    }
+
+    #[test]
+    fn nested_derived_assertions_in_capture_mode_keep_the_drop_contract_satisfied() {
+        let root = assert_that!(1).with_capture();
+        {
+            let doubled = root.derive(|it| *it * 2);
+            {
+                let incremented = doubled.derive(|it| *it + 1);
+                incremented.is_equal_to(3);
+            }
+        }
+
+        let failures = root.capture_failures();
+        assert_that!(failures).is_empty();
+    }
+
+    #[test]
+    fn nested_derived_assertions_propagate_failures_to_the_root() {
+        let root = assert_that!(1).with_capture().with_location(false);
+        {
+            let doubled = root.derive(|it| *it * 2);
+            let incremented = doubled.derive(|it| *it + 1);
+            incremented.is_equal_to(4);
+        }
+
+        let failures = root.capture_failures();
+        assert_that!(failures)
+            .contains_exactly_matching([|it: &String| it.contains("Expected: 4")])
+            .contains_exactly_satisfying([|it: AssertThat<String, Capture>| {
+                it.contains("Expected: 4");
+            }]);
+    }
+
+    #[test]
+    fn satisfies_borrowed_hands_out_a_value_typed_assertion_over_the_borrowed_projection() {
+        assert_that!(("foo".to_owned(), 42))
+            .satisfies_borrowed(
+                |it| &it.0,
+                |name| {
+                    name.contains("oo");
+                },
+            )
+            .satisfies_borrowed(
+                |it| &it.1,
+                |number| {
+                    number.is_equal_to(42);
+                },
+            );
+    }
+
+    #[test]
+    fn satisfies_borrowed_propagates_failures_to_the_root() {
+        let failures = assert_that!(("foo".to_owned(), 42))
+            .with_capture()
+            .with_location(false)
+            .satisfies_borrowed(
+                |it| &it.0,
+                |name| {
+                    name.contains("xyz");
+                },
+            )
+            .capture_failures();
+
+        assert_that!(failures).contains_exactly_matching([|it: &String| it.contains("xyz")]);
+    }
+
+    #[test]
+    fn dropping_a_capturing_assert_during_unwinding_preserves_the_original_panic() {
+        assert_that_panic_by(|| {
+            let _assert = assert_that!(42).with_capture().is_equal_to(43);
+            panic!("original panic");
+        })
+        .has_type::<&str>()
+        .is_equal_to("original panic");
     }
 
     #[test]
@@ -1108,7 +1485,7 @@ mod tests {
                 // Avoid "number-of-assertions not greater 0" panic.
                 .is_equal_to(42);
             let actual = assert.unwrap_inner();
-            actual.must().be_equal_to(42);
+            assert_that!(actual).is_equal_to(42);
         }
 
         #[test]
@@ -1118,7 +1495,7 @@ mod tests {
                 .with_capture()
                 .has_display_value("42");
             let actual = assert.unwrap_inner();
-            actual.must().be_equal_to(42);
+            assert_that!(actual).is_equal_to(42);
         }
 
         #[test]

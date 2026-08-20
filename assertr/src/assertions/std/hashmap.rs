@@ -509,6 +509,7 @@ mod tests {
         }
 
         #[test]
+        #[cfg(feature = "derive")]
         fn can_check_for_derived_type() {
             #[derive(Debug, PartialEq, AssertrEq)]
             struct Data {

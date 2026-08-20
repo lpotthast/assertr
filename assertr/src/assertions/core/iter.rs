@@ -111,7 +111,7 @@ where
 
         let mut ctx = this.eq_context();
         let result =
-            crate::util::slice::compare_with_context(actual.as_slice(), expected, Some(&mut ctx));
+            crate::assertions::collection::compare(actual.as_slice(), expected, Some(&mut ctx));
 
         if !result.strictly_equal {
             if result.only_differing_in_order() {
@@ -231,7 +231,7 @@ where
         let expected = expected.as_ref().iter().collect::<Vec<_>>();
 
         let mut ctx = self.eq_context();
-        let result = crate::util::slice::compare_with_context(
+        let result = crate::assertions::collection::compare(
             actual.as_slice(),
             expected.as_slice(),
             Some(&mut ctx),

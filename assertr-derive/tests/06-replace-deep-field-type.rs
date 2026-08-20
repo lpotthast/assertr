@@ -29,19 +29,19 @@ pub struct Foo {
 }
 
 fn main() {
-    let foo = Foo {
+    let subject = Foo {
         id: 1,
         bars: vec![Bar { id: 42 }],
         bars2: HashMap::new(),
     };
 
-    foo.must().be_equal_to(FooAssertrEq {
+    subject.must().be_equal_to(FooAssertrEq {
         id: any(),
         bars: any(),
         bars2: any(),
     });
 
-    foo.must().be_equal_to(FooAssertrEq {
+    subject.must().be_equal_to(FooAssertrEq {
         id: eq(1),
         bars: eq(vec![BarAssertrEq { id: eq(42) }]),
         bars2: eq(HashMap::new()),

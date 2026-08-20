@@ -2,9 +2,40 @@ use crate::AssertThat;
 use crate::AssertionRenderer;
 use crate::mode::Mode;
 use crate::tracking::AssertionTracking;
+use alloc::format;
+use alloc::string::String;
+use core::cmp::Ordering;
 use core::fmt::Write;
 use indoc::writedoc;
-use num::{Float, Num, Signed};
+#[cfg(any(feature = "std", feature = "libm"))]
+use num::Float;
+use num::{Num, Signed};
+
+/// Overflow-safe check of `hi - lo <= deviation`, given `lo <= hi` and `deviation >= 0`.
+///
+/// The difference of same-signed values never overflows. When the values cross zero, the
+/// distance is compared piecewise so that neither `hi - lo` nor `-lo` is ever materialized
+/// (`lo` may be the minimum of a signed type).
+fn distance_at_most<T>(lo: &T, hi: &T, deviation: &T) -> bool
+where
+    T: Num + PartialOrd + Clone,
+{
+    let zero = T::zero();
+    if hi < &zero {
+        // Both negative: their difference never overflows.
+        hi.clone() - lo.clone() <= deviation.clone()
+    } else if lo >= &zero {
+        // Both non-negative: `lo >= 0` is trivially within a lower bound `hi - deviation <= 0`;
+        // otherwise that bound is safe to materialize.
+        deviation >= hi || lo >= &(hi.clone() - deviation.clone())
+    } else if deviation < hi {
+        // Crossing zero: the distance is `hi + |lo| > hi`, which already exceeds the deviation.
+        false
+    } else {
+        // `lo < 0 <= hi`: compare `lo` against `-(deviation - hi)` without negating `lo`.
+        lo >= &(zero - (deviation.clone() - hi.clone()))
+    }
+}
 
 /// Assertions for numeric values not already handled by
 /// [`crate::prelude::PartialEqAssertions`] and [`crate::prelude::PartialOrdAssertions`].
@@ -31,6 +62,10 @@ pub trait NumAssertions<T: Num> {
 
     /// Fails if actual is not in the range
     /// `[expected - allowed_deviation, expected + allowed_deviation]`.
+    ///
+    /// The allowed deviation must be a non-negative number. Boundary calculations avoid
+    /// overflowing the numeric type. Positive-infinite deviation accepts every comparable
+    /// non-NaN value.
     fn is_close_to(self, expected: T, allowed_deviation: T) -> Self
     where
         T: PartialOrd,
@@ -163,19 +198,53 @@ where
     {
         self.track_assertion();
         let actual = self.actual();
-        let min = expected.clone() - allowed_deviation.clone();
-        let max = expected.clone() + allowed_deviation.clone();
-        if !(actual >= &min && actual <= &max) {
+        let zero = T::zero();
+
+        // Rejects both negative deviations and a NaN deviation, which is incomparable to zero.
+        let deviation_is_valid = matches!(
+            allowed_deviation.partial_cmp(&zero),
+            Some(Ordering::Greater | Ordering::Equal)
+        );
+        if !deviation_is_valid {
+            let allowed_deviation = self.render_value(&allowed_deviation);
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Allowed deviation must be a non-negative number.
+
+                    Actual deviation: {allowed_deviation:#?}
+                "}
+            });
+            return self;
+        }
+
+        // An infinite deviation is detectable without a `Float` bound: `inf - inf` is NaN and
+        // therefore incomparable to zero. NaN deviations were already rejected above.
+        let deviation_is_unbounded = (allowed_deviation.clone() - allowed_deviation.clone())
+            .partial_cmp(&zero)
+            .is_none();
+
+        // Checked before `partial_cmp` so equal infinities are accepted without computing their
+        // (NaN) distance.
+        let within_allowed_deviation = if actual == &expected {
+            true
+        } else {
+            match actual.partial_cmp(&expected) {
+                None => false,
+                Some(_) if deviation_is_unbounded => true,
+                Some(Ordering::Less) => distance_at_most(actual, &expected, &allowed_deviation),
+                Some(_) => distance_at_most(&expected, actual, &allowed_deviation),
+            }
+        };
+
+        if !within_allowed_deviation {
             let actual = self.render_value(actual);
             let expected = self.render_value(&expected);
             let allowed_deviation = self.render_value(&allowed_deviation);
-            let min = self.render_value(&min);
-            let max = self.render_value(&max);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be close to: {expected:#?},
                      with allowed deviation being: {allowed_deviation:#?},
-                      but value was outside range: [{min:?}, {max:?}]
+                      but value was outside the allowed deviation.
 
                       Actual: {actual:#?}
                 "}
@@ -439,7 +508,7 @@ mod tests {
                     -------- assertr --------
                     Expected value to be close to: 0.333,
                      with allowed deviation being: 0.001,
-                      but value was outside range: [0.332, 0.334]
+                      but value was outside the allowed deviation.
 
                       Actual: 0.3319
                     -------- assertr --------
@@ -451,6 +520,76 @@ mod tests {
             assert_that!(0.332).is_close_to(0.333, 0.001);
             assert_that!(0.333).is_close_to(0.333, 0.001);
             assert_that!(0.334).is_close_to(0.333, 0.001);
+            assert_that!(0_u8).is_close_to(0, 1);
+            assert_that!(-100_i8).is_close_to(20, 120);
+            assert_that!(i8::MIN).is_close_to(-1, i8::MAX);
+        }
+
+        #[test]
+        fn succeeds_for_equal_negative_infinity() {
+            assert_that!(f64::NEG_INFINITY).is_close_to(f64::NEG_INFINITY, 0.0);
+        }
+
+        #[test]
+        fn positive_infinite_deviation_is_unbounded_for_comparable_values() {
+            let deviation = f64::INFINITY;
+
+            assert_that!(-1.0).is_close_to(f64::INFINITY, deviation);
+            assert_that!(1.0).is_close_to(f64::NEG_INFINITY, deviation);
+            assert_that!(f64::INFINITY).is_close_to(-1.0, deviation);
+            assert_that!(f64::NEG_INFINITY).is_close_to(1.0, deviation);
+            assert_that!(f64::INFINITY).is_close_to(f64::NEG_INFINITY, deviation);
+            assert_that!(f64::NEG_INFINITY).is_close_to(f64::INFINITY, deviation);
+        }
+
+        #[test]
+        fn positive_infinite_deviation_does_not_accept_nan_values() {
+            assert_that_panic_by(|| {
+                assert_that!(f64::NAN)
+                    .with_location(false)
+                    .is_close_to(1.0, f64::INFINITY);
+            })
+            .has_type::<String>()
+            .contains("outside the allowed deviation");
+
+            assert_that_panic_by(|| {
+                assert_that!(1.0)
+                    .with_location(false)
+                    .is_close_to(f64::NAN, f64::INFINITY);
+            })
+            .has_type::<String>()
+            .contains("outside the allowed deviation");
+        }
+
+        #[test]
+        fn rejects_nan_deviation() {
+            assert_that_panic_by(|| {
+                assert_that!(1.0)
+                    .with_location(false)
+                    .is_close_to(1.0, f64::NAN);
+            })
+            .has_type::<String>()
+            .contains("Allowed deviation must be a non-negative number");
+        }
+
+        #[test]
+        fn reports_extreme_signed_values_without_overflowing() {
+            assert_that_panic_by(|| {
+                assert_that!(i8::MIN)
+                    .with_location(false)
+                    .is_close_to(i8::MAX, i8::MAX);
+            })
+            .has_type::<String>()
+            .contains("outside the allowed deviation");
+        }
+
+        #[test]
+        fn rejects_negative_deviation() {
+            assert_that_panic_by(|| {
+                assert_that!(1_i8).with_location(false).is_close_to(1, -1);
+            })
+            .has_type::<String>()
+            .contains("Allowed deviation must be a non-negative number");
         }
 
         #[test]
@@ -465,7 +604,7 @@ mod tests {
                     -------- assertr --------
                     Expected value to be close to: 0.333,
                      with allowed deviation being: 0.001,
-                      but value was outside range: [0.332, 0.334]
+                      but value was outside the allowed deviation.
 
                       Actual: 0.3341
                     -------- assertr --------

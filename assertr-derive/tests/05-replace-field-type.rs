@@ -16,17 +16,17 @@ pub struct Foo {
 }
 
 fn main() {
-    let foo = Foo {
+    let subject = Foo {
         id: 1,
         bar: Bar { id: 42 },
     };
 
-    foo.must().be_equal_to(FooAssertrEq {
+    subject.must().be_equal_to(FooAssertrEq {
         id: any(),
         bar: any(),
     });
 
-    foo.must().be_equal_to(FooAssertrEq {
+    subject.must().be_equal_to(FooAssertrEq {
         id: eq(1),
         bar: eq(BarAssertrEq { id: eq(42) }),
     });

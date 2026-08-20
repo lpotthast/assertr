@@ -1,0 +1,48 @@
+//! Implementation of the `fluent_aliases` attribute macro.
+
+mod attributes;
+mod generate;
+mod naming;
+
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::{ItemTrait, TraitItem};
+
+use self::{
+    attributes::{fluent_alias_name, has_attribute, is_helper_attribute},
+    generate::generate_alias,
+    naming::automatic_alias,
+};
+
+/// Adds fluent aliases to eligible trait methods and removes the helper attributes consumed by
+/// the macro from the emitted trait.
+pub(super) fn fluent_aliases_impl(mut trait_definition: ItemTrait) -> TokenStream {
+    let mut items = Vec::new();
+
+    for item in &trait_definition.items {
+        items.push(item.clone());
+
+        if let TraitItem::Fn(method) = item {
+            if has_attribute(&method.attrs, "no_fluent_alias") {
+                continue;
+            }
+
+            let alias = fluent_alias_name(&method.attrs)
+                .or_else(|| automatic_alias(&method.sig.ident.to_string()));
+            if let Some(alias) = alias {
+                items.push(TraitItem::Fn(generate_alias(method, &alias)));
+            }
+        }
+    }
+
+    trait_definition.items = items;
+    for item in &mut trait_definition.items {
+        if let TraitItem::Fn(method) = item {
+            method
+                .attrs
+                .retain(|attribute| !is_helper_attribute(attribute));
+        }
+    }
+
+    quote! { #trait_definition }
+}

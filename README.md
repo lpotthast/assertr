@@ -1,14 +1,19 @@
 # assertr
 
-A fluent assertion library for Rust that enables clear, readable test code with detailed failure
-messages that help pinpoint issues quickly.
+[![Crates.io](https://img.shields.io/crates/v/assertr.svg)](https://crates.io/crates/assertr)
+[![Docs.rs](https://docs.rs/assertr/badge.svg)](https://docs.rs/assertr)
+[![CI](https://github.com/lpotthast/assertr/actions/workflows/ci.yml/badge.svg)](https://github.com/lpotthast/assertr/actions/workflows/ci.yml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.89.0-blue.svg)](https://github.com/lpotthast/assertr/blob/main/Cargo.toml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/assertr.svg)](#license)
+
+A fluent assertion library for Rust that enables clear, readable test code with detailed failure messages that help
+pinpoint issues quickly.
 
 ## Features
 
-- 🔗 **Fluent API**: Chain multiple assertions for improved readability.
-  Fluent assertions provide better IDE support through method chaining. The IDE can show you exactly what
-  assertions are available for your specific type, making it hard to write invalid assertions and easier to discover
-  available checks.
+- 🔗 **Fluent API**: Chain multiple assertions for improved readability. Fluent assertions provide better IDE support
+  through method chaining. The IDE can show you exactly what assertions are available for your specific type, making it
+  hard to write invalid assertions and easier to discover available checks.
 - 🎯 **Type-specific Assertions**: Specialized checks for many Rust types, plus broad generic coverage.
 - 📝 **Detailed Error Messages**: Clear, context-rich failure messages. Any assertion can extend the context with
   additional descriptive output.
@@ -22,7 +27,7 @@ messages that help pinpoint issues quickly.
 
 ```toml
 [dependencies]
-assertr = "0.6.0"
+assertr = "0.6.1"
 ```
 
 ### Cargo features
@@ -57,11 +62,15 @@ Disable the default features in `no_std` environments:
 
 ```toml
 [dependencies]
-assertr = { version = "0.5.7", default-features = false }
+assertr = { version = "0.6.1", default-features = false }
 ```
 
-If you still want numeric assertions in `no_std`, enable `num`. For floating-point classification
-helpers such as `is_nan()`, `is_finite()`, or `is_infinite()` without `std`, also enable `libm`.
+If you still want numeric assertions in `no_std`, enable `num`. For floating-point classification helpers such as
+`is_nan()`, `is_finite()`, or `is_infinite()` without `std`, also enable `libm`.
+
+Without `std`, Assertr cannot detect whether the current thread is already unwinding. Panic-on-drop checks for unused or
+uncaptured assertion chains are therefore disabled in this configuration; assertion failures themselves retain their
+normal behavior.
 
 ## Quick start
 
@@ -103,8 +112,8 @@ fn test() {
 
 ## Available Assertions
 
-This table is meant as a reference. In day-to-day use, `use assertr::prelude::*;` plus IDE
-autocomplete is usually the fastest way to discover what is available.
+This table is meant as a reference. In day-to-day use, `use assertr::prelude::*;` plus IDE autocomplete is usually the
+fastest way to discover what is available.
 
 Roughly, the table is grouped like this:
 
@@ -146,25 +155,53 @@ Roughly, the table is grouped like this:
 | `String`                                  | `ends_with(expected)`                                         |                                                                                                                                                     |                   |
 | `String`                                  | `does_not_end_with(unexpected)`                               |                                                                                                                                                     |                   |
 | `&[T]`                                    | `contains(expected)`                                          |                                                                                                                                                     |                   |
+| `&[T]`                                    | `contains_matching(predicate)`                                |                                                                                                                                                     |                   |
+| `&[T]`                                    | `contains_satisfying(assertions)`                             |                                                                                                                                                     |                   |
 | `&[T]`                                    | `does_not_contain(not_expected)`                              |                                                                                                                                                     |                   |
+| `&[T]`                                    | `does_not_contain_matching(predicate)`                        |                                                                                                                                                     |                   |
+| `&[T]`                                    | `does_not_contain_satisfying(assertions)`                     |                                                                                                                                                     |                   |
 | `&[T]`                                    | `contains_exactly(expected)`                                  |                                                                                                                                                     |                   |
+| `&[T]`                                    | `contains_exactly_matching(expected)`                         |                                                                                                                                                     |                   |
+| `&[T]`                                    | `contains_exactly_satisfying(assertions)`                     |                                                                                                                                                     |                   |
 | `&[T]`                                    | `contains_exactly_in_any_order(expected)`                     |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_exactly_matching_in_any_order(expected)`            |                                                                                                                                                     |                   |
+| `&[T]`                                    | `contains_exactly_in_any_order_matching(expected)`            |                                                                                                                                                     |                   |
+| `&[T]`                                    | `contains_exactly_in_any_order_satisfying(assertions)`        |                                                                                                                                                     |                   |
 | `[T; N]`                                  | `contains(expected)`                                          |                                                                                                                                                     |                   |
+| `[T; N]`                                  | `contains_matching(predicate)`                                |                                                                                                                                                     |                   |
+| `[T; N]`                                  | `contains_satisfying(assertions)`                             |                                                                                                                                                     |                   |
 | `[T; N]`                                  | `does_not_contain(not_expected)`                              |                                                                                                                                                     |                   |
+| `[T; N]`                                  | `does_not_contain_matching(predicate)`                        |                                                                                                                                                     |                   |
+| `[T; N]`                                  | `does_not_contain_satisfying(assertions)`                     |                                                                                                                                                     |                   |
 | `[T; N]`                                  | `contains_exactly(expected)`                                  |                                                                                                                                                     |                   |
+| `[T; N]`                                  | `contains_exactly_matching(expected)`                         |                                                                                                                                                     |                   |
+| `[T; N]`                                  | `contains_exactly_satisfying(assertions)`                     |                                                                                                                                                     |                   |
 | `[T; N]`                                  | `contains_exactly_in_any_order(expected)`                     |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_exactly_matching_in_any_order(expected)`            |                                                                                                                                                     |                   |
+| `[T; N]`                                  | `contains_exactly_in_any_order_matching(expected)`            |                                                                                                                                                     |                   |
+| `[T; N]`                                  | `contains_exactly_in_any_order_satisfying(assertions)`        |                                                                                                                                                     |                   |
 | `Vec<T>`                                  | `contains(expected)`                                          |                                                                                                                                                     |                   |
+| `Vec<T>`                                  | `contains_matching(predicate)`                                |                                                                                                                                                     |                   |
+| `Vec<T>`                                  | `contains_satisfying(assertions)`                             |                                                                                                                                                     |                   |
 | `Vec<T>`                                  | `does_not_contain(not_expected)`                              |                                                                                                                                                     |                   |
+| `Vec<T>`                                  | `does_not_contain_matching(predicate)`                        |                                                                                                                                                     |                   |
+| `Vec<T>`                                  | `does_not_contain_satisfying(assertions)`                     |                                                                                                                                                     |                   |
 | `Vec<T>`                                  | `contains_exactly(expected)`                                  |                                                                                                                                                     |                   |
+| `Vec<T>`                                  | `contains_exactly_matching(expected)`                         |                                                                                                                                                     |                   |
+| `Vec<T>`                                  | `contains_exactly_satisfying(assertions)`                     |                                                                                                                                                     |                   |
 | `Vec<T>`                                  | `contains_exactly_in_any_order(expected)`                     |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_exactly_matching_in_any_order(expected)`            |                                                                                                                                                     |                   |
+| `Vec<T>`                                  | `contains_exactly_in_any_order_matching(expected)`            |                                                                                                                                                     |                   |
+| `Vec<T>`                                  | `contains_exactly_in_any_order_satisfying(assertions)`        |                                                                                                                                                     |                   |
 | `VecDeque<T>`                             | `contains(expected)`                                          |                                                                                                                                                     |                   |
+| `VecDeque<T>`                             | `contains_matching(predicate)`                                |                                                                                                                                                     |                   |
+| `VecDeque<T>`                             | `contains_satisfying(assertions)`                             |                                                                                                                                                     |                   |
 | `VecDeque<T>`                             | `does_not_contain(not_expected)`                              |                                                                                                                                                     |                   |
+| `VecDeque<T>`                             | `does_not_contain_matching(predicate)`                        |                                                                                                                                                     |                   |
+| `VecDeque<T>`                             | `does_not_contain_satisfying(assertions)`                     |                                                                                                                                                     |                   |
 | `VecDeque<T>`                             | `contains_exactly(expected)`                                  |                                                                                                                                                     |                   |
+| `VecDeque<T>`                             | `contains_exactly_matching(expected)`                         |                                                                                                                                                     |                   |
+| `VecDeque<T>`                             | `contains_exactly_satisfying(assertions)`                     |                                                                                                                                                     |                   |
 | `VecDeque<T>`                             | `contains_exactly_in_any_order(expected)`                     |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_exactly_matching_in_any_order(expected)`            |                                                                                                                                                     |                   |
+| `VecDeque<T>`                             | `contains_exactly_in_any_order_matching(expected)`            |                                                                                                                                                     |                   |
+| `VecDeque<T>`                             | `contains_exactly_in_any_order_satisfying(assertions)`        |                                                                                                                                                     |                   |
 | `T: Debug`                                | `has_debug_string(expected)`                                  |                                                                                                                                                     |                   |
 | `T: Debug`                                | `has_debug_value(expected)`                                   |                                                                                                                                                     |                   |
 | `T: Display`                              | `has_display_value(expected)`                                 |                                                                                                                                                     |                   |
@@ -188,7 +225,7 @@ Roughly, the table is grouped like this:
 | `T: Num`                                  | `is_multiplicative_identity()`                                | Synonym for `is_one`                                                                                                                                | num               |
 | `T: Num + Signed`                         | `is_negative()`                                               |                                                                                                                                                     | num               |
 | `T: Num + Signed`                         | `is_positive()`                                               |                                                                                                                                                     | num               |
-| `T: Num + PartialOrd + Clone`             | `is_close_to(expected, allowed_deviation)`                    |                                                                                                                                                     | num               |
+| `T: Num + PartialOrd + Clone`             | `is_close_to(expected, allowed_deviation)`                    | Deviation must be a non-negative number; positive infinity accepts comparable non-NaN values                                                        | num               |
 | `T: Num + Float`                          | `is_nan()`                                                    | Requires either `std` or `libm` in addition to `num`                                                                                                | num               |
 | `T: Num + Float`                          | `is_finite()`                                                 | Requires either `std` or `libm` in addition to `num`                                                                                                | num               |
 | `T: Num + Float`                          | `is_infinite()`                                               | Requires either `std` or `libm` in addition to `num`                                                                                                | num               |
@@ -209,6 +246,8 @@ Roughly, the table is grouped like this:
 | `Mutex<T>`                                | `is_locked()`                                                 |                                                                                                                                                     | std               |
 | `Mutex<T>`                                | `is_not_locked()`                                             |                                                                                                                                                     | std               |
 | `Mutex<T>`                                | `is_free()`                                                   | Synonym for `is_not_locked`                                                                                                                         | std               |
+| `Mutex<T>`                                | `is_poisoned()`                                               |                                                                                                                                                     | std               |
+| `Mutex<T>`                                | `is_not_poisoned()`                                           |                                                                                                                                                     | std               |
 | `Result<T, E>`                            | `is_ok()`                                                     | Panic mode only                                                                                                                                     |                   |
 | `Result<T, E>`                            | `is_err()`                                                    | Panic mode only                                                                                                                                     |                   |
 | `Result<T, E>`                            | `is_ok_satisfying(assertions)`                                |                                                                                                                                                     |                   |
@@ -302,8 +341,14 @@ Roughly, the table is grouped like this:
 | `jiff::Zoned`                             | `is_in_time_zone(expected)`                                   |                                                                                                                                                     | jiff              |
 | `jiff::Zoned`                             | `is_in_time_zone_named(expected)`                             |                                                                                                                                                     | jiff              |
 
-*The generic types (`T`, `E`, ...) nearly always also require `Debug`. Otherwise the library could
-not print useful failure output. We chose not to list those bounds everywhere in the table above.
+*With the default `DebugRenderer`, assertion methods that render generic values require those values to implement
+`Debug`. A custom `AssertionRenderer` can support non-`Debug` values, so those bounds are not repeated throughout the
+table.
+
+The unordered exact collection assertions are multiset comparisons: every actual element and every expected value or
+predicate must participate in a distinct match. Duplicate values therefore have to occur the same number of times.
+Numeric range lengths are mathematical lengths converted to `usize`. If a platform cannot represent that length, the
+length assertion panics with an explicit overflow message.
 
 For `PartialOrd` assertions, unordered comparisons fail. That matters most for floating-point values like `NaN`, where
 `partial_cmp()` returns `None`.
@@ -315,8 +360,8 @@ For `PartialOrd` assertions, unordered comparisons fail. That matters most for f
 
 ### Derived Assertions
 
-Use derived assertions to map the current subject to one of its fields or views and then keep
-asserting on the derived value:
+Use derived assertions to map the current subject to one of its fields or views and then keep asserting on the derived
+value:
 
 ```rust
 use assertr::prelude::*;
@@ -426,7 +471,7 @@ You can derive a helper struct for partial equality comparisons by annotating an
 **Make sure this crate's `derive` feature is enabled.**
 
 ```toml
-assertr = { version = "0.5.7", features = ["derive"] }
+assertr = { version = "0.6.1", features = ["derive"] }
 ```
 
 ```rust
@@ -462,6 +507,10 @@ fn test() {
     });
 }
 ```
+
+Named structs may use lifetimes, type parameters, const generics, and where-clauses. A failed partial comparison reports
+every mismatched public field in declaration order. If the dependency is renamed in `Cargo.toml`, the derive macro
+resolves that name automatically.
 
 For nested public fields, `map_type` lets the generated matcher use another generated matcher type:
 
@@ -541,9 +590,13 @@ short. Custom comparison functions can use ordinary Rust where-predicate syntax 
 
 ### Write assertions for your own types.
 
-Good custom assertions add domain-specific value. In practice, the most maintainable way to build
-them is often to delegate to existing assertions so you keep the same failure formatting,
-capture-mode behavior, and chaining style.
+Good custom assertions add domain-specific value. In practice, the most maintainable way to build them is often to
+delegate to existing assertions so you keep the same failure formatting, capture-mode behavior, and chaining style.
+
+The built-in `*Assertions` traits are public primarily so their methods participate in Rust's trait-based method
+discovery. They are not intended as downstream implementation interfaces. Adding a new assertion method to an existing
+assertion trait is therefore considered a compatible change and may happen in a patch release. Define a separate
+assertion trait for your own types, as shown below, instead of implementing Assertr's built-in assertion traits.
 
 ```rust
 use assertr::prelude::*;
@@ -608,14 +661,14 @@ fn test() {
 }
 ```
 
-- Partial equality assertions (meaning that only some fields of a struct are compared, while some are ignored).
-  Add the `AssertrEq` annotation to one of your structs to enable this.
+- Partial equality assertions (meaning that only some fields of a struct are compared, while some are ignored). Add the
+  `AssertrEq` annotation to one of your structs to enable this.
 
 ## Compared to other assertion styles
 
-One other style of assertions in Rust is the "individual macros" approach.
-The standard library already comes with a few of them, like the `assert_eq!` macro, many libraries provide a more
-exhaustive list of macros specifically tailored for specific types and operations.
+One other style of assertions in Rust is the "individual macros" approach. The standard library already comes with a few
+of them, like the `assert_eq!` macro, many libraries provide a more exhaustive list of macros specifically tailored for
+specific types and operations.
 
 Let me point out a few benefits of fluent assertions compared to individual assert macros.
 
@@ -626,15 +679,14 @@ properties. Instead of writing multiple separate assertions, you can express rel
 statement that reads almost like natural language.
 
 Additionally, having a concrete entrance into the assertion context using the `assert_that!` macro with assertions
-coming after makes it totally obvious which value is the "actual" and which is the "expected" value. This provides
-a clear schema for how assertions are written, compared to an assertion macro, like std's `assert_eq!`, in which the
-order of arguments can be chosen freely, making it non-obvious when coming into a new codebase which style
-was chosen.
+coming after makes it totally obvious which value is the "actual" and which is the "expected" value. This provides a
+clear schema for how assertions are written, compared to an assertion macro, like std's `assert_eq!`, in which the order
+of arguments can be chosen freely, making it non-obvious when coming into a new codebase which style was chosen.
 
 #### Better Error Messages
 
-Fluent assertions can provide more detailed and structured error messages out of the box. Rather than just showing
-the values that didn't match, they can include context about what specific check failed within the chain and clearer
+Fluent assertions can provide more detailed and structured error messages out of the box. Rather than just showing the
+values that didn't match, they can include context about what specific check failed within the chain and clearer
 descriptions of the expected vs actual values. Descriptive messages can be collected throughout the call chain.
 
 #### Reduced Code Duplication
@@ -668,40 +720,35 @@ fn test() {
 - Assertions to be defined on common traits as often as possible. Allowing, for example, all types implementing `Eq`
   to allow `is_equal_to`, `PartialOrd` types to allow `is_greater_than` assertions and all types implementing the
   `HasLength` trait to support the `has_length` assertion.
-- A single `assert_that!(...)` macro suffices to get into an assertion context. It handles both owned values
-  and references automatically — pass `assert_that!(value)` for owned values or `assert_that!(&value)` to borrow.
+- A single `assert_that!(...)` macro suffices to get into an assertion context. It handles both owned values and
+  references automatically — pass `assert_that!(value)` for owned values or `assert_that!(&value)` to borrow.
 - One import should be enough to access all possible assertions through **autocomplete**.
   `use assertr::prelude::*;`
 
 ## Dev
 
-Run the full maintenance pipeline, including formatting, checks, clippy, tests, and docs with:
-(This will run checks and tests with default features, no default features and all features enabled.)
+Install the tools used by the maintenance recipes with:
 
 ```bash
-just tidy
+just install-tools
 ```
 
-### Testing
-
-To test all crates from the workspace root:
+Run the full non-mutating validation suite with:
 
 ```bash
-cargo test --all
+just verify
 ```
 
-Some assertions are feature-gated. To run the full test suite, enable all features:
-
-```bash
-cargo test --all-features
-```
+The suite checks and tests every package independently so Cargo cannot make one configuration pass through workspace
+feature unification. Run individual stages with `just check`, `just clippy`, or `just test`. To update dependencies,
+sort manifests, and format the workspace, run `just tidy`.
 
 ## MSRV
 
 Current MSRV:
 
 - `assertr`: `1.89.0`
-- `assertr-derive`: `1.85.0`
+- `assertr-derive`: `1.89.0`
 
 Previous MSRV values:
 
@@ -716,6 +763,5 @@ Contributions are welcome. Feel free to open a PR with your suggested changes.
 ## Acknowledgements
 
 Midway through implementing this, I found out that "spectral" already exists, which uses a very similar style of
-assertions.
-After looking into it, I took the concept of generally relying on `*Assertions` trait definitions instead of directly
-implementing Assertions with multiple impl blocks on the `AssertThat` type.
+assertions. After looking into it, I took the concept of generally relying on `*Assertions` trait definitions instead of
+directly implementing Assertions with multiple impl blocks on the `AssertThat` type.

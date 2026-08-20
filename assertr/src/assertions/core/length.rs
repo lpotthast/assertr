@@ -225,6 +225,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[allow(clippy::zero_sized_map_values)]
     mod is_empty_on_hashmap {
         use std::collections::HashMap;
@@ -290,6 +291,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[allow(clippy::zero_sized_map_values)]
     mod is_not_empty_on_hashmap {
         use std::collections::HashMap;
@@ -528,6 +530,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[allow(clippy::zero_sized_map_values)]
     mod has_length_on_hashmap {
         use indoc::formatdoc;

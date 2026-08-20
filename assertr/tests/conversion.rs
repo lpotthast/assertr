@@ -1,3 +1,5 @@
+#![cfg(feature = "serde")]
+
 use assertr::prelude::*;
 
 #[test]
