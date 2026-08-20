@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-- Added `just` recipes for installing maintenance tools and running checks, Clippy, tests, or the full non-mutating
-  validation suite. `just tidy` now only updates dependencies, sorts manifests, and formats code.
 
 ## [0.6.1] - 2026-08-20
 
@@ -46,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   derived assertions, the `satisfies_*` split, capture mode) and documentation for the fluent entry points,
   explaining why `must()` / `must_owned()` and `verify()` / `verify_owned()` are separate functions and why the
   borrowing variants carry the shorter names.
+- Added `just` recipes for installing maintenance tools and running checks, Clippy, tests, or the full non-mutating
+  validation suite. `just tidy` now only updates dependencies, sorts manifests, and formats code.
 - Continuous integration coverage for formatting, Clippy, tests, documentation, hosted and embedded `no_std`, and the
   declared minimum supported Rust version, all respecting the lockfile.
 
