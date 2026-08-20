@@ -247,6 +247,10 @@ mod collection_renderer_equality {
         }
     }
 
+    fn is_actual_two(assertion: AssertThat<CollectionActual, Capture, CollectionRenderer>) {
+        assertion.is_equal_to(CollectionExpected(2));
+    }
+
     impl AssertionRenderer<VecDeque<CollectionActual>> for CollectionRenderer {
         fn fmt(
             &self,
@@ -286,10 +290,63 @@ mod collection_renderer_equality {
     }
 
     #[test]
+    fn iterator_sequence_assertions_use_renderer_specific_equality() {
+        assert_that!(
+            vec![
+                CollectionActual(1),
+                CollectionActual(2),
+                CollectionActual(3)
+            ]
+            .into_iter()
+        )
+        .with_renderer(CollectionRenderer)
+        .contains_contiguous([CollectionExpected(2), CollectionExpected(3)]);
+
+        assert_that!(
+            vec![
+                CollectionActual(1),
+                CollectionActual(2),
+                CollectionActual(3)
+            ]
+            .into_iter()
+        )
+        .with_renderer(CollectionRenderer)
+        .starts_with([CollectionExpected(1), CollectionExpected(2)]);
+
+        assert_that!(
+            vec![
+                CollectionActual(1),
+                CollectionActual(2),
+                CollectionActual(3)
+            ]
+            .into_iter()
+        )
+        .with_renderer(CollectionRenderer)
+        .ends_with([CollectionExpected(2), CollectionExpected(3)]);
+
+        assert_that!(vec![CollectionActual(1), CollectionActual(2)].into_iter())
+            .with_renderer(CollectionRenderer)
+            .contains_contiguous_satisfying([is_actual_two]);
+    }
+
+    #[test]
     fn into_iterator_membership_uses_renderer_specific_equality() {
         assert_that!(vec![CollectionActual(1), CollectionActual(2)])
             .with_renderer(CollectionRenderer)
             .into_iter_contains(CollectionExpected(2));
+    }
+
+    #[test]
+    fn borrowed_iterator_sequence_assertions_use_renderer_specific_equality() {
+        assert_that!(vec![
+            CollectionActual(1),
+            CollectionActual(2),
+            CollectionActual(3)
+        ])
+        .with_renderer(CollectionRenderer)
+        .into_iter_starts_with([CollectionExpected(1)])
+        .into_iter_contains_contiguous([CollectionExpected(2), CollectionExpected(3)])
+        .into_iter_ends_with([CollectionExpected(3)]);
     }
 
     #[test]
@@ -337,7 +394,7 @@ mod wrapper_renderer {
             value: &HashSet<Secret>,
             f: &mut core::fmt::Formatter<'_>,
         ) -> core::fmt::Result {
-            let mut entries: std::vec::Vec<u32> = value.iter().map(|s| s.0).collect();
+            let mut entries: Vec<u32> = value.iter().map(|s| s.0).collect();
             entries.sort_unstable();
             f.write_str("{")?;
             for (i, entry) in entries.iter().enumerate() {
@@ -356,7 +413,7 @@ mod wrapper_renderer {
             value: &HashMap<&'static str, Secret>,
             f: &mut core::fmt::Formatter<'_>,
         ) -> core::fmt::Result {
-            let mut entries: std::vec::Vec<(&&'static str, &Secret)> = value.iter().collect();
+            let mut entries: Vec<(&&'static str, &Secret)> = value.iter().collect();
             entries.sort_by_key(|(k, _)| **k);
             f.write_str("{")?;
             for (i, (k, v)) in entries.iter().enumerate() {

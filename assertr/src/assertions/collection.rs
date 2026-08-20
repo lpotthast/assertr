@@ -14,25 +14,11 @@ use indoc::writedoc;
 
 use crate::{
     AssertThat, AssertionRenderer, AssertrPartialEq, EqContext, Mode,
-    failure::BANNER,
     mode::Capture,
     tracking::AssertionTracking,
+    util::failure::join_failures,
     util::slice::{match_bipartite, match_multiset},
 };
-
-/// Joins one element's captured assertion failures for embedding into a detail message,
-/// stripping the banners every rendered failure carries.
-fn join_failures(failures: &[String]) -> String {
-    failures
-        .iter()
-        .map(|failure| {
-            let failure = failure.strip_prefix(BANNER).unwrap_or(failure);
-            let failure = failure.strip_suffix(BANNER).unwrap_or(failure);
-            failure.trim_matches('\n')
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
 
 /// A collection whose elements can be inspected by reference for assertion purposes.
 ///
@@ -292,15 +278,16 @@ pub(crate) fn assert_contains_satisfying<C, T, A, M, R>(
         unsatisfied.push((index, failures));
     }
 
+    let mut details = Vec::new();
     for (index, failures) in &unsatisfied {
-        this.add_detail_message(format!(
+        details.push(format!(
             "Element at index {index} does not satisfy the assertions:\n{}",
             join_failures(failures)
         ));
     }
 
     let actual = this.render_value(actual.rendered());
-    this.fail(|w: &mut String| {
+    this.fail_with_details(details, |w: &mut String| {
         writedoc! {w, r"
             Actual: {actual:#?}
 
@@ -388,26 +375,27 @@ where
     let result = compare(actual, expected, Some(&mut ctx));
 
     if !result.strictly_equal {
+        let mut details = Vec::new();
         if !result.not_in_expected.is_empty() {
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Elements not expected: {:#?}",
                 this.render_values(result.not_in_expected.as_slice())
             ));
         }
         if !result.not_in_actual.is_empty() {
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Elements not found: {:#?}",
                 this.render_values(result.not_in_actual.as_slice())
             ));
         }
         if result.only_differing_in_order() {
-            this.add_detail_message("The order of elements does not match!".to_owned());
+            details.push("The order of elements does not match!".to_owned());
         }
 
         let actual = this.render_value(actual.rendered());
         let expected = this.render_value(expected);
 
-        this.fail(|w: &mut String| {
+        this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
                 Actual: {actual:#?},
 
@@ -441,22 +429,23 @@ pub(crate) fn assert_contains_exactly_matching<C, T, P, M, R>(
     }
 
     if !same_length || !not_matched.is_empty() {
+        let mut details = Vec::new();
         if !same_length {
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Number of elements ({}) does not match number of predicates ({})!",
                 actual.len(),
                 predicates.len()
             ));
         }
         for (index, element) in not_matched {
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Element at index {index} does not match its predicate: {:#?}",
                 this.render_value(element)
             ));
         }
 
         let actual = this.render_value(actual.rendered());
-        this.fail(|w: &mut String| {
+        this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
                 Actual: {actual:#?},
 
@@ -489,22 +478,23 @@ pub(crate) fn assert_contains_exactly_satisfying<C, T, A, M, R>(
     }
 
     if !same_length || !unsatisfied.is_empty() {
+        let mut details = Vec::new();
         if !same_length {
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Number of elements ({}) does not match number of assertions ({})!",
                 actual.len(),
                 assertions.len()
             ));
         }
         for (index, failures) in unsatisfied {
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Element at index {index} does not satisfy its assertions:\n{}",
                 join_failures(&failures)
             ));
         }
 
         let actual = this.render_value(actual.rendered());
-        this.fail(|w: &mut String| {
+        this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
                 Actual: {actual:#?},
 
@@ -582,26 +572,27 @@ pub(crate) fn assert_contains_exactly_in_any_order_matching<C, T, P, M, R>(
     );
 
     if !result.is_exact() {
+        let mut details = Vec::new();
         if !result.unmatched_actual.is_empty() {
             let not_matched = result
                 .unmatched_actual
                 .iter()
                 .map(|index| actual.element(*index))
                 .collect::<Vec<_>>();
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Elements not matched: {:#?}",
                 this.render_values(not_matched.as_slice())
             ));
         }
         if !result.unmatched_expected.is_empty() {
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Predicates not matched: {}",
                 result.unmatched_expected.len()
             ));
         }
         let actual = this.render_value(actual.rendered());
 
-        this.fail(|w: &mut String| {
+        this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
                 Actual: {actual:#?},
 
@@ -646,26 +637,27 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<C, T, A, M, R>(
     );
 
     if !result.is_exact() {
+        let mut details = Vec::new();
         if !result.unmatched_actual.is_empty() {
             let not_matched = result
                 .unmatched_actual
                 .iter()
                 .map(|index| actual.element(*index))
                 .collect::<Vec<_>>();
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Elements not matched: {:#?}",
                 this.render_values(not_matched.as_slice())
             ));
         }
         if !result.unmatched_expected.is_empty() {
-            this.add_detail_message(format!(
+            details.push(format!(
                 "Assertions not matched: {}",
                 result.unmatched_expected.len()
             ));
         }
         let actual = this.render_value(actual.rendered());
 
-        this.fail(|w: &mut String| {
+        this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
                 Actual: {actual:#?},
 

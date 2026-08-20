@@ -64,6 +64,10 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ///
     /// Use this variant instead of the `with_` variants when not in a call-chain context,
     /// and you don't want to call an ownership-taking function.
+    ///
+    /// Messages added this way apply to every subsequent failure of the assertion chain.
+    /// Assertion implementations must not use this for per-failure diagnostics; those belong to
+    /// `AssertThat::fail_with_details`, which scopes them to a single failure.
     pub fn add_detail_message(&self, message: impl Into<String>) {
         self.detail_messages.borrow_mut().push(message.into());
     }

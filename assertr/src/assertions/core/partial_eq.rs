@@ -1,5 +1,6 @@
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt::Write;
 use indoc::writedoc;
 
@@ -34,15 +35,16 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
         let mut ctx = self.eq_context();
 
         if !AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
+            let mut details = Vec::new();
             if !ctx.differences.differences.is_empty() {
-                self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
+                details.push(format!("Differences: {:#?}", ctx.differences));
             }
             let actual = self.render_value(actual);
             let expected = self.render_value(expected);
-            self.fail(|w: &mut String| {
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
-                    
+
                       Actual: {actual:#?}
                 "}
             });
@@ -64,12 +66,13 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
         let mut ctx = self.eq_context();
 
         if AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
+            let mut details = Vec::new();
             if !ctx.differences.differences.is_empty() {
-                self.add_detail_message(format!("Differences: {:#?}", ctx.differences));
+                details.push(format!("Differences: {:#?}", ctx.differences));
             }
             let actual = self.render_value(actual);
             let expected = self.render_value(expected);
-            self.fail(|w: &mut String| {
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
 

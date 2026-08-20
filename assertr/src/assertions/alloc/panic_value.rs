@@ -2,6 +2,7 @@ use crate::{AssertThat, PanicValue, actual::Actual, mode::Panic, tracking::Asser
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::any::{Any, type_name, type_name_of_val};
 use core::fmt::Write;
 use indoc::writedoc;
@@ -40,17 +41,18 @@ impl<'t> PanicValueAssertions<'t> for AssertThat<'t, PanicValue, Panic> {
             let is_str = any.downcast_ref::<&str>().is_some();
             let is_string = any.downcast_ref::<String>().is_some();
 
+            let mut details = Vec::new();
             let actual_type_name = if is_str {
                 Cow::Borrowed("&str")
             } else if is_string {
                 Cow::Borrowed("String")
             } else {
                 // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
-                self.add_detail_message("The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.");
+                details.push(String::from("The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code."));
                 Cow::Borrowed(type_name_of_val(&*self.actual().0))
             };
 
-            self.fail(|w: &mut String| {
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected panic value type: {expected_type_name}
 

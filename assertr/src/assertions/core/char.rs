@@ -32,8 +32,10 @@ impl<M: Mode, R> CharAssertions for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.eq_ignore_ascii_case(&expected) {
-            self.add_detail_message("Actual is not equal to expected, even when ignoring casing.");
-            self.fail(|w: &mut String| {
+            let details = [String::from(
+                "Actual is not equal to expected, even when ignoring casing.",
+            )];
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?},
 

@@ -62,8 +62,31 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Panics with the formatted failure message when not in capture mode.
     #[track_caller]
     pub fn fail(&self, failure: impl Failure) {
+        self.fail_with_details(core::iter::empty(), failure);
+    }
+
+    /// Records or raises a failure message carrying detail messages that belong to exactly this
+    /// failure.
+    ///
+    /// Assertion implementations must hand their per-failure diagnostics to this method instead
+    /// of staging them via [`AssertThat::add_detail_message`]: the given details are rendered
+    /// into this failure only and are never stored on the assertion, so they cannot reappear in
+    /// the failure messages of later assertions on the same chain. `add_detail_message` and the
+    /// `with_detail_message` variants remain reserved for user-provided context, which
+    /// intentionally applies to every subsequent failure.
+    ///
+    /// # Panics
+    ///
+    /// Panics with the formatted failure message when not in capture mode.
+    #[track_caller]
+    pub(crate) fn fail_with_details(
+        &self,
+        details: impl IntoIterator<Item = String>,
+        failure: impl Failure,
+    ) {
         let mut detail_messages = Vec::new();
         self.collect_messages(&mut detail_messages);
+        detail_messages.extend(details);
 
         let msg = build_failure_message(
             self.print_location,

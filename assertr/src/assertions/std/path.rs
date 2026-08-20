@@ -316,8 +316,8 @@ impl<M: Mode, R> PathAssertions for AssertThat<'_, &Path, M, R> {
         let actual = self.actual();
         let expected_prefix = expected.as_ref();
         if !actual.starts_with(expected_prefix) {
-            self.add_detail_message("Only whole path components are matched!");
-            self.fail(|w: &mut String| {
+            let details = [String::from("Only whole path components are matched!")];
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
 
@@ -334,8 +334,8 @@ impl<M: Mode, R> PathAssertions for AssertThat<'_, &Path, M, R> {
         let actual = self.actual();
         let expected_postfix = expected.as_ref();
         if !actual.ends_with(expected_postfix) {
-            self.add_detail_message("Only whole path components are matched!");
-            self.fail(|w: &mut String| {
+            let details = [String::from("Only whole path components are matched!")];
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
 

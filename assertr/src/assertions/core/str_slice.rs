@@ -94,10 +94,10 @@ impl<M: Mode, R> StrSliceAssertions for AssertThat<'_, &str, M, R> {
         let actual = *self.actual();
         let expected = expected.as_ref();
         if !actual.eq_ignore_ascii_case(expected) {
-            self.add_detail_message(
+            let details = [String::from(
                 "Actual is not equal to expected, even when ignoring ASCII casing.",
-            );
-            self.fail(|w: &mut String| {
+            )];
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:?}
 

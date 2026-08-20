@@ -48,6 +48,10 @@ mod tests {
                 ]
                 
                 does not contain expected: "help"
+
+                Details: [
+                    Consumed 1 element(s).,
+                ]
                 -------- assertr --------
             "#});
         }

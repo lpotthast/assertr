@@ -9,6 +9,7 @@ pub mod condition;
 pub mod core;
 #[cfg(feature = "http")]
 pub mod http;
+pub(crate) mod iterator;
 #[cfg(feature = "jiff")]
 pub mod jiff;
 #[cfg(feature = "num")]

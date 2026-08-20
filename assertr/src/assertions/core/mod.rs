@@ -30,8 +30,9 @@ pub mod prelude {
     // All inner fn's are already std-gated, so we remove this otherwise noise-generating export.
     #[cfg(feature = "std")]
     pub use super::r#fn::FnOnceAssertions;
-    pub use super::iter::IntoIteratorAssertions;
-    pub use super::iter::IteratorAssertions;
+    pub use super::iter::{
+        ExactSizeIteratorAssertions, IntoIteratorAssertions, IteratorAssertions,
+    };
     pub use super::length::LengthAssertions;
     pub use super::option::OptionAssertions;
     pub use super::option::OptionExtractAssertions;

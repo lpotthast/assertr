@@ -204,14 +204,15 @@ impl<K, V, S: BuildHasher, M: Mode, R> HashMapAssertions<K, V, S, R>
             Some(actual_value) => {
                 let mut ctx = then.eq_context();
                 if !AssertrPartialEq::eq(actual_value, expected_value, Some(&mut ctx)) {
+                    let mut details = Vec::new();
                     if !ctx.differences.differences.is_empty() {
-                        then.add_detail_message(format!("Differences: {:#?}", ctx.differences));
+                        details.push(format!("Differences: {:#?}", ctx.differences));
                     }
                     let actual = then.render_value(actual);
                     let expected_key = then.render_value(expected_key);
                     let expected_value = then.render_value(expected_value);
                     let actual_value = then.render_value(actual_value);
-                    then.fail(|w: &mut String| {
+                    then.fail_with_details(details, |w: &mut String| {
                         writedoc! {w, r"
                             Actual: HashMap {actual:#?}
 
@@ -317,6 +318,7 @@ impl<K, V, S: BuildHasher, M: Mode, R> HashMapAssertions<K, V, S, R>
         self.track_assertion();
 
         let expected = expected.into_iter().collect::<Vec<_>>();
+        let mut details = Vec::new();
         let mut keys_not_found = Vec::new();
         let mut keys_with_unexpected_values = Vec::new();
 
@@ -329,7 +331,7 @@ impl<K, V, S: BuildHasher, M: Mode, R> HashMapAssertions<K, V, S, R>
                         keys_with_unexpected_values.push(expected_key);
                         if !ctx.differences.differences.is_empty() {
                             let expected_key_rendered = self.render_value(expected_key);
-                            self.add_detail_message(format!(
+                            details.push(format!(
                                 "Differences at key {expected_key_rendered:#?}: {:#?}",
                                 ctx.differences
                             ));
@@ -355,7 +357,7 @@ impl<K, V, S: BuildHasher, M: Mode, R> HashMapAssertions<K, V, S, R>
         {
             if !keys_not_found.is_empty() {
                 let keys_not_found_rendered = self.render_values(keys_not_found.as_slice());
-                self.add_detail_message(format!("Keys not found: {keys_not_found_rendered:#?}"));
+                details.push(format!("Keys not found: {keys_not_found_rendered:#?}"));
             }
             if !unexpected_entries.is_empty() {
                 let unexpected_entries_rendered: Vec<RenderedKeyValuePair<'_, K, V, R>> =
@@ -365,14 +367,14 @@ impl<K, V, S: BuildHasher, M: Mode, R> HashMapAssertions<K, V, S, R>
                             RenderedKeyValuePair(self.render_value(*k), self.render_value(*v))
                         })
                         .collect();
-                self.add_detail_message(format!(
+                details.push(format!(
                     "Unexpected entries: {unexpected_entries_rendered:#?}"
                 ));
             }
             if !keys_with_unexpected_values.is_empty() {
                 let keys_with_unexpected_values_rendered =
                     self.render_values(keys_with_unexpected_values.as_slice());
-                self.add_detail_message(format!(
+                details.push(format!(
                     "Keys with unexpected values: {keys_with_unexpected_values_rendered:#?}"
                 ));
             }
@@ -383,7 +385,7 @@ impl<K, V, S: BuildHasher, M: Mode, R> HashMapAssertions<K, V, S, R>
                 .collect();
             let actual = self.render_value(self.actual());
 
-            self.fail(|w: &mut String| {
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Actual: HashMap {actual:#?}
 

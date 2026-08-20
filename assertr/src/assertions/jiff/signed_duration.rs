@@ -23,10 +23,10 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
         self.track_assertion();
 
         if !self.actual().is_zero() {
-            self.add_detail_message("Actual was not zero.");
+            let details = [String::from("Actual was not zero.")];
 
             let expected = SignedDuration::ZERO;
-            self.fail(|w: &mut String| {
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
 

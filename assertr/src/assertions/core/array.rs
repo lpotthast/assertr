@@ -84,7 +84,7 @@ pub trait ArrayAssertions<'t, T, R> {
 
     /// Deprecated name of [`ArrayAssertions::contains_exactly_in_any_order_matching`].
     #[deprecated(
-        since = "0.7.0",
+        since = "0.6.2",
         note = "renamed to `contains_exactly_in_any_order_matching`"
     )]
     #[cfg_attr(feature = "fluent", no_fluent_alias)]
@@ -101,7 +101,7 @@ pub trait ArrayAssertions<'t, T, R> {
     /// Deprecated name of the `contain_exactly_in_any_order_matching` fluent alias.
     #[cfg(feature = "fluent")]
     #[deprecated(
-        since = "0.7.0",
+        since = "0.6.2",
         note = "renamed to `contain_exactly_in_any_order_matching`"
     )]
     #[track_caller]

@@ -99,14 +99,14 @@ where
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_zero() {
-            self.add_detail_message(format!(
+            let details = [format!(
                 "Expecting additive identity of type '{}'",
                 core::any::type_name::<T>()
-            ));
+            )];
             let expected = T::zero();
             let expected = self.render_value(&expected);
             let actual = self.render_value(actual);
-            self.fail(|w: &mut String| {
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
 
@@ -127,14 +127,14 @@ where
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_one() {
-            self.add_detail_message(format!(
+            let details = [format!(
                 "Expecting multiplicative identity of type '{}'",
                 core::any::type_name::<T>()
-            ));
+            )];
             let expected = T::one();
             let expected = self.render_value(&expected);
             let actual = self.render_value(actual);
-            self.fail(|w: &mut String| {
+            self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
 
