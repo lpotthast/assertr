@@ -11,7 +11,7 @@ struct Metadata {
 }
 
 impl Person {
-    #[allow(clippy::unused_async)]
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
     async fn into_metadata(self) -> Metadata {
         self.meta
     }
