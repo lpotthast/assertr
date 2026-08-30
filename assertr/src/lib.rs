@@ -4,7 +4,11 @@
 // Allow functions named `is_*`, taking self by value instead of taking self by mutable reference
 // or reference.
 #![allow(clippy::wrong_self_convention)]
-#![doc = include_str!("../../README.md")]
+#![doc = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/",
+    env!("CARGO_PKG_README")
+))]
 //!
 //! ## Core model
 //!

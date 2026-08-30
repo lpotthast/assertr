@@ -64,6 +64,12 @@ test:
     cargo test -p assertr-derive
     cargo test -p assertr-no-std-tests
 
+build-docs:
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --exclude assertr-no-std-tests --no-deps --all-features
+
+open-docs:
+    cargo doc -p assertr --all-features --no-deps --open
+
 # Update all deps; sort all Cargo.toml deps; format all code.
 tidy:
     cargo update --workspace
@@ -78,4 +84,4 @@ verify:
     just check-no-std
     just clippy
     just test
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --exclude assertr-no-std-tests --no-deps --all-features
+    just build-docs
