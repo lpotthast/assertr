@@ -1,8 +1,9 @@
-#![cfg(feature = "serde")]
+#![cfg(any(feature = "serde-json", feature = "serde-toml"))]
 
 use assertr::prelude::*;
 
 #[test]
+#[cfg(feature = "serde-json")]
 fn is_able_to_use_json_conversion() {
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     struct Person {
@@ -18,6 +19,7 @@ fn is_able_to_use_json_conversion() {
 }
 
 #[test]
+#[cfg(feature = "serde-toml")]
 fn is_able_to_use_toml_conversion() {
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     struct Config {

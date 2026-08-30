@@ -1,6 +1,11 @@
+//! Structured assertion failures and their descriptions.
+//!
+//! [`AssertionFailure`] is what capture mode hands back. Implement [`Failure`] to describe a
+//! failure without building a `String` first, then pass it to [`AssertThat::fail`].
+
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::{Arguments, Write};
+use core::fmt::{Arguments, Display, Write};
 
 use crate::{
     AssertThat,
@@ -8,6 +13,7 @@ use crate::{
     prelude::Mode,
 };
 
+/// A description accepted by [`AssertThat::fail`] without first allocating a `String`.
 pub trait Failure {
     /// Writes the failure message to the target string.
     ///
@@ -41,21 +47,91 @@ where
 /// Delimiter opening and closing every rendered failure message.
 pub(crate) const BANNER: &str = "-------- assertr --------\n";
 
+/// A single structured assertion failure.
+///
+/// Capture-mode assertions (see [`AssertThat::capture`]) collect these instead of panicking.
+/// Every part of a failure is exposed as its own field, so consumers can inspect failures
+/// programmatically or compose their own rendering without parsing formatted text.
+///
+/// The complete human-readable form is produced by the [`Display`] implementation. In panic mode,
+/// it becomes the panic message. Capture mode retains the fields without formatting that complete
+/// message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct AssertionFailure {
+    /// Where the failing assertion was invoked. `None` when location printing was disabled via
+    /// `with_location(false)`.
+    pub location: Option<&'static core::panic::Location<'static>>,
+
+    /// The name given to the assertion's subject via `with_subject_name`, if any.
+    pub subject_name: Option<String>,
+
+    /// The assertion-specific description, such as the rendered subject and expected value.
+    /// Location, subject name, and detail messages live in their own fields.
+    pub description: String,
+
+    /// Diagnostics attached by the failing assertion itself and scoped to exactly this failure,
+    /// e.g. the `Differences` of an equality assertion or the per-element diagnostics of a
+    /// collection assertion.
+    pub details: Vec<String>,
+
+    /// User-provided detail messages (`with_detail_message` / `add_detail_message`) collected
+    /// from the assertion chain. Contains only the messages provided up to the point this
+    /// failure was raised. A message added later appears only in the failures raised after it.
+    pub messages: Vec<String>,
+}
+
+impl Display for AssertionFailure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(BANNER)?;
+
+        if let Some(location) = self.location {
+            f.write_fmt(format_args!(
+                "Assertion failed at {file}:{line}:{column}\n\n",
+                file = location.file(),
+                line = location.line(),
+                column = location.column(),
+            ))?;
+        }
+
+        if let Some(subject_name) = &self.subject_name {
+            f.write_fmt(format_args!("Subject: {subject_name}\n\n"))?;
+        }
+
+        f.write_str(&self.description)?;
+        if !self.description.ends_with('\n') {
+            f.write_str("\n")?;
+        }
+
+        if !self.messages.is_empty() || !self.details.is_empty() {
+            f.write_str("\n")?;
+            let detail_messages = DetailMessages(&self.messages, &self.details);
+            f.write_fmt(format_args!("Details: {detail_messages:#?}\n"))?;
+        }
+
+        f.write_str(BANNER)
+    }
+}
+
 pub(crate) trait Fallible {
-    fn store_failure(&self, failure: String);
+    fn store_failure(&self, failure: AssertionFailure);
 }
 
 impl<T, M: Mode, R> Fallible for AssertThat<'_, T, M, R> {
-    fn store_failure(&self, failure: String) {
-        match &self.parent {
+    fn store_failure(&self, failure: AssertionFailure) {
+        match &self.state.parent {
             Some(parent) => parent.store_failure(failure),
-            None => self.failures.borrow_mut().push(failure),
+            None => self.state.failures.borrow_mut().push(failure),
         }
     }
 }
 
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Records or raises a failure message.
+    ///
+    /// This is the failure path of a hand-written leaf assertion, called after
+    /// [`AssertThat::track_assertion`]. See [custom assertions](crate#custom-assertions) for the
+    /// shape such an assertion takes.
     ///
     /// # Panics
     ///
@@ -65,80 +141,67 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         self.fail_with_details(core::iter::empty(), failure);
     }
 
-    /// Records or raises a failure message carrying detail messages that belong to exactly this
-    /// failure.
+    #[track_caller]
+    #[cfg(feature = "std")]
+    pub(crate) fn fail_at(
+        &self,
+        location: &'static core::panic::Location<'static>,
+        failure: impl Failure,
+    ) {
+        self.fail_with_details_at(location, core::iter::empty(), failure);
+    }
+
+    /// Records or raises a failure with diagnostics scoped to that failure.
     ///
-    /// Assertion implementations must hand their per-failure diagnostics to this method instead
-    /// of staging them via [`AssertThat::add_detail_message`]: the given details are rendered
-    /// into this failure only and are never stored on the assertion, so they cannot reappear in
-    /// the failure messages of later assertions on the same chain. `add_detail_message` and the
-    /// `with_detail_message` variants remain reserved for user-provided context, which
-    /// intentionally applies to every subsequent failure.
+    /// Assertion implementations use this for evidence specific to one failure. The details are
+    /// stored in [`AssertionFailure::details`] and cannot reappear in later failures. Use
+    /// [`AssertThat::add_detail_message`] or a `with_detail_message` method for user context that
+    /// should apply to subsequent failures. See [custom assertions](crate#custom-assertions) for
+    /// the shape of a hand-written assertion.
     ///
     /// # Panics
     ///
     /// Panics with the formatted failure message when not in capture mode.
     #[track_caller]
-    pub(crate) fn fail_with_details(
+    pub fn fail_with_details(
         &self,
         details: impl IntoIterator<Item = String>,
         failure: impl Failure,
     ) {
-        let mut detail_messages = Vec::new();
-        self.collect_messages(&mut detail_messages);
-        detail_messages.extend(details);
+        self.fail_with_details_at(core::panic::Location::caller(), details, failure);
+    }
 
-        let msg = build_failure_message(
-            self.print_location,
-            self.subject_name.as_deref(),
-            &detail_messages,
-            failure,
-        )
-        .expect("no write error");
-
-        // TODO: Check is_capture in root! Do not allow with_capture() on derived asserts.
-        if self.mode.borrow().is_capture() {
-            self.store_failure(msg);
+    #[track_caller]
+    pub(crate) fn fail_with_details_at(
+        &self,
+        location: &'static core::panic::Location<'static>,
+        details: impl IntoIterator<Item = String>,
+        failure: impl Failure,
+    ) {
+        let location = if self.state.print_location {
+            Some(location)
         } else {
-            panic!("{msg}");
+            None
+        };
+
+        let mut messages = Vec::new();
+        self.collect_messages(&mut messages);
+
+        let mut description = String::new();
+        failure.write_to(&mut description).expect("no write error");
+
+        let failure = AssertionFailure {
+            location,
+            subject_name: self.state.subject_name.clone(),
+            description,
+            details: details.into_iter().collect(),
+            messages,
+        };
+
+        if M::CAPTURES {
+            self.store_failure(failure);
+        } else {
+            panic!("{failure}");
         }
     }
-}
-
-#[track_caller]
-fn build_failure_message(
-    print_location: bool,
-    subject_name: Option<&str>,
-    detail_messages: &[String],
-    failure: impl Failure,
-) -> Result<String, core::fmt::Error> {
-    let mut err = String::new();
-
-    err.write_str(BANNER)?;
-
-    if print_location {
-        let caller_location = core::panic::Location::caller();
-        let _ = err.write_fmt(format_args!(
-            "Assertion failed at {file}:{line}:{column}\n\n",
-            file = caller_location.file(),
-            line = caller_location.line(),
-            column = caller_location.column(),
-        ));
-    }
-
-    if let Some(subject_name) = subject_name {
-        err.write_fmt(format_args!("Subject: {subject_name}\n\n"))?;
-    }
-
-    failure.write_to(&mut err)?;
-
-    if !detail_messages.is_empty() {
-        err.write_str("\n")?;
-        let detail_messages = DetailMessages(detail_messages);
-        err.write_fmt(format_args!("Details: {detail_messages:#?}\n"))?;
-    }
-
-    err.write_str(BANNER)?;
-
-    Ok(err)
 }

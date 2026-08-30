@@ -4,8 +4,8 @@ use std::hash::{BuildHasher, Hash};
 
 /// Bound helper for `#[assertr_eq(compare_with = "::assertr::cmp::hashmap::compare")]`.
 ///
-/// This trait means an actual map value can be compared with an expected map value. Users normally
-/// only name this trait in `#[assertr_eq(compare_bounds = "...")]`.
+/// An actual map value implements this trait when it can be compared with an expected map value.
+/// Name it in `#[assertr_eq(compare_bounds = "...")]`.
 pub trait CompareValue<Expected, R>: AssertrPartialEq<Expected, R> {}
 
 impl<Actual, Expected, R> CompareValue<Expected, R> for Actual where
@@ -13,7 +13,10 @@ impl<Actual, Expected, R> CompareValue<Expected, R> for Actual where
 {
 }
 
-/// This function is supposed to be used when deriving `AssertrEq`:
+/// Compares maps by key and compares their values with [`AssertrPartialEq`].
+///
+/// The maps may use different hashers and value types. The optional context is forwarded to value
+/// comparisons. Use this as the `compare_with` function for a map field of an `AssertrEq` type:
 /// ```
 /// # #[cfg(feature = "derive")]
 /// # mod example {
@@ -38,6 +41,7 @@ impl<Actual, Expected, R> CompareValue<Expected, R> for Actual where
 /// }
 /// # }
 /// ```
+///
 pub fn compare<K, V1, V2, S1, S2, R>(
     map1: &HashMap<K, V1, S1>,
     map2: &HashMap<K, V2, S2>,

@@ -16,4 +16,5 @@ fn tests() {
     t.pass("tests/13-generic-qualified-name-collision.rs");
     t.pass("tests/14-renderer-name-collision.rs");
     t.pass("tests/15-generic-bound-private-dependency.rs");
+    t.pass("tests/16-generated-items-are-documented.rs");
 }

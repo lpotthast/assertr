@@ -164,7 +164,7 @@ pub(super) fn matcher_debug_generics(
         }
         bounded_types.push(type_key);
         generics.make_where_clause().predicates.push(parse_quote! {
-            #assertr::DebugRenderer: #assertr::AssertionRenderer<#expected_type>
+            #assertr::DebugRenderer: #assertr::ValueRenderer<#expected_type>
         });
     }
 

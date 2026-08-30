@@ -1,19 +1,25 @@
 use crate::assertions::core::strip_quotation_marks;
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, Mode};
 use alloc::format;
 use alloc::string::String;
 use core::fmt::Debug;
 use core::fmt::Write;
 use indoc::writedoc;
 
-/// Assertions for values implementing [Debug].
+/// Assertions for values implementing [`Debug`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait DebugAssertions {
-    /// Test that actual has the `expected` `Debug` representation.
+    /// Asserts that the subject has the expected `Debug` representation.
+    ///
+    /// One leading and one trailing double quote, when present, are removed from both
+    /// representations before comparison.
     fn has_debug_string(self, expected: impl AsRef<str>) -> Self;
 
-    /// Test that actual and expected have the same `Debug` representation.
+    /// Asserts that the subject and `expected` have the same `Debug` representation.
+    ///
+    /// One leading and one trailing double quote, when present, are removed from both
+    /// representations before comparison.
     fn has_debug_value(self, expected: impl Debug) -> Self;
 }
 
@@ -75,6 +81,12 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            42.must().have_debug_string("42");
+        }
+
+        #[test]
         fn succeeds_when_equal() {
             assert_that!(42).has_debug_string("42");
             assert_that!(42).has_debug_string("42");
@@ -114,6 +126,15 @@ mod tests {
     }
 
     mod has_debug_value {
+        #[cfg(feature = "fluent")]
+        use crate::prelude::*;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            42.must().have_debug_value(42);
+        }
+
         mod with_number {
             use crate::prelude::*;
             use indoc::formatdoc;

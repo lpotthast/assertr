@@ -1,124 +1,161 @@
 use alloc::vec::Vec;
 
 use crate::{
-    AssertThat, AssertionRenderer, AssertrPartialEq, Mode, assertions::iterator, mode::Capture,
-    tracking::AssertionTracking,
+    AssertThat, AssertrPartialEq, Mode, ValueRenderer, assertions::iterator, mode::Capture,
 };
 
 /// Chainable assertions over a fresh borrowed iteration of a collection-like value.
 ///
-/// Each method calls `IntoIterator::into_iter(&actual)` exactly once and returns the original
+/// Each method calls `IntoIterator::into_iter(&subject)` exactly once and returns the original
 /// assertion. Chaining therefore performs one fresh borrowed traversal per assertion. Streaming,
 /// bounded-preview, sequence-criteria, and potential-nontermination behavior matches
 /// [`super::IteratorAssertions`].
 /// Method names are prefixed to avoid collisions with more specific collection assertion traits.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait IntoIteratorAssertions<T, R> {
+    /// Asserts that a borrowed traversal contains an element equal to `expected`.
     fn into_iter_contains<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + AssertionRenderer<E>;
+        R: ValueRenderer<T> + ValueRenderer<E>;
+
+    /// Asserts that every expected element is present during one borrowed traversal.
+    ///
+    /// Extra subject elements are allowed and duplicates are not counted, matching
+    /// [`CollectionAssertions::contains_all`](crate::assertions::collection::CollectionAssertions::contains_all).
+    /// The traversal stops when all expected elements have been found. It cannot complete on a
+    /// non-terminating source if an expected element never occurs.
+    fn into_iter_contains_all<E, EI>(self, expected: EI) -> Self
+    where
+        T: AssertrPartialEq<E, R>,
+        EI: IntoIterator<Item = E>,
+        R: ValueRenderer<T> + ValueRenderer<E>;
+    /// Asserts that a borrowed traversal contains an element matching `predicate`.
     fn into_iter_contains_matching<P>(self, predicate: P) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts that a borrowed traversal contains an element satisfying `assertions`.
     fn into_iter_contains_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone;
+        R: ValueRenderer<T> + Clone;
+    /// Asserts that a borrowed traversal starts with elements equal to `expected`, in order.
     fn into_iter_starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>;
+        R: ValueRenderer<T> + ValueRenderer<E>;
+    /// Asserts that the traversal's prefix matches `predicates` in order.
     fn into_iter_starts_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts that the traversal's prefix satisfies `assertions` in order.
     fn into_iter_starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone;
+        R: ValueRenderer<T> + Clone;
+    /// Asserts that a borrowed traversal ends with elements equal to `expected`, in order.
     fn into_iter_ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>;
+        R: ValueRenderer<T> + ValueRenderer<E>;
+    /// Asserts that the traversal's suffix matches `predicates` in order.
     fn into_iter_ends_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts that the traversal's suffix satisfies `assertions` in order.
     fn into_iter_ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone;
+        R: ValueRenderer<T> + Clone;
+    /// Asserts that a borrowed traversal contains `expected` as a contiguous subsequence.
     fn into_iter_contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>;
+        R: ValueRenderer<T> + ValueRenderer<E>;
+    /// Asserts that a contiguous subsequence matches `predicates` in order.
     fn into_iter_contains_contiguous_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts that a contiguous subsequence satisfies `assertions` in order.
     fn into_iter_contains_contiguous_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone;
+        R: ValueRenderer<T> + Clone;
+    /// Asserts that no element in a borrowed traversal equals `not_expected`.
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + AssertionRenderer<E>;
+        R: ValueRenderer<T> + ValueRenderer<E>;
+    /// Asserts that no element in a borrowed traversal matches `predicate`.
     fn into_iter_does_not_contain_matching<P>(self, predicate: P) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts that no element in a borrowed traversal satisfies `assertions`.
     fn into_iter_does_not_contain_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone;
+        R: ValueRenderer<T> + Clone;
+    /// Asserts positional equality with `expected`, including length.
     fn into_iter_contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>;
+        R: ValueRenderer<T> + ValueRenderer<E>;
+    /// Asserts that each element matches the predicate at the same position, including length.
     fn into_iter_contains_exactly_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts that each element satisfies the assertions at the same position, including length.
     fn into_iter_contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone;
-    fn into_iter_contains_exactly_in_any_order(self, expected: impl AsRef<[T]>) -> Self
+        R: ValueRenderer<T> + Clone;
+    /// Asserts multiset equality with `expected`, ignoring order but preserving duplicate counts.
+    fn into_iter_contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: PartialEq,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        T: AssertrPartialEq<E, R>,
+        R: ValueRenderer<T> + ValueRenderer<E>;
+    /// Asserts one-to-one matching between elements and `predicates`, independent of order.
     fn into_iter_contains_exactly_in_any_order_matching<P>(
         self,
         predicates: impl AsRef<[P]>,
     ) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts one-to-one matching between elements and `assertions`, independent of order.
     fn into_iter_contains_exactly_in_any_order_satisfying<A>(
         self,
         assertions: impl AsRef<[A]>,
     ) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone;
+        R: ValueRenderer<T> + Clone;
+    /// Asserts that a borrowed traversal yields no elements.
     fn into_iter_is_empty(self) -> Self
     where
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts that a borrowed traversal yields at least one element.
     fn into_iter_is_not_empty(self) -> Self
     where
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
+    /// Asserts that a borrowed traversal yields exactly `expected` elements.
     fn into_iter_has_length(self, expected: usize) -> Self
     where
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
 
     #[deprecated(since = "0.6.2", note = "renamed to `into_iter_is_empty`")]
+    #[cfg_attr(feature = "fluent", no_fluent_alias)]
     /// Deprecated forwarding name for [`IntoIteratorAssertions::into_iter_is_empty`].
     fn into_iter_iterator_is_empty(self) -> Self
     where
-        R: for<'a> AssertionRenderer<Vec<&'a T>>;
+        R: ValueRenderer<T>;
 }
 
 impl<T, I, M: Mode, R> IntoIteratorAssertions<T, R> for AssertThat<'_, I, M, R>
@@ -129,17 +166,33 @@ where
     fn into_iter_contains<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + AssertionRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
         iterator::assert_contains::<_, T, _, _, _, _>(&self, self.actual().into_iter(), &expected);
         self
     }
     #[track_caller]
+    fn into_iter_contains_all<E, EI>(self, expected: EI) -> Self
+    where
+        T: AssertrPartialEq<E, R>,
+        EI: IntoIterator<Item = E>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
+    {
+        self.track_assertion();
+        let expected = expected.into_iter().collect::<Vec<_>>();
+        iterator::assert_contains_all::<_, T, _, _, _, _>(
+            &self,
+            self.actual().into_iter(),
+            expected.as_slice(),
+        );
+        self
+    }
+    #[track_caller]
     fn into_iter_contains_matching<P>(self, predicate: P) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_contains_matching::<_, T, _, _, _, _>(
@@ -153,7 +206,7 @@ where
     fn into_iter_contains_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone,
+        R: ValueRenderer<T> + Clone,
     {
         self.track_assertion();
         iterator::assert_contains_satisfying::<_, T, _, _, _, _>(
@@ -167,16 +220,14 @@ where
     fn into_iter_starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
         let expected = expected.as_ref();
-        let rendered = expected.iter().collect::<Vec<_>>();
-        iterator::assert_starts_with::<_, T, _, _, _, _, _>(
+        iterator::assert_starts_with::<_, T, _, _, _, _>(
             &self,
             self.actual().into_iter(),
             expected,
-            &rendered,
         );
         self
     }
@@ -184,7 +235,7 @@ where
     fn into_iter_starts_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_starts_with_matching::<_, T, _, _, _, _>(
@@ -198,7 +249,7 @@ where
     fn into_iter_starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone,
+        R: ValueRenderer<T> + Clone,
     {
         self.track_assertion();
         iterator::assert_starts_with_satisfying::<_, T, _, _, _, _>(
@@ -212,24 +263,18 @@ where
     fn into_iter_ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
         let expected = expected.as_ref();
-        let rendered = expected.iter().collect::<Vec<_>>();
-        iterator::assert_ends_with::<_, T, _, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            expected,
-            &rendered,
-        );
+        iterator::assert_ends_with::<_, T, _, _, _, _>(&self, self.actual().into_iter(), expected);
         self
     }
     #[track_caller]
     fn into_iter_ends_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_ends_with_matching::<_, T, _, _, _, _>(
@@ -243,7 +288,7 @@ where
     fn into_iter_ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone,
+        R: ValueRenderer<T> + Clone,
     {
         self.track_assertion();
         iterator::assert_ends_with_satisfying::<_, T, _, _, _, _>(
@@ -257,16 +302,14 @@ where
     fn into_iter_contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
         let expected = expected.as_ref();
-        let rendered = expected.iter().collect::<Vec<_>>();
-        iterator::assert_contains_contiguous::<_, T, _, _, _, _, _>(
+        iterator::assert_contains_contiguous::<_, T, _, _, _, _>(
             &self,
             self.actual().into_iter(),
             expected,
-            &rendered,
         );
         self
     }
@@ -274,7 +317,7 @@ where
     fn into_iter_contains_contiguous_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_contains_contiguous_matching::<_, T, _, _, _, _>(
@@ -288,7 +331,7 @@ where
     fn into_iter_contains_contiguous_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone,
+        R: ValueRenderer<T> + Clone,
     {
         self.track_assertion();
         iterator::assert_contains_contiguous_satisfying::<_, T, _, _, _, _>(
@@ -302,7 +345,7 @@ where
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + AssertionRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
         iterator::assert_does_not_contain::<_, T, _, _, _, _>(
@@ -316,7 +359,7 @@ where
     fn into_iter_does_not_contain_matching<P>(self, predicate: P) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_does_not_contain_matching::<_, T, _, _, _, _>(
@@ -330,7 +373,7 @@ where
     fn into_iter_does_not_contain_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone,
+        R: ValueRenderer<T> + Clone,
     {
         self.track_assertion();
         iterator::assert_does_not_contain_satisfying::<_, T, _, _, _, _>(
@@ -344,16 +387,14 @@ where
     fn into_iter_contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + for<'a> AssertionRenderer<Vec<&'a E>>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
         let expected = expected.as_ref();
-        let rendered = expected.iter().collect::<Vec<_>>();
-        iterator::assert_contains_exactly::<_, T, _, _, _, _, _>(
+        iterator::assert_contains_exactly::<_, T, _, _, _, _>(
             &self,
             self.actual().into_iter(),
             expected,
-            &rendered,
         );
         self
     }
@@ -361,7 +402,7 @@ where
     fn into_iter_contains_exactly_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_contains_exactly_matching::<_, T, _, _, _, _>(
@@ -375,7 +416,7 @@ where
     fn into_iter_contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone,
+        R: ValueRenderer<T> + Clone,
     {
         self.track_assertion();
         iterator::assert_contains_exactly_satisfying::<_, T, _, _, _, _>(
@@ -386,19 +427,17 @@ where
         self
     }
     #[track_caller]
-    fn into_iter_contains_exactly_in_any_order(self, expected: impl AsRef<[T]>) -> Self
+    fn into_iter_contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: PartialEq,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        T: AssertrPartialEq<E, R>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
         let expected = expected.as_ref();
-        let rendered = expected.iter().collect::<Vec<_>>();
-        iterator::assert_contains_exactly_in_any_order::<_, T, _, _, _, _>(
+        iterator::assert_contains_exactly_in_any_order::<_, T, E, _, _, _>(
             &self,
             self.actual().into_iter(),
             expected,
-            &rendered,
         );
         self
     }
@@ -409,7 +448,7 @@ where
     ) -> Self
     where
         P: Fn(&T) -> bool,
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_contains_exactly_in_any_order_matching::<_, T, _, _, _, _>(
@@ -426,7 +465,7 @@ where
     ) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: for<'a> AssertionRenderer<Vec<&'a T>> + Clone,
+        R: ValueRenderer<T> + Clone,
     {
         self.track_assertion();
         iterator::assert_contains_exactly_in_any_order_satisfying::<_, T, _, _, _, _>(
@@ -439,7 +478,7 @@ where
     #[track_caller]
     fn into_iter_is_empty(self) -> Self
     where
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_is_empty::<_, T, _, _, _>(&self, self.actual().into_iter());
@@ -448,7 +487,7 @@ where
     #[track_caller]
     fn into_iter_is_not_empty(self) -> Self
     where
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_is_not_empty::<_, T, _, _, _>(&self, self.actual().into_iter());
@@ -457,7 +496,7 @@ where
     #[track_caller]
     fn into_iter_has_length(self, expected: usize) -> Self
     where
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         iterator::assert_has_length::<_, T, _, _, _>(&self, self.actual().into_iter(), expected);
@@ -466,7 +505,7 @@ where
     #[track_caller]
     fn into_iter_iterator_is_empty(self) -> Self
     where
-        R: for<'a> AssertionRenderer<Vec<&'a T>>,
+        R: ValueRenderer<T>,
     {
         self.into_iter_is_empty()
     }
@@ -478,6 +517,12 @@ mod tests {
     mod into_iter_contains {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().into_iter_contain(2);
+        }
 
         #[test]
         fn succeeds_when_expected_is_contained() {
@@ -515,9 +560,150 @@ mod tests {
         }
     }
 
+    mod into_iter_contains_all {
+        use core::cell::Cell;
+
+        use crate::prelude::*;
+        use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().into_iter_contain_all([1, 3]);
+        }
+
+        #[test]
+        fn succeeds_when_every_expected_element_is_present() {
+            assert_that!(vec![1, 2, 3]).into_iter_contains_all([3, 1]);
+        }
+
+        #[test]
+        fn succeeds_with_vec_input() {
+            assert_that!(vec![1, 2, 3]).into_iter_contains_all(vec![3, 1]);
+        }
+
+        #[test]
+        fn ignores_duplicate_expectations_and_extra_actual_elements() {
+            assert_that!(vec![1, 2, 3]).into_iter_contains_all([1, 1, 1]);
+        }
+
+        #[test]
+        fn compiles_for_comparable_but_different_type() {
+            assert_that!(vec!["a".to_owned(), "b".to_owned()]).into_iter_contains_all(["b", "a"]);
+            assert_that!(vec!["a", "b"]).into_iter_contains_all(["b".to_owned(), "a".to_owned()]);
+        }
+
+        #[test]
+        fn panics_when_any_expected_value_is_absent() {
+            assert_that_panic_by(|| {
+                assert_that!(vec![1, 2, 3])
+                    .with_location(false)
+                    .into_iter_contains_all([2, 4]);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    does not contain all expected elements
+
+                    Expected: [
+                        2,
+                        4,
+                    ]
+
+                    Elements not found: [
+                        4,
+                    ]
+
+                    Details: [
+                        Consumed 3 element(s).,
+                    ]
+                    -------- assertr --------
+                "});
+        }
+
+        struct CountingValues {
+            values: Vec<i32>,
+            iterations: Cell<usize>,
+            yielded: Cell<usize>,
+        }
+
+        struct CountingIter<'a> {
+            values: core::slice::Iter<'a, i32>,
+            yielded: &'a Cell<usize>,
+        }
+
+        impl<'a> Iterator for CountingIter<'a> {
+            type Item = &'a i32;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                let next = self.values.next();
+                if next.is_some() {
+                    self.yielded.set(self.yielded.get() + 1);
+                }
+                next
+            }
+        }
+
+        impl<'a> IntoIterator for &'a CountingValues {
+            type Item = &'a i32;
+            type IntoIter = CountingIter<'a>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.iterations.set(self.iterations.get() + 1);
+                CountingIter {
+                    values: self.values.iter(),
+                    yielded: &self.yielded,
+                }
+            }
+        }
+
+        #[test]
+        fn creates_one_iterator_and_stops_as_soon_as_all_elements_are_found() {
+            let values = CountingValues {
+                values: vec![1, 2, 3, 4],
+                iterations: Cell::new(0),
+                yielded: Cell::new(0),
+            };
+
+            assert_that!(values).into_iter_contains_all([1, 3]);
+
+            assert_that!(values.iterations.get()).is_equal_to(1);
+            assert_that!(values.yielded.get()).is_equal_to(3);
+        }
+
+        #[test]
+        fn empty_expectation_still_creates_one_iterator_but_consumes_nothing() {
+            let values = CountingValues {
+                values: vec![1, 2, 3],
+                iterations: Cell::new(0),
+                yielded: Cell::new(0),
+            };
+
+            let expected: [i32; 0] = [];
+            assert_that!(values).into_iter_contains_all(expected);
+
+            assert_that!(values.iterations.get()).is_equal_to(1);
+            assert_that!(values.yielded.get()).is_equal_to(0);
+        }
+    }
+
     mod into_iter_contains_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_contain_matching(|it: &i32| *it % 2 == 0);
+        }
 
         #[test]
         fn succeeds_when_an_element_matches() {
@@ -553,6 +739,12 @@ mod tests {
     mod into_iter_contains_satisfying {
         use crate::prelude::*;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().into_iter_contain_satisfying(is_two);
+        }
+
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
@@ -583,6 +775,12 @@ mod tests {
     mod into_iter_does_not_contain {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().into_iter_not_contain(4);
+        }
 
         #[test]
         fn succeeds_when_expected_is_not_contained() {
@@ -625,6 +823,14 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_not_contain_matching(|it: &i32| *it > 7);
+        }
+
+        #[test]
         fn succeeds_when_no_element_matches() {
             assert_that!(vec![1, 2, 3]).into_iter_does_not_contain_matching(|it: &i32| *it > 7);
         }
@@ -644,7 +850,7 @@ mod tests {
                         2,
                     ]
 
-                    contains an element matching the predicate.
+                    unexpectedly contains an element matching the predicate.
 
                     Details: [
                         Consumed 2 element(s).,
@@ -658,6 +864,14 @@ mod tests {
     mod into_iter_does_not_contain_satisfying {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_not_contain_satisfying(is_seven);
+        }
 
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
@@ -687,7 +901,7 @@ mod tests {
                         2,
                     ]
 
-                    contains an element satisfying the assertions.
+                    unexpectedly contains an element satisfying the assertions.
 
                     Details: [
                         Consumed 2 element(s).,
@@ -701,6 +915,12 @@ mod tests {
     mod into_iter_starts_with {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().into_iter_start_with([1, 2]);
+        }
 
         #[test]
         fn succeeds_when_prefix_matches() {
@@ -744,6 +964,14 @@ mod tests {
     mod into_iter_starts_with_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_start_with_matching([is_one, is_two]);
+        }
 
         fn is_one(value: &i32) -> bool {
             *value == 1
@@ -791,6 +1019,14 @@ mod tests {
     mod into_iter_starts_with_satisfying {
         use crate::prelude::*;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_start_with_satisfying([is_one]);
+        }
+
         fn is_one(it: AssertThat<i32, Capture>) {
             it.is_equal_to(1);
         }
@@ -822,6 +1058,12 @@ mod tests {
     mod into_iter_ends_with {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().into_iter_end_with([2, 3]);
+        }
 
         #[test]
         fn succeeds_when_suffix_matches() {
@@ -865,6 +1107,14 @@ mod tests {
     mod into_iter_ends_with_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_end_with_matching([is_two, is_three]);
+        }
 
         fn is_two(value: &i32) -> bool {
             *value == 2
@@ -912,6 +1162,14 @@ mod tests {
     mod into_iter_ends_with_satisfying {
         use crate::prelude::*;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_end_with_satisfying([is_two, is_three]);
+        }
+
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
@@ -947,6 +1205,12 @@ mod tests {
     mod into_iter_contains_contiguous {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().into_iter_contain_contiguous([2, 3]);
+        }
 
         #[test]
         fn succeeds_when_a_contiguous_match_exists() {
@@ -997,6 +1261,14 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_contain_contiguous_matching([is_one, is_two]);
+        }
+
         fn is_one(value: &i32) -> bool {
             *value == 1
         }
@@ -1043,6 +1315,14 @@ mod tests {
     mod into_iter_contains_contiguous_satisfying {
         use crate::prelude::*;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_contain_contiguous_satisfying([is_two, is_three]);
+        }
+
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
@@ -1077,6 +1357,12 @@ mod tests {
     mod into_iter_contains_exactly {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().into_iter_contain_exactly([1, 2, 3]);
+        }
 
         #[test]
         fn succeeds_when_elements_match_exactly() {
@@ -1152,6 +1438,14 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3]
+                .must()
+                .into_iter_contain_exactly_matching([is_one, is_two, is_three]);
+        }
+
         fn is_one(value: &i32) -> bool {
             *value == 1
         }
@@ -1203,6 +1497,14 @@ mod tests {
     mod into_iter_contains_exactly_satisfying {
         use crate::prelude::*;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2]
+                .must()
+                .into_iter_contain_exactly_satisfying([is_one, is_two]);
+        }
+
         fn is_one(it: AssertThat<i32, Capture>) {
             it.is_equal_to(1);
         }
@@ -1235,11 +1537,38 @@ mod tests {
 
     mod into_iter_contains_exactly_in_any_order {
         use crate::prelude::*;
+        use crate::{AssertrPartialEq, EqContext};
         use indoc::formatdoc;
+
+        #[derive(Debug)]
+        struct Actual(u8);
+
+        #[derive(Debug)]
+        struct Expected(u8);
+
+        impl<R> AssertrPartialEq<Expected, R> for Actual {
+            fn eq(&self, other: &Expected, _ctx: Option<&mut EqContext<'_, R>>) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![2, 1, 1]
+                .must()
+                .into_iter_contain_exactly_in_any_order([1, 2, 1]);
+        }
 
         #[test]
         fn succeeds_when_elements_match_in_another_order() {
             assert_that!(vec![2, 1, 1]).into_iter_contains_exactly_in_any_order([1, 2, 1]);
+        }
+
+        #[test]
+        fn supports_assertr_partial_eq_without_partial_eq() {
+            assert_that!(vec![Actual(1), Actual(2)])
+                .into_iter_contains_exactly_in_any_order([Expected(2), Expected(1)]);
         }
 
         #[test]
@@ -1277,6 +1606,14 @@ mod tests {
     mod into_iter_contains_exactly_in_any_order_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2]
+                .must()
+                .into_iter_contain_exactly_in_any_order_matching([is_at_most_two, is_one]);
+        }
 
         fn is_at_most_two(value: &i32) -> bool {
             *value <= 2
@@ -1329,6 +1666,14 @@ mod tests {
     mod into_iter_contains_exactly_in_any_order_satisfying {
         use crate::prelude::*;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![-1, 1]
+                .must()
+                .into_iter_contain_exactly_in_any_order_satisfying([positive, negative]);
+        }
+
         fn positive(it: AssertThat<i32, Capture>) {
             it.is_greater_than(0);
         }
@@ -1361,6 +1706,12 @@ mod tests {
     mod into_iter_is_empty {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Vec::<i32>::new().must().into_iter_be_empty();
+        }
 
         #[test]
         fn succeeds_when_empty() {
@@ -1397,6 +1748,12 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1].must().into_iter_not_be_empty();
+        }
+
+        #[test]
         fn succeeds_when_not_empty() {
             assert_that!(vec![1]).into_iter_is_not_empty();
         }
@@ -1422,6 +1779,12 @@ mod tests {
     mod into_iter_has_length {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2].must().into_iter_have_length(2);
+        }
 
         #[test]
         fn succeeds_when_length_matches() {

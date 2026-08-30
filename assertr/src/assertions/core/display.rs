@@ -5,11 +5,16 @@ use core::fmt::Write;
 use indoc::writedoc;
 
 use crate::assertions::core::strip_quotation_marks;
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, Mode};
 
+/// Assertions over a subject's [`Display`] representation.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait DisplayAssertions {
+    /// Asserts that the subject and `expected` have the same `Display` representation.
+    ///
+    /// One leading and one trailing double quote, when present, are removed from both
+    /// representations before comparison.
     fn has_display_value(self, expected: impl Display) -> Self;
 }
 
@@ -41,6 +46,14 @@ impl<T: Display, M: Mode, R> DisplayAssertions for AssertThat<'_, T, M, R> {
 mod tests {
 
     mod has_display_value {
+        #[cfg(feature = "fluent")]
+        use crate::prelude::*;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            42.must().have_display_value(42);
+        }
 
         mod with_number {
             use crate::prelude::*;

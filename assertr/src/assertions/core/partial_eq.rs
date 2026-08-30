@@ -4,20 +4,23 @@ use alloc::vec::Vec;
 use core::fmt::Write;
 use indoc::writedoc;
 
-use crate::{AssertThat, AssertionRenderer, AssertrPartialEq, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, AssertrPartialEq, Mode, ValueRenderer};
 
+/// Equality and inequality assertions using [`AssertrPartialEq`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PartialEqAssertions<T, R> {
+    /// Asserts that the subject equals `expected`.
     fn is_equal_to<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: AssertionRenderer<T> + AssertionRenderer<E>;
+        R: ValueRenderer<T> + ValueRenderer<E>;
 
+    /// Asserts that the subject does not equal `expected`.
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: AssertionRenderer<T> + AssertionRenderer<E>;
+        R: ValueRenderer<T> + ValueRenderer<E>;
 }
 
 impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
@@ -25,7 +28,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     fn is_equal_to<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: AssertionRenderer<T> + AssertionRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
 
@@ -56,7 +59,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
         T: AssertrPartialEq<E, R>,
-        R: AssertionRenderer<T> + AssertionRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
 
@@ -67,9 +70,11 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
 
         if AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
             let mut details = Vec::new();
+            // There shouldn't be any differences here...
             if !ctx.differences.differences.is_empty() {
                 details.push(format!("Differences: {:#?}", ctx.differences));
             }
+            details.push(String::from("Values were expected to be different."));
             let actual = self.render_value(actual);
             let expected = self.render_value(expected);
             self.fail_with_details(details, |w: &mut String| {
@@ -90,6 +95,12 @@ mod tests {
         use indoc::formatdoc;
 
         use crate::prelude::*;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            "foo".must().be_equal_to("foo");
+        }
 
         #[test]
         fn succeeds_when_equal() {
@@ -126,6 +137,61 @@ mod tests {
             }
 
             assert_that!(Foo {}).is_equal_to(Bar {});
+        }
+    }
+
+    mod is_not_equal_to {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            "foo".must().not_be_equal_to("bar");
+        }
+
+        #[test]
+        fn succeeds_when_not_equal() {
+            assert_that!("foo").is_not_equal_to("bar");
+        }
+
+        #[test]
+        fn panics_when_equal() {
+            assert_that_panic_by(|| {
+                assert_that!("foo")
+                    .with_location(false)
+                    .is_not_equal_to("foo")
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expected: "foo"
+
+                      Actual: "foo"
+
+                    Details: [
+                        Values were expected to be different.,
+                    ]
+                    -------- assertr --------
+                "#});
+        }
+
+        #[test]
+        fn accepts_expected_being_of_different_type() {
+            #[derive(Debug)]
+            struct Foo {}
+
+            #[derive(Debug)]
+            struct Bar {}
+
+            impl PartialEq<Bar> for Foo {
+                fn eq(&self, _other: &Bar) -> bool {
+                    false
+                }
+            }
+
+            assert_that!(Foo {}).is_not_equal_to(Bar {});
         }
     }
 }

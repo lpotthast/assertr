@@ -1,4 +1,4 @@
-use crate::{AssertThat, PanicValue, actual::Actual, mode::Panic, tracking::AssertionTracking};
+use crate::{AssertThat, PanicValue, actual::Actual, mode::Panic};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -9,18 +9,27 @@ use indoc::writedoc;
 
 use super::boxed::BoxAssertions;
 
-/// Data-extracting assertions for `PanicValue`'s, the output of a panic occurred within an `assert_that_panic_by`.
-/// Only available in Panic mode, as the extracted type cannot be produced when the downcast fails.
+/// Downcasting assertions for [`PanicValue`] subjects.
+///
+/// These methods are available only in panic mode because a failed downcast cannot produce the
+/// requested subject type.
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait PanicValueAssertions<'t> {
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic>;
+pub trait PanicValueAssertions<'t, R = crate::DebugRenderer> {
+    /// Asserts that the panic payload has type `E` and returns an assertion over that value.
+    ///
+    /// An owned subject produces an `AssertThat<E>` owning `E`. A borrowed subject produces an
+    /// `AssertThat<E>` borrowing it.
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R>;
 
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic>;
+    /// Asserts that the panic payload has type `E` and returns an assertion over `&E`.
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
+    where
+        R: Clone;
 }
 
-impl<'t> PanicValueAssertions<'t> for AssertThat<'t, PanicValue, Panic> {
+impl<'t, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R> {
     #[track_caller]
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic> {
+    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
         self.map::<Box<dyn Any>>(|it| match it {
             Actual::Borrowed(b) => Actual::Borrowed(&b.0),
             Actual::Owned(o) => Actual::Owned(o.0),
@@ -29,12 +38,15 @@ impl<'t> PanicValueAssertions<'t> for AssertThat<'t, PanicValue, Panic> {
     }
 
     #[track_caller]
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic> {
+    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
+    where
+        R: Clone,
+    {
         self.track_assertion();
 
         let any = &self.actual().0;
         if let Some(casted) = any.downcast_ref::<E>() {
-            self.derive(|_actual| casted)
+            self.derive_owned(|_actual| casted)
         } else {
             let expected_type_name = type_name::<E>();
 
@@ -69,6 +81,14 @@ mod tests {
     mod has_type {
         use crate::{PanicValue, prelude::*};
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            let actual = PanicValue(Box::new(String::from("foo")));
+
+            actual.must().have_type::<String>();
+        }
 
         #[test]
         fn succeeds_when_type_matches() {
@@ -106,6 +126,14 @@ mod tests {
     mod has_type_ref {
         use crate::{PanicValue, prelude::*};
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            let actual = PanicValue(Box::new(String::from("foo")));
+
+            actual.must().have_type_ref::<String>();
+        }
 
         #[test]
         fn succeeds_when_type_matches() {

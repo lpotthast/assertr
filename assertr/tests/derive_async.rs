@@ -26,6 +26,6 @@ async fn is_able_to_access_derived_properties_without_breaking_the_call_chain() 
     assert_that!(person)
         .derive_async(Person::get_metadata)
         .await
-        .derive(|it| it.alive)
+        .derive(|it| &it.alive)
         .is_equal_to(true);
 }

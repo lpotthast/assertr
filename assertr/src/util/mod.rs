@@ -1,2 +1,2 @@
 pub(crate) mod failure;
-pub mod slice;
+pub(crate) mod matching;

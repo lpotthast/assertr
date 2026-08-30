@@ -38,10 +38,40 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy -p assertr --all-targets --no-default-features --locked -- -D warnings -W clippy::pedantic
+      - run: cargo clippy -p assertr --all-targets --no-default-features --features std --locked -- -D warnings -W clippy::pedantic
+      - run: cargo clippy -p assertr --all-targets --no-default-features --features num --locked -- -D warnings -W clippy::pedantic
       - run: cargo clippy -p assertr --all-targets --locked -- -D warnings -W clippy::pedantic
       - run: cargo clippy -p assertr --all-targets --all-features --locked -- -D warnings -W clippy::pedantic
       - run: cargo clippy -p assertr-derive --all-targets --locked -- -D warnings -W clippy::pedantic
       - run: cargo clippy -p assertr-no-std-tests --all-targets --locked -- -D warnings -W clippy::pedantic
+
+  # Every feature on its own: Cargo unifies features within one invocation, so an integration
+  # that silently relies on another feature is only visible when it is the only one enabled.
+  each-feature:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature:
+          - derive
+          - fluent
+          - http
+          - jiff
+          - libm
+          - num
+          - program
+          - reqwest
+          - rootcause
+          - serde
+          - serde-json
+          - serde-toml
+          - std
+          - tokio
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p assertr --all-targets --no-default-features --features ${{ matrix.feature }} --locked
 
   test:
     runs-on: ubuntu-latest
@@ -50,6 +80,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p assertr --no-default-features --locked
+      - run: cargo test -p assertr --no-default-features --features std --locked
+      - run: cargo test -p assertr --no-default-features --features num --locked
       - run: cargo test -p assertr --locked
       - run: cargo test -p assertr --all-features --locked
       - run: cargo test -p assertr-derive --locked
@@ -74,6 +106,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p assertr-no-std-tests --locked
       - run: cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf --locked
+      - run: cargo check -p assertr --lib --no-default-features --features num,libm --target thumbv8m.main-none-eabihf --locked
 
   msrv:
     runs-on: ubuntu-latest

@@ -3,7 +3,7 @@ use core::fmt::Write;
 
 use indoc::writedoc;
 
-use crate::{AssertThat, AssertionRenderer, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, Mode, ValueRenderer};
 
 /// A Rust pattern together with the predicate and source text needed to assert that it matches.
 ///
@@ -15,9 +15,7 @@ pub struct Pattern<P> {
 
 impl<P> Pattern<P> {
     /// Creates the runtime representation emitted by [`pattern!`](crate::pattern).
-    #[doc(hidden)]
-    #[must_use]
-    pub fn new(description: &'static str, predicate: P) -> Self {
+    pub(crate) fn new(description: &'static str, predicate: P) -> Self {
         Self {
             description,
             predicate,
@@ -27,7 +25,7 @@ impl<P> Pattern<P> {
 
 /// Creates a pattern for use with [`PatternAssertions`].
 ///
-/// The actual value is matched by reference, so ordinary patterns benefit from Rust's match
+/// The subject is matched by reference, so ordinary patterns benefit from Rust's match
 /// ergonomics and do not consume the assertion subject. Pattern guards are supported.
 ///
 /// ```
@@ -45,7 +43,7 @@ impl<P> Pattern<P> {
 #[macro_export]
 macro_rules! pattern {
     ($pattern:pat $(if $guard:expr)? $(,)?) => {
-        $crate::assertions::core::pattern::Pattern::new(
+        $crate::__private::new_pattern(
             ::core::stringify!($pattern $(if $guard)?),
             |actual: &_| ::core::matches!(actual, $pattern $(if $guard)?),
         )
@@ -53,27 +51,23 @@ macro_rules! pattern {
 }
 
 /// Assertions based on arbitrary Rust patterns.
+///
+/// Failure diagnostics include the pattern's source text and the subject rendered through the
+/// active [`ValueRenderer`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PatternAssertions<T, R> {
-    /// Asserts that the actual value matches `pattern`.
-    ///
-    /// The failure diagnostic includes both the pattern's source text and the actual value
-    /// rendered through the assertion's active [`AssertionRenderer`].
+    /// Asserts that the subject matches `pattern`.
     fn is_matching<P>(self, pattern: Pattern<P>) -> Self
     where
         P: FnOnce(&T) -> bool,
-        R: AssertionRenderer<T>;
+        R: ValueRenderer<T>;
 
-    /// Asserts that the actual value does not match `pattern`.
-    ///
-    /// The failure diagnostic includes both the pattern's source text and the actual value
-    /// rendered through the assertion's active [`AssertionRenderer`].
-    #[cfg_attr(feature = "fluent", fluent_alias("not_be_matching"))]
+    /// Asserts that the subject does not match `pattern`.
     fn is_not_matching<P>(self, pattern: Pattern<P>) -> Self
     where
         P: FnOnce(&T) -> bool,
-        R: AssertionRenderer<T>;
+        R: ValueRenderer<T>;
 }
 
 impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
@@ -81,7 +75,7 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
     fn is_matching<P>(self, pattern: Pattern<P>) -> Self
     where
         P: FnOnce(&T) -> bool,
-        R: AssertionRenderer<T>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
 
@@ -107,7 +101,7 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
     fn is_not_matching<P>(self, pattern: Pattern<P>) -> Self
     where
         P: FnOnce(&T) -> bool,
-        R: AssertionRenderer<T>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
 
@@ -138,6 +132,12 @@ mod tests {
         use indoc::formatdoc;
 
         use crate::prelude::*;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Some(42).must().be_matching(pattern!(Some(42)));
+        }
 
         #[derive(Debug)]
         enum TestError {
@@ -172,19 +172,13 @@ mod tests {
             )));
         }
 
-        #[cfg(feature = "fluent")]
-        #[test]
-        fn has_a_fluent_alias() {
-            assert_that!(Some(42)).is_matching(pattern!(Some(42)));
-        }
-
         #[test]
         fn borrows_the_actual_value_while_matching() {
             let actual = Some(String::from("value"));
 
             assert_that!(&actual).is_matching(pattern!(Some(value) if value == "value"));
 
-            assert_that!(actual).is_some().is_equal_to("value");
+            assert_that!(actual).get_some().is_equal_to("value");
         }
 
         #[test]
@@ -225,19 +219,21 @@ mod tests {
         fn works_in_capture_mode() {
             let failures = assert_that!(Some(42))
                 .with_location(false)
-                .with_capture()
-                .is_matching(pattern!(None))
-                .capture_failures();
+                .capture(|it| it.is_matching(pattern!(None)));
 
-            assert_that!(failures).contains_exactly([formatdoc! {r"
-                -------- assertr --------
-                Expected pattern: None
+            assert_that!(failures).contains_exactly_satisfying([
+                |it: AssertThat<AssertionFailure, Capture>| {
+                    it.has_display_value(formatdoc! {r"
+                        -------- assertr --------
+                        Expected pattern: None
 
-                          Actual: Some(
-                    42,
-                )
-                -------- assertr --------
-            "}]);
+                                  Actual: Some(
+                            42,
+                        )
+                        -------- assertr --------
+                    "});
+                },
+            ]);
         }
 
         #[test]
@@ -270,6 +266,12 @@ mod tests {
 
         use crate::prelude::*;
 
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Some(42).must().not_be_matching(pattern!(Some(43)));
+        }
+
         #[derive(Debug)]
         enum TestError {
             MissingQueryParams,
@@ -295,12 +297,6 @@ mod tests {
             ));
         }
 
-        #[cfg(feature = "fluent")]
-        #[test]
-        fn has_a_fluent_alias() {
-            assert_that!(Some(42)).is_not_matching(pattern!(Some(43)));
-        }
-
         #[test]
         fn panics_with_the_unexpected_pattern_and_rendered_actual_value() {
             assert_that_panic_by(|| {
@@ -324,19 +320,21 @@ mod tests {
         fn works_in_capture_mode() {
             let failures = assert_that!(Some(42))
                 .with_location(false)
-                .with_capture()
-                .is_not_matching(pattern!(Some(42)))
-                .capture_failures();
+                .capture(|it| it.is_not_matching(pattern!(Some(42))));
 
-            assert_that!(failures).contains_exactly([formatdoc! {r"
-                -------- assertr --------
-                Unexpected pattern: Some(42)
+            assert_that!(failures).contains_exactly_satisfying([
+                |it: AssertThat<AssertionFailure, Capture>| {
+                    it.has_display_value(formatdoc! {r"
+                        -------- assertr --------
+                        Unexpected pattern: Some(42)
 
-                          Actual: Some(
-                    42,
-                )
-                -------- assertr --------
-            "}]);
+                                  Actual: Some(
+                            42,
+                        )
+                        -------- assertr --------
+                    "});
+                },
+            ]);
         }
 
         #[test]

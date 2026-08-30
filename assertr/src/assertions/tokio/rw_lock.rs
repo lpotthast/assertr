@@ -1,47 +1,54 @@
-use crate::{AssertThat, AssertionRenderer, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, Mode, ValueRenderer};
 use alloc::string::String;
 use core::fmt::Write;
 use indoc::writedoc;
 use tokio::sync::RwLock;
 
-/// Assertions for tokio's [`RwLock`] type.
+/// Non-blocking assertions for Tokio's [`RwLock`] type.
+///
+/// State is inferred from immediate `try_read` and `try_write` attempts. Queued waiters and a
+/// configured reader limit can affect those attempts, so these methods report acquisition state,
+/// not a synchronized count of guards.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait TokioRwLockAssertions<T, R> {
-    #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
+    /// Asserts that `try_write` can acquire the lock.
     fn is_not_locked(self) -> Self
     where
-        R: AssertionRenderer<RwLock<T>>;
+        R: ValueRenderer<T>;
 
+    /// Alias of [`TokioRwLockAssertions::is_not_locked`].
     fn is_free(self) -> Self
     where
         Self: Sized,
-        R: AssertionRenderer<RwLock<T>>,
+        R: ValueRenderer<T>,
     {
         self.is_not_locked()
     }
 
+    /// Asserts that `try_write` fails while `try_read` succeeds.
     fn is_read_locked(self) -> Self
     where
-        R: AssertionRenderer<RwLock<T>>;
+        R: ValueRenderer<T>;
 
+    /// Asserts that both `try_write` and `try_read` fail.
     fn is_write_locked(self) -> Self
     where
-        R: AssertionRenderer<RwLock<T>>;
+        R: ValueRenderer<T>;
 }
 
 impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M, R> {
     #[track_caller]
     fn is_not_locked(self) -> Self
     where
-        R: AssertionRenderer<RwLock<T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         if self.actual().try_write().is_err() {
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_err() {
                 // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                let actual = self.render_value(self.actual());
+                let actual = Self::render_unavailable_struct_field("RwLock", "data", "<locked>");
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -52,7 +59,11 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                     "}
                 });
             } else {
-                let actual = self.render_value(self.actual());
+                let value = self
+                    .actual()
+                    .try_read()
+                    .expect("the lock-state check already succeeded");
+                let actual = self.render_struct_field("RwLock", "data", &*value);
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -70,12 +81,16 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
     #[track_caller]
     fn is_read_locked(self) -> Self
     where
-        R: AssertionRenderer<RwLock<T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         if self.actual().try_write().is_ok() {
             // Can be locked for writing, must have zero locks than!
-            let actual = self.render_value(self.actual());
+            let value = self
+                .actual()
+                .try_read()
+                .expect("the lock-state check already succeeded");
+            let actual = self.render_struct_field("RwLock", "data", &*value);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:?}
@@ -89,7 +104,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_err() {
                 // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                let actual = self.render_value(self.actual());
+                let actual = Self::render_unavailable_struct_field("RwLock", "data", "<locked>");
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -107,12 +122,16 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
     #[track_caller]
     fn is_write_locked(self) -> Self
     where
-        R: AssertionRenderer<RwLock<T>>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         if self.actual().try_write().is_ok() {
             // Can be locked for writing, must have zero locks than!
-            let actual = self.render_value(self.actual());
+            let value = self
+                .actual()
+                .try_read()
+                .expect("the lock-state check already succeeded");
+            let actual = self.render_struct_field("RwLock", "data", &*value);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:?}
@@ -124,7 +143,11 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_ok() {
                 // RwLock allows multiple readers, and we can read again, so existing lock must be read-lock!
-                let actual = self.render_value(self.actual());
+                let value = self
+                    .actual()
+                    .try_read()
+                    .expect("the lock-state check already succeeded");
+                let actual = self.render_struct_field("RwLock", "data", &*value);
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -146,6 +169,12 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            RwLock::new(42).must().not_be_locked();
+        }
 
         #[test]
         fn succeeds_when_not_locked() {
@@ -194,10 +223,34 @@ mod tests {
         }
     }
 
+    /// Synonym of `is_not_locked`. Only the fluent name is pinned here. The behavior is covered by
+    /// that module.
+    mod is_free {
+        #[cfg(feature = "fluent")]
+        use crate::prelude::*;
+        #[cfg(feature = "fluent")]
+        use tokio::sync::RwLock;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            RwLock::new(42).must().be_free();
+        }
+    }
+
     mod is_read_locked {
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
+
+        #[tokio::test]
+        #[cfg(feature = "fluent")]
+        async fn fluent_alias_is_as_expected() {
+            let rw_lock = RwLock::new(42);
+            let rw_lock_read_guard = rw_lock.read().await;
+            rw_lock.must().be_read_locked();
+            drop(rw_lock_read_guard);
+        }
 
         #[tokio::test]
         async fn succeeds_when_read_locked() {
@@ -249,6 +302,15 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
+
+        #[tokio::test]
+        #[cfg(feature = "fluent")]
+        async fn fluent_alias_is_as_expected() {
+            let rw_lock = RwLock::new(42);
+            let rw_lock_write_guard = rw_lock.write().await;
+            rw_lock.must().be_write_locked();
+            drop(rw_lock_write_guard);
+        }
 
         #[tokio::test]
         async fn succeeds_when_write_locked() {

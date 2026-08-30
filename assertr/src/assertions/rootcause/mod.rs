@@ -1,3 +1,6 @@
+//! Assertions and length adapters for `rootcause` reports and report collections.
+
+/// Assertions and extraction for reports.
 pub mod report;
 
 use crate::assertions::HasLength;
@@ -44,6 +47,7 @@ impl<T> HasLength for &ReportAttachments<T> {
     }
 }
 
+/// Rootcause assertion traits.
 pub mod prelude {
     pub use super::report::RootcauseDynamicReportAssertions;
     pub use super::report::RootcauseDynamicReportExtractAssertions;

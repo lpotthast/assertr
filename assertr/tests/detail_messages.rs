@@ -14,20 +14,21 @@ fn assertion_details_are_scoped_to_the_failure_that_produced_them() {
 
     let failures = assert_that!(VecDeque::from([1, 2, 3]))
         .with_location(false)
-        .with_capture()
-        .contains_exactly_in_any_order_matching([
-            |it: &i32| *it == 1,
-            |it: &i32| *it == 2,
-            |it: &i32| *it == 9,
-        ])
-        .contains(42)
-        .capture_failures();
+        .capture(|it| {
+            it.contains_exactly_in_any_order_matching([
+                |it: &i32| *it == 1,
+                |it: &i32| *it == 2,
+                |it: &i32| *it == 9,
+            ])
+            .contains(42)
+        });
 
     assert_that!(&failures).has_length(2);
-    assert_that!(failures[0].as_str()).contains("Elements not matched:");
-    assert_that!(failures[1].as_str())
-        .contains("does not contain expected: 42")
-        .does_not_contain("Elements not matched:");
+    assert_that!(failures[0].details.as_slice())
+        .contains_matching(|it: &String| it.contains("Elements not matched:"));
+    assert_that!(&failures[1].description).contains("does not contain expected: 42");
+    assert_that!(failures[1].details.as_slice())
+        .does_not_contain_matching(|it: &String| it.contains("Elements not matched:"));
 }
 
 #[cfg(feature = "derive")]
@@ -40,36 +41,36 @@ fn equality_differences_are_scoped_to_the_failure_that_produced_them() {
 
     let failures = assert_that!(Data { age: 30 })
         .with_location(false)
-        .with_capture()
-        .is_equal_to(DataAssertrEq { age: eq(31) })
-        .is_equal_to(DataAssertrEq { age: eq(32) })
-        .capture_failures();
+        .capture(|it| {
+            it.is_equal_to(DataAssertrEq { age: eq(31) })
+                .is_equal_to(DataAssertrEq { age: eq(32) })
+        });
 
     assert_that!(&failures).has_length(2);
-    assert_that!(failures[0].as_str()).contains(r#""age": expected 31, but was 30"#);
-    assert_that!(failures[1].as_str())
+    assert_that!(failures[0].to_string().as_str()).contains(r#""age": expected 31, but was 30"#);
+    assert_that!(failures[1].to_string().as_str())
         .contains(r#""age": expected 32, but was 30"#)
         .does_not_contain("expected 31");
 }
 
 #[test]
-fn test() {
+fn detail_messages_are_scoped_to_the_assertion_that_adds_them() {
     let failures = assert_that!(Person { age: 42 })
         .with_location(false)
-        .with_capture()
         .with_detail_message("Checking person...")
-        .is_equal_to(Person { age: 30 })
-        .satisfies(
-            |p| p.age,
-            |age| {
-                age.with_detail_message("Checking age...")
-                    .is_greater_than(9000);
-            },
-        )
-        .capture_failures();
+        .capture(|it| {
+            it.is_equal_to(Person { age: 30 }).satisfies(
+                |p| &p.age,
+                |age| {
+                    age.with_detail_message("Checking age...")
+                        .is_greater_than(9000);
+                },
+            )
+        });
 
-    assert_that!(failures).contains_exactly::<String>([
-        formatdoc! {r"
+    assert_that!(failures).contains_exactly_satisfying([
+        |it: AssertThat<AssertionFailure, Capture>| {
+            it.has_display_value(formatdoc! {r"
                 -------- assertr --------
                 Expected: Person {{
                     age: 30,
@@ -83,8 +84,10 @@ fn test() {
                     Checking person...,
                 ]
                 -------- assertr --------
-            "},
-        formatdoc! {r"
+            "});
+        },
+        |it: AssertThat<AssertionFailure, Capture>| {
+            it.has_display_value(formatdoc! {r"
                 -------- assertr --------
                 Actual: 42
 
@@ -97,6 +100,7 @@ fn test() {
                     Checking person...,
                 ]
                 -------- assertr --------
-            "},
+            "});
+        },
     ]);
 }

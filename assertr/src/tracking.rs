@@ -1,6 +1,11 @@
 use crate::{AssertThat, prelude::Mode};
 
-pub(crate) struct NumberOfAssertions(usize);
+/// Counts the assertions performed on an assertion chain.
+///
+/// [`AssertThat::capture`] uses the count to reject capture closures that perform no assertions.
+/// In panic mode, unused assertion contexts are caught at compile time instead, by the
+/// `#[must_use]` annotations on the entry points.
+pub(crate) struct NumberOfAssertions(pub(crate) usize);
 
 impl NumberOfAssertions {
     pub(crate) const fn new() -> Self {
@@ -8,32 +13,49 @@ impl NumberOfAssertions {
     }
 }
 
-impl Drop for NumberOfAssertions {
-    fn drop(&mut self) {
-        if crate::enforce_drop_contracts() {
-            assert!(
-                self.0 != 0,
-                "An AssertThat was dropped without performing any actual assertions on it!"
-            );
-        }
-    }
-}
+impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
+    /// Records that one assertion was performed on this chain.
+    ///
+    /// Every assertion method must call this as its first statement, whether it ends up passing
+    /// or failing. [`AssertThat::capture`] and the fluent `verify` use the count to reject a
+    /// closure that performed no assertions at all, so an assertion that forgets to
+    /// track makes a passing capture closure panic as if it had been empty.
+    ///
+    /// A hand-written leaf assertion calls this before using [`AssertThat::fail`] or
+    /// [`AssertThat::fail_with_details`]. Assertions built by composing existing ones (through
+    /// [`AssertThat::satisfies`] and friends) are tracked by the assertions they delegate to and
+    /// must not call this in addition. See [custom assertions](crate#custom-assertions) for how to
+    /// shape the trait around either kind of method.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// trait EvenAssertions {
+    ///     fn is_even(self) -> Self;
+    /// }
+    ///
+    /// impl<M: Mode, R> EvenAssertions for AssertThat<'_, u32, M, R> {
+    ///     #[track_caller]
+    ///     fn is_even(self) -> Self {
+    ///         self.track_assertion();
+    ///         let actual = *self.actual();
+    ///         if actual % 2 != 0 {
+    ///             self.fail(format_args!("Expected {actual} to be even, but it is odd!"));
+    ///         }
+    ///         self
+    ///     }
+    /// }
+    ///
+    /// assert_that!(42).is_even();
+    /// ```
+    ///
+    pub fn track_assertion(&self) {
+        self.state.number_of_assertions.borrow_mut().0 += 1;
 
-pub(crate) trait AssertionTracking {
-    fn track_assertion(&self);
-}
-
-impl<T, M: Mode, R> AssertionTracking for AssertThat<'_, T, M, R> {
-    /// Track that a single assertion was made / is about to be checked.
-    fn track_assertion(&self) {
-        self.number_of_assertions.borrow_mut().0 += 1;
-
-        // If we don't propagate to our parent that an assertion was made, we could drop a parent
-        // `AssertThat` value, which was only used to derive another `AssertThat` on which then
-        // assertions were made.
-        // We would unexpectedly panic because we think nothing was asserted.
-        if let Some(parent) = self.parent {
-            parent.track_assertion();
+        // Propagate to the parent, so that assertions made on a derived assertion also count
+        // for the chain it was derived from.
+        if let Some(parent) = self.state.parent {
+            parent.track_assertion_on_chain();
         }
     }
 }
@@ -43,24 +65,11 @@ mod tests {
     use crate::prelude::*;
 
     #[test]
-    #[cfg(feature = "std")]
-    fn panics_on_drop_when_no_assertions_were_made() {
-        assert_that_panic_by(|| assert_that!(42).with_location(false))
-            .has_type::<&str>()
-            .is_equal_to(
-                "An AssertThat was dropped without performing any actual assertions on it!",
-            );
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "std")]
-    async fn panics_on_drop_when_no_assertions_were_made_async() {
-        assert_that_panic_by_async(async || assert_that!(42).with_location(false))
-            .await
-            .has_type::<&str>()
-            .is_equal_to(
-                "An AssertThat was dropped without performing any actual assertions on it!",
-            );
+    fn dropping_an_unused_assertion_does_not_panic() {
+        let result = std::panic::catch_unwind(|| {
+            let _unused = assert_that!(42).with_location(false);
+        });
+        assert_that!(result.is_ok()).is_true();
     }
 
     #[test]
@@ -77,11 +86,11 @@ mod tests {
     fn number_of_assertions_are_tracked() {
         let initial_assertions = assert_that!(42).is_equal_to(42).is_not_equal_to(43);
 
-        assert_that!(initial_assertions.number_of_assertions.borrow().0).is_equal_to(2);
+        assert_that!(initial_assertions.state.number_of_assertions.borrow().0).is_equal_to(2);
 
-        let derived_assertions = initial_assertions.derive(|it| it * 2).is_equal_to(84);
+        let derived_assertions = initial_assertions.derive_owned(|it| it * 2).is_equal_to(84);
 
-        assert_that!(initial_assertions.number_of_assertions.borrow().0).is_equal_to(3);
-        assert_that!(derived_assertions.number_of_assertions.borrow().0).is_equal_to(1);
+        assert_that!(initial_assertions.state.number_of_assertions.borrow().0).is_equal_to(3);
+        assert_that!(derived_assertions.state.number_of_assertions.borrow().0).is_equal_to(1);
     }
 }

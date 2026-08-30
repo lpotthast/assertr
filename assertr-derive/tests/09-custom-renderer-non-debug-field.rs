@@ -17,13 +17,13 @@ pub struct Subject {
 #[derive(Clone, Copy)]
 struct Renderer;
 
-impl AssertionRenderer<Subject> for Renderer {
+impl ValueRenderer<Subject> for Renderer {
     fn fmt(&self, value: &Subject, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_fmt(format_args!("Subject({})", value.hidden.0))
     }
 }
 
-impl AssertionRenderer<SubjectAssertrEq> for Renderer {
+impl ValueRenderer<SubjectAssertrEq> for Renderer {
     fn fmt(
         &self,
         _value: &SubjectAssertrEq,
@@ -33,7 +33,7 @@ impl AssertionRenderer<SubjectAssertrEq> for Renderer {
     }
 }
 
-impl AssertionRenderer<NonDebug> for Renderer {
+impl ValueRenderer<NonDebug> for Renderer {
     fn fmt(&self, value: &NonDebug, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_fmt(format_args!("Hidden({})", value.0))
     }

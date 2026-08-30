@@ -16,19 +16,19 @@ pub struct Foo {
     secret: Secret,
 }
 
-impl AssertionRenderer<Foo> for Renderer {
+impl ValueRenderer<Foo> for Renderer {
     fn fmt(&self, _value: &Foo, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("Foo(..)")
     }
 }
 
-impl AssertionRenderer<FooAssertrEq> for Renderer {
+impl ValueRenderer<FooAssertrEq> for Renderer {
     fn fmt(&self, _value: &FooAssertrEq, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("FooAssertrEq(..)")
     }
 }
 
-impl AssertionRenderer<i32> for Renderer {
+impl ValueRenderer<i32> for Renderer {
     fn fmt(&self, value: &i32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(value, f)
     }

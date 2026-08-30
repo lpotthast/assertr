@@ -9,9 +9,9 @@ use quote::quote;
 use syn::{ItemTrait, TraitItem};
 
 use self::{
-    attributes::{fluent_alias_name, has_attribute, is_helper_attribute},
+    attributes::{fluent_alias_name, has_attribute, remove_helper_attributes},
     generate::generate_alias,
-    naming::automatic_alias,
+    naming::{AutomaticAlias, automatic_alias},
 };
 
 /// Adds fluent aliases to eligible trait methods and removes the helper attributes consumed by
@@ -27,9 +27,11 @@ pub(super) fn fluent_aliases_impl(mut trait_definition: ItemTrait) -> TokenStrea
                 continue;
             }
 
-            let alias = fluent_alias_name(&method.attrs)
-                .or_else(|| automatic_alias(&method.sig.ident.to_string()));
-            if let Some(alias) = alias {
+            let alias = fluent_alias_name(&method.attrs).map_or_else(
+                || automatic_alias(&method.sig.ident.to_string()),
+                AutomaticAlias::Generated,
+            );
+            if let AutomaticAlias::Generated(alias) = alias {
                 items.push(TraitItem::Fn(generate_alias(method, &alias)));
             }
         }
@@ -38,9 +40,7 @@ pub(super) fn fluent_aliases_impl(mut trait_definition: ItemTrait) -> TokenStrea
     trait_definition.items = items;
     for item in &mut trait_definition.items {
         if let TraitItem::Fn(method) = item {
-            method
-                .attrs
-                .retain(|attribute| !is_helper_attribute(attribute));
+            remove_helper_attributes(&mut method.attrs);
         }
     }
 

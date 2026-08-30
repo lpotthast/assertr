@@ -1,36 +1,38 @@
-use crate::{AssertionRenderer, AssertrPartialEq, EqContext};
+use crate::{AssertrPartialEq, EqContext, ValueRenderer, assertions::collection::CollectionStyle};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
 /// Bound helper for `#[assertr_eq(compare_with = "::assertr::cmp::slice::compare")]`.
 ///
-/// This trait means an actual slice element can be compared with an expected slice element while
-/// both can be rendered by the active assertion renderer. Users normally only name this trait in
+/// An actual slice element implements this trait when it can be compared with an expected element
+/// and both can be rendered by the active renderer. Name it in
 /// `#[assertr_eq(compare_bounds = "...")]`.
 pub trait CompareElement<Expected, R>: AssertrPartialEq<Expected, R> {
+    /// Renders actual elements as a list with the context's renderer.
     fn render_actual_values(ctx: &EqContext<'_, R>, values: &[&Self]) -> String;
 
+    /// Renders expected elements as a list with the context's renderer.
     fn render_expected_values(ctx: &EqContext<'_, R>, values: &[&Expected]) -> String;
 }
 
 impl<Actual, Expected, R> CompareElement<Expected, R> for Actual
 where
     Actual: AssertrPartialEq<Expected, R>,
-    R: AssertionRenderer<Actual> + AssertionRenderer<Expected>,
+    R: ValueRenderer<Actual> + ValueRenderer<Expected>,
 {
     fn render_actual_values(ctx: &EqContext<'_, R>, values: &[&Self]) -> String {
-        format!("{:#?}", ctx.render_values(values))
+        format!("{:#?}", ctx.render_values(values, CollectionStyle::List))
     }
 
     fn render_expected_values(ctx: &EqContext<'_, R>, values: &[&Expected]) -> String {
-        format!("{:#?}", ctx.render_values(values))
+        format!("{:#?}", ctx.render_values(values, CollectionStyle::List))
     }
 }
 
-/// `PartialEq` like comparison on slices, but with an `EqContext`, tracking human-readable differences.
+/// Compares slices element by element and records differences in an optional [`EqContext`].
 ///
-/// This function is supposed to be used when deriving `AssertrEq` and having a slice-like type:
+/// Use it as the `compare_with` function for a slice-like field of an `AssertrEq` type:
 /// ```
 /// # #[cfg(feature = "derive")]
 /// # mod example {
@@ -54,6 +56,7 @@ where
 /// }
 /// # }
 /// ```
+///
 pub fn compare<V1, V2, R>(
     slice1: &[V1],
     slice2: &[V2],
@@ -62,7 +65,8 @@ pub fn compare<V1, V2, R>(
 where
     V1: CompareElement<V2, R>,
 {
-    let cmp_result = crate::assertions::collection::compare(slice1, slice2, ctx.as_deref_mut());
+    let cmp_result =
+        crate::assertions::collection::imp::compare(slice1, slice2, ctx.as_deref_mut());
 
     if let Some(ctx) = ctx
         && !cmp_result.strictly_equal
@@ -210,13 +214,13 @@ mod test {
 
         struct Renderer;
 
-        impl AssertionRenderer<Actual> for Renderer {
+        impl ValueRenderer<Actual> for Renderer {
             fn fmt(&self, value: &Actual, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 f.write_fmt(format_args!("Actual({})", value.0))
             }
         }
 
-        impl AssertionRenderer<Expected> for Renderer {
+        impl ValueRenderer<Expected> for Renderer {
             fn fmt(&self, value: &Expected, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 f.write_fmt(format_args!("Expected({})", value.0))
             }
@@ -245,7 +249,7 @@ mod test {
 
         struct Renderer;
 
-        impl AssertionRenderer<Value> for Renderer {
+        impl ValueRenderer<Value> for Renderer {
             fn fmt(&self, value: &Value, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 f.write_fmt(format_args!("Value({})", value.0))
             }

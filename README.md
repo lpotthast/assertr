@@ -3,815 +3,189 @@
 [![Crates.io](https://img.shields.io/crates/v/assertr.svg)](https://crates.io/crates/assertr)
 [![Docs.rs](https://docs.rs/assertr/badge.svg)](https://docs.rs/assertr)
 [![CI](https://github.com/lpotthast/assertr/actions/workflows/ci.yml/badge.svg)](https://github.com/lpotthast/assertr/actions/workflows/ci.yml)
-[![MSRV](https://img.shields.io/badge/MSRV-1.89.0-blue.svg)](https://github.com/lpotthast/assertr/blob/main/Cargo.toml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.89.0-blue.svg)](https://github.com/lpotthast/assertr/blob/main/assertr/Cargo.toml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/assertr.svg)](#license)
 
-A fluent assertion library for Rust that enables clear, readable test code with detailed failure messages that help
-pinpoint issues quickly.
+Assertr is a fluent assertion library for Rust. Assertions are methods on the subject, so a chain reads as a statement
+about one value and autocomplete lists only the assertions available for its type. A failure shows the subject, the
+expectation, and the relation that did not hold. Assertr supports `std` and `no_std` builds.
 
-## Features
+```rust
+use assertr::prelude::*;
 
-- 🔗 **Fluent API**: Chain multiple assertions for improved readability. Fluent assertions provide better IDE support
-  through method chaining. The IDE can show you exactly what assertions are available for your specific type, making it
-  hard to write invalid assertions and easier to discover available checks.
-- 🎯 **Type-specific Assertions**: Specialized checks for many Rust types, plus broad generic coverage.
-- 📝 **Detailed Error Messages**: Clear, context-rich failure messages. Any assertion can extend the context with
-  additional descriptive output.
-- 🔄 **Capture Mode**: Collect assertion failures for manual inspection instead of immediately panicking.
-- 🛠 **Extensible**: Easily add custom assertions for your own types.
-- ⚡ **Derive Macros**: Perform partial struct assertions with the help of the `#[derive(AssertrEq)]` macro.
+assert_that!("hello, world!")
+    .starts_with("hello")
+    .ends_with("!");
+```
+
+Change the `"!"` to `"?"` and the test fails with:
+
+```text
+-------- assertr --------
+Assertion failed at tests/greeting.rs:5:6
+
+Actual: "hello, world!"
+
+does not end with
+
+Expected: "?"
+-------- assertr --------
+```
+
+## Why a fluent API
+
+The subject comes first. This distinguishes it from the expected value, and one chain replaces one `assert!` per
+assertion:
+
+```rust
+let vec = vec![1, 2, 3];
+assert_eq!(vec.len(), 3);
+assert!(vec.contains(&2));
+```
+
+becomes
+
+```rust
+use assertr::prelude::*;
+
+let vec = vec![1, 2, 3];
+assert_that!(vec).has_length(3).contains(2);
+```
 
 ## Installation
 
-### Default setup
-
 ```toml
 [dependencies]
-assertr = "0.6.2"
+assertr = "0.7.0"
 ```
 
-### Cargo features
+The default features are `std` and `num`. Everything else is opt-in:
 
-Available individual features and feature groups:
-
-| feature   | description                                                           | default feature |
-|-----------|-----------------------------------------------------------------------|-----------------|
-| std       | Assertions for types from the standard library.                       | yes             |
-| derive    | Enables the `AssertrEq` derive macro.                                 | no              |
-| fluent    | Enables `.must()` / `.verify()` entry points and fluent aliases.      | no              |
-| num       | Assertions for numeric types.                                         | yes             |
-| libm      | Use fallback implementations for Rust's float math functions in core. | no              |
-| serde     | Assertions for serializable types (supporting json and toml).         | no              |
-| jiff      | Assertions for types from the `jiff` crate.                           | no              |
-| http      | Assertions for types from the `http` crate.                           | no              |
-| tokio     | Assertions for types from the `tokio` crate.                          | no              |
-| reqwest   | Assertions for types from the `reqwest` crate.                        | no              |
-| rootcause | Assertions for types from the `rootcause` crate.                      | no              |
-| program   | Assertions for the provided `Program` type.                           | no              |
-
-| feature-group | description                                                          |
-|---------------|----------------------------------------------------------------------|
-| default       | Small set of features, enabling support for `std` types and numbers. |
-| full          | Enables all features listed above.                                   |
-
-All optional features are additive.
+| feature                                                    | enables                                                                             |
+|------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| `std`                                                      | Assertions for standard library types (`HashMap`, `Path`, `Command`, `Mutex`, ...). |
+| `num`                                                      | Assertions for numeric types (`is_zero`, `is_positive`, `is_close_to`, ...).        |
+| `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
+| `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
+| `derive`                                                   | The `AssertrEq` derive macro for partial equality assertions.                       |
+| `serde-json`                                               | `json()` and `as_json()` conversions.                                               |
+| `serde-toml`                                               | `toml()` and `as_toml()` conversions.                                               |
+| `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
+| `program`                                                  | Assertions that resolve an executable name or path.                                 |
+| `http`, `jiff`, `reqwest`, `rootcause`, `tokio`            | Assertions for the types of the crate of the same name.                             |
+| `full`                                                     | All of the above.                                                                   |
 
 ### no_std
 
-Disable the default features in `no_std` environments:
-
-```toml
-[dependencies]
-assertr = { version = "0.6.2", default-features = false }
-```
-
-If you still want numeric assertions in `no_std`, enable `num`. For floating-point classification helpers such as
-`is_nan()`, `is_finite()`, or `is_infinite()` without `std`, also enable `libm`.
-
-Without `std`, Assertr cannot detect whether the current thread is already unwinding. Panic-on-drop checks for unused or
-uncaptured assertion chains are therefore disabled in this configuration; assertion failures themselves retain their
-normal behavior.
+Disable the default features. `derive`, `fluent`, `num`, `libm`, and `rootcause` support embedded `no_std` targets.
+The `http` feature leaves Assertr in `no_std` mode but currently requires a hosted target through its dependencies.
+Every other feature enables `std`. Add `libm` next to `num` if numeric assertions need floating-point
+classifications. `libm` does not enable `num` by itself.
 
 ## Quick start
 
-Always prefer importing the entire prelude:
+Import the prelude. It brings the enabled assertion traits into scope, so autocomplete lists the methods available for
+the subject:
 
 ```rust
 use assertr::prelude::*;
 
-#[test]
-fn test() {
-    assert_that!("hello, world!")
-        .starts_with("hello")
-        .ends_with("!");
-}
+assert_that!("42".parse::<i32>()).is_ok_satisfying(|value| {
+    value.is_greater_than(0).is_less_than(100);
+});
 ```
 
-This gives you full IDE autocomplete for the assertions available on the current subject type.
-
-If the `fluent` feature is enabled, you can also enter assertion contexts directly from values:
+`assert_that!(value)` borrows its input. Named values stay usable after the assertion, and temporaries live until the
+end of the enclosing statement. The few assertions that consume their subject, such as `panics()` on a closure or
+terminal iterator assertions, need `assert_that_owned!(value)`, which takes ownership instead:
 
 ```rust
 use assertr::prelude::*;
 
-#[test]
-fn test() {
-    "hello, world!"
-        .must()
-        .start_with("hello")
-        .end_with("!");
-
-    let failures = 3
-        .verify()
-        .be_equal_to(4)
-        .capture_failures();
-
-    assert_that!(failures).have_length(1);
-}
+assert_that_owned!((1..=3).map(|n| n * n)).contains_exactly([1, 4, 9]);
 ```
 
-## Available Assertions
-
-This table is meant as a reference. In day-to-day use, `use assertr::prelude::*;` plus IDE autocomplete is usually the
-fastest way to discover what is available.
-
-Roughly, the table is grouped like this:
-
-- Core assertions and collection/string helpers first
-- `std` assertions next
-- Optional integrations (`http`, `tokio`, `reqwest`, `program`, `rootcause`, `jiff`) last
-
-Iterator assertions stream and keep at most the last 16 consumed elements for diagnostics. Methods on
-`I: Iterator` are terminal: they consume enough of the iterator to decide, drop its remainder, and return an assertion
-over `()`. The `into_iter_*` methods are chainable and create exactly one fresh borrowed iterator per assertion.
-Positive membership, prefix, and contiguous assertions can succeed on potentially unbounded iterators; a match that
-never occurs cannot terminate. Non-empty suffix checks and successful negative membership checks must reach the end.
-Exact positional checks use at most `expected.len() + 1` calls to `next()`, while unordered exact checks buffer at most
-that many elements. `ExactSizeIteratorAssertions` inspect the exact remaining count through `len()` without advancing.
-
-| type / required bounds                    | assertion                                                        | note                                                                                                                                                | required features |
-|-------------------------------------------|------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
-| `T: PartialEq`                            | `is_equal_to(expected)`                                          |                                                                                                                                                     |                   |
-| `T: PartialEq`                            | `is_not_equal_to(expected)`                                      |                                                                                                                                                     |                   |
-| `T: PartialOrd<E>`                        | `is_less_than(expected)`                                         |                                                                                                                                                     |                   |
-| `T: PartialOrd<E>`                        | `is_greater_than(expected)`                                      |                                                                                                                                                     |                   |
-| `T: PartialOrd<E>`                        | `is_less_or_equal_to(expected)`                                  |                                                                                                                                                     |                   |
-| `T: PartialOrd<E>`                        | `is_greater_or_equal_to(expected)`                               |                                                                                                                                                     |                   |
-| `bool`                                    | `is_true()`                                                      |                                                                                                                                                     |                   |
-| `bool`                                    | `is_false()`                                                     |                                                                                                                                                     |                   |
-| `char`                                    | `is_equal_to_ignoring_ascii_case(expected)`                      |                                                                                                                                                     |                   |
-| `char`                                    | `is_lowercase()`                                                 |                                                                                                                                                     |                   |
-| `char`                                    | `is_uppercase()`                                                 |                                                                                                                                                     |                   |
-| `char`                                    | `is_ascii_lowercase()`                                           |                                                                                                                                                     |                   |
-| `char`                                    | `is_ascii_uppercase()`                                           |                                                                                                                                                     |                   |
-| `&str`                                    | `is_blank()`                                                     |                                                                                                                                                     |                   |
-| `&str`                                    | `is_not_blank()`                                                 |                                                                                                                                                     |                   |
-| `&str`                                    | `is_blank_ascii()`                                               |                                                                                                                                                     |                   |
-| `&str`                                    | `is_equal_to_ignoring_ascii_case(expected)`                      |                                                                                                                                                     |                   |
-| `&str`                                    | `contains(expected)`                                             |                                                                                                                                                     |                   |
-| `&str`                                    | `does_not_contain(unexpected)`                                   |                                                                                                                                                     |                   |
-| `&str`                                    | `starts_with(expected)`                                          |                                                                                                                                                     |                   |
-| `&str`                                    | `does_not_start_with(unexpected)`                                |                                                                                                                                                     |                   |
-| `&str`                                    | `ends_with(expected)`                                            |                                                                                                                                                     |                   |
-| `&str`                                    | `does_not_end_with(unexpected)`                                  |                                                                                                                                                     |                   |
-| `String`                                  | `is_not_blank()`                                                 |                                                                                                                                                     |                   |
-| `String`                                  | `is_equal_to_ignoring_ascii_case(expected)`                      |                                                                                                                                                     |                   |
-| `String`                                  | `contains(expected)`                                             |                                                                                                                                                     |                   |
-| `String`                                  | `does_not_contain(unexpected)`                                   |                                                                                                                                                     |                   |
-| `String`                                  | `starts_with(expected)`                                          |                                                                                                                                                     |                   |
-| `String`                                  | `does_not_start_with(unexpected)`                                |                                                                                                                                                     |                   |
-| `String`                                  | `ends_with(expected)`                                            |                                                                                                                                                     |                   |
-| `String`                                  | `does_not_end_with(unexpected)`                                  |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains(expected)`                                             |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_matching(predicate)`                                   |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_satisfying(assertions)`                                |                                                                                                                                                     |                   |
-| `&[T]`                                    | `does_not_contain(not_expected)`                                 |                                                                                                                                                     |                   |
-| `&[T]`                                    | `does_not_contain_matching(predicate)`                           |                                                                                                                                                     |                   |
-| `&[T]`                                    | `does_not_contain_satisfying(assertions)`                        |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_exactly(expected)`                                     |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_exactly_matching(expected)`                            |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_exactly_satisfying(assertions)`                        |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_exactly_in_any_order(expected)`                        |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_exactly_in_any_order_matching(expected)`               |                                                                                                                                                     |                   |
-| `&[T]`                                    | `contains_exactly_in_any_order_satisfying(assertions)`           |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains(expected)`                                             |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_matching(predicate)`                                   |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_satisfying(assertions)`                                |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `does_not_contain(not_expected)`                                 |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `does_not_contain_matching(predicate)`                           |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `does_not_contain_satisfying(assertions)`                        |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_exactly(expected)`                                     |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_exactly_matching(expected)`                            |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_exactly_satisfying(assertions)`                        |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_exactly_in_any_order(expected)`                        |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_exactly_in_any_order_matching(expected)`               |                                                                                                                                                     |                   |
-| `[T; N]`                                  | `contains_exactly_in_any_order_satisfying(assertions)`           |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains(expected)`                                             |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_matching(predicate)`                                   |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_satisfying(assertions)`                                |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `does_not_contain(not_expected)`                                 |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `does_not_contain_matching(predicate)`                           |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `does_not_contain_satisfying(assertions)`                        |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_exactly(expected)`                                     |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_exactly_matching(expected)`                            |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_exactly_satisfying(assertions)`                        |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_exactly_in_any_order(expected)`                        |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_exactly_in_any_order_matching(expected)`               |                                                                                                                                                     |                   |
-| `Vec<T>`                                  | `contains_exactly_in_any_order_satisfying(assertions)`           |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains(expected)`                                             |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_matching(predicate)`                                   |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_satisfying(assertions)`                                |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `does_not_contain(not_expected)`                                 |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `does_not_contain_matching(predicate)`                           |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `does_not_contain_satisfying(assertions)`                        |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_exactly(expected)`                                     |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_exactly_matching(expected)`                            |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_exactly_satisfying(assertions)`                        |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_exactly_in_any_order(expected)`                        |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_exactly_in_any_order_matching(expected)`               |                                                                                                                                                     |                   |
-| `VecDeque<T>`                             | `contains_exactly_in_any_order_satisfying(assertions)`           |                                                                                                                                                     |                   |
-| `T: Debug`                                | `has_debug_string(expected)`                                     |                                                                                                                                                     |                   |
-| `T: Debug`                                | `has_debug_value(expected)`                                      |                                                                                                                                                     |                   |
-| `T: Display`                              | `has_display_value(expected)`                                    |                                                                                                                                                     |                   |
-| `F: FnOnce() -> R`                        | `panics()`                                                       | Panic mode only                                                                                                                                     | std               |
-| `F: FnOnce() -> R`                        | `does_not_panic()`                                               | Panic mode only                                                                                                                                     | std               |
-| `F: FnOnce() -> impl Future<Output = R>`  | `panics_async()`                                                 | Panic mode only                                                                                                                                     | std               |
-| `F: FnOnce() -> impl Future<Output = R>`  | `does_not_panic_async()`                                         | Panic mode only                                                                                                                                     | std               |
-| `I: Iterator<Item = T>`                   | `contains(expected)`                                             | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `contains_matching(predicate)`                                   | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `contains_satisfying(assertions)`                                | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `does_not_contain(not_expected)`                                 | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `does_not_contain_matching(predicate)`                           | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `does_not_contain_satisfying(assertions)`                        | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `starts_with(expected)`                                          | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `starts_with_matching(predicates)`                               | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `starts_with_satisfying(assertions)`                             | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `ends_with(expected)`                                            | Terminal; non-empty suffixes consume to exhaustion                                                                                                  |                   |
-| `I: Iterator<Item = T>`                   | `ends_with_matching(predicates)`                                 | Terminal; non-empty suffixes consume to exhaustion                                                                                                  |                   |
-| `I: Iterator<Item = T>`                   | `ends_with_satisfying(assertions)`                               | Terminal; non-empty suffixes consume to exhaustion                                                                                                  |                   |
-| `I: Iterator<Item = T>`                   | `contains_contiguous(expected)`                                  | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `contains_contiguous_matching(predicates)`                       | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `contains_contiguous_satisfying(assertions)`                     | Terminal, streaming                                                                                                                                 |                   |
-| `I: Iterator<Item = T>`                   | `contains_exactly(expected)`                                     | Terminal; positional and length-exact                                                                                                               |                   |
-| `I: Iterator<Item = T>`                   | `contains_exactly_matching(predicates)`                          | Terminal; positional and length-exact                                                                                                               |                   |
-| `I: Iterator<Item = T>`                   | `contains_exactly_satisfying(assertions)`                        | Terminal; positional and length-exact                                                                                                               |                   |
-| `I: Iterator<Item = T>`                   | `contains_exactly_in_any_order(expected)`                        | Terminal; unordered and length-exact                                                                                                                |                   |
-| `I: Iterator<Item = T>`                   | `contains_exactly_in_any_order_matching(predicates)`             | Terminal; maximum matching handles overlapping predicates                                                                                           |                   |
-| `I: Iterator<Item = T>`                   | `contains_exactly_in_any_order_satisfying(assertions)`           | Terminal; maximum matching handles overlapping assertions                                                                                           |                   |
-| `I: ExactSizeIterator`                    | `has_remaining_count(expected)`                                  | Chainable and non-consuming                                                                                                                         |                   |
-| `I: ExactSizeIterator`                    | `has_no_remaining_elements()`                                    | Chainable and non-consuming                                                                                                                         |                   |
-| `I: ExactSizeIterator`                    | `has_remaining_elements()`                                       | Chainable and non-consuming                                                                                                                         |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains(expected)`                                   | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_matching(predicate)`                         | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_satisfying(assertions)`                      | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_does_not_contain(not_expected)`                       | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_does_not_contain_matching(predicate)`                 | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_does_not_contain_satisfying(assertions)`              | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_starts_with(expected)`                                | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_starts_with_matching(predicates)`                     | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_starts_with_satisfying(assertions)`                   | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_ends_with(expected)`                                  | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_ends_with_matching(predicates)`                       | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_ends_with_satisfying(assertions)`                     | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_contiguous(expected)`                        | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_contiguous_matching(predicates)`             | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_contiguous_satisfying(assertions)`           | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_exactly(expected)`                           | Chainable; positional and length-exact                                                                                                              |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_exactly_matching(predicates)`                | Chainable; positional and length-exact                                                                                                              |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_exactly_satisfying(assertions)`              | Chainable; positional and length-exact                                                                                                              |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_exactly_in_any_order(expected)`              | Chainable; unordered and length-exact                                                                                                               |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_exactly_in_any_order_matching(predicates)`   | Chainable; maximum matching handles overlapping predicates                                                                                          |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_contains_exactly_in_any_order_satisfying(assertions)` | Chainable; maximum matching handles overlapping assertions                                                                                          |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_is_empty()`                                           | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_iterator_is_empty()`                                  | Deprecated alias of `into_iter_is_empty()`                                                                                                          |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_is_not_empty()`                                       | Chainable; one fresh borrowed iteration                                                                                                             |                   |
-| `I where &I: IntoIterator<Item = &T>`     | `into_iter_has_length(expected)`                                 | Chainable; reads at most `expected + 1` elements                                                                                                    |                   |
-| `T: HasLength`                            | `is_empty()`                                                     | Implemented for strings, slices, arrays, `Vec`/`VecDeque`, `HashMap`/`HashSet`, numeric ranges, and feature-gated rootcause collections/attachments |                   |
-| `T: HasLength`                            | `is_not_empty()`                                                 | Implemented for strings, slices, arrays, `Vec`/`VecDeque`, `HashMap`/`HashSet`, numeric ranges, and feature-gated rootcause collections/attachments |                   |
-| `T: HasLength`                            | `has_length(expected)`                                           | Implemented for strings, slices, arrays, `Vec`/`VecDeque`, `HashMap`/`HashSet`, numeric ranges, and feature-gated rootcause collections/attachments |                   |
-| `T: Num`                                  | `is_zero()`                                                      |                                                                                                                                                     | num               |
-| `T: Num`                                  | `is_additive_identity()`                                         | Synonym for `is_zero`                                                                                                                               | num               |
-| `T: Num`                                  | `is_one()`                                                       |                                                                                                                                                     | num               |
-| `T: Num`                                  | `is_multiplicative_identity()`                                   | Synonym for `is_one`                                                                                                                                | num               |
-| `T: Num + Signed`                         | `is_negative()`                                                  |                                                                                                                                                     | num               |
-| `T: Num + Signed`                         | `is_positive()`                                                  |                                                                                                                                                     | num               |
-| `T: Num + PartialOrd + Clone`             | `is_close_to(expected, allowed_deviation)`                       | Deviation must be a non-negative number; positive infinity accepts comparable non-NaN values                                                        | num               |
-| `T: Num + Float`                          | `is_nan()`                                                       | Requires either `std` or `libm` in addition to `num`                                                                                                | num               |
-| `T: Num + Float`                          | `is_finite()`                                                    | Requires either `std` or `libm` in addition to `num`                                                                                                | num               |
-| `T: Num + Float`                          | `is_infinite()`                                                  | Requires either `std` or `libm` in addition to `num`                                                                                                | num               |
-| `Option<T>`                               | `is_some()`                                                      | Panic mode only                                                                                                                                     |                   |
-| `Option<T>`                               | `is_some_satisfying(assertions)`                                 |                                                                                                                                                     |                   |
-| `Option<T>`                               | `is_none()`                                                      |                                                                                                                                                     |                   |
-| `Poll<T>`                                 | `is_pending()`                                                   |                                                                                                                                                     |                   |
-| `Poll<T>`                                 | `is_ready()`                                                     | Panic mode only                                                                                                                                     |                   |
-| `Poll<T>`                                 | `is_ready_satisfying(assertions)`                                |                                                                                                                                                     |                   |
-| `R: RangeBounds<B>, B: PartialOrd`        | `contains_element(expected)`                                     |                                                                                                                                                     |                   |
-| `R: RangeBounds<B>, B: PartialOrd`        | `does_not_contain_element(expected)`                             |                                                                                                                                                     |                   |
-| `B: PartialOrd`                           | `is_in_range(expected)`                                          |                                                                                                                                                     |                   |
-| `B: PartialOrd`                           | `is_not_in_range(expected)`                                      |                                                                                                                                                     |                   |
-| `B: PartialOrd`                           | `is_outside_of_range(expected)`                                  | Synonym for `is_not_in_range`                                                                                                                       |                   |
-| `RefCell<T>`                              | `is_borrowed()`                                                  |                                                                                                                                                     |                   |
-| `RefCell<T>`                              | `is_mutably_borrowed()`                                          |                                                                                                                                                     |                   |
-| `RefCell<T>`                              | `is_not_mutably_borrowed()`                                      |                                                                                                                                                     |                   |
-| `Mutex<T>`                                | `is_locked()`                                                    |                                                                                                                                                     | std               |
-| `Mutex<T>`                                | `is_not_locked()`                                                |                                                                                                                                                     | std               |
-| `Mutex<T>`                                | `is_free()`                                                      | Synonym for `is_not_locked`                                                                                                                         | std               |
-| `Mutex<T>`                                | `is_poisoned()`                                                  |                                                                                                                                                     | std               |
-| `Mutex<T>`                                | `is_not_poisoned()`                                              |                                                                                                                                                     | std               |
-| `Result<T, E>`                            | `is_ok()`                                                        | Panic mode only                                                                                                                                     |                   |
-| `Result<T, E>`                            | `is_err()`                                                       | Panic mode only                                                                                                                                     |                   |
-| `Result<T, E>`                            | `is_ok_satisfying(assertions)`                                   |                                                                                                                                                     |                   |
-| `Result<T, E>`                            | `is_err_satisfying(assertions)`                                  |                                                                                                                                                     |                   |
-| `PathBuf`                                 | `exists()`                                                       |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `does_not_exist()`                                               |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `is_a_file()`                                                    |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `is_a_directory()`                                               |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `is_a_symlink()`                                                 |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `has_a_root()`                                                   |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `is_relative()`                                                  |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `has_file_name(expected)`                                        |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `has_file_stem(expected)`                                        |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `has_extension(expected)`                                        |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `starts_with(expected)`                                          |                                                                                                                                                     | std               |
-| `PathBuf`                                 | `ends_with(expected)`                                            |                                                                                                                                                     | std               |
-| `&Path`                                   | `exists()`                                                       |                                                                                                                                                     | std               |
-| `&Path`                                   | `does_not_exist()`                                               |                                                                                                                                                     | std               |
-| `&Path`                                   | `is_a_file()`                                                    |                                                                                                                                                     | std               |
-| `&Path`                                   | `is_a_directory()`                                               |                                                                                                                                                     | std               |
-| `&Path`                                   | `is_a_symlink()`                                                 |                                                                                                                                                     | std               |
-| `&Path`                                   | `has_a_root()`                                                   |                                                                                                                                                     | std               |
-| `&Path`                                   | `is_relative()`                                                  |                                                                                                                                                     | std               |
-| `&Path`                                   | `has_file_name(expected)`                                        |                                                                                                                                                     | std               |
-| `&Path`                                   | `has_file_stem(expected)`                                        |                                                                                                                                                     | std               |
-| `&Path`                                   | `has_extension(expected)`                                        |                                                                                                                                                     | std               |
-| `&Path`                                   | `starts_with(expected)`                                          |                                                                                                                                                     | std               |
-| `&Path`                                   | `ends_with(expected)`                                            |                                                                                                                                                     | std               |
-| `HashMap<K, V>`                           | `contains_key(expected)`                                         |                                                                                                                                                     | std               |
-| `HashMap<K, V>`                           | `does_not_contain_key(not_expected)`                             |                                                                                                                                                     | std               |
-| `HashMap<K, V>`                           | `contains_value(expected)`                                       |                                                                                                                                                     | std               |
-| `HashMap<K, V>`                           | `does_not_contain_value(not_expected)`                           |                                                                                                                                                     | std               |
-| `HashMap<K, V>`                           | `contains_entry(expected_key, expected_value)`                   |                                                                                                                                                     | std               |
-| `HashMap<K, V>`                           | `does_not_contain_entry(unexpected_key, unexpected_value)`       |                                                                                                                                                     | std               |
-| `HashMap<K, V>`                           | `contains_keys(expected)`                                        |                                                                                                                                                     | std               |
-| `HashMap<K, V>`                           | `contains_exactly_entries(expected)`                             |                                                                                                                                                     | std               |
-| `HashSet<T>`                              | `contains(expected)`                                             |                                                                                                                                                     | std               |
-| `HashSet<T>`                              | `does_not_contain(not_expected)`                                 |                                                                                                                                                     | std               |
-| `HashSet<T>`                              | `contains_all(expected)`                                         |                                                                                                                                                     | std               |
-| `HashSet<T>`                              | `is_subset_of(expected_superset)`                                |                                                                                                                                                     | std               |
-| `HashSet<T>`                              | `is_superset_of(expected_subset)`                                |                                                                                                                                                     | std               |
-| `HashSet<T>`                              | `is_disjoint_from(other)`                                        |                                                                                                                                                     | std               |
-| `Command`                                 | `has_arg(expected)`                                              |                                                                                                                                                     | std               |
-| `Type<T>`                                 | `needs_drop()`                                                   |                                                                                                                                                     | std               |
-| `Type<T>`                                 | `need_drop()`                                                    | Synonym for `needs_drop`                                                                                                                            | std               |
-| `Box<dyn Any>`                            | `has_type::<Expected>()`                                         | Panic mode only                                                                                                                                     |                   |
-| `Box<dyn Any>`                            | `has_type_ref::<Expected>()`                                     | Panic mode only                                                                                                                                     |                   |
-| `PanicValue`                              | `has_type::<Expected>()`                                         | Panic mode only                                                                                                                                     |                   |
-| `PanicValue`                              | `has_type_ref::<Expected>()`                                     | Panic mode only                                                                                                                                     |                   |
-| `http::HeaderValue`                       | `is_empty()`                                                     |                                                                                                                                                     | http              |
-| `http::HeaderValue`                       | `is_not_empty()`                                                 |                                                                                                                                                     | http              |
-| `http::HeaderValue`                       | `is_sensitive()`                                                 |                                                                                                                                                     | http              |
-| `http::HeaderValue`                       | `is_insensitive()`                                               |                                                                                                                                                     | http              |
-| `http::HeaderValue`                       | `is_ascii_satisfying(assertions)`                                |                                                                                                                                                     | http              |
-| `http::HeaderValue`                       | `is_ascii()`                                                     | Panic mode only                                                                                                                                     | http              |
-| `tokio::sync::Mutex<T>`                   | `is_locked()`                                                    |                                                                                                                                                     | tokio             |
-| `tokio::sync::Mutex<T>`                   | `is_not_locked()`                                                |                                                                                                                                                     | tokio             |
-| `tokio::sync::Mutex<T>`                   | `is_free()`                                                      | Synonym for `is_not_locked`                                                                                                                         | tokio             |
-| `tokio::sync::RwLock<T>`                  | `is_not_locked()`                                                |                                                                                                                                                     | tokio             |
-| `tokio::sync::RwLock<T>`                  | `is_free()`                                                      | Synonym for `is_not_locked`                                                                                                                         | tokio             |
-| `tokio::sync::RwLock<T>`                  | `is_read_locked()`                                               |                                                                                                                                                     | tokio             |
-| `tokio::sync::RwLock<T>`                  | `is_write_locked()`                                              |                                                                                                                                                     | tokio             |
-| `tokio::sync::watch::Receiver<T>`         | `has_current_value(expected)`                                    |                                                                                                                                                     | tokio             |
-| `tokio::sync::watch::Receiver<T>`         | `has_changed()`                                                  | Panic mode only                                                                                                                                     | tokio             |
-| `tokio::sync::watch::Receiver<T>`         | `has_not_changed()`                                              | Panic mode only                                                                                                                                     | tokio             |
-| `reqwest::Response`                       | `has_status_code(expected)`                                      |                                                                                                                                                     | reqwest           |
-| `Program<'a>`                             | `exists()`                                                       |                                                                                                                                                     | program           |
-| `Program<'a>`                             | `exists_and()`                                                   | Panic mode only                                                                                                                                     | program           |
-| `rootcause::ReportCollection<C, T>`       | `is_empty()`                                                     | via `HasLength`                                                                                                                                     | rootcause         |
-| `rootcause::ReportCollection<C, T>`       | `is_not_empty()`                                                 | via `HasLength`                                                                                                                                     | rootcause         |
-| `rootcause::ReportCollection<C, T>`       | `has_length(expected)`                                           | via `HasLength`                                                                                                                                     | rootcause         |
-| `rootcause::ReportAttachments<T>`         | `is_empty()`                                                     | via `HasLength`                                                                                                                                     | rootcause         |
-| `rootcause::ReportAttachments<T>`         | `is_not_empty()`                                                 | via `HasLength`                                                                                                                                     | rootcause         |
-| `rootcause::ReportAttachments<T>`         | `has_length(expected)`                                           | via `HasLength`                                                                                                                                     | rootcause         |
-| `rootcause::Report<C, O, T>`              | `has_child_count(expected)`                                      |                                                                                                                                                     | rootcause         |
-| `rootcause::Report<C, O, T>`              | `has_attachment_count(expected)`                                 |                                                                                                                                                     | rootcause         |
-| `rootcause::Report<C, O, T>`              | `has_current_context_type::<Expected>()`                         |                                                                                                                                                     | rootcause         |
-| `rootcause::Report<C, O, T>`              | `has_current_context_display_value(expected)`                    |                                                                                                                                                     | rootcause         |
-| `rootcause::Report<C, O, T>`              | `has_current_context_debug_string(expected)`                     |                                                                                                                                                     | rootcause         |
-| `rootcause::Report<Dynamic, O, T>`        | `has_current_context_satisfying::<Expected>(...)`                |                                                                                                                                                     | rootcause         |
-| `rootcause::Report<Dynamic, O, T>`        | `has_current_context::<Expected>()`                              | Panic mode only                                                                                                                                     | rootcause         |
-| `rootcause::ReportRef<'a, C, O, T>`       | Same as corresponding `rootcause::Report<C, O, T>` rows          |                                                                                                                                                     | rootcause         |
-| `rootcause::ReportRef<'a, Dynamic, O, T>` | Same as corresponding `rootcause::Report<Dynamic, O, T>` rows    |                                                                                                                                                     | rootcause         |
-| `jiff::SignedDuration`                    | `is_zero()`                                                      |                                                                                                                                                     | jiff              |
-| `jiff::SignedDuration`                    | `is_negative()`                                                  |                                                                                                                                                     | jiff              |
-| `jiff::SignedDuration`                    | `is_positive()`                                                  |                                                                                                                                                     | jiff              |
-| `jiff::SignedDuration`                    | `is_close_to(expected, allowed_deviation)`                       |                                                                                                                                                     | jiff              |
-| `jiff::Span`                              | `is_zero()`                                                      |                                                                                                                                                     | jiff              |
-| `jiff::Span`                              | `is_negative()`                                                  |                                                                                                                                                     | jiff              |
-| `jiff::Span`                              | `is_positive()`                                                  |                                                                                                                                                     | jiff              |
-| `jiff::Zoned`                             | `is_in_time_zone(expected)`                                      |                                                                                                                                                     | jiff              |
-| `jiff::Zoned`                             | `is_in_time_zone_named(expected)`                                |                                                                                                                                                     | jiff              |
-
-*With the default `DebugRenderer`, assertion methods that render generic values require those values to implement
-`Debug`. A custom `AssertionRenderer` can support non-`Debug` values, so those bounds are not repeated throughout the
-table.
-
-The unordered exact collection assertions are multiset comparisons: every actual element and every expected value or
-predicate must participate in a distinct match. Duplicate values therefore have to occur the same number of times.
-Numeric range lengths are mathematical lengths converted to `usize`. If a platform cannot represent that length, the
-length assertion panics with an explicit overflow message.
-
-For `PartialOrd` assertions, unordered comparisons fail. That matters most for floating-point values like `NaN`, where
-`partial_cmp()` returns `None`.
-
-### Conditions
-
-- `is(condition)` / `has(condition)`: Assert that a value satisfies a reusable `Condition<T>`.
-- `are(condition)` / `have(condition)`: Assert that every element of an iterable satisfies a condition.
-
-### Derived Assertions
-
-Use derived assertions to map the current subject to one of its fields or views and then keep asserting on the derived
-value:
+With the `fluent` feature, an assertion context can be entered from the value itself. `must()` panics on the first
+failure, `verify(...)` collects the failures and returns them. Both borrow. The consuming variants are named
+`must_owned()` and `verify_owned()`.
 
 ```rust
 use assertr::prelude::*;
 
-#[derive(Debug)]
-struct Person {
-    age: u32,
-}
+# #[cfg(feature = "fluent")]
+# {
+"hello, world!"
+    .must()
+    .start_with("hello")
+    .end_with("!");
 
-#[test]
-fn test() {
-    assert_that!(Person { age: 30 }).satisfies(
-        |person| person.age,
-        |age| age.is_greater_or_equal_to(18),
-    );
-}
+let failures = 3.verify(|it| it.be_equal_to(4));
+assert_that!(failures).has_length(1);
+
+let mut values = vec![1, 2, 3];
+let reference = &mut values;
+reference.must().contain(2).have_length(3);
+reference.push(4);
+# }
 ```
 
-- `satisfies(mapper, assertions)`: Derive an owned view for nested assertions.
-- `satisfies_ref(mapper, assertions)`: Derive a borrowed view for nested assertions.
-
-## Advanced Features
-
-### Capture Mode
-
-Instead of immediately panicking on assertion failure, you can capture failures for later analysis:
-
-```rust
-#[test]
-fn test() {
-    let failures = assert_that!(3)
-        .with_capture()
-        .is_equal_to(4)
-        .is_less_than(2)
-        .capture_failures();
-
-    assert_that!(failures).has_length(2);
-}
-```
-
-With the `fluent` feature enabled, the same pattern can start from `.verify()` instead of
-`assert_that!(...).with_capture()`.
-
-### Custom rendering for non-Debug types
-
-Assertion failure messages format the actual and expected values through an `AssertionRenderer`. By default, this is a
-`DebugRenderer`, which delegates to `Debug` and is why most assertion subjects need to / should derive `Debug`.
-
-The trait is a type-state on `AssertThat`, so you can swap in a renderer for any type, including types that do not
-implement `Debug`.
-
-For a one-off renderer, use `with_debug_format(...)` and pass a closure shaped like `fmt::Debug::fmt`:
-
-```rust
-use assertr::prelude::*;
-
-#[derive(PartialEq)]
-struct Secret(u32);
-
-#[test]
-fn test() {
-    assert_that!(Secret(1))
-        .with_debug_format(|value, f| f.write_fmt(format_args!("Secret({})", value.0)))
-        .is_equal_to(Secret(1));
-}
-```
-
-For something reusable, implement `AssertionRenderer<T>` on a (unit) struct and pass it via `with_renderer(...)`.
-Implement it once per type that needs to be rendered (the actual value, the expected value, slices, and any companion
-types involved in chained assertions):
-
-```rust
-use core::fmt;
-use assertr::prelude::*;
-
-#[derive(PartialEq)]
-struct Secret(u32);
-
-#[derive(Clone, Copy)]
-struct SecretRenderer;
-
-impl AssertionRenderer<Secret> for SecretRenderer {
-    fn fmt(&self, value: &Secret, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("Secret({})", value.0))
-    }
-}
-
-#[test]
-fn test() {
-    assert_that!(Secret(1))
-        .with_renderer(SecretRenderer)
-        .is_equal_to(Secret(1));
-}
-```
-
-Failure-message templates render values with `{value:#?}`, so renderers that want pretty vs. compact output should
-branch on `f.alternate()`. See
-[`AssertionRenderer`](https://docs.rs/assertr/latest/assertr/renderer/trait.AssertionRenderer.html) for the full API.
-Chained assertions (e.g. `.satisfies(...)`, `.is_some_satisfying(...)`, deep `Vec`/`Path` assertions) require the
-renderer to be `Clone`.
-
-### Partial equality assertions
-
-You can derive a helper struct for partial equality comparisons by annotating an owned struct with
-`#[derive(AssertrEq)]`.
-
-**Make sure this crate's `derive` feature is enabled.**
-
-```toml
-assertr = { version = "0.6.2", features = ["derive"] }
-```
-
-```rust
-// Deriving `AssertrEq` provides an additional `PersonAssertrEq` type.
-// Deriving `Debug` is necessary because `Person` is used as an assertion subject.
-#[derive(Debug, AssertrEq)]
-pub struct Person {
-    pub name: String,
-    pub age: i32,
-    pub data: (u32, u32),
-}
-
-#[test]
-fn test() {
-    let alice = Person {
-        name: "Alice".to_owned(),
-        age: 30,
-        data: (100, 998)
-    };
-
-    // We can still perform a standard (full) equality check.
-    assert_that!(&alice).is_equal_to(Person {
-        name: "Alice".to_owned(),
-        age: 30,
-        data: (100, 998),
-    });
-
-    // But we can also do a partial equality check!
-    assert_that!(&alice).is_equal_to(PersonAssertrEq {
-        name: eq("Alice".to_owned()),
-        age: any(), // Match any age
-        data: any() // Match any data
-    });
-}
-```
-
-Named structs may use lifetimes, type parameters, const generics, and where-clauses. A failed partial comparison reports
-every mismatched public field in declaration order. If the dependency is renamed in `Cargo.toml`, the derive macro
-resolves that name automatically.
-
-For nested public fields, `map_type` lets the generated matcher use another generated matcher type:
-
-```rust
-use assertr::prelude::*;
-
-#[derive(Debug, AssertrEq)]
-pub struct Child {
-    pub id: i32,
-}
-
-#[derive(Debug, AssertrEq)]
-pub struct Parent {
-    #[assertr_eq(map_type = "ChildAssertrEq")]
-    pub child: Child,
-}
-
-#[test]
-fn test() {
-    assert_that!(Parent { 
-        child: Child { id: 1 }
-    }).is_equal_to(ParentAssertrEq {
-        child: eq(ChildAssertrEq { id: eq(1) }),
-    });
-}
-```
-
-For collection fields, `map_type` changes the expected field type and `compare_with` chooses the comparison function.
-Because the derive macro intentionally does not inspect field types, custom comparison functions that need additional
-generic bounds must declare them with `compare_bounds`.
-
-Use this recipe for ordered slice-like comparisons:
-
-```rust
-use assertr::prelude::*;
-
-#[derive(Debug, AssertrEq)]
-pub struct Child {
-    pub id: i32,
-}
-
-#[derive(Debug, AssertrEq)]
-pub struct Parent {
-    #[assertr_eq(
-        map_type = "Vec<ChildAssertrEq>",
-        compare_with = "::assertr::cmp::slice::compare",
-        compare_bounds = "Child: ::assertr::cmp::slice::CompareElement<ChildAssertrEq, R>"
-    )]
-    pub children: Vec<Child>,
-}
-```
-
-Use this recipe for `HashMap` value comparisons:
-
-```rust
-use std::collections::HashMap;
-use assertr::prelude::*;
-
-#[derive(Debug, AssertrEq)]
-pub struct Child {
-    pub id: i32,
-}
-
-#[derive(Debug, AssertrEq)]
-pub struct Parent {
-    #[assertr_eq(
-        map_type = "HashMap<String, ChildAssertrEq>",
-        compare_with = "::assertr::cmp::hashmap::compare",
-        compare_bounds = "Child: ::assertr::cmp::hashmap::CompareValue<ChildAssertrEq, R>"
-    )]
-    pub children: HashMap<String, Child>,
-}
-```
-
-`R` in `compare_bounds` is the active assertion renderer type. The built-in bound helper traits keep the common cases
-short. Custom comparison functions can use ordinary Rust where-predicate syntax in the same string.
-
-### Write assertions for your own types.
-
-Good custom assertions add domain-specific value. In practice, the most maintainable way to build them is often to
-delegate to existing assertions so you keep the same failure formatting, capture-mode behavior, and chaining style.
-
-The built-in `*Assertions` traits are public primarily so their methods participate in Rust's trait-based method
-discovery. They are not intended as downstream implementation interfaces. Adding a new assertion method to an existing
-assertion trait is therefore considered a compatible change and may happen in a patch release. Define a separate
-assertion trait for your own types, as shown below, instead of implementing Assertr's built-in assertion traits.
-
-```rust
-use assertr::prelude::*;
-
-#[derive(Debug)]
-struct Person {
-    age: u32,
-}
-
-trait PersonAssertions {
-    fn is_adult(self) -> Self;
-}
-
-impl<M: Mode> PersonAssertions for AssertThat<'_, Person, M> {
-    #[track_caller]
-    fn is_adult(self) -> Self {
-        self.satisfies(|person| person.age, |age| {
-            age.is_greater_or_equal_to(18);
-        })
-    }
-}
-
-#[test]
-fn test() {
-    assert_that!(Person { age: 30 })
-        .is_adult();
-}
-```
-
-### Type Testing
-
-Test properties of types:
-
-```rust
-#[test]
-fn test() {
-    assert_that_type::<MyType>()
-        .needs_drop()
-        .satisfies(|it| it.size(), |size| {
-            size.is_equal_to(32);
-        });
-}
-```
-
-## Examples
-
-```rust
-#[test]
-fn test() {
-    // Assertions that read like English.
-    assert_that!("foobar").starts_with("foo").contains("ooba");
-    assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
-    assert_that!(Ok(42)).is_ok().is_equal_to(42);
-    assert_that!(Some(42)).has_debug_string("Some(42)");
-
-    // Chainable.
-    assert_that!("foobar")
-        .is_not_empty()
-        .starts_with("foo")
-        .ends_with("bar")
-        .has_length(6);
-}
-```
-
-- Partial equality assertions (meaning that only some fields of a struct are compared, while some are ignored). Add the
-  `AssertrEq` annotation to one of your structs to enable this.
-
-## Compared to other assertion styles
-
-One other style of assertions in Rust is the "individual macros" approach. The standard library already comes with a few
-of them, like the `assert_eq!` macro, many libraries provide a more exhaustive list of macros specifically tailored for
-specific types and operations.
-
-Let me point out a few benefits of fluent assertions compared to individual assert macros.
-
-#### Chainability and Readability
-
-The fluent interface allows you to chain multiple assertions naturally, following the way we think about validating
-properties. Instead of writing multiple separate assertions, you can express related checks in a single, flowing
-statement that reads almost like natural language.
-
-Additionally, having a concrete entrance into the assertion context using the `assert_that!` macro with assertions
-coming after makes it totally obvious which value is the "actual" and which is the "expected" value. This provides a
-clear schema for how assertions are written, compared to an assertion macro, like std's `assert_eq!`, in which the order
-of arguments can be chosen freely, making it non-obvious when coming into a new codebase which style was chosen.
-
-#### Better Error Messages
-
-Fluent assertions can provide more detailed and structured error messages out of the box. Rather than just showing the
-values that didn't match, they can include context about what specific check failed within the chain and clearer
-descriptions of the expected vs actual values. Descriptive messages can be collected throughout the call chain.
-
-#### Reduced Code Duplication
-
-With traditional assert macros, you often need to reference the same value multiple times:
-
-```rust
-#[test]
-fn test() {
-    let vec = vec![1, 2, 3];
-    assert_eq!(vec.len(), 3);
-    assert!(vec.contains(&2));
-}
-```
-
-Versus the fluent style:
-
-```rust
-#[test]
-fn test() {
-    assert_that!(vec![1, 2, 3]).has_length(3).contains(2);
-}
-```
-
-## Technical decisions
-
-- Derived assertions are not allowed to control whether the location is printed.
-- Detail messages are collected from the current assertion upwards, taking the messages of all parents into account.
-- Failures are stored at the root assertion.
-- Failures can only be extracted from the root assertion.
-- Assertions to be defined on common traits as often as possible. Allowing, for example, all types implementing `Eq`
-  to allow `is_equal_to`, `PartialOrd` types to allow `is_greater_than` assertions and all types implementing the
-  `HasLength` trait to support the `has_length` assertion.
-- A single `assert_that!(...)` macro suffices to get into an assertion context. It handles both owned values and
-  references automatically — pass `assert_that!(value)` for owned values or `assert_that!(&value)` to borrow.
-- One import should be enough to access all possible assertions through **autocomplete**.
-  `use assertr::prelude::*;`
-
-## Dev
-
-Install the tools used by the maintenance recipes with:
-
-```bash
-just install-tools
-```
-
-Run the full non-mutating validation suite with:
-
-```bash
-just verify
-```
-
-The suite checks and tests every package independently so Cargo cannot make one configuration pass through workspace
-feature unification. Run individual stages with `just check`, `just clippy`, or `just test`. To update dependencies,
-sort manifests, and format the workspace, run `just tidy`.
+Fluent names follow fixed rules. `is_x` becomes `be_x`, `has_x` becomes `have_x`, other verbs become imperative
+(`contains` -> `contain`), and negations put `not` first (`is_not_x` -> `not_be_x`). See
+[`IntoAssertContext`](https://docs.rs/assertr/latest/assertr/trait.IntoAssertContext.html) for the complete rules.
+
+## Finding assertions
+
+Autocomplete on the subject is the fastest way. For a browsable reference, start with the
+[assertion families](https://docs.rs/assertr/latest/assertr/assertions/index.html) on docs.rs. Each assertion trait page
+is the authoritative list of its methods, signatures, and required bounds.
+
+Blanket implementations make general assertions available to user-defined types. A `PartialEq` type has
+`is_equal_to`, a `PartialOrd` type has `is_greater_than`, and a `HasLength` type has `has_length`.
+
+## Guides
+
+The detailed material lives on the API item that owns it:
+
+- **Capture mode**: collect failures as structured `AssertionFailure` values instead of panicking. See
+  [`AssertThat::capture`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture) and
+  [`AssertionFailure`](https://docs.rs/assertr/latest/assertr/failure/struct.AssertionFailure.html).
+- **Partial equality**: compare only some fields of a struct with `#[derive(AssertrEq)]`, including nested structs and
+  collections of them. See [`AssertrEq`](https://docs.rs/assertr/latest/assertr/prelude/derive.AssertrEq.html).
+- **Rendering values without `Debug`**: swap the renderer that failure messages use. See
+  [`AssertThat::with_debug_format`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.with_debug_format),
+  [`AssertThat::with_renderer`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.with_renderer),
+  and [`ValueRenderer`](https://docs.rs/assertr/latest/assertr/renderer/trait.ValueRenderer.html). Type-specific
+  structural assertions compose leaf renderers into collection, map, range, and wrapper syntax. Generic assertions
+  that render the whole subject require a renderer for that subject.
+- **Assertions for custom types**: define an assertion trait and implement it on `AssertThat`, either by composing
+  existing assertions or by deciding the outcome yourself. See
+  [custom assertions](https://docs.rs/assertr/latest/assertr/#custom-assertions).
+- **Assertions on a part of the subject**: the projections
+  [`AssertThat::derive`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.derive) and
+  [`AssertThat::satisfies`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.satisfies). See
+  [the core model](https://docs.rs/assertr/latest/assertr/#core-model).
+- **Assertions about types**: `needs_drop`, type name, and size. See
+  [`assert_that_type`](https://docs.rs/assertr/latest/assertr/fn.assert_that_type.html).
+
+## API stability
+
+Publicly exported items follow the usual Semantic Versioning rules unless their documentation explicitly says
+otherwise. The `*Assertions` traits are public for method discovery, not as downstream implementation interfaces, so
+adding a method to one of them is considered compatible. `assertr::__private` is the explicitly unsupported macro
+plumbing and must not be named directly.
 
 ## MSRV
 
-Current MSRV:
-
-- `assertr`: `1.89.0`
-- `assertr-derive`: `1.89.0`
-
-Previous MSRV values:
-
-- As of `0.1.0`, the MSRV was `1.76.0`
-- As of `0.2.0`, the MSRV was `1.85.0`
-- As of `0.4.0`, the MSRV was `1.89.0`
+The minimum supported Rust version is `1.89.0` for both crates. Version history is recorded in the changelog.
 
 ## Contributing
 
-Contributions are welcome. Feel free to open a PR with your suggested changes.
+Run `just install-tools` once, then `just verify` before submitting a pull request. Record notable changes under
+`## [Unreleased]`, or under the latest version section if it has not been published yet.
 
-## Acknowledgements
+## License
 
-Midway through implementing this, I found out that "spectral" already exists, which uses a very similar style of
-assertions. After looking into it, I took the concept of generally relying on `*Assertions` trait definitions instead of
-directly implementing Assertions with multiple impl blocks on the `AssertThat` type.
+Licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](https://github.com/lpotthast/assertr/blob/main/LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](https://github.com/lpotthast/assertr/blob/main/LICENSE-MIT))

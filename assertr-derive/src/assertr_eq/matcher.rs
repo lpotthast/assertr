@@ -20,7 +20,14 @@ pub(super) fn matcher_field_definitions(
         .map(|(field, ident)| {
             let visibility = &field.vis;
             let expected_type = field.expected_type();
-            quote! { #visibility #ident: #assertr::Eq<#expected_type> }
+            quote! {
+                #[doc = concat!(
+                    "Partial-equality expectation for the `",
+                    stringify!(#ident),
+                    "` field. Use `Eq::Any` to ignore it."
+                )]
+                #visibility #ident: #assertr::Eq<#expected_type>
+            }
         })
         .collect()
 }
@@ -45,7 +52,7 @@ pub(super) fn default_field_values(
 /// non-`Debug` types. Fields whose types name matcher generics cannot use that fallback (the
 /// specialization never resolves for a generic type), so they render through
 /// `assertr::__private::RenderableEq`, whose conditional `Debug` impl is satisfied by the
-/// `DebugRenderer: AssertionRenderer<FieldType>` bounds that `matcher_debug_generics` adds to
+/// `DebugRenderer: ValueRenderer<FieldType>` bounds that `matcher_debug_generics` adds to
 /// the matcher's `Debug` impl.
 ///
 /// The concrete-field wrapper identifier is allocated through `identifiers` because its

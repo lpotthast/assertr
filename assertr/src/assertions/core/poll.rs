@@ -5,61 +5,62 @@ use indoc::writedoc;
 
 use crate::actual::Actual;
 use crate::mode::{Mode, Panic};
-use crate::tracking::AssertionTracking;
-use crate::{AssertThat, AssertionRenderer};
+use crate::{AssertThat, ValueRenderer};
 
-/// Non-extracting assertions for `Poll` values.
-/// These work in any mode (Panic or Capture).
+/// Non-extracting assertions for `Poll` subjects.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PollAssertions<'t, T, M: Mode, R> {
+    /// Asserts that the subject is `Ready`.
+    ///
+    /// Non-extracting: the subject stays the full `Poll`, so further assertions can be chained
+    /// in any mode. Use [`PollExtractAssertions::get_ready`] to extract the contained value in
+    /// panic mode, or [`PollAssertions::is_ready_satisfying`] to assert on it in any mode.
+    fn is_ready(self) -> Self;
+
+    /// Asserts that the subject is `Pending`.
+    fn is_pending(self) -> Self
+    where
+        R: ValueRenderer<T>;
+
+    /// Asserts that the subject is `Ready`, then runs `assertions` on its value.
+    ///
+    /// The closure receives an `AssertThat<T>` borrowing the contained value.
     fn is_ready_satisfying<A>(self, assertions: A) -> Self
     where
-        R: AssertionRenderer<Poll<T>> + Clone,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M, R>);
-
-    fn is_pending(self) -> Self;
+        R: Clone,
+        A: for<'a> FnOnce(AssertThat<'a, T, M, R>);
 }
 
-impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, M, R>
-where
-    R: AssertionRenderer<Poll<T>>,
-{
+impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, M, R> {
     #[track_caller]
-    fn is_ready_satisfying<A>(self, assertions: A) -> Self
-    where
-        R: AssertionRenderer<Poll<T>> + Clone,
-        A: for<'a> FnOnce(AssertThat<'a, &'a T, M, R>),
-    {
+    fn is_ready(self) -> Self {
         self.track_assertion();
         let actual = self.actual();
-        if actual.is_ready() {
-            self.satisfies_ref(
-                |it| match it {
-                    Poll::Ready(t) => t,
-                    Poll::Pending => unreachable!("already checked"),
-                },
-                assertions,
-            )
-        } else {
-            let actual = self.render_value(actual);
+        if !actual.is_ready() {
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                    Actual: {actual:#?}
+                    Actual: Pending
 
                     is not yet ready.
                 "}
             });
-            self
         }
+        self
     }
 
     #[track_caller]
-    fn is_pending(self) -> Self {
+    fn is_pending(self) -> Self
+    where
+        R: ValueRenderer<T>,
+    {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_pending() {
-            let actual = self.render_value(actual);
+            let actual = match actual {
+                Poll::Ready(value) => self.render_variant("Ready", value),
+                Poll::Pending => unreachable!("already checked"),
+            };
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -70,31 +71,58 @@ where
         }
         self
     }
+
+    #[track_caller]
+    fn is_ready_satisfying<A>(self, assertions: A) -> Self
+    where
+        R: Clone,
+        A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
+    {
+        self.track_assertion();
+        let actual = self.actual();
+        if actual.is_ready() {
+            self.satisfies(
+                |it| match it {
+                    Poll::Ready(t) => t,
+                    Poll::Pending => unreachable!("already checked"),
+                },
+                assertions,
+            )
+        } else {
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                    Actual: Pending
+
+                    is not yet ready.
+                "}
+            });
+            self
+        }
+    }
 }
 
-/// Data-extracting assertion for `Poll` values.
-/// Only available in Panic mode, as the extracted `T` cannot be produced when the poll is pending.
+/// Panic-mode extraction from `Poll` subjects.
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait PollExtractAssertions<'t, T, R> {
-    /// Use `PollAssertions::is_ready_satisfying` for capture mode.
-    fn is_ready(self) -> AssertThat<'t, T, Panic, R>
-    where
-        R: AssertionRenderer<Poll<T>>;
+    /// Asserts that the subject is `Ready`, then returns an assertion over its value.
+    ///
+    /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
+    ///
+    /// This is available only in `Panic` mode because `Pending` cannot produce a `T`. Use
+    /// [`PollAssertions::is_ready_satisfying`] for capture mode, or the
+    /// non-extracting [`PollAssertions::is_ready`] when the contained value is irrelevant.
+    fn get_ready(self) -> AssertThat<'t, T, Panic, R>;
 }
 
 impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic, R> {
     #[track_caller]
-    fn is_ready(self) -> AssertThat<'t, T, Panic, R>
-    where
-        R: AssertionRenderer<Poll<T>>,
-    {
+    fn get_ready(self) -> AssertThat<'t, T, Panic, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_ready() {
-            let actual = self.render_value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                    Actual: {actual:#?}
+                    Actual: Pending
 
                     is not yet ready.
                 "}
@@ -103,11 +131,11 @@ impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic
         self.map(|it| match it {
             Actual::Owned(p) => Actual::Owned(match p {
                 Poll::Ready(t) => t,
-                Poll::Pending => panic!("is pending"),
+                Poll::Pending => unreachable!("already checked"),
             }),
             Actual::Borrowed(p) => Actual::Borrowed(match p {
                 Poll::Ready(t) => t,
-                Poll::Pending => panic!("is pending"),
+                Poll::Pending => unreachable!("already checked"),
             }),
         })
     }
@@ -127,10 +155,16 @@ mod tests {
         use std::task::Poll;
 
         #[test]
-        fn succeeds_when_ready() {
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Poll::Ready(Foo { val: 42 }).must().be_ready();
+        }
+
+        #[test]
+        fn succeeds_when_ready_and_retains_the_subject() {
             assert_that!(Poll::Ready(Foo { val: 42 }))
                 .is_ready()
-                .is_equal_to(Foo { val: 42 });
+                .is_equal_to(Poll::Ready(Foo { val: 42 }));
         }
 
         #[test]
@@ -144,7 +178,73 @@ mod tests {
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Actual: Pending
-                
+
+                is not yet ready.
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn works_in_capture_mode_and_allows_further_chaining() {
+            let failures = assert_that!(Poll::<i32>::Pending)
+                .with_location(false)
+                .capture(|it| it.is_ready().is_pending());
+
+            assert_that!(failures).contains_exactly_satisfying([
+                |it: AssertThat<AssertionFailure, Capture>| {
+                    it.has_display_value(formatdoc! {r"
+                        -------- assertr --------
+                        Actual: Pending
+
+                        is not yet ready.
+                        -------- assertr --------
+                    "});
+                },
+            ]);
+        }
+    }
+
+    mod get_ready {
+        use super::Foo;
+        use crate::prelude::*;
+        use indoc::formatdoc;
+        use std::task::Poll;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Poll::Ready(42).must().get_ready().is_equal_to(42);
+        }
+
+        #[test]
+        fn extracts_the_borrowed_inner_value() {
+            let poll = Poll::Ready(Foo { val: 42 });
+
+            assert_that!(poll).get_ready().is_equal_to(Foo { val: 42 });
+
+            // The poll was only borrowed and remains usable.
+            assert_that!(poll).is_ready();
+        }
+
+        #[test]
+        fn extracts_the_owned_inner_value() {
+            assert_that_owned!(Poll::Ready(Foo { val: 42 }))
+                .get_ready()
+                .is_equal_to(Foo { val: 42 });
+        }
+
+        #[test]
+        fn panics_when_not_ready() {
+            assert_that_panic_by(|| {
+                assert_that!(Poll::<Foo>::Pending)
+                    .with_location(false)
+                    .get_ready();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Actual: Pending
+
                 is not yet ready.
                 -------- assertr --------
             "});
@@ -157,48 +257,69 @@ mod tests {
         use std::task::Poll;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Poll::Ready(42).must().be_ready_satisfying(|ready| {
+                ready.is_equal_to(42);
+            });
+        }
+
+        #[test]
         fn succeeds_when_ready_and_assertions_pass() {
             assert_that!(Poll::Ready(42)).is_ready_satisfying(|ready| {
-                ready.is_equal_to(&42);
+                ready.is_equal_to(42);
+            });
+        }
+
+        #[test]
+        fn hands_out_a_value_typed_assertion_supporting_type_specific_assertions() {
+            assert_that!(Poll::Ready(String::from("value"))).is_ready_satisfying(|ready| {
+                ready.contains("alu").starts_with("v");
             });
         }
 
         #[test]
         fn captures_inner_failure_when_ready_and_assertion_fails() {
             let failures = assert_that!(Poll::Ready(42))
-                .with_capture()
                 .with_location(false)
-                .is_ready_satisfying(|ready| {
-                    ready.is_greater_than(&9000);
-                })
-                .capture_failures();
+                .capture(|it| {
+                    it.is_ready_satisfying(|ready| {
+                        ready.is_greater_than(9000);
+                    })
+                });
 
-            assert_that!(failures).contains_exactly::<String>([formatdoc! {"
-                -------- assertr --------
-                Actual: 42
+            assert_that!(failures).contains_exactly_satisfying([
+                |it: AssertThat<AssertionFailure, Capture>| {
+                    it.has_display_value(formatdoc! {"
+                        -------- assertr --------
+                        Actual: 42
 
-                is not greater than
+                        is not greater than
 
-                Expected: 9000
-                -------- assertr --------
-            "}]);
+                        Expected: 9000
+                        -------- assertr --------
+                    "});
+                },
+            ]);
         }
 
         #[test]
         fn captures_variant_failure_when_pending() {
             let failures = assert_that!(Poll::<i32>::Pending)
-                .with_capture()
                 .with_location(false)
-                .is_ready_satisfying(|_| panic!("assertions should not run"))
-                .capture_failures();
+                .capture(|it| it.is_ready_satisfying(|_| panic!("assertions should not run")));
 
-            assert_that!(failures).contains_exactly::<String>([formatdoc! {r"
-                -------- assertr --------
-                Actual: Pending
-                
-                is not yet ready.
-                -------- assertr --------
-            "}]);
+            assert_that!(failures).contains_exactly_satisfying([
+                |it: AssertThat<AssertionFailure, Capture>| {
+                    it.has_display_value(formatdoc! {r"
+                        -------- assertr --------
+                        Actual: Pending
+
+                        is not yet ready.
+                        -------- assertr --------
+                    "});
+                },
+            ]);
         }
 
         #[test]
@@ -212,7 +333,7 @@ mod tests {
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Actual: Pending
-                
+
                 is not yet ready.
                 -------- assertr --------
             "});
@@ -224,6 +345,12 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use std::task::Poll;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Poll::<Foo>::Pending.must().be_pending();
+        }
 
         #[test]
         fn succeeds_when_pending() {
@@ -245,7 +372,7 @@ mod tests {
                         val: 42,
                     }},
                 )
-                
+
                 is not pending.
                 -------- assertr --------
             "});

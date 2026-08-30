@@ -1,37 +1,62 @@
-use crate::AssertThat;
 use crate::mode::Mode;
-use crate::tracking::AssertionTracking;
+use crate::{AssertThat, ValueRenderer};
 use indoc::writedoc;
 use jiff::SignedDuration;
 use std::fmt::Write;
 
+/// Assertions for [`SignedDuration`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait SignedDurationAssertions {
-    fn is_zero(self) -> Self;
+pub trait SignedDurationAssertions<R = crate::DebugRenderer> {
+    /// Asserts that the duration is zero.
+    fn is_zero(self) -> Self
+    where
+        R: ValueRenderer<SignedDuration>;
 
-    fn is_negative(self) -> Self;
+    /// Asserts that the duration is strictly negative.
+    fn is_negative(self) -> Self
+    where
+        R: ValueRenderer<SignedDuration>;
 
-    fn is_positive(self) -> Self;
+    /// Asserts that the duration is strictly positive.
+    fn is_positive(self) -> Self
+    where
+        R: ValueRenderer<SignedDuration>;
 
-    fn is_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self;
+    /// Asserts that the duration is within `allowed_deviation` of `expected`, including the
+    /// endpoints.
+    ///
+    /// A negative `allowed_deviation` produces an empty range, so the assertion always fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if adding or subtracting `allowed_deviation` from `expected` overflows
+    /// [`SignedDuration`].
+    fn is_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self
+    where
+        R: ValueRenderer<SignedDuration>;
 }
 
-impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
+impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, M, R> {
     #[track_caller]
-    fn is_zero(self) -> Self {
+    fn is_zero(self) -> Self
+    where
+        R: ValueRenderer<SignedDuration>,
+    {
         self.track_assertion();
 
         if !self.actual().is_zero() {
             let details = [String::from("Actual was not zero.")];
 
             let expected = SignedDuration::ZERO;
+            let actual = self.render_value(self.actual());
+            let expected = self.render_value(&expected);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
 
                       Actual: {actual:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
 
@@ -39,16 +64,20 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
     }
 
     #[track_caller]
-    fn is_negative(self) -> Self {
+    fn is_negative(self) -> Self
+    where
+        R: ValueRenderer<SignedDuration>,
+    {
         self.track_assertion();
 
         if !self.actual().is_negative() {
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?} to be negative,
 
                       Actual: {actual:#?},
-                ", actual = self.actual()}
+                "}
             });
         }
 
@@ -56,16 +85,20 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
     }
 
     #[track_caller]
-    fn is_positive(self) -> Self {
+    fn is_positive(self) -> Self
+    where
+        R: ValueRenderer<SignedDuration>,
+    {
         self.track_assertion();
 
         if !self.actual().is_positive() {
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?} to be positive,
 
                       Actual: {actual:#?},
-                ", actual = self.actual()}
+                "}
             });
         }
 
@@ -73,13 +106,21 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
     }
 
     #[track_caller]
-    fn is_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self {
+    fn is_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self
+    where
+        R: ValueRenderer<SignedDuration>,
+    {
         self.track_assertion();
 
         let actual = *self.actual();
         let min = expected - allowed_deviation;
         let max = expected + allowed_deviation;
         if !(actual >= min && actual <= max) {
+            let actual = self.render_value(&actual);
+            let expected = self.render_value(&expected);
+            let allowed_deviation = self.render_value(&allowed_deviation);
+            let min = self.render_value(&min);
+            let max = self.render_value(&max);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be close to: {expected:?},
@@ -87,7 +128,7 @@ impl<M: Mode> SignedDurationAssertions for AssertThat<'_, SignedDuration, M> {
                       but value was outside range: [{min:?}, {max:?}]
 
                       Actual: {actual:?}
-                ", actual = self.actual()}
+                "}
             });
         }
 
@@ -101,6 +142,12 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::SignedDuration;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            SignedDuration::ZERO.must().be_zero();
+        }
 
         #[test]
         fn succeeds_when_zero() {
@@ -133,6 +180,12 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::SignedDuration;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            SignedDuration::from_secs(-5).must().be_negative();
+        }
 
         #[test]
         fn succeeds_when_negative() {
@@ -180,6 +233,12 @@ mod tests {
         use jiff::SignedDuration;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            SignedDuration::from_secs(5).must().be_positive();
+        }
+
+        #[test]
         fn succeeds_when_positive() {
             assert_that!(SignedDuration::from_secs(5)).is_positive();
         }
@@ -223,6 +282,15 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::SignedDuration;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            SignedDuration::from_secs_f32(0.333).must().be_close_to(
+                SignedDuration::from_secs_f32(0.333),
+                SignedDuration::from_secs_f32(0.001),
+            );
+        }
 
         #[test]
         fn panics_when_below_allowed_range() {

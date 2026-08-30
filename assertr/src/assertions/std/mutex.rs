@@ -2,26 +2,24 @@ use core::fmt::Write;
 use indoc::writedoc;
 use std::sync::{Mutex, TryLockError};
 
-use crate::{AssertThat, AssertionRenderer, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, Mode, ValueRenderer};
 
+/// Assertions for the lock and poison state of [`Mutex`].
+///
+/// Lock state is observed with [`Mutex::try_lock`]. A successful or poisoned acquisition means
+/// unlocked. [`TryLockError::WouldBlock`] means locked.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait MutexAssertions<T, R> {
     /// Asserts that this mutex is locked.
-    /// Note that implementations may try to acquire the lock in order to check its state.
     fn is_locked(self) -> Self
     where
-        R: AssertionRenderer<T>;
+        R: ValueRenderer<T>;
 
     /// Asserts that this mutex is not locked.
-    /// Note that implementations may try to acquire the lock in order to check its state.
-    #[cfg_attr(feature = "fluent", fluent_alias("not_be_locked"))]
     fn is_not_locked(self) -> Self;
 
-    /// Asserts that this mutex is not locked.
-    /// Note that implementations may try to acquire the lock in order to check its state.
-    ///
-    /// Synonym for [`Self::is_not_locked`].
+    /// Alias of [`MutexAssertions::is_not_locked`].
     fn is_free(self) -> Self
     where
         Self: Sized,
@@ -40,7 +38,7 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
     #[track_caller]
     fn is_locked(self) -> Self
     where
-        R: AssertionRenderer<T>,
+        R: ValueRenderer<T>,
     {
         self.track_assertion();
         let actual = self.actual();
@@ -127,6 +125,15 @@ mod tests {
         use std::sync::Mutex;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            let mutex = Mutex::new(42);
+            let guard = mutex.lock();
+            mutex.must().be_locked();
+            drop(guard);
+        }
+
+        #[test]
         fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
@@ -169,6 +176,12 @@ mod tests {
         use std::sync::Mutex;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Mutex::new(42).must().not_be_locked();
+        }
+
+        #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
             assert_that!(mutex).is_not_locked();
@@ -197,14 +210,18 @@ mod tests {
         }
     }
 
+    /// Synonym of `is_not_locked`. Only the fluent name is pinned here. The behavior is covered by
+    /// that module.
     mod is_free {
+        #[cfg(feature = "fluent")]
         use crate::prelude::*;
+        #[cfg(feature = "fluent")]
         use std::sync::Mutex;
 
         #[test]
-        fn succeeds_when_not_locked() {
-            let mutex = Mutex::new(42);
-            assert_that!(mutex).is_free();
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Mutex::new(42).must().be_free();
         }
     }
 
@@ -214,6 +231,12 @@ mod tests {
         use std::sync::Mutex;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            super::poisoned_mutex().must().be_poisoned();
+        }
+
+        #[test]
         fn succeeds_when_poisoned() {
             assert_that!(super::poisoned_mutex()).is_poisoned();
         }
@@ -221,7 +244,7 @@ mod tests {
         #[test]
         fn panics_when_not_poisoned() {
             assert_that_panic_by(|| {
-                assert_that!(Mutex::new(42))
+                assert_that_owned!(Mutex::new(42))
                     .with_location(false)
                     .is_poisoned()
             })
@@ -240,6 +263,12 @@ mod tests {
         use std::sync::Mutex;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Mutex::new(42).must().not_be_poisoned();
+        }
+
+        #[test]
         fn succeeds_when_not_poisoned() {
             assert_that!(Mutex::new(42)).is_not_poisoned();
         }
@@ -247,7 +276,7 @@ mod tests {
         #[test]
         fn panics_when_poisoned() {
             assert_that_panic_by(|| {
-                assert_that!(super::poisoned_mutex())
+                assert_that_owned!(super::poisoned_mutex())
                     .with_location(false)
                     .is_not_poisoned()
             })

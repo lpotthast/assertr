@@ -5,12 +5,18 @@ use core::fmt::Debug;
 
 use crate::{AssertThat, mode::Mode};
 
-pub(crate) struct DetailMessages<'a>(pub(crate) &'a [String]);
+/// Renders chain-level user messages followed by per-failure details as one debug list.
+pub(crate) struct DetailMessages<'a>(pub(crate) &'a [String], pub(crate) &'a [String]);
 
 impl Debug for DetailMessages<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list()
-            .entries(self.0.iter().map(|it| DisplayString(it)))
+            .entries(
+                self.0
+                    .iter()
+                    .chain(self.1.iter())
+                    .map(|it| DisplayString(it)),
+            )
             .finish()
     }
 }
@@ -29,24 +35,33 @@ pub(crate) trait WithDetail {
 
 impl<T, M: Mode, R> WithDetail for AssertThat<'_, T, M, R> {
     fn collect_messages(&self, collection: &mut Vec<String>) {
-        for m in self.detail_messages.borrow().iter() {
+        for m in self.state.detail_messages.borrow().iter() {
             collection.push(m.to_owned());
         }
-        if let Some(parent) = self.parent {
+        if let Some(parent) = self.state.parent {
             parent.collect_messages(collection);
         }
     }
 }
 
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
-    /// Add a message to be displayed on assertion failure.
+    /// Adds a message that is shown with every failure of this chain from here on.
+    ///
+    /// Messages are collected from the failing assertion upward through all of its parents, so a
+    /// message set on the subject also shows up in failures of assertions derived from it through
+    /// `satisfies` and friends. Use it for context that belongs to the test ("ids must be
+    /// sorted"). Assertion implementations attach the evidence of one particular failure through
+    /// [`AssertThat::fail_with_details`] instead.
     #[must_use]
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {
-        self.detail_messages.borrow_mut().push(message.into());
+        self.state.detail_messages.borrow_mut().push(message.into());
         self
     }
 
-    /// Add a message to be displayed on assertion failure bound by the given condition.
+    /// Adds a message for subsequent failures when `condition` is true.
+    ///
+    /// `condition` is evaluated immediately. `message_provider` runs immediately only when the
+    /// condition returns `true`.
     #[must_use]
     pub fn with_conditional_detail_message<Message: Into<String>>(
         self,
@@ -55,20 +70,17 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ) -> Self {
         if condition(&self) {
             let message = message_provider(&self);
-            self.detail_messages.borrow_mut().push(message.into());
+            self.state.detail_messages.borrow_mut().push(message.into());
         }
         self
     }
 
-    /// Add a message to be displayed on assertion failure.
+    /// Adds a message for every subsequent failure of this chain.
     ///
-    /// Use this variant instead of the `with_` variants when not in a call-chain context,
-    /// and you don't want to call an ownership-taking function.
-    ///
-    /// Messages added this way apply to every subsequent failure of the assertion chain.
-    /// Assertion implementations must not use this for per-failure diagnostics; those belong to
-    /// `AssertThat::fail_with_details`, which scopes them to a single failure.
+    /// Unlike the `with_` variants, this method borrows the assertion. Assertion implementations
+    /// must not use it for per-failure diagnostics. Those belong to
+    /// [`AssertThat::fail_with_details`], which scopes them to a single failure.
     pub fn add_detail_message(&self, message: impl Into<String>) {
-        self.detail_messages.borrow_mut().push(message.into());
+        self.state.detail_messages.borrow_mut().push(message.into());
     }
 }

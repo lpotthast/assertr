@@ -13,6 +13,7 @@ pub use iterator::IteratorAssertions;
 #[cfg(test)]
 mod tests {
     use core::cell::Cell;
+    use std::sync::{Arc, Mutex};
 
     use crate::prelude::*;
 
@@ -39,18 +40,19 @@ mod tests {
         };
         assert_that!(&values)
             .into_iter_contains(2)
+            .into_iter_contains_all([1, 3])
             .into_iter_does_not_contain(4)
             .into_iter_has_length(3)
             .into_iter_starts_with([1])
             .into_iter_ends_with([3])
             .into_iter_contains_contiguous([2, 3]);
-        assert_that!(values.calls.get()).is_equal_to(6);
+        assert_that!(values.calls.get()).is_equal_to(7);
     }
 
     #[test]
     fn decisive_streaming_assertions_stop_immediately() {
         let calls = Cell::new(0);
-        assert_that!(core::iter::from_fn(|| {
+        assert_that_owned!(core::iter::from_fn(|| {
             let value = calls.get();
             calls.set(value + 1);
             Some(value)
@@ -59,19 +61,17 @@ mod tests {
         assert_that!(calls.get()).is_equal_to(3);
 
         let calls = Cell::new(0);
-        let failures = assert_that!(core::iter::from_fn(|| {
+        let failures = assert_that_owned!(core::iter::from_fn(|| {
             let value = calls.get();
             calls.set(value + 1);
             Some(value)
         }))
-        .with_capture()
-        .does_not_contain(2)
-        .capture_failures();
+        .capture(|it| it.does_not_contain(2));
         assert_that!(calls.get()).is_equal_to(3);
         assert_that!(failures).has_length(1);
 
         let calls = Cell::new(0);
-        assert_that!(core::iter::from_fn(|| {
+        assert_that_owned!(core::iter::from_fn(|| {
             let value = calls.get();
             calls.set(value + 1);
             Some(value)
@@ -87,7 +87,7 @@ mod tests {
             calls.set(calls.get() + 1);
             Some(1)
         });
-        assert_that!(iterator).starts_with::<i32>([]);
+        assert_that_owned!(iterator).starts_with::<i32>([]);
         assert_that!(calls.get()).is_equal_to(0);
 
         let calls = Cell::new(0);
@@ -95,7 +95,7 @@ mod tests {
             calls.set(calls.get() + 1);
             Some(1)
         });
-        assert_that!(iterator).ends_with::<i32>([]);
+        assert_that_owned!(iterator).ends_with::<i32>([]);
         assert_that!(calls.get()).is_equal_to(0);
 
         let calls = Cell::new(0);
@@ -103,45 +103,39 @@ mod tests {
             calls.set(calls.get() + 1);
             Some(1)
         });
-        assert_that!(iterator).contains_contiguous::<i32>([]);
+        assert_that_owned!(iterator).contains_contiguous::<i32>([]);
         assert_that!(calls.get()).is_equal_to(0);
     }
 
     #[test]
     fn exact_assertions_consume_at_most_expected_length_plus_one() {
         let calls = Cell::new(0);
-        let failures = assert_that!(core::iter::from_fn(|| {
+        let failures = assert_that_owned!(core::iter::from_fn(|| {
             let value = calls.get();
             calls.set(value + 1);
             Some(value)
         }))
-        .with_capture()
-        .contains_exactly([0, 9, 2])
-        .capture_failures();
+        .capture(|it| it.contains_exactly([0, 9, 2]));
         assert_that!(calls.get()).is_equal_to(2);
         assert_that!(failures).has_length(1);
 
         let calls = Cell::new(0);
-        let failures = assert_that!(core::iter::from_fn(|| {
+        let failures = assert_that_owned!(core::iter::from_fn(|| {
             let value = calls.get();
             calls.set(value + 1);
             Some(value)
         }))
-        .with_capture()
-        .contains_exactly_in_any_order([0, 1, 2])
-        .capture_failures();
+        .capture(|it| it.contains_exactly_in_any_order([0, 1, 2]));
         assert_that!(calls.get()).is_equal_to(4);
         assert_that!(failures).has_length(1);
     }
 
     #[test]
     fn failure_preview_is_capped_and_retains_the_decisive_item() {
-        let failures = assert_that!(0..100)
+        let failures = assert_that_owned!(0..100)
             .with_location(false)
-            .with_capture()
-            .does_not_contain(99)
-            .capture_failures();
-        let failure = &failures[0];
+            .capture(|it| it.does_not_contain(99));
+        let failure = failures[0].to_string();
         assert_that!(failure.as_str())
             .contains("last 16 consumed elements")
             .contains("84,")
@@ -152,17 +146,43 @@ mod tests {
 
     #[test]
     fn failure_locations_point_at_the_callers_assertion() {
-        let failures = assert_that!([1, 2, 3].into_iter())
-            .with_capture()
-            .contains(9)
-            .capture_failures();
-        assert_that!(failures[0].as_str()).contains("core/iter/mod.rs");
+        let failures = assert_that_owned!([1, 2, 3].into_iter()).capture(|it| it.contains(9));
+        assert_that!(failures[0].location.expect("present").file()).contains("core/iter/mod.rs");
 
-        let failures = assert_that!(vec![1, 2, 3])
-            .with_capture()
-            .into_iter_contains(9)
-            .capture_failures();
-        assert_that!(failures[0].as_str()).contains("core/iter/mod.rs");
+        let failures = assert_that!(vec![1, 2, 3]).capture(|it| it.into_iter_contains(9));
+        assert_that!(failures[0].location.expect("present").file()).contains("core/iter/mod.rs");
+    }
+
+    #[test]
+    fn borrowed_iterator_ownership_panic_points_at_the_callers_assertion() {
+        let panic_location = Arc::new(Mutex::new(None));
+        let panic_location_for_hook = Arc::clone(&panic_location);
+        let test_thread = std::thread::current().id();
+        let previous_hook: Arc<dyn Fn(&std::panic::PanicHookInfo<'_>) + Send + Sync> =
+            Arc::from(std::panic::take_hook());
+        let previous_hook_for_hook = Arc::clone(&previous_hook);
+
+        std::panic::set_hook(Box::new(move |panic| {
+            if std::thread::current().id() == test_thread {
+                *panic_location_for_hook.lock().expect("not poisoned") = panic
+                    .location()
+                    .map(|location| (location.file().to_owned(), location.line()));
+            } else {
+                previous_hook_for_hook(panic);
+            }
+        }));
+
+        let iterator = [1, 2, 3].into_iter();
+        let expected_line = line!() + 1;
+        let result = std::panic::catch_unwind(|| assert_that!(iterator).contains(2));
+
+        std::panic::set_hook(Box::new(move |panic| previous_hook(panic)));
+
+        assert_that!(result.is_err()).is_true();
+        let location = panic_location.lock().expect("not poisoned").clone();
+        let (file, line) = location.expect("panic location");
+        assert_that!(file.as_str()).contains("core/iter/mod.rs");
+        assert_that!(line).is_equal_to(expected_line);
     }
 
     #[test]
@@ -170,18 +190,16 @@ mod tests {
         let failures = assert_that!(vec![1, 2, 3])
             .with_location(false)
             .with_detail_message("user context")
-            .with_capture()
-            .into_iter_does_not_contain(2)
-            .into_iter_contains(9)
-            .capture_failures();
+            .capture(|it| it.into_iter_does_not_contain(2).into_iter_contains(9));
 
         assert_that!(&failures).has_length(2);
-        assert_that!(failures[0].as_str())
-            .contains("user context")
-            .contains("Decisive element is at zero-based index 1.");
-        assert_that!(failures[1].as_str())
-            .contains("user context")
-            .contains("Consumed 3 element(s).")
-            .does_not_contain("Decisive element");
+        assert_that!(failures[0].messages.as_slice()).contains_exactly(["user context"]);
+        assert_that!(failures[0].details.as_slice()).contains_matching(|it: &String| {
+            it.contains("Decisive element is at zero-based index 1.")
+        });
+        assert_that!(failures[1].messages.as_slice()).contains_exactly(["user context"]);
+        assert_that!(failures[1].details.as_slice())
+            .contains_matching(|it: &String| it.contains("Consumed 3 element(s)."))
+            .does_not_contain_matching(|it: &String| it.contains("Decisive element"));
     }
 }

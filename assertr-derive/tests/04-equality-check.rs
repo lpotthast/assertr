@@ -3,8 +3,8 @@
 use assertr::prelude::*;
 use indoc::formatdoc;
 
-// Deriving `Debug` is now necessary, as we want to actually use `Foo` in an assertion.
-#[derive(Debug, AssertrEq)]
+// `Debug` renders `Foo`, while `PartialEq` also permits full equality assertions.
+#[derive(Debug, PartialEq, AssertrEq)]
 pub struct Foo {
     pub id: i32,
 
@@ -19,6 +19,12 @@ fn main() {
         name: "bob".to_string(),
         data: (42, 100),
     };
+
+    subject.must().be_equal_to(Foo {
+        id: 1,
+        name: "bob".to_string(),
+        data: (42, 100),
+    });
 
     subject.must().be_equal_to(FooAssertrEq {
         id: any(),

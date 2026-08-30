@@ -53,9 +53,9 @@ pub(super) fn equality_checks(
 
 /// Extends the source type's generics for the generated `AssertrPartialEq` implementations.
 ///
-/// The added renderer parameter must render both the actual and expected field types; types
+/// The added renderer parameter must render both the actual and expected field types. Types
 /// shared between fields are only bounded once. Fields using the default comparison also
-/// receive an `AssertrPartialEq` bound; custom comparisons may contribute predicates through
+/// receive an `AssertrPartialEq` bound. Custom comparisons may contribute predicates through
 /// `compare_bounds`.
 pub(super) fn build_implementation_generics(
     original: &Generics,
@@ -76,7 +76,7 @@ pub(super) fn build_implementation_generics(
             }
             rendered_types.push(type_key);
             where_clause.predicates.push(parse_quote! {
-                #renderer: #assertr::AssertionRenderer<#ty>
+                #renderer: #assertr::ValueRenderer<#ty>
             });
         }
         where_clause

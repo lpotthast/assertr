@@ -2,24 +2,35 @@ use alloc::string::String;
 use core::fmt::Write;
 use indoc::writedoc;
 
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, Mode, ValueRenderer};
 
 /// Assertions for boolean values.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait BoolAssertions {
-    fn is_true(self) -> Self;
+pub trait BoolAssertions<R = crate::DebugRenderer> {
+    /// Asserts that the subject is `true`.
+    fn is_true(self) -> Self
+    where
+        R: ValueRenderer<bool>;
 
-    fn is_false(self) -> Self;
+    /// Asserts that the subject is `false`.
+    fn is_false(self) -> Self
+    where
+        R: ValueRenderer<bool>;
 }
 
-impl<M: Mode, R> BoolAssertions for AssertThat<'_, bool, M, R> {
+impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
     #[track_caller]
-    fn is_true(self) -> Self {
+    fn is_true(self) -> Self
+    where
+        R: ValueRenderer<bool>,
+    {
         self.track_assertion();
         let actual = self.actual();
         let expected = &true;
         if actual != expected {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -32,11 +43,16 @@ impl<M: Mode, R> BoolAssertions for AssertThat<'_, bool, M, R> {
     }
 
     #[track_caller]
-    fn is_false(self) -> Self {
+    fn is_false(self) -> Self
+    where
+        R: ValueRenderer<bool>,
+    {
         self.track_assertion();
         let actual = self.actual();
         let expected = &false;
         if actual != expected {
+            let actual = self.render_value(actual);
+            let expected = self.render_value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -55,6 +71,12 @@ mod tests {
     mod is_true {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            true.must().be_true();
+        }
 
         #[test]
         fn succeeds_when_true() {
@@ -78,6 +100,12 @@ mod tests {
     mod is_false {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            false.must().be_false();
+        }
 
         #[test]
         fn succeeds_when_false() {

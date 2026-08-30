@@ -1,6 +1,6 @@
 [package]
 name = "assertr-derive"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.89.0"
 autotests = false
@@ -13,6 +13,8 @@ Derive AssertrEq implementations.
 """
 categories = ["development-tools::testing", "no-std"]
 keywords = ["assertions", "assert", "assert-that", "testing"]
+include = ["/src/**", "/tests/**", "/LICENSE-*"]
+# Package contents were vetted with `cargo package --list`.
 
 [lib]
 proc-macro = true

@@ -86,6 +86,11 @@ pub(super) fn derive_assertr_eq_impl(ast: &DeriveInput) -> TokenStream {
     );
 
     quote! {
+        #[doc = concat!(
+            "Partial-equality matcher generated for `",
+            stringify!(#original_struct_ident),
+            "`. Fields default to `Eq::Any`."
+        )]
         pub struct #eq_struct_ident #matcher_generics {
             #(#eq_struct_fields),*
         }

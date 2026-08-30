@@ -1,29 +1,48 @@
 use crate::AssertThat;
-use crate::AssertionRenderer;
+use crate::ValueRenderer;
 use crate::assertions::HasLength;
 use crate::mode::Mode;
-use crate::tracking::AssertionTracking;
 use alloc::string::String;
 use core::fmt::Write;
 use indoc::writedoc;
 
+/// Assertions for subjects implementing [`HasLength`].
+///
+/// [`HasLength`]: crate::assertions::HasLength
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait LengthAssertions {
-    fn is_empty(self) -> Self;
+    /// The assertion subject whose length is checked and whose failures are rendered.
+    type Subject: HasLength;
 
-    #[cfg_attr(feature = "fluent", fluent_alias("not_be_empty"))]
-    fn is_not_empty(self) -> Self;
+    /// The renderer carried by the assertion chain.
+    type Renderer;
 
-    fn has_length(self, expected: usize) -> Self;
+    /// Asserts that the subject has length zero.
+    fn is_empty(self) -> Self
+    where
+        Self::Renderer: ValueRenderer<Self::Subject>;
+
+    /// Asserts that the subject has nonzero length.
+    fn is_not_empty(self) -> Self
+    where
+        Self::Renderer: ValueRenderer<Self::Subject>;
+
+    /// Asserts that the subject has exactly `expected` elements or bytes.
+    fn has_length(self, expected: usize) -> Self
+    where
+        Self::Renderer: ValueRenderer<Self::Subject>;
 }
 
-impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R>
-where
-    R: AssertionRenderer<T>,
-{
+impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
+    type Renderer = R;
+    type Subject = T;
+
     #[track_caller]
-    fn is_empty(self) -> Self {
+    fn is_empty(self) -> Self
+    where
+        R: ValueRenderer<T>,
+    {
         self.track_assertion();
         if !self.actual().is_empty() {
             let actual = self.actual();
@@ -41,7 +60,10 @@ where
     }
 
     #[track_caller]
-    fn is_not_empty(self) -> Self {
+    fn is_not_empty(self) -> Self
+    where
+        R: ValueRenderer<T>,
+    {
         self.track_assertion();
         if self.actual().is_empty() {
             let actual = self.actual();
@@ -59,7 +81,10 @@ where
     }
 
     #[track_caller]
-    fn has_length(self, expected: usize) -> Self {
+    fn has_length(self, expected: usize) -> Self
+    where
+        R: ValueRenderer<T>,
+    {
         self.track_assertion();
         let actual_len = self.actual().length();
         if actual_len != expected {
@@ -85,6 +110,13 @@ mod tests {
     mod is_empty_on_array {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            let arr: [i32; 0] = [];
+            arr.must().be_empty();
+        }
 
         #[test]
         fn succeeds_when_empty() {
@@ -114,6 +146,13 @@ mod tests {
         use indoc::formatdoc;
 
         use crate::prelude::*;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            let slice: &[i32] = [].as_slice();
+            slice.must().be_empty();
+        }
 
         #[test]
         fn with_slice_succeeds_when_empty() {
@@ -146,6 +185,12 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            "".must().be_empty();
+        }
+
+        #[test]
         fn succeeds_when_empty() {
             assert_that!("").is_empty();
         }
@@ -169,6 +214,12 @@ mod tests {
     mod is_empty_on_string {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            String::new().must().be_empty();
+        }
 
         #[test]
         fn succeeds_when_empty() {
@@ -200,6 +251,12 @@ mod tests {
         use alloc::vec;
         use alloc::vec::Vec;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Vec::<i32>::new().must().be_empty();
+        }
 
         #[test]
         fn with_slice_succeeds_when_empty() {
@@ -235,6 +292,12 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            HashMap::<(), ()>::new().must().be_empty();
+        }
+
+        #[test]
         fn succeeds_when_map_is_empty() {
             let map = HashMap::<(), ()>::new();
             assert_that!(map).is_empty();
@@ -265,6 +328,12 @@ mod tests {
 
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            VecDeque::<i32>::new().must().be_empty();
+        }
 
         #[test]
         fn succeeds_when_empty() {
@@ -301,6 +370,12 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            HashMap::from([("foo", "bar")]).must().not_be_empty();
+        }
+
+        #[test]
         fn succeeds_when_map_is_empty() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
@@ -329,6 +404,12 @@ mod tests {
 
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            VecDeque::from([42]).must().not_be_empty();
+        }
 
         #[test]
         fn succeeds_when_not_empty() {
@@ -365,6 +446,12 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            "foo bar".must().have_length(7);
+        }
+
+        #[test]
         fn succeeds_when_expected_length_matches() {
             assert_that!("foo bar").has_length(7);
         }
@@ -393,6 +480,12 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            String::from("foo bar").must().have_length(7);
+        }
+
+        #[test]
         fn succeeds_when_expected_length_matches() {
             assert_that!(String::from("foo bar")).has_length(7);
         }
@@ -418,9 +511,39 @@ mod tests {
         }
     }
 
+    mod length_assertions_on_other_string_like_types {
+        use crate::prelude::*;
+        use alloc::{borrow::Cow, boxed::Box, string::String};
+
+        #[test]
+        fn boxed_str_supports_length_assertions() {
+            assert_that!(Box::<str>::from("foo"))
+                .is_not_empty()
+                .has_length(3);
+            assert_that!(Box::<str>::default()).is_empty().has_length(0);
+        }
+
+        #[test]
+        fn cow_str_supports_length_assertions() {
+            assert_that!(Cow::Borrowed("foo"))
+                .is_not_empty()
+                .has_length(3);
+            assert_that!(Cow::<str>::Owned(String::new()))
+                .is_empty()
+                .has_length(0);
+        }
+    }
+
     mod has_length_on_slice {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            let slice: &[i32] = [1, 2, 3].as_slice();
+            slice.must().have_length(3);
+        }
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {
@@ -462,6 +585,12 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            vec![1, 2, 3].must().have_length(3);
+        }
+
+        #[test]
         fn succeeds_when_length_matches_and_empty() {
             assert_that!(Vec::<i32>::new()).has_length(0);
         }
@@ -496,6 +625,12 @@ mod tests {
 
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            VecDeque::from([1, 2, 3]).must().have_length(3);
+        }
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {
@@ -537,6 +672,12 @@ mod tests {
         use std::collections::HashMap;
 
         use crate::prelude::*;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            HashMap::from([("foo", "bar")]).must().have_length(1);
+        }
 
         #[test]
         fn succeeds_when_length_matches_and_empty() {

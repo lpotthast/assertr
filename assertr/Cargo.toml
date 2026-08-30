@@ -1,6 +1,6 @@
 [package]
 name = "assertr"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2024"
 rust-version = "1.89.0"
 authors = ["Lukas Potthast <privat@lukas-potthast.de>"]
@@ -12,9 +12,17 @@ Fluent assertions for the Rust programming language.
 """
 categories = ["development-tools::testing", "no-std"]
 keywords = ["assertions", "assert", "assert-that", "testing"]
-exclude = ["/.idea/", "/.vscode/", "/.github", "/AGENTS.md", "/CLAUDE.md", "Justfile"]
+include = ["/src/**", "/tests/**", "/LICENSE-*"]
+# Package contents were vetted with `cargo package --list`.
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
+# The `num-traits?/...` edges are deliberately weak: enabling `std` or `libm` must not pull in
+# the numeric assertions and the `num-traits` dependency behind the user's back. A strong
+# `num-traits/std` edge would make `default-features = false, features = ["std"]` enable `num`
+# implicitly.
 default = ["std", "num"]
 full = [
     "derive",
@@ -30,38 +38,52 @@ full = [
     "std",
     "tokio",
 ]
-std = ["dep:futures", "num/std"]
+std = ["num-traits?/std"]
 derive = ["dep:assertr-derive"]
 fluent = ["dep:assertr-derive"]
-num = ["dep:num"]
+num = ["dep:num-traits"]
 http = ["dep:http"]
-jiff = ["dep:jiff"]
-tokio = ["dep:tokio"]
-serde = ["dep:serde", "dep:serde_json", "dep:toml"]
-program = ["dep:which"]
-reqwest = ["dep:reqwest"]
+# The integrations below wrap crates that are themselves std-only. Their `std` edge is what
+# makes `default-features = false, features = ["<integration>"]` a configuration that compiles.
+jiff = ["std", "dep:jiff"]
+tokio = ["std", "dep:tokio"]
+serde = ["serde-json", "serde-toml"]
+serde-json = ["std", "dep:serde", "dep:serde_json"]
+serde-toml = ["std", "dep:serde", "dep:toml"]
+program = ["std", "dep:which"]
+reqwest = ["std", "dep:reqwest"]
 rootcause = ["dep:rootcause"]
-libm = ["dep:libm", "num/libm"]
+# `libm` carries no dependency of its own: the crate is never named in assertr's source, it is
+# only what `num-traits` uses to provide the float traits without `std`.
+libm = ["num-traits?/libm"]
 
 [dependencies]
 # Exact pin: generated code uses `assertr::__private`, so the two crates only work in the
 # versions released together. A range requirement would let Cargo resolve a newer derive
 # against an older assertr and produce generated code that does not compile.
-assertr-derive = { version = "=0.3.0", optional = true, path = "../assertr-derive" }
-futures = { version = "0.3.31", optional = true }
+assertr-derive = { version = "=0.4.0", optional = true, path = "../assertr-derive" }
 http = { version = "1.3.1", optional = true }
 indoc = "2.0.5"
 jiff = { version = "0.2.13", optional = true }
-libm = { version = "0.2.11", optional = true }
-num = { version = "0.4.3", optional = true, default-features = false }
-reqwest = { version = "0.12.12", optional = true }
-rootcause = { version = "0.12.1", optional = true, default-features = false }
-serde = { version = "1.0.218", optional = true, features = ["derive"] }
+num-traits = { version = "0.2.19", optional = true, default-features = false }
+reqwest = { version = "0.13.4", optional = true, default-features = false }
+rootcause = { version = "0.13.0", optional = true, default-features = false }
+serde = { version = "1.0.218", optional = true, default-features = false }
 serde_json = { version = "1.0.140", optional = true }
-tokio = { version = "1.43.0", optional = true, features = ["full"] }
-toml = { version = "0.8.20", optional = true }
+tokio = { version = "1.43.0", optional = true, default-features = false, features = ["sync"] }
+toml = { version = "1.1.4", optional = true }
 which = { version = "8.0.0", optional = true, default-features = false, features = ["real-sys"] }
 
 [dev-dependencies]
-mockito = "1.6.1"
-tokio = { version = "1.43.0", features = ["full"] }
+# These two narrow body crates let the reqwest tests construct a response whose body read fails.
+bytes = "1.11.1"
+# The reqwest tests build their responses from `http::Response` instead of running a mock server.
+http = "1.5.0"
+http-body = "1.0.1"
+# `serde/derive` is a test-only need: the library bounds only require `serde::Serialize`. The "derive" appears
+# exclusively in doc examples and tests.
+serde = { version = "1.0.229", features = ["derive"] }
+# `#[tokio::test]` needs a current-thread runtime and the attribute macro. `sync` is needed by the
+# `program` tests, which reach for a `tokio::sync::RwLock` while the `tokio` feature (and with it
+# the normal dependency that would supply `sync`) is off.
+tokio = { version = "1.53.1", default-features = false, features = ["macros", "rt", "sync"] }

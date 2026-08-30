@@ -1,18 +1,15 @@
-use crate::{AssertThat, Mode, Type, tracking::AssertionTracking};
+use crate::{AssertThat, Mode, Type};
 use core::fmt::Write;
 use indoc::writedoc;
 
 /// Static memory assertions for any type.
 #[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait MemAssertions {
+    /// Asserts that [`core::mem::needs_drop`] returns `true` for the represented type.
+    ///
+    /// This is a conservative signal. It does not guarantee that dropping the type runs code.
     fn needs_drop(self) -> Self;
-
-    fn need_drop(self) -> Self
-    where
-        Self: Sized,
-    {
-        self.needs_drop()
-    }
 }
 
 impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
@@ -27,7 +24,7 @@ impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
 
                     but dropping it is guaranteed to have no side effect.
 
-                    You may forgot to `impl Drop` for this type.
+                    You may have forgotten to `impl Drop` for this type.
                 ", actual = actual.get_type_name()}
             });
         }
@@ -41,6 +38,12 @@ mod tests {
         use crate::assert_that_type;
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            crate::Type::<String>::new().must().need_drop();
+        }
 
         #[test]
         fn succeeds_when_type_needs_drop() {
@@ -70,7 +73,7 @@ mod tests {
 
                     but dropping it is guaranteed to have no side effect.
 
-                    You may forgot to `impl Drop` for this type.
+                    You may have forgotten to `impl Drop` for this type.
                     -------- assertr --------
                 "#});
         }

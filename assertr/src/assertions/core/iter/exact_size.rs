@@ -2,13 +2,13 @@ use alloc::string::String;
 use core::fmt::Write;
 use indoc::writedoc;
 
-use crate::{AssertThat, Mode, tracking::AssertionTracking};
+use crate::{AssertThat, Mode};
 
 /// Non-consuming assertions for the exact number of elements remaining in an iterator.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait ExactSizeIteratorAssertions {
-    /// Asserts that `ExactSizeIterator::len()` equals `expected` without advancing the iterator.
+    /// Asserts that [`ExactSizeIterator::len`] equals `expected` without advancing the iterator.
     fn has_remaining_count(self, expected: usize) -> Self;
     /// Asserts that no elements remain without advancing the iterator.
     fn has_no_remaining_elements(self) -> Self;
@@ -34,7 +34,17 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions for AssertTha
 
     #[track_caller]
     fn has_no_remaining_elements(self) -> Self {
-        self.has_remaining_count(0)
+        self.track_assertion();
+        let actual = self.actual().len();
+        if actual != 0 {
+            let verb = if actual == 1 { "remains" } else { "remain" };
+            self.fail(|w: &mut String| {
+                writedoc! {w, r"
+                Expected the iterator to have no remaining elements, but {actual} {verb}.
+            "}
+            });
+        }
+        self
     }
 
     #[track_caller]
@@ -56,6 +66,12 @@ mod tests {
     mod has_remaining_count {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            [1, 2].into_iter().must().have_remaining_count(2);
+        }
 
         #[test]
         fn succeeds_when_count_matches_without_advancing() {
@@ -88,6 +104,12 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            [1].into_iter().skip(1).must().have_no_remaining_elements();
+        }
+
+        #[test]
         fn succeeds_when_no_elements_remain() {
             assert_that!([1].into_iter().skip(1)).has_no_remaining_elements();
         }
@@ -102,8 +124,22 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
-                    Expected remaining element count: 0
-                      Actual remaining element count: 1
+                    Expected the iterator to have no remaining elements, but 1 remains.
+                    -------- assertr --------
+                "});
+        }
+
+        #[test]
+        fn uses_plural_grammar_when_multiple_elements_remain() {
+            assert_that_panic_by(|| {
+                assert_that!([1, 2].into_iter())
+                    .with_location(false)
+                    .has_no_remaining_elements();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expected the iterator to have no remaining elements, but 2 remain.
                     -------- assertr --------
                 "});
         }
@@ -112,6 +148,12 @@ mod tests {
     mod has_remaining_elements {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            [1, 2].into_iter().must().have_remaining_elements();
+        }
 
         #[test]
         fn succeeds_when_elements_remain_without_advancing() {
@@ -133,19 +175,6 @@ mod tests {
                     Expected the iterator to have remaining elements, but it has none.
                     -------- assertr --------
                 "});
-        }
-    }
-
-    #[cfg(feature = "fluent")]
-    mod fluent_aliases {
-        use crate::prelude::*;
-
-        #[test]
-        fn assertions_have_fluent_aliases() {
-            assert_that!([1, 2].into_iter())
-                .have_remaining_count(2)
-                .have_remaining_elements();
-            assert_that!([1_i32; 0].into_iter()).have_no_remaining_elements();
         }
     }
 }

@@ -6,7 +6,7 @@ use quote::quote;
 /// Renders one `Eq<T>` matcher value.
 ///
 /// `render_value` must be an expression of type `::core::fmt::Result` that renders the `Eq::Eq`
-/// payload; it can reference the payload as `value` and the formatter through `formatter`.
+/// payload. It can reference the payload as `value` and the formatter through `formatter`.
 pub(super) fn render_debug_eq(
     value: &TokenStream,
     formatter: &TokenStream,
@@ -30,7 +30,7 @@ pub(super) fn render_debug_eq(
 /// cannot render.
 ///
 /// The specialization resolves where this expression is emitted, so the payload type must be
-/// concrete at that location; payload types naming matcher generics use bounds on the matcher's
+/// concrete at that location. Payload types naming matcher generics use bounds on the matcher's
 /// `Debug` impl instead (see `RenderableEq`).
 pub(super) fn specialized_render_value(
     value: &TokenStream,

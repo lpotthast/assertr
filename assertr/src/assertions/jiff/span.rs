@@ -1,36 +1,49 @@
-use crate::AssertThat;
 use crate::mode::Mode;
-use crate::tracking::AssertionTracking;
+use crate::{AssertThat, ValueRenderer};
 use indoc::writedoc;
 use jiff::Span;
 use std::fmt::Write;
 
+/// Assertions for [`Span`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
-pub trait SpanAssertions {
-    fn is_zero(self) -> Self;
+pub trait SpanAssertions<R = crate::DebugRenderer> {
+    /// Asserts that the span is zero.
+    fn is_zero(self) -> Self
+    where
+        R: ValueRenderer<Span>;
 
-    fn is_negative(self) -> Self;
+    /// Asserts that the span is strictly negative.
+    fn is_negative(self) -> Self
+    where
+        R: ValueRenderer<Span>;
 
-    /// Unlike the `is_positive` assertions on numerics, this fails for a span of 0!
-    fn is_positive(self) -> Self;
+    /// Asserts that the span is strictly positive.
+    fn is_positive(self) -> Self
+    where
+        R: ValueRenderer<Span>;
 }
 
-impl<M: Mode> SpanAssertions for AssertThat<'_, Span, M> {
+impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
     #[track_caller]
-    fn is_zero(self) -> Self {
+    fn is_zero(self) -> Self
+    where
+        R: ValueRenderer<Span>,
+    {
         self.track_assertion();
 
         if !self.actual().is_zero() {
             let details = [String::from("Actual was not zero.")];
 
             let expected = Span::new();
+            let actual = self.render_value(self.actual());
+            let expected = self.render_value(&expected);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
 
                       Actual: {actual:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
 
@@ -38,16 +51,20 @@ impl<M: Mode> SpanAssertions for AssertThat<'_, Span, M> {
     }
 
     #[track_caller]
-    fn is_negative(self) -> Self {
+    fn is_negative(self) -> Self
+    where
+        R: ValueRenderer<Span>,
+    {
         self.track_assertion();
 
         if !self.actual().is_negative() {
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be negative. But was
 
                       Actual: {actual:#?}
-                ", actual = self.actual()}
+                "}
             });
         }
 
@@ -55,16 +72,20 @@ impl<M: Mode> SpanAssertions for AssertThat<'_, Span, M> {
     }
 
     #[track_caller]
-    fn is_positive(self) -> Self {
+    fn is_positive(self) -> Self
+    where
+        R: ValueRenderer<Span>,
+    {
         self.track_assertion();
 
         if !self.actual().is_positive() {
+            let actual = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be positive. But was
 
-                      Actual: {actual} ({actual:#?})
-                ", actual = self.actual()}
+                      Actual: {actual:#?}
+                "}
             });
         }
 
@@ -78,6 +99,12 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::{Span, ToSpan};
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Span::new().must().be_zero();
+        }
 
         #[test]
         fn succeeds_when_zero() {
@@ -108,6 +135,12 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::ToSpan;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            (-2).hours().minutes(30).must().be_negative();
+        }
 
         #[test]
         fn succeeds_when_zero() {
@@ -153,6 +186,12 @@ mod tests {
         use jiff::ToSpan;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            2.hours().minutes(30).must().be_positive();
+        }
+
+        #[test]
         fn succeeds_when_positive() {
             assert_that!(2.hours().minutes(30)).is_positive();
         }
@@ -167,7 +206,7 @@ mod tests {
                     -------- assertr --------
                     Expected value to be positive. But was
 
-                      Actual: PT0S (0s)
+                      Actual: 0s
                     -------- assertr --------
                 "});
         }
@@ -184,7 +223,7 @@ mod tests {
                     -------- assertr --------
                     Expected value to be positive. But was
 
-                      Actual: -PT2H30M (2h 30m ago)
+                      Actual: 2h 30m ago
                     -------- assertr --------
                 "});
         }

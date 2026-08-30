@@ -1,67 +1,43 @@
-use core::any::TypeId;
+//! The two assertion modes: fail immediately, or collect failures.
+//!
+//! [`Mode`] is sealed. [`Panic`] and [`Capture`] are its only implementations.
 
-pub trait Mode: Default + Clone + 'static {
-    fn is_panic(&self) -> bool {
-        TypeId::of::<Self>() == TypeId::of::<Panic>()
-    }
+mod sealed {
+    pub trait Sealed {}
 
-    fn is_capture(&self) -> bool {
-        TypeId::of::<Self>() == TypeId::of::<Capture>()
-    }
-
-    fn set_derived(&mut self);
+    impl Sealed for super::Panic {}
+    impl Sealed for super::Capture {}
 }
 
-/// Panic mode. When an assertion fails, a panic message is raised and the program terminates immediately.
-/// Subsequent assertions after a failure are therefore not executed.
-/// This is the default mode and allows an `AssertThat` to be mapped to a different type with a condition,
-/// failing when that condition cannot be met.
-/// A good example for that is `assert_that(Err("foo")).is_err().is_equal_to("foo")`, where the `is_err`
-/// implementation can map the contained actual value to the results error value and allow for simpler chaining of assertions.
-#[derive(Debug, Default, PartialEq, Clone)]
-pub struct Panic {
-    pub(crate) derived: bool,
+/// The mode of an assertion, deciding what happens when an assertion fails.
+///
+/// This trait is sealed. [`Panic`] and [`Capture`] are its only implementations and are type-state
+/// markers, not extension points. Every assertion derived from a root assertion retains the
+/// root's mode.
+pub trait Mode: sealed::Sealed + 'static {
+    /// Whether failures are collected for later inspection (`true`) or raise an immediate panic
+    /// (`false`).
+    const CAPTURES: bool;
 }
 
-impl Panic {
-    /// Matches the outcome of `Panic::default()` but is usable in const contexts.
-    pub(crate) const DEFAULT: Self = Self { derived: false };
-}
+/// Panic mode, in which the first failure panics immediately.
+///
+/// This is the default mode. Projections that cannot produce a continuation after failure, such
+/// as `get_ok`, are available only in this mode.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Panic;
 
-#[derive(Debug, Default, PartialEq, Clone)]
-pub struct Capture {
-    pub(crate) derived: bool,
-    pub(crate) captured: bool,
-}
-
-impl Capture {
-    /// Matches the outcome of `Capture::default()` but is usable in const contexts.
-    #[cfg(feature = "fluent")]
-    pub(crate) const DEFAULT: Self = Self {
-        derived: false,
-        captured: false,
-    };
-}
+/// Capture mode, in which failures are collected instead of panicking.
+///
+/// [`crate::AssertThat::capture`] and the fluent `verify` entry points return the collected
+/// failures when their closure completes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Capture;
 
 impl Mode for Panic {
-    fn set_derived(&mut self) {
-        self.derived = true;
-    }
+    const CAPTURES: bool = false;
 }
 
 impl Mode for Capture {
-    fn set_derived(&mut self) {
-        self.derived = true;
-    }
-}
-
-impl Drop for Capture {
-    fn drop(&mut self) {
-        if crate::enforce_drop_contracts() {
-            assert!(
-                self.captured || self.derived,
-                "You dropped an `assert_that(..)` value, on which `.with_capture()` was called, without actually capturing the assertion failures using `.capture_failures()`!"
-            );
-        }
-    }
+    const CAPTURES: bool = true;
 }

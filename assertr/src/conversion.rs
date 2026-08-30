@@ -1,13 +1,11 @@
-#[cfg(feature = "serde")]
+#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 use crate::AssertThat;
-#[cfg(feature = "serde")]
+#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 use crate::actual::Actual;
-#[cfg(feature = "serde")]
+#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 use crate::mode::Mode;
 
-/// A conversion function that can be used with `map` to easily convert any `serde::Serialize`able
-/// type into its JSON representation for further checks.
-/// Uses `serde_json` to perform the conversion.
+/// Returns a `map` adapter that serializes the subject as JSON with `serde_json`.
 ///
 /// # Panics
 ///
@@ -23,11 +21,11 @@ use crate::mode::Mode;
 ///
 /// let person = Person { age: 42 };
 ///
-/// assert_that(&person)
+/// assert_that!(person)
 ///     .map(json())
 ///     .is_equal_to(r#"{"age":42}"#);
 /// ```
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-json")]
 pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
     |it| {
         serde_json::to_string(it.borrowed())
@@ -36,9 +34,7 @@ pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
     }
 }
 
-/// A conversion function that can be used with `map` to easily convert any `serde::Serialize`able
-/// type into its TOML representation for further checks.
-/// Uses `toml` to perform the conversion.
+/// Returns a `map` adapter that serializes the subject as TOML with `toml`.
 ///
 /// # Panics
 ///
@@ -54,11 +50,11 @@ pub fn json<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
 ///
 /// let config = Config { value: 42 };
 ///
-/// assert_that(&config)
+/// assert_that!(config)
 ///     .map(toml())
 ///     .is_equal_to("value = 42\n");
 /// ```
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-toml")]
 pub fn toml<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
     |it| {
         toml::to_string(it.borrowed())
@@ -67,15 +63,21 @@ pub fn toml<S: serde::Serialize>() -> impl FnOnce(Actual<S>) -> Actual<String> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R>
 where
     T: serde::Serialize,
 {
+    /// Converts the subject to JSON for further assertions.
+    #[cfg(feature = "serde-json")]
+    #[must_use]
     pub fn as_json(self) -> AssertThat<'t, String, M, R> {
         self.map(json())
     }
 
+    /// Converts the subject to TOML for further assertions.
+    #[cfg(feature = "serde-toml")]
+    #[must_use]
     pub fn as_toml(self) -> AssertThat<'t, String, M, R> {
         self.map(toml())
     }

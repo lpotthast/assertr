@@ -1,18 +1,19 @@
-use crate::AssertThat;
+//! Assertions for resolving executable programs.
+
 use crate::mode::{Mode, Panic};
-use crate::tracking::AssertionTracking;
+use crate::{Actual, AssertThat, ValueRenderer};
 use alloc::borrow::Cow;
 use indoc::writedoc;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write;
 use std::path::PathBuf;
 
-/// The name of a program. E.g. "ls", "sh", "chrome", ...
+/// A program name or path to resolve with [`which::which`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program<'a>(Cow<'a, OsStr>);
 
 impl<'a> Program<'a> {
-    /// Prefer calling `Program::from` instead.
+    /// Creates a program name from owned or borrowed platform string data.
     pub fn new(program: impl Into<Cow<'a, OsStr>>) -> Self {
         Program(program.into())
     }
@@ -57,29 +58,42 @@ impl AsRef<OsStr> for Program<'_> {
     }
 }
 
-pub trait ProgramAssertions<'t, 'a, M: Mode> {
-    /// Check that the program exists (equivalent to doing a `which {program}` check on unix).
-    fn exists(self) -> AssertThat<'t, Program<'a>, M>;
+/// Non-extracting assertions for [`Program`] subjects.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait ProgramAssertions<'t, 'a, M: Mode, R = crate::DebugRenderer> {
+    /// Asserts that [`which::which`] resolves the program.
+    fn exists(self) -> AssertThat<'t, Program<'a>, M, R>
+    where
+        R: ValueRenderer<Program<'a>>;
 }
 
-pub trait ProgramAssertionsRequiringPanicMode<'t> {
-    /// Check that the program exists (equivalent to doing a `which {program}` check on unix).
+/// Panic-mode assertions that project a [`Program`] to its resolved path.
+#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+pub trait ProgramAssertionsRequiringPanicMode<'t, R = crate::DebugRenderer> {
+    /// The program subject rendered in failure diagnostics.
+    type Subject;
+
+    /// Asserts that [`which::which`] resolves the program, then returns an assertion over the
+    /// resulting [`PathBuf`].
     ///
-    /// Terminal operation, automatically mapping to the found `PathBuf` on success.
-    ///
-    /// This is only available in [`Panic`] mode, os we rely on the assertion panic for the mapping
-    /// to only happen in the success case!
-    fn exists_and(self) -> AssertThat<'t, PathBuf, Panic>;
+    /// This projection is available only in [`Panic`] mode because failure cannot produce a path.
+    fn exists_and(self) -> AssertThat<'t, PathBuf, Panic, R>
+    where
+        R: ValueRenderer<Self::Subject>;
 }
 
-impl<'a, 't, M: Mode> ProgramAssertions<'t, 'a, M> for AssertThat<'t, Program<'a>, M> {
+impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Program<'a>, M, R> {
     #[track_caller]
-    fn exists(self) -> AssertThat<'t, Program<'a>, M> {
+    fn exists(self) -> AssertThat<'t, Program<'a>, M, R>
+    where
+        R: ValueRenderer<Program<'a>>,
+    {
         self.track_assertion();
         let program = self.actual().as_ref();
         let found = which::which(program);
 
         if let Err(err) = &found {
+            let program = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Expected program: {program:?}
@@ -95,14 +109,22 @@ impl<'a, 't, M: Mode> ProgramAssertions<'t, 'a, M> for AssertThat<'t, Program<'a
     }
 }
 
-impl<'t> ProgramAssertionsRequiringPanicMode<'t> for AssertThat<'t, Program<'_>, Panic> {
+impl<'a, 't, R> ProgramAssertionsRequiringPanicMode<'t, R>
+    for AssertThat<'t, Program<'a>, Panic, R>
+{
+    type Subject = Program<'a>;
+
     #[track_caller]
-    fn exists_and(self) -> AssertThat<'t, PathBuf, Panic> {
+    fn exists_and(self) -> AssertThat<'t, PathBuf, Panic, R>
+    where
+        R: ValueRenderer<Program<'a>>,
+    {
         self.track_assertion();
         let program = self.actual().as_ref();
         let found = which::which(program);
 
         if let Err(err) = &found {
+            let program = self.render_value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Expected program: {program:?}
@@ -114,8 +136,7 @@ impl<'t> ProgramAssertionsRequiringPanicMode<'t> for AssertThat<'t, Program<'_>,
             });
         }
 
-        // Note: This will fail in capturing mode!
-        self.map_owned(|_| found.expect("present"))
+        self.map(|_| Actual::Owned(found.expect("present")))
     }
 }
 
@@ -174,6 +195,12 @@ mod tests {
         use tokio::sync::RwLock;
 
         #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Program::from("ls").must().exist();
+        }
+
+        #[test]
         fn succeeds_when_existent() {
             assert_that!(Program::from("ls")).exists();
         }
@@ -184,14 +211,14 @@ mod tests {
             let rw_lock_write_guard = rw_lock.write().await;
 
             assert_that_panic_by(|| {
-                assert_that!(Program::from("someNonexistentProgram"))
+                assert_that_owned!(Program::from("someNonexistentProgram"))
                     .with_location(false)
                     .exists()
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Expected program: "someNonexistentProgram"
+                    Expected program: Program("someNonexistentProgram")
 
                     to exist, but it could not be found.
 
@@ -207,6 +234,12 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            Program::from("ls").must_owned().exist_and();
+        }
 
         #[cfg(target_os = "linux")]
         fn expected_ls_location() -> &'static str {
