@@ -650,6 +650,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `3`
+
                     Expected: 0
 
                       Actual: 3
@@ -696,6 +698,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `3`
+
                     Expected: 1
 
                       Actual: 3
@@ -748,6 +752,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `0.0`
+
                     Expected value to be negative. But was
 
                       Actual: 0.0
@@ -761,6 +767,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `1.23`
+
                     Expected value to be negative. But was
 
                       Actual: 1.23
@@ -800,6 +808,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `-1.23`
+
                     Expected value to be positive. But was
 
                       Actual: -1.23
@@ -828,6 +838,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `0.3319`
+
                     Expected value to be close to: 0.333,
                      with allowed deviation being: 0.001,
                       but value was outside the allowed deviation.
@@ -924,6 +936,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `0.3341`
+
                     Expected value to be close to: 0.333,
                      with allowed deviation being: 0.001,
                       but value was outside the allowed deviation.
@@ -957,6 +971,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `1.23`
+
                     Expected: NaN
 
                       Actual: 1.23
@@ -992,6 +1008,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `f32::infinity()`
+
                     Expected a finite value, but was
 
                       Actual: inf
@@ -1009,6 +1027,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `f32::neg_infinity()`
+
                     Expected a finite value, but was
 
                       Actual: -inf
@@ -1045,6 +1065,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `1.23`
+
                     Expected: +/- inf
 
                       Actual: 1.23
@@ -1079,6 +1101,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `subnormal`
+
                     Expected a normal floating-point value, but was
 
                       Actual: 1e-45
@@ -1111,6 +1135,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `1.0_f32`
+
                     Expected a subnormal floating-point value, but was
 
                       Actual: 1.0

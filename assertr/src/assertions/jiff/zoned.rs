@@ -134,6 +134,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `zdt`
+
                     Expected: Europe/Berlin
 
                       Actual: America/New_York
@@ -157,6 +159,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `zdt`
+
                     Expected: Europe/Berlin
 
                       Actual: TimeZone(05:00:00)
@@ -196,6 +200,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `zdt`
+
                     Expected: Europe/Berlin
 
                       Actual: America/New_York

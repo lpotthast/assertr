@@ -206,6 +206,8 @@ mod leaf {
 
         panic.has_type::<String>().is_equal_to(formatdoc! {"
             -------- assertr --------
+            Expression: `person(12)`
+
             Expected the person to be an adult, but they are only 12 years old!
             -------- assertr --------
         "});
@@ -226,6 +228,7 @@ mod leaf {
         assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {"
             -------- assertr --------
             Subject: child
+            Expression: `person(12)`
 
             Expected the person to be an adult, but they are only 12 years old!
             -------- assertr --------

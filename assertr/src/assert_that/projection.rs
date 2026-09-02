@@ -90,7 +90,8 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// Failures and assertion counts propagate to the root. Use the `derive_*` methods when the
     /// child must be stored or chained. Use `satisfies_*` to return to the original subject after
-    /// asserting on the projection.
+    /// asserting on the projection. A child starts a new diagnostic subject and therefore does
+    /// not inherit the parent's subject name or source expression.
     #[must_use]
     pub fn derive_owned<'u, U: 'u>(
         &'t self,

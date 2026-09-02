@@ -66,8 +66,13 @@ pub struct AssertionFailure {
     /// The name given to the assertion's subject via `with_subject_name`, if any.
     pub subject_name: Option<String>,
 
+    /// The source expression that produced the assertion subject, if the entry point captured it.
+    /// Derived child chains start a new diagnostic subject and do not inherit their parent's
+    /// expression.
+    pub expression: Option<&'static str>,
+
     /// The assertion-specific description, such as the rendered subject and expected value.
-    /// Location, subject name, and detail messages live in their own fields.
+    /// Location, subject name, expression, and detail messages live in their own fields.
     pub description: String,
 
     /// Diagnostics attached by the failing assertion itself and scoped to exactly this failure,
@@ -95,7 +100,15 @@ impl Display for AssertionFailure {
         }
 
         if let Some(subject_name) = &self.subject_name {
-            f.write_fmt(format_args!("Subject: {subject_name}\n\n"))?;
+            f.write_fmt(format_args!("Subject: {subject_name}\n"))?;
+        }
+        if let Some(expression) = self.expression {
+            f.write_str("Expression: `")?;
+            write_expression(f, expression)?;
+            f.write_str("`\n")?;
+        }
+        if self.subject_name.is_some() || self.expression.is_some() {
+            f.write_str("\n")?;
         }
 
         f.write_str(&self.description)?;
@@ -110,6 +123,28 @@ impl Display for AssertionFailure {
         }
 
         f.write_str(BANNER)
+    }
+}
+
+const MAX_EXPRESSION_CHARS: usize = 100;
+const ELLIPSIS: &str = "...";
+
+fn write_expression(f: &mut core::fmt::Formatter<'_>, expression: &str) -> core::fmt::Result {
+    let line_end = expression.find(['\r', '\n']).unwrap_or(expression.len());
+    let first_line = &expression[..line_end];
+    let truncated =
+        line_end != expression.len() || first_line.chars().count() > MAX_EXPRESSION_CHARS;
+
+    if truncated {
+        for character in first_line
+            .chars()
+            .take(MAX_EXPRESSION_CHARS - ELLIPSIS.len())
+        {
+            f.write_char(character)?;
+        }
+        f.write_str(ELLIPSIS)
+    } else {
+        f.write_str(first_line)
     }
 }
 
@@ -193,6 +228,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         let failure = AssertionFailure {
             location,
             subject_name: self.state.subject_name.clone(),
+            expression: self.state.expression,
             description,
             details: details.into_iter().collect(),
             messages,

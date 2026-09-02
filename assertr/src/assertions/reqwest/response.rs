@@ -469,8 +469,10 @@ mod tests {
                     .has_status_code(reqwest::StatusCode::OK);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(404, &[], "")`
+
                 Actual: 404 Not Found
 
                 is not the expected status code
@@ -481,7 +483,7 @@ mod tests {
                     URL: http://localhost/hello,
                 ]
                 -------- assertr --------
-            "});
+            "#});
         }
 
         #[test]
@@ -492,8 +494,10 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(404, &[], "")`
+
                         Actual: 404 Not Found
 
                         is not the expected status code
@@ -504,11 +508,13 @@ mod tests {
                             URL: http://localhost/hello,
                         ]
                         -------- assertr --------
-                    "});
+                    "#});
                 },
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(404, &[], "")`
+
                         Actual: 404 Not Found
 
                         is not a success (2xx) status code
@@ -517,7 +523,7 @@ mod tests {
                             URL: http://localhost/hello,
                         ]
                         -------- assertr --------
-                    "});
+                    "#});
                 },
             ]);
         }
@@ -548,8 +554,10 @@ mod tests {
                     .is_informational();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(200, &[], "")`
+
                 Actual: 200 OK
 
                 is not informational (1xx) status code
@@ -558,7 +566,7 @@ mod tests {
                     URL: http://localhost/hello,
                 ]
                 -------- assertr --------
-            "});
+            "#});
         }
 
         #[test]
@@ -569,8 +577,10 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(200, &[], "")`
+
                         Actual: 200 OK
 
                         is not informational (1xx) status code
@@ -579,7 +589,7 @@ mod tests {
                             URL: http://localhost/hello,
                         ]
                         -------- assertr --------
-                    "});
+                    "#});
                 },
             ]);
         }
@@ -611,8 +621,10 @@ mod tests {
                     .is_success();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(500, &[], "")`
+
                 Actual: 500 Internal Server Error
 
                 is not a success (2xx) status code
@@ -621,7 +633,7 @@ mod tests {
                     URL: http://localhost/hello,
                 ]
                 -------- assertr --------
-            "});
+            "#});
         }
 
         #[test]
@@ -632,8 +644,10 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(500, &[], "")`
+
                         Actual: 500 Internal Server Error
 
                         is not a success (2xx) status code
@@ -642,7 +656,7 @@ mod tests {
                             URL: http://localhost/hello,
                         ]
                         -------- assertr --------
-                    "});
+                    "#});
                 },
             ]);
         }
@@ -673,8 +687,10 @@ mod tests {
                     .is_redirection();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(200, &[], "")`
+
                 Actual: 200 OK
 
                 is not a redirection (3xx) status code
@@ -683,7 +699,7 @@ mod tests {
                     URL: http://localhost/hello,
                 ]
                 -------- assertr --------
-            "});
+            "#});
         }
 
         #[test]
@@ -694,8 +710,10 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(200, &[], "")`
+
                         Actual: 200 OK
 
                         is not a redirection (3xx) status code
@@ -704,7 +722,7 @@ mod tests {
                             URL: http://localhost/hello,
                         ]
                         -------- assertr --------
-                    "});
+                    "#});
                 },
             ]);
         }
@@ -735,8 +753,10 @@ mod tests {
                     .is_client_error();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(500, &[], "")`
+
                 Actual: 500 Internal Server Error
 
                 is not a client error (4xx) status code
@@ -745,7 +765,7 @@ mod tests {
                     URL: http://localhost/hello,
                 ]
                 -------- assertr --------
-            "});
+            "#});
         }
 
         #[test]
@@ -756,8 +776,10 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(500, &[], "")`
+
                         Actual: 500 Internal Server Error
 
                         is not a client error (4xx) status code
@@ -766,7 +788,7 @@ mod tests {
                             URL: http://localhost/hello,
                         ]
                         -------- assertr --------
-                    "});
+                    "#});
                 },
             ]);
         }
@@ -797,8 +819,10 @@ mod tests {
                     .is_server_error();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(404, &[], "")`
+
                 Actual: 404 Not Found
 
                 is not a server error (5xx) status code
@@ -807,7 +831,7 @@ mod tests {
                     URL: http://localhost/hello,
                 ]
                 -------- assertr --------
-            "});
+            "#});
         }
 
         #[test]
@@ -818,8 +842,10 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(404, &[], "")`
+
                         Actual: 404 Not Found
 
                         is not a server error (5xx) status code
@@ -828,7 +854,7 @@ mod tests {
                             URL: http://localhost/hello,
                         ]
                         -------- assertr --------
-                    "});
+                    "#});
                 },
             ]);
         }
@@ -865,6 +891,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(200, &[("x-api-key", "1234")], "")`
+
                 Actual: [
                     "x-api-key",
                 ]
@@ -890,6 +918,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(200, &[("x-api-key", "1234")], "")`
+
                         Actual: [
                             "x-api-key",
                         ]
@@ -934,6 +964,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(200, &[("x-api-key", "1234")], "")`
+
                 Actual: "1234"
 
                 is the value of header "x-api-key", which was not expected to be present
@@ -955,6 +987,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `response(200, &[("x-api-key", "1234")], "")`
+
                         Actual: "1234"
 
                         is the value of header "x-api-key", which was not expected to be present
@@ -1007,6 +1041,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `ok_response()`
+
                 Actual: "text/plain"
 
                 is not the expected value of header "content-type"
@@ -1030,6 +1066,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(200, &[], "")`
+
                 Actual: []
 
                 does not contain the expected header
@@ -1057,6 +1095,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `ok_response()`
+
                         Actual: "text/plain"
 
                         is not the expected value of header "content-type"
@@ -1123,6 +1163,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `response(200, &[("x-api-key", "1234")], "")`
+
                 Actual: [
                     "x-api-key",
                 ]
@@ -1335,6 +1377,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r"
                 -------- assertr --------
+                Expression: `json_response(body)`
+
                 Actual: {body:?}
 
                 is not valid JSON for the expected type: {expected_type}
@@ -1391,6 +1435,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
+                Expression: `json_response(body)`
+
                 Actual: {body:?}
 
                 is not valid JSON for the expected type: {expected_type}

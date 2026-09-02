@@ -137,6 +137,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `rx`
+
                     Expected: Person {{
                         name: "alice",
                     }}

@@ -181,6 +181,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `f32::NAN`
+
                 Actual: NaN
 
                 is not less than
@@ -217,6 +219,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `f32::NAN`
+
                 Actual: NaN
 
                 is not greater than
@@ -259,6 +263,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `f32::NAN`
+
                 Actual: NaN
 
                 is not less or equal to
@@ -301,6 +307,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `f32::NAN`
+
                 Actual: NaN
 
                 is not greater or equal to

@@ -164,6 +164,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `duration`
+
                     Expected: 0s
 
                       Actual: 9000s
@@ -202,6 +204,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `SignedDuration::ZERO`
+
                     Expected: 0s to be negative,
 
                       Actual: 0s,
@@ -219,6 +223,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `SignedDuration::from_secs(5)`
+
                     Expected: 5s to be negative,
 
                       Actual: 5s,
@@ -253,6 +259,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `SignedDuration::ZERO`
+
                     Expected: 0s to be positive,
 
                       Actual: 0s,
@@ -270,6 +278,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `SignedDuration::from_secs(-5)`
+
                     Expected: -5s to be positive,
 
                       Actual: -5s,
@@ -305,6 +315,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `SignedDuration::from_secs_f32(0.3319)`
+
                     Expected value to be close to: 333ms,
                      with allowed deviation being: 1ms,
                       but value was outside range: [332ms, 334ms]
@@ -343,6 +355,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `SignedDuration::from_secs_f32(0.3341)`
+
                     Expected value to be close to: 333ms,
                      with allowed deviation being: 1ms,
                       but value was outside range: [332ms, 334ms]

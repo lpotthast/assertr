@@ -16,6 +16,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
         Self {
             parent: None,
             subject_name: None,
+            expression: None,
             detail_messages: core::cell::RefCell::new(alloc::vec::Vec::new()),
             print_location: true,
             number_of_assertions: core::cell::RefCell::new(
@@ -31,6 +32,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
         ChainState {
             parent: Some(parent),
             subject_name: None,
+            expression: None,
             detail_messages: core::cell::RefCell::new(alloc::vec::Vec::new()),
             print_location: self.print_location,
             number_of_assertions: core::cell::RefCell::new(
@@ -46,6 +48,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
         ChainState {
             parent: self.parent,
             subject_name: self.subject_name,
+            expression: self.expression,
             detail_messages: self.detail_messages,
             print_location: self.print_location,
             number_of_assertions: self.number_of_assertions,

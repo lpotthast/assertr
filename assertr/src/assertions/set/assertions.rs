@@ -136,6 +136,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `HashSet::from(["bar"])`
+
                     Actual: HashSet {{
                         "bar",
                     }}
@@ -165,6 +167,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeSet::from(["bar"])`
+
                     Actual: BTreeSet {{
                         "bar",
                     }}
@@ -246,6 +250,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `HashSet::<&str>::new()`
+
                     Actual: HashSet {{}}
 
                     is not a superset of expected
@@ -275,6 +281,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeSet::<&str>::new()`
+
                     Actual: BTreeSet {{}}
 
                     is not a superset of expected
@@ -356,6 +364,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `HashSet::from(["foo"])`
+
                     Actual: HashSet {{
                         "foo",
                     }}
@@ -387,6 +397,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeSet::from(["foo"])`
+
                     Actual: BTreeSet {{
                         "foo",
                     }}

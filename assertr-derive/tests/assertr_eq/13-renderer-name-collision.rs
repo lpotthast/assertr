@@ -1,4 +1,5 @@
-use assertr::prelude::*;
+use renamed_assertr::prelude::*;
+use assertr_derive::AssertrEq;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, PartialEq)]

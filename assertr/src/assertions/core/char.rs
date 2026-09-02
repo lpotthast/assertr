@@ -167,6 +167,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `'a'`
+
                 Expected: 'B'
                 
                   Actual: 'a'
@@ -200,6 +202,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `'A'`
+
                     Expected 'A' to be lowercase, but it is not.
                     -------- assertr --------
                 "});
@@ -227,6 +231,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `'a'`
+
                     Expected 'a' to be uppercase, but it is not.
                     -------- assertr --------
                 "});
@@ -254,6 +260,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `'A'`
+
                     Expected 'A' to be an ascii-lowercase char, but it is not.
                     -------- assertr --------
                 "});
@@ -281,6 +289,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `'a'`
+
                     Expected 'a' to be an ascii-uppercase char, but it is not.
                     -------- assertr --------
                 "});

@@ -89,6 +89,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `false`
+
                     Expected: true
 
                       Actual: false
@@ -118,6 +120,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `true`
+
                     Expected: false
 
                       Actual: true

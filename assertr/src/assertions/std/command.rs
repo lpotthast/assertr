@@ -78,6 +78,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `cmd`
+
                 Actual: [
                     "--bar",
                 ]

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use assertr::prelude::*;
+use renamed_assertr::prelude::*;
+use assertr_derive::AssertrEq;
 
 #[derive(Clone, Copy)]
 struct Renderer;

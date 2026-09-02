@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use assertr::prelude::*;
+use renamed_assertr::prelude::*;
+use assertr_derive::AssertrEq;
 
 #[derive(Debug, AssertrEq)]
 pub struct Bar {
@@ -15,15 +16,15 @@ pub struct Foo {
 
     #[assertr_eq(
         map_type = "Vec<BarAssertrEq>",
-        compare_with = "::assertr::cmp::slice::compare",
-        compare_bounds = "Bar: ::assertr::cmp::slice::CompareElement<BarAssertrEq, R>"
+        compare_with = "::renamed_assertr::cmp::slice::compare",
+        compare_bounds = "Bar: ::renamed_assertr::cmp::slice::CompareElement<BarAssertrEq, R>"
     )]
     pub bars: Vec<Bar>,
 
     #[assertr_eq(
         map_type = "HashMap<String, BarAssertrEq>",
-        compare_with = "::assertr::cmp::hashmap::compare",
-        compare_bounds = "Bar: ::assertr::cmp::hashmap::CompareValue<BarAssertrEq, R>"
+        compare_with = "::renamed_assertr::cmp::hashmap::compare",
+        compare_bounds = "Bar: ::renamed_assertr::cmp::hashmap::CompareValue<BarAssertrEq, R>"
     )]
     pub bars2: HashMap<String, Bar>,
 }

@@ -218,6 +218,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `Program::from("someNonexistentProgram")`
+
                     Expected program: Program("someNonexistentProgram")
 
                     to exist, but it could not be found.
@@ -272,6 +274,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `Program::from("ls")`
+
                     Expected: "/some/unexpected/location/ls"
 
                       Actual: "{}"

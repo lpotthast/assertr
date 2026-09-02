@@ -103,6 +103,7 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
 
 #[cfg(test)]
 mod tests {
+    use crate::prelude::*;
     use std::sync::Mutex;
 
     fn poisoned_mutex() -> Mutex<i32> {
@@ -114,7 +115,7 @@ mod tests {
                     panic!("poison the mutex");
                 })
                 .join();
-            assert!(panic.is_err());
+            assert_that!(panic).is_err();
         });
         mutex
     }
@@ -148,6 +149,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `mutex`
+
                     Expected: Mutex {{ data: 42, poisoned: false }}
 
                     to be locked, but it wasn't!
@@ -162,6 +165,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `mutex`
+
                     Expected: Mutex {{ data: 42, poisoned: true }}
 
                     to be locked, but it wasn't!
@@ -195,6 +200,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `&mutex`
+
                     Expected: Mutex {{ data: <locked>, poisoned: false }}
 
                     to not be locked, but it was!
@@ -251,6 +258,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
+                Expression: `Mutex::new(42)`
+
                 Expected the mutex to be poisoned, but it was not!
                 -------- assertr --------
             "});
@@ -283,6 +292,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
+                Expression: `super::poisoned_mutex()`
+
                 Expected the mutex to not be poisoned, but it was!
                 -------- assertr --------
             "});

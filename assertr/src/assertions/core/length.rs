@@ -130,6 +130,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `[1, 2, 3]`
+
                 Actual: [i32; 3] [
                     1,
                     2,
@@ -170,6 +172,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `[42].as_slice()`
+
                     Actual: &[i32] [
                         42,
                     ]
@@ -203,6 +207,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"foo"`
+
                 Actual: &str "foo"
 
                 was expected to be empty, but it is not!
@@ -236,6 +242,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `String::from("foo")`
+
                     Actual: alloc::string::String "foo"
 
                     was expected to be empty, but it is not!
@@ -272,6 +280,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `vec![42]`
+
                     Actual: alloc::vec::Vec<i32> [
                         42,
                     ]
@@ -313,6 +323,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: std::collections::hash::map::HashMap<&str, &str> {{
                         "foo": "bar",
                     }}
@@ -350,6 +362,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `VecDeque::from([42])`
+
                     Actual: alloc::collections::vec_deque::VecDeque<i32> [
                         42,
                     ]
@@ -391,6 +405,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: std::collections::hash::map::HashMap<(), ()> {{}}
 
                     was expected not to be empty, but it is!
@@ -433,6 +449,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `VecDeque::<i32>::new()`
+
                     Actual: alloc::collections::vec_deque::VecDeque<i32> []
 
                     was expected not to be empty, but it is!
@@ -464,6 +482,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `"foo bar"`
+
                     Actual: &str "foo bar"
 
                     does not have the correct length
@@ -500,6 +520,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `String::from("foo bar")`
+
                     Actual: alloc::string::String "foo bar"
 
                     does not have the correct length
@@ -566,6 +588,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `[42].as_slice()`
+
                     Actual: &[i32] [
                         42,
                     ]
@@ -607,6 +631,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `vec![42]`
+
                     Actual: alloc::vec::Vec<i32> [
                         42,
                     ]
@@ -652,6 +678,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `VecDeque::from([42])`
+
                     Actual: alloc::collections::vec_deque::VecDeque<i32> [
                         42,
                     ]
@@ -703,6 +731,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `map`
+
                 Actual: std::collections::hash::map::HashMap<&str, &str> {{
                     "foo": "bar",
                 }}

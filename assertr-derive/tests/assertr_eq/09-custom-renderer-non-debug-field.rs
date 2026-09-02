@@ -4,7 +4,8 @@
 // custom renderer for the actual type, matcher type, and field, without requiring DebugRenderer
 // for that field.
 
-use assertr::prelude::*;
+use renamed_assertr::prelude::*;
+use assertr_derive::AssertrEq;
 
 #[derive(PartialEq)]
 pub struct NonDebug(u32);

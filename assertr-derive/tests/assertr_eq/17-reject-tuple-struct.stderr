@@ -1,5 +1,5 @@
 error: Unsupported shape `one unnamed field`. Expected named fields.
- --> tests/11-reject-tuple-struct.rs:3:10
+ --> tests/assertr_eq/17-reject-tuple-struct.rs:3:10
   |
 3 | #[derive(AssertrEq)]
   |          ^^^^^^^^^

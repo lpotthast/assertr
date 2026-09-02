@@ -544,6 +544,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -603,6 +605,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -720,6 +724,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -802,6 +808,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -845,6 +853,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -896,6 +906,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -942,6 +954,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1000,6 +1014,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1085,6 +1101,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1143,6 +1161,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1238,6 +1258,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1296,6 +1318,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1385,6 +1409,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1416,6 +1442,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [],
 
                     did not exactly match
@@ -1478,6 +1506,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1581,6 +1611,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1647,6 +1679,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: [
                         1,
                         2,
@@ -1728,6 +1762,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1]`
+
                     Actual: [
                         1,
                     ]
@@ -1768,6 +1804,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `Vec::<i32>::new()`
+
                     Actual: []
 
                     is empty.
@@ -1801,6 +1839,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `vec![1, 2, 3]`
+
                     Actual: []
 
                     does not have the correct length

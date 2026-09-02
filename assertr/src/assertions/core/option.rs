@@ -161,6 +161,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
+                Expression: `Option::<i32>::None`
+
                 Actual: None
 
                 is not of expected variant: Option::Some
@@ -178,6 +180,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {"
                         -------- assertr --------
+                        Expression: `Option::<i32>::None`
+
                         Actual: None
 
                         is not of expected variant: Option::Some
@@ -225,6 +229,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
+                Expression: `Option::<i32>::None`
+
                 Actual: None
 
                 is not of expected variant: Option::Some
@@ -319,6 +325,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {"
                         -------- assertr --------
+                        Expression: `Option::<i32>::None`
+
                         Actual: None
 
                         is not of expected variant: Option::Some
@@ -338,6 +346,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
+                Expression: `Option::<i32>::None`
+
                 Actual: None
 
                 is not of expected variant: Option::Some
@@ -374,6 +384,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
+                Expression: `Option::<i32>::Some(42)`
+
                 Actual: Some(
                     42,
                 )
@@ -393,6 +405,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {"
                         -------- assertr --------
+                        Expression: `Option::<i32>::Some(42)`
+
                         Actual: Some(
                             42,
                         )

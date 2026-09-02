@@ -165,6 +165,8 @@ fn a_condition_failure_renders_the_error_under_details() {
 
     assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {r#"
         -------- assertr --------
+        Expression: `bob`
+
         Condition did not match.
 
         Details: [

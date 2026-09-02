@@ -128,6 +128,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `&cell`
+
                     Actual: RefCell {{
                         value: 42,
                     }} is not borrowed.
@@ -198,6 +200,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `&cell`
+
                     Actual: RefCell {{
                         value: <borrowed>,
                     }} is mutably borrowed.

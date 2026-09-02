@@ -1,4 +1,5 @@
-use assertr::prelude::*;
+use renamed_assertr::prelude::*;
+use assertr_derive::AssertrEq;
 
 mod named {
     #[derive(Debug, PartialEq)]

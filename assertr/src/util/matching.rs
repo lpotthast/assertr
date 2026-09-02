@@ -164,6 +164,7 @@ where
 #[cfg(test)]
 mod tests {
     mod match_bipartite {
+        use crate::prelude::*;
         use crate::util::matching::match_bipartite;
         use alloc::vec::Vec;
 
@@ -177,7 +178,7 @@ mod tests {
                 |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
             );
 
-            assert!(result.is_exact());
+            assert_that!(result.is_exact()).is_true();
         }
 
         #[test]
@@ -190,7 +191,7 @@ mod tests {
                 |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
             );
 
-            assert!(result.is_exact());
+            assert_that!(result.is_exact()).is_true();
         }
 
         #[test]
@@ -204,8 +205,8 @@ mod tests {
                 |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
             );
 
-            assert_eq!(result.unmatched_actual, [0, 2]);
-            assert_eq!(result.unmatched_expected, [1, 2, 3]);
+            assert_that!(result.unmatched_actual.as_slice()).is_equal_to([0, 2].as_slice());
+            assert_that!(result.unmatched_expected.as_slice()).is_equal_to([1, 2, 3].as_slice());
         }
 
         #[test]
@@ -217,10 +218,10 @@ mod tests {
                 true
             });
 
-            assert!(result.is_exact());
+            assert_that!(result.is_exact()).is_true();
             // Every value takes the first free slot. Occupied slots are skipped without a
             // comparison and no earlier assignment is revisited.
-            assert_eq!(comparisons, len);
+            assert_that!(comparisons).is_equal_to(len);
         }
 
         #[test]
@@ -233,15 +234,13 @@ mod tests {
                 true
             });
 
-            assert_eq!(
-                result.unmatched_actual,
-                (expected_len..actual_len).collect::<Vec<_>>()
-            );
-            assert!(result.unmatched_expected.is_empty());
+            assert_that!(result.unmatched_actual.as_slice())
+                .is_equal_to((expected_len..actual_len).collect::<Vec<_>>().as_slice());
+            assert_that!(result.unmatched_expected).is_empty();
             // The first value that finds no free slot compares against every slot once while
             // proving that no reassignment can free one. The remaining surplus values reuse
             // that proof instead of repeating the search.
-            assert_eq!(comparisons, 2 * expected_len);
+            assert_that!(comparisons).is_equal_to(2 * expected_len);
         }
 
         #[test]
@@ -250,9 +249,9 @@ mod tests {
             let search = std::thread::Builder::new()
                 .stack_size(64 * 1024)
                 .spawn(move || {
-                    assert!(match_bipartite(len, len, |_, _| true).is_exact());
+                    assert_that!(match_bipartite(len, len, |_, _| true).is_exact()).is_true();
                     let surplus = match_bipartite(len + 1, len, |_, _| true);
-                    assert_eq!(surplus.unmatched_actual, [len]);
+                    assert_that!(surplus.unmatched_actual.as_slice()).is_equal_to([len].as_slice());
                 })
                 .expect("thread spawns");
 
@@ -273,8 +272,8 @@ mod tests {
             // The third `1` exhausts every reassignment through the first two predicates. That
             // must neither block the `5` from taking its own predicate nor leave a predicate
             // unmatched.
-            assert_eq!(result.unmatched_actual, [2, 3]);
-            assert!(result.unmatched_expected.is_empty());
+            assert_that!(result.unmatched_actual.as_slice()).is_equal_to([2, 3].as_slice());
+            assert_that!(result.unmatched_expected).is_empty();
         }
     }
 }

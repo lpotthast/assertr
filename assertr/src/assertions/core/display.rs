@@ -79,6 +79,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `42`
+
                     Expected: "foo"
 
                       Actual: "42"
@@ -106,6 +108,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `"foo:bar"`
+
                     Expected: "foo:baz"
 
                       Actual: "foo:bar"
@@ -157,6 +161,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `Person {{ age: 42, alive: true, }}`
+
                     Expected: "foo"
 
                       Actual: "PERSON<AGE=42,ALIVE=true>"

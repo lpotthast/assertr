@@ -191,6 +191,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `&rw_lock`
+
                     Actual: RwLock {{ data: <locked> }}
 
                     was expected to not be read- or write-locked, but it is!
@@ -211,6 +213,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `&rw_lock`
+
                     Actual: RwLock {{ data: 42 }}
 
                     was expected to not be read- or write-locked, but it is!
@@ -269,6 +273,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `&rw_lock`
+
                     Actual: RwLock {{ data: <locked> }}
 
                     was expected to be read-locked, but it is not!
@@ -288,6 +294,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `rw_lock`
+
                     Actual: RwLock {{ data: 42 }}
 
                     was expected to be read-locked, but it is not!
@@ -333,6 +341,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `&rw_lock`
+
                     Actual: RwLock {{ data: 42 }}
 
                     was expected to be write-locked, but it is not!
@@ -352,6 +362,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `rw_lock`
+
                     Actual: RwLock {{ data: 42 }}
 
                     was expected to be write-locked, but it is not!

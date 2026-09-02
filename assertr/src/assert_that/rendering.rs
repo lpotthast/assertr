@@ -120,6 +120,18 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         self
     }
 
+    /// Sets the source expression shown in the backticked `Expression:` field of failure messages.
+    ///
+    /// [`assert_that!`](crate::assert_that) and [`assert_that_owned!`](crate::assert_that_owned)
+    /// fill this automatically. This method is primarily for downstream assertion entry macros
+    /// and for the scoped `#[assertr::fluent_expressions]` attribute. Derived child chains start a
+    /// new diagnostic subject and do not inherit this expression.
+    #[must_use]
+    pub fn with_expression(mut self, expression: &'static str) -> Self {
+        self.state.expression = Some(expression);
+        self
+    }
+
     /// Controls whether failures record the source file, line, and column.
     ///
     /// Disable locations when comparing a rendered failure exactly in a test.

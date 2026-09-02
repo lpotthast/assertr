@@ -3,8 +3,8 @@
 //! - `AssertThat::capture` runs assertions in capture mode inside a closure and returns the
 //!   collected failures, making a forgotten capture structurally impossible.
 //! - Captured failures are structured `AssertionFailure` values whose fields (location, subject
-//!   name, description, per-failure details, chain-level messages) can be inspected without
-//!   parsing formatted text.
+//!   name, asserted expression, description, per-failure details, chain-level messages) can be
+//!   inspected without parsing formatted text.
 //! - Rendering happens only at the panic or display boundary, via `Display`.
 
 use assertr::prelude::*;
@@ -20,6 +20,7 @@ fn capture_returns_structured_failures_with_separated_fields() {
     let failure = &failures[0];
 
     assert_that!(failure.subject_name.as_deref()).is_equal_to(Some("answer"));
+    assert_that!(failure.expression).is_equal_to(Some("42"));
     assert_that!(failure.details.as_slice()).is_empty();
     assert_that!(failure.messages.as_slice()).contains_exactly(["user context"]);
     // The description holds only the assertion-specific body; everything else lives in its own
@@ -30,6 +31,7 @@ fn capture_returns_structured_failures_with_separated_fields() {
         .does_not_contain("-------- assertr --------")
         .does_not_contain("Assertion failed at")
         .does_not_contain("Subject:")
+        .does_not_contain("Expression:")
         .does_not_contain("Details:");
     // Failures are plain values: cloneable and comparable.
     assert_that!(failures.clone() == failures).is_true();
@@ -73,6 +75,8 @@ fn display_renders_the_stable_human_readable_format() {
 
     assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {"
         -------- assertr --------
+        Expression: `42`
+
         Expected: 43
 
           Actual: 42

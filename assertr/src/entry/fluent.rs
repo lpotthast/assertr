@@ -46,6 +46,16 @@ use crate::{
 /// owned_reference.push('!');
 /// ```
 ///
+/// # Capturing source expressions
+///
+/// A method cannot observe the source text of its receiver. Plain fluent calls therefore leave
+/// [`AssertionFailure::expression`] empty. Put [`#[assertr::fluent_expressions]`](crate::fluent_expressions)
+/// on a test function or inline test module to capture fluent entry calls written directly in that
+/// scope. A macro invocation may be the receiver, but calls produced by expanding a macro are not
+/// visible to the attribute and remain uncaptured. Place the attribute above `#[test]` and
+/// proc-macro test attributes such as `#[tokio::test]` or `#[rstest]` so it sees the original
+/// function body.
+///
 /// # Alias names
 ///
 /// The fluent names are derived mechanically from the assertion names. `is_x` becomes `be_x`,

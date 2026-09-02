@@ -366,8 +366,8 @@ mod tests {
             #[test]
             fn exhausted_inclusive_range_has_length_zero() {
                 let mut range = 5_usize..=5_usize;
-                assert_eq!(range.next(), Some(5));
-                assert!(range.is_empty());
+                assert_that!(range.next()).is_equal_to(Some(5));
+                assert_that!(range.is_empty()).is_true();
 
                 assert_that!(range).has_length(0);
             }
@@ -458,8 +458,8 @@ mod tests {
             #[test]
             fn exhausted_inclusive_range_has_length_zero() {
                 let mut range = 5_i8..=5_i8;
-                assert_eq!(range.next(), Some(5));
-                assert!(range.is_empty());
+                assert_that!(range.next()).is_equal_to(Some(5));
+                assert_that!(range.is_empty()).is_true();
 
                 assert_that!(range).has_length(0);
             }

@@ -11,11 +11,16 @@ list:
 install-tools:
     cargo +stable install cargo-msrv --locked
     cargo +stable install cargo-sort --locked
+    cargo +stable install cargo-semver-checks --locked
 
 # Find the minimum supported rust version.
 msrv:
     cargo msrv find --path assertr
     cargo msrv find --path assertr-derive
+
+# Check whether current changes require a breaking release.
+semver-checks:
+    cargo semver-checks
 
 # Check the code.
 check:
@@ -64,11 +69,17 @@ test:
     cargo test -p assertr-derive
     cargo test -p assertr-no-std-tests
 
+# Build the crate documentation.
 build-docs:
     RUSTDOCFLAGS="-D warnings" cargo doc --workspace --exclude assertr-no-std-tests --no-deps --all-features
 
+# Build and open the crate documentation for review.
 open-docs:
     cargo doc -p assertr --all-features --no-deps --open
+
+# Run security auditing.
+audit:
+    cargo audit --deny warnings
 
 # Update all deps; sort all Cargo.toml deps; format all code.
 tidy:
@@ -85,3 +96,5 @@ verify:
     just clippy
     just test
     just build-docs
+    just audit
+    just semver-checks

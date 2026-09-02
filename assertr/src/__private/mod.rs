@@ -10,6 +10,8 @@ use crate::assertions::core::pattern::Pattern;
 use crate::{DebugRenderer, Eq, ValueRenderer};
 
 pub mod assert_that_macro;
+#[cfg(feature = "fluent")]
+pub mod fluent_expressions;
 
 /// Constructor behind [`pattern!`](crate::pattern).
 ///

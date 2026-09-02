@@ -139,12 +139,21 @@ fn fresh_argument_ident(
 #[cfg(test)]
 mod tests {
     use quote::quote;
+    use renamed_assertr::prelude::*;
+    use std::fmt::Debug;
     use syn::{Attribute, TraitItemFn, parse_quote};
 
     use super::generate_alias;
 
     fn attributes_tokens(attributes: &[Attribute]) -> String {
         quote! { #(#attributes)* }.to_string()
+    }
+
+    fn assert_equal<T>(actual: &T, expected: T)
+    where
+        T: Debug + PartialEq,
+    {
+        assert_that!(actual).is_equal_to(expected);
     }
 
     #[test]
@@ -162,26 +171,24 @@ mod tests {
 
         let alias = generate_alias(&original, "be_ready");
 
-        assert_eq!(alias.attrs[0], parse_quote! { #[cfg(feature = "fluent")] });
-        assert_eq!(
-            alias.attrs[1],
+        assert_equal(&alias.attrs[0], parse_quote! { #[cfg(feature = "fluent")] });
+        assert_equal(
+            &alias.attrs[1],
             parse_quote! {
                 #[doc = "Fluent alias for [`is_ready`](Self::is_ready)."]
-            }
+            },
         );
-        assert_eq!(alias.attrs[2], parse_quote! { #[doc = ""] });
-        assert_eq!(
-            attributes_tokens(&alias.attrs[3..]),
-            attributes_tokens(&original.attrs)
-        );
-        assert_eq!(
+        assert_equal(&alias.attrs[2], parse_quote! { #[doc = ""] });
+        assert_that!(attributes_tokens(&alias.attrs[3..]))
+            .is_equal_to(attributes_tokens(&original.attrs));
+        assert_that!(
             alias
                 .attrs
                 .iter()
                 .filter(|attribute| attribute.path().is_ident("track_caller"))
-                .count(),
-            1
-        );
+                .count()
+        )
+        .is_equal_to(1);
     }
 
     #[test]
@@ -200,18 +207,18 @@ mod tests {
 
         let alias = generate_alias(&original, "be_expected");
 
-        assert_eq!(
-            alias.sig.inputs,
+        assert_equal(
+            &alias.sig.inputs,
             parse_quote! {
                 self,
                 expected: usize,
                 __assertr_fluent_argument_1: (usize, usize),
                 __assertr_fluent_argument_2: bool,
                 label: String,
-            }
+            },
         );
-        assert_eq!(
-            alias.default,
+        assert_equal(
+            &alias.default,
             Some(parse_quote! {{
                 self.is_expected::<__assertr_fluent_argument_0>(
                     expected,
@@ -219,7 +226,7 @@ mod tests {
                     __assertr_fluent_argument_2,
                     label
                 )
-            }})
+            }}),
         );
     }
 
@@ -236,11 +243,11 @@ mod tests {
 
         let alias = generate_alias(&original, "borrow_as");
 
-        assert_eq!(
-            alias.default,
+        assert_equal(
+            &alias.default,
             Some(parse_quote! {{
                 self.is_borrowed_as::<T, N>(expected)
-            }})
+            }}),
         );
     }
 
@@ -252,11 +259,11 @@ mod tests {
 
         let alias = generate_alias(&original, "be_ready");
 
-        assert_eq!(
-            alias.attrs[1],
+        assert_equal(
+            &alias.attrs[1],
             parse_quote! {
                 #[doc = "Fluent alias for [`is_ready`](Self::is_ready)."]
-            }
+            },
         );
     }
 }

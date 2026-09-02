@@ -343,13 +343,15 @@ mod tests {
                         .has_type::<String>();
                 })
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `|| panic!("boom")`
+
                     Expected value type: alloc::string::String
 
                       Actual value type: &str
                     -------- assertr --------
-                "});
+                "#});
             }
 
             #[test]
@@ -358,6 +360,8 @@ mod tests {
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r"
                         -------- assertr --------
+                        Expression: `|| 42`
+
                         Expected: Function to panic when called.
 
                           Actual: No panic occurred!
@@ -392,6 +396,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `|| "actual"`
+
                     Expected: "expected"
 
                       Actual: "actual"
@@ -409,6 +415,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `|| unimplemented!()`
+
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!
@@ -430,6 +438,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `|| std::panic::panic_any(String::from("owned boom"))`
+
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!
@@ -513,13 +523,15 @@ mod tests {
                 })
                 .await
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `async || panic!("boom")`
+
                     Expected value type: alloc::string::String
 
                       Actual value type: &str
                     -------- assertr --------
-                "});
+                "#});
             }
 
             #[tokio::test]
@@ -534,6 +546,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                         -------- assertr --------
+                        Expression: `async || 42`
+
                         Expected: Function to panic when called.
 
                           Actual: No panic occurred!
@@ -595,6 +609,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `async || "actual"`
+
                     Expected: "expected"
 
                       Actual: "actual"
@@ -614,6 +630,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `async || unimplemented!()`
+
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!
@@ -637,6 +655,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `|| -> core::future::Ready<()> {{ panic!("before future") }}`
+
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!
@@ -662,6 +682,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `async || {{ std::panic::panic_any(String::from("owned boom")) }}`
+
                     Expected: Function to not panic when called.
 
                       Actual: Function panicked unexpectedly!

@@ -146,6 +146,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `mutex`
+
                     Expected: Mutex {{ data: 42 }}
 
                     to be locked, but it wasn't!
@@ -180,6 +182,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `&mutex`
+
                     Expected: Mutex {{ data: <locked> }}
 
                     to not be locked, but it was!
@@ -254,6 +258,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `mutex`
+
                     Actual: Mutex {{ data: 42 }}
 
                     contains data that does not satisfy the assertions.
@@ -283,6 +289,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `mutex`
+
                     Actual: Mutex {{ data: <locked> }}
 
                     could not be inspected because it is locked.

@@ -283,6 +283,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `Result::<i32, String>::Err("someError".to_owned())`
+
                     Actual: Err(
                         "someError",
                     )
@@ -302,6 +304,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `Result::<i32, String>::Err("someError".to_owned())`
+
                         Actual: Err(
                             "someError",
                         )
@@ -342,6 +346,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `Result::<i32, String>::Ok(42)`
+
                     Actual: Ok(
                         42,
                     )
@@ -390,6 +396,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `Result::<i32, String>::Err("someError".to_owned())`
+
                     Actual: Err(
                         "someError",
                     )
@@ -438,6 +446,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `Result::<i32, String>::Ok(42)`
+
                     Actual: Ok(
                         42,
                     )
@@ -513,6 +523,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `Result::<i32, String>::Err(String::from("boom"))`
+
                         Actual: Err(
                             "boom",
                         )
@@ -581,6 +593,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r"
                         -------- assertr --------
+                        Expression: `Result::<i32, String>::Ok(42)`
+
                         Actual: Ok(
                             42,
                         )

@@ -92,6 +92,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2].into_iter()`
+
                     Expected remaining element count: 3
                       Actual remaining element count: 2
                     -------- assertr --------
@@ -124,6 +126,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1].into_iter()`
+
                     Expected the iterator to have no remaining elements, but 1 remains.
                     -------- assertr --------
                 "});
@@ -139,6 +143,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2].into_iter()`
+
                     Expected the iterator to have no remaining elements, but 2 remain.
                     -------- assertr --------
                 "});
@@ -172,6 +178,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1_i32; 0].into_iter()`
+
                     Expected the iterator to have remaining elements, but it has none.
                     -------- assertr --------
                 "});

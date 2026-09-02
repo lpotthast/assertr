@@ -561,6 +561,8 @@ fn non_debug_type_can_use_debug_format_closure() {
         |it: AssertThat<AssertionFailure, Capture>| {
             it.has_display_value(indoc::formatdoc! {"
                 -------- assertr --------
+                Expression: `Secret(1)`
+
                 Expected: Secret(2)
 
                   Actual: Secret(1)
@@ -671,6 +673,8 @@ fn named_renderer_can_render_heterogeneous_comparisons() {
         |it: AssertThat<AssertionFailure, Capture>| {
             it.has_display_value(indoc::formatdoc! {"
                 -------- assertr --------
+                Expression: `Actual(1)`
+
                 Expected: Expected(2)
         
                   Actual: Actual(1)
@@ -879,6 +883,8 @@ mod wrapper_renderer {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(indoc::formatdoc! {"
                     -------- assertr --------
+                    Expression: `&cell`
+
                     Actual: RefCell {{
                         value: Secret(7),
                     }} is not borrowed.
@@ -934,6 +940,8 @@ mod wrapper_renderer {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(indoc::formatdoc! {"
                     -------- assertr --------
+                    Expression: `actual`
+
                     Actual: HashSet {{
                         Secret(1),
                     }}
@@ -960,6 +968,8 @@ mod wrapper_renderer {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(indoc::formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "alpha": Secret(1),
                     }}
@@ -991,6 +1001,8 @@ mod wrapper_renderer {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(indoc::formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "alpha": Secret(1),
                     }}
@@ -1009,6 +1021,8 @@ mod wrapper_renderer {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(indoc::formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "alpha": Secret(1),
                     }}
@@ -1045,6 +1059,8 @@ mod wrapper_renderer {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(indoc::formatdoc! {"
                     -------- assertr --------
+                    Expression: `mutex`
+
                     Expected: Mutex {{ data: Secret(11), poisoned: false }}
 
                     to be locked, but it wasn't!
@@ -1133,6 +1149,8 @@ mod derive {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(indoc::formatdoc! {"
                     -------- assertr --------
+                    Expression: `Subject {{ hidden: Hidden(1) }}`
+
                     Expected: SubjectAssertrEq(..)
             
                       Actual: Subject(1)

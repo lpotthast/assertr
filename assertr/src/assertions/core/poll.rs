@@ -177,6 +177,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Poll::<Foo>::Pending`
+
                 Actual: Pending
 
                 is not yet ready.
@@ -194,6 +196,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r"
                         -------- assertr --------
+                        Expression: `Poll::<i32>::Pending`
+
                         Actual: Pending
 
                         is not yet ready.
@@ -243,6 +247,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Poll::<Foo>::Pending`
+
                 Actual: Pending
 
                 is not yet ready.
@@ -313,6 +319,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r"
                         -------- assertr --------
+                        Expression: `Poll::<i32>::Pending`
+
                         Actual: Pending
 
                         is not yet ready.
@@ -332,6 +340,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Poll::<i32>::Pending`
+
                 Actual: Pending
 
                 is not yet ready.
@@ -367,6 +377,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Poll::Ready(Foo {{ val: 42 }})`
+
                 Actual: Ready(
                     Foo {{
                         val: 42,

@@ -119,6 +119,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `duration`
+
                     Expected: 0s
 
                       Actual: 2h 30m
@@ -155,6 +157,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `0.seconds()`
+
                     Expected value to be negative. But was
 
                       Actual: 0s
@@ -172,6 +176,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `2.hours().minutes(30)`
+
                     Expected value to be negative. But was
 
                       Actual: 2h 30m
@@ -204,6 +210,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `0.seconds()`
+
                     Expected value to be positive. But was
 
                       Actual: 0s
@@ -221,6 +229,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `(-2).hours().minutes(30)`
+
                     Expected value to be positive. But was
 
                       Actual: 2h 30m ago

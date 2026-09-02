@@ -211,6 +211,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `"aa".."zz"`
+
                     Actual range: "aa".."zz"
                     
                     Does not contain expected: "zz"
@@ -245,6 +247,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `"aa".."zz"`
+
                     Actual range: "aa".."zz"
                     
                     Contains element expected not to be contained: "cc"
@@ -280,6 +284,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `'A'`
+
                     Actual: 'A'
                     is not in range: 'a'..='z'
                     -------- assertr --------
@@ -310,6 +316,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `5`
+
                     Actual: 5
                     was not expected to be in range: 0..=7
                     -------- assertr --------

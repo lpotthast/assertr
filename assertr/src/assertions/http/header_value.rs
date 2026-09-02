@@ -394,6 +394,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `actual`
+
                     Actual: " !\xff"
 
                     is not valid ASCII
@@ -448,6 +450,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `actual`
+
                     Actual: "\xc3\x84"
 
                     is not valid ASCII
@@ -463,6 +467,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `actual`
+
                     Actual: " !\xff"
 
                     is not valid ASCII
@@ -536,6 +542,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `actual`
+
                 Actual: " !\xff"
 
                 is not valid ASCII

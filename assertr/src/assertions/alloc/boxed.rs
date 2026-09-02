@@ -213,6 +213,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `boxed_any`
+
                     Expected value type: u32
 
                       Actual value type: &str
@@ -233,6 +235,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `boxed_any`
+
                 Expected value type: u32
 
                   Actual value type: dyn core::any::Any
@@ -257,6 +261,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `boxed_any`
+
                 Expected value type: u32
 
                   Actual value type: dyn core::any::Any
@@ -303,6 +309,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `actual`
+
                 Expected value type: u32
 
                   Actual value type: String
@@ -322,6 +330,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `actual`
+
                 Expected value type: u32
 
                   Actual value type: &str
@@ -342,6 +352,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `actual`
+
                 Expected value type: u32
 
                   Actual value type: dyn core::any::Any

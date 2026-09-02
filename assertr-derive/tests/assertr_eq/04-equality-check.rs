@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use assertr::prelude::*;
+use renamed_assertr::prelude::*;
+use assertr_derive::AssertrEq;
 use indoc::formatdoc;
 
 // `Debug` renders `Foo`, while `PartialEq` also permits full equality assertions.
@@ -38,18 +39,14 @@ fn main() {
         data: any(),
     });
 
-    assert_that_panic_by(|| {
-        subject
-            .must()
-            .with_location(false)
-            .be_equal_to(FooAssertrEq {
-                id: eq(2),
-                name: eq("otto".to_string()),
-                data: any(),
-            })
-    })
-    .has_type::<String>()
-    .is_equal_to(formatdoc! {r#"
+    let failures = subject.verify(|it| {
+        it.with_location(false).be_equal_to(FooAssertrEq {
+            id: eq(2),
+            name: eq("otto".to_string()),
+            data: any(),
+        })
+    });
+    failures[0].to_string().must().be_equal_to(formatdoc! {r#"
             -------- assertr --------
             Expected: FooAssertrEq {{
                 id: Eq::Eq(2),

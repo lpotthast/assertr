@@ -134,6 +134,8 @@ pub mod renderer;
 mod tracking;
 mod util;
 
+#[cfg(feature = "fluent")]
+pub use assertr_derive::fluent_expressions;
 pub use cmp::{AssertrPartialEq, Differences, Eq, EqContext, any, eq};
 pub use failure::AssertionFailure;
 pub use renderer::{CustomRenderer, DebugRenderer, Renderable, RenderableValues, ValueRenderer};
@@ -175,6 +177,7 @@ struct ChainState<'t, M: Mode, R> {
     parent: Option<&'t dyn DynAssertThat>,
 
     subject_name: Option<String>,
+    expression: Option<&'static str>,
     detail_messages: RefCell<Vec<String>>,
     print_location: bool,
 

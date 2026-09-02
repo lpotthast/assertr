@@ -405,23 +405,41 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
 
 #[cfg(test)]
 mod tests {
+    macro_rules! source_relative_path {
+        () => {{
+            let source = std::path::Path::new(file!());
+            source
+                .strip_prefix(env!("CARGO_PKG_NAME"))
+                .unwrap_or(source)
+        }};
+    }
+
+    macro_rules! source_path {
+        () => {{
+            let source = std::path::Path::new(file!());
+            let package_relative = source
+                .strip_prefix(env!("CARGO_PKG_NAME"))
+                .unwrap_or(source);
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(package_relative)
+        }};
+    }
+
     mod path {
         mod exists {
             use crate::prelude::*;
             use indoc::formatdoc;
-            use std::env;
             use std::path::Path;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 path.as_path().must().exist();
             }
 
             #[test]
             fn succeeds_when_present() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 assert_that!(path.as_path())
                     .exists()
                     .map(|it| it.borrowed().to_str().unwrap_or_default().into())
@@ -435,6 +453,8 @@ mod tests {
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `path`
+
                         Expected: "src/assertions/std/some-non-existing-file.rs"
 
                         to exist, but it does not!
@@ -445,7 +465,6 @@ mod tests {
 
         mod does_not_exist {
             use crate::prelude::*;
-            use std::env;
             use std::path::Path;
 
             #[test]
@@ -462,7 +481,7 @@ mod tests {
 
             #[test]
             fn panics_when_present() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path.as_path())
                         .with_location(false)
@@ -471,31 +490,30 @@ mod tests {
                 .has_type::<String>()
                 .contains("-------- assertr --------")
                 .contains("Expected: \"")
-                .contains("assertr/src/assertions/std/path.rs\"")
+                .contains("src/assertions/std/path.rs\"")
                 .contains("to not exist, but it does!");
             }
         }
 
         mod is_a_file {
             use crate::prelude::*;
-            use std::env;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 path.as_path().must().be_a_file();
             }
 
             #[test]
             fn succeeds_when_file() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 assert_that!(path.as_path()).is_a_file();
             }
 
             #[test]
             fn panics_when_not_a_file() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 let dir = path.parent().unwrap();
                 assert_that_panic_by(|| {
                     assert_that!(dir)
@@ -506,41 +524,32 @@ mod tests {
                 .has_type::<String>()
                 .contains("-------- assertr --------")
                 .contains("Expected: \"")
-                .contains("assertr/src/assertions/std\"")
+                .contains("src/assertions/std\"")
                 .contains("to be a file, but it is not!");
             }
         }
 
         mod is_a_directory {
-            use std::env;
-            use std::path::Path;
-
             use crate::prelude::*;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = env::current_dir()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join(Path::new(file!()).parent().expect("present"));
-                path.as_path().must().be_a_directory();
+                let path = source_path!();
+                let path = path.parent().expect("present");
+                path.must().be_a_directory();
             }
 
             #[test]
             fn succeeds_when_directory() {
-                let path = env::current_dir()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join(Path::new(file!()).parent().expect("present"));
-                assert_that!(path.as_path()).is_a_directory();
+                let path = source_path!();
+                let path = path.parent().expect("present");
+                assert_that!(path).is_a_directory();
             }
 
             #[test]
             fn panics_when_not_a_directory() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path.as_path())
                         .with_location(false)
@@ -550,7 +559,7 @@ mod tests {
                 .has_type::<String>()
                 .contains("-------- assertr --------")
                 .contains("Expected: \"")
-                .contains("assertr/src/assertions/std/path.rs\"")
+                .contains("src/assertions/std/path.rs\"")
                 .contains("to be a directory, but it is not!")
                 .contains("The path exists: true")
                 .contains("The path is a file: true");
@@ -559,7 +568,7 @@ mod tests {
 
         #[cfg(unix)]
         mod is_a_symlink {
-            use std::path::{Path, PathBuf};
+            use std::path::PathBuf;
 
             use crate::prelude::*;
 
@@ -571,7 +580,7 @@ mod tests {
                     let link =
                         std::env::temp_dir().join(format!("assertr-{name}-{}", std::process::id()));
                     let _ = std::fs::remove_file(&link);
-                    std::os::unix::fs::symlink(Path::new(file!()), &link).expect("symlink created");
+                    std::os::unix::fs::symlink(source_path!(), &link).expect("symlink created");
                     Self(link)
                 }
             }
@@ -597,18 +606,20 @@ mod tests {
 
             #[test]
             fn panics_when_not_a_symlink() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path).with_location(false).is_a_symlink();
                 })
                 .has_type::<String>()
                 .is_equal_to(indoc::formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `path`
+
                     Expected: "{}"
 
                     to be a symlink, but it is not!
                     -------- assertr --------
-                "#, file!()});
+                "#, source_relative_path!().display()});
             }
         }
 
@@ -636,6 +647,8 @@ mod tests {
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `path`
+
                         Expected: "foo/bar/baz.rs"
 
                         to be a root-path, but it is not!
@@ -668,6 +681,8 @@ mod tests {
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `path`
+
                         Expected: "/foo/bar/baz.rs"
 
                         to be a relative path, but it is not!
@@ -684,18 +699,18 @@ mod tests {
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                Path::new(file!()).must().have_file_name("path.rs");
+                source_relative_path!().must().have_file_name("path.rs");
             }
 
             #[test]
             fn succeeds_when_equal() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that!(path).has_file_name("path.rs");
             }
 
             #[test]
             fn panics_when_different() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -704,7 +719,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
     
                         Expected filename: "some.json"
                           Actual filename: "path.rs"
@@ -721,6 +738,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `path`
+
                     Path: "/"
 
                     Expected filename: "foo"
@@ -738,18 +757,18 @@ mod tests {
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                Path::new(file!()).must().have_file_stem("path");
+                source_relative_path!().must().have_file_stem("path");
             }
 
             #[test]
             fn succeeds_when_equal() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that!(path).has_file_stem("path");
             }
 
             #[test]
             fn panics_when_different() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -758,7 +777,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
     
                         Expected filestem: "some"
                           Actual filestem: "path"
@@ -775,6 +796,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `path`
+
                     Path: "/"
 
                     Expected filestem: "foo"
@@ -792,18 +815,18 @@ mod tests {
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                Path::new(file!()).must().have_extension("rs");
+                source_relative_path!().must().have_extension("rs");
             }
 
             #[test]
             fn succeeds_when_equal() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that!(path).has_extension("rs");
             }
 
             #[test]
             fn panics_when_different() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -812,7 +835,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
     
                         Expected extension: "json"
                           Actual extension: "rs"
@@ -829,6 +854,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `path`
+
                     Path: "/"
 
                     Expected extension: "rs"
@@ -841,23 +868,22 @@ mod tests {
         mod starts_with {
             use crate::prelude::*;
             use indoc::formatdoc;
-            use std::path::Path;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                Path::new(file!()).must().start_with("assertr/src");
+                source_relative_path!().must().start_with("src");
             }
 
             #[test]
             fn succeeds_when_prefix() {
-                let path = Path::new(file!());
-                assert_that!(path).starts_with("assertr/src");
+                let path = source_relative_path!();
+                assert_that!(path).starts_with("src");
             }
 
             #[test]
             fn panics_when_not_a_prefix() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -866,7 +892,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
 
                         Did not start with expected prefix: "foobar"
 
@@ -879,7 +907,7 @@ mod tests {
 
             #[test]
             fn panics_when_not_a_whole_segment_prefix() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -888,7 +916,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
 
                         Did not start with expected prefix: "assert"
 
@@ -903,30 +933,31 @@ mod tests {
         mod ends_with {
             use crate::prelude::*;
             use indoc::formatdoc;
-            use std::path::Path;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                Path::new(file!()).must().end_with("std/path.rs");
+                source_relative_path!().must().end_with("std/path.rs");
             }
 
             #[test]
             fn succeeds_when_postfix() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that!(path).ends_with("std/path.rs");
             }
 
             #[test]
             fn panics_when_not_a_postfix() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path).with_location(false).ends_with("foobar")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
 
                         Did not end with expected postfix: "foobar"
 
@@ -939,14 +970,16 @@ mod tests {
 
             #[test]
             fn panics_when_not_a_whole_segment_postfix() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path).with_location(false).ends_with("ath.rs")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
 
                         Did not end with expected postfix: "ath.rs"
 
@@ -990,24 +1023,18 @@ mod tests {
         mod exists {
             use crate::prelude::*;
             use indoc::formatdoc;
-            use std::env;
             use std::path::Path;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 path.must().exist();
             }
 
             #[test]
             fn succeeds_when_present() {
-                let path = env::current_dir()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join(file!())
-                    .clone();
+                let path = source_path!();
                 assert_that_owned!(path)
                     .exists()
                     .map(|it| it.unwrap_owned().display().to_string().into())
@@ -1021,6 +1048,8 @@ mod tests {
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `path`
+
                         Expected: "src/assertions/std/some-non-existing-file.rs"
 
                         to exist, but it does not!
@@ -1031,7 +1060,6 @@ mod tests {
 
         mod does_not_exist {
             use crate::prelude::*;
-            use std::env;
             use std::path::Path;
 
             #[test]
@@ -1049,36 +1077,35 @@ mod tests {
 
             #[test]
             fn panics_when_present() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 assert_that_panic_by(|| assert_that!(path).with_location(false).does_not_exist())
                     .has_type::<String>()
                     .contains("-------- assertr --------")
                     .contains("Expected: \"")
-                    .contains("assertr/src/assertions/std/path.rs\"")
+                    .contains("src/assertions/std/path.rs\"")
                     .contains("to not exist, but it does!");
             }
         }
 
         mod is_a_file {
             use crate::prelude::*;
-            use std::env;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 path.must().be_a_file();
             }
 
             #[test]
             fn succeeds_when_file() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 assert_that!(path).is_a_file();
             }
 
             #[test]
             fn panics_when_not_a_file() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 let dir = path.parent().unwrap().to_owned();
                 assert_that_panic_by(|| {
                     assert_that!(dir)
@@ -1089,41 +1116,32 @@ mod tests {
                 .has_type::<String>()
                 .contains("-------- assertr --------")
                 .contains("Expected: \"")
-                .contains("assertr/src/assertions/std\"")
+                .contains("src/assertions/std\"")
                 .contains("to be a file, but it is not!");
             }
         }
 
         mod is_a_directory {
-            use std::env;
-            use std::path::Path;
-
             use crate::prelude::*;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = env::current_dir()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join(Path::new(file!()).parent().expect("present"));
+                let path = source_path!();
+                let path = path.parent().expect("present");
                 path.must().be_a_directory();
             }
 
             #[test]
             fn succeeds_when_directory() {
-                let path = env::current_dir()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join(Path::new(file!()).parent().expect("present"));
+                let path = source_path!();
+                let path = path.parent().expect("present");
                 assert_that!(path).is_a_directory();
             }
 
             #[test]
             fn panics_when_not_a_directory() {
-                let path = env::current_dir().unwrap().parent().unwrap().join(file!());
+                let path = source_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -1133,7 +1151,7 @@ mod tests {
                 .has_type::<String>()
                 .contains("-------- assertr --------")
                 .contains("Expected: \"")
-                .contains("assertr/src/assertions/std/path.rs\"")
+                .contains("src/assertions/std/path.rs\"")
                 .contains("to be a directory, but it is not!")
                 .contains("The path exists: true")
                 .contains("The path is a file: true");
@@ -1142,7 +1160,7 @@ mod tests {
 
         #[cfg(unix)]
         mod is_a_symlink {
-            use std::path::{Path, PathBuf};
+            use std::path::PathBuf;
 
             use crate::prelude::*;
 
@@ -1154,7 +1172,7 @@ mod tests {
                     let link =
                         std::env::temp_dir().join(format!("assertr-{name}-{}", std::process::id()));
                     let _ = std::fs::remove_file(&link);
-                    std::os::unix::fs::symlink(Path::new(file!()), &link).expect("symlink created");
+                    std::os::unix::fs::symlink(source_path!(), &link).expect("symlink created");
                     Self(link)
                 }
             }
@@ -1180,7 +1198,7 @@ mod tests {
 
             #[test]
             fn panics_when_not_a_symlink() {
-                let path = Path::new(file!());
+                let path = source_relative_path!();
                 assert_that_panic_by(|| {
                     assert_that!(path.to_path_buf())
                         .with_location(false)
@@ -1189,11 +1207,13 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(indoc::formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `path.to_path_buf()`
+
                     Expected: "{}"
 
                     to be a symlink, but it is not!
                     -------- assertr --------
-                "#, file!()});
+                "#, source_relative_path!().display()});
             }
         }
 
@@ -1222,6 +1242,8 @@ mod tests {
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `path`
+
                         Expected: "foo/bar/baz.rs"
 
                         to be a root-path, but it is not!
@@ -1255,6 +1277,8 @@ mod tests {
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `path`
+
                         Expected: "/foo/bar/baz.rs"
 
                         to be a relative path, but it is not!
@@ -1271,19 +1295,19 @@ mod tests {
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 path.must().have_file_name("path.rs");
             }
 
             #[test]
             fn succeeds_when_equal() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that!(path).has_file_name("path.rs");
             }
 
             #[test]
             fn panics_when_different() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -1292,7 +1316,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
     
                         Expected filename: "some.json"
                           Actual filename: "path.rs"
@@ -1309,6 +1335,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `path`
+
                     Path: "/"
 
                     Expected filename: "foo"
@@ -1326,19 +1354,19 @@ mod tests {
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 path.must().have_file_stem("path");
             }
 
             #[test]
             fn succeeds_when_equal() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that!(path).has_file_stem("path");
             }
 
             #[test]
             fn panics_when_different() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -1347,7 +1375,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
     
                         Expected filestem: "some"
                           Actual filestem: "path"
@@ -1364,6 +1394,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `path`
+
                     Path: "/"
 
                     Expected filestem: "foo"
@@ -1381,19 +1413,19 @@ mod tests {
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 path.must().have_extension("rs");
             }
 
             #[test]
             fn succeeds_when_equal() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that!(path).has_extension("rs");
             }
 
             #[test]
             fn panics_when_different() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -1402,7 +1434,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
     
                         Expected extension: "json"
                           Actual extension: "rs"
@@ -1419,6 +1453,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `path`
+
                     Path: "/"
 
                     Expected extension: "rs"
@@ -1431,24 +1467,23 @@ mod tests {
         mod starts_with {
             use crate::prelude::*;
             use indoc::formatdoc;
-            use std::path::Path;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = Path::new(file!()).to_owned();
-                path.must().start_with("assertr/src");
+                let path = source_relative_path!().to_owned();
+                path.must().start_with("src");
             }
 
             #[test]
             fn succeeds_when_prefix() {
-                let path = Path::new(file!()).to_owned();
-                assert_that!(path).starts_with("assertr/src");
+                let path = source_relative_path!().to_owned();
+                assert_that!(path).starts_with("src");
             }
 
             #[test]
             fn panics_when_not_a_prefix() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -1457,7 +1492,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
 
                         Did not start with expected prefix: "foobar"
 
@@ -1470,7 +1507,7 @@ mod tests {
 
             #[test]
             fn panics_when_not_a_whole_segment_prefix() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that_panic_by(|| {
                     assert_that!(path)
                         .with_location(false)
@@ -1479,7 +1516,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
 
                         Did not start with expected prefix: "assert"
 
@@ -1494,31 +1533,32 @@ mod tests {
         mod ends_with {
             use crate::prelude::*;
             use indoc::formatdoc;
-            use std::path::Path;
 
             #[test]
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 path.must().end_with("std/path.rs");
             }
 
             #[test]
             fn succeeds_when_postfix() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that!(path).ends_with("std/path.rs");
             }
 
             #[test]
             fn panics_when_not_a_postfix() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that_panic_by(|| {
                     assert_that!(path).with_location(false).ends_with("foobar")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
 
                         Did not end with expected postfix: "foobar"
 
@@ -1531,14 +1571,16 @@ mod tests {
 
             #[test]
             fn panics_when_not_a_whole_segment_postfix() {
-                let path = Path::new(file!()).to_owned();
+                let path = source_relative_path!().to_owned();
                 assert_that_panic_by(|| {
                     assert_that!(path).with_location(false).ends_with("ath.rs")
                 })
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
-                        Path: "assertr/src/assertions/std/path.rs"
+                        Expression: `path`
+
+                        Path: "src/assertions/std/path.rs"
 
                         Did not end with expected postfix: "ath.rs"
 

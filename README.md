@@ -24,6 +24,8 @@ Change the `"!"` to `"?"` and the test fails with:
 -------- assertr --------
 Assertion failed at tests/greeting.rs:5:6
 
+Expression: `"hello, world!"`
+
 Actual: "hello, world!"
 
 does not end with
@@ -56,7 +58,7 @@ assert_that!(vec).has_length(3).contains(2);
 
 ```toml
 [dependencies]
-assertr = "0.7.0"
+assertr = "0.7.1"
 ```
 
 The default features are `std` and `num`. Everything else is opt-in:

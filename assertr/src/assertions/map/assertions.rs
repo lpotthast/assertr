@@ -314,6 +314,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -364,6 +366,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -405,6 +409,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -469,6 +475,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -506,7 +514,7 @@ mod tests {
 
             let assertion = assert_that!(map).contains_entry("foo", 1);
 
-            assert_eq!(assertion.state.number_of_assertions.borrow().0, 1);
+            assert_that!(assertion.state.number_of_assertions.borrow().0).is_equal_to(1);
         }
 
         #[test]
@@ -540,6 +548,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -561,6 +571,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -619,6 +631,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeMap::from([("retries", 3)])`
+
                     Actual: BTreeMap {{
                         "retries": 3,
                     }}
@@ -688,6 +702,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -736,6 +752,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -794,6 +812,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -832,6 +852,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "a": 1,
                     }}
@@ -871,6 +893,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: BTreeMap {{
                         "a": 1,
                         "b": 2,
@@ -912,6 +936,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -944,6 +970,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map`
+
                     Actual: HashMap {{
                         "foo": "bar",
                     }}
@@ -1021,6 +1049,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 2)])`
+
                     Actual: BTreeMap {{
                         "a": 2,
                     }}
@@ -1054,6 +1084,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 1)])`
+
                     Actual: BTreeMap {{
                         "a": 1,
                     }}
@@ -1082,6 +1114,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 1), ("extra", 9)])`
+
                     Actual: BTreeMap {{
                         "a": 1,
                         "extra": 9,
@@ -1116,6 +1150,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 1)])`
+
                     Actual: BTreeMap {{
                         "a": 1,
                     }}
@@ -1189,6 +1225,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 2)])`
+
                     Actual: BTreeMap {{
                         "a": 2,
                     }}
@@ -1222,6 +1260,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 1)])`
+
                     Actual: BTreeMap {{
                         "a": 1,
                     }}
@@ -1250,6 +1290,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 1), ("extra", 9)])`
+
                     Actual: BTreeMap {{
                         "a": 1,
                         "extra": 9,
@@ -1350,6 +1392,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map()`
+
                     Actual: BTreeMap {{
                         "foo": "bar",
                     }}
@@ -1369,6 +1413,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `map()`
+
                     Actual: BTreeMap {{
                         "foo": "bar",
                     }}

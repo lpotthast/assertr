@@ -13,6 +13,7 @@ impl<'t, R> ChainState<'t, Panic, R> {
         ChainState {
             parent: None,
             subject_name: self.subject_name,
+            expression: self.expression,
             detail_messages: RefCell::new(messages),
             print_location: self.print_location,
             // `capture` validates the assertions performed by its closure, not work completed on
@@ -103,6 +104,8 @@ mod tests {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(formatdoc! {"
                     -------- assertr --------
+                    Expression: `42`
+
                     Actual: 42
 
                     is not greater than
@@ -114,6 +117,8 @@ mod tests {
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_display_value(formatdoc! {"
                     -------- assertr --------
+                    Expression: `42`
+
                     Expected: 1
 
                       Actual: 42

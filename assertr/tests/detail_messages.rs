@@ -72,6 +72,8 @@ fn detail_messages_are_scoped_to_the_assertion_that_adds_them() {
         |it: AssertThat<AssertionFailure, Capture>| {
             it.has_display_value(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Person {{ age: 42 }}`
+
                 Expected: Person {{
                     age: 30,
                 }}

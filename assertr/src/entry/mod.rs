@@ -39,6 +39,7 @@ macro_rules! assert_that {
             inner: $crate::__private::assert_that_macro::Fallback(&$e),
         }
         .into_assert_that()
+        .with_expression(::core::stringify!($e))
     };
 }
 
@@ -56,6 +57,6 @@ macro_rules! assert_that {
 #[macro_export]
 macro_rules! assert_that_owned {
     ($e:expr) => {
-        $crate::__private::assert_that_macro::owned($e)
+        $crate::__private::assert_that_macro::owned($e).with_expression(::core::stringify!($e))
     };
 }

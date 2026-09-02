@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-02
+
+### Added
+
+- Assertion failures capture the asserted expression from `assert_that!`, `assert_that_owned!`, and
+  `assert_that_type` and display it in a backticked `Expression:` field. The `fluent` feature provides
+  `#[assertr::fluent_expressions]` for scoped expression capture on `must`, `must_owned`, `verify`, and `verify_owned`
+  calls, including through a renamed `assertr` dependency, without changing ordinary method resolution for same-named
+  user methods. It handles calls written directly in the annotated syntax, including macro invocations used as the
+  receiver, but not fluent calls produced by later macro expansion. Derived child assertions start without the root
+  expression because they represent a new diagnostic subject.
+
+### Changed
+
+- `assertr-derive`: Bumped to 0.4.1.
+
 ## [0.7.0] - 2026-08-30
 
 ### Added
@@ -472,7 +488,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.7.1...HEAD
+
+[0.7.1]: https://github.com/lpotthast/assertr/compare/v0.7.0...v0.7.1
 
 [0.7.0]: https://github.com/lpotthast/assertr/compare/v0.6.2...v0.7.0
 

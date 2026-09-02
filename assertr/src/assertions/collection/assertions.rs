@@ -277,6 +277,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
                     Actual: [
                         1,
                         2,
@@ -317,6 +319,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
                     Actual: [
                         1,
                         2,
@@ -404,6 +408,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2].as_slice()`
+
                     Actual: [
                         1,
                         2,
@@ -452,6 +458,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
                     Actual: [
                         1,
                         2,
@@ -498,6 +506,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
                     Actual: [
                         1,
                         2,
@@ -538,6 +548,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
                     Actual: [
                         1,
                         2,
@@ -645,6 +657,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
                     Actual: [
                         1,
                         2,
@@ -749,6 +763,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
                     Actual: [
                         1,
                         2,

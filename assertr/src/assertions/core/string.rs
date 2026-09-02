@@ -331,6 +331,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"a"`
+
                 Actual: "a"
 
                 contains non-whitespace characters.
@@ -367,6 +369,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"a"`
+
                 Actual: "a"
 
                 contains non-ASCII-whitespace characters.
@@ -384,6 +388,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"\u{{a0}}"`
+
                 Actual: "\u{{a0}}"
 
                 contains non-ASCII-whitespace characters.
@@ -419,6 +425,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"\t \n"`
+
                 Actual: "\t \n"
 
                 is blank.
@@ -455,6 +463,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"foo"`
+
                 Expected: "bar"
 
                   Actual: "foo"
@@ -506,6 +516,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"foo bar baz"`
+
                 Actual: "foo bar baz"
 
                 does not contain
@@ -526,6 +538,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `String::from("abc")`
+
                 Actual: custom(abc)
 
                 does not contain
@@ -562,6 +576,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"foo bar baz"`
+
                 Actual: "foo bar baz"
 
                 contains
@@ -598,6 +614,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"foo bar baz"`
+
                 Actual: "foo bar baz"
 
                 does not start with
@@ -634,6 +652,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"foo bar baz"`
+
                 Actual: "foo bar baz"
 
                 starts with
@@ -670,6 +690,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"foo bar baz"`
+
                 Actual: "foo bar baz"
 
                 does not end with
@@ -706,6 +728,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `"foo bar baz"`
+
                 Actual: "foo bar baz"
 
                 ends with
@@ -717,7 +741,7 @@ mod tests {
     }
 
     /// One blanket implementation serves every `AsRef<str>` subject, so all string-like types have
-    /// to produce byte-identical diagnostics for the same content.
+    /// to produce the same assertion-specific descriptions for the same content.
     mod every_string_like_type {
         use crate::prelude::*;
         use alloc::borrow::Cow;
@@ -752,9 +776,12 @@ mod tests {
         }
 
         #[test]
-        fn all_string_like_subjects_produce_identical_failures() {
+        fn all_string_like_subjects_produce_identical_descriptions() {
             let rendered = |failures: Vec<AssertionFailure>| {
-                failures.iter().map(ToString::to_string).collect::<Vec<_>>()
+                failures
+                    .iter()
+                    .map(|failure| failure.description.clone())
+                    .collect::<Vec<_>>()
             };
 
             let reference = rendered(
@@ -800,6 +827,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(indoc::formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `"foobar"`
+
                         Actual: string(foobar)
 
                         does not contain

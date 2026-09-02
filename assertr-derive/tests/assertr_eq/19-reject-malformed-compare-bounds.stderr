@@ -1,0 +1,5 @@
+error: expected `:`
+ --> tests/assertr_eq/19-reject-malformed-compare-bounds.rs:5:61
+  |
+5 |     #[assertr_eq(compare_with = "compare", compare_bounds = "u32 + u64")]
+  |                                                             ^^^^^^^^^^^

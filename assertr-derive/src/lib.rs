@@ -10,9 +10,10 @@
 
 mod assertr_eq;
 mod fluent_aliases;
+mod fluent_expressions;
 
 use proc_macro::TokenStream;
-use syn::{DeriveInput, ItemTrait, parse_macro_input};
+use syn::{DeriveInput, Item, ItemTrait, parse_macro_input};
 
 /// Derives a companion matcher type for partial equality assertions.
 ///
@@ -22,6 +23,8 @@ use syn::{DeriveInput, ItemTrait, parse_macro_input};
 /// matcher to `is_equal_to` compares only the `eq` fields:
 ///
 /// ```
+/// # extern crate renamed_assertr as assertr;
+/// # use assertr_derive::AssertrEq;
 /// use assertr::prelude::*;
 ///
 /// #[derive(Debug, AssertrEq)]
@@ -52,8 +55,8 @@ use syn::{DeriveInput, ItemTrait, parse_macro_input};
 ///
 /// # What is generated
 ///
-/// - The matcher struct, `<Name>AssertrEq`, with the same generics as the source struct.
-///   Lifetimes, type parameters, const generics, and where-clauses are carried over.
+/// - The matcher struct, `<Name>AssertrEq`, with the source generics required by its public
+///   fields. Parameters and dependent bounds used only by private fields are omitted.
 /// - `Default` and `Debug` for the matcher.
 /// - `AssertrPartialEq<NameAssertrEq>` for `Name` and `&Name`, so the matcher works with
 ///   collections of values and collections of references.
@@ -69,6 +72,8 @@ use syn::{DeriveInput, ItemTrait, parse_macro_input};
 /// nested struct partially as well, point `map_type` at that struct's own matcher:
 ///
 /// ```
+/// # extern crate renamed_assertr as assertr;
+/// # use assertr_derive::AssertrEq;
 /// use assertr::prelude::*;
 ///
 /// #[derive(Debug, AssertrEq)]
@@ -97,6 +102,8 @@ use syn::{DeriveInput, ItemTrait, parse_macro_input};
 /// each have a companion trait for their required bound:
 ///
 /// ```
+/// # extern crate renamed_assertr as assertr;
+/// # use assertr_derive::AssertrEq;
 /// use assertr::prelude::*;
 ///
 /// #[derive(Debug, AssertrEq)]
@@ -161,4 +168,47 @@ pub fn derive_assertr_eq(input: TokenStream) -> TokenStream {
 pub fn fluent_aliases(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let trait_def = parse_macro_input!(item as ItemTrait);
     fluent_aliases::fluent_aliases_impl(trait_def).into()
+}
+
+/// Captures receiver expressions for fluent assertion entry points in a test scope.
+///
+/// Place this attribute on a test function or an inline test module. It rewrites syntactically
+/// visible `value.must()` and `value.must_owned()` calls to attach `stringify!(value)`, and wraps
+/// the callbacks passed to visible `value.verify(...)` and `value.verify_owned(...)` calls with
+/// macro-only expression-aware support. Calls outside the annotated scope remain unchanged.
+///
+/// A macro invocation can be the receiver, as in `fixture!().must()`, because the fluent call is
+/// visible to this attribute. The attribute cannot inspect later macro expansion, so a macro that
+/// itself expands to `value.must()` or `value.verify(...)` does not gain expression capture.
+///
+/// Put this attribute above `#[test]` and proc-macro test attributes such as `#[tokio::test]` or
+/// `#[rstest]`, so expression capture runs before those attributes transform the function body:
+///
+/// ```ignore
+/// #[assertr::fluent_expressions]
+/// #[test]
+/// fn reports_the_receiver() {
+///     response.status().must().be_equal_to(200);
+/// }
+/// ```
+///
+/// The rewrite keeps ordinary method resolution. A user-defined zero-argument `must` method is
+/// still called, after which the generated expression attachment fails to compile if its return
+/// type is not an assertion chain. User-defined `verify` and `verify_owned` methods likewise remain
+/// selected, and callback inputs unrelated to assertr pass through unchanged.
+#[proc_macro_attribute]
+pub fn fluent_expressions(attr: TokenStream, item: TokenStream) -> TokenStream {
+    if !attr.is_empty() {
+        return syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "fluent_expressions does not accept arguments",
+        )
+        .into_compile_error()
+        .into();
+    }
+
+    let item = parse_macro_input!(item as Item);
+    fluent_expressions::fluent_expressions_impl(item)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }

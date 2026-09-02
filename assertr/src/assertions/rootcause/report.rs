@@ -468,6 +468,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `collection`
+
                 Actual: rootcause::report_collection::owned::limit_field_access::ReportCollection{trailing_space}
 
 
@@ -797,13 +799,15 @@ mod tests {
                         .has_current_context::<String>();
                 })
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
+                    Expression: `report!("root")`
+
                     Expected current context type: alloc::string::String
 
                       Actual current context type: &str
                     -------- assertr --------
-                "});
+                "#});
             }
         }
     }

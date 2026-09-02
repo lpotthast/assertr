@@ -695,44 +695,44 @@ mod tests {
         fn returns_equal_on_equal_input_using_refs() {
             let result = compare_slices(&[&1, &2, &3], &[&1, &2, &3]);
 
-            assert!(!result.only_differing_in_order());
-            assert!(result.strictly_equal);
-            assert!(result.same_length);
-            assert!(result.not_in_actual.is_empty());
-            assert!(result.not_in_expected.is_empty());
+            assert_that!(result.only_differing_in_order()).is_false();
+            assert_that!(result.strictly_equal).is_true();
+            assert_that!(result.same_length).is_true();
+            assert_that!(result.not_in_actual).is_empty();
+            assert_that!(result.not_in_expected).is_empty();
         }
 
         #[test]
         fn returns_equal_on_equal_input() {
             let result = compare_slices(&[1, 2, 3], &[1, 2, 3]);
 
-            assert!(!result.only_differing_in_order());
-            assert!(result.strictly_equal);
-            assert!(result.same_length);
-            assert!(result.not_in_actual.is_empty());
-            assert!(result.not_in_expected.is_empty());
+            assert_that!(result.only_differing_in_order()).is_false();
+            assert_that!(result.strictly_equal).is_true();
+            assert_that!(result.same_length).is_true();
+            assert_that!(result.not_in_actual).is_empty();
+            assert_that!(result.not_in_expected).is_empty();
         }
 
         #[test]
         fn returns_not_equal_on_equal_but_rearranged_input() {
             let result = compare_slices(&[1, 2, 3], &[3, 2, 1]);
 
-            assert!(result.only_differing_in_order());
-            assert!(!result.strictly_equal);
-            assert!(result.same_length);
-            assert!(result.not_in_actual.is_empty());
-            assert!(result.not_in_expected.is_empty());
+            assert_that!(result.only_differing_in_order()).is_true();
+            assert_that!(result.strictly_equal).is_false();
+            assert_that!(result.same_length).is_true();
+            assert_that!(result.not_in_actual).is_empty();
+            assert_that!(result.not_in_expected).is_empty();
         }
 
         #[test]
         fn returns_not_equal_and_lists_differences_on_differing_input() {
             let result = compare_slices(&[1, 5, 7], &[5, 3, 4, 42]);
 
-            assert!(!result.only_differing_in_order());
-            assert!(!result.strictly_equal);
-            assert!(!result.same_length);
-            assert_eq!(result.not_in_actual, [&3, &4, &42]);
-            assert_eq!(result.not_in_expected, [&1, &7]);
+            assert_that!(result.only_differing_in_order()).is_false();
+            assert_that!(result.strictly_equal).is_false();
+            assert_that!(result.same_length).is_false();
+            assert_that!(result.not_in_actual.as_slice()).is_equal_to([&3, &4, &42].as_slice());
+            assert_that!(result.not_in_expected.as_slice()).is_equal_to([&1, &7].as_slice());
         }
 
         #[test]

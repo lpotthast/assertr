@@ -206,6 +206,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Result::<(), TestError>::Err(TestError::MissingTokenQueryParam)`
+
                 Expected pattern: Err(TestError::MissingQueryParams)
 
                           Actual: Err(
@@ -225,6 +227,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r"
                         -------- assertr --------
+                        Expression: `Some(42)`
+
                         Expected pattern: None
 
                                   Actual: Some(
@@ -251,6 +255,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Opaque(1)`
+
                 Expected pattern: Opaque(2)
 
                           Actual: Opaque(1)
@@ -307,6 +313,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Result::<(), TestError>::Err(TestError::MissingQueryParams)`
+
                 Unexpected pattern: Err(TestError::MissingQueryParams)
 
                           Actual: Err(
@@ -326,6 +334,8 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_display_value(formatdoc! {r"
                         -------- assertr --------
+                        Expression: `Some(42)`
+
                         Unexpected pattern: Some(42)
 
                                   Actual: Some(
@@ -352,6 +362,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `Opaque(1)`
+
                 Unexpected pattern: Opaque(1)
 
                           Actual: Opaque(1)

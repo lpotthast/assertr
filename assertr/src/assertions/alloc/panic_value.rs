@@ -115,6 +115,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `actual`
+
                     Expected value type: u32
 
                       Actual value type: String
@@ -156,6 +158,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `actual`
+
                 Expected panic value type: u32
 
                   Actual panic value type: String
@@ -175,6 +179,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `actual`
+
                 Expected panic value type: u32
 
                   Actual panic value type: &str
@@ -195,6 +201,8 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                 -------- assertr --------
+                Expression: `actual`
+
                 Expected panic value type: u32
 
                   Actual panic value type: dyn core::any::Any

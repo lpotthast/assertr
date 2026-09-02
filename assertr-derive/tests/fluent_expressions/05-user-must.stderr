@@ -1,0 +1,5 @@
+error[E0599]: no method named `with_expression` found for unit type `()` in the current scope
+ --> tests/fluent_expressions/05-user-must.rs:9:14
+  |
+9 |     UserType.must();
+  |              ^^^^ method not found in `()`

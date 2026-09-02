@@ -1,4 +1,5 @@
-use assertr::prelude::*;
+use renamed_assertr::prelude::*;
+use assertr_derive::AssertrEq;
 use core::marker::PhantomData;
 
 pub trait Related<U> {}

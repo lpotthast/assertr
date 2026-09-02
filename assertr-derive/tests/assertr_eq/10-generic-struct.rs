@@ -1,4 +1,5 @@
-use assertr::prelude::*;
+use renamed_assertr::prelude::*;
+use assertr_derive::AssertrEq;
 use indoc::formatdoc;
 
 #[derive(Debug, AssertrEq)]
@@ -27,18 +28,14 @@ fn main() {
     let _: GenericAssertrEq<'_, i32, 3> = GenericAssertrEq::default();
 
     // Failure output must render generic field values instead of falling back to `<unrendered>`.
-    assert_that_panic_by(|| {
-        subject
-            .must()
-            .with_location(false)
-            .be_equal_to(GenericAssertrEq {
-                value: eq(43),
-                label: eq("question"),
-                bytes: any(),
-            })
-    })
-    .has_type::<String>()
-    .is_equal_to(formatdoc! {r#"
+    let failures = subject.verify(|it| {
+        it.with_location(false).be_equal_to(GenericAssertrEq {
+            value: eq(43),
+            label: eq("question"),
+            bytes: any(),
+        })
+    });
+    failures[0].to_string().must().be_equal_to(formatdoc! {r#"
             -------- assertr --------
             Expected: GenericAssertrEq {{
                 value: Eq::Eq(43),

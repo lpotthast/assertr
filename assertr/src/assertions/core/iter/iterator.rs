@@ -554,6 +554,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -598,6 +600,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -683,6 +687,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -727,6 +733,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -779,6 +787,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -830,6 +840,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -889,6 +901,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -980,6 +994,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -1039,6 +1055,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -1138,6 +1156,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -1204,6 +1224,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -1297,6 +1319,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -1328,6 +1352,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [],
 
                     did not exactly match
@@ -1391,6 +1417,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -1517,6 +1545,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,
@@ -1584,6 +1614,8 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
                     Actual: [
                         1,
                         2,

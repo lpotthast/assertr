@@ -1,6 +1,6 @@
 [package]
 name = "assertr-derive"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 rust-version = "1.89.0"
 autotests = false
@@ -13,7 +13,8 @@ Derive AssertrEq implementations.
 """
 categories = ["development-tools::testing", "no-std"]
 keywords = ["assertions", "assert", "assert-that", "testing"]
-include = ["/src/**", "/tests/**", "/LICENSE-*"]
+# The fluent-expression fixtures require the matching assertr runtime and remain workspace-only.
+include = ["/src/**", "/tests/assertr_eq/**", "/tests/progress.rs", "/LICENSE-*"]
 # Package contents were vetted with `cargo package --list`.
 
 [lib]
@@ -24,11 +25,11 @@ darling = "0.24.0"
 proc-macro-crate = "3.5.0"
 proc-macro2 = "1.0.107"
 quote = "1.0.47"
-syn = { version = "3.0.3", features = ["extra-traits", "visit"] }
+syn = { version = "3.0.3", features = ["extra-traits", "full", "visit", "visit-mut"] }
 
 [dev-dependencies]
-assertr = { path = "../assertr", features = ["std", "derive", "fluent"] }
 indoc = "2.0.5"
+renamed_assertr = { package = "assertr", version = "0.7.0", path = "../assertr", features = ["std", "fluent"] }
 trybuild = { version = "1.0.103", features = ["diff"] }
 
 [[test]]

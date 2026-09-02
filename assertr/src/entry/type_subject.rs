@@ -67,5 +67,5 @@ impl<T> Default for Type<T> {
 /// ```
 #[must_use]
 pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
-    AssertThat::new_panicking(Actual::Owned(Type::<T>::new()))
+    AssertThat::new_panicking(Actual::Owned(Type::<T>::new())).with_expression(type_name::<T>())
 }
