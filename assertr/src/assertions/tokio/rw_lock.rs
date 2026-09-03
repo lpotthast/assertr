@@ -48,7 +48,12 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_err() {
                 // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                let actual = Self::render_unavailable_struct_field("RwLock", "data", "<locked>");
+                let actual = self.render().unavailable_struct_field(
+                    self.actual(),
+                    "RwLock",
+                    "data",
+                    "<locked>",
+                );
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -63,7 +68,9 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                     .actual()
                     .try_read()
                     .expect("the lock-state check already succeeded");
-                let actual = self.render_struct_field("RwLock", "data", &*value);
+                let actual = self
+                    .render()
+                    .struct_field(self.actual(), "RwLock", "data", &*value);
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -90,7 +97,9 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                 .actual()
                 .try_read()
                 .expect("the lock-state check already succeeded");
-            let actual = self.render_struct_field("RwLock", "data", &*value);
+            let actual = self
+                .render()
+                .struct_field(self.actual(), "RwLock", "data", &*value);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:?}
@@ -104,7 +113,12 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
             // Cannot be locked for writing, must already be read- or write-locked than!
             if self.actual().try_read().is_err() {
                 // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                let actual = Self::render_unavailable_struct_field("RwLock", "data", "<locked>");
+                let actual = self.render().unavailable_struct_field(
+                    self.actual(),
+                    "RwLock",
+                    "data",
+                    "<locked>",
+                );
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -131,7 +145,9 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                 .actual()
                 .try_read()
                 .expect("the lock-state check already succeeded");
-            let actual = self.render_struct_field("RwLock", "data", &*value);
+            let actual = self
+                .render()
+                .struct_field(self.actual(), "RwLock", "data", &*value);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:?}
@@ -147,7 +163,9 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                     .actual()
                     .try_read()
                     .expect("the lock-state check already succeeded");
-                let actual = self.render_struct_field("RwLock", "data", &*value);
+                let actual = self
+                    .render()
+                    .struct_field(self.actual(), "RwLock", "data", &*value);
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Actual: {actual:?}
@@ -165,6 +183,33 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use tokio::sync::RwLock;
+
+        struct Secret;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, RwLock<i32>, Panic, NoRenderer>
+                    => TokioRwLockAssertions<i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_render_the_inner_value_with_the_active_renderer() {
+            let failures = assert_that!(RwLock::new(Secret))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(TokioRwLockAssertions::is_read_locked);
+
+            assert_that!(failures[0].description.as_str())
+                .contains(format!("RwLock {{ data: {SENTINEL} }}"));
+        }
+    }
+
     mod is_not_locked {
         use crate::prelude::*;
         use indoc::formatdoc;

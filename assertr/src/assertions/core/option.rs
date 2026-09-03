@@ -94,7 +94,7 @@ impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<
 
         if !self.actual().is_none() {
             let actual = match self.actual() {
-                Some(value) => self.render_variant("Some", value),
+                Some(value) => self.render().variant(self.actual(), "Some", value),
                 None => unreachable!("already checked"),
             };
             self.fail(|w: &mut String| {
@@ -134,6 +134,47 @@ impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        struct Secret;
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Option<i32>, Panic, NoRenderer>
+                    => OptionAssertions<'static, i32, Panic, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, Option<i32>, Panic, NoRenderer>
+                    => OptionExtractAssertions<'static, i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn some_variant_is_rendered_from_its_leaf_value() {
+            let failures = assert_that!(Some(Secret))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(OptionAssertions::is_none);
+
+            assert_that!(failures[0].description.as_str())
+                .contains("Some(")
+                .contains(SENTINEL);
+        }
+
+        #[test]
+        fn valueless_variant_needs_no_renderer_capability() {
+            let failures = assert_that!(Option::<Secret>::None)
+                .with_renderer(NoRenderer)
+                .with_location(false)
+                .capture(OptionAssertions::is_some);
+
+            assert_that!(failures[0].description.as_str()).contains("Actual: None");
+        }
+    }
+
     mod is_some {
         use crate::prelude::*;
         use indoc::formatdoc;

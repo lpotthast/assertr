@@ -5,8 +5,8 @@ use alloc::{format, string::String, vec::Vec};
 use core::fmt::Write;
 use indoc::writedoc;
 
-use crate::assertions::collection::CollectionStyle;
 use crate::mode::Mode;
+use crate::renderer::GroupStyle;
 use crate::{AssertThat, ValueRenderer};
 
 /// Assertions for process commands.
@@ -30,8 +30,10 @@ impl<M: Mode, R> CommandAssertions<R> for AssertThat<'_, Command, M, R> {
         let expected = expected.as_ref();
         if !actual.contains(&expected) {
             let details = [format!("Consumed {} element(s).", actual.len())];
-            let actual = self.render_values(&actual, CollectionStyle::List);
-            let expected = self.render_value(expected);
+            let actual = self
+                .render()
+                .borrowed_values::<OsStr, _>(&actual, GroupStyle::List);
+            let expected = self.render().value(expected);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -46,6 +48,33 @@ impl<M: Mode, R> CommandAssertions<R> for AssertThat<'_, Command, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use std::process::Command;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Command, Panic, NoRenderer>
+                    => CommandAssertions<NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_render_arguments_with_the_active_renderer() {
+            let mut command = Command::new("program");
+            command.arg("--actual");
+
+            let failures = assert_that!(command)
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(|it| it.has_arg("--expected"));
+
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
+
     mod has_arg {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -86,9 +115,8 @@ mod tests {
                 
                 does not contain expected: "help"
 
-                Details: [
-                    Consumed 1 element(s).,
-                ]
+                Details:
+                  - Consumed 1 element(s).
                 -------- assertr --------
             "#});
         }

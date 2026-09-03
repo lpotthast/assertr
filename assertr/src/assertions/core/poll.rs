@@ -58,7 +58,7 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
         let actual = self.actual();
         if !actual.is_pending() {
             let actual = match actual {
-                Poll::Ready(value) => self.render_variant("Ready", value),
+                Poll::Ready(value) => self.render().variant(actual, "Ready", value),
                 Poll::Pending => unreachable!("already checked"),
             };
             self.fail(|w: &mut String| {
@@ -143,6 +143,38 @@ impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use core::task::Poll;
+
+        struct Secret;
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Poll<()>, Panic, NoRenderer>
+                    => PollAssertions<'static, (), Panic, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, Poll<()>, Panic, NoRenderer>
+                    => PollExtractAssertions<'static, (), NoRenderer>
+            );
+        }
+
+        #[test]
+        fn ready_variant_is_rendered_from_its_leaf_value() {
+            let failures = assert_that!(Poll::Ready(Secret))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(PollAssertions::is_pending);
+
+            assert_that!(failures[0].description.as_str())
+                .contains("Ready(")
+                .contains(SENTINEL);
+        }
+    }
+
     #[derive(Debug, PartialEq)]
     pub struct Foo {
         val: u32,

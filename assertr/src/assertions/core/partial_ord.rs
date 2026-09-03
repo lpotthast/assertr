@@ -50,8 +50,8 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
         let expected = expected.borrow();
 
         if !matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -77,8 +77,8 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
         let expected = expected.borrow();
 
         if !matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -107,8 +107,8 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
             actual.partial_cmp(expected),
             Some(Ordering::Less | Ordering::Equal)
         ) {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -137,8 +137,8 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
             actual.partial_cmp(expected),
             Some(Ordering::Greater | Ordering::Equal)
         ) {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -155,6 +155,19 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, i32, Panic, NoRenderer>
+                    => PartialOrdAssertions<i32, NoRenderer>
+            );
+        }
+    }
+
     mod is_less_than {
         use crate::prelude::*;
         use indoc::formatdoc;

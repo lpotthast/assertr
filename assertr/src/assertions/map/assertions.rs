@@ -276,6 +276,55 @@ where
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use alloc::collections::BTreeMap;
+
+        use crate::prelude::*;
+        use crate::test_support::{
+            NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+        };
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, BTreeMap<i32, i32>, Panic, NoRenderer>
+                    => MapAssertions<i32, i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn equality_uses_the_active_renderer_type() {
+            assert_that!(BTreeMap::from([("a", RendererActual(1))]))
+                .with_renderer(SentinelRenderer)
+                .contains_value(RendererExpected(1))
+                .contains_entry("a", RendererExpected(1))
+                .contains_exactly_entries([("a", RendererExpected(1))]);
+        }
+    }
+
+    mod rendering_budget {
+        use alloc::collections::BTreeMap;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn limits_complete_expected_and_unexpected_entry_groups() {
+            let failures = assert_that!(BTreeMap::from([("a", 1), ("b", 2), ("c", 3)]))
+                .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
+                .with_location(false)
+                .capture(|it| it.contains_exactly_entries([("x", 10), ("y", 20), ("z", 30)]));
+
+            assert_that!(failures[0].description.as_str())
+                .contains("Expected entries: [")
+                .contains("] (... 2 more entries ...)");
+            assert_that!(failures[0].details.iter().any(|detail| {
+                detail.starts_with("Unexpected entries: [")
+                    && detail.contains("] (... 2 more entries ...)")
+            }))
+            .is_true();
+        }
+    }
+
     #[cfg(feature = "std")]
     mod contains_key {
         use std::collections::HashMap;
@@ -318,7 +367,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     does not contain expected key: "baz"
                     -------- assertr --------
@@ -370,7 +419,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     contains unexpected key: "foo"
                     -------- assertr --------
@@ -413,7 +462,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     does not contain expected value: "baz"
                     -------- assertr --------
@@ -479,7 +528,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     contains unexpected value: "bar"
                     -------- assertr --------
@@ -552,7 +601,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     does not contain expected key: "baz"
                     -------- assertr --------
@@ -575,7 +624,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     does not contain expected value at key: "foo"
 
@@ -592,6 +641,7 @@ mod tests {
         use indoc::formatdoc;
 
         use crate::prelude::*;
+        use crate::test_support::{RendererActual, RendererExpected, SENTINEL, SentinelRenderer};
 
         fn is_three(it: AssertThat<i32, Capture>) {
             it.is_equal_to(3);
@@ -599,6 +649,10 @@ mod tests {
 
         fn is_positive_and_large(it: AssertThat<i32, Capture>) {
             it.is_greater_than(0).is_greater_than(10);
+        }
+
+        fn is_renderer_expected_two(it: AssertThat<RendererActual, Capture, SentinelRenderer>) {
+            it.is_equal_to(RendererExpected(2));
         }
 
         #[test]
@@ -655,6 +709,16 @@ mod tests {
             .contains("Expected: 0")
             .contains("Expected: 10");
         }
+
+        #[test]
+        fn nested_failures_use_the_active_renderer() {
+            let failures = assert_that!(BTreeMap::from([("value", RendererActual(1))]))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(|it| it.contains_entry_satisfying("value", is_renderer_expected_two));
+
+            assert_that!(failures[0].details[0].as_str()).contains(SENTINEL);
+        }
     }
 
     #[cfg(feature = "std")]
@@ -706,7 +770,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     contains unexpected entry at key: "foo"
 
@@ -756,7 +820,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     does not contain all expected keys
 
@@ -816,7 +880,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     does not exactly contain expected entries
 
@@ -831,12 +895,11 @@ mod tests {
                         ),
                     ]
 
-                    Details: [
-                        Number of entries (1) does not match number of expected entries (2)!,
-                        Keys not found: [
+                    Details:
+                      - Number of entries (1) does not match number of expected entries (2)!
+                      - Keys not found: [
                             "baz",
-                        ],
-                    ]
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -856,7 +919,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "a": 1,
-                    }}
+                    }} (sorted for rendering)
 
                     does not exactly contain expected entries
 
@@ -871,9 +934,8 @@ mod tests {
                         ),
                     ]
 
-                    Details: [
-                        Number of entries (1) does not match number of expected entries (2)!,
-                    ]
+                    Details:
+                      - Number of entries (1) does not match number of expected entries (2)!
                     -------- assertr --------
                 "#});
         }
@@ -913,14 +975,13 @@ mod tests {
                         ),
                     ]
 
-                    Details: [
-                        Unexpected entries: [
+                    Details:
+                      - Unexpected entries: [
                             (
                                 "b",
                                 2,
                             ),
-                        ],
-                    ]
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -940,21 +1001,20 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     does not exactly contain expected entries
 
                     Expected entries: []
 
-                    Details: [
-                        Number of entries (1) does not match number of expected entries (0)!,
-                        Unexpected entries: [
+                    Details:
+                      - Number of entries (1) does not match number of expected entries (0)!
+                      - Unexpected entries: [
                             (
                                 "foo",
                                 "bar",
                             ),
-                        ],
-                    ]
+                        ] (sorted for rendering)
                     -------- assertr --------
                 "#});
         }
@@ -974,7 +1034,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     does not exactly contain expected entries
 
@@ -985,11 +1045,10 @@ mod tests {
                         ),
                     ]
 
-                    Details: [
-                        Keys with unexpected values: [
+                    Details:
+                      - Keys with unexpected values: [
                             "foo",
-                        ],
-                    ]
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -1062,12 +1121,11 @@ mod tests {
                         "missing",
                     ]
 
-                    Details: [
-                        Number of entries (1) does not match number of predicates (2)!,
-                        Keys not found: [
+                    Details:
+                      - Number of entries (1) does not match number of predicates (2)!
+                      - Keys not found: [
                             "missing",
-                        ],
-                    ]
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -1097,9 +1155,8 @@ mod tests {
                         "a",
                     ]
 
-                    Details: [
-                        Number of entries (1) does not match number of predicates (2)!,
-                    ]
+                    Details:
+                      - Number of entries (1) does not match number of predicates (2)!
                     -------- assertr --------
                 "#});
         }
@@ -1127,15 +1184,14 @@ mod tests {
                         "a",
                     ]
 
-                    Details: [
-                        Number of entries (2) does not match number of predicates (1)!,
-                        Unexpected entries: [
+                    Details:
+                      - Number of entries (2) does not match number of predicates (1)!
+                      - Unexpected entries: [
                             (
                                 "extra",
                                 9,
                             ),
-                        ],
-                    ]
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -1162,11 +1218,10 @@ mod tests {
                         "a",
                     ]
 
-                    Details: [
-                        Keys with values not matching their predicates: [
+                    Details:
+                      - Keys with values not matching their predicates: [
                             "a",
-                        ],
-                    ]
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -1185,6 +1240,10 @@ mod tests {
 
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
+        }
+
+        fn is_zero(it: AssertThat<i32, Capture>) {
+            it.is_equal_to(0);
         }
 
         type ValueAssertions = fn(AssertThat<i32, Capture>);
@@ -1238,12 +1297,11 @@ mod tests {
                         "missing",
                     ]
 
-                    Details: [
-                        Number of entries (1) does not match number of assertions (2)!,
-                        Keys not found: [
+                    Details:
+                      - Number of entries (1) does not match number of assertions (2)!
+                      - Keys not found: [
                             "missing",
-                        ],
-                    ]
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -1273,9 +1331,8 @@ mod tests {
                         "a",
                     ]
 
-                    Details: [
-                        Number of entries (1) does not match number of assertions (2)!,
-                    ]
+                    Details:
+                      - Number of entries (1) does not match number of assertions (2)!
                     -------- assertr --------
                 "#});
         }
@@ -1303,15 +1360,14 @@ mod tests {
                         "a",
                     ]
 
-                    Details: [
-                        Number of entries (2) does not match number of assertions (1)!,
-                        Unexpected entries: [
+                    Details:
+                      - Number of entries (2) does not match number of assertions (1)!
+                      - Unexpected entries: [
                             (
                                 "extra",
                                 9,
                             ),
-                        ],
-                    ]
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -1326,6 +1382,20 @@ mod tests {
             .has_type::<String>()
             .contains("does not exactly contain entries satisfying the assertions")
             .contains("Value at key \"a\" does not satisfy its assertions:\n    Expected: 2");
+        }
+
+        #[test]
+        fn limits_repeated_value_evidence_to_the_rendering_budget() {
+            let assertions: [(&str, ValueAssertions); 3] =
+                [("a", is_zero), ("b", is_zero), ("c", is_zero)];
+            let failures = assert_that!(BTreeMap::from([("a", 1), ("b", 2), ("c", 3)]))
+                .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
+                .with_location(false)
+                .capture(|it| it.contains_exactly_entries_satisfying(assertions));
+
+            assert_that!(failures[0].details.as_slice())
+                .has_length(2)
+                .contains("... 2 more unsatisfied values ...");
         }
     }
 

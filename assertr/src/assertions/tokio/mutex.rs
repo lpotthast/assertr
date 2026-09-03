@@ -43,7 +43,7 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
         self.track_assertion();
         let actual = self.actual();
         if let Ok(guard) = actual.try_lock() {
-            let data = self.render_value(&*guard);
+            let data = self.render().value(&*guard);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: Mutex {{ data: {data:#?} }}
@@ -84,10 +84,10 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
                 Ok(guard) => {
                     let failures = self.collect_element_failures(&*guard, assertions);
                     if !failures.is_empty() {
-                        let data = self.render_value(&*guard);
+                        let data = self.render().value(&*guard);
                         let details = [format!(
                             "Contained data failures:\n{}",
-                            join_failures(&failures)
+                            join_failures(&failures, self.render().max_items())
                         )];
                         self.fail_with_details(details, |w: &mut String| {
                             writedoc! {w, r"
@@ -115,6 +115,19 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use tokio::sync::Mutex;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Mutex<i32>, Panic, NoRenderer>
+                    => TokioMutexAssertions<i32, NoRenderer>
+            );
+        }
+    }
 
     mod is_locked {
         use indoc::formatdoc;
@@ -264,12 +277,11 @@ mod tests {
 
                     contains data that does not satisfy the assertions.
 
-                    Details: [
-                        Contained data failures:
+                    Details:
+                      - Contained data failures:
                         Expected: 43
                     {indented_blank_line}
-                          Actual: 42,
-                    ]
+                          Actual: 42
                     -------- assertr --------
                 "});
         }

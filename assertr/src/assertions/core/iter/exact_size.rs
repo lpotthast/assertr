@@ -63,6 +63,19 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions for AssertTha
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, core::array::IntoIter<i32, 1>, Panic, NoRenderer>
+                    => ExactSizeIteratorAssertions
+            );
+        }
+    }
+
     mod has_remaining_count {
         use crate::prelude::*;
         use indoc::formatdoc;

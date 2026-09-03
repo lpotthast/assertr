@@ -9,9 +9,11 @@ list:
 
 # Install tools required by other recipes.
 install-tools:
+    cargo +stable install cargo-minimal-versions --locked
+    cargo +stable install cargo-semver-checks --locked
+    cargo +stable install cargo-audit --locked
     cargo +stable install cargo-msrv --locked
     cargo +stable install cargo-sort --locked
-    cargo +stable install cargo-semver-checks --locked
 
 # Find the minimum supported rust version.
 msrv:

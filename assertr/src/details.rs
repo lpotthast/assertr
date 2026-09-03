@@ -5,22 +5,6 @@ use core::fmt::Debug;
 
 use crate::{AssertThat, mode::Mode};
 
-/// Renders chain-level user messages followed by per-failure details as one debug list.
-pub(crate) struct DetailMessages<'a>(pub(crate) &'a [String], pub(crate) &'a [String]);
-
-impl Debug for DetailMessages<'_> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_list()
-            .entries(
-                self.0
-                    .iter()
-                    .chain(self.1.iter())
-                    .map(|it| DisplayString(it)),
-            )
-            .finish()
-    }
-}
-
 pub(crate) struct DisplayString<'a>(pub(crate) &'a str);
 
 impl Debug for DisplayString<'_> {

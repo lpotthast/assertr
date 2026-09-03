@@ -1,6 +1,6 @@
 [package]
 name = "assertr-derive"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 rust-version = "1.89.0"
 autotests = false
@@ -29,7 +29,7 @@ syn = { version = "3.0.3", features = ["extra-traits", "full", "visit", "visit-m
 
 [dev-dependencies]
 indoc = "2.0.5"
-renamed_assertr = { package = "assertr", version = "0.7.0", path = "../assertr", features = ["std", "fluent"] }
+renamed_assertr = { package = "assertr", version = "0.8.0", path = "../assertr", features = ["std", "fluent"] }
 trybuild = { version = "1.0.103", features = ["diff"] }
 
 [[test]]

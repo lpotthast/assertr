@@ -81,7 +81,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         // This iterator will yield no entries if the string is empty or all whitespace!
         if actual.split_whitespace().next().is_some() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -103,7 +103,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         self.track_assertion();
         let actual = self.actual().as_ref();
         if actual.split_whitespace().next().is_none() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -126,7 +126,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         // This iterator will yield no entries if the string is empty or all whitespace!
         if actual.split_ascii_whitespace().next().is_some() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -152,7 +152,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             let details = [String::from(
                 "Actual is not equal to expected, even when ignoring ASCII casing.",
             )];
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -173,7 +173,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let expected = expected.as_ref();
         if !actual.contains(expected) {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -196,7 +196,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let unexpected = unexpected.as_ref();
         if actual.contains(unexpected) {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -219,7 +219,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let expected = expected.as_ref();
         if !actual.starts_with(expected) {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -242,7 +242,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let unexpected = unexpected.as_ref();
         if actual.starts_with(unexpected) {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -265,7 +265,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let expected = expected.as_ref();
         if !actual.ends_with(expected) {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -288,7 +288,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let unexpected = unexpected.as_ref();
         if actual.ends_with(unexpected) {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?}
@@ -305,6 +305,18 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, &'static str, Panic, NoRenderer> => StrAssertions
+            );
+        }
+    }
+
     mod is_blank {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -469,9 +481,8 @@ mod tests {
 
                   Actual: "foo"
 
-                Details: [
-                    Actual is not equal to expected, even when ignoring ASCII casing.,
-                ]
+                Details:
+                  - Actual is not equal to expected, even when ignoring ASCII casing.
                 -------- assertr --------
             "#});
         }

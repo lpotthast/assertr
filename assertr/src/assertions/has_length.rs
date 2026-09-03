@@ -1,7 +1,7 @@
 use ::alloc::{
     borrow::Cow,
     boxed::Box,
-    collections::{BTreeMap, BTreeSet, LinkedList, VecDeque},
+    collections::{BTreeMap, BTreeSet, BinaryHeap, LinkedList, VecDeque},
     string::String,
     vec::Vec,
 };
@@ -35,7 +35,7 @@ pub trait HasLength {
     }
 }
 
-impl HasLength for &str {
+impl HasLength for str {
     fn length(&self) -> usize {
         str::len(self)
     }
@@ -46,16 +46,6 @@ impl HasLength for &str {
 }
 
 impl HasLength for String {
-    fn length(&self) -> usize {
-        String::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        String::is_empty(self)
-    }
-}
-
-impl HasLength for &String {
     fn length(&self) -> usize {
         String::len(self)
     }
@@ -85,9 +75,13 @@ impl HasLength for Cow<'_, str> {
     }
 }
 
-impl<T> HasLength for &[T] {
+impl<T> HasLength for [T] {
     fn length(&self) -> usize {
         self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        <[T]>::is_empty(self)
     }
 }
 
@@ -95,25 +89,13 @@ impl<T, const S: usize> HasLength for [T; S] {
     fn length(&self) -> usize {
         self.len()
     }
-}
 
-impl<T, const S: usize> HasLength for &[T; S] {
-    fn length(&self) -> usize {
-        self.len()
+    fn is_empty(&self) -> bool {
+        S == 0
     }
 }
 
 impl<T> HasLength for Vec<T> {
-    fn length(&self) -> usize {
-        Vec::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        Vec::is_empty(self)
-    }
-}
-
-impl<T> HasLength for &Vec<T> {
     fn length(&self) -> usize {
         Vec::len(self)
     }
@@ -143,27 +125,7 @@ impl<K, V> HasLength for BTreeMap<K, V> {
     }
 }
 
-impl<K, V> HasLength for &BTreeMap<K, V> {
-    fn length(&self) -> usize {
-        BTreeMap::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        BTreeMap::is_empty(self)
-    }
-}
-
 impl<T> HasLength for BTreeSet<T> {
-    fn length(&self) -> usize {
-        BTreeSet::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        BTreeSet::is_empty(self)
-    }
-}
-
-impl<T> HasLength for &BTreeSet<T> {
     fn length(&self) -> usize {
         BTreeSet::len(self)
     }
@@ -183,67 +145,69 @@ impl<T> HasLength for LinkedList<T> {
     }
 }
 
-impl<T> HasLength for &LinkedList<T> {
+impl<T> HasLength for BinaryHeap<T> {
     fn length(&self) -> usize {
-        LinkedList::len(self)
+        BinaryHeap::len(self)
     }
 
     fn is_empty(&self) -> bool {
-        LinkedList::is_empty(self)
-    }
-}
-
-impl<T> HasLength for &VecDeque<T> {
-    fn length(&self) -> usize {
-        VecDeque::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        VecDeque::is_empty(self)
+        BinaryHeap::is_empty(self)
     }
 }
 
 #[cfg(feature = "std")]
-impl<K, V, S: BuildHasher> HasLength for ::std::collections::HashMap<K, V, S> {
+impl<K, V, S: BuildHasher> HasLength for std::collections::HashMap<K, V, S> {
     fn length(&self) -> usize {
-        ::std::collections::HashMap::len(self)
+        std::collections::HashMap::len(self)
     }
 
     fn is_empty(&self) -> bool {
-        ::std::collections::HashMap::is_empty(self)
+        std::collections::HashMap::is_empty(self)
     }
 }
 
 #[cfg(feature = "std")]
-impl<K, V, S: BuildHasher> HasLength for &::std::collections::HashMap<K, V, S> {
+impl<V, S: BuildHasher> HasLength for std::collections::HashSet<V, S> {
     fn length(&self) -> usize {
-        ::std::collections::HashMap::len(self)
+        std::collections::HashSet::len(self)
     }
 
     fn is_empty(&self) -> bool {
-        ::std::collections::HashMap::is_empty(self)
+        std::collections::HashSet::is_empty(self)
     }
 }
 
-#[cfg(feature = "std")]
-impl<V, S: BuildHasher> HasLength for ::std::collections::HashSet<V, S> {
+impl<T> HasLength for &T
+where
+    T: HasLength + ?Sized,
+{
     fn length(&self) -> usize {
-        ::std::collections::HashSet::len(self)
+        T::length(self)
     }
 
     fn is_empty(&self) -> bool {
-        ::std::collections::HashSet::is_empty(self)
+        T::is_empty(self)
+    }
+
+    fn is_not_empty(&self) -> bool {
+        T::is_not_empty(self)
     }
 }
 
-#[cfg(feature = "std")]
-impl<V, S: BuildHasher> HasLength for &::std::collections::HashSet<V, S> {
+impl<T> HasLength for &mut T
+where
+    T: HasLength + ?Sized,
+{
     fn length(&self) -> usize {
-        ::std::collections::HashSet::len(self)
+        T::length(self)
     }
 
     fn is_empty(&self) -> bool {
-        ::std::collections::HashSet::is_empty(self)
+        T::is_empty(self)
+    }
+
+    fn is_not_empty(&self) -> bool {
+        T::is_not_empty(self)
     }
 }
 
@@ -325,6 +289,20 @@ impl_has_length_for_signed_ranges!(i8, i16, i32, i64);
 
 #[cfg(test)]
 mod tests {
+    mod dyn_compatibility {
+        use crate::prelude::*;
+
+        #[test]
+        fn has_length_remains_usable_as_a_trait_object() {
+            let values = [1, 2, 3];
+            let value: &dyn HasLength = &values;
+
+            assert_that!(value.length()).is_equal_to(3);
+            assert_that!(value.is_empty()).is_false();
+            assert_that!(value.is_not_empty()).is_true();
+        }
+    }
+
     mod has_length_for_array_references {
         use crate::prelude::*;
 

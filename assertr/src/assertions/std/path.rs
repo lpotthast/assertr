@@ -96,7 +96,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         match actual.try_exists() {
             Ok(true) => {}
             Ok(false) => {
-                let actual = self.render_value(self.actual());
+                let actual = self.render().value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Expected: {actual:#?}
@@ -106,7 +106,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
                 });
             }
             Err(err) => {
-                let actual = self.render_value(self.actual());
+                let actual = self.render().value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Expected: {actual:#?}
@@ -131,7 +131,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
 
         match actual.try_exists() {
             Ok(true) => {
-                let actual = self.render_value(self.actual());
+                let actual = self.render().value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Expected: {actual:#?}
@@ -156,7 +156,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         if !actual.is_file() {
             let exists = actual.exists();
             let is_dir = actual.is_dir();
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?}
@@ -181,7 +181,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         if !actual.is_dir() {
             let exists = actual.exists();
             let is_file = actual.is_file();
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?}
@@ -204,7 +204,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         self.track_assertion();
         let actual = P::deref(self.actual());
         if !actual.is_symlink() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?}
@@ -224,7 +224,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         self.track_assertion();
         let actual = P::deref(self.actual());
         if !actual.has_root() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?}
@@ -244,7 +244,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         self.track_assertion();
         let actual = P::deref(self.actual());
         if !actual.is_relative() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?}
@@ -265,7 +265,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         let actual = P::deref(self.actual());
         let expected_file_name = expected.as_ref();
         let Some(actual_file_name) = actual.file_name() else {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
@@ -277,7 +277,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             return self;
         };
         if actual_file_name != expected_file_name {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
@@ -299,7 +299,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         let actual = P::deref(self.actual());
         let expected_file_stem = expected.as_ref();
         let Some(actual_file_stem) = actual.file_stem() else {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
@@ -311,7 +311,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             return self;
         };
         if actual_file_stem != expected_file_stem {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
@@ -333,7 +333,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         let actual = P::deref(self.actual());
         let expected_extension = expected.as_ref();
         let Some(actual_extension) = actual.extension() else {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
@@ -345,7 +345,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             return self;
         };
         if actual_extension != expected_extension {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
@@ -368,7 +368,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         let expected_prefix = expected.as_ref();
         if !actual.starts_with(expected_prefix) {
             let details = [String::from("Only whole path components are matched!")];
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
@@ -390,7 +390,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         let expected_postfix = expected.as_ref();
         if !actual.ends_with(expected_postfix) {
             let details = [String::from("Only whole path components are matched!")];
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Path: {actual:?}
@@ -405,6 +405,32 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use std::path::PathBuf;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, PathBuf, Panic, NoRenderer>
+                    => PathAssertions<Subject = PathBuf, Renderer = NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_use_the_active_renderer() {
+            let failures = assert_that!(PathBuf::from(
+                "assertr-renderer-test-path-that-does-not-exist",
+            ))
+            .with_renderer(SentinelRenderer)
+            .with_location(false)
+            .capture(PathAssertions::exists);
+
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
+
     macro_rules! source_relative_path {
         () => {{
             let source = std::path::Path::new(file!());
@@ -898,9 +924,8 @@ mod tests {
 
                         Did not start with expected prefix: "foobar"
 
-                        Details: [
-                            Only whole path components are matched!,
-                        ]
+                        Details:
+                          - Only whole path components are matched!
                         -------- assertr --------
                     "#});
             }
@@ -922,9 +947,8 @@ mod tests {
 
                         Did not start with expected prefix: "assert"
 
-                        Details: [
-                            Only whole path components are matched!,
-                        ]
+                        Details:
+                          - Only whole path components are matched!
                         -------- assertr --------
                     "#});
             }
@@ -961,9 +985,8 @@ mod tests {
 
                         Did not end with expected postfix: "foobar"
 
-                        Details: [
-                            Only whole path components are matched!,
-                        ]
+                        Details:
+                          - Only whole path components are matched!
                         -------- assertr --------
                     "#});
             }
@@ -983,9 +1006,8 @@ mod tests {
 
                         Did not end with expected postfix: "ath.rs"
 
-                        Details: [
-                            Only whole path components are matched!,
-                        ]
+                        Details:
+                          - Only whole path components are matched!
                         -------- assertr --------
                     "#});
             }
@@ -1498,9 +1520,8 @@ mod tests {
 
                         Did not start with expected prefix: "foobar"
 
-                        Details: [
-                            Only whole path components are matched!,
-                        ]
+                        Details:
+                          - Only whole path components are matched!
                         -------- assertr --------
                     "#});
             }
@@ -1522,9 +1543,8 @@ mod tests {
 
                         Did not start with expected prefix: "assert"
 
-                        Details: [
-                            Only whole path components are matched!,
-                        ]
+                        Details:
+                          - Only whole path components are matched!
                         -------- assertr --------
                     "#});
             }
@@ -1562,9 +1582,8 @@ mod tests {
 
                         Did not end with expected postfix: "foobar"
 
-                        Details: [
-                            Only whole path components are matched!,
-                        ]
+                        Details:
+                          - Only whole path components are matched!
                         -------- assertr --------
                     "#});
             }
@@ -1584,9 +1603,8 @@ mod tests {
 
                         Did not end with expected postfix: "ath.rs"
 
-                        Details: [
-                            Only whole path components are matched!,
-                        ]
+                        Details:
+                          - Only whole path components are matched!
                         -------- assertr --------
                     "#});
             }

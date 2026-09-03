@@ -15,7 +15,9 @@ mod tests {
     use core::cell::Cell;
     use std::sync::{Arc, Mutex};
 
+    use crate::assertions::collection::Collection;
     use crate::prelude::*;
+    use crate::renderer::CollectionPresentation;
 
     struct Counted<'a> {
         values: &'a [i32],
@@ -32,6 +34,21 @@ mod tests {
         }
     }
 
+    impl HasLength for Counted<'_> {
+        fn length(&self) -> usize {
+            self.values.len()
+        }
+    }
+
+    impl Collection for Counted<'_> {
+        type Item = i32;
+        const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+
+        fn elements(&self) -> impl Iterator<Item = &i32> {
+            self.values.iter()
+        }
+    }
+
     #[test]
     fn each_borrowed_assertion_creates_exactly_one_fresh_iterator() {
         let values = Counted {
@@ -42,11 +59,8 @@ mod tests {
             .into_iter_contains(2)
             .into_iter_contains_all([1, 3])
             .into_iter_does_not_contain(4)
-            .into_iter_has_length(3)
-            .into_iter_starts_with([1])
-            .into_iter_ends_with([3])
-            .into_iter_contains_contiguous([2, 3]);
-        assert_that!(values.calls.get()).is_equal_to(7);
+            .into_iter_has_length(3);
+        assert_that!(values.calls.get()).is_equal_to(4);
     }
 
     #[test]
@@ -194,9 +208,8 @@ mod tests {
 
         assert_that!(&failures).has_length(2);
         assert_that!(failures[0].messages.as_slice()).contains_exactly(["user context"]);
-        assert_that!(failures[0].details.as_slice()).contains_matching(|it: &String| {
-            it.contains("Decisive element is at zero-based index 1.")
-        });
+        assert_that!(failures[0].details.as_slice())
+            .does_not_contain_matching(|it: &String| it.contains("Decisive element"));
         assert_that!(failures[1].messages.as_slice()).contains_exactly(["user context"]);
         assert_that!(failures[1].details.as_slice())
             .contains_matching(|it: &String| it.contains("Consumed 3 element(s)."))

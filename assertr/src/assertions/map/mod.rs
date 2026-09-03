@@ -17,29 +17,28 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use core::borrow::Borrow;
 
+use crate::{assertions::HasLength, renderer::RenderingOrder};
+
 pub use assertions::MapAssertions;
 
 /// A keyed collection supporting iteration over its entries.
 ///
 /// Implementing this trait makes iteration-based [`MapAssertions`] available. Implement
-/// [`MapLookup`] for key queries and [`HasLength`](crate::assertions::HasLength) for length
-/// assertions. The prelude does not re-export this implementor-facing trait.
+/// [`MapLookup`] for key queries. The prelude does not re-export this implementor-facing trait.
 ///
 /// Assertr renders map syntax. A custom [`ValueRenderer`](crate::ValueRenderer) needs to render
 /// only [`Key`](Map::Key) and [`Value`](Map::Value).
-pub trait Map {
+pub trait Map: HasLength {
     /// The map's key type.
     type Key;
 
     /// The map's value type.
     type Value;
 
-    /// The name prefixed to the rendered subject in failure messages, e.g. the `HashMap` in
-    /// `Actual: HashMap {"a": 1}`. See [`Collection::TYPE_NAME`](crate::assertions::collection::Collection::TYPE_NAME).
-    const TYPE_NAME: Option<&'static str> = None;
-
-    /// The number of entries in this map.
-    fn length(&self) -> usize;
+    /// Whether diagnostics preserve iteration order or sort entries by rendered text.
+    ///
+    /// This affects presentation only; it does not change matching or lookup behavior.
+    const RENDERING_ORDER: RenderingOrder;
 
     /// The entries of this map.
     ///
@@ -66,14 +65,19 @@ pub trait Map {
 /// use core::borrow::Borrow;
 /// use std::collections::BTreeMap;
 ///
+/// use assertr::assertions::HasLength;
 /// use assertr::assertions::map::{Map, MapLookup};
+/// use assertr::renderer::RenderingOrder;
 ///
 /// struct Config(BTreeMap<String, i32>);
 ///
+/// # impl HasLength for Config {
+/// #     fn length(&self) -> usize { self.0.len() }
+/// # }
 /// # impl Map for Config {
 /// #     type Key = String;
 /// #     type Value = i32;
-/// #     fn length(&self) -> usize { self.0.len() }
+/// #     const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
 /// #     fn entries(&self) -> impl Iterator<Item = (&String, &i32)> { self.0.iter() }
 /// # }
 /// impl<Q> MapLookup<Q> for Config
@@ -253,12 +257,7 @@ impl MapKeyQuery<String> for Cow<'_, str> {
 impl<K: Ord, V> Map for BTreeMap<K, V> {
     type Key = K;
     type Value = V;
-
-    const TYPE_NAME: Option<&'static str> = Some("BTreeMap");
-
-    fn length(&self) -> usize {
-        BTreeMap::len(self)
-    }
+    const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
 
     fn entries(&self) -> impl Iterator<Item = (&K, &V)> {
         self.iter()
@@ -283,12 +282,7 @@ where
 {
     type Key = K;
     type Value = V;
-
-    const TYPE_NAME: Option<&'static str> = Some("HashMap");
-
-    fn length(&self) -> usize {
-        std::collections::HashMap::len(self)
-    }
+    const RENDERING_ORDER: RenderingOrder = RenderingOrder::SortByRenderedText;
 
     fn entries(&self) -> impl Iterator<Item = (&K, &V)> {
         self.iter()
@@ -315,12 +309,7 @@ where
 {
     type Key = M::Key;
     type Value = M::Value;
-
-    const TYPE_NAME: Option<&'static str> = M::TYPE_NAME;
-
-    fn length(&self) -> usize {
-        M::length(self)
-    }
+    const RENDERING_ORDER: RenderingOrder = M::RENDERING_ORDER;
 
     fn entries(&self) -> impl Iterator<Item = (&M::Key, &M::Value)> {
         M::entries(self)
@@ -352,7 +341,9 @@ mod tests {
 
     use crate::prelude::*;
 
-    use super::{Map, MapLookup};
+    use crate::assertions::HasLength;
+
+    use super::{Map, MapLookup, RenderingOrder};
 
     #[derive(Debug, Default)]
     struct LookupCounts {
@@ -413,11 +404,12 @@ mod tests {
         }
     }
 
-    fn assert_map_contract<M>(actual: &M, type_name: &'static str)
+    fn assert_map_contract<M>(actual: &M, arbitrary_iteration: bool)
     where
         M: Map<Key = String, Value = i32> + MapLookup<str> + MapLookup<String> + ?Sized,
     {
-        assert_that!(M::TYPE_NAME).is_equal_to(Some(type_name));
+        assert_that!(M::RENDERING_ORDER == RenderingOrder::SortByRenderedText)
+            .is_equal_to(arbitrary_iteration);
         assert_that!(actual.length()).is_equal_to(2);
         assert_that!(actual.get_key_value("alpha")).is_equal_to(Some((&String::from("alpha"), &1)));
         assert_that!(actual.get_key_value(&String::from("beta")))
@@ -465,13 +457,16 @@ mod tests {
         impl Map for NonEqMap {
             type Key = Key;
             type Value = i32;
-
-            fn length(&self) -> usize {
-                self.0.len()
-            }
+            const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
 
             fn entries(&self) -> impl Iterator<Item = (&Key, &i32)> {
                 self.0.iter().map(|(key, value)| (key, value))
+            }
+        }
+
+        impl HasLength for NonEqMap {
+            fn length(&self) -> usize {
+                self.0.len()
             }
         }
 
@@ -493,8 +488,8 @@ mod tests {
         let map = BTreeMap::from([(String::from("alpha"), 1), (String::from("beta"), 2)]);
         let map_ref = &map;
 
-        assert_map_contract(&map, "BTreeMap");
-        assert_map_contract(&map_ref, "BTreeMap");
+        assert_map_contract(&map, false);
+        assert_map_contract(&map_ref, false);
     }
 
     #[test]
@@ -605,8 +600,8 @@ mod tests {
         map.insert(String::from("beta"), 2);
         let map_ref = &map;
 
-        assert_map_contract(&map, "HashMap");
-        assert_map_contract(&map_ref, "HashMap");
+        assert_map_contract(&map, true);
+        assert_map_contract(&map_ref, true);
         assert_that!(map)
             .contains_key("alpha")
             .contains_value(2)

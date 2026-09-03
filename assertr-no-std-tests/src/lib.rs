@@ -23,9 +23,9 @@ fn iterator_assertions_compile_without_std() {
 
     assert_that!([1, 2])
         .into_iter_contains_all([2, 1])
-        .into_iter_starts_with([1])
-        .into_iter_ends_with([2])
-        .into_iter_contains_contiguous_satisfying([positive, positive])
+        .starts_with([1])
+        .ends_with([2])
+        .contains_contiguous_satisfying([positive, positive])
         .into_iter_contains_exactly_in_any_order([2, 1]);
 }
 

@@ -36,8 +36,8 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
             let details = [String::from("Actual was not zero.")];
 
             let expected = Span::new();
-            let actual = self.render_value(self.actual());
-            let expected = self.render_value(&expected);
+            let actual = self.render().value(self.actual());
+            let expected = self.render().value(&expected);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -58,7 +58,7 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
         self.track_assertion();
 
         if !self.actual().is_negative() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be negative. But was
@@ -79,7 +79,7 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
         self.track_assertion();
 
         if !self.actual().is_positive() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be positive. But was
@@ -95,6 +95,29 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use jiff::Span;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Span, Panic, NoRenderer> => SpanAssertions<NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_use_the_active_renderer() {
+            let failures = assert_that!(Span::new().hours(1))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(SpanAssertions::is_zero);
+
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
+
     mod is_zero {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -125,9 +148,8 @@ mod tests {
 
                       Actual: 2h 30m
 
-                    Details: [
-                        Actual was not zero.,
-                    ]
+                    Details:
+                      - Actual was not zero.
                     -------- assertr --------
                 "});
         }

@@ -7,28 +7,15 @@ use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::{Display, Write};
+use core::fmt::Write;
 use indoc::writedoc;
 
-use super::{Collection, CollectionStyle};
+use super::{Collection, StableOrder};
+use crate::renderer::GroupStyle;
 use crate::{
     AssertThat, AssertrPartialEq, EqContext, Mode, ValueRenderer, mode::Capture,
-    util::failure::join_failures, util::matching::match_bipartite,
+    renderer::omission, util::failure::join_failures, util::matching::match_bipartite,
 };
-
-/// Renders a [`Collection::TYPE_NAME`] as the prefix of a failure's "Actual" value, e.g. the
-/// `HashSet ` in `Actual: HashSet {1, 2}`. Renders nothing for a collection that does not name
-/// itself. Built-in sequences use no prefix because `[1, 2]` already reads as a list.
-pub(crate) struct TypePrefix(pub(crate) Option<&'static str>);
-
-impl Display for TypePrefix {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self.0 {
-            Some(name) => f.write_fmt(format_args!("{name} ")),
-            None => Ok(()),
-        }
-    }
-}
 
 pub(crate) struct ExactCompareResult<'t, T, E> {
     pub(crate) strictly_equal: bool,
@@ -81,7 +68,7 @@ where
         expected.len(),
         |actual_index, expected_index| {
             if let Some(ctx) = ctx.as_deref() {
-                let mut probe_ctx = EqContext::with_renderer(ctx.renderer);
+                let mut probe_ctx = ctx.fork();
                 AssertrPartialEq::eq(
                     elements[actual_index],
                     &expected[expected_index],
@@ -120,18 +107,16 @@ where
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
     if !actual.elements().any(|it| {
         let mut ctx = this.eq_context();
         <_ as AssertrPartialEq<_, R>>::eq(it, expected, Some(&mut ctx))
     }) {
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
-        let expected = this.render_value(expected);
+        let actual = this.render().collection(actual);
+        let expected = this.render().value(expected);
         this.fail(|w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?}
+                Actual: {actual:#?}
 
                 does not contain expected: {expected:#?}
             "}
@@ -148,7 +133,6 @@ where
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
 
     let not_found = expected
@@ -162,14 +146,16 @@ where
         .collect::<Vec<_>>();
 
     if !not_found.is_empty() {
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let rendered_actual = this.render_values(&actual_values, C::STYLE);
-        let rendered_expected =
-            this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
-        let not_found = this.render_values(not_found.as_slice(), CollectionStyle::List);
+        let rendered_actual = this.render().collection(actual);
+        let rendered_expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
+        let not_found = this
+            .render()
+            .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List);
         this.fail(|w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{rendered_actual:#?}
+                Actual: {rendered_actual:#?}
 
                 does not contain all expected elements
 
@@ -192,18 +178,16 @@ pub(crate) fn assert_does_not_contain<C, T, E, M, R>(
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
     if actual.elements().any(|it| {
         let mut ctx = this.eq_context();
         <_ as AssertrPartialEq<_, R>>::eq(it, not_expected, Some(&mut ctx))
     }) {
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
-        let not_expected = this.render_value(not_expected);
+        let actual = this.render().collection(actual);
+        let not_expected = this.render().value(not_expected);
         this.fail(|w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?}
+                Actual: {actual:#?}
 
                 contains unexpected: {not_expected:#?}
             "}
@@ -220,14 +204,12 @@ where
     R: ValueRenderer<T>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
     if !actual.elements().any(predicate) {
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
+        let actual = this.render().collection(actual);
         this.fail(|w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?}
+                Actual: {actual:#?}
 
                 does not contain an element matching the given predicate.
             "}
@@ -246,31 +228,38 @@ pub(crate) fn assert_contains_satisfying<C, T, A, M, R>(
     R: ValueRenderer<T> + Clone,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
 
+    let maximum = this.render().max_items();
     let mut unsatisfied = Vec::new();
-    for (index, element) in actual.elements().enumerate() {
+    let mut number_of_unsatisfied_elements = 0_usize;
+    for element in actual.elements() {
         let failures = this.collect_element_failures(element, assertions);
         if failures.is_empty() {
             return;
         }
-        unsatisfied.push((index, failures));
+        number_of_unsatisfied_elements += 1;
+        if unsatisfied.len() < maximum {
+            unsatisfied.push(failures);
+        }
     }
 
     let mut details = Vec::new();
-    for (index, failures) in &unsatisfied {
+    for failures in &unsatisfied {
         details.push(format!(
-            "Element at index {index} does not satisfy the assertions:\n{}",
-            join_failures(failures)
+            "An element does not satisfy the assertions:\n{}",
+            join_failures(failures, this.render().max_items())
         ));
     }
+    let omitted = number_of_unsatisfied_elements - unsatisfied.len();
+    if omitted != 0 {
+        details.push(omission(omitted, "unsatisfied element"));
+    }
 
-    let actual_values = actual.elements().collect::<Vec<_>>();
-    let actual = this.render_values(&actual_values, C::STYLE);
+    let actual = this.render().collection(actual);
     this.fail_with_details(details, |w: &mut String| {
         writedoc! {w, r"
-            Actual: {prefix}{actual:#?}
+            Actual: {actual:#?}
 
             does not contain an element satisfying the given assertions.
         "}
@@ -288,19 +277,19 @@ pub(crate) fn assert_does_not_contain_matching<C, T, P, M, R>(
     R: ValueRenderer<T>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
     let matching = actual
         .elements()
         .filter(|it| predicate(it))
         .collect::<Vec<_>>();
     if !matching.is_empty() {
-        let matching = this.render_values(matching.as_slice(), CollectionStyle::List);
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
+        let matching = this
+            .render()
+            .borrowed_values::<T, _>(matching.as_slice(), GroupStyle::List);
+        let actual = this.render().collection(actual);
         this.fail(|w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?}
+                Actual: {actual:#?}
 
                 unexpectedly contains elements matching the given predicate: {matching:#?}
             "}
@@ -319,7 +308,6 @@ pub(crate) fn assert_does_not_contain_satisfying<C, T, A, M, R>(
     R: ValueRenderer<T> + Clone,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
     let satisfying = actual
         .elements()
@@ -329,12 +317,13 @@ pub(crate) fn assert_does_not_contain_satisfying<C, T, A, M, R>(
         })
         .collect::<Vec<_>>();
     if !satisfying.is_empty() {
-        let satisfying = this.render_values(satisfying.as_slice(), CollectionStyle::List);
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
+        let satisfying = this
+            .render()
+            .borrowed_values::<T, _>(satisfying.as_slice(), GroupStyle::List);
+        let actual = this.render().collection(actual);
         this.fail(|w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?}
+                Actual: {actual:#?}
 
                 unexpectedly contains elements satisfying the given assertions: {satisfying:#?}
             "}
@@ -343,15 +332,419 @@ pub(crate) fn assert_does_not_contain_satisfying<C, T, A, M, R>(
 }
 
 #[track_caller]
-pub(crate) fn assert_contains_exactly<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &[E])
+pub(crate) fn assert_starts_with<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &[E])
 where
-    C: Collection<Item = T>,
+    C: StableOrder<Item = T>,
     T: AssertrPartialEq<E, R>,
     M: Mode,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
+    let actual = this.actual();
+    let mismatch = actual
+        .elements()
+        .zip(expected)
+        .position(|(actual, expected)| {
+            !AssertrPartialEq::eq(actual, expected, Some(&mut this.eq_context()))
+        });
+
+    if actual.length() < expected.len() || mismatch.is_some() {
+        let mut details = Vec::new();
+        if actual.length() < expected.len() {
+            details.push(format!(
+                "Collection has {} element(s), shorter than prefix length {}.",
+                actual.length(),
+                expected.len()
+            ));
+        }
+        if let Some(index) = mismatch {
+            details.push(format!("Prefix differs at zero-based index {index}."));
+        }
+        let actual = this.render().stable_collection(actual);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
+        this.fail_with_details(details, |w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not start with expected prefix: {expected:#?}
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_starts_with_matching<C, T, P, M, R>(
+    this: &AssertThat<'_, C, M, R>,
+    predicates: &[P],
+) where
+    C: StableOrder<Item = T>,
+    P: Fn(&T) -> bool,
+    M: Mode,
+    R: ValueRenderer<T>,
+{
+    this.track_assertion();
+    let actual = this.actual();
+    let mismatch = actual
+        .elements()
+        .zip(predicates)
+        .position(|(actual, predicate)| !predicate(actual));
+
+    if actual.length() < predicates.len() || mismatch.is_some() {
+        let mut details = Vec::new();
+        if actual.length() < predicates.len() {
+            details.push(format!(
+                "Collection has {} element(s), shorter than predicate prefix length {}.",
+                actual.length(),
+                predicates.len()
+            ));
+        }
+        if let Some(index) = mismatch {
+            details.push(format!(
+                "Element at zero-based index {index} does not match its prefix predicate."
+            ));
+        }
+        let actual = this.render().stable_collection(actual);
+        this.fail_with_details(details, |w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not start with elements matching the predicates.
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_starts_with_satisfying<C, T, A, M, R>(
+    this: &AssertThat<'_, C, M, R>,
+    assertions: &[A],
+) where
+    C: StableOrder<Item = T>,
+    A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+    M: Mode,
+    R: ValueRenderer<T> + Clone,
+{
+    this.track_assertion();
+    let actual = this.actual();
+    let maximum = this.render().max_items();
+    let mut unsatisfied = Vec::new();
+    let mut number_of_unsatisfied_elements = 0_usize;
+    for (index, (element, assertions)) in actual.elements().zip(assertions).enumerate() {
+        let failures = this.collect_element_failures(element, assertions);
+        if !failures.is_empty() {
+            number_of_unsatisfied_elements += 1;
+            if unsatisfied.len() < maximum {
+                unsatisfied.push((index, failures));
+            }
+        }
+    }
+
+    if actual.length() < assertions.len() || number_of_unsatisfied_elements != 0 {
+        let mut details = Vec::new();
+        if actual.length() < assertions.len() {
+            details.push(format!(
+                "Collection has {} element(s), shorter than assertion prefix length {}.",
+                actual.length(),
+                assertions.len()
+            ));
+        }
+        for (index, failures) in unsatisfied {
+            details.push(format!(
+                "Element at index {index} does not satisfy its prefix assertions:\n{}",
+                join_failures(&failures, this.render().max_items())
+            ));
+        }
+        let omitted = number_of_unsatisfied_elements.saturating_sub(maximum);
+        if omitted != 0 {
+            details.push(omission(omitted, "unsatisfied prefix element"));
+        }
+        let actual = this.render().stable_collection(actual);
+        this.fail_with_details(details, |w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not start with elements satisfying the assertions.
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_ends_with<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &[E])
+where
+    C: StableOrder<Item = T>,
+    T: AssertrPartialEq<E, R>,
+    M: Mode,
+    R: ValueRenderer<T> + ValueRenderer<E>,
+{
+    this.track_assertion();
+    let actual = this.actual();
+    let offset = actual.length().saturating_sub(expected.len());
+    let mismatch = actual
+        .elements()
+        .skip(offset)
+        .zip(expected)
+        .position(|(actual, expected)| {
+            !AssertrPartialEq::eq(actual, expected, Some(&mut this.eq_context()))
+        });
+
+    if actual.length() < expected.len() || mismatch.is_some() {
+        let mut details = Vec::new();
+        if actual.length() < expected.len() {
+            details.push(format!(
+                "Collection has {} element(s), shorter than suffix length {}.",
+                actual.length(),
+                expected.len()
+            ));
+        }
+        if let Some(index) = mismatch {
+            details.push(format!(
+                "Suffix differs at zero-based collection index {}.",
+                offset + index
+            ));
+        }
+        let actual = this.render().stable_collection(actual);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
+        this.fail_with_details(details, |w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not end with expected suffix: {expected:#?}
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_ends_with_matching<C, T, P, M, R>(
+    this: &AssertThat<'_, C, M, R>,
+    predicates: &[P],
+) where
+    C: StableOrder<Item = T>,
+    P: Fn(&T) -> bool,
+    M: Mode,
+    R: ValueRenderer<T>,
+{
+    this.track_assertion();
+    let actual = this.actual();
+    let offset = actual.length().saturating_sub(predicates.len());
+    let mismatch = actual
+        .elements()
+        .skip(offset)
+        .zip(predicates)
+        .position(|(actual, predicate)| !predicate(actual));
+
+    if actual.length() < predicates.len() || mismatch.is_some() {
+        let mut details = Vec::new();
+        if actual.length() < predicates.len() {
+            details.push(format!(
+                "Collection has {} element(s), shorter than predicate suffix length {}.",
+                actual.length(),
+                predicates.len()
+            ));
+        }
+        if let Some(index) = mismatch {
+            details.push(format!(
+                "Element at zero-based index {} does not match its suffix predicate.",
+                offset + index
+            ));
+        }
+        let actual = this.render().stable_collection(actual);
+        this.fail_with_details(details, |w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not end with elements matching the predicates.
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_ends_with_satisfying<C, T, A, M, R>(
+    this: &AssertThat<'_, C, M, R>,
+    assertions: &[A],
+) where
+    C: StableOrder<Item = T>,
+    A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+    M: Mode,
+    R: ValueRenderer<T> + Clone,
+{
+    this.track_assertion();
+    let actual = this.actual();
+    let offset = actual.length().saturating_sub(assertions.len());
+    let maximum = this.render().max_items();
+    let mut unsatisfied = Vec::new();
+    let mut number_of_unsatisfied_elements = 0_usize;
+    for (index, (element, assertions)) in actual.elements().skip(offset).zip(assertions).enumerate()
+    {
+        let failures = this.collect_element_failures(element, assertions);
+        if !failures.is_empty() {
+            number_of_unsatisfied_elements += 1;
+            if unsatisfied.len() < maximum {
+                unsatisfied.push((offset + index, failures));
+            }
+        }
+    }
+
+    if actual.length() < assertions.len() || number_of_unsatisfied_elements != 0 {
+        let mut details = Vec::new();
+        if actual.length() < assertions.len() {
+            details.push(format!(
+                "Collection has {} element(s), shorter than assertion suffix length {}.",
+                actual.length(),
+                assertions.len()
+            ));
+        }
+        for (index, failures) in unsatisfied {
+            details.push(format!(
+                "Suffix element at index {index} does not satisfy its assertions:\n{}",
+                join_failures(&failures, this.render().max_items())
+            ));
+        }
+        let omitted = number_of_unsatisfied_elements.saturating_sub(maximum);
+        if omitted != 0 {
+            details.push(omission(omitted, "unsatisfied suffix element"));
+        }
+        let actual = this.render().stable_collection(actual);
+        this.fail_with_details(details, |w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not end with elements satisfying the assertions.
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_contains_contiguous<C, T, E, M, R>(
+    this: &AssertThat<'_, C, M, R>,
+    expected: &[E],
+) where
+    C: StableOrder<Item = T>,
+    T: AssertrPartialEq<E, R>,
+    M: Mode,
+    R: ValueRenderer<T> + ValueRenderer<E>,
+{
+    this.track_assertion();
+    let actual = this.actual();
+    let elements = actual.elements().collect::<Vec<_>>();
+    let found = expected.is_empty()
+        || elements.windows(expected.len()).any(|window| {
+            window.iter().zip(expected).all(|(actual, expected)| {
+                AssertrPartialEq::eq(*actual, expected, Some(&mut this.eq_context()))
+            })
+        });
+
+    if !found {
+        let actual = this.render().stable_collection(actual);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
+        this.fail(|w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not contain contiguous expected elements: {expected:#?}
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_contains_contiguous_matching<C, T, P, M, R>(
+    this: &AssertThat<'_, C, M, R>,
+    predicates: &[P],
+) where
+    C: StableOrder<Item = T>,
+    P: Fn(&T) -> bool,
+    M: Mode,
+    R: ValueRenderer<T>,
+{
+    this.track_assertion();
+    let actual = this.actual();
+    let elements = actual.elements().collect::<Vec<_>>();
+    let found = predicates.is_empty()
+        || elements.windows(predicates.len()).any(|window| {
+            window
+                .iter()
+                .zip(predicates)
+                .all(|(actual, predicate)| predicate(actual))
+        });
+
+    if !found {
+        let actual = this.render().stable_collection(actual);
+        this.fail(|w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not contain contiguous elements matching the predicates.
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_contains_contiguous_satisfying<C, T, A, M, R>(
+    this: &AssertThat<'_, C, M, R>,
+    assertions: &[A],
+) where
+    C: StableOrder<Item = T>,
+    A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
+    M: Mode,
+    R: ValueRenderer<T> + Clone,
+{
+    this.track_assertion();
+    let actual = this.actual();
+    let elements = actual.elements().collect::<Vec<_>>();
+    let mut final_failures = Vec::new();
+    let found = assertions.is_empty()
+        || elements.windows(assertions.len()).any(|window| {
+            let failures = window
+                .iter()
+                .zip(assertions)
+                .flat_map(|(element, assertions)| {
+                    this.collect_element_failures(*element, assertions)
+                })
+                .collect::<Vec<_>>();
+            let matched = failures.is_empty();
+            final_failures = failures;
+            matched
+        });
+
+    if !found {
+        let mut details = Vec::new();
+        if !final_failures.is_empty() {
+            details.push(format!(
+                "The final contiguous candidate did not satisfy the assertions:\n{}",
+                join_failures(&final_failures, this.render().max_items())
+            ));
+        }
+        let actual = this.render().stable_collection(actual);
+        this.fail_with_details(details, |w: &mut String| {
+            writedoc! {w, r"
+                Actual: {actual:#?}
+
+                does not contain contiguous elements satisfying the assertions.
+            "}
+        });
+    }
+}
+
+#[track_caller]
+pub(crate) fn assert_contains_exactly<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &[E])
+where
+    C: StableOrder<Item = T>,
+    T: AssertrPartialEq<E, R>,
+    M: Mode,
+    R: ValueRenderer<T> + ValueRenderer<E>,
+{
+    this.track_assertion();
     let actual = this.actual();
 
     let mut ctx = this.eq_context();
@@ -366,26 +759,29 @@ where
         if !result.not_in_expected.is_empty() {
             details.push(format!(
                 "Elements not expected: {:#?}",
-                this.render_values(result.not_in_expected.as_slice(), CollectionStyle::List)
+                this.render()
+                    .borrowed_values::<T, _>(result.not_in_expected.as_slice(), GroupStyle::List)
             ));
         }
         if !result.not_in_actual.is_empty() {
             details.push(format!(
                 "Elements not found: {:#?}",
-                this.render_values(result.not_in_actual.as_slice(), CollectionStyle::List)
+                this.render()
+                    .borrowed_values::<E, _>(result.not_in_actual.as_slice(), GroupStyle::List)
             ));
         }
         if only_differing_in_order {
             details.push("The order of elements does not match!".to_owned());
         }
 
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
-        let expected = this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
+        let actual = this.render().stable_collection(actual);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
 
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?},
+                Actual: {actual:#?},
 
                 did not exactly match
 
@@ -400,24 +796,28 @@ pub(crate) fn assert_contains_exactly_matching<C, T, P, M, R>(
     this: &AssertThat<'_, C, M, R>,
     predicates: &[P],
 ) where
-    C: Collection<Item = T>,
+    C: StableOrder<Item = T>,
     P: Fn(&T) -> bool,
     M: Mode,
     R: ValueRenderer<T>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
 
     let same_length = actual.length() == predicates.len();
+    let maximum = this.render().max_items();
     let mut not_matched = Vec::new();
+    let mut number_not_matched = 0_usize;
     for (index, (element, predicate)) in actual.elements().zip(predicates).enumerate() {
         if !predicate(element) {
-            not_matched.push((index, element));
+            number_not_matched += 1;
+            if not_matched.len() < maximum {
+                not_matched.push((index, element));
+            }
         }
     }
 
-    if !same_length || !not_matched.is_empty() {
+    if !same_length || number_not_matched != 0 {
         let mut details = Vec::new();
         if !same_length {
             details.push(format!(
@@ -429,15 +829,18 @@ pub(crate) fn assert_contains_exactly_matching<C, T, P, M, R>(
         for (index, element) in not_matched {
             details.push(format!(
                 "Element at index {index} does not match its predicate: {:#?}",
-                this.render_value(element)
+                this.render().value(element)
             ));
         }
+        let omitted = number_not_matched.saturating_sub(maximum);
+        if omitted != 0 {
+            details.push(omission(omitted, "element"));
+        }
 
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
+        let actual = this.render().stable_collection(actual);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?},
+                Actual: {actual:#?},
 
                 did not exactly match predicates.
             "}
@@ -450,25 +853,29 @@ pub(crate) fn assert_contains_exactly_satisfying<C, T, A, M, R>(
     this: &AssertThat<'_, C, M, R>,
     assertions: &[A],
 ) where
-    C: Collection<Item = T>,
+    C: StableOrder<Item = T>,
     A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
     M: Mode,
     R: ValueRenderer<T> + Clone,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
 
     let same_length = actual.length() == assertions.len();
+    let maximum = this.render().max_items();
     let mut unsatisfied = Vec::new();
+    let mut number_of_unsatisfied_elements = 0_usize;
     for (index, (element, element_assertions)) in actual.elements().zip(assertions).enumerate() {
         let failures = this.collect_element_failures(element, element_assertions);
         if !failures.is_empty() {
-            unsatisfied.push((index, failures));
+            number_of_unsatisfied_elements += 1;
+            if unsatisfied.len() < maximum {
+                unsatisfied.push((index, failures));
+            }
         }
     }
 
-    if !same_length || !unsatisfied.is_empty() {
+    if !same_length || number_of_unsatisfied_elements != 0 {
         let mut details = Vec::new();
         if !same_length {
             details.push(format!(
@@ -480,15 +887,18 @@ pub(crate) fn assert_contains_exactly_satisfying<C, T, A, M, R>(
         for (index, failures) in unsatisfied {
             details.push(format!(
                 "Element at index {index} does not satisfy its assertions:\n{}",
-                join_failures(&failures)
+                join_failures(&failures, this.render().max_items())
             ));
         }
+        let omitted = number_of_unsatisfied_elements.saturating_sub(maximum);
+        if omitted != 0 {
+            details.push(omission(omitted, "unsatisfied element"));
+        }
 
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
+        let actual = this.render().stable_collection(actual);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?},
+                Actual: {actual:#?},
 
                 did not exactly satisfy the assertions.
             "}
@@ -507,7 +917,6 @@ pub(crate) fn assert_contains_exactly_in_any_order<C, T, E, M, R>(
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
     let elements = actual.elements().collect::<Vec<_>>();
 
@@ -534,16 +943,19 @@ pub(crate) fn assert_contains_exactly_in_any_order<C, T, E, M, R>(
             .iter()
             .map(|index| elements[*index])
             .collect::<Vec<_>>();
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let rendered_actual = this.render_values(&actual_values, C::STYLE);
-        let expected = this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
-        let elements_not_found =
-            this.render_values(elements_not_found.as_slice(), CollectionStyle::List);
-        let elements_not_expected =
-            this.render_values(elements_not_expected.as_slice(), CollectionStyle::List);
+        let rendered_actual = this.render().collection(actual);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
+        let elements_not_found = this
+            .render()
+            .borrowed_values::<E, _>(elements_not_found.as_slice(), GroupStyle::List);
+        let elements_not_expected = this
+            .render()
+            .borrowed_values::<T, _>(elements_not_expected.as_slice(), GroupStyle::List);
         this.fail(|w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{rendered_actual:#?},
+                Actual: {rendered_actual:#?},
 
                 Elements expected: {expected:#?}
 
@@ -566,7 +978,6 @@ pub(crate) fn assert_contains_exactly_in_any_order_matching<C, T, P, M, R>(
     R: ValueRenderer<T>,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
     let elements = actual.elements().collect::<Vec<_>>();
 
@@ -586,7 +997,8 @@ pub(crate) fn assert_contains_exactly_in_any_order_matching<C, T, P, M, R>(
                 .collect::<Vec<_>>();
             details.push(format!(
                 "Elements not matched: {:#?}",
-                this.render_values(not_matched.as_slice(), CollectionStyle::List)
+                this.render()
+                    .borrowed_values::<T, _>(not_matched.as_slice(), GroupStyle::List)
             ));
         }
         if !result.unmatched_expected.is_empty() {
@@ -595,12 +1007,11 @@ pub(crate) fn assert_contains_exactly_in_any_order_matching<C, T, P, M, R>(
                 result.unmatched_expected.len()
             ));
         }
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
+        let actual = this.render().collection(actual);
 
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?},
+                Actual: {actual:#?},
 
                 did not exactly match predicates in any order.
             "}
@@ -619,7 +1030,6 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<C, T, A, M, R>(
     R: ValueRenderer<T> + Clone,
 {
     this.track_assertion();
-    let prefix = TypePrefix(C::TYPE_NAME);
     let actual = this.actual();
     let elements = actual.elements().collect::<Vec<_>>();
 
@@ -655,7 +1065,8 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<C, T, A, M, R>(
                 .collect::<Vec<_>>();
             details.push(format!(
                 "Elements not matched: {:#?}",
-                this.render_values(not_matched.as_slice(), CollectionStyle::List)
+                this.render()
+                    .borrowed_values::<T, _>(not_matched.as_slice(), GroupStyle::List)
             ));
         }
         if !result.unmatched_expected.is_empty() {
@@ -664,12 +1075,11 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<C, T, A, M, R>(
                 result.unmatched_expected.len()
             ));
         }
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let actual = this.render_values(&actual_values, C::STYLE);
+        let actual = this.render().collection(actual);
 
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w, r"
-                Actual: {prefix}{actual:#?},
+                Actual: {actual:#?},
 
                 did not exactly satisfy the assertions in any order.
             "}

@@ -230,7 +230,12 @@ where
         't: 'u,
     {
         let (iter, this) = take_iterator(self);
-        iterator::assert_contains_satisfying::<_, T, _, _, _, _>(&this, iter, &assertions);
+        iterator::assert_contains_satisfying::<_, T, _, _, _, _>(
+            &this,
+            iter,
+            &assertions,
+            iterator::PositionReporting::YieldOrder,
+        );
         this
     }
 
@@ -367,7 +372,12 @@ where
         't: 'u,
     {
         let (iter, this) = take_iterator(self);
-        iterator::assert_does_not_contain::<_, T, _, _, _, _>(&this, iter, &not_expected);
+        iterator::assert_does_not_contain::<_, T, _, _, _, _>(
+            &this,
+            iter,
+            &not_expected,
+            iterator::PositionReporting::YieldOrder,
+        );
         this
     }
 
@@ -379,7 +389,12 @@ where
         't: 'u,
     {
         let (iter, this) = take_iterator(self);
-        iterator::assert_does_not_contain_matching::<_, T, _, _, _, _>(&this, iter, &predicate);
+        iterator::assert_does_not_contain_matching::<_, T, _, _, _, _>(
+            &this,
+            iter,
+            &predicate,
+            iterator::PositionReporting::YieldOrder,
+        );
         this
     }
 
@@ -391,7 +406,12 @@ where
         't: 'u,
     {
         let (iter, this) = take_iterator(self);
-        iterator::assert_does_not_contain_satisfying::<_, T, _, _, _, _>(&this, iter, &assertions);
+        iterator::assert_does_not_contain_satisfying::<_, T, _, _, _, _>(
+            &this,
+            iter,
+            &assertions,
+            iterator::PositionReporting::YieldOrder,
+        );
         this
     }
 
@@ -487,7 +507,10 @@ where
         let assertions = assertions.as_ref();
         let (iter, this) = take_iterator(self);
         iterator::assert_contains_exactly_in_any_order_satisfying::<_, T, _, _, _, _>(
-            &this, iter, assertions,
+            &this,
+            iter,
+            assertions,
+            iterator::PositionReporting::YieldOrder,
         );
         this
     }
@@ -519,6 +542,32 @@ where
 #[cfg(test)]
 #[allow(clippy::trivially_copy_pass_by_ref)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{
+            NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+        };
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, core::ops::Range<i32>, Panic, NoRenderer>
+                    => IteratorAssertions<'static, i32, Panic, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn membership_and_sequence_equality_use_the_active_renderer_type() {
+            assert_that_owned!(vec![RendererActual(1), RendererActual(2)].into_iter())
+                .with_renderer(SentinelRenderer)
+                .contains(RendererExpected(2));
+
+            assert_that_owned!(vec![RendererActual(1), RendererActual(2)].into_iter())
+                .with_renderer(SentinelRenderer)
+                .starts_with([RendererExpected(1)]);
+        }
+    }
+
     mod contains {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -564,9 +613,8 @@ mod tests {
 
                     does not contain expected: 4
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -610,9 +658,8 @@ mod tests {
 
                     does not contain an element matching the predicate.
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -655,6 +702,29 @@ mod tests {
             .contains("Element at index 0 does not satisfy the assertions:\n    Expected: 7")
             .contains("Element at index 1 does not satisfy the assertions:\n    Expected: 7");
         }
+
+        #[test]
+        fn rendering_budget_limits_unsatisfied_element_details() {
+            let failures = assert_that_owned!(0..20)
+                .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
+                .with_location(false)
+                .capture(|it| {
+                    it.contains_satisfying(|element| {
+                        element.is_equal_to(99);
+                    })
+                });
+
+            assert_that!(
+                failures[0]
+                    .details
+                    .iter()
+                    .filter(|detail| detail.starts_with("Element at index "))
+                    .count()
+            )
+            .is_equal_to(1);
+            assert_that!(failures[0].details.last().map(String::as_str))
+                .is_equal_to(Some("... 19 more unsatisfied elements ..."));
+        }
     }
 
     mod does_not_contain {
@@ -696,10 +766,9 @@ mod tests {
 
                     contains unexpected: 2
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
+                      - Decisive element is at zero-based index 1.
                     -------- assertr --------
                 "});
         }
@@ -742,10 +811,9 @@ mod tests {
 
                     unexpectedly contains an element matching the predicate.
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
+                      - Decisive element is at zero-based index 1.
                     -------- assertr --------
                 "});
         }
@@ -796,10 +864,9 @@ mod tests {
 
                     unexpectedly contains an element satisfying the assertions.
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
+                      - Decisive element is at zero-based index 1.
                     -------- assertr --------
                 "});
         }
@@ -852,10 +919,9 @@ mod tests {
                         9,
                     ]
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
+                      - Decisive element is at zero-based index 1.
                     -------- assertr --------
                 "});
         }
@@ -910,10 +976,9 @@ mod tests {
 
                     does not start with elements matching the predicates.
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
+                      - Decisive element is at zero-based index 1.
                     -------- assertr --------
                 "});
         }
@@ -1007,9 +1072,8 @@ mod tests {
                         9,
                     ]
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -1065,9 +1129,8 @@ mod tests {
 
                     does not end with elements matching the predicates.
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -1097,6 +1160,10 @@ mod tests {
             it.is_equal_to(9);
         }
 
+        fn is_zero(it: AssertThat<i32, Capture>) {
+            it.is_equal_to(0);
+        }
+
         #[test]
         fn succeeds_when_suffix_satisfies() {
             assert_that_owned!([1, 2, 3].into_iter()).ends_with_satisfying([is_two, is_three]);
@@ -1114,6 +1181,17 @@ mod tests {
             .contains(
                 "Suffix element at index 2 does not satisfy its assertions:\n    Expected: 9",
             );
+        }
+
+        #[test]
+        fn limits_repeated_suffix_evidence_to_the_rendering_budget() {
+            let failures = assert_that_owned!([1, 2, 3].into_iter())
+                .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
+                .with_location(false)
+                .capture(|it| it.ends_with_satisfying([is_zero; 3]));
+
+            assert_that!(failures[0].details.as_slice())
+                .contains("... 2 more unsatisfied suffix elements ...");
         }
     }
 
@@ -1169,9 +1247,8 @@ mod tests {
                         9,
                     ]
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -1234,9 +1311,8 @@ mod tests {
 
                     does not contain contiguous elements matching the predicates.
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -1334,10 +1410,9 @@ mod tests {
                         3,
                     ]
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
+                      - Decisive element is at zero-based index 1.
                     -------- assertr --------
                 "});
         }
@@ -1363,10 +1438,9 @@ mod tests {
                         2,
                     ]
 
-                    Details: [
-                        Consumed 0 element(s).,
-                        Iterator reported an exact remaining length of 3; expected 2.,
-                    ]
+                    Details:
+                      - Consumed 0 element(s).
+                      - Iterator reported an exact remaining length of 3; expected 2.
                     -------- assertr --------
                 "});
         }
@@ -1426,10 +1500,9 @@ mod tests {
 
                     did not exactly match predicates.
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
+                      - Decisive element is at zero-based index 1.
                     -------- assertr --------
                 "});
         }
@@ -1561,9 +1634,8 @@ mod tests {
 
                     The elements did not match exactly in any order.
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -1624,9 +1696,8 @@ mod tests {
 
                     did not exactly match predicates in any order.
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }

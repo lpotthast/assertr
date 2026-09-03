@@ -25,7 +25,9 @@ pub use crate::assert_that_type;
 pub use crate::assertions::HasLength;
 pub use crate::assertions::alloc::prelude::*;
 pub use crate::assertions::collection::CollectionAssertions;
-pub use crate::assertions::collection::SequenceAssertions;
+pub use crate::assertions::collection::RandomAccessExtractAssertions;
+pub use crate::assertions::collection::StableOrderAssertions;
+pub use crate::assertions::collection::StableOrderExtractAssertions;
 pub use crate::assertions::condition::ConditionAssertions;
 pub use crate::assertions::condition::IterableConditionAssertions;
 pub use crate::assertions::core::prelude::*;
@@ -61,6 +63,6 @@ pub(crate) use crate::entry::assert_that_panic_by;
 pub use crate::eq;
 pub use crate::mode::{Capture, Mode, Panic};
 pub use crate::pattern;
-pub use crate::{AssertThat, AssertionFailure, DebugRenderer, ValueRenderer};
+pub use crate::{AssertThat, AssertionFailure, DebugRenderer, RenderingBudget, ValueRenderer};
 #[cfg(feature = "fluent")]
 pub use crate::{IntoAssertContext, IntoOwnedAssertContext};

@@ -1,8 +1,10 @@
 use super::{
-    AssertThat, AssertrPartialEq, Borrow, Capture, CollectionStyle, Mode, PREVIEW_CAPACITY,
+    AssertThat, AssertrPartialEq, Borrow, Capture, Mode, PREVIEW_CAPACITY, PositionReporting,
     Preview, String, Tail, ValueRenderer, Vec, VecDeque, Write, format, join_failures,
     push_preview_details, writedoc,
 };
+use crate::renderer::GroupStyle;
+use crate::renderer::omission;
 
 #[track_caller]
 fn fail_membership<S, T, Item, E: ?Sized, M: Mode, R>(
@@ -17,8 +19,10 @@ fn fail_membership<S, T, Item, E: ?Sized, M: Mode, R>(
 {
     let mut details = Vec::new();
     push_preview_details(&mut details, preview, decisive_index);
-    let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
-    let expected = this.render_value(expected);
+    let actual = this
+        .render()
+        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
+    let expected = this.render().value(expected);
     this.fail_with_details(details, |w: &mut String| {
         if positive {
             writedoc! {w, r"
@@ -101,9 +105,15 @@ pub(crate) fn assert_contains_all<S, T, E, I, M: Mode, R>(
     let preview = tail.finish();
     let mut details = Vec::new();
     push_preview_details(&mut details, &preview, None);
-    let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
-    let expected = this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
-    let not_found = this.render_values(not_found.as_slice(), CollectionStyle::List);
+    let actual = this
+        .render()
+        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
+    let expected = this
+        .render()
+        .borrowed_values::<E, _>(expected, GroupStyle::List);
+    let not_found = this
+        .render()
+        .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List);
     this.fail_with_details(details, |w: &mut String| {
         writedoc! {w, r"
             Actual: {actual:#?}
@@ -122,6 +132,7 @@ pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     iterator: I,
     expected: &E,
+    positions: PositionReporting,
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -134,7 +145,7 @@ pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
         tail.push(item);
         if matches {
             let preview = tail.finish();
-            fail_membership(this, &preview, expected, false, Some(index));
+            fail_membership(this, &preview, expected, false, positions.index(index));
             return;
         }
     }
@@ -152,7 +163,9 @@ fn fail_predicate_membership<S, T, Item, M: Mode, R>(
 {
     let mut details = Vec::new();
     push_preview_details(&mut details, preview, decisive_index);
-    let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+    let actual = this
+        .render()
+        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
     this.fail_with_details(details, |w: &mut String| {
         if positive {
             writedoc! {w, r"
@@ -198,6 +211,7 @@ pub(crate) fn assert_does_not_contain_matching<S, T, P, I, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     iterator: I,
     predicate: &P,
+    positions: PositionReporting,
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -210,7 +224,7 @@ pub(crate) fn assert_does_not_contain_matching<S, T, P, I, M: Mode, R>(
         tail.push(item);
         if matches {
             let preview = tail.finish();
-            fail_predicate_membership(this, &preview, false, Some(index));
+            fail_predicate_membership(this, &preview, false, positions.index(index));
             return;
         }
     }
@@ -221,6 +235,7 @@ fn fail_satisfying_membership<S, T, Item, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     preview: &Preview<Item>,
     positive: bool,
+    positions: PositionReporting,
     decisive_index: Option<usize>,
     failures: &VecDeque<Vec<String>>,
 ) where
@@ -230,15 +245,28 @@ fn fail_satisfying_membership<S, T, Item, M: Mode, R>(
     let mut details = Vec::new();
     push_preview_details(&mut details, preview, decisive_index);
     if positive {
-        for (offset, failures) in failures.iter().enumerate() {
-            details.push(format!(
-                "Element at index {} does not satisfy the assertions:\n{}",
-                preview.start_index() + offset,
-                join_failures(failures)
-            ));
+        let maximum = this.render().max_items();
+        for (offset, failures) in failures.iter().take(maximum).enumerate() {
+            let failures = join_failures(failures, this.render().max_items());
+            details.push(match positions {
+                PositionReporting::YieldOrder => format!(
+                    "Element at index {} does not satisfy the assertions:\n{failures}",
+                    preview.start_index() + offset
+                ),
+                PositionReporting::Unavailable => {
+                    format!("An element does not satisfy the assertions:\n{failures}")
+                }
+            });
+        }
+        let rendered = failures.len().min(maximum);
+        let omitted = preview.consumed.saturating_sub(rendered);
+        if omitted != 0 {
+            details.push(omission(omitted, "unsatisfied element"));
         }
     }
-    let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+    let actual = this
+        .render()
+        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
     this.fail_with_details(details, |w: &mut String| {
         if positive {
             writedoc! {w,r"
@@ -261,6 +289,7 @@ pub(crate) fn assert_contains_satisfying<S, T, A, I, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     iterator: I,
     assertions: &A,
+    positions: PositionReporting,
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -281,7 +310,7 @@ pub(crate) fn assert_contains_satisfying<S, T, A, I, M: Mode, R>(
         retained.push_back(failures);
     }
     let preview = tail.finish();
-    fail_satisfying_membership(this, &preview, true, None, &retained);
+    fail_satisfying_membership(this, &preview, true, positions, None, &retained);
 }
 
 #[track_caller]
@@ -289,6 +318,7 @@ pub(crate) fn assert_does_not_contain_satisfying<S, T, A, I, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     iterator: I,
     assertions: &A,
+    positions: PositionReporting,
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -303,7 +333,14 @@ pub(crate) fn assert_does_not_contain_satisfying<S, T, A, I, M: Mode, R>(
         tail.push(item);
         if matches {
             let preview = tail.finish();
-            fail_satisfying_membership(this, &preview, false, Some(index), &VecDeque::new());
+            fail_satisfying_membership(
+                this,
+                &preview,
+                false,
+                positions,
+                positions.index(index),
+                &VecDeque::new(),
+            );
             return;
         }
     }

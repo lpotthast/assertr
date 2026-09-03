@@ -36,7 +36,9 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
                 .actual()
                 .try_borrow()
                 .expect("the borrow check already succeeded");
-            let actual = self.render_struct_field("RefCell", "value", &*value);
+            let actual = self
+                .render()
+                .struct_field(self.actual(), "RefCell", "value", &*value);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?} is not borrowed.
@@ -59,7 +61,9 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
                 .actual()
                 .try_borrow()
                 .expect("the borrow check already succeeded");
-            let actual = self.render_struct_field("RefCell", "value", &*value);
+            let actual = self
+                .render()
+                .struct_field(self.actual(), "RefCell", "value", &*value);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?} is not mutably borrowed.
@@ -75,7 +79,12 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
     fn is_not_mutably_borrowed(self) -> Self {
         self.track_assertion();
         if self.actual().try_borrow().is_err() {
-            let actual = Self::render_unavailable_struct_field("RefCell", "value", "<borrowed>");
+            let actual = self.render().unavailable_struct_field(
+                self.actual(),
+                "RefCell",
+                "value",
+                "<borrowed>",
+            );
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:#?} is mutably borrowed.
@@ -90,6 +99,34 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use core::cell::RefCell;
+
+        struct Secret;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, RefCell<i32>, Panic, NoRenderer>
+                    => RefCellAssertions<i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_render_the_inner_value_with_the_active_renderer() {
+            let cell = RefCell::new(Secret);
+            let failures = assert_that!(&cell)
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(RefCellAssertions::is_borrowed);
+
+            assert_that!(failures[0].description.as_str())
+                .contains("RefCell {")
+                .contains(SENTINEL);
+        }
+    }
 
     mod is_borrowed {
         use crate::prelude::*;

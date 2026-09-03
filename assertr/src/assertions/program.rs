@@ -93,7 +93,7 @@ impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Prog
         let found = which::which(program);
 
         if let Err(err) = &found {
-            let program = self.render_value(self.actual());
+            let program = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Expected program: {program:?}
@@ -124,7 +124,7 @@ impl<'a, 't, R> ProgramAssertionsRequiringPanicMode<'t, R>
         let found = which::which(program);
 
         if let Err(err) = &found {
-            let program = self.render_value(self.actual());
+            let program = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r#"
                     Expected program: {program:?}
@@ -142,6 +142,44 @@ impl<'a, 't, R> ProgramAssertionsRequiringPanicMode<'t, R>
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::assertions::program::Program;
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Program<'static>, Panic, NoRenderer>
+                    => ProgramAssertions<'static, 'static, Panic, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, Program<'static>, Panic, NoRenderer>
+                    => ProgramAssertionsRequiringPanicMode<'static, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn checking_and_extracting_failures_use_the_active_renderer() {
+            const MISSING: &str = "assertr-renderer-test-program-that-does-not-exist";
+
+            let failures = assert_that!(Program::from(MISSING))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(ProgramAssertions::exists);
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+
+            assert_that_panic_by(|| {
+                assert_that!(Program::from(MISSING))
+                    .with_renderer(SentinelRenderer)
+                    .with_location(false)
+                    .exists_and();
+            })
+            .has_type::<String>()
+            .contains(SENTINEL);
+        }
+    }
+
     mod program_construction {
         use crate::prelude::*;
         use alloc::borrow::Cow;

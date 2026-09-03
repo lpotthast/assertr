@@ -237,6 +237,37 @@ where
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{
+            NoRenderer, RendererActual, RendererExpected, SENTINEL, SentinelRenderer,
+            assert_trait_impl,
+        };
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Vec<i32>, Panic, NoRenderer>
+                    => CollectionAssertions<i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn equality_and_failures_use_the_active_renderer_type() {
+            assert_that!([RendererActual(1), RendererActual(2)].as_slice())
+                .with_renderer(SentinelRenderer)
+                .contains(RendererExpected(2))
+                .contains_all([RendererExpected(1)])
+                .contains_exactly_in_any_order([RendererExpected(2), RendererExpected(1)]);
+
+            let failures = assert_that!([RendererActual(1)].as_slice())
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(|it| it.contains(RendererExpected(2)));
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
+
     mod contains {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -362,8 +393,30 @@ mod tests {
             })
             .has_type::<String>()
             .contains("does not contain an element satisfying the given assertions.")
-            .contains("Element at index 0 does not satisfy the assertions:\n    Expected: 7")
-            .contains("Element at index 1 does not satisfy the assertions:\n    Expected: 7");
+            .contains("An element does not satisfy the assertions:\n    Expected: 7");
+        }
+
+        #[test]
+        fn rendering_budget_limits_items_and_nested_failure_values() {
+            let failures = assert_that!([123_456, 234_567, 345_678].as_slice())
+                .with_rendering_budget(
+                    RenderingBudget::builder()
+                        .max_items(1)
+                        .max_leaf_characters(3)
+                        .build(),
+                )
+                .with_location(false)
+                .capture(|it| {
+                    it.contains_satisfying(|element| {
+                        element.is_equal_to(99);
+                    })
+                });
+
+            assert_that!(failures[0].details.as_slice()).has_length(2);
+            assert_that!(failures[0].details[0].as_str())
+                .contains("Actual: 123... 3 more characters ...");
+            assert_that!(failures[0].details[1].as_str())
+                .is_equal_to("... 2 more unsatisfied elements ...");
         }
     }
 
@@ -773,12 +826,11 @@ mod tests {
 
                     did not exactly match predicates in any order.
 
-                    Details: [
-                        Elements not matched: [
+                    Details:
+                      - Elements not matched: [
                             1,
-                        ],
-                        Predicates not matched: 1,
-                    ]
+                        ]
+                      - Predicates not matched: 1
                     -------- assertr --------
                 "});
         }

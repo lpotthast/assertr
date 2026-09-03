@@ -147,8 +147,8 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
                 core::any::type_name::<T>()
             )];
             let expected = T::zero();
-            let expected = self.render_value(&expected);
-            let actual = self.render_value(actual);
+            let expected = self.render().value(&expected);
+            let actual = self.render().value(actual);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -181,8 +181,8 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
                 core::any::type_name::<T>()
             )];
             let expected = T::one();
-            let expected = self.render_value(&expected);
-            let actual = self.render_value(actual);
+            let expected = self.render().value(&expected);
+            let actual = self.render().value(actual);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -211,7 +211,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_negative() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be negative. But was
@@ -232,7 +232,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_positive() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be positive. But was
@@ -261,7 +261,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
             Some(Ordering::Greater | Ordering::Equal)
         );
         if !deviation_is_valid {
-            let allowed_deviation = self.render_value(&allowed_deviation);
+            let allowed_deviation = self.render().value(&allowed_deviation);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Allowed deviation must be a non-negative number.
@@ -292,9 +292,9 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         };
 
         if !within_allowed_deviation {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(&expected);
-            let allowed_deviation = self.render_value(&allowed_deviation);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(&expected);
+            let allowed_deviation = self.render().value(&allowed_deviation);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be close to: {expected:#?},
@@ -319,8 +319,8 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         let actual = self.actual();
         if !actual.is_nan() {
             let nan = T::nan();
-            let nan = self.render_value(&nan);
-            let actual = self.render_value(actual);
+            let nan = self.render().value(&nan);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {nan:#?}
@@ -342,7 +342,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_finite() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected a finite value, but was
@@ -365,8 +365,8 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         let actual = self.actual();
         if !actual.is_infinite() {
             let inf = T::infinity();
-            let inf = self.render_value(&inf);
-            let actual = self.render_value(actual);
+            let inf = self.render().value(&inf);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: +/- {inf:#?}
@@ -388,7 +388,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_normal() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected a normal floating-point value, but was
@@ -410,7 +410,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_subnormal() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected a subnormal floating-point value, but was
@@ -425,6 +425,18 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, i32, Panic, NoRenderer> => NumAssertions<i32>
+            );
+        }
+    }
+
     // These helpers deliberately take `T` by value to model the signature available to downstream
     // generic code, rather than proving the assertion bounds only for `&T`.
     #[allow(clippy::needless_pass_by_value)]
@@ -656,9 +668,8 @@ mod tests {
 
                       Actual: 3
                     
-                    Details: [
-                        Expecting additive identity of type 'i32',
-                    ]
+                    Details:
+                      - Expecting additive identity of type 'i32'
                     -------- assertr --------
                 "});
         }
@@ -704,9 +715,8 @@ mod tests {
 
                       Actual: 3
                     
-                    Details: [
-                        Expecting multiplicative identity of type 'i32',
-                    ]
+                    Details:
+                      - Expecting multiplicative identity of type 'i32'
                     -------- assertr --------
                 "});
         }

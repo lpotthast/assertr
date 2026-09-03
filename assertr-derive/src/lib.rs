@@ -46,11 +46,10 @@ use syn::{DeriveInput, Item, ItemTrait, parse_macro_input};
 /// declaration order:
 ///
 /// ```text
-/// Details: [
-///     Differences: [
+/// Details:
+///   - Differences: [
 ///         "name": expected "Alicia", but was "Alice",
-///     ],
-/// ]
+///     ]
 /// ```
 ///
 /// # What is generated

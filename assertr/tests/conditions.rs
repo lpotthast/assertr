@@ -123,7 +123,7 @@ fn a_failing_condition_exposes_its_error_as_a_failure_detail() {
 }
 
 #[test]
-fn each_failing_element_raises_its_own_failure_naming_its_index() {
+fn each_failing_element_raises_its_own_failure_without_inventing_an_index() {
     let people = vec![
         Person {
             name: "Bob",
@@ -145,10 +145,10 @@ fn each_failing_element_raises_its_own_failure_naming_its_index() {
 
     assert_that!(&failures).has_length(2);
     assert_that!(failures[0].description.as_str())
-        .is_equal_to("Condition did not match for the element at zero-based index 1.\n");
+        .is_equal_to("Condition did not match for an element.\n");
     assert_that!(failures[0].details.as_slice()).contains_exactly(["\"Kevin\" is dead!"]);
     assert_that!(failures[1].description.as_str())
-        .is_equal_to("Condition did not match for the element at zero-based index 2.\n");
+        .is_equal_to("Condition did not match for an element.\n");
     assert_that!(failures[1].details.as_slice()).contains_exactly(["\"Otto\" is dead!"]);
 }
 
@@ -169,9 +169,8 @@ fn a_condition_failure_renders_the_error_under_details() {
 
         Condition did not match.
 
-        Details: [
-            "Bob" is dead!,
-        ]
+        Details:
+          - "Bob" is dead!
         -------- assertr --------
     "#});
 }

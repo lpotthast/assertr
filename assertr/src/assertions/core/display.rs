@@ -44,6 +44,17 @@ impl<T: Display, M: Mode, R> DisplayAssertions for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, i32, Panic, NoRenderer> => DisplayAssertions
+            );
+        }
+    }
 
     mod has_display_value {
         #[cfg(feature = "fluent")]

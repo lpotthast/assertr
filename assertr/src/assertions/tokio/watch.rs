@@ -29,8 +29,8 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R>
         let actual = tokio::sync::watch::Receiver::borrow(self.actual());
         let expected = expected.borrow();
         if *actual != *expected {
-            let actual = self.render_value(&*actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(&*actual);
+            let expected = self.render().value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -93,6 +93,37 @@ impl<T, R> TokioWatchReceiverExtractAssertions<T, R>
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, tokio::sync::watch::Receiver<()>, Panic, NoRenderer>
+                    => TokioWatchReceiverAssertions<(), NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, tokio::sync::watch::Receiver<()>, Panic, NoRenderer>
+                    => TokioWatchReceiverExtractAssertions<(), NoRenderer>
+            );
+        }
+
+        #[test]
+        fn projected_boolean_failure_uses_the_active_renderer() {
+            let (_sender, receiver) = tokio::sync::watch::channel(());
+
+            assert_that_panic_by(|| {
+                assert_that!(receiver)
+                    .with_renderer(SentinelRenderer)
+                    .with_location(false)
+                    .has_changed();
+            })
+            .has_type::<String>()
+            .contains(SENTINEL);
+        }
+    }
+
     #[derive(Debug, PartialEq)]
     struct Person {
         name: String,
@@ -185,9 +216,8 @@ mod tests {
 
                       Actual: false
 
-                    Details: [
-                        Expected a tokio `watch` channel to have changed.,
-                    ]
+                    Messages:
+                      - Expected a tokio `watch` channel to have changed.
                     -------- assertr --------
                 "});
         }
@@ -227,9 +257,8 @@ mod tests {
 
                       Actual: true
 
-                    Details: [
-                        Expected a tokio `watch` channel to have not changed.,
-                    ]
+                    Messages:
+                      - Expected a tokio `watch` channel to have not changed.
                     -------- assertr --------
                 "});
         }

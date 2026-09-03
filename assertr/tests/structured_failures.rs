@@ -3,8 +3,8 @@
 //! - `AssertThat::capture` runs assertions in capture mode inside a closure and returns the
 //!   collected failures, making a forgotten capture structurally impossible.
 //! - Captured failures are structured `AssertionFailure` values whose fields (location, subject
-//!   name, asserted expression, description, per-failure details, chain-level messages) can be
-//!   inspected without parsing formatted text.
+//!   name, asserted expression, subject type, description, per-failure details, chain-level
+//!   messages) can be inspected without parsing formatted text.
 //! - Rendering happens only at the panic or display boundary, via `Display`.
 
 use assertr::prelude::*;
@@ -21,6 +21,7 @@ fn capture_returns_structured_failures_with_separated_fields() {
 
     assert_that!(failure.subject_name.as_deref()).is_equal_to(Some("answer"));
     assert_that!(failure.expression).is_equal_to(Some("42"));
+    assert_that!(failure.subject_type_name).is_equal_to(core::any::type_name::<i32>());
     assert_that!(failure.details.as_slice()).is_empty();
     assert_that!(failure.messages.as_slice()).contains_exactly(["user context"]);
     // The description holds only the assertion-specific body; everything else lives in its own
@@ -94,7 +95,37 @@ fn per_failure_diagnostics_are_exposed_as_details() {
     assert_that!(failure.details.is_empty()).is_false();
     assert_that!(failure.messages.as_slice()).is_empty();
     // The rendered form still shows them under `Details:`.
-    assert_that!(failure.to_string()).contains("Details: [");
+    assert_that!(failure.to_string()).contains("Details:\n  - ");
+}
+
+#[test]
+fn messages_and_details_render_as_separate_plain_bullet_blocks() {
+    let failures = assert_that!(42)
+        .with_location(false)
+        .with_detail_message("first message\ncontinued message")
+        .capture(|it| {
+            it.track_assertion();
+            it.fail_with_details(
+                ["first detail\ncontinued detail".to_owned()],
+                "The assertion failed.",
+            );
+            it
+        });
+
+    assert_that!(failures[0].to_string()).is_equal_to(indoc::indoc! {"
+        -------- assertr --------
+        Expression: `42`
+
+        The assertion failed.
+
+        Messages:
+          - first message
+            continued message
+        Details:
+          - first detail
+            continued detail
+        -------- assertr --------
+    "});
 }
 
 #[test]
@@ -118,6 +149,8 @@ fn failures_from_derived_and_satisfies_assertions_reach_the_root() {
     assert_that!(&failures).has_length(2);
     assert_that!(&failures[0].description).contains("xyz");
     assert_that!(&failures[1].description).contains("Expected: 9");
+    assert_that!(failures[0].subject_type_name).is_equal_to(core::any::type_name::<String>());
+    assert_that!(failures[1].subject_type_name).is_equal_to(core::any::type_name::<usize>());
 }
 
 #[test]
@@ -145,6 +178,7 @@ fn mapping_inside_the_capture_closure_is_supported() {
         .capture(|it| it.map(|v| v.borrowed().len().into()).is_equal_to(4));
 
     assert_that!(&failures).has_length(1);
+    assert_that!(failures[0].subject_type_name).is_equal_to(core::any::type_name::<usize>());
 }
 
 #[test]

@@ -299,6 +299,23 @@ where
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, fn() -> (), Panic, NoRenderer>
+                    => FnOnceAssertions<'static, (), NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, fn() -> core::future::Ready<()>, Panic, NoRenderer>
+                    => AsyncFnOnceAssertions<'static, (), NoRenderer>
+            );
+        }
+    }
+
     mod fn_once {
         mod panics {
             use crate::prelude::*;
@@ -421,9 +438,8 @@ mod tests {
 
                       Actual: Function panicked unexpectedly!
 
-                    Details: [
-                        Panic payload: "not implemented",
-                    ]
+                    Details:
+                      - Panic payload: "not implemented"
                     -------- assertr --------
                 "#});
             }
@@ -444,9 +460,8 @@ mod tests {
 
                       Actual: Function panicked unexpectedly!
 
-                    Details: [
-                        Panic payload: "owned boom",
-                    ]
+                    Details:
+                      - Panic payload: "owned boom"
                     -------- assertr --------
                 "#});
             }
@@ -636,9 +651,8 @@ mod tests {
 
                       Actual: Function panicked unexpectedly!
 
-                    Details: [
-                        Panic payload: "not implemented",
-                    ]
+                    Details:
+                      - Panic payload: "not implemented"
                     -------- assertr --------
                 "#});
             }
@@ -661,9 +675,8 @@ mod tests {
 
                       Actual: Function panicked unexpectedly!
 
-                    Details: [
-                        Panic payload: "before future",
-                    ]
+                    Details:
+                      - Panic payload: "before future"
                     -------- assertr --------
                 "#});
             }
@@ -688,9 +701,8 @@ mod tests {
 
                       Actual: Function panicked unexpectedly!
 
-                    Details: [
-                        Panic payload: "owned boom",
-                    ]
+                    Details:
+                      - Panic payload: "owned boom"
                     -------- assertr --------
                 "#});
             }

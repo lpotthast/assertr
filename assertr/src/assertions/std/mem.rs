@@ -34,6 +34,19 @@ impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::Type;
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Type<i32>, Panic, NoRenderer> => MemAssertions
+            );
+        }
+    }
+
     mod needs_drop {
         use crate::assert_that_type;
         use crate::prelude::*;

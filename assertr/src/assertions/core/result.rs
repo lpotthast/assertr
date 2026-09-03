@@ -40,7 +40,7 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
 
         if self.actual().is_err() {
             let actual = match self.actual() {
-                Err(error) => self.render_variant("Err", error),
+                Err(error) => self.render().variant(self.actual(), "Err", error),
                 Ok(_) => unreachable!("already checked"),
             };
             self.fail(|w: &mut String| {
@@ -74,7 +74,7 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
 
         if self.actual().is_ok() {
             let actual = match self.actual() {
-                Ok(value) => self.render_variant("Ok", value),
+                Ok(value) => self.render().variant(self.actual(), "Ok", value),
                 Err(_) => unreachable!("already checked"),
             };
             self.fail(|w: &mut String| {
@@ -149,7 +149,7 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
 
         if !self.actual().is_ok() {
             let actual = match self.actual() {
-                Err(error) => self.render_variant("Err", error),
+                Err(error) => self.render().variant(self.actual(), "Err", error),
                 Ok(_) => unreachable!("already checked"),
             };
             self.fail(|w: &mut String| {
@@ -173,7 +173,7 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
 
         if !self.actual().is_err() {
             let actual = match self.actual() {
-                Ok(value) => self.render_variant("Ok", value),
+                Ok(value) => self.render().variant(self.actual(), "Ok", value),
                 Err(_) => unreachable!("already checked"),
             };
             self.fail(|w: &mut String| {
@@ -206,7 +206,7 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
             )
         } else {
             let actual = match self.actual() {
-                Err(error) => self.render_variant("Err", error),
+                Err(error) => self.render().variant(self.actual(), "Err", error),
                 Ok(_) => unreachable!("already checked"),
             };
             self.fail(|w: &mut String| {
@@ -238,7 +238,7 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
             )
         } else {
             let actual = match self.actual() {
-                Ok(value) => self.render_variant("Ok", value),
+                Ok(value) => self.render().variant(self.actual(), "Ok", value),
                 Err(_) => unreachable!("already checked"),
             };
             self.fail(|w: &mut String| {
@@ -255,6 +255,37 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        struct Secret;
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Result<i32, i32>, Panic, NoRenderer>
+                    => ResultAssertions<'static, Panic, i32, i32, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, Result<i32, i32>, Panic, NoRenderer>
+                    => ResultExtractAssertions<'static, i32, i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn err_variant_is_rendered_from_its_leaf_value() {
+            let failures = assert_that!(Result::<(), Secret>::Err(Secret))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(ResultAssertions::is_ok);
+
+            assert_that!(failures[0].description.as_str())
+                .contains("Err(")
+                .contains(SENTINEL);
+        }
+    }
+
     mod is_ok {
         use indoc::formatdoc;
 

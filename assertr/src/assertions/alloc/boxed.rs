@@ -169,6 +169,21 @@ impl<'t, R> BoxAssertions<'t, R> for AssertThat<'t, Box<dyn Any>, Panic, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use alloc::boxed::Box;
+
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Box<dyn core::any::Any>, Panic, NoRenderer>
+                    => BoxAssertions<'static, NoRenderer>
+            );
+        }
+    }
+
     mod has_type {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -241,9 +256,8 @@ mod tests {
 
                   Actual value type: dyn core::any::Any
 
-                Details: [
-                    A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.,
-                ]
+                Details:
+                  - A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
                 -------- assertr --------
             "});
         }
@@ -267,9 +281,8 @@ mod tests {
 
                   Actual value type: dyn core::any::Any
 
-                Details: [
-                    A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.,
-                ]
+                Details:
+                  - A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
                 -------- assertr --------
             "});
         }
@@ -358,9 +371,8 @@ mod tests {
 
                   Actual value type: dyn core::any::Any
 
-                Details: [
-                    A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.,
-                ]
+                Details:
+                  - A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
                 -------- assertr --------
             "});
         }

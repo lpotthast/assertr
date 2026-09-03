@@ -123,16 +123,20 @@ mod composed {
 mod leaf {
     use super::Person;
     use assertr::prelude::*;
+    use assertr::renderer::TypeHint;
+    use core::fmt;
     use indoc::formatdoc;
 
-    trait PersonAssertions {
+    trait PersonAssertions<R = DebugRenderer> {
         #[allow(clippy::wrong_self_convention)]
         fn is_adult(self) -> Self;
         #[allow(clippy::wrong_self_convention)]
-        fn is_older_than(self, other: &Person) -> Self;
+        fn is_older_than(self, other: &Person) -> Self
+        where
+            R: ValueRenderer<Person>;
     }
 
-    impl<M: Mode, R> PersonAssertions for AssertThat<'_, Person, M, R> {
+    impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
         #[track_caller]
         fn is_adult(self) -> Self {
             // Tracking comes first and happens unconditionally: a passing assertion must count
@@ -149,7 +153,10 @@ mod leaf {
         }
 
         #[track_caller]
-        fn is_older_than(self, other: &Person) -> Self {
+        fn is_older_than(self, other: &Person) -> Self
+        where
+            R: ValueRenderer<Person>,
+        {
             self.track_assertion();
 
             let actual = self.actual();
@@ -158,8 +165,8 @@ mod leaf {
                 // reappear in a later failure of the same chain.
                 self.fail_with_details(
                     [
-                        format!("Actual person: {actual:?}"),
-                        format!("Compared to:   {other:?}"),
+                        format!("Actual person: {:#?}", self.render().value(actual)),
+                        format!("Compared to:   {:#?}", self.render().value(other)),
                     ],
                     format_args!(
                         "Expected an age greater than {expected}, but was {age}!",
@@ -180,6 +187,15 @@ mod leaf {
     }
 
     struct NoRenderer;
+
+    #[derive(Clone, Copy)]
+    struct AgeRenderer;
+
+    impl ValueRenderer<Person> for AgeRenderer {
+        fn fmt(&self, value: &Person, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "Person(age={})", value.age)
+        }
+    }
 
     #[test]
     fn leaf_assertions_do_not_require_renderer_support() {
@@ -246,6 +262,32 @@ mod leaf {
         assert_that!(failures[0].details.as_slice()).has_length(2);
         assert_that!(&failures[0].details[0]).contains("Actual person:");
         assert_that!(failures[1].details.as_slice()).is_empty();
+    }
+
+    #[test]
+    fn leaf_assertion_values_use_the_active_renderer() {
+        let failures = assert_that!(person(12))
+            .with_renderer(AgeRenderer)
+            .with_location(false)
+            .capture(|it| it.is_older_than(&person(40)));
+
+        assert_that!(failures[0].details.as_slice()).contains_exactly([
+            "Actual person: Person(age=12)",
+            "Compared to:   Person(age=40)",
+        ]);
+    }
+
+    #[test]
+    fn rendered_values_can_customize_and_show_type_hints() {
+        let person = person(12);
+        let assertion = assert_that!(&person).with_renderer(AgeRenderer);
+        let rendered = assertion
+            .render()
+            .value(assertion.actual())
+            .with_type_hint(TypeHint::Label("Subject"))
+            .show_type_hint(true);
+
+        assert_that!(format!("{rendered:?}")).is_equal_to("Subject Person(age=12)");
     }
 
     #[test]

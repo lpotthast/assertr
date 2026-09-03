@@ -106,7 +106,7 @@ impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
         self.track_assertion();
 
         if self.actual().to_str().is_err() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:?}
@@ -130,7 +130,7 @@ impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
         if self.actual().to_str().is_ok() {
             self.satisfies_ref(|hv| hv.to_str().expect("already checked"), assertions)
         } else {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual: {actual:?}
@@ -178,6 +178,41 @@ impl<'t, R> HttpHeaderValueExtractAssertions<'t, R>
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use http::HeaderValue;
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, HeaderValue, Panic, NoRenderer>
+                    => HttpHeaderValueAssertions<'static, Panic, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, HeaderValue, Panic, NoRenderer>
+                    => HttpHeaderValueExtractAssertions<'static, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn direct_and_projected_failures_use_the_active_renderer() {
+            let opaque = HeaderValue::from_bytes(b"\xFF").expect("valid opaque header bytes");
+            let opaque_failures = assert_that!(opaque)
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(HttpHeaderValueAssertions::is_ascii);
+            assert_that!(opaque_failures[0].description.as_str()).contains(SENTINEL);
+
+            let visible = HeaderValue::from_static("visible");
+            let projected_failures = assert_that!(visible)
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(HttpHeaderValueAssertions::is_sensitive);
+            assert_that!(projected_failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
+
     mod has_debug_value {
         use crate::prelude::*;
         use http::header::HeaderValue;
@@ -228,9 +263,8 @@ mod tests {
 
                       Actual: 8
 
-                    Details: [
-                        Expected an empty header value.,
-                    ]
+                    Messages:
+                      - Expected an empty header value.
                     -------- assertr --------
                 "});
         }
@@ -269,9 +303,8 @@ mod tests {
 
                     Expected: 0
 
-                    Details: [
-                        Expected a non-empty header value.,
-                    ]
+                    Messages:
+                      - Expected a non-empty header value.
                     -------- assertr --------
                 "});
         }
@@ -311,9 +344,8 @@ mod tests {
 
                       Actual: false
 
-                    Details: [
-                        Expected a sensitive header value. You might have forgotten to call `set_sensitive(true)` on the header value.,
-                    ]
+                    Messages:
+                      - Expected a sensitive header value. You might have forgotten to call `set_sensitive(true)` on the header value.
                     -------- assertr --------
                 "});
         }
@@ -359,9 +391,8 @@ mod tests {
 
                       Actual: true
 
-                    Details: [
-                        Expected an insensitive header value. You might have forgotten to call `set_sensitive(false)` on the header value.,
-                    ]
+                    Messages:
+                      - Expected an insensitive header value. You might have forgotten to call `set_sensitive(false)` on the header value.
                     -------- assertr --------
                 "});
         }

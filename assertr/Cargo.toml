@@ -1,6 +1,6 @@
 [package]
 name = "assertr"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2024"
 rust-version = "1.89.0"
 authors = ["Lukas Potthast <privat@lukas-potthast.de>"]
@@ -61,7 +61,7 @@ libm = ["num-traits?/libm"]
 # Exact pin: generated code uses `assertr::__private`, so the two crates only work in the
 # versions released together. A range requirement would let Cargo resolve a newer derive
 # against an older assertr and produce generated code that does not compile.
-assertr-derive = { version = "=0.4.1", optional = true, path = "../assertr-derive" }
+assertr-derive = { version = "=0.4.2", optional = true, path = "../assertr-derive" }
 http = { version = "1.3.1", optional = true }
 indoc = "2.0.5"
 jiff = { version = "0.2.13", optional = true }

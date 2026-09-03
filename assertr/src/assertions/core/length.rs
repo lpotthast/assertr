@@ -46,11 +46,10 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
         self.track_assertion();
         if !self.actual().is_empty() {
             let actual = self.actual();
-            let actual = self.render_value(actual);
-            let type_name = core::any::type_name::<T>();
+            let actual = self.render().value(actual).show_type_hint(true);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                    Actual: {type_name} {actual:#?}
+                    Actual: {actual:#?}
 
                     was expected to be empty, but it is not!
                 "}
@@ -67,11 +66,10 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
         self.track_assertion();
         if self.actual().is_empty() {
             let actual = self.actual();
-            let actual = self.render_value(actual);
-            let type_name = core::any::type_name::<T>();
+            let actual = self.render().value(actual).show_type_hint(true);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                    Actual: {type_name} {actual:#?}
+                    Actual: {actual:#?}
 
                     was expected not to be empty, but it is!
                 "}
@@ -88,11 +86,11 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual_len = self.actual().length();
         if actual_len != expected {
-            let type_name = core::any::type_name::<T>();
-            let actual = self.render_value(self.actual());
+            let actual = self.actual();
+            let actual = self.render().value(actual).show_type_hint(true);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
-                    Actual: {type_name} {actual:#?}
+                    Actual: {actual:#?}
 
                     does not have the correct length
 
@@ -107,6 +105,18 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Vec<u8>, Panic, NoRenderer> => LengthAssertions
+            );
+        }
+    }
+
     mod is_empty_on_array {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -174,7 +184,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `[42].as_slice()`
 
-                    Actual: &[i32] [
+                    Actual: [i32] [
                         42,
                     ]
 
@@ -209,7 +219,7 @@ mod tests {
                 -------- assertr --------
                 Expression: `"foo"`
 
-                Actual: &str "foo"
+                Actual: str "foo"
 
                 was expected to be empty, but it is not!
                 -------- assertr --------
@@ -244,7 +254,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `String::from("foo")`
 
-                    Actual: alloc::string::String "foo"
+                    Actual: String "foo"
 
                     was expected to be empty, but it is not!
                     -------- assertr --------
@@ -282,7 +292,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `vec![42]`
 
-                    Actual: alloc::vec::Vec<i32> [
+                    Actual: Vec [
                         42,
                     ]
 
@@ -325,7 +335,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `map`
 
-                    Actual: std::collections::hash::map::HashMap<&str, &str> {{
+                    Actual: HashMap {{
                         "foo": "bar",
                     }}
 
@@ -364,7 +374,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `VecDeque::from([42])`
 
-                    Actual: alloc::collections::vec_deque::VecDeque<i32> [
+                    Actual: VecDeque [
                         42,
                     ]
 
@@ -407,7 +417,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `map`
 
-                    Actual: std::collections::hash::map::HashMap<(), ()> {{}}
+                    Actual: HashMap {{}}
 
                     was expected not to be empty, but it is!
                     -------- assertr --------
@@ -451,7 +461,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `VecDeque::<i32>::new()`
 
-                    Actual: alloc::collections::vec_deque::VecDeque<i32> []
+                    Actual: VecDeque []
 
                     was expected not to be empty, but it is!
                     -------- assertr --------
@@ -484,7 +494,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `"foo bar"`
 
-                    Actual: &str "foo bar"
+                    Actual: str "foo bar"
 
                     does not have the correct length
 
@@ -522,7 +532,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `String::from("foo bar")`
 
-                    Actual: alloc::string::String "foo bar"
+                    Actual: String "foo bar"
 
                     does not have the correct length
 
@@ -590,7 +600,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `[42].as_slice()`
 
-                    Actual: &[i32] [
+                    Actual: [i32] [
                         42,
                     ]
 
@@ -633,7 +643,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `vec![42]`
 
-                    Actual: alloc::vec::Vec<i32> [
+                    Actual: Vec [
                         42,
                     ]
 
@@ -680,7 +690,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `VecDeque::from([42])`
 
-                    Actual: alloc::collections::vec_deque::VecDeque<i32> [
+                    Actual: VecDeque [
                         42,
                     ]
 
@@ -733,7 +743,7 @@ mod tests {
                 -------- assertr --------
                 Expression: `map`
 
-                Actual: std::collections::hash::map::HashMap<&str, &str> {{
+                Actual: HashMap {{
                     "foo": "bar",
                 }}
 

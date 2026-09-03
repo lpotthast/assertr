@@ -11,7 +11,7 @@
 //! - State and extraction: the assertion and extraction traits in [`option`], [`result`], and
 //!   [`poll`], plus [`RefCellAssertions`](ref_cell::RefCellAssertions)
 //! - Iteration: [`IteratorAssertions`](iter::IteratorAssertions),
-//!   [`IntoIteratorAssertions`](iter::IntoIteratorAssertions), and
+//!   [`IntoIteratorAssertions`](iter::IntoIteratorAssertions),
 //!   [`ExactSizeIteratorAssertions`](iter::ExactSizeIteratorAssertions)
 //! - String-like values: [`StrAssertions`](string::StrAssertions)
 //!

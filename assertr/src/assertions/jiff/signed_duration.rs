@@ -49,8 +49,8 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
             let details = [String::from("Actual was not zero.")];
 
             let expected = SignedDuration::ZERO;
-            let actual = self.render_value(self.actual());
-            let expected = self.render_value(&expected);
+            let actual = self.render().value(self.actual());
+            let expected = self.render().value(&expected);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -71,7 +71,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         self.track_assertion();
 
         if !self.actual().is_negative() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?} to be negative,
@@ -92,7 +92,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         self.track_assertion();
 
         if !self.actual().is_positive() {
-            let actual = self.render_value(self.actual());
+            let actual = self.render().value(self.actual());
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {actual:#?} to be positive,
@@ -116,11 +116,11 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         let min = expected - allowed_deviation;
         let max = expected + allowed_deviation;
         if !(actual >= min && actual <= max) {
-            let actual = self.render_value(&actual);
-            let expected = self.render_value(&expected);
-            let allowed_deviation = self.render_value(&allowed_deviation);
-            let min = self.render_value(&min);
-            let max = self.render_value(&max);
+            let actual = self.render().value(&actual);
+            let expected = self.render().value(&expected);
+            let allowed_deviation = self.render().value(&allowed_deviation);
+            let min = self.render().value(&min);
+            let max = self.render().value(&max);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected value to be close to: {expected:?},
@@ -138,6 +138,30 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use jiff::SignedDuration;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, SignedDuration, Panic, NoRenderer>
+                    => SignedDurationAssertions<NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_use_the_active_renderer() {
+            let failures = assert_that!(SignedDuration::from_secs(1))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(SignedDurationAssertions::is_zero);
+
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
+
     mod is_zero {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -170,9 +194,8 @@ mod tests {
 
                       Actual: 9000s
 
-                    Details: [
-                        Actual was not zero.,
-                    ]
+                    Details:
+                      - Actual was not zero.
                     -------- assertr --------
                 "});
         }

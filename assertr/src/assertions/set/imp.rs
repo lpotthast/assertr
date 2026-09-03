@@ -8,34 +8,41 @@ use alloc::vec::Vec;
 use core::fmt::Write;
 use indoc::writedoc;
 
-use super::Set;
-use crate::assertions::collection::{CollectionStyle, imp::TypePrefix};
+use super::SetLookup;
+use crate::renderer::GroupStyle;
 use crate::{AssertThat, Mode, ValueRenderer};
 
 fn type_difference_detail<S, O>() -> Option<String>
 where
-    S: Set,
-    O: Set,
+    S: SetLookup,
+    O: SetLookup,
 {
-    match (S::TYPE_NAME, O::TYPE_NAME) {
-        (Some(actual_type), Some(other_type)) if actual_type != other_type => Some(String::from(
+    if set_type_name::<S>() == set_type_name::<O>() {
+        None
+    } else {
+        Some(String::from(
             "The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.",
-        )),
-        _ => None,
+        ))
     }
+}
+
+fn set_type_name<S: ?Sized>() -> &'static str {
+    let mut name = core::any::type_name::<S>();
+    while let Some(unreferenced) = name.strip_prefix('&') {
+        name = unreferenced.strip_prefix("mut ").unwrap_or(unreferenced);
+    }
+    name
 }
 
 #[track_caller]
 pub(crate) fn assert_is_subset_of<S, O, M, R>(this: &AssertThat<'_, S, M, R>, expected_superset: &O)
 where
-    S: Set,
-    O: Set<Item = S::Item>,
+    S: SetLookup,
+    O: SetLookup<Item = S::Item>,
     M: Mode,
     R: ValueRenderer<S::Item>,
 {
     this.track_assertion();
-    let actual_prefix = TypePrefix(S::TYPE_NAME);
-    let expected_prefix = TypePrefix(O::TYPE_NAME);
     let actual = this.actual();
 
     let elements_not_in_expected = actual
@@ -44,19 +51,18 @@ where
         .collect::<Vec<_>>();
 
     if !elements_not_in_expected.is_empty() {
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let rendered_actual = this.render_values(&actual_values, S::STYLE);
-        let expected_values = expected_superset.elements().collect::<Vec<_>>();
-        let expected_superset_rendered = this.render_values(&expected_values, O::STYLE);
-        let elements_rendered =
-            this.render_values(elements_not_in_expected.as_slice(), CollectionStyle::List);
+        let rendered_actual = this.render().collection(actual);
+        let expected_superset_rendered = this.render().collection(expected_superset);
+        let elements_rendered = this
+            .render()
+            .borrowed_values::<S::Item, _>(elements_not_in_expected.as_slice(), GroupStyle::List);
         this.fail_with_details(type_difference_detail::<S, O>(), |w: &mut String| {
             writedoc! {w, r"
-                Actual: {actual_prefix}{rendered_actual:#?}
+                Actual: {rendered_actual:#?}
 
                 is not a subset of expected
 
-                Expected superset: {expected_prefix}{expected_superset_rendered:#?}
+                Expected superset: {expected_superset_rendered:#?}
 
                 Elements not in expected: {elements_rendered:#?}
             "}
@@ -67,14 +73,12 @@ where
 #[track_caller]
 pub(crate) fn assert_is_superset_of<S, O, M, R>(this: &AssertThat<'_, S, M, R>, expected_subset: &O)
 where
-    S: Set,
-    O: Set<Item = S::Item>,
+    S: SetLookup,
+    O: SetLookup<Item = S::Item>,
     M: Mode,
     R: ValueRenderer<S::Item>,
 {
     this.track_assertion();
-    let actual_prefix = TypePrefix(S::TYPE_NAME);
-    let expected_prefix = TypePrefix(O::TYPE_NAME);
     let actual = this.actual();
 
     let elements_not_in_actual = expected_subset
@@ -83,19 +87,18 @@ where
         .collect::<Vec<_>>();
 
     if !elements_not_in_actual.is_empty() {
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let rendered_actual = this.render_values(&actual_values, S::STYLE);
-        let expected_values = expected_subset.elements().collect::<Vec<_>>();
-        let expected_subset_rendered = this.render_values(&expected_values, O::STYLE);
-        let elements_rendered =
-            this.render_values(elements_not_in_actual.as_slice(), CollectionStyle::List);
+        let rendered_actual = this.render().collection(actual);
+        let expected_subset_rendered = this.render().collection(expected_subset);
+        let elements_rendered = this
+            .render()
+            .borrowed_values::<S::Item, _>(elements_not_in_actual.as_slice(), GroupStyle::List);
         this.fail_with_details(type_difference_detail::<S, O>(), |w: &mut String| {
             writedoc! {w, r"
-                Actual: {actual_prefix}{rendered_actual:#?}
+                Actual: {rendered_actual:#?}
 
                 is not a superset of expected
 
-                Expected subset: {expected_prefix}{expected_subset_rendered:#?}
+                Expected subset: {expected_subset_rendered:#?}
 
                 Elements not in actual: {elements_rendered:#?}
             "}
@@ -106,14 +109,12 @@ where
 #[track_caller]
 pub(crate) fn assert_is_disjoint_from<S, O, M, R>(this: &AssertThat<'_, S, M, R>, other: &O)
 where
-    S: Set,
-    O: Set<Item = S::Item>,
+    S: SetLookup,
+    O: SetLookup<Item = S::Item>,
     M: Mode,
     R: ValueRenderer<S::Item>,
 {
     this.track_assertion();
-    let actual_prefix = TypePrefix(S::TYPE_NAME);
-    let other_prefix = TypePrefix(O::TYPE_NAME);
     let actual = this.actual();
 
     let overlapping_elements = actual
@@ -122,22 +123,38 @@ where
         .collect::<Vec<_>>();
 
     if !overlapping_elements.is_empty() {
-        let actual_values = actual.elements().collect::<Vec<_>>();
-        let rendered_actual = this.render_values(&actual_values, S::STYLE);
-        let other_values = other.elements().collect::<Vec<_>>();
-        let other_rendered = this.render_values(&other_values, O::STYLE);
-        let elements_rendered =
-            this.render_values(overlapping_elements.as_slice(), CollectionStyle::List);
+        let rendered_actual = this.render().collection(actual);
+        let other_rendered = this.render().collection(other);
+        let elements_rendered = this
+            .render()
+            .borrowed_values::<S::Item, _>(overlapping_elements.as_slice(), GroupStyle::List);
         this.fail_with_details(type_difference_detail::<S, O>(), |w: &mut String| {
             writedoc! {w, r"
-                Actual: {actual_prefix}{rendered_actual:#?}
+                Actual: {rendered_actual:#?}
 
                 is not disjoint from expected
 
-                Expected disjoint set: {other_prefix}{other_rendered:#?}
+                Expected disjoint set: {other_rendered:#?}
 
                 Overlapping elements: {elements_rendered:#?}
             "}
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::collections::BTreeSet;
+
+    use crate::{prelude::*, test_support::UnorderedSet};
+
+    use super::type_difference_detail;
+
+    #[test]
+    fn type_difference_compares_rust_types() {
+        assert_that!(type_difference_detail::<BTreeSet<i32>, BTreeSet<i32>>()).is_none();
+        assert_that!(type_difference_detail::<BTreeSet<i32>, &BTreeSet<i32>>()).is_none();
+        assert_that!(type_difference_detail::<BTreeSet<i32>, &&BTreeSet<i32>>()).is_none();
+        assert_that!(type_difference_detail::<BTreeSet<i32>, UnorderedSet>()).is_some();
     }
 }

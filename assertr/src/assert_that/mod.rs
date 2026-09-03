@@ -1,6 +1,7 @@
 //! Core construction and basic operations for assertion chains.
 
 mod capture;
+mod diagnostics;
 mod projection;
 mod rendering;
 
@@ -8,7 +9,7 @@ use crate::{
     AssertThat, ChainState, DynAssertThat,
     actual::Actual,
     mode::{Capture, Mode, Panic},
-    renderer::DebugRenderer,
+    renderer::{DebugRenderer, RenderingBudget},
 };
 
 impl<'t, M: Mode, R> ChainState<'t, M, R> {
@@ -19,6 +20,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
             expression: None,
             detail_messages: core::cell::RefCell::new(alloc::vec::Vec::new()),
             print_location: true,
+            rendering_budget: RenderingBudget::DEFAULT,
             number_of_assertions: core::cell::RefCell::new(
                 crate::tracking::NumberOfAssertions::new(),
             ),
@@ -35,6 +37,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
             expression: None,
             detail_messages: core::cell::RefCell::new(alloc::vec::Vec::new()),
             print_location: self.print_location,
+            rendering_budget: self.rendering_budget,
             number_of_assertions: core::cell::RefCell::new(
                 crate::tracking::NumberOfAssertions::new(),
             ),
@@ -51,6 +54,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
             expression: self.expression,
             detail_messages: self.detail_messages,
             print_location: self.print_location,
+            rendering_budget: self.rendering_budget,
             number_of_assertions: self.number_of_assertions,
             failures: self.failures,
             mode: self.mode,
@@ -82,6 +86,13 @@ impl<'t, T> AssertThat<'t, T, Capture> {
 /* Fluent connect */
 
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
+    /// Borrows the current assertion subject.
+    ///
+    /// Custom assertion implementations use this to inspect the value being asserted.
+    pub fn actual(&self) -> &T {
+        self.actual.borrowed()
+    }
+
     /// Returns the chain unchanged, allowing an optional `and()` between assertions.
     ///
     /// ```

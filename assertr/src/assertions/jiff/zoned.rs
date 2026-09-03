@@ -45,7 +45,7 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
                 .iana_name()
                 .map_or_else(|| format!("{expected:?}"), ToOwned::to_owned);
 
-            let zdt = self.render_value(zdt);
+            let zdt = self.render().value(zdt);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected}
@@ -71,7 +71,7 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
 
         match actual {
             None => {
-                let object = self.render_value(self.actual());
+                let object = self.render().value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Expected: '{expected}'
@@ -83,7 +83,7 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
                 });
             }
             Some(actual) if actual != expected => {
-                let object = self.render_value(self.actual());
+                let object = self.render().value(self.actual());
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Expected: {expected}
@@ -102,6 +102,32 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use jiff::Zoned;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Zoned, Panic, NoRenderer> => ZonedAssertions<NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_use_the_active_renderer() {
+            let zoned: Zoned = "2024-06-19 15:22[America/New_York]"
+                .parse()
+                .expect("valid zoned datetime");
+            let failures = assert_that!(zoned)
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(|it| it.is_in_time_zone_named("Europe/Berlin"));
+
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
+
     mod is_in_time_zone {
         use crate::prelude::*;
         use indoc::formatdoc;

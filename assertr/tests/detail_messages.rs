@@ -82,9 +82,8 @@ fn detail_messages_are_scoped_to_the_assertion_that_adds_them() {
                     age: 42,
                 }}
 
-                Details: [
-                    Checking person...,
-                ]
+                Messages:
+                  - Checking person...
                 -------- assertr --------
             "});
         },
@@ -97,10 +96,9 @@ fn detail_messages_are_scoped_to_the_assertion_that_adds_them() {
 
                 Expected: 9000
 
-                Details: [
-                    Checking age...,
-                    Checking person...,
-                ]
+                Messages:
+                  - Checking age...
+                  - Checking person...
                 -------- assertr --------
             "});
         },

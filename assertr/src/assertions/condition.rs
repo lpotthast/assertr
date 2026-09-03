@@ -43,8 +43,9 @@ impl<T, M: Mode, R> ConditionAssertions<T> for AssertThat<'_, T, M, R> {
 
 /// Assertions that apply a reusable condition to every element of an iterable subject.
 ///
-/// Each non-matching element raises its own failure naming the element's zero-based index, so
-/// capture mode reports every offending element.
+/// Each non-matching element raises its own failure, so capture mode reports every offending
+/// element. This order-free assertion never describes traversal offsets as collection indexes;
+/// the condition's error should identify the offending value when that context matters.
 ///
 /// `have` is a readability alias of `are`. It also serves as the fluent spelling because
 /// `people.must().have(condition)` already reads imperatively.
@@ -70,13 +71,11 @@ where
     #[track_caller]
     fn are<C: AssertrCondition<T>>(self, condition: C) -> Self {
         self.track_assertion();
-        for (index, actual) in self.actual().into_iter().enumerate() {
+        for actual in self.actual() {
             if let Err(err) = condition.test(actual) {
                 self.fail_with_details(
                     [err.to_string()],
-                    format_args!(
-                        "Condition did not match for the element at zero-based index {index}.\n"
-                    ),
+                    "Condition did not match for an element.\n",
                 );
             }
         }
@@ -86,5 +85,22 @@ where
     #[track_caller]
     fn have<C: AssertrCondition<T>>(self, condition: C) -> Self {
         self.are(condition)
+    }
+}
+
+#[cfg(test)]
+mod renderer_contract {
+    use crate::prelude::*;
+    use crate::test_support::{NoRenderer, assert_trait_impl};
+
+    #[test]
+    fn traits_are_implemented_without_renderer_support() {
+        assert_trait_impl!(
+            AssertThat<'static, i32, Panic, NoRenderer> => ConditionAssertions<i32>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, [i32; 1], Panic, NoRenderer>
+                => IterableConditionAssertions<i32, [i32; 1]>
+        );
     }
 }

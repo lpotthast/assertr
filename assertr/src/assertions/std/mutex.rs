@@ -49,7 +49,7 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
                 Err(TryLockError::WouldBlock) => None,
             };
             if let Some(guard) = acquired {
-                let data = self.render_value(&*guard);
+                let data = self.render().value(&*guard);
                 self.fail(|w: &mut String| {
                     writedoc! {w, r"
                         Expected: Mutex {{ data: {data:#?}, poisoned: {poisoned} }}
@@ -105,6 +105,33 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
 mod tests {
     use crate::prelude::*;
     use std::sync::Mutex;
+
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use std::sync::Mutex;
+
+        struct Secret;
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Mutex<i32>, Panic, NoRenderer>
+                    => MutexAssertions<i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_render_the_inner_value_with_the_active_renderer() {
+            let failures = assert_that!(Mutex::new(Secret))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(MutexAssertions::is_locked);
+
+            assert_that!(failures[0].description.as_str())
+                .contains(format!("Mutex {{ data: {SENTINEL}, poisoned: false }}"));
+        }
+    }
 
     fn poisoned_mutex() -> Mutex<i32> {
         let mutex = Mutex::new(42);

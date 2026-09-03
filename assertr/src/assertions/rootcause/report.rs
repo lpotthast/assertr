@@ -415,6 +415,45 @@ fn assert_current_context_type<E: 'static, T, M: Mode, R>(
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::NoRenderer;
+        use rootcause::markers::Dynamic;
+        use rootcause::prelude::*;
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            fn assert_dynamic_report<'t, O, T, R>(
+                _: &AssertThat<'t, rootcause::Report<Dynamic, O, T>, Panic, R>,
+            ) where
+                O: rootcause::markers::ReportOwnershipMarker,
+                AssertThat<'t, rootcause::Report<Dynamic, O, T>, Panic, R>:
+                    RootcauseReportAssertions<R>
+                        + RootcauseDynamicReportAssertions<'t, Panic, R>
+                        + RootcauseDynamicReportExtractAssertions<'t, R>,
+            {
+            }
+
+            fn assert_dynamic_report_ref<'t, 'r: 't, O, T, R>(
+                _: &AssertThat<'t, rootcause::ReportRef<'r, Dynamic, O, T>, Panic, R>,
+            ) where
+                AssertThat<'t, rootcause::ReportRef<'r, Dynamic, O, T>, Panic, R>:
+                    RootcauseReportRefAssertions
+                        + RootcauseDynamicReportRefAssertions<'r, Panic, R>
+                        + RootcauseDynamicReportRefExtractAssertions<'t, R>,
+            {
+            }
+
+            let report = report!("root");
+            let assertion = assert_that!(report).with_renderer(NoRenderer);
+            assert_dynamic_report(&assertion);
+
+            let report_ref = report.as_ref();
+            let assertion = assert_that!(report_ref).with_renderer(NoRenderer);
+            assert_dynamic_report_ref(&assertion);
+        }
+    }
+
     #[derive(Debug)]
     struct TestError(&'static str);
 
@@ -470,7 +509,7 @@ mod tests {
                 -------- assertr --------
                 Expression: `collection`
 
-                Actual: rootcause::report_collection::owned::limit_field_access::ReportCollection{trailing_space}
+                Actual: ReportCollection{trailing_space}
 
 
                 does not have the correct length

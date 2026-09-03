@@ -278,6 +278,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         // assertion from the sink, letting its failures propagate there.
         let sink = AssertThat::new_capturing(Actual::Borrowed(element))
             .with_renderer(self.state.renderer.clone())
+            .with_rendering_budget(self.state.rendering_budget)
             .with_location(self.state.print_location)
             .satisfies(|it| it, assertions);
         let failures = sink.state.failures.take();
@@ -288,6 +289,35 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
+    use crate::test_support::{SENTINEL, SentinelRenderer};
+
+    #[derive(PartialEq)]
+    struct Secret(u32);
+
+    #[test]
+    fn custom_renderer_is_preserved_by_satisfies() {
+        let failures = assert_that!(Secret(1))
+            .with_renderer(SentinelRenderer)
+            .with_location(false)
+            .capture(|it| {
+                it.satisfies(
+                    |secret| &secret.0,
+                    |inner| {
+                        inner.is_equal_to(2);
+                    },
+                )
+            });
+
+        assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+    }
+
+    #[test]
+    fn debug_format_closure_is_cloneable_for_derived_chains() {
+        assert_that!(Secret(7))
+            .with_debug_format(|value: &Secret, f| write!(f, "Secret({})", value.0))
+            .derive_owned(|secret| Secret(secret.0))
+            .is_equal_to(Secret(7));
+    }
 
     #[test]
     fn nested_derived_assertions_propagate_no_failures_when_they_pass() {

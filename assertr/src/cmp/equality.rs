@@ -1,10 +1,12 @@
 use alloc::{format, string::String, vec::Vec};
-use core::{fmt, fmt::Debug, marker::PhantomData};
+use core::{fmt, fmt::Debug};
 
 use crate::{
-    assertions::collection::CollectionStyle,
     details,
-    renderer::{DebugRenderer, Renderable, RenderableValues, ValueRenderer},
+    renderer::{
+        DebugRenderer, GroupStyle, RenderedValue, RenderedValues, RenderingBudget,
+        RenderingContext, Typed, ValueRenderer,
+    },
 };
 
 /// Differences recorded during an [`AssertrPartialEq`] comparison.
@@ -44,7 +46,7 @@ impl Debug for Differences {
 /// context is optional because callers that need only a boolean result may omit diagnostics.
 pub struct EqContext<'r, R = DebugRenderer> {
     pub(crate) differences: Differences,
-    pub(crate) renderer: &'r R,
+    rendering: RenderingContext<'r, R>,
 }
 
 impl Default for EqContext<'static, DebugRenderer> {
@@ -65,9 +67,20 @@ impl<'r, R> EqContext<'r, R> {
     /// Creates an empty context using `renderer`.
     #[must_use]
     pub fn with_renderer(renderer: &'r R) -> Self {
+        Self::with_rendering(RenderingContext::new(renderer, RenderingBudget::DEFAULT))
+    }
+
+    pub(crate) fn with_rendering(rendering: RenderingContext<'r, R>) -> Self {
         Self {
             differences: Differences::default(),
-            renderer,
+            rendering,
+        }
+    }
+
+    pub(crate) fn fork(&self) -> Self {
+        Self {
+            differences: Differences::default(),
+            rendering: self.rendering,
         }
     }
 
@@ -94,9 +107,8 @@ impl<'r, R> EqContext<'r, R> {
     {
         let expected = self.render_value(expected);
         let actual = self.render_value(actual);
-        self.differences.differences.push(format!(
-            "\"{field_name}\": expected {expected:#?}, but was {actual:#?}"
-        ));
+        let difference = format!("\"{field_name}\": expected {expected:#?}, but was {actual:#?}");
+        self.differences.differences.push(difference);
     }
 
     /// Records a field difference using the values' [`Debug`] implementations.
@@ -113,27 +125,31 @@ impl<'r, R> EqContext<'r, R> {
         ));
     }
 
-    /// Wraps one value so its [`Debug`] output uses the context's renderer.
-    pub fn render_value<'a, T: ?Sized>(&'a self, value: &'a T) -> Renderable<'a, T, R> {
-        Renderable {
-            value,
-            renderer: self.renderer,
-        }
+    /// Wraps one value so its [`Debug`] output uses the context's renderer and rendering budget.
+    ///
+    /// The adapter has no destructor, so the context can be mutated again as soon as the adapter
+    /// is no longer used.
+    pub fn render_value<'a, T: ?Sized>(&'a self, value: &'a T) -> Typed<RenderedValue<'a, T, R>>
+    where
+        R: ValueRenderer<T>,
+    {
+        self.rendering.value(value)
     }
 
     /// Wraps a slice of references so their [`Debug`] output uses the context's renderer and the
     /// requested structural style.
+    ///
+    /// The adapter has no destructor, so the context can be mutated again as soon as the adapter
+    /// is no longer used.
     pub fn render_values<'a, T: ?Sized>(
         &'a self,
         values: &'a [&'a T],
-        style: CollectionStyle,
-    ) -> RenderableValues<'a, T, R> {
-        RenderableValues {
-            values,
-            renderer: self.renderer,
-            style,
-            item: PhantomData,
-        }
+        style: GroupStyle,
+    ) -> RenderedValues<'a, T, [&'a T], R>
+    where
+        R: ValueRenderer<T>,
+    {
+        self.rendering.borrowed_values(values, style)
     }
 }
 
@@ -218,6 +234,185 @@ impl<T: Debug> Debug for Eq<T> {
         match self {
             Eq::Any => f.write_str("Eq::Any"),
             Eq::Eq(v) => f.write_fmt(format_args!("Eq::Eq({v:?})")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prelude::*;
+    use crate::test_support::{SENTINEL, SentinelRenderer};
+
+    #[test]
+    fn render_values_honors_the_requested_group_style() {
+        let values = [&1, &2];
+        let renderer = SentinelRenderer;
+        let context = EqContext::with_renderer(&renderer);
+
+        assert_that!(format!(
+            "{:?}",
+            context.render_values(&values, GroupStyle::List)
+        ))
+        .is_equal_to(format!("[{SENTINEL}, {SENTINEL}]"));
+        assert_that!(format!(
+            "{:?}",
+            context.render_values(&values, GroupStyle::Set)
+        ))
+        .is_equal_to(format!("{{{SENTINEL}, {SENTINEL}}}"));
+    }
+
+    #[test]
+    fn rendered_adapters_release_the_context_before_it_is_mutated() {
+        let renderer = SentinelRenderer;
+        let mut context = EqContext::with_renderer(&renderer);
+        let value = 1;
+
+        let adapter = context.render_value(&value);
+        let difference = format!("rendered {adapter:?}");
+        context.add_difference(difference);
+
+        assert_that!(&context.differences.differences)
+            .is_equal_to(vec![format!("rendered {SENTINEL}")]);
+    }
+
+    #[cfg(feature = "derive")]
+    mod derive_renderer {
+        use super::*;
+
+        #[derive(PartialEq)]
+        pub struct Hidden(u32);
+
+        #[derive(AssertrEq)]
+        pub struct Subject {
+            pub hidden: Hidden,
+        }
+
+        #[test]
+        fn reports_non_debug_field_differences_with_the_active_renderer() {
+            let failures = assert_that!(Subject { hidden: Hidden(1) })
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(|it| {
+                    it.is_equal_to(SubjectAssertrEq {
+                        hidden: eq(Hidden(2)),
+                    })
+                });
+
+            assert_that!(failures[0].details[0].as_str())
+                .contains(format!("expected {SENTINEL}, but was {SENTINEL}"));
+        }
+    }
+
+    /// Generated matchers nest inside other matchers, `Vec`s, and `HashMap`s. The default
+    /// renderer must render the whole expected structure, including the `Eq::Eq` wrappers.
+    #[cfg(feature = "derive")]
+    mod generated_matchers {
+        use super::*;
+
+        #[derive(Debug, AssertrEq)]
+        pub struct Child {
+            pub id: i32,
+        }
+
+        #[derive(Debug, AssertrEq)]
+        pub struct NestedParent {
+            #[assertr_eq(map_type = "ChildAssertrEq")]
+            pub child: Child,
+        }
+
+        #[test]
+        fn nested_matchers_render_through_the_debug_renderer() {
+            let failures = assert_that!(NestedParent {
+                child: Child { id: 1 },
+            })
+            .with_location(false)
+            .capture(|it| {
+                it.is_equal_to(NestedParentAssertrEq {
+                    child: eq(ChildAssertrEq { id: eq(2) }),
+                })
+            });
+
+            assert_that!(failures[0].to_string().as_str()).contains(indoc::indoc! {r"
+                Expected: NestedParentAssertrEq {
+                    child: Eq::Eq(ChildAssertrEq {
+                        id: Eq::Eq(2),
+                    }),
+                }
+            "});
+        }
+
+        #[derive(Debug, AssertrEq)]
+        pub struct VecParent {
+            #[assertr_eq(
+                map_type = "Vec<ChildAssertrEq>",
+                compare_with = "::assertr::cmp::slice::compare",
+                compare_bounds = "Child: ::assertr::cmp::slice::CompareElement<ChildAssertrEq, R>"
+            )]
+            pub children: Vec<Child>,
+        }
+
+        #[test]
+        fn vec_matchers_render_through_the_debug_renderer() {
+            let failures = assert_that!(VecParent {
+                children: vec![Child { id: 1 }],
+            })
+            .with_location(false)
+            .capture(|it| {
+                it.is_equal_to(VecParentAssertrEq {
+                    children: eq(vec![ChildAssertrEq { id: eq(2) }]),
+                })
+            });
+
+            assert_that!(failures[0].to_string().as_str()).contains(indoc::indoc! {r"
+                Expected: VecParentAssertrEq {
+                    children: Eq::Eq([
+                        ChildAssertrEq {
+                            id: Eq::Eq(2),
+                        },
+                    ]),
+                }
+            "});
+        }
+
+        #[cfg(feature = "std")]
+        #[derive(Debug, AssertrEq)]
+        pub struct MapParent {
+            #[assertr_eq(
+                map_type = "std::collections::HashMap<String, ChildAssertrEq>",
+                compare_with = "::assertr::cmp::hashmap::compare",
+                compare_bounds = "Child: ::assertr::cmp::hashmap::CompareValue<ChildAssertrEq, R>"
+            )]
+            pub children: std::collections::HashMap<String, Child>,
+        }
+
+        #[test]
+        #[cfg(feature = "std")]
+        fn hashmap_matchers_render_through_the_debug_renderer() {
+            use std::collections::HashMap;
+
+            let failures = assert_that!(MapParent {
+                children: HashMap::from([(String::from("first"), Child { id: 1 })]),
+            })
+            .with_location(false)
+            .capture(|it| {
+                it.is_equal_to(MapParentAssertrEq {
+                    children: eq(HashMap::from([(
+                        String::from("first"),
+                        ChildAssertrEq { id: eq(2) },
+                    )])),
+                })
+            });
+
+            assert_that!(failures[0].to_string().as_str()).contains(indoc::indoc! {r#"
+                Expected: MapParentAssertrEq {
+                    children: Eq::Eq({
+                        "first": ChildAssertrEq {
+                            id: Eq::Eq(2),
+                        },
+                    }),
+                }
+            "#});
         }
     }
 }

@@ -1,10 +1,12 @@
 //! Set assertions for `BTreeSet`, `HashSet`, and custom set types.
 //!
-//! A [`Set`] is also a [`Collection`], so it receives every order-free collection assertion.
-//! [`SetAssertions`] adds subset, superset, and disjointness relations. Sets do not implement
-//! [`Sequence`](crate::assertions::collection::Sequence), so order-sensitive calls do not compile.
+//! A set implements [`Collection`] for order-free element assertions and [`SetLookup`] for subset,
+//! superset, and disjointness relations. It does not implement
+//! [`StableOrder`](crate::assertions::collection::StableOrder), even when its iteration happens to
+//! be deterministic.
 //!
-//! Implement [`Set`] to make every set assertion available on a custom type.
+//! Implement [`Collection`] and [`SetLookup`] for a custom set to make every set assertion
+//! available.
 
 mod assertions;
 mod imp;
@@ -13,15 +15,17 @@ use alloc::collections::BTreeSet;
 
 pub use assertions::SetAssertions;
 
-use crate::assertions::collection::{Collection, CollectionStyle};
+#[cfg(feature = "std")]
+use crate::renderer::RenderingOrder;
+use crate::{assertions::collection::Collection, renderer::CollectionPresentation};
 
-/// A collection with native membership lookup and no meaningful element order.
+/// Native membership lookup capability for a set collection.
 ///
-/// Implementing this trait makes [`SetAssertions`] and the order-free collection assertions
-/// available. Implement [`HasLength`](crate::assertions::HasLength) for length assertions. Set
-/// [`Collection::STYLE`] to [`CollectionStyle::Set`] for set delimiters. This implementor-facing
-/// trait is not re-exported from the prelude.
-pub trait Set: Collection {
+/// Implementing this trait declares that the collection has unique elements and can query
+/// membership according to the same equivalence relation that enforces that uniqueness.
+/// [`SetAssertions`] require this capability. This implementor-facing trait is not re-exported
+/// from the prelude.
+pub trait SetLookup: Collection {
     /// Whether `element` is a member, using the set's own lookup, such as hashing or ordering,
     /// rather than a linear scan over [`Collection::elements`].
     fn contains_element(&self, element: &Self::Item) -> bool;
@@ -29,35 +33,25 @@ pub trait Set: Collection {
 
 impl<T> Collection for BTreeSet<T> {
     type Item = T;
-
-    const STYLE: CollectionStyle = CollectionStyle::Set;
-    const TYPE_NAME: Option<&'static str> = Some("BTreeSet");
-
-    fn length(&self) -> usize {
-        BTreeSet::len(self)
-    }
+    const PRESENTATION: CollectionPresentation = CollectionPresentation::set().with_type_hint();
 
     fn elements(&self) -> impl Iterator<Item = &T> {
         self.iter()
     }
 }
 
-impl<T: Ord> Set for BTreeSet<T> {
+impl<T: Ord> SetLookup for BTreeSet<T> {
     fn contains_element(&self, element: &T) -> bool {
         BTreeSet::contains(self, element)
     }
 }
 
 #[cfg(feature = "std")]
-impl<T, S> Collection for std::collections::HashSet<T, S> {
+impl<T, S: core::hash::BuildHasher> Collection for std::collections::HashSet<T, S> {
     type Item = T;
-
-    const STYLE: CollectionStyle = CollectionStyle::Set;
-    const TYPE_NAME: Option<&'static str> = Some("HashSet");
-
-    fn length(&self) -> usize {
-        std::collections::HashSet::len(self)
-    }
+    const PRESENTATION: CollectionPresentation = CollectionPresentation::set()
+        .with_type_hint()
+        .with_order(RenderingOrder::SortByRenderedText);
 
     fn elements(&self) -> impl Iterator<Item = &T> {
         self.iter()
@@ -65,7 +59,7 @@ impl<T, S> Collection for std::collections::HashSet<T, S> {
 }
 
 #[cfg(feature = "std")]
-impl<T, S> Set for std::collections::HashSet<T, S>
+impl<T, S> SetLookup for std::collections::HashSet<T, S>
 where
     T: core::hash::Hash + Eq,
     S: core::hash::BuildHasher,
@@ -77,9 +71,9 @@ where
 
 /// Makes shared-reference subjects sets in their own right, mirroring the `Collection` impl for
 /// `&C`.
-impl<S> Set for &S
+impl<S> SetLookup for &S
 where
-    S: Set + ?Sized,
+    S: SetLookup + ?Sized,
 {
     fn contains_element(&self, element: &S::Item) -> bool {
         S::contains_element(self, element)
@@ -95,15 +89,12 @@ mod tests {
 
     use crate::prelude::*;
 
-    use super::Set;
-    use crate::assertions::collection::CollectionStyle;
+    use super::SetLookup;
 
-    fn assert_set_contract<S>(actual: &S, expected: &[i32], type_name: &'static str)
+    fn assert_set_contract<S>(actual: &S, expected: &[i32])
     where
-        S: Set<Item = i32> + ?Sized,
+        S: SetLookup<Item = i32> + ?Sized,
     {
-        assert_that!(S::STYLE).is_equal_to(CollectionStyle::Set);
-        assert_that!(S::TYPE_NAME).is_equal_to(Some(type_name));
         assert_that!(actual.length()).is_equal_to(expected.len());
 
         let mut elements = actual.elements().copied().collect::<Vec<_>>();
@@ -145,8 +136,8 @@ mod tests {
         let set = BTreeSet::from([1, 2, 3]);
         let set_ref = &set;
 
-        assert_set_contract(&set, &[1, 2, 3], "BTreeSet");
-        assert_set_contract(&set_ref, &[1, 2, 3], "BTreeSet");
+        assert_set_contract(&set, &[1, 2, 3]);
+        assert_set_contract(&set_ref, &[1, 2, 3]);
     }
 
     #[test]
@@ -174,6 +165,17 @@ mod tests {
     }
 
     #[test]
+    fn borrowed_iteration_over_a_set_never_reports_offsets_as_indexes() {
+        let failures = assert_that!(BTreeSet::from([1, 2, 3]))
+            .with_location(false)
+            .capture(|it| it.into_iter_does_not_contain(2));
+
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].details.as_slice())
+            .does_not_contain_matching(|detail| detail.contains("index"));
+    }
+
+    #[test]
     fn collection_failures_include_the_btree_set_type_name() {
         let failures = assert_that!(BTreeSet::from([2]))
             .with_location(false)
@@ -194,8 +196,8 @@ mod tests {
         set.extend([1, 2, 3]);
         let set_ref = &set;
 
-        assert_set_contract(&set, &[1, 2, 3], "HashSet");
-        assert_set_contract(&set_ref, &[1, 2, 3], "HashSet");
+        assert_set_contract(&set, &[1, 2, 3]);
+        assert_set_contract(&set_ref, &[1, 2, 3]);
         assert_that!(set)
             .contains(2)
             .is_subset_of(BTreeSet::from([1, 2, 3, 4]));

@@ -1,9 +1,10 @@
 use super::{
-    AssertThat, AssertrPartialEq, Borrow, Capture, CollectionStyle, Mode, PREVIEW_CAPACITY,
+    AssertThat, AssertrPartialEq, Borrow, Capture, Mode, PREVIEW_CAPACITY, PositionReporting,
     Preview, String, ValueRenderer, Vec, Write, exact_size_hint, format, join_failures,
     match_bipartite, push_preview_details, writedoc,
 };
 
+use crate::renderer::{GroupStyle, omission};
 struct Captured<Item> {
     items: Vec<Item>,
     known_length: Option<usize>,
@@ -66,8 +67,12 @@ fn fail_unordered<S, T, E, Item, M: Mode, R>(
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     push_preview_details(&mut details, preview, None);
-    let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
-    let expected = this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
+    let actual = this
+        .render()
+        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
+    let expected = this
+        .render()
+        .borrowed_values::<E, _>(expected, GroupStyle::List);
     this.fail_with_details(details, |w: &mut String| {
         writedoc! {w,r"
     Actual: {actual:#?},
@@ -136,7 +141,9 @@ pub(crate) fn assert_contains_exactly_in_any_order_matching<S, T, P, I, M: Mode,
     if !exact {
         let preview = bounded_preview(captured);
         push_preview_details(&mut details, &preview, None);
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
     Actual: {actual:#?},
@@ -152,6 +159,7 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<S, T, A, I, M: Mod
     this: &AssertThat<'_, S, M, R>,
     iterator: I,
     assertions: &[A],
+    positions: PositionReporting,
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -189,6 +197,8 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<S, T, A, I, M: Mod
             .unwrap_or(false)
     });
     if captured.known_length.is_some() || !result.is_exact() {
+        let maximum = this.render().max_items();
+        let mut number_of_unsatisfied_elements = 0_usize;
         for index in result
             .unmatched_actual
             .iter()
@@ -196,22 +206,43 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<S, T, A, I, M: Mod
             .filter(|index| *index >= preview_start)
         {
             if let Some(row) = retained_failures.get(index - preview_start) {
-                let joined = row
-                    .iter()
-                    .filter(|failures| !failures.is_empty())
-                    .map(|failures| join_failures(failures))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let mut joined_failures = Vec::new();
+                let mut number_of_unsatisfied_assertions = 0_usize;
+                for failures in row.iter().filter(|failures| !failures.is_empty()) {
+                    number_of_unsatisfied_assertions += 1;
+                    if joined_failures.len() < maximum {
+                        joined_failures.push(join_failures(failures, maximum));
+                    }
+                }
+                let omitted_assertions = number_of_unsatisfied_assertions.saturating_sub(maximum);
+                if omitted_assertions != 0 {
+                    joined_failures.push(omission(omitted_assertions, "unsatisfied assertion"));
+                }
+                let joined = joined_failures.join("\n");
                 if !joined.is_empty() {
-                    details.push(format!(
-                        "Element at index {index} did not satisfy any available assertion:\n{joined}"
-                    ));
+                    number_of_unsatisfied_elements += 1;
+                    if number_of_unsatisfied_elements <= maximum {
+                        details.push(match positions {
+                            PositionReporting::YieldOrder => format!(
+                                "Element at index {index} did not satisfy any available assertion:\n{joined}"
+                            ),
+                            PositionReporting::Unavailable => format!(
+                                "An element did not satisfy any available assertion:\n{joined}"
+                            ),
+                        });
+                    }
                 }
             }
         }
+        let omitted = number_of_unsatisfied_elements.saturating_sub(maximum);
+        if omitted != 0 {
+            details.push(omission(omitted, "unsatisfied element"));
+        }
         let preview = bounded_preview(captured);
         push_preview_details(&mut details, &preview, None);
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
         Actual: {actual:#?},

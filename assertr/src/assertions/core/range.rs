@@ -61,7 +61,7 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
         self.track_assertion();
         if !self.actual().contains(&expected) {
             let actual = render_range(self, self.actual());
-            let expected = self.render_value(&expected);
+            let expected = self.render().value(&expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual range: {actual}
@@ -81,7 +81,7 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
         self.track_assertion();
         if self.actual().contains(&expected) {
             let actual = render_range(self, self.actual());
-            let expected = self.render_value(&expected);
+            let expected = self.render().value(&expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Actual range: {actual}
@@ -106,7 +106,7 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
 
         if !expected.contains(actual) {
             let range = render_range(&self, &expected);
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|err: &mut String| {
                 writedoc! {err, r"
                     Actual: {actual:#?}
@@ -130,7 +130,7 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
 
         if expected.contains(actual) {
             let range = render_range(&self, &expected);
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|err: &mut String| {
                 writedoc! {err, r"
                     Actual: {actual:#?}
@@ -157,7 +157,7 @@ where
     ) where
         R: ValueRenderer<B>,
     {
-        let bound = assert_that.render_value(bound);
+        let bound = assert_that.render().value(bound);
         to.write_fmt(format_args!("{bound:?}")).unwrap();
     }
 
@@ -180,6 +180,43 @@ where
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, core::ops::Range<i32>, Panic, NoRenderer>
+                    => RangeBoundAssertions<i32, core::ops::Range<i32>, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, i32, Panic, NoRenderer>
+                    => RangeAssertions<i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_render_bounds_and_values_with_the_active_renderer() {
+            let bound_failures = assert_that!(1..3)
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(|it| {
+                    it.contains_element(4);
+                    it
+                });
+            assert_that!(bound_failures[0].description.as_str())
+                .contains(format!("{SENTINEL}..{SENTINEL}"));
+
+            let value_failures = assert_that!(1)
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(|it| it.is_in_range(2..=3));
+            assert_that!(value_failures[0].description.as_str())
+                .contains(SENTINEL)
+                .contains(format!("{SENTINEL}..={SENTINEL}"));
+        }
+    }
 
     mod contains_element {
         use crate::prelude::*;

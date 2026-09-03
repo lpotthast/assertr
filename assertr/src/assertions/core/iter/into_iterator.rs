@@ -8,8 +8,7 @@ use crate::{
 ///
 /// Each method calls `IntoIterator::into_iter(&subject)` exactly once and returns the original
 /// assertion. Chaining therefore performs one fresh borrowed traversal per assertion. Streaming,
-/// bounded-preview, sequence-criteria, and potential-nontermination behavior matches
-/// [`super::IteratorAssertions`].
+/// bounded-preview and potential-nontermination behavior matches [`super::IteratorAssertions`].
 /// Method names are prefixed to avoid collisions with more specific collection assertion traits.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
@@ -41,51 +40,6 @@ pub trait IntoIteratorAssertions<T, R> {
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: ValueRenderer<T> + Clone;
-    /// Asserts that a borrowed traversal starts with elements equal to `expected`, in order.
-    fn into_iter_starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
-    where
-        T: AssertrPartialEq<E, R>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
-    /// Asserts that the traversal's prefix matches `predicates` in order.
-    fn into_iter_starts_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
-    where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>;
-    /// Asserts that the traversal's prefix satisfies `assertions` in order.
-    fn into_iter_starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
-    where
-        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone;
-    /// Asserts that a borrowed traversal ends with elements equal to `expected`, in order.
-    fn into_iter_ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
-    where
-        T: AssertrPartialEq<E, R>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
-    /// Asserts that the traversal's suffix matches `predicates` in order.
-    fn into_iter_ends_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
-    where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>;
-    /// Asserts that the traversal's suffix satisfies `assertions` in order.
-    fn into_iter_ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
-    where
-        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone;
-    /// Asserts that a borrowed traversal contains `expected` as a contiguous subsequence.
-    fn into_iter_contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
-    where
-        T: AssertrPartialEq<E, R>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
-    /// Asserts that a contiguous subsequence matches `predicates` in order.
-    fn into_iter_contains_contiguous_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
-    where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>;
-    /// Asserts that a contiguous subsequence satisfies `assertions` in order.
-    fn into_iter_contains_contiguous_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
-    where
-        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone;
     /// Asserts that no element in a borrowed traversal equals `not_expected`.
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
     where
@@ -98,21 +52,6 @@ pub trait IntoIteratorAssertions<T, R> {
         R: ValueRenderer<T>;
     /// Asserts that no element in a borrowed traversal satisfies `assertions`.
     fn into_iter_does_not_contain_satisfying<A>(self, assertions: A) -> Self
-    where
-        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone;
-    /// Asserts positional equality with `expected`, including length.
-    fn into_iter_contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
-    where
-        T: AssertrPartialEq<E, R>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
-    /// Asserts that each element matches the predicate at the same position, including length.
-    fn into_iter_contains_exactly_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
-    where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>;
-    /// Asserts that each element satisfies the assertions at the same position, including length.
-    fn into_iter_contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: ValueRenderer<T> + Clone;
@@ -213,131 +152,7 @@ where
             &self,
             self.actual().into_iter(),
             &assertions,
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
-    where
-        T: AssertrPartialEq<E, R>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
-    {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        iterator::assert_starts_with::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            expected,
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_starts_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
-    where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>,
-    {
-        self.track_assertion();
-        iterator::assert_starts_with_matching::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            predicates.as_ref(),
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
-    where
-        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
-    {
-        self.track_assertion();
-        iterator::assert_starts_with_satisfying::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            assertions.as_ref(),
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
-    where
-        T: AssertrPartialEq<E, R>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
-    {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        iterator::assert_ends_with::<_, T, _, _, _, _>(&self, self.actual().into_iter(), expected);
-        self
-    }
-    #[track_caller]
-    fn into_iter_ends_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
-    where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>,
-    {
-        self.track_assertion();
-        iterator::assert_ends_with_matching::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            predicates.as_ref(),
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
-    where
-        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
-    {
-        self.track_assertion();
-        iterator::assert_ends_with_satisfying::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            assertions.as_ref(),
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
-    where
-        T: AssertrPartialEq<E, R>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
-    {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        iterator::assert_contains_contiguous::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            expected,
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_contains_contiguous_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
-    where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>,
-    {
-        self.track_assertion();
-        iterator::assert_contains_contiguous_matching::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            predicates.as_ref(),
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_contains_contiguous_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
-    where
-        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
-    {
-        self.track_assertion();
-        iterator::assert_contains_contiguous_satisfying::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            assertions.as_ref(),
+            iterator::PositionReporting::Unavailable,
         );
         self
     }
@@ -352,6 +167,7 @@ where
             &self,
             self.actual().into_iter(),
             &not_expected,
+            iterator::PositionReporting::Unavailable,
         );
         self
     }
@@ -366,6 +182,7 @@ where
             &self,
             self.actual().into_iter(),
             &predicate,
+            iterator::PositionReporting::Unavailable,
         );
         self
     }
@@ -380,49 +197,7 @@ where
             &self,
             self.actual().into_iter(),
             &assertions,
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
-    where
-        T: AssertrPartialEq<E, R>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
-    {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        iterator::assert_contains_exactly::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            expected,
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_contains_exactly_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
-    where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>,
-    {
-        self.track_assertion();
-        iterator::assert_contains_exactly_matching::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            predicates.as_ref(),
-        );
-        self
-    }
-    #[track_caller]
-    fn into_iter_contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
-    where
-        A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
-    {
-        self.track_assertion();
-        iterator::assert_contains_exactly_satisfying::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            assertions.as_ref(),
+            iterator::PositionReporting::Unavailable,
         );
         self
     }
@@ -472,6 +247,7 @@ where
             &self,
             self.actual().into_iter(),
             assertions.as_ref(),
+            iterator::PositionReporting::Unavailable,
         );
         self
     }
@@ -481,7 +257,11 @@ where
         R: ValueRenderer<T>,
     {
         self.track_assertion();
-        iterator::assert_is_empty::<_, T, _, _, _>(&self, self.actual().into_iter());
+        iterator::assert_is_empty::<_, T, _, _, _>(
+            &self,
+            self.actual().into_iter(),
+            iterator::PositionReporting::Unavailable,
+        );
         self
     }
     #[track_caller]
@@ -514,6 +294,29 @@ where
 #[cfg(test)]
 #[allow(clippy::trivially_copy_pass_by_ref)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{
+            NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+        };
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, Vec<i32>, Panic, NoRenderer>
+                    => IntoIteratorAssertions<i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn membership_uses_the_active_renderer_type() {
+            assert_that!(vec![RendererActual(1), RendererActual(2)])
+                .with_renderer(SentinelRenderer)
+                .into_iter_contains(RendererExpected(2))
+                .into_iter_contains_all([RendererExpected(1)]);
+        }
+    }
+
     mod into_iter_contains {
         use crate::prelude::*;
         use indoc::formatdoc;
@@ -554,9 +357,8 @@ mod tests {
 
                     does not contain expected: 4
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -624,9 +426,8 @@ mod tests {
                         4,
                     ]
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -734,9 +535,8 @@ mod tests {
 
                     does not contain an element matching the predicate.
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -773,8 +573,7 @@ mod tests {
             })
             .has_type::<String>()
             .contains("does not contain an element satisfying the assertions.")
-            .contains("Element at index 0 does not satisfy the assertions:\n    Expected: 7")
-            .contains("Element at index 1 does not satisfy the assertions:\n    Expected: 7");
+            .contains("An element does not satisfy the assertions:\n    Expected: 7");
         }
     }
 
@@ -817,10 +616,8 @@ mod tests {
 
                     contains unexpected: 2
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
                     -------- assertr --------
                 "});
         }
@@ -862,10 +659,8 @@ mod tests {
 
                     unexpectedly contains an element matching the predicate.
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
                     -------- assertr --------
                 "});
         }
@@ -915,653 +710,10 @@ mod tests {
 
                     unexpectedly contains an element satisfying the assertions.
 
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
+                    Details:
+                      - Consumed 2 element(s).
                     -------- assertr --------
                 "});
-        }
-    }
-
-    mod into_iter_starts_with {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3].must().into_iter_start_with([1, 2]);
-        }
-
-        #[test]
-        fn succeeds_when_prefix_matches() {
-            assert_that!(vec![1, 2, 3]).into_iter_starts_with([1, 2]);
-        }
-
-        #[test]
-        fn compiles_for_comparable_but_different_type() {
-            assert_that!(vec!["a".to_owned(), "b".to_owned()]).into_iter_starts_with(["a"]);
-        }
-
-        #[test]
-        fn panics_when_prefix_does_not_match() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_starts_with([1, 9]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                    ]
-
-                    does not start with expected prefix: [
-                        1,
-                        9,
-                    ]
-
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod into_iter_starts_with_matching {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_start_with_matching([is_one, is_two]);
-        }
-
-        fn is_one(value: &i32) -> bool {
-            *value == 1
-        }
-
-        fn is_two(value: &i32) -> bool {
-            *value == 2
-        }
-
-        fn is_nine(value: &i32) -> bool {
-            *value == 9
-        }
-
-        #[test]
-        fn succeeds_when_prefix_matches() {
-            assert_that!(vec![1, 2, 3]).into_iter_starts_with_matching([is_one, is_two]);
-        }
-
-        #[test]
-        fn panics_when_prefix_does_not_match() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_starts_with_matching([is_one, is_nine]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                    ]
-
-                    does not start with elements matching the predicates.
-
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod into_iter_starts_with_satisfying {
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_start_with_satisfying([is_one]);
-        }
-
-        fn is_one(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(1);
-        }
-
-        fn is_nine(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(9);
-        }
-
-        #[test]
-        fn succeeds_when_prefix_satisfies() {
-            assert_that!(vec![1, 2, 3]).into_iter_starts_with_satisfying([is_one]);
-        }
-
-        #[test]
-        fn panics_when_prefix_does_not_satisfy() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_starts_with_satisfying([is_one, is_nine]);
-            })
-            .has_type::<String>()
-            .contains("does not start with elements satisfying the assertions.")
-            .contains(
-                "Element at index 1 does not satisfy its prefix assertions:\n    Expected: 9",
-            );
-        }
-    }
-
-    mod into_iter_ends_with {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3].must().into_iter_end_with([2, 3]);
-        }
-
-        #[test]
-        fn succeeds_when_suffix_matches() {
-            assert_that!(vec![1, 2, 3]).into_iter_ends_with([2, 3]);
-        }
-
-        #[test]
-        fn compiles_for_comparable_but_different_type() {
-            assert_that!(vec!["a".to_owned(), "b".to_owned()]).into_iter_ends_with(["b"]);
-        }
-
-        #[test]
-        fn panics_when_suffix_does_not_match() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_ends_with([2, 9]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
-
-                    does not end with expected suffix: [
-                        2,
-                        9,
-                    ]
-
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod into_iter_ends_with_matching {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_end_with_matching([is_two, is_three]);
-        }
-
-        fn is_two(value: &i32) -> bool {
-            *value == 2
-        }
-
-        fn is_three(value: &i32) -> bool {
-            *value == 3
-        }
-
-        fn is_nine(value: &i32) -> bool {
-            *value == 9
-        }
-
-        #[test]
-        fn succeeds_when_suffix_matches() {
-            assert_that!(vec![1, 2, 3]).into_iter_ends_with_matching([is_two, is_three]);
-        }
-
-        #[test]
-        fn panics_when_suffix_does_not_match() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_ends_with_matching([is_two, is_nine]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
-
-                    does not end with elements matching the predicates.
-
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod into_iter_ends_with_satisfying {
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_end_with_satisfying([is_two, is_three]);
-        }
-
-        fn is_two(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(2);
-        }
-
-        fn is_three(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(3);
-        }
-
-        fn is_nine(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(9);
-        }
-
-        #[test]
-        fn succeeds_when_suffix_satisfies() {
-            assert_that!(vec![1, 2, 3]).into_iter_ends_with_satisfying([is_two, is_three]);
-        }
-
-        #[test]
-        fn panics_when_suffix_does_not_satisfy() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_ends_with_satisfying([is_two, is_nine]);
-            })
-            .has_type::<String>()
-            .contains("does not end with elements satisfying the assertions.")
-            .contains(
-                "Suffix element at index 2 does not satisfy its assertions:\n    Expected: 9",
-            );
-        }
-    }
-
-    mod into_iter_contains_contiguous {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3].must().into_iter_contain_contiguous([2, 3]);
-        }
-
-        #[test]
-        fn succeeds_when_a_contiguous_match_exists() {
-            assert_that!(vec![1, 2, 3]).into_iter_contains_contiguous([2, 3]);
-        }
-
-        #[test]
-        fn succeeds_when_candidates_overlap() {
-            assert_that!(vec![1, 1, 2]).into_iter_contains_contiguous([1, 2]);
-        }
-
-        #[test]
-        fn compiles_for_comparable_but_different_type() {
-            assert_that!(vec!["a".to_owned(), "b".to_owned()])
-                .into_iter_contains_contiguous(["a", "b"]);
-        }
-
-        #[test]
-        fn panics_when_no_contiguous_match_exists() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_contains_contiguous([2, 9]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
-
-                    does not contain contiguous expected elements: [
-                        2,
-                        9,
-                    ]
-
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod into_iter_contains_contiguous_matching {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_contain_contiguous_matching([is_one, is_two]);
-        }
-
-        fn is_one(value: &i32) -> bool {
-            *value == 1
-        }
-
-        fn is_two(value: &i32) -> bool {
-            *value == 2
-        }
-
-        fn is_nine(value: &i32) -> bool {
-            *value == 9
-        }
-
-        #[test]
-        fn succeeds_when_a_contiguous_match_exists() {
-            assert_that!(vec![1, 2, 3]).into_iter_contains_contiguous_matching([is_one, is_two]);
-        }
-
-        #[test]
-        fn panics_when_no_contiguous_match_exists() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_contains_contiguous_matching([is_two, is_nine]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
-
-                    does not contain contiguous elements matching the predicates.
-
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod into_iter_contains_contiguous_satisfying {
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_contain_contiguous_satisfying([is_two, is_three]);
-        }
-
-        fn is_two(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(2);
-        }
-
-        fn is_three(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(3);
-        }
-
-        fn is_nine(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(9);
-        }
-
-        #[test]
-        fn succeeds_when_a_contiguous_match_exists() {
-            assert_that!(vec![1, 2, 3])
-                .into_iter_contains_contiguous_satisfying([is_two, is_three]);
-        }
-
-        #[test]
-        fn panics_when_no_contiguous_match_exists() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_contains_contiguous_satisfying([is_two, is_nine]);
-            })
-            .has_type::<String>()
-            .contains("does not contain contiguous elements satisfying the assertions.")
-            .contains("The final contiguous candidate did not satisfy the assertions:");
-        }
-    }
-
-    mod into_iter_contains_exactly {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3].must().into_iter_contain_exactly([1, 2, 3]);
-        }
-
-        #[test]
-        fn succeeds_when_elements_match_exactly() {
-            assert_that!(vec![1, 2, 3]).into_iter_contains_exactly([1, 2, 3]);
-        }
-
-        #[test]
-        fn compiles_for_comparable_but_different_type() {
-            assert_that!(vec!["a".to_owned(), "b".to_owned()])
-                .into_iter_contains_exactly(["a", "b"]);
-        }
-
-        #[test]
-        fn panics_when_an_element_differs() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_contains_exactly([1, 9, 3]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                    ],
-
-                    did not exactly match
-
-                    Expected: [
-                        1,
-                        9,
-                        3,
-                    ]
-
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-
-        #[test]
-        fn panics_without_consumption_when_a_known_length_differs() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_contains_exactly([1, 2]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [],
-
-                    did not exactly match
-
-                    Expected: [
-                        1,
-                        2,
-                    ]
-
-                    Details: [
-                        Consumed 0 element(s).,
-                        Iterator reported an exact remaining length of 3; expected 2.,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod into_iter_contains_exactly_matching {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_contain_exactly_matching([is_one, is_two, is_three]);
-        }
-
-        fn is_one(value: &i32) -> bool {
-            *value == 1
-        }
-
-        fn is_two(value: &i32) -> bool {
-            *value == 2
-        }
-
-        fn is_three(value: &i32) -> bool {
-            *value == 3
-        }
-
-        fn is_nine(value: &i32) -> bool {
-            *value == 9
-        }
-
-        #[test]
-        fn succeeds_when_all_predicates_match_in_order() {
-            assert_that!(vec![1, 2, 3])
-                .into_iter_contains_exactly_matching([is_one, is_two, is_three]);
-        }
-
-        #[test]
-        fn panics_when_an_element_does_not_match() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_contains_exactly_matching([is_one, is_nine, is_three]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                    ],
-
-                    did not exactly match predicates.
-
-                    Details: [
-                        Consumed 2 element(s).,
-                        Decisive element is at zero-based index 1.,
-                    ]
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod into_iter_contains_exactly_satisfying {
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2]
-                .must()
-                .into_iter_contain_exactly_satisfying([is_one, is_two]);
-        }
-
-        fn is_one(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(1);
-        }
-
-        fn is_two(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(2);
-        }
-
-        fn is_nine(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(9);
-        }
-
-        #[test]
-        fn succeeds_when_all_assertions_are_satisfied_in_order() {
-            assert_that!(vec![1, 2]).into_iter_contains_exactly_satisfying([is_one, is_two]);
-        }
-
-        #[test]
-        fn panics_when_an_element_does_not_satisfy() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2])
-                    .with_location(false)
-                    .into_iter_contains_exactly_satisfying([is_one, is_nine]);
-            })
-            .has_type::<String>()
-            .contains("did not exactly satisfy the assertions.")
-            .contains("Element at index 1 does not satisfy its assertions:\n    Expected: 9");
         }
     }
 
@@ -1627,9 +779,8 @@ mod tests {
 
                     The elements did not match exactly in any order.
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -1689,9 +840,8 @@ mod tests {
 
                     did not exactly match predicates in any order.
 
-                    Details: [
-                        Consumed 3 element(s).,
-                    ]
+                    Details:
+                      - Consumed 3 element(s).
                     -------- assertr --------
                 "});
         }
@@ -1733,7 +883,7 @@ mod tests {
             })
             .has_type::<String>()
             .contains("did not exactly satisfy the assertions in any order.")
-            .contains("Element at index 1 did not satisfy any available assertion:");
+            .contains("An element did not satisfy any available assertion:");
         }
     }
 
@@ -1770,10 +920,8 @@ mod tests {
 
                     is not empty.
 
-                    Details: [
-                        Consumed 1 element(s).,
-                        Decisive element is at zero-based index 0.,
-                    ]
+                    Details:
+                      - Consumed 1 element(s).
                     -------- assertr --------
                 "});
         }
@@ -1848,9 +996,8 @@ mod tests {
                     Expected: 2
                     Observed: 3
 
-                    Details: [
-                        Iterator reported an exact remaining length of 3; no elements were consumed.,
-                    ]
+                    Details:
+                      - Iterator reported an exact remaining length of 3; no elements were consumed.
                     -------- assertr --------
                 "});
         }
@@ -1874,8 +1021,6 @@ mod tests {
             assert_that!(vec![1, 2])
                 .into_iter_contains(1)
                 .into_iter_does_not_contain(3)
-                .into_iter_starts_with([1])
-                .into_iter_ends_with([2])
                 .into_iter_has_length(2)
                 .into_iter_is_not_empty();
         }

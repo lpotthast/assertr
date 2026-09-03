@@ -1,9 +1,10 @@
 use super::{
-    AssertThat, AssertrPartialEq, Borrow, Capture, CollectionStyle, Mode, PREVIEW_CAPACITY,
-    Preview, String, Tail, ValueRenderer, Vec, VecDeque, Write, exact_size_hint, format,
-    join_failures, push_preview_details, writedoc,
+    AssertThat, AssertrPartialEq, Borrow, Capture, Mode, PREVIEW_CAPACITY, Preview, String, Tail,
+    ValueRenderer, Vec, VecDeque, Write, exact_size_hint, format, join_failures,
+    push_preview_details, writedoc,
 };
 
+use crate::renderer::{GroupStyle, omission};
 enum ExactFailure {
     KnownLength { actual: usize },
     Exhausted { index: usize },
@@ -53,6 +54,7 @@ fn push_exact_details<Item>(
     preview: &Preview<Item>,
     failure: &ExactFailure,
     expected_len: usize,
+    maximum: usize,
 ) {
     let decisive = match failure {
         ExactFailure::Criterion { index, .. } | ExactFailure::Extra { index } => Some(*index),
@@ -73,7 +75,7 @@ fn push_exact_details<Item>(
             if !failures.is_empty() {
                 details.push(format!(
                     "Element at index {index} does not satisfy its assertions:\n{}",
-                    join_failures(failures)
+                    join_failures(failures, maximum)
                 ));
             }
         }
@@ -99,9 +101,19 @@ pub(crate) fn assert_contains_exactly<S, T, E, I, M: Mode, R>(
         }
     }) {
         let mut details = Vec::new();
-        push_exact_details(&mut details, &preview, &failure, expected.len());
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
-        let expected = this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
+        push_exact_details(
+            &mut details,
+            &preview,
+            &failure,
+            expected.len(),
+            this.render().max_items(),
+        );
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
         Actual: {actual:#?},
@@ -133,8 +145,16 @@ pub(crate) fn assert_contains_exactly_matching<S, T, P, I, M: Mode, R>(
         }
     }) {
         let mut details = Vec::new();
-        push_exact_details(&mut details, &preview, &failure, predicates.len());
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        push_exact_details(
+            &mut details,
+            &preview,
+            &failure,
+            predicates.len(),
+            this.render().max_items(),
+        );
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
         Actual: {actual:#?},
@@ -165,8 +185,16 @@ pub(crate) fn assert_contains_exactly_satisfying<S, T, A, I, M: Mode, R>(
         }
     }) {
         let mut details = Vec::new();
-        push_exact_details(&mut details, &preview, &failure, assertions.len());
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        push_exact_details(
+            &mut details,
+            &preview,
+            &failure,
+            assertions.len(),
+            this.render().max_items(),
+        );
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
         Actual: {actual:#?},
@@ -219,6 +247,7 @@ fn push_prefix_details<Item>(
     preview: &Preview<Item>,
     failure: &PrefixFailure,
     expected_len: usize,
+    maximum: usize,
 ) {
     let decisive = match failure {
         PrefixFailure::Criterion { index, .. } => Some(*index),
@@ -235,7 +264,7 @@ fn push_prefix_details<Item>(
         PrefixFailure::Criterion { index, failures } if !failures.is_empty() => {
             details.push(format!(
                 "Element at index {index} does not satisfy its prefix assertions:\n{}",
-                join_failures(failures)
+                join_failures(failures, maximum)
             ));
         }
         PrefixFailure::Criterion { .. } => {}
@@ -261,9 +290,19 @@ pub(crate) fn assert_starts_with<S, T, E, I, M: Mode, R>(
         }
     }) {
         let mut details = Vec::new();
-        push_prefix_details(&mut details, &preview, &failure, expected.len());
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
-        let expected = this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
+        push_prefix_details(
+            &mut details,
+            &preview,
+            &failure,
+            expected.len(),
+            this.render().max_items(),
+        );
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}
@@ -293,8 +332,16 @@ pub(crate) fn assert_starts_with_matching<S, T, P, I, M: Mode, R>(
         }
     }) {
         let mut details = Vec::new();
-        push_prefix_details(&mut details, &preview, &failure, predicates.len());
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        push_prefix_details(
+            &mut details,
+            &preview,
+            &failure,
+            predicates.len(),
+            this.render().max_items(),
+        );
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}
@@ -325,8 +372,16 @@ pub(crate) fn assert_starts_with_satisfying<S, T, A, I, M: Mode, R>(
         }
     }) {
         let mut details = Vec::new();
-        push_prefix_details(&mut details, &preview, &failure, assertions.len());
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        push_prefix_details(
+            &mut details,
+            &preview,
+            &failure,
+            assertions.len(),
+            this.render().max_items(),
+        );
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}
@@ -388,8 +443,12 @@ pub(crate) fn assert_ends_with<S, T, E, I, M: Mode, R>(
         trim_preview(&mut preview);
         let mut details = Vec::new();
         push_preview_details(&mut details, &preview, None);
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
-        let expected = this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}
@@ -425,7 +484,9 @@ pub(crate) fn assert_ends_with_matching<S, T, P, I, M: Mode, R>(
         trim_preview(&mut preview);
         let mut details = Vec::new();
         push_preview_details(&mut details, &preview, None);
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}
@@ -452,27 +513,40 @@ pub(crate) fn assert_ends_with_satisfying<S, T, A, I, M: Mode, R>(
     }
     let mut preview = collect_tail(iterator, assertions.len());
     let start = preview.items.len().saturating_sub(assertions.len());
-    let mut failures = Vec::new();
+    let maximum = this.render().max_items();
+    let mut unsatisfied = Vec::new();
+    let mut number_of_unsatisfied_elements = 0_usize;
     if preview.consumed >= assertions.len() {
-        for (item, assertion) in preview.items[start..].iter().zip(assertions) {
-            failures.push(this.collect_element_failures(item.borrow(), assertion));
+        for (offset, (item, assertion)) in preview.items[start..].iter().zip(assertions).enumerate()
+        {
+            let failures = this.collect_element_failures(item.borrow(), assertion);
+            if !failures.is_empty() {
+                number_of_unsatisfied_elements += 1;
+                if unsatisfied.len() < maximum {
+                    unsatisfied.push((offset, failures));
+                }
+            }
         }
     }
-    let matches = preview.consumed >= assertions.len() && failures.iter().all(Vec::is_empty);
+    let matches = preview.consumed >= assertions.len() && number_of_unsatisfied_elements == 0;
     if !matches {
         let mut details = Vec::new();
-        for (offset, failures) in failures.iter().enumerate() {
-            if !failures.is_empty() {
-                details.push(format!(
-                    "Suffix element at index {} does not satisfy its assertions:\n{}",
-                    preview.consumed - assertions.len() + offset,
-                    join_failures(failures)
-                ));
-            }
+        for (offset, failures) in unsatisfied {
+            details.push(format!(
+                "Suffix element at index {} does not satisfy its assertions:\n{}",
+                preview.consumed - assertions.len() + offset,
+                join_failures(&failures, maximum)
+            ));
+        }
+        let omitted = number_of_unsatisfied_elements.saturating_sub(maximum);
+        if omitted != 0 {
+            details.push(omission(omitted, "unsatisfied suffix element"));
         }
         trim_preview(&mut preview);
         push_preview_details(&mut details, &preview, None);
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}
@@ -542,8 +616,12 @@ pub(crate) fn assert_contains_contiguous<S, T, E, I, M: Mode, R>(
     }) {
         let mut details = Vec::new();
         push_preview_details(&mut details, &preview, None);
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
-        let expected = this.render_borrowed_values::<E, _>(expected, CollectionStyle::List);
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
+        let expected = this
+            .render()
+            .borrowed_values::<E, _>(expected, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}
@@ -576,7 +654,9 @@ pub(crate) fn assert_contains_contiguous_matching<S, T, P, I, M: Mode, R>(
     }) {
         let mut details = Vec::new();
         push_preview_details(&mut details, &preview, None);
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}
@@ -612,11 +692,13 @@ pub(crate) fn assert_contains_contiguous_satisfying<S, T, A, I, M: Mode, R>(
         if !failures.is_empty() {
             details.push(format!(
                 "The final contiguous candidate did not satisfy the assertions:\n{}",
-                join_failures(&failures)
+                join_failures(&failures, this.render().max_items())
             ));
         }
         push_preview_details(&mut details, &preview, None);
-        let actual = this.render_borrowed_values::<T, _>(&preview.items, CollectionStyle::List);
+        let actual = this
+            .render()
+            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
         this.fail_with_details(details, |w: &mut String| {
             writedoc! {w,r"
                 Actual: {actual:#?}

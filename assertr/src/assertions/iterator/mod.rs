@@ -8,8 +8,8 @@ use core::{borrow::Borrow, fmt::Write};
 use indoc::writedoc;
 
 use crate::{
-    AssertThat, AssertrPartialEq, Mode, ValueRenderer, assertions::collection::CollectionStyle,
-    mode::Capture, util::failure::join_failures, util::matching::match_bipartite,
+    AssertThat, AssertrPartialEq, Mode, ValueRenderer, mode::Capture, util::failure::join_failures,
+    util::matching::match_bipartite,
 };
 
 const PREVIEW_CAPACITY: usize = 16;
@@ -23,8 +23,24 @@ impl<Item> Preview<Item> {
     fn omitted(&self) -> usize {
         self.consumed.saturating_sub(self.items.len())
     }
+
     fn start_index(&self) -> usize {
         self.omitted()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum PositionReporting {
+    YieldOrder,
+    Unavailable,
+}
+
+impl PositionReporting {
+    const fn index(self, index: usize) -> Option<usize> {
+        match self {
+            Self::YieldOrder => Some(index),
+            Self::Unavailable => None,
+        }
     }
 }
 

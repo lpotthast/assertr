@@ -41,6 +41,14 @@
 //! - **Leaf assertions**: call [`AssertThat::track_assertion`] first, then [`AssertThat::fail`] or
 //!   [`AssertThat::fail_with_details`] when the condition does not hold.
 //!
+//! Render values shown by a leaf assertion through [`AssertThat::render`]. Its
+//! [`value`](renderer::RenderingContext::value), [`values`](renderer::RenderingContext::values), and
+//! [`borrowed_values`](renderer::RenderingContext::borrowed_values) adapters apply the active
+//! renderer and rendering budget. Formatting the values with `Debug` directly bypasses both. A
+//! rendered leaf always retains type metadata. Customize its hint and
+//! text visibility through [`Typed::with_type_hint`](renderer::Typed::with_type_hint) and
+//! [`Typed::show_type_hint`](renderer::Typed::show_type_hint).
+//!
 //! ```
 //! use assertr::prelude::*;
 //!
@@ -55,7 +63,9 @@
 //!     where
 //!         R: Clone + ValueRenderer<u32>;
 //!
-//!     fn has_name(self) -> Self;
+//!     fn has_name(self) -> Self
+//!     where
+//!         R: ValueRenderer<Person>;
 //! }
 //!
 //! impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
@@ -72,10 +82,14 @@
 //!
 //!     // Leaf: track first, then fail with a message of your own.
 //!     #[track_caller]
-//!     fn has_name(self) -> Self {
+//!     fn has_name(self) -> Self
+//!     where
+//!         R: ValueRenderer<Person>,
+//!     {
 //!         self.track_assertion();
 //!         if self.actual().name.is_empty() {
-//!             self.fail("Expected the person to have a name, but the name is empty!");
+//!             let actual = self.render().value(self.actual());
+//!             self.fail(format_args!("Expected a named person, but was {actual:#?}."));
 //!         }
 //!         self
 //!     }
@@ -131,6 +145,8 @@ mod details;
 pub mod failure;
 pub mod mode;
 pub mod renderer;
+#[cfg(test)]
+mod test_support;
 mod tracking;
 mod util;
 
@@ -138,7 +154,7 @@ mod util;
 pub use assertr_derive::fluent_expressions;
 pub use cmp::{AssertrPartialEq, Differences, Eq, EqContext, any, eq};
 pub use failure::AssertionFailure;
-pub use renderer::{CustomRenderer, DebugRenderer, Renderable, RenderableValues, ValueRenderer};
+pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
 
 /// One glob import brings every assertion into scope.
 ///
@@ -180,6 +196,7 @@ struct ChainState<'t, M: Mode, R> {
     expression: Option<&'static str>,
     detail_messages: RefCell<Vec<String>>,
     print_location: bool,
+    rendering_budget: RenderingBudget,
 
     number_of_assertions: RefCell<NumberOfAssertions>,
     failures: RefCell<Vec<AssertionFailure>>,

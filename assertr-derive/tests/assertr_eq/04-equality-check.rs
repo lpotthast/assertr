@@ -63,12 +63,11 @@ fn main() {
                 ),
             }}
 
-            Details: [
-                Differences: [
+            Details:
+              - Differences: [
                     "id": expected 2, but was 1,
                     "name": expected "otto", but was "bob",
-                ],
-            ]
+                ]
             -------- assertr --------
         "#});
 }

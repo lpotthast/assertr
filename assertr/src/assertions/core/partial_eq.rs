@@ -42,8 +42,8 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
             if !ctx.differences.differences.is_empty() {
                 details.push(format!("Differences: {:#?}", ctx.differences));
             }
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(expected);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -75,8 +75,8 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
                 details.push(format!("Differences: {:#?}", ctx.differences));
             }
             details.push(String::from("Values were expected to be different."));
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(expected);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -91,6 +91,38 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        struct Actual(u32);
+        struct Expected(u32);
+
+        impl PartialEq<Expected> for Actual {
+            fn eq(&self, other: &Expected) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, i32, Panic, NoRenderer>
+                    => PartialEqAssertions<i32, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn heterogeneous_failures_render_both_types_with_the_active_renderer() {
+            let failures = assert_that!(Actual(1))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(|it| it.is_equal_to(Expected(2)));
+
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
+
     mod is_equal_to {
         use indoc::formatdoc;
 
@@ -174,9 +206,8 @@ mod tests {
 
                       Actual: "foo"
 
-                    Details: [
-                        Values were expected to be different.,
-                    ]
+                    Details:
+                      - Values were expected to be different.
                     -------- assertr --------
                 "#});
         }

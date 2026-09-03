@@ -7,7 +7,7 @@
 //!
 //! - [General-purpose values, wrappers, ranges, and iterators](core)
 //! - [Reusable conditions](condition)
-//! - [Collections and sequences](collection)
+//! - [Collections and stable order](collection)
 //! - [Sets](set)
 //! - [Maps](map)
 //! - [Heap-backed values and panic payloads](alloc)
@@ -35,10 +35,10 @@
 //! design rationale.
 //!
 //! To extend an existing family to a custom type, implement [`HasLength`] for length assertions,
-//! [`Collection`](collection::Collection) for the element assertions,
-//! [`Sequence`](collection::Sequence) for the order-sensitive ones on top of those,
-//! [`Set`](set::Set) for the set relations, or [`Map`](map::Map) with
-//! [`MapLookup`](map::MapLookup) for the map assertions.
+//! [`Collection`](collection::Collection) for order-free element assertions,
+//! [`StableOrder`](collection::StableOrder) for ordered collection assertions,
+//! [`SetLookup`](set::SetLookup) for set relations, or [`Map`](map::Map) with
+//! [`MapLookup`](map::MapLookup) for map assertions.
 
 mod has_length;
 

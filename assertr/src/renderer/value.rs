@@ -1,12 +1,4 @@
-//! Rendering individual values in assertion failure messages.
-
-use core::{
-    borrow::Borrow,
-    fmt::{self, Debug},
-    marker::PhantomData,
-};
-
-use crate::assertions::collection::CollectionStyle;
+use core::fmt;
 
 /// Formats individual values in assertion diagnostics.
 ///
@@ -30,6 +22,17 @@ use crate::assertions::collection::CollectionStyle;
 /// This keeps unrelated methods available and reports a missing capability on the method that
 /// needs it. Projection and extraction methods preserve `R` instead of resetting it to
 /// [`DebugRenderer`].
+///
+/// Custom leaf assertions access the active renderer through
+/// [`AssertThat::render`](crate::AssertThat::render). Render every value included in their failure
+/// text with [`RenderingContext::value`](crate::renderer::RenderingContext::value),
+/// [`RenderingContext::values`](crate::renderer::RenderingContext::values), or
+/// [`RenderingContext::borrowed_values`](crate::renderer::RenderingContext::borrowed_values) so
+/// custom renderers and the chain's [`RenderingBudget`](crate::RenderingBudget) remain effective. Use
+/// [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) to customize the type metadata
+/// retained automatically for a leaf value, and
+/// [`Typed::show_type_hint`](crate::renderer::Typed::show_type_hint) to control whether text output
+/// shows it.
 ///
 /// # Render leaf values, not structural wrappers
 ///
@@ -117,146 +120,5 @@ where
 {
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0(value, f)
-    }
-}
-
-/// A [`Debug`] adapter that formats one value through a [`ValueRenderer`].
-///
-/// [`crate::AssertThat::render_value`] creates this adapter for custom assertion diagnostics.
-pub struct Renderable<'a, T: ?Sized, R> {
-    pub(crate) value: &'a T,
-    pub(crate) renderer: &'a R,
-}
-
-impl<T: ?Sized, R> Debug for Renderable<'_, T, R>
-where
-    R: ValueRenderer<T>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.renderer.fmt(self.value, f)
-    }
-}
-
-/// A [`Debug`] adapter that formats a collection of values through a [`ValueRenderer`].
-///
-/// [`crate::AssertThat::render_values`] creates this adapter for custom assertion diagnostics.
-pub struct RenderableValues<'a, T: ?Sized, R, B = &'a T> {
-    pub(crate) values: &'a [B],
-    pub(crate) renderer: &'a R,
-    pub(crate) style: CollectionStyle,
-    pub(crate) item: PhantomData<fn() -> T>,
-}
-
-impl<T: ?Sized, B, R> Debug for RenderableValues<'_, T, R, B>
-where
-    B: Borrow<T>,
-    R: ValueRenderer<T>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let values = self.values.iter().map(|value| Renderable {
-            value: value.borrow(),
-            renderer: self.renderer,
-        });
-        match self.style {
-            CollectionStyle::List => f.debug_list().entries(values).finish(),
-            CollectionStyle::Set => f.debug_set().entries(values).finish(),
-        }
-    }
-}
-
-/// A crate-internal adapter for borrowed map entries.
-pub(crate) struct RenderableMap<'a, K, V, R> {
-    pub(crate) entries: &'a [(&'a K, &'a V)],
-    pub(crate) renderer: &'a R,
-}
-
-/// A crate-internal adapter for one-field enum variants such as `Some`, `Ok`, and `Ready`.
-pub(crate) struct RenderableVariant<'a, T: ?Sized, R> {
-    pub(crate) name: &'static str,
-    pub(crate) value: &'a T,
-    pub(crate) renderer: &'a R,
-}
-
-impl<T: ?Sized, R> Debug for RenderableVariant<'_, T, R>
-where
-    R: ValueRenderer<T>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(self.name)
-            .field(&Renderable {
-                value: self.value,
-                renderer: self.renderer,
-            })
-            .finish()
-    }
-}
-
-/// A crate-internal adapter for one-field structural wrappers such as `RefCell` and `RwLock`.
-pub(crate) struct RenderableStructField<'a, T: ?Sized, R> {
-    pub(crate) name: &'static str,
-    pub(crate) field: &'static str,
-    pub(crate) value: &'a T,
-    pub(crate) renderer: &'a R,
-}
-
-impl<T: ?Sized, R> Debug for RenderableStructField<'_, T, R>
-where
-    R: ValueRenderer<T>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct(self.name)
-            .field(
-                self.field,
-                &Renderable {
-                    value: self.value,
-                    renderer: self.renderer,
-                },
-            )
-            .finish()
-    }
-}
-
-/// A crate-internal adapter for structural wrappers whose field is temporarily inaccessible.
-pub(crate) struct RenderableUnavailableStructField {
-    pub(crate) name: &'static str,
-    pub(crate) field: &'static str,
-    pub(crate) unavailable: &'static str,
-}
-
-struct Unavailable(&'static str);
-
-impl Debug for Unavailable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
-    }
-}
-
-impl Debug for RenderableUnavailableStructField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct(self.name)
-            .field(self.field, &Unavailable(self.unavailable))
-            .finish()
-    }
-}
-
-impl<K, V, R> Debug for RenderableMap<'_, K, V, R>
-where
-    R: ValueRenderer<K> + ValueRenderer<V>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map()
-            .entries(self.entries.iter().map(|(key, value)| {
-                (
-                    Renderable {
-                        value: *key,
-                        renderer: self.renderer,
-                    },
-                    Renderable {
-                        value: *value,
-                        renderer: self.renderer,
-                    },
-                )
-            }))
-            .finish()
     }
 }

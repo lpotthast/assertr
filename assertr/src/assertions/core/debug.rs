@@ -76,6 +76,18 @@ impl<T: Debug, M: Mode, R> DebugAssertions for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, i32, Panic, NoRenderer> => DebugAssertions
+            );
+        }
+    }
+
     mod has_debug_string {
         use crate::prelude::*;
         use indoc::formatdoc;

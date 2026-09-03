@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `AssertionFailure::subject_type_name` records the Rust type of the subject that raised the failure.
+- `RenderingBudget` limits rendered leaf values and repeated diagnostic items by default. `RenderingBudget::unlimited()`
+  restores complete output.
+- `RenderingContext::value` returns a `renderer::Typed` adapter. `Typed::with_type_hint` selects the
+  `renderer::TypeHint` (`Full`, `Short`, or `Label`) derived from the value's Rust type, and `Typed::show_type_hint`
+  controls whether text output shows it. Hints are hidden by default.
+- `BinaryHeap` implements `HasLength` and `Collection`, so heaps support length and order-free collection assertions.
+  Its diagnostic presentation is sorted and explicitly marked as such.
+- `StableOrderExtractAssertions` provides `get_first`, `get_last`, and `get_single`.
+  `RandomAccessExtractAssertions` provides `get_at`. These panic-mode projections borrow the assertion chain and the
+  selected element.
+
+### Changed
+
+- **Breaking:** Custom assertions now render diagnostics through `AssertThat::render().value(...)`, `.values(...)`, or
+  `.borrowed_values(...)`.
+  `AssertThat::render_value`, `AssertThat::render_values`, `Renderable`, and `RenderableValues` were removed. The
+  equivalent `EqContext` methods remain and return the same `renderer::Typed` and `renderer::RenderedValues` adapters.
+  `RenderingContext::values` accepts any `Collection` and infers its item type. `borrowed_values` explicitly selects a
+  different type borrowed by each item. Collection and map rendering adapters retain their sources by reference and
+  obtain elements or entries only when formatted, avoiding temporary collections of references.
+- **Breaking:** Container capabilities and diagnostic presentation are now independent. `Collection` inherits
+  `HasLength` and replaces `STYLE`, `TYPE_NAME`, `DETERMINISTIC_ITERATION`, `length()`, and the separate `Sequence`
+  marker with a required presentation-only `PRESENTATION: renderer::CollectionPresentation`. `StableOrder` is the
+  explicit capability for meaningful ordinal positions, and `RandomAccess: StableOrder` adds constant-time
+  `element_at`; `LinkedList` has only stable order, while slices, arrays, `Vec`, and `VecDeque` have both.
+  `StableOrderAssertions` replaces `SequenceAssertions` and owns every positional finite-collection assertion:
+  `starts_with`, `ends_with`, `contains_contiguous`, and `contains_exactly`, including their `_matching` and
+  `_satisfying` variants. The equivalent positional `into_iter_*` methods were removed. Explicitly asserted iterators
+  retain positional yield-stream assertions, while the remaining borrowed-iteration API is order-free. The
+  native-membership `Set` trait was renamed to `SetLookup` and now directly declares the set capability. `Map` likewise
+  inherits `HasLength`, replaces
+  `TYPE_NAME`, `DETERMINISTIC_ITERATION`, and `length()` with presentation-only
+  `RENDERING_ORDER: renderer::RenderingOrder`, and keeps lookup separate in `MapLookup`. `CollectionStyle` was replaced
+  by `renderer::GroupStyle` for explicitly styled ad-hoc groups passed to `RenderingContext::values`,
+  `RenderingContext::borrowed_values`, or `EqContext::render_values`.
+- `AssertionFailure` formatting now separates chain messages under `Messages:` from assertion
+  evidence under `Details:`.
+- **Breaking:** `HasLength` is implemented for `str` and `[T]` directly and forwarded through blanket `&T` and
+  `&mut T` implementations; the separate reference implementations were removed. Downstream types that implement it
+  for both `T` and `&T` must drop the reference implementation. The trait remains dyn-compatible and contains only
+  length and emptiness methods.
+- Length diagnostics show the subject's short Rust type name, such as `Vec` or `[String]`, instead of its complete
+  `core::any::type_name`.
+- `renderer::CollectionPresentation` configures list or set syntax, type-hint visibility, and
+  `renderer::RenderingOrder::{PreserveIteration, SortByRenderedText}` independently of behavioral capabilities.
+  Positional collection diagnostics always preserve iteration order so displayed indexes cannot disagree with
+  displayed elements.
+- Order-free collection, borrowed-iteration, and iterable-condition diagnostics no longer describe traversal offsets
+  as element indexes. Explicit iterator assertions may still report positions in the iterator's yield stream.
+- Set relation diagnostics determine whether two sets have different underlying types from their canonical Rust type
+  names rather than their presentation hints. Transparent reference forwarding does not make otherwise identical sets
+  cross-type.
+
 ## [0.7.1] - 2026-09-02
 
 ### Added

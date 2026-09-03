@@ -280,7 +280,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
             let parsed = serde_json::from_str::<T>(this.actual().as_str());
 
             if let Err(error) = &parsed {
-                let actual = this.render_value(this.actual());
+                let actual = this.render().value(this.actual());
                 let expected_type = core::any::type_name::<T>();
                 this.fail_with_details_at(
                     location,
@@ -398,6 +398,90 @@ fn assert_status_class<M: Mode, R>(
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use super::response;
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        /// Renders a response by its status code only. It implements no other `ValueRenderer`,
+        /// so it proves which renderer capability each assertion actually requires.
+        struct StatusOnly;
+
+        impl ValueRenderer<reqwest::Response> for StatusOnly {
+            fn fmt(
+                &self,
+                value: &reqwest::Response,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                write!(f, "<{}>", value.status().as_u16())
+            }
+        }
+
+        #[test]
+        fn traits_are_implemented_without_response_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, reqwest::Response, Panic, NoRenderer>
+                    => ReqwestResponseAssertions
+            );
+            assert_trait_impl!(
+                AssertThat<'static, reqwest::Response, Panic, NoRenderer>
+                    => ReqwestResponseExtractAssertions<'static, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn checking_assertions_require_only_a_response_renderer() {
+            assert_that!(response(200, &[("content-type", "text/plain")], ""))
+                .with_renderer(StatusOnly)
+                .has_status_code(reqwest::StatusCode::OK)
+                .is_success()
+                .has_header("content-type")
+                .does_not_have_header("x-api-key")
+                .has_header_value("content-type", "text/plain");
+
+            assert_that!(response(100, &[], ""))
+                .with_renderer(StatusOnly)
+                .is_informational();
+            assert_that!(response(301, &[], ""))
+                .with_renderer(StatusOnly)
+                .is_redirection();
+            assert_that!(response(404, &[], ""))
+                .with_renderer(StatusOnly)
+                .is_client_error();
+            assert_that!(response(500, &[], ""))
+                .with_renderer(StatusOnly)
+                .is_server_error();
+        }
+
+        #[test]
+        fn body_extractors_require_only_the_renderers_their_failure_paths_use() {
+            let text = assert_that_owned!(response(200, &[], "text"))
+                .with_renderer(StatusOnly)
+                .get_text();
+            drop(text);
+
+            #[cfg(feature = "serde-json")]
+            {
+                struct StringRenderer;
+
+                impl ValueRenderer<String> for StringRenderer {
+                    fn fmt(
+                        &self,
+                        value: &String,
+                        f: &mut core::fmt::Formatter<'_>,
+                    ) -> core::fmt::Result {
+                        core::fmt::Debug::fmt(value, f)
+                    }
+                }
+
+                let json = assert_that_owned!(response(200, &[], "null"))
+                    .with_renderer(StringRenderer)
+                    .get_json::<serde_json::Value>();
+                drop(json);
+            }
+        }
+    }
+
     use core::pin::Pin;
     use core::task::{Context, Poll};
 
@@ -479,9 +563,8 @@ mod tests {
 
                 Expected: 200 OK
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -504,9 +587,8 @@ mod tests {
 
                         Expected: 200 OK
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -519,9 +601,8 @@ mod tests {
 
                         is not a success (2xx) status code
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -562,9 +643,8 @@ mod tests {
 
                 is not informational (1xx) status code
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -585,9 +665,8 @@ mod tests {
 
                         is not informational (1xx) status code
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -629,9 +708,8 @@ mod tests {
 
                 is not a success (2xx) status code
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -652,9 +730,8 @@ mod tests {
 
                         is not a success (2xx) status code
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -695,9 +772,8 @@ mod tests {
 
                 is not a redirection (3xx) status code
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -718,9 +794,8 @@ mod tests {
 
                         is not a redirection (3xx) status code
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -761,9 +836,8 @@ mod tests {
 
                 is not a client error (4xx) status code
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -784,9 +858,8 @@ mod tests {
 
                         is not a client error (4xx) status code
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -827,9 +900,8 @@ mod tests {
 
                 is not a server error (5xx) status code
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -850,9 +922,8 @@ mod tests {
 
                         is not a server error (5xx) status code
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -901,9 +972,8 @@ mod tests {
 
                 Expected: "content-type"
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -928,9 +998,8 @@ mod tests {
 
                         Expected: "content-type"
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -970,9 +1039,8 @@ mod tests {
 
                 is the value of header "x-api-key", which was not expected to be present
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -993,9 +1061,8 @@ mod tests {
 
                         is the value of header "x-api-key", which was not expected to be present
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -1049,9 +1116,8 @@ mod tests {
 
                 Expected: "application/json"
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -1074,10 +1140,9 @@ mod tests {
 
                 Expected: "content-type"
 
-                Details: [
-                    URL: http://localhost/hello,
-                    Expected value: "application/json",
-                ]
+                Details:
+                  - URL: http://localhost/hello
+                  - Expected value: "application/json"
                 -------- assertr --------
             "#});
         }
@@ -1103,9 +1168,8 @@ mod tests {
 
                         Expected: "application/json"
 
-                        Details: [
-                            URL: http://localhost/hello,
-                        ]
+                        Details:
+                          - URL: http://localhost/hello
                         -------- assertr --------
                     "#});
                 },
@@ -1173,9 +1237,8 @@ mod tests {
 
                 Expected: "content-type"
 
-                Details: [
-                    URL: http://localhost/hello,
-                ]
+                Details:
+                  - URL: http://localhost/hello
                 -------- assertr --------
             "#});
         }
@@ -1383,10 +1446,9 @@ mod tests {
 
                 is not valid JSON for the expected type: {expected_type}
 
-                Details: [
-                    URL: http://localhost/hello,
-                    Error: expected ident at line 1 column 2,
-                ]
+                Details:
+                  - URL: http://localhost/hello
+                  - Error: expected ident at line 1 column 2
                 -------- assertr --------
             "});
         }
@@ -1441,10 +1503,9 @@ mod tests {
 
                 is not valid JSON for the expected type: {expected_type}
 
-                Details: [
-                    URL: http://localhost/hello,
-                    Error: invalid type: string "old", expected u32 at line 1 column 25,
-                ]
+                Details:
+                  - URL: http://localhost/hello
+                  - Error: invalid type: string "old", expected u32 at line 1 column 25
                 -------- assertr --------
             "#});
         }

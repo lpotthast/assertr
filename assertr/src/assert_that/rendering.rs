@@ -1,145 +1,81 @@
-use alloc::string::String;
-use core::{fmt, marker::PhantomData};
+use core::fmt;
 
 use crate::{
     AssertThat, EqContext,
-    assertions::collection::CollectionStyle,
     mode::Mode,
-    renderer::{
-        CustomRenderer, Renderable, RenderableMap, RenderableStructField,
-        RenderableUnavailableStructField, RenderableValues, RenderableVariant,
-    },
+    renderer::{CustomRenderer, RenderingBudget, RenderingContext},
 };
 
 impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
-    /// Borrows the current assertion subject.
+    /// Returns this chain's diagnostic rendering context.
     ///
-    /// Custom assertion implementations use this to inspect the value being asserted.
-    pub fn actual(&self) -> &T {
-        self.actual.borrowed()
-    }
-
-    /// Adapts a value so its [`Debug`] output uses this assertion's renderer.
+    /// Custom assertion implementations use [`RenderingContext::value`],
+    /// [`RenderingContext::values`], and [`RenderingContext::borrowed_values`] instead of formatting
+    /// diagnostic values directly. This honors both the active
+    /// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. A rendered value always
+    /// retains type metadata. Customize its hint through
+    /// [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) and its text visibility
+    /// through [`Typed::show_type_hint`](crate::renderer::Typed::show_type_hint).
     ///
-    /// Custom assertions can interpolate the returned [`Renderable`] into their diagnostics with
-    /// `{:?}` or `{:#?}`.
-    pub fn render_value<'a, U: ?Sized>(&'a self, value: &'a U) -> Renderable<'a, U, R> {
-        Renderable {
-            value,
-            renderer: &self.state.renderer,
-        }
-    }
-
-    /// Adapts a slice of references so its [`Debug`] output uses this assertion's renderer for
-    /// every value and the requested structural style.
-    pub fn render_values<'a, U: ?Sized>(
-        &'a self,
-        values: &'a [&'a U],
-        style: CollectionStyle,
-    ) -> RenderableValues<'a, U, R> {
-        RenderableValues {
-            values,
-            renderer: &self.state.renderer,
-            style,
-            item: PhantomData,
-        }
-    }
-
-    pub(crate) fn render_borrowed_values<'a, U: ?Sized, B>(
-        &'a self,
-        values: &'a [B],
-        style: CollectionStyle,
-    ) -> RenderableValues<'a, U, R, B>
-    where
-        B: core::borrow::Borrow<U>,
-    {
-        RenderableValues {
-            values,
-            renderer: &self.state.renderer,
-            style,
-            item: PhantomData,
-        }
-    }
-
-    pub(crate) fn render_map<'a, K, V>(
-        &'a self,
-        entries: &'a [(&'a K, &'a V)],
-    ) -> RenderableMap<'a, K, V, R> {
-        RenderableMap {
-            entries,
-            renderer: &self.state.renderer,
-        }
-    }
-
-    pub(crate) fn render_variant<'a, U: ?Sized>(
-        &'a self,
-        name: &'static str,
-        value: &'a U,
-    ) -> RenderableVariant<'a, U, R> {
-        RenderableVariant {
-            name,
-            value,
-            renderer: &self.state.renderer,
-        }
-    }
-
-    pub(crate) fn render_struct_field<'a, U: ?Sized>(
-        &'a self,
-        name: &'static str,
-        field: &'static str,
-        value: &'a U,
-    ) -> RenderableStructField<'a, U, R> {
-        RenderableStructField {
-            name,
-            field,
-            value,
-            renderer: &self.state.renderer,
-        }
-    }
-
-    pub(crate) fn render_unavailable_struct_field(
-        name: &'static str,
-        field: &'static str,
-        unavailable: &'static str,
-    ) -> RenderableUnavailableStructField {
-        RenderableUnavailableStructField {
-            name,
-            field,
-            unavailable,
-        }
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// trait EvenAssertions<R = DebugRenderer> {
+    ///     fn is_even(self) -> Self
+    ///     where
+    ///         R: ValueRenderer<u32>;
+    /// }
+    ///
+    /// impl<M: Mode, R> EvenAssertions<R> for AssertThat<'_, u32, M, R> {
+    ///     #[track_caller]
+    ///     fn is_even(self) -> Self
+    ///     where
+    ///         R: ValueRenderer<u32>,
+    ///     {
+    ///         self.track_assertion();
+    ///         if self.actual() % 2 != 0 {
+    ///             let actual = self.render().value(self.actual());
+    ///             self.fail(format_args!("Expected an even value, but was {actual:#?}."));
+    ///         }
+    ///         self
+    ///     }
+    /// }
+    ///
+    /// assert_that!(4).is_even();
+    /// ```
+    #[must_use]
+    pub const fn render(&self) -> RenderingContext<'_, R> {
+        RenderingContext::new(&self.state.renderer, self.state.rendering_budget)
     }
 
     pub(crate) fn eq_context(&self) -> EqContext<'_, R> {
-        EqContext::with_renderer(&self.state.renderer)
+        EqContext::with_rendering(self.render())
     }
 
-    /// Sets the subject name shown in failure messages.
-    #[must_use]
-    pub fn with_subject_name(mut self, subject_name: impl Into<String>) -> Self {
-        self.state.subject_name = Some(subject_name.into());
-        self
-    }
-
-    /// Sets the source expression shown in the backticked `Expression:` field of failure messages.
+    /// Sets the limits applied when this chain renders diagnostic values and collections.
     ///
-    /// [`assert_that!`](crate::assert_that) and [`assert_that_owned!`](crate::assert_that_owned)
-    /// fill this automatically. This method is primarily for downstream assertion entry macros
-    /// and for the scoped `#[assertr::fluent_expressions]` attribute. Derived child chains start a
-    /// new diagnostic subject and do not inherit this expression.
-    #[must_use]
-    pub fn with_expression(mut self, expression: &'static str) -> Self {
-        self.state.expression = Some(expression);
-        self
-    }
-
-    /// Controls whether failures record the source file, line, and column.
+    /// The budget is inherited by assertions derived through `satisfies`, `derive`, and related
+    /// methods. [`RenderingBudget::default`] keeps diagnostics generous but bounded.
+    /// [`RenderingBudget::unlimited`] restores complete rendering.
     ///
-    /// Disable locations when comparing a rendered failure exactly in a test.
+    /// ```
+    /// use assertr::prelude::*;
     ///
-    /// Assertions derived from this one (through `satisfies` and friends) inherit the setting.
+    /// let failures = assert_that!([1, 2, 3, 4])
+    ///     .with_rendering_budget(
+    ///         RenderingBudget::builder()
+    ///             .max_items(2)
+    ///             .max_leaf_characters(1_000)
+    ///             .build(),
+    ///     )
+    ///     .with_location(false)
+    ///     .capture(|it| it.contains(5));
+    ///
+    /// assert_that!(failures[0].to_string()).contains("... 2 more elements ...");
+    /// ```
     #[must_use]
-    pub fn with_location(mut self, value: bool) -> Self {
-        self.state.print_location = value;
+    pub fn with_rendering_budget(mut self, budget: RenderingBudget) -> Self {
+        self.state.rendering_budget = budget;
         self
     }
 
@@ -209,5 +145,58 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
             actual,
             state: state.with_renderer(renderer),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+
+    #[derive(PartialEq)]
+    struct Secret(u32);
+
+    #[test]
+    fn default_budget_is_bounded_and_unlimited_restores_complete_output() {
+        let values = (0..260).collect::<Vec<_>>();
+        let bounded = assert_that!(&values)
+            .with_location(false)
+            .capture(|it| it.contains(999));
+        assert_that!(bounded[0].description.as_str()).contains("... 4 more elements ...");
+
+        let unlimited = assert_that!(&values)
+            .with_rendering_budget(RenderingBudget::unlimited())
+            .with_location(false)
+            .capture(|it| it.contains(999));
+        assert_that!(unlimited[0].description.as_str()).does_not_contain("more elements");
+    }
+
+    #[test]
+    fn budget_is_inherited_by_derived_assertions() {
+        let failures = assert_that!((123_456,))
+            .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
+            .with_location(false)
+            .capture(|it| {
+                it.satisfies(
+                    |tuple| &tuple.0,
+                    |value| {
+                        value.is_equal_to(0);
+                    },
+                )
+            });
+
+        assert_that!(failures[0].description.as_str())
+            .contains("Actual: 123... 3 more characters ...");
+    }
+
+    #[test]
+    fn non_debug_subject_can_use_debug_format_closure() {
+        let failures = assert_that!(Secret(1))
+            .with_debug_format(|value, f| write!(f, "Secret({})", value.0))
+            .with_location(false)
+            .capture(|it| it.is_equal_to(Secret(2)));
+
+        assert_that!(failures[0].description.as_str())
+            .contains("Expected: Secret(2)")
+            .contains("Actual: Secret(1)");
     }
 }

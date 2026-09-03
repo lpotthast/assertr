@@ -53,8 +53,8 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
             let details = [String::from(
                 "Actual is not equal to expected, even when ignoring casing.",
             )];
-            let actual = self.render_value(actual);
-            let expected = self.render_value(&expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(&expected);
             self.fail_with_details(details, |w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -74,7 +74,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_lowercase() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected {actual:#?} to be lowercase, but it is not.
@@ -92,7 +92,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_uppercase() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected {actual:#?} to be uppercase, but it is not.
@@ -110,7 +110,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_ascii_lowercase() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected {actual:#?} to be an ascii-lowercase char, but it is not.
@@ -128,7 +128,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_ascii_uppercase() {
-            let actual = self.render_value(actual);
+            let actual = self.render().value(actual);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected {actual:#?} to be an ascii-uppercase char, but it is not.
@@ -141,6 +141,27 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, char, Panic, NoRenderer> => CharAssertions<NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_use_the_active_renderer() {
+            let failures = assert_that!('A')
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(CharAssertions::is_lowercase);
+
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
 
     mod is_equal_to_ignoring_ascii_case {
         use crate::prelude::*;
@@ -173,9 +194,8 @@ mod tests {
                 
                   Actual: 'a'
                 
-                Details: [
-                    Actual is not equal to expected, even when ignoring casing.,
-                ]
+                Details:
+                  - Actual is not equal to expected, even when ignoring casing.
                 -------- assertr --------
             "});
         }

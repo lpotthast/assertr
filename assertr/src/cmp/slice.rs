@@ -1,4 +1,5 @@
-use crate::{AssertrPartialEq, EqContext, ValueRenderer, assertions::collection::CollectionStyle};
+use crate::renderer::GroupStyle;
+use crate::{AssertrPartialEq, EqContext, ValueRenderer};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -22,11 +23,11 @@ where
     R: ValueRenderer<Actual> + ValueRenderer<Expected>,
 {
     fn render_actual_values(ctx: &EqContext<'_, R>, values: &[&Self]) -> String {
-        format!("{:#?}", ctx.render_values(values, CollectionStyle::List))
+        format!("{:#?}", ctx.render_values(values, GroupStyle::List))
     }
 
     fn render_expected_values(ctx: &EqContext<'_, R>, values: &[&Expected]) -> String {
-        format!("{:#?}", ctx.render_values(values, CollectionStyle::List))
+        format!("{:#?}", ctx.render_values(values, GroupStyle::List))
     }
 }
 

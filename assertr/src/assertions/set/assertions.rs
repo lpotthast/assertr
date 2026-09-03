@@ -1,4 +1,4 @@
-use super::{Set, imp};
+use super::{SetLookup, imp};
 use crate::{AssertThat, Mode, ValueRenderer};
 
 /// The set relations: subset, superset, and disjointness.
@@ -14,31 +14,31 @@ pub trait SetAssertions<T, R> {
     /// Asserts that every subject element belongs to `expected_superset`.
     fn is_subset_of<O>(self, expected_superset: O) -> Self
     where
-        O: Set<Item = T>,
+        O: SetLookup<Item = T>,
         R: ValueRenderer<T>;
 
     /// Asserts that every element of `expected_subset` belongs to the subject.
     fn is_superset_of<O>(self, expected_subset: O) -> Self
     where
-        O: Set<Item = T>,
+        O: SetLookup<Item = T>,
         R: ValueRenderer<T>;
 
     /// Asserts that the subject and `other` share no element.
     fn is_disjoint_from<O>(self, other: O) -> Self
     where
-        O: Set<Item = T>,
+        O: SetLookup<Item = T>,
         R: ValueRenderer<T>;
 }
 
 impl<S, M, R> SetAssertions<S::Item, R> for AssertThat<'_, S, M, R>
 where
-    S: Set,
+    S: SetLookup,
     M: Mode,
 {
     #[track_caller]
     fn is_subset_of<O>(self, expected_superset: O) -> Self
     where
-        O: Set<Item = S::Item>,
+        O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
         imp::assert_is_subset_of(&self, &expected_superset);
@@ -48,7 +48,7 @@ where
     #[track_caller]
     fn is_superset_of<O>(self, expected_subset: O) -> Self
     where
-        O: Set<Item = S::Item>,
+        O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
         imp::assert_is_superset_of(&self, &expected_subset);
@@ -58,7 +58,7 @@ where
     #[track_caller]
     fn is_disjoint_from<O>(self, other: O) -> Self
     where
-        O: Set<Item = S::Item>,
+        O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
         imp::assert_is_disjoint_from(&self, &other);
@@ -68,6 +68,21 @@ where
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use alloc::collections::BTreeSet;
+
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, BTreeSet<i32>, Panic, NoRenderer>
+                    => SetAssertions<i32, NoRenderer>
+            );
+        }
+    }
+
     mod is_subset_of {
         use alloc::collections::BTreeSet;
         #[cfg(feature = "std")]
@@ -106,6 +121,16 @@ mod tests {
         }
 
         #[test]
+        fn a_borrowed_expected_set_keeps_the_underlying_set_type() {
+            let expected = BTreeSet::new();
+            let failures = assert_that!(BTreeSet::from(["extra"]))
+                .with_location(false)
+                .capture(|it| it.is_subset_of(&expected));
+
+            assert_that!(failures[0].details.as_slice()).is_empty();
+        }
+
+        #[test]
         #[cfg(feature = "std")]
         fn succeeds_with_different_hashers() {
             let actual: HashSet<&str, RandomState> = HashSet::from(["foo"]);
@@ -140,7 +165,7 @@ mod tests {
 
                     Actual: HashSet {{
                         "bar",
-                    }}
+                    }} (sorted for rendering)
 
                     is not a subset of expected
 
@@ -150,9 +175,8 @@ mod tests {
                         "bar",
                     ]
 
-                    Details: [
-                        The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.,
-                    ]
+                    Details:
+                      - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
                     -------- assertr --------
                 "#});
         }
@@ -252,7 +276,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `HashSet::<&str>::new()`
 
-                    Actual: HashSet {{}}
+                    Actual: HashSet {{}} (sorted for rendering)
 
                     is not a superset of expected
 
@@ -264,9 +288,8 @@ mod tests {
                         "bar",
                     ]
 
-                    Details: [
-                        The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.,
-                    ]
+                    Details:
+                      - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
                     -------- assertr --------
                 "#});
         }
@@ -368,7 +391,7 @@ mod tests {
 
                     Actual: HashSet {{
                         "foo",
-                    }}
+                    }} (sorted for rendering)
 
                     is not disjoint from expected
 
@@ -380,9 +403,8 @@ mod tests {
                         "foo",
                     ]
 
-                    Details: [
-                        The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.,
-                    ]
+                    Details:
+                      - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
                     -------- assertr --------
                 "#});
         }

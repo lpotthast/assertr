@@ -78,6 +78,19 @@ impl<'t, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R>
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, crate::PanicValue, Panic, NoRenderer>
+                    => PanicValueAssertions<'static, NoRenderer>
+            );
+        }
+    }
+
     mod has_type {
         use crate::{PanicValue, prelude::*};
         use indoc::formatdoc;
@@ -207,9 +220,8 @@ mod tests {
 
                   Actual panic value type: dyn core::any::Any
 
-                Details: [
-                    The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.,
-                ]
+                Details:
+                  - The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
                 -------- assertr --------
             "});
         }

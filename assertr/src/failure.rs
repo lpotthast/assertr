@@ -7,11 +7,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::{Arguments, Display, Write};
 
-use crate::{
-    AssertThat,
-    details::{DetailMessages, WithDetail},
-    prelude::Mode,
-};
+use crate::{AssertThat, details::WithDetail, prelude::Mode};
 
 /// A description accepted by [`AssertThat::fail`] without first allocating a `String`.
 pub trait Failure {
@@ -71,6 +67,12 @@ pub struct AssertionFailure {
     /// expression.
     pub expression: Option<&'static str>,
 
+    /// The Rust type name of the assertion subject that raised this failure.
+    ///
+    /// This is produced by [`core::any::type_name`] and is intended for diagnostics. A failure
+    /// raised by a derived child records the child's subject type rather than the root's.
+    pub subject_type_name: &'static str,
+
     /// The assertion-specific description, such as the rendered subject and expected value.
     /// Location, subject name, expression, and detail messages live in their own fields.
     pub description: String,
@@ -118,12 +120,35 @@ impl Display for AssertionFailure {
 
         if !self.messages.is_empty() || !self.details.is_empty() {
             f.write_str("\n")?;
-            let detail_messages = DetailMessages(&self.messages, &self.details);
-            f.write_fmt(format_args!("Details: {detail_messages:#?}\n"))?;
+            write_labeled_entries(f, "Messages", &self.messages)?;
+            write_labeled_entries(f, "Details", &self.details)?;
         }
 
         f.write_str(BANNER)
     }
+}
+
+fn write_labeled_entries(
+    f: &mut core::fmt::Formatter<'_>,
+    label: &str,
+    entries: &[String],
+) -> core::fmt::Result {
+    if entries.is_empty() {
+        return Ok(());
+    }
+
+    f.write_fmt(format_args!("{label}:\n"))?;
+    for entry in entries {
+        let mut lines = entry.split('\n');
+        f.write_str("  - ")?;
+        f.write_str(lines.next().unwrap_or_default())?;
+        for line in lines {
+            f.write_str("\n    ")?;
+            f.write_str(line)?;
+        }
+        f.write_str("\n")?;
+    }
+    Ok(())
 }
 
 const MAX_EXPRESSION_CHARS: usize = 100;
@@ -229,6 +254,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
             location,
             subject_name: self.state.subject_name.clone(),
             expression: self.state.expression,
+            subject_type_name: core::any::type_name::<T>(),
             description,
             details: details.into_iter().collect(),
             messages,

@@ -29,8 +29,8 @@ impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
         let actual = self.actual();
         let expected = &true;
         if actual != expected {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -51,8 +51,8 @@ impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
         let actual = self.actual();
         let expected = &false;
         if actual != expected {
-            let actual = self.render_value(actual);
-            let expected = self.render_value(expected);
+            let actual = self.render().value(actual);
+            let expected = self.render().value(expected);
             self.fail(|w: &mut String| {
                 writedoc! {w, r"
                     Expected: {expected:#?}
@@ -67,6 +67,27 @@ impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod renderer_contract {
+        use crate::prelude::*;
+        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, bool, Panic, NoRenderer> => BoolAssertions<NoRenderer>
+            );
+        }
+
+        #[test]
+        fn failures_use_the_active_renderer() {
+            let failures = assert_that!(false)
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(BoolAssertions::is_true);
+
+            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        }
+    }
 
     mod is_true {
         use crate::prelude::*;

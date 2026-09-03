@@ -53,12 +53,11 @@ fn main() {
                 ],
             }}
 
-            Details: [
-                Differences: [
+            Details:
+              - Differences: [
                     "value": expected 43, but was 42,
                     "label": expected "question", but was "answer",
-                ],
-            ]
+                ]
             -------- assertr --------
         "#});
 }
