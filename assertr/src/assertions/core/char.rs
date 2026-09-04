@@ -141,7 +141,7 @@ mod tests {
                 .with_location(false)
                 .capture(CharAssertions::is_lowercase);
 
-            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
         }
     }
 

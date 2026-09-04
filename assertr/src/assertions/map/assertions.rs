@@ -315,7 +315,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_exactly_entries([("x", 10), ("y", 20), ("z", 30)]));
 
-            assert_that!(TextReporter.report(&failures[0]))
+            assert_that!(ToHumanReadableText.render(&failures[0]))
                 .contains("Expected: [")
                 .contains("] (... 2 more entries ...)");
             assert_that!(failures[0].facts.iter().any(|fact| {
@@ -734,7 +734,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_entry_satisfying("value", is_renderer_expected_two));
 
-            assert_that!(TextReporter.report(&failures[0].children[0])).contains(SENTINEL);
+            assert_that!(ToHumanReadableText.render(&failures[0].children[0])).contains(SENTINEL);
         }
     }
 

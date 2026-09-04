@@ -333,13 +333,15 @@ mod tests {
                 })
             });
 
-            assert_that!(TextReporter.report(&failures[0]).as_str()).contains(indoc::indoc! {r"
+            assert_that!(ToHumanReadableText.render(&failures[0]).as_str()).contains(
+                indoc::indoc! {r"
                 Expected: NestedParentAssertrEq {
                     child: Eq::Eq(ChildAssertrEq {
                         id: Eq::Eq(2),
                     }),
                 }
-            "});
+            "},
+            );
         }
 
         #[derive(Debug, AssertrEq)]
@@ -364,7 +366,8 @@ mod tests {
                 })
             });
 
-            assert_that!(TextReporter.report(&failures[0]).as_str()).contains(indoc::indoc! {r"
+            assert_that!(ToHumanReadableText.render(&failures[0]).as_str()).contains(
+                indoc::indoc! {r"
                 Expected: VecParentAssertrEq {
                     children: Eq::Eq([
                         ChildAssertrEq {
@@ -372,7 +375,8 @@ mod tests {
                         },
                     ]),
                 }
-            "});
+            "},
+            );
         }
 
         #[cfg(feature = "std")]
@@ -404,7 +408,8 @@ mod tests {
                 })
             });
 
-            assert_that!(TextReporter.report(&failures[0]).as_str()).contains(indoc::indoc! {r#"
+            assert_that!(ToHumanReadableText.render(&failures[0]).as_str()).contains(
+                indoc::indoc! {r#"
                 Expected: MapParentAssertrEq {
                     children: Eq::Eq({
                         "first": ChildAssertrEq {
@@ -412,7 +417,8 @@ mod tests {
                         },
                     }),
                 }
-            "#});
+            "#},
+            );
         }
     }
 }

@@ -102,7 +102,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_in_time_zone_named("Europe/Berlin"));
 
-            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
         }
     }
 

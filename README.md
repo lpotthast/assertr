@@ -151,10 +151,11 @@ The detailed material lives on the API item that owns it:
 - **Capture mode**: collect failures as structured `AssertionFailure` values instead of panicking. See
   [`AssertThat::capture`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture) and
   [`AssertionFailure`](https://docs.rs/assertr/latest/assertr/failure/struct.AssertionFailure.html).
-- **Failure reports**: inspect retained value trees or produce human-readable text with a reporter. See
+- **Failure adapters**: inspect retained value trees or transform failures through typed, chainable adapters. See
   [`Rendered`](https://docs.rs/assertr/latest/assertr/renderer/struct.Rendered.html),
-  [`FailureReporter`](https://docs.rs/assertr/latest/assertr/report/trait.FailureReporter.html), and
-  [`TextReporter`](https://docs.rs/assertr/latest/assertr/report/struct.TextReporter.html).
+  [`Adapter`](https://docs.rs/assertr/latest/assertr/failure/adapter/trait.Adapter.html),
+  [`FailurePipeline`](https://docs.rs/assertr/latest/assertr/failure/adapter/struct.FailurePipeline.html), and
+  [`ToHumanReadableText`](https://docs.rs/assertr/latest/assertr/failure/adapter/struct.ToHumanReadableText.html).
 - **Partial equality**: compare only some fields of a struct with `#[derive(AssertrEq)]`, including nested structs and
   collections of them. See [`AssertrEq`](https://docs.rs/assertr/latest/assertr/prelude/derive.AssertrEq.html).
 - **Rendering values without `Debug`**: swap the renderer that failure messages use. See

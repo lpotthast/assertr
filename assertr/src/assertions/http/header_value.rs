@@ -193,14 +193,14 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(HttpHeaderValueAssertions::is_ascii);
-            assert_that!(TextReporter.report(&opaque_failures[0])).contains(SENTINEL);
+            assert_that!(ToHumanReadableText.render(&opaque_failures[0])).contains(SENTINEL);
 
             let visible = HeaderValue::from_static("visible");
             let projected_failures = assert_that!(visible)
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(HttpHeaderValueAssertions::is_sensitive);
-            assert_that!(TextReporter.report(&projected_failures[0])).contains(SENTINEL);
+            assert_that!(ToHumanReadableText.render(&projected_failures[0])).contains(SENTINEL);
         }
     }
 
@@ -434,7 +434,7 @@ mod tests {
                 .capture(|it| it.is_ascii().is_not_empty());
 
             assert_that!(&failures).has_length(1);
-            assert_that!(TextReporter.report(&failures[0])).contains("is not ASCII");
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains("is not ASCII");
         }
     }
 
@@ -546,7 +546,7 @@ mod tests {
             assert_that!(&failures).has_length(1);
             assert_that!(failures.first())
                 .get_some()
-                .map(|it| TextReporter.report(it.borrowed()).into())
+                .map(|it| ToHumanReadableText.render(it.borrowed()).into())
                 .contains("is not ASCII");
         }
 

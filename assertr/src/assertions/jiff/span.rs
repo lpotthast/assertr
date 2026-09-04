@@ -97,7 +97,7 @@ mod tests {
                 .with_location(false)
                 .capture(SpanAssertions::is_zero);
 
-            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
         }
     }
 

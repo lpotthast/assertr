@@ -7,7 +7,7 @@ use super::{GroupStyle, TypeHint, omission, type_info::short_rust_type_name};
 ///
 /// Values are rendered into this owned tree when a failure is built. A leaf's text is produced
 /// exactly once by the active [`ValueRenderer`](super::ValueRenderer). Structural syntax and
-/// truncation markers remain data until a reporter explicitly prints the tree.
+/// truncation markers remain data until an adapter explicitly prints the tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Rendered {

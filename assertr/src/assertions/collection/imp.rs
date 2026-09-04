@@ -6,9 +6,8 @@
 use alloc::vec::Vec;
 
 use super::{Collection, StableOrder};
-use crate::failure::{Fact, FailureBuilder, FailureKind};
+use crate::failure::{Fact, FailureBuilder, FailureKind, adapter::ToHumanReadableText};
 use crate::renderer::{GroupStyle, RenderingOrder};
-use crate::report::TextReporter;
 use crate::{
     AssertThat, AssertionFailure, AssertrPartialEq, EqContext, Mode, ValueRenderer, mode::Capture,
     util::matching::match_bipartite,
@@ -114,7 +113,7 @@ fn element_children<C: Collection + ?Sized>(
         unsatisfied.sort_by_cached_key(|failures| {
             failures
                 .iter()
-                .map(|failure| TextReporter.report(failure))
+                .map(|failure| ToHumanReadableText.render(failure).into_string())
                 .collect::<alloc::string::String>()
         });
     }

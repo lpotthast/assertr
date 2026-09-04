@@ -2,8 +2,8 @@
 //!
 //! The builder collects the rendered values, the relation, the facts, and the children of one
 //! failure and turns them into an [`AssertionFailure`]. Its text is derived from those fields by
-//! [`TextReporter`](crate::report::TextReporter), so assertion code never formats a failure body
-//! by hand and the grammar of every failure comes from one place.
+//! [`ToHumanReadableText`](super::adapter::ToHumanReadableText), so assertion code never formats a
+//! failure body by hand and the grammar of every failure comes from one place.
 
 use alloc::{borrow::Cow, format, string::String, vec::Vec};
 use core::{fmt::Display, panic::Location};
@@ -121,7 +121,7 @@ impl<'c> FailureBuilder<Attached<'c>> {
         if sink.captures() {
             sink.store_failure(failure);
         } else {
-            panic!("{}", crate::report::report_for_panic(&failure));
+            panic!("{}", super::adapter::message_for_panic(&failure));
         }
     }
 }

@@ -26,7 +26,8 @@ fn assertion_details_are_scoped_to_the_failure_that_produced_them() {
     assert_that!(&failures).has_length(2);
     assert_that!(failures[0].facts.as_slice())
         .contains_matching(|it: &assertr::Fact| it.label == "Elements not matched");
-    assert_that!(TextReporter.report(&failures[1])).contains("does not contain\n\nExpected: 42");
+    assert_that!(ToHumanReadableText.render(&failures[1]))
+        .contains("does not contain\n\nExpected: 42");
     assert_that!(failures[1].facts.as_slice())
         .does_not_contain_matching(|it: &assertr::Fact| it.label == "Elements not matched");
 }
@@ -47,9 +48,9 @@ fn equality_differences_are_scoped_to_the_failure_that_produced_them() {
         });
 
     assert_that!(&failures).has_length(2);
-    assert_that!(TextReporter.report(&failures[0]).as_str())
+    assert_that!(ToHumanReadableText.render(&failures[0]).as_str())
         .contains(r#""age": expected 31, but was 30"#);
-    assert_that!(TextReporter.report(&failures[1]).as_str())
+    assert_that!(ToHumanReadableText.render(&failures[1]).as_str())
         .contains(r#""age": expected 32, but was 30"#)
         .does_not_contain("expected 31");
 }
@@ -72,7 +73,7 @@ fn detail_messages_are_scoped_to_the_assertion_that_adds_them() {
     assert_that!(failures).contains_exactly_satisfying([
         |it: AssertThat<AssertionFailure, Capture>| {
             it.satisfies_owned(
-                |failure| TextReporter.report(failure),
+                |failure| ToHumanReadableText.render(failure),
                 |it| {
                     it.is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -95,7 +96,7 @@ fn detail_messages_are_scoped_to_the_assertion_that_adds_them() {
         },
         |it: AssertThat<AssertionFailure, Capture>| {
             it.satisfies_owned(
-                |failure| TextReporter.report(failure),
+                |failure| ToHumanReadableText.render(failure),
                 |it| {
                     it.is_equal_to(formatdoc! {r"
                 -------- assertr --------

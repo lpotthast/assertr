@@ -20,10 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   layout stay data.
   `renderer::IntoRendered` consumes the lazy adapters returned by `AssertThat::render()` into the same tree stored in
   a failure.
-- `report::FailureReporter` supports arbitrary uses of a structured failure through an associated output type.
-  `TextReporter` produces the default human-readable panic report. With `std`, `report::set_reporter` installs a
-  string-producing process-wide panic reporter once. Side-effect-only reporters can return `()` when applied directly
-  to captured failures.
+- `failure::adapter::Adapter<Input>` transforms structured failures and intermediate representations with typed
+  outputs and errors. `then`, `tap`, sequential `FanOut`, and `FailurePipeline::branch` compose linear and independent
+  processing paths. `ToHumanReadableText` produces the default typed text output. With `std`,
+  `set_failure_pipeline` installs a string-producing process-wide panic pipeline once and falls back to the
+  human-readable failure plus an adapter diagnostic if that pipeline errors or panics.
 - `BinaryHeap` implements `HasLength` and `Collection`, so heaps support length and order-free collection assertions.
   Its diagnostic presentation is sorted and explicitly marked as such.
 - `StableOrderExtractAssertions` provides `get_first`, `get_last`, and `get_single`.
@@ -61,8 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   by `renderer::GroupStyle` for explicitly styled ad-hoc groups passed to `RenderingContext::values`,
   `RenderingContext::borrowed_values`, or `EqContext::render_values`.
 - **Breaking:** The `AssertionFailure::description` and `AssertionFailure::details` fields were removed. A failure and
-  its facts no longer implement `Display`. Use `TextReporter::report(&failure)` for the complete human-readable
-  report, or inspect `relation`, the `Rendered` value fields, and `facts` directly.
+  its facts no longer implement `Display`. Use `ToHumanReadableText::render(&failure)` for the complete human-readable
+  output, or inspect `relation`, the `Rendered` value fields, and `facts` directly.
 - **Breaking:** `AssertThat::fail`, `AssertThat::fail_with_details`, and the `failure::Failure` trait were removed.
   Custom leaf assertions raise failures the way built-in ones do: `AssertThat::failure(kind)` returns a
   `failure::FailureBuilder` that takes the rendered `actual`, the `relation`, the `expected` or `unexpected` value,

@@ -155,7 +155,7 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(ProgramAssertions::exists);
-            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
 
             assert_that_panic_by(|| {
                 assert_that!(Program::from(MISSING))

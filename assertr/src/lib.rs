@@ -26,8 +26,10 @@
 //! [`expected`](AssertionFailure::expected) values, the
 //! [`relation`](AssertionFailure::relation) between them, further
 //! [`facts`](AssertionFailure::facts), nested [`children`](AssertionFailure::children), and a
-//! [`kind`](AssertionFailure::kind) as data. A [`FailureReporter`](report::FailureReporter) puts
-//! that data to use. [`TextReporter`](report::TextReporter) produces the default panic message.
+//! [`kind`](AssertionFailure::kind) as data. An
+//! [`Adapter`](failure::adapter::Adapter) transforms that data, and adapters compose into typed
+//! pipelines. [`ToHumanReadableText`](failure::adapter::ToHumanReadableText) produces the default
+//! panic message.
 //!
 //! ## Custom assertions
 //!
@@ -167,7 +169,6 @@ mod details;
 pub mod failure;
 pub mod mode;
 pub mod renderer;
-pub mod report;
 #[cfg(test)]
 mod test_support;
 mod tracking;

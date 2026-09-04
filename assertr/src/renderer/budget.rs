@@ -21,7 +21,7 @@
 ///     .with_location(false)
 ///     .capture(|it| it.contains(0));
 ///
-/// assert!(TextReporter.report(&failures[0]).contains(concat!(
+/// assert!(ToHumanReadableText.render(&failures[0]).contains(concat!(
 ///         "Actual: [\n",
 ///         "    123... 3 more characters ...,\n",
 ///         "    234... 3 more characters ...,\n",

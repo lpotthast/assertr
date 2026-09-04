@@ -317,7 +317,7 @@ mod tests {
                 |failure: AssertThat<AssertionFailure, Capture>| {
                     failure
                         .satisfies_owned(
-                            |failure| TextReporter.report(failure),
+                            |failure| ToHumanReadableText.render(failure),
                             |description| {
                                 description.contains(formatdoc! {r"
                                     Actual: Mutex {{
@@ -334,7 +334,7 @@ mod tests {
                                 children.contains_exactly_satisfying([
                                     |child: AssertThat<AssertionFailure, Capture>| {
                                         child.satisfies_owned(
-                                            |failure| TextReporter.report(failure),
+                                            |failure| ToHumanReadableText.render(failure),
                                             |description| {
                                                 description.contains(formatdoc! {r"
                                                     Expected: 43

@@ -166,7 +166,7 @@ fn a_condition_failure_renders_the_error_under_details() {
         .with_location(false)
         .capture(|it| it.is(IsAlive {}));
 
-    assert_that!(TextReporter.report(&failures[0])).is_equal_to(formatdoc! {r#"
+    assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {r#"
         -------- assertr --------
         Expression: `bob`
 

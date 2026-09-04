@@ -149,7 +149,7 @@ mod tests {
         let failures = assert_that_owned!(0..100)
             .with_location(false)
             .capture(|it| it.does_not_contain(99));
-        let failure = TextReporter.report(&failures[0]);
+        let failure = ToHumanReadableText.render(&failures[0]);
         assert_that!(failure.as_str())
             .contains("last 16 consumed elements")
             .contains("84,")

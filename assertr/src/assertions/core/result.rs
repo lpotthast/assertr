@@ -266,7 +266,7 @@ mod tests {
                 .with_location(false)
                 .capture(ResultAssertions::is_ok);
 
-            assert_that!(TextReporter.report(&failures[0]))
+            assert_that!(ToHumanReadableText.render(&failures[0]))
                 .contains("Err(")
                 .contains(SENTINEL);
         }

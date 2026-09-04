@@ -61,9 +61,9 @@ pub use crate::conversion::toml;
 #[cfg(all(test, not(feature = "std")))]
 pub(crate) use crate::entry::assert_that_panic_by;
 pub use crate::eq;
+pub use crate::failure::adapter::ToHumanReadableText;
 pub use crate::mode::{Capture, Mode, Panic};
 pub use crate::pattern;
-pub use crate::report::{FailureReporter, TextReporter};
 #[cfg(test)]
 pub(crate) use crate::test_support::FailureReportAssertions;
 #[cfg(test)]

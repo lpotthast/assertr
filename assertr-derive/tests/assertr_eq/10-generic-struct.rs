@@ -35,7 +35,7 @@ fn main() {
             bytes: any(),
         })
     });
-    TextReporter.report(&failures[0]).must().be_equal_to(formatdoc! {r#"
+    ToHumanReadableText.render(&failures[0]).must().be_equal_to(formatdoc! {r#"
             -------- assertr --------
             Expected: GenericAssertrEq {{
                 value: Eq::Eq(43),

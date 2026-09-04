@@ -4,10 +4,9 @@ use core::fmt;
 use crate::{
     AssertThat, AssertionFailure, AssertrPartialEq, EqContext, Mode, ValueRenderer,
     assertions::{HasLength, collection::Collection, map::Map, set::SetLookup},
-    failure::FailureKind,
+    failure::{FailureKind, adapter::ToHumanReadableText},
     renderer::Rendered,
     renderer::{CollectionPresentation, RenderingOrder},
-    report::TextReporter,
 };
 
 pub(crate) fn rendered_text(value: &Rendered) -> alloc::string::String {
@@ -26,7 +25,7 @@ impl<M: Mode, R> FailureReportAssertions for AssertThat<'_, AssertionFailure, M,
     #[track_caller]
     fn has_text_report(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();
-        let report = TextReporter.report(self.actual());
+        let report = ToHumanReadableText.render(self.actual());
         let expected = expected.as_ref();
         if report != expected {
             self.failure(FailureKind::Equality)

@@ -5,7 +5,7 @@
 //! - Captured failures are structured `AssertionFailure` values whose fields (location, subject
 //!   name, asserted expression, subject type, actual, relation, expected, unexpected,
 //!   facts, chain-level messages, children, kind) can be inspected without parsing formatted text.
-//! - Values become owned rendered trees when failures are built. Reporters decide how to use
+//! - Values become owned rendered trees when failures are built. Adapters decide how to use
 //!   those trees at the panic boundary or after capture.
 
 use assertr::prelude::*;
@@ -72,20 +72,20 @@ fn failures_arrive_in_assertion_order_and_carry_the_messages_provided_up_to_them
     });
 
     assert_that!(&failures).has_length(2);
-    assert_that!(TextReporter.report(&failures[0])).contains("is not greater than");
-    assert_that!(TextReporter.report(&failures[1])).contains("Expected: 1");
+    assert_that!(ToHumanReadableText.render(&failures[0])).contains("is not greater than");
+    assert_that!(ToHumanReadableText.render(&failures[1])).contains("Expected: 1");
     // A message only reaches the failures raised after it was provided.
     assert_that!(failures[0].messages.as_slice()).contains_exactly(["early"]);
     assert_that!(failures[1].messages.as_slice()).contains_exactly(["early", "late"]);
 }
 
 #[test]
-fn the_text_reporter_renders_the_stable_human_readable_format() {
+fn the_human_readable_adapter_renders_the_stable_format() {
     let failures = assert_that!(42)
         .with_location(false)
         .capture(|it| it.is_equal_to(43));
 
-    assert_that!(TextReporter.report(&failures[0])).is_equal_to(formatdoc! {"
+    assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {"
         -------- assertr --------
         Expression: `42`
 
@@ -106,7 +106,7 @@ fn per_failure_diagnostics_are_exposed_as_facts() {
     assert_that!(failure.facts.is_empty()).is_false();
     assert_that!(failure.messages.as_slice()).is_empty();
     // The rendered form still shows them under `Details:`.
-    assert_that!(TextReporter.report(failure)).contains("Details:\n  - ");
+    assert_that!(ToHumanReadableText.render(failure)).contains("Details:\n  - ");
 }
 
 #[test]
@@ -123,7 +123,7 @@ fn messages_and_details_render_as_separate_plain_bullet_blocks() {
             it
         });
 
-    assert_that!(TextReporter.report(&failures[0])).is_equal_to(indoc::indoc! {"
+    assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(indoc::indoc! {"
         -------- assertr --------
         Expression: `42`
 
@@ -158,8 +158,8 @@ fn failures_from_derived_and_satisfies_assertions_reach_the_root() {
         });
 
     assert_that!(&failures).has_length(2);
-    assert_that!(TextReporter.report(&failures[0])).contains("xyz");
-    assert_that!(TextReporter.report(&failures[1])).contains("Expected: 9");
+    assert_that!(ToHumanReadableText.render(&failures[0])).contains("xyz");
+    assert_that!(ToHumanReadableText.render(&failures[1])).contains("Expected: 9");
     assert_that!(failures[0].subject_type_name).is_equal_to(core::any::type_name::<String>());
     assert_that!(failures[1].subject_type_name).is_equal_to(core::any::type_name::<usize>());
 }
@@ -226,16 +226,21 @@ fn dropping_an_unused_panic_mode_assertion_no_longer_panics() {
 }
 
 #[test]
-fn a_side_effect_only_reporter_can_consume_a_captured_failure() {
+fn a_side_effect_only_adapter_can_consume_a_captured_failure() {
     use core::cell::Cell;
+    use core::convert::Infallible;
+
+    use assertr::failure::adapter::Adapter;
 
     struct Observer<'a>(&'a Cell<Option<FailureKind>>);
 
-    impl FailureReporter for Observer<'_> {
+    impl Adapter<AssertionFailure> for Observer<'_> {
         type Output = ();
+        type Error = Infallible;
 
-        fn report(&self, failure: &assertr::AssertionFailure) {
+        fn adapt(&self, failure: &AssertionFailure) -> Result<(), Self::Error> {
             self.0.set(Some(failure.kind));
+            Ok(())
         }
     }
 
@@ -244,7 +249,7 @@ fn a_side_effect_only_reporter_can_consume_a_captured_failure() {
         .capture(|it| it.is_equal_to(2));
     let observed = Cell::new(None);
 
-    Observer(&observed).report(&failures[0]);
+    Observer(&observed).adapt(&failures[0]).unwrap();
 
     assert_that!(observed.get()).is_equal_to(Some(FailureKind::Equality));
 }
@@ -274,7 +279,7 @@ fn a_panic_inside_the_capture_closure_propagates_without_a_double_panic() {
 fn fluent_verify_and_verify_owned_return_structured_failures() {
     let failures = 42.verify(|it| it.with_location(false).be_equal_to(43));
     assert_that!(&failures).has_length(1);
-    assert_that!(TextReporter.report(&failures[0])).contains("Expected: 43");
+    assert_that!(ToHumanReadableText.render(&failures[0])).contains("Expected: 43");
 
     assert_that!(42.verify(|it| it.be_equal_to(42))).is_empty();
 
@@ -308,7 +313,8 @@ mod fields {
         assert_that!(text_opt(failure.unexpected.as_ref())).is_none();
         assert_that!(failure.facts.as_slice()).is_empty();
         assert_that!(failure.children.as_slice()).is_empty();
-        assert_that!(TextReporter.report(failure)).contains("Expected: 43\n\n  Actual: 42\n");
+        assert_that!(ToHumanReadableText.render(failure))
+            .contains("Expected: 43\n\n  Actual: 42\n");
     }
 
     #[test]
@@ -321,7 +327,7 @@ mod fields {
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("is equal to"));
         assert_that!(text_opt(failure.expected.as_ref())).is_none();
         assert_that!(text_opt(failure.unexpected.as_ref())).is_equal_to(Some("42"));
-        assert_that!(TextReporter.report(failure))
+        assert_that!(ToHumanReadableText.render(failure))
             .contains("Actual: 42\n\nis equal to\n\nUnexpected: 42\n");
     }
 
@@ -336,7 +342,7 @@ mod fields {
         assert_that!(text_opt(failure.actual.as_ref())).is_equal_to(Some("42"));
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("is not greater than"));
         assert_that!(text_opt(failure.expected.as_ref())).is_equal_to(Some("100"));
-        assert_that!(TextReporter.report(failure))
+        assert_that!(ToHumanReadableText.render(failure))
             .contains("Actual: 42\n\nis not greater than\n\nExpected: 100\n");
     }
 
@@ -493,7 +499,7 @@ mod fields {
         assert_that!(items.as_slice()).has_length(2);
         assert_that!(text(&items[0])).is_equal_to("4s");
         assert_that!(text(&items[1])).is_equal_to("6s");
-        assert_that!(TextReporter.report(&failures[0])).contains("Allowed range: [4s, 6s]");
+        assert_that!(ToHumanReadableText.render(&failures[0])).contains("Allowed range: [4s, 6s]");
     }
 
     #[test]
@@ -587,7 +593,7 @@ mod fields {
         assert_that!(child.facts.as_slice()).contains_exactly([Fact::new(Fact::INDEX, "1")]);
         assert_that!(child.subject_type_name).is_equal_to(core::any::type_name::<i32>());
 
-        assert_that!(TextReporter.report(failure)).ends_with(indoc::indoc! {"
+        assert_that!(ToHumanReadableText.render(failure)).ends_with(indoc::indoc! {"
             does not exactly satisfy the assertions
 
             Nested failures:
@@ -654,7 +660,7 @@ mod fields {
 
         assert_that!(failure.kind).is_equal_to(FailureKind::Other);
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not hold"));
-        assert_that!(TextReporter.report(failure)).contains("does not hold\n");
+        assert_that!(ToHumanReadableText.render(failure)).contains("does not hold\n");
         assert_that!(text_opt(failure.actual.as_ref())).is_none();
         assert_that!(text_opt(failure.expected.as_ref())).is_none();
         assert_that!(failure.facts.as_slice()).contains_exactly([Fact::note("some evidence")]);

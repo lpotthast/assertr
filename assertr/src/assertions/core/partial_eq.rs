@@ -98,7 +98,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_equal_to(Expected(2)));
 
-            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
         }
     }
 

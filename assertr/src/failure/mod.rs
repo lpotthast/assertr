@@ -4,12 +4,13 @@
 //! carry every part of a failure as data: the rendered [`actual`](AssertionFailure::actual) and
 //! [`expected`](AssertionFailure::expected) values, the [`relation`](AssertionFailure::relation)
 //! between them, additional [`facts`](AssertionFailure::facts), and nested
-//! [`children`](AssertionFailure::children). Reporters consume these fields directly, so no
+//! [`children`](AssertionFailure::children). Adapters consume these fields directly, so no
 //! machine-readable use needs to parse the human-readable text report.
 //!
 //! A leaf assertion raises a failure through [`AssertThat::failure`], which returns the
 //! [`FailureBuilder`] every built-in assertion uses.
 
+pub mod adapter;
 mod builder;
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
@@ -26,7 +27,7 @@ pub(crate) const BANNER: &str = "-------- assertr --------\n";
 
 /// The family an assertion belongs to, recorded on every [`AssertionFailure`].
 ///
-/// One tag per family, never one per method: the kind exists so reporters can filter or group
+/// One tag per family, never one per method: the kind exists so adapters can filter or group
 /// failures, not to describe them. The description lives in the failure's other fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -119,8 +120,9 @@ impl Fact {
 /// programmatically or compose their own rendering without parsing formatted text.
 ///
 /// The complete human-readable form is produced by
-/// [`TextReporter`](crate::report::TextReporter). In panic mode, the configured reporter's output
-/// becomes the panic message. Capture mode retains the fields without producing a report.
+/// [`ToHumanReadableText`](adapter::ToHumanReadableText). In panic mode, the configured failure
+/// pipeline's output becomes the panic message. Capture mode retains the fields without running
+/// a pipeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AssertionFailure {
@@ -148,8 +150,8 @@ pub struct AssertionFailure {
 
     /// The sentence between the actual and the expected value, such as `does not contain` or
     /// `is not greater than`. A failure without a relation is a direct comparison of
-    /// [`expected`](Self::expected) and [`actual`](Self::actual), which the text reporter renders
-    /// as an aligned `Expected:` / `Actual:` pair.
+    /// [`expected`](Self::expected) and [`actual`](Self::actual), which the human-readable adapter
+    /// renders as an aligned `Expected:` / `Actual:` pair.
     pub relation: Option<Cow<'static, str>>,
 
     /// The value the subject was compared with, rendered through the chain's
@@ -187,8 +189,8 @@ pub struct AssertionFailure {
 
 impl AssertionFailure {
     /// Prepends a fact locating this failure within its parent's subject, such as
-    /// [`Fact::index`] or [`Fact::key`]. The text reporter uses it as the heading of the nested
-    /// failure.
+    /// [`Fact::index`] or [`Fact::key`]. The human-readable adapter uses it as the heading of the
+    /// nested failure.
     #[must_use]
     pub fn located_at(mut self, fact: Fact) -> Self {
         self.facts.insert(0, fact);

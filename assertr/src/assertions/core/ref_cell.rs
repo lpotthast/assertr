@@ -109,7 +109,7 @@ mod tests {
                 .with_location(false)
                 .capture(RefCellAssertions::is_borrowed);
 
-            assert_that!(TextReporter.report(&failures[0]))
+            assert_that!(ToHumanReadableText.render(&failures[0]))
                 .contains("RefCell {")
                 .contains(SENTINEL);
         }

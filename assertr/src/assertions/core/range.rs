@@ -194,14 +194,14 @@ mod tests {
                     it.contains_element(4);
                     it
                 });
-            assert_that!(TextReporter.report(&bound_failures[0]))
+            assert_that!(ToHumanReadableText.render(&bound_failures[0]))
                 .contains(format!("{SENTINEL}..{SENTINEL}"));
 
             let value_failures = assert_that!(1)
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(|it| it.is_in_range(2..=3));
-            assert_that!(TextReporter.report(&value_failures[0]))
+            assert_that!(ToHumanReadableText.render(&value_failures[0]))
                 .contains(SENTINEL)
                 .contains(format!("{SENTINEL}..={SENTINEL}"));
         }

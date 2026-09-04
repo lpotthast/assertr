@@ -729,7 +729,7 @@ mod tests {
                 }
                 failures
                     .iter()
-                    .map(|failure| TextReporter.report(failure))
+                    .map(|failure| ToHumanReadableText.render(failure))
                     .collect::<Vec<_>>()
             };
 

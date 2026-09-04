@@ -132,7 +132,8 @@ mod tests {
                 .with_location(false)
                 .capture(MutexAssertions::is_locked);
 
-            assert_that!(TextReporter.report(&failures[0])).contains(format!("data: {SENTINEL},"));
+            assert_that!(ToHumanReadableText.render(&failures[0]))
+                .contains(format!("data: {SENTINEL},"));
         }
     }
 

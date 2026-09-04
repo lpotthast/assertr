@@ -148,7 +148,7 @@ mod tests {
                 .with_location(false)
                 .capture(OptionAssertions::is_none);
 
-            assert_that!(TextReporter.report(&failures[0]))
+            assert_that!(ToHumanReadableText.render(&failures[0]))
                 .contains("Some(")
                 .contains(SENTINEL);
         }
@@ -160,7 +160,7 @@ mod tests {
                 .with_location(false)
                 .capture(OptionAssertions::is_some);
 
-            assert_that!(TextReporter.report(&failures[0])).contains("Actual: None");
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains("Actual: None");
         }
     }
 

@@ -5,6 +5,28 @@ extern crate alloc;
 use assertr::prelude::*;
 
 #[allow(dead_code)]
+fn failure_adapters_compile_without_std() {
+    use core::convert::Infallible;
+
+    use assertr::failure::adapter::{Adapter, AdapterExt, HumanReadableText, ToHumanReadableText};
+
+    struct Sink;
+
+    impl Adapter<HumanReadableText> for Sink {
+        type Output = ();
+        type Error = Infallible;
+
+        fn adapt(&self, _input: &HumanReadableText) -> Result<Self::Output, Self::Error> {
+            Ok(())
+        }
+    }
+
+    fn accepts_failure_adapter<A: Adapter<assertr::AssertionFailure>>(_adapter: A) {}
+
+    accepts_failure_adapter(ToHumanReadableText.then(Sink));
+}
+
+#[allow(dead_code)]
 fn pattern_assertions_compile_without_std() {
     assert_that!(Some(42)).is_matching(pattern!(Some(42)));
 }

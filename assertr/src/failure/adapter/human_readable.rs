@@ -1,4 +1,4 @@
-//! Assertr's stable human-readable failure reporter.
+//! Assertr's stable human-readable failure adapter.
 //!
 //! The body grammar is:
 //!
@@ -26,33 +26,108 @@
 //! index or map key it was raised for.
 
 use alloc::string::String;
-use core::fmt::{self, Display, Write};
+use core::{
+    convert::Infallible,
+    fmt::{self, Display, Write},
+    ops::Deref,
+};
 
-use super::FailureReporter;
+use super::Adapter;
 use crate::{AssertionFailure, Fact, failure::BANNER, renderer::Rendered};
 
-/// Produces assertr's stable human-readable failure report.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TextReporter;
+/// The typed human-readable representation of an assertion failure.
+///
+/// Keeping this distinct from an arbitrary [`String`] prevents a machine-oriented stage from
+/// accidentally accepting human-readable text. It can be borrowed through [`AsRef<str>`] or
+/// consumed with [`into_string`](Self::into_string).
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct HumanReadableText(String);
 
-impl TextReporter {
-    /// Produces the stable human-readable report for one failure.
+impl HumanReadableText {
+    /// Borrows the generated text.
     #[must_use]
-    pub fn report(self, failure: &AssertionFailure) -> String {
-        <Self as FailureReporter>::report(&self, failure)
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consumes this value and returns its string.
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
     }
 }
 
-impl FailureReporter for TextReporter {
-    type Output = String;
+impl AsRef<str> for HumanReadableText {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
 
-    fn report(&self, failure: &AssertionFailure) -> Self::Output {
+impl Deref for HumanReadableText {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
+}
+
+impl Display for HumanReadableText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl From<HumanReadableText> for String {
+    fn from(text: HumanReadableText) -> Self {
+        text.into_string()
+    }
+}
+
+impl PartialEq<str> for HumanReadableText {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for HumanReadableText {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<String> for HumanReadableText {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == other
+    }
+}
+
+/// Converts an [`AssertionFailure`] to assertr's stable human-readable text.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ToHumanReadableText;
+
+impl ToHumanReadableText {
+    /// Converts one failure without the `Result` wrapper needed by generic adapter composition.
+    ///
+    /// # Panics
+    ///
+    /// Panics if Rust's infallible [`String`] formatter unexpectedly reports an error.
+    #[must_use]
+    pub fn render(self, failure: &AssertionFailure) -> HumanReadableText {
         let mut report = String::new();
         report.push_str(BANNER);
         write_report(failure, &mut report, false)
             .expect("writing a text report to a String cannot fail");
         report.push_str(BANNER);
-        report
+        HumanReadableText(report)
+    }
+}
+
+impl Adapter<AssertionFailure> for ToHumanReadableText {
+    type Output = HumanReadableText;
+    type Error = Infallible;
+
+    fn adapt(&self, failure: &AssertionFailure) -> Result<Self::Output, Self::Error> {
+        Ok(self.render(failure))
     }
 }
 
@@ -290,7 +365,7 @@ mod tests {
     use crate::prelude::*;
     use crate::renderer::IntoRendered;
 
-    use super::{TextReporter, body};
+    use super::{ToHumanReadableText, body};
 
     mod body_grammar {
         use super::*;
@@ -374,7 +449,7 @@ mod tests {
                 it
             });
 
-            assert_that!(TextReporter.report(&failures[0])).is_equal_to(indoc::indoc! {"
+            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(indoc::indoc! {"
                 -------- assertr --------
                 Expression: `1`
 

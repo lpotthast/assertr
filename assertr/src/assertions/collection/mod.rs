@@ -326,7 +326,7 @@ mod tests {
         let failures = assert_that!(&heap)
             .with_location(false)
             .capture(|it| it.contains(4));
-        assert_that!(TextReporter.report(&failures[0])).contains(indoc::indoc! {"
+        assert_that!(ToHumanReadableText.render(&failures[0])).contains(indoc::indoc! {"
             Actual: BinaryHeap [
                 1,
                 2,
