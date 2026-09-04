@@ -2,12 +2,9 @@
 
 use crate::AssertThat;
 use crate::ValueRenderer;
+use crate::failure::FailureKind;
 use crate::mode::Mode;
-use alloc::format;
-use alloc::string::String;
 use core::cmp::Ordering;
-use core::fmt::Write;
-use indoc::writedoc;
 #[cfg(any(feature = "std", feature = "libm"))]
 use num_traits::Float;
 use num_traits::{Num, Signed};
@@ -142,20 +139,11 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_zero() {
-            let details = [format!(
-                "Expecting additive identity of type '{}'",
-                core::any::type_name::<T>()
-            )];
             let expected = T::zero();
-            let expected = self.render().value(&expected);
-            let actual = self.render().value(actual);
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(actual))
+                .expected(self.render().value(&expected))
+                .raise();
         }
         self
     }
@@ -176,20 +164,11 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_one() {
-            let details = [format!(
-                "Expecting multiplicative identity of type '{}'",
-                core::any::type_name::<T>()
-            )];
             let expected = T::one();
-            let expected = self.render().value(&expected);
-            let actual = self.render().value(actual);
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(actual))
+                .expected(self.render().value(&expected))
+                .raise();
         }
         self
     }
@@ -211,14 +190,10 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_negative() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected value to be negative. But was
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is not negative")
+                .raise();
         }
         self
     }
@@ -232,14 +207,10 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_positive() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected value to be positive. But was
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is not positive")
+                .raise();
         }
         self
     }
@@ -262,13 +233,11 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         );
         if !deviation_is_valid {
             let allowed_deviation = self.render().value(&allowed_deviation);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Allowed deviation must be a non-negative number.
-
-                    Actual deviation: {allowed_deviation:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .relation("was given an invalid allowed deviation")
+                .fact("Allowed deviation", format_args!("{allowed_deviation:#?}"))
+                .note("The allowed deviation must be a non-negative number.")
+                .raise();
             return self;
         }
 
@@ -292,18 +261,13 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         };
 
         if !within_allowed_deviation {
-            let actual = self.render().value(actual);
-            let expected = self.render().value(&expected);
             let allowed_deviation = self.render().value(&allowed_deviation);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected value to be close to: {expected:#?},
-                     with allowed deviation being: {allowed_deviation:#?},
-                      but value was outside the allowed deviation.
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is not close to")
+                .expected(self.render().value(&expected))
+                .fact("Allowed deviation", format_args!("{allowed_deviation:#?}"))
+                .raise();
         }
         self
     }
@@ -319,15 +283,10 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         let actual = self.actual();
         if !actual.is_nan() {
             let nan = T::nan();
-            let nan = self.render().value(&nan);
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {nan:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(actual))
+                .expected(self.render().value(&nan))
+                .raise();
         }
         self
     }
@@ -342,14 +301,10 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_finite() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected a finite value, but was
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(actual))
+                .relation("is not finite")
+                .raise();
         }
         self
     }
@@ -364,16 +319,10 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_infinite() {
-            let inf = T::infinity();
-            let inf = self.render().value(&inf);
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: +/- {inf:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(actual))
+                .relation("is not infinite")
+                .raise();
         }
         self
     }
@@ -388,14 +337,10 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_normal() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected a normal floating-point value, but was
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(actual))
+                .relation("is not normal")
+                .raise();
         }
         self
     }
@@ -410,14 +355,10 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_subnormal() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected a subnormal floating-point value, but was
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(actual))
+                .relation("is not subnormal")
+                .raise();
         }
         self
     }
@@ -667,9 +608,6 @@ mod tests {
                     Expected: 0
 
                       Actual: 3
-                    
-                    Details:
-                      - Expecting additive identity of type 'i32'
                     -------- assertr --------
                 "});
         }
@@ -714,9 +652,6 @@ mod tests {
                     Expected: 1
 
                       Actual: 3
-                    
-                    Details:
-                      - Expecting multiplicative identity of type 'i32'
                     -------- assertr --------
                 "});
         }
@@ -764,9 +699,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `0.0`
 
-                    Expected value to be negative. But was
+                    Actual: 0.0
 
-                      Actual: 0.0
+                    is not negative
                     -------- assertr --------
                 "});
         }
@@ -779,9 +714,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `1.23`
 
-                    Expected value to be negative. But was
+                    Actual: 1.23
 
-                      Actual: 1.23
+                    is not negative
                     -------- assertr --------
                 "});
         }
@@ -820,9 +755,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `-1.23`
 
-                    Expected value to be positive. But was
+                    Actual: -1.23
 
-                      Actual: -1.23
+                    is not positive
                     -------- assertr --------
                 "});
         }
@@ -850,11 +785,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `0.3319`
 
-                    Expected value to be close to: 0.333,
-                     with allowed deviation being: 0.001,
-                      but value was outside the allowed deviation.
+                    Actual: 0.3319
 
-                      Actual: 0.3319
+                    is not close to
+
+                    Expected: 0.333
+
+                    Details:
+                      - Allowed deviation: 0.001
                     -------- assertr --------
                 "});
         }
@@ -894,7 +832,7 @@ mod tests {
                     .is_close_to(1.0, f64::INFINITY);
             })
             .has_type::<String>()
-            .contains("outside the allowed deviation");
+            .contains("is not close to");
 
             assert_that_panic_by(|| {
                 assert_that!(1.0)
@@ -902,7 +840,7 @@ mod tests {
                     .is_close_to(f64::NAN, f64::INFINITY);
             })
             .has_type::<String>()
-            .contains("outside the allowed deviation");
+            .contains("is not close to");
         }
 
         #[test]
@@ -913,7 +851,7 @@ mod tests {
                     .is_close_to(1.0, f64::NAN);
             })
             .has_type::<String>()
-            .contains("Allowed deviation must be a non-negative number");
+            .contains("was given an invalid allowed deviation");
         }
 
         #[test]
@@ -924,7 +862,7 @@ mod tests {
                     .is_close_to(i8::MAX, i8::MAX);
             })
             .has_type::<String>()
-            .contains("outside the allowed deviation");
+            .contains("is not close to");
         }
 
         #[test]
@@ -933,7 +871,17 @@ mod tests {
                 assert_that!(1_i8).with_location(false).is_close_to(1, -1);
             })
             .has_type::<String>()
-            .contains("Allowed deviation must be a non-negative number");
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `1_i8`
+
+                was given an invalid allowed deviation
+
+                Details:
+                  - Allowed deviation: -1
+                  - The allowed deviation must be a non-negative number.
+                -------- assertr --------
+            "});
         }
 
         #[test]
@@ -948,11 +896,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `0.3341`
 
-                    Expected value to be close to: 0.333,
-                     with allowed deviation being: 0.001,
-                      but value was outside the allowed deviation.
+                    Actual: 0.3341
 
-                      Actual: 0.3341
+                    is not close to
+
+                    Expected: 0.333
+
+                    Details:
+                      - Allowed deviation: 0.001
                     -------- assertr --------
                 "});
         }
@@ -1020,9 +971,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `f32::infinity()`
 
-                    Expected a finite value, but was
+                    Actual: inf
 
-                      Actual: inf
+                    is not finite
                     -------- assertr --------
                 "});
         }
@@ -1039,9 +990,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `f32::neg_infinity()`
 
-                    Expected a finite value, but was
+                    Actual: -inf
 
-                      Actual: -inf
+                    is not finite
                     -------- assertr --------
                 "});
         }
@@ -1077,9 +1028,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `1.23`
 
-                    Expected: +/- inf
+                    Actual: 1.23
 
-                      Actual: 1.23
+                    is not infinite
                     -------- assertr --------
                 "});
         }
@@ -1113,9 +1064,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `subnormal`
 
-                    Expected a normal floating-point value, but was
+                    Actual: 1e-45
 
-                      Actual: 1e-45
+                    is not normal
                     -------- assertr --------
                 "});
         }
@@ -1147,9 +1098,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `1.0_f32`
 
-                    Expected a subnormal floating-point value, but was
+                    Actual: 1.0
 
-                      Actual: 1.0
+                    is not subnormal
                     -------- assertr --------
                 "});
         }

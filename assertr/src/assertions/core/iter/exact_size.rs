@@ -1,8 +1,4 @@
-use alloc::string::String;
-use core::fmt::Write;
-use indoc::writedoc;
-
-use crate::{AssertThat, Mode};
+use crate::{AssertThat, Mode, failure::FailureKind};
 
 /// Non-consuming assertions for the exact number of elements remaining in an iterator.
 #[allow(clippy::return_self_not_must_use)]
@@ -22,12 +18,11 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions for AssertTha
         self.track_assertion();
         let actual = self.actual().len();
         if actual != expected {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                Expected remaining element count: {expected}
-                  Actual remaining element count: {actual}
-            "}
-            });
+            self.failure(FailureKind::Length)
+                .relation("does not have the expected remaining count")
+                .expected(expected)
+                .fact("Actual remaining count", actual)
+                .raise();
         }
         self
     }
@@ -37,12 +32,10 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions for AssertTha
         self.track_assertion();
         let actual = self.actual().len();
         if actual != 0 {
-            let verb = if actual == 1 { "remains" } else { "remain" };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                Expected the iterator to have no remaining elements, but {actual} {verb}.
-            "}
-            });
+            self.failure(FailureKind::Length)
+                .relation("unexpectedly has remaining elements")
+                .fact("Remaining count", actual)
+                .raise();
         }
         self
     }
@@ -51,11 +44,9 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions for AssertTha
     fn has_remaining_elements(self) -> Self {
         self.track_assertion();
         if self.actual().len() == 0 {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                Expected the iterator to have remaining elements, but it has none.
-            "}
-            });
+            self.failure(FailureKind::Length)
+                .relation("has no remaining elements")
+                .raise();
         }
         self
     }
@@ -107,8 +98,12 @@ mod tests {
                     -------- assertr --------
                     Expression: `[1, 2].into_iter()`
 
-                    Expected remaining element count: 3
-                      Actual remaining element count: 2
+                    does not have the expected remaining count
+
+                    Expected: 3
+
+                    Details:
+                      - Actual remaining count: 2
                     -------- assertr --------
                 "});
         }
@@ -132,23 +127,6 @@ mod tests {
         #[test]
         fn panics_when_elements_remain() {
             assert_that_panic_by(|| {
-                assert_that!([1].into_iter())
-                    .with_location(false)
-                    .has_no_remaining_elements();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `[1].into_iter()`
-
-                    Expected the iterator to have no remaining elements, but 1 remains.
-                    -------- assertr --------
-                "});
-        }
-
-        #[test]
-        fn uses_plural_grammar_when_multiple_elements_remain() {
-            assert_that_panic_by(|| {
                 assert_that!([1, 2].into_iter())
                     .with_location(false)
                     .has_no_remaining_elements();
@@ -158,7 +136,10 @@ mod tests {
                     -------- assertr --------
                     Expression: `[1, 2].into_iter()`
 
-                    Expected the iterator to have no remaining elements, but 2 remain.
+                    unexpectedly has remaining elements
+
+                    Details:
+                      - Remaining count: 2
                     -------- assertr --------
                 "});
         }
@@ -193,7 +174,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `[1_i32; 0].into_iter()`
 
-                    Expected the iterator to have remaining elements, but it has none.
+                    has no remaining elements
                     -------- assertr --------
                 "});
         }

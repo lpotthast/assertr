@@ -2,9 +2,8 @@ use alloc::string::String;
 use core::fmt::Write;
 use core::ops::Bound;
 use core::ops::RangeBounds;
-use indoc::writedoc;
 
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions over a range subject's membership.
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
@@ -60,15 +59,12 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
     {
         self.track_assertion();
         if !self.actual().contains(&expected) {
-            let actual = render_range(self, self.actual());
-            let expected = self.render().value(&expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual range: {actual}
-
-                    Does not contain expected: {expected:#?}
-                "}
-            });
+            let range = render_range(self, self.actual());
+            self.failure(FailureKind::Membership)
+                .actual(format_args!("{range}"))
+                .relation("does not contain")
+                .expected(self.render().value(&expected))
+                .raise();
         }
     }
 
@@ -80,15 +76,12 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
     {
         self.track_assertion();
         if self.actual().contains(&expected) {
-            let actual = render_range(self, self.actual());
-            let expected = self.render().value(&expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual range: {actual}
-
-                    Contains element expected not to be contained: {expected:#?}
-                "}
-            });
+            let range = render_range(self, self.actual());
+            self.failure(FailureKind::Membership)
+                .actual(format_args!("{range}"))
+                .relation("contains")
+                .unexpected(self.render().value(&expected))
+                .raise();
         }
     }
 }
@@ -106,13 +99,11 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
 
         if !expected.contains(actual) {
             let range = render_range(&self, &expected);
-            let actual = self.render().value(actual);
-            self.fail(|err: &mut String| {
-                writedoc! {err, r"
-                    Actual: {actual:#?}
-                    is not in range: {range}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is not in range")
+                .expected(format_args!("{range}"))
+                .raise();
         }
 
         self
@@ -130,13 +121,11 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
 
         if expected.contains(actual) {
             let range = render_range(&self, &expected);
-            let actual = self.render().value(actual);
-            self.fail(|err: &mut String| {
-                writedoc! {err, r"
-                    Actual: {actual:#?}
-                    was not expected to be in range: {range}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is in range")
+                .unexpected(format_args!("{range}"))
+                .raise();
         }
 
         self
@@ -205,14 +194,14 @@ mod tests {
                     it.contains_element(4);
                     it
                 });
-            assert_that!(bound_failures[0].description.as_str())
+            assert_that!(bound_failures[0].description())
                 .contains(format!("{SENTINEL}..{SENTINEL}"));
 
             let value_failures = assert_that!(1)
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(|it| it.is_in_range(2..=3));
-            assert_that!(value_failures[0].description.as_str())
+            assert_that!(value_failures[0].description())
                 .contains(SENTINEL)
                 .contains(format!("{SENTINEL}..={SENTINEL}"));
         }
@@ -250,9 +239,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `"aa".."zz"`
 
-                    Actual range: "aa".."zz"
-                    
-                    Does not contain expected: "zz"
+                    Actual: "aa".."zz"
+
+                    does not contain
+
+                    Expected: "zz"
                     -------- assertr --------
                 "#});
         }
@@ -286,9 +277,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `"aa".."zz"`
 
-                    Actual range: "aa".."zz"
-                    
-                    Contains element expected not to be contained: "cc"
+                    Actual: "aa".."zz"
+
+                    contains
+
+                    Unexpected: "cc"
                     -------- assertr --------
                 "#});
         }
@@ -324,7 +317,10 @@ mod tests {
                     Expression: `'A'`
 
                     Actual: 'A'
-                    is not in range: 'a'..='z'
+
+                    is not in range
+
+                    Expected: 'a'..='z'
                     -------- assertr --------
                 "});
         }
@@ -356,7 +352,10 @@ mod tests {
                     Expression: `5`
 
                     Actual: 5
-                    was not expected to be in range: 0..=7
+
+                    is in range
+
+                    Unexpected: 0..=7
                     -------- assertr --------
                 "});
         }

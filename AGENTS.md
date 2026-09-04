@@ -54,7 +54,10 @@ features, and API details.
   compile-time regression for a new trait or capability boundary.
 - Mark assertion methods `#[track_caller]` and call `self.track_assertion()` first. A composing method whose entire
   body delegates to tracked assertions must not track again.
-- Report failures through `self.fail(...)` or `self.fail_with_details(...)`. Use details for distinct evidence.
+- Every leaf assertion, built-in or downstream, raises its failure through `self.failure(FailureKind::..)` with
+  `.actual(..)`, `.relation(..)`, `.expected(..)` or `.unexpected(..)`, labeled `.fact(..)`s, `.note(..)`s, and
+  nested `.children(..)`, then `.raise()`. Never format a failure body by hand: `Display` renders every failure from
+  its fields with one grammar. Relations are lowercase sentences without trailing periods and never embed values.
 - Add explicit negative assertions only when commonly useful and not already represented by an existing assertion.
   Hand-write diagnostics that name the negation and preserve its evidence. There is no generic `.not()`. Allow at most
   one antonym synonym per positive assertion.

@@ -1,11 +1,19 @@
-use alloc::string::String;
-use core::fmt::Write;
 use core::task::Poll;
-use indoc::writedoc;
 
 use crate::actual::Actual;
+use crate::failure::FailureKind;
 use crate::mode::{Mode, Panic};
 use crate::{AssertThat, ValueRenderer};
+
+/// Raises the failure of an assertion that found `Pending` where it expected `Ready`.
+#[track_caller]
+fn fail_pending<T, M: Mode, R>(this: &AssertThat<'_, Poll<T>, M, R>) {
+    this.failure(FailureKind::Variant)
+        .actual(format_args!("Pending"))
+        .relation("is not the expected variant")
+        .expected(format_args!("Poll::Ready"))
+        .raise();
+}
 
 /// Non-extracting assertions for `Poll` subjects.
 #[allow(clippy::return_self_not_must_use)]
@@ -36,15 +44,8 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
     #[track_caller]
     fn is_ready(self) -> Self {
         self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_ready() {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: Pending
-
-                    is not yet ready.
-                "}
-            });
+        if !self.actual().is_ready() {
+            fail_pending(&self);
         }
         self
     }
@@ -61,13 +62,11 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
                 Poll::Ready(value) => self.render().variant(actual, "Ready", value),
                 Poll::Pending => unreachable!("already checked"),
             };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not pending.
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(actual)
+                .relation("is not the expected variant")
+                .expected(format_args!("Poll::Pending"))
+                .raise();
         }
         self
     }
@@ -79,8 +78,7 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
         self.track_assertion();
-        let actual = self.actual();
-        if actual.is_ready() {
+        if self.actual().is_ready() {
             self.satisfies(
                 |it| match it {
                     Poll::Ready(t) => t,
@@ -89,13 +87,7 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
                 assertions,
             )
         } else {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: Pending
-
-                    is not yet ready.
-                "}
-            });
+            fail_pending(&self);
             self
         }
     }
@@ -118,15 +110,8 @@ impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic
     #[track_caller]
     fn get_ready(self) -> AssertThat<'t, T, Panic, R> {
         self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_ready() {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: Pending
-
-                    is not yet ready.
-                "}
-            });
+        if !self.actual().is_ready() {
+            fail_pending(&self);
         }
         self.map(|it| match it {
             Actual::Owned(p) => Actual::Owned(match p {
@@ -169,7 +154,7 @@ mod tests {
                 .with_location(false)
                 .capture(PollAssertions::is_pending);
 
-            assert_that!(failures[0].description.as_str())
+            assert_that!(failures[0].description())
                 .contains("Ready(")
                 .contains(SENTINEL);
         }
@@ -213,7 +198,9 @@ mod tests {
 
                 Actual: Pending
 
-                is not yet ready.
+                is not the expected variant
+
+                Expected: Poll::Ready
                 -------- assertr --------
             "});
         }
@@ -232,7 +219,9 @@ mod tests {
 
                         Actual: Pending
 
-                        is not yet ready.
+                        is not the expected variant
+
+                        Expected: Poll::Ready
                         -------- assertr --------
                     "});
                 },
@@ -283,7 +272,9 @@ mod tests {
 
                 Actual: Pending
 
-                is not yet ready.
+                is not the expected variant
+
+                Expected: Poll::Ready
                 -------- assertr --------
             "});
         }
@@ -355,7 +346,9 @@ mod tests {
 
                         Actual: Pending
 
-                        is not yet ready.
+                        is not the expected variant
+
+                        Expected: Poll::Ready
                         -------- assertr --------
                     "});
                 },
@@ -376,7 +369,9 @@ mod tests {
 
                 Actual: Pending
 
-                is not yet ready.
+                is not the expected variant
+
+                Expected: Poll::Ready
                 -------- assertr --------
             "});
         }
@@ -417,7 +412,9 @@ mod tests {
                     }},
                 )
 
-                is not pending.
+                is not the expected variant
+
+                Expected: Poll::Pending
                 -------- assertr --------
             "});
         }

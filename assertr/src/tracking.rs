@@ -21,14 +21,16 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// closure that performed no assertions at all, so an assertion that forgets to
     /// track makes a passing capture closure panic as if it had been empty.
     ///
-    /// A hand-written leaf assertion calls this before using [`AssertThat::fail`] or
-    /// [`AssertThat::fail_with_details`]. Assertions built by composing existing ones (through
+    /// A handwritten leaf assertion calls this before raising a failure through
+    /// [`AssertThat::failure`]. Assertions built by composing existing ones (through
     /// [`AssertThat::satisfies`] and friends) are tracked by the assertions they delegate to and
     /// must not call this in addition. See [custom assertions](crate#custom-assertions) for how to
     /// shape the trait around either kind of method.
     ///
     /// ```
     /// use assertr::prelude::*;
+    ///
+    /// use assertr::failure::FailureKind;
     ///
     /// trait EvenAssertions {
     ///     fn is_even(self) -> Self;
@@ -38,9 +40,11 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ///     #[track_caller]
     ///     fn is_even(self) -> Self {
     ///         self.track_assertion();
-    ///         let actual = *self.actual();
-    ///         if actual % 2 != 0 {
-    ///             self.fail(format_args!("Expected {actual} to be even, but it is odd!"));
+    ///         if self.actual() % 2 != 0 {
+    ///             self.failure(FailureKind::Predicate)
+    ///                 .actual(self.actual())
+    ///                 .relation("is not even")
+    ///                 .raise();
     ///         }
     ///         self
     ///     }

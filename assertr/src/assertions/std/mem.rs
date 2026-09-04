@@ -1,6 +1,4 @@
-use crate::{AssertThat, Mode, Type};
-use core::fmt::Write;
-use indoc::writedoc;
+use crate::{AssertThat, Mode, Type, failure::FailureKind};
 
 /// Static memory assertions for any type.
 #[allow(clippy::return_self_not_must_use)]
@@ -18,15 +16,12 @@ impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.needs_drop() {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Type {actual:#?} was expected to need drop,
-
-                    but dropping it is guaranteed to have no side effect.
-
-                    You may have forgotten to `impl Drop` for this type.
-                ", actual = actual.get_type_name()}
-            });
+            self.failure(FailureKind::Other)
+                .actual(format_args!("{}", actual.get_type_name()))
+                .relation("does not need drop")
+                .note("Dropping a value of this type is guaranteed to have no side effect.")
+                .note("You may have forgotten to `impl Drop` for this type.")
+                .raise();
         }
         self
     }
@@ -80,17 +75,19 @@ mod tests {
                     .needs_drop();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+            .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `assertr::assertions::std::mem::tests::needs_drop::panics_when_type_does_not_need_drop::DoeNotNeed...`
 
-                    Type "assertr::assertions::std::mem::tests::needs_drop::panics_when_type_does_not_need_drop::DoeNotNeedDrop" was expected to need drop,
+                    Actual: assertr::assertions::std::mem::tests::needs_drop::panics_when_type_does_not_need_drop::DoeNotNeedDrop
 
-                    but dropping it is guaranteed to have no side effect.
+                    does not need drop
 
-                    You may have forgotten to `impl Drop` for this type.
+                    Details:
+                      - Dropping a value of this type is guaranteed to have no side effect.
+                      - You may have forgotten to `impl Drop` for this type.
                     -------- assertr --------
-                "#});
+                "});
         }
     }
 }

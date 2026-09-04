@@ -1,10 +1,4 @@
-use alloc::format;
-use alloc::string::String;
-use alloc::vec::Vec;
-use core::fmt::Write;
-use indoc::writedoc;
-
-use crate::{AssertThat, AssertrPartialEq, Mode, ValueRenderer};
+use crate::{AssertThat, AssertrPartialEq, Mode, ValueRenderer, failure::FailureKind};
 
 /// Equality and inequality assertions using [`AssertrPartialEq`].
 #[allow(clippy::return_self_not_must_use)]
@@ -38,19 +32,14 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
         let mut ctx = self.eq_context();
 
         if !AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
-            let mut details = Vec::new();
+            let mut failure = self
+                .failure(FailureKind::Equality)
+                .actual(self.render().value(actual))
+                .expected(self.render().value(expected));
             if !ctx.differences.differences.is_empty() {
-                details.push(format!("Differences: {:#?}", ctx.differences));
+                failure = failure.fact("Differences", format_args!("{:#?}", ctx.differences));
             }
-            let actual = self.render().value(actual);
-            let expected = self.render().value(expected);
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            failure.raise();
         }
         self
     }
@@ -69,21 +58,11 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
         let mut ctx = self.eq_context();
 
         if AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
-            let mut details = Vec::new();
-            // There shouldn't be any differences here...
-            if !ctx.differences.differences.is_empty() {
-                details.push(format!("Differences: {:#?}", ctx.differences));
-            }
-            details.push(String::from("Values were expected to be different."));
-            let actual = self.render().value(actual);
-            let expected = self.render().value(expected);
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(actual))
+                .relation("is equal to")
+                .unexpected(self.render().value(expected))
+                .raise();
         }
         self
     }
@@ -119,7 +98,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_equal_to(Expected(2)));
 
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -202,12 +181,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `"foo"`
 
-                    Expected: "foo"
+                    Actual: "foo"
 
-                      Actual: "foo"
+                    is equal to
 
-                    Details:
-                      - Values were expected to be different.
+                    Unexpected: "foo"
                     -------- assertr --------
                 "#});
         }

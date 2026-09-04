@@ -5,11 +5,10 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::Write;
-use indoc::writedoc;
 
 use super::SetLookup;
-use crate::renderer::GroupStyle;
+use crate::failure::FailureKind;
+use crate::renderer::{GroupStyle, RenderingOrder};
 use crate::{AssertThat, Mode, ValueRenderer};
 
 fn type_difference_detail<S, O>() -> Option<String>
@@ -34,6 +33,12 @@ fn set_type_name<S: ?Sized>() -> &'static str {
     name
 }
 
+/// Whether diagnostics over `S`'s elements are sorted by their rendered text because the set has
+/// no deterministic iteration order.
+fn sorts_for_rendering<S: SetLookup + ?Sized>() -> bool {
+    S::PRESENTATION.order() == RenderingOrder::SortByRenderedText
+}
+
 #[track_caller]
 pub(crate) fn assert_is_subset_of<S, O, M, R>(this: &AssertThat<'_, S, M, R>, expected_superset: &O)
 where
@@ -51,22 +56,24 @@ where
         .collect::<Vec<_>>();
 
     if !elements_not_in_expected.is_empty() {
-        let rendered_actual = this.render().collection(actual);
-        let expected_superset_rendered = this.render().collection(expected_superset);
-        let elements_rendered = this
-            .render()
-            .borrowed_values::<S::Item, _>(elements_not_in_expected.as_slice(), GroupStyle::List);
-        this.fail_with_details(type_difference_detail::<S, O>(), |w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                is not a subset of expected
-
-                Expected superset: {expected_superset_rendered:#?}
-
-                Elements not in expected: {elements_rendered:#?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().collection(actual))
+            .relation("is not a subset of")
+            .expected(this.render().collection(expected_superset))
+            .fact(
+                "Elements not in expected",
+                format_args!(
+                    "{:#?}",
+                    this.render()
+                        .borrowed_values::<S::Item, _>(
+                            elements_not_in_expected.as_slice(),
+                            GroupStyle::List
+                        )
+                        .sort_for_rendering(sorts_for_rendering::<S>())
+                ),
+            )
+            .notes(type_difference_detail::<S, O>())
+            .raise();
     }
 }
 
@@ -87,22 +94,24 @@ where
         .collect::<Vec<_>>();
 
     if !elements_not_in_actual.is_empty() {
-        let rendered_actual = this.render().collection(actual);
-        let expected_subset_rendered = this.render().collection(expected_subset);
-        let elements_rendered = this
-            .render()
-            .borrowed_values::<S::Item, _>(elements_not_in_actual.as_slice(), GroupStyle::List);
-        this.fail_with_details(type_difference_detail::<S, O>(), |w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                is not a superset of expected
-
-                Expected subset: {expected_subset_rendered:#?}
-
-                Elements not in actual: {elements_rendered:#?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().collection(actual))
+            .relation("is not a superset of")
+            .expected(this.render().collection(expected_subset))
+            .fact(
+                "Elements not in actual",
+                format_args!(
+                    "{:#?}",
+                    this.render()
+                        .borrowed_values::<S::Item, _>(
+                            elements_not_in_actual.as_slice(),
+                            GroupStyle::List
+                        )
+                        .sort_for_rendering(sorts_for_rendering::<O>())
+                ),
+            )
+            .notes(type_difference_detail::<S, O>())
+            .raise();
     }
 }
 
@@ -123,22 +132,24 @@ where
         .collect::<Vec<_>>();
 
     if !overlapping_elements.is_empty() {
-        let rendered_actual = this.render().collection(actual);
-        let other_rendered = this.render().collection(other);
-        let elements_rendered = this
-            .render()
-            .borrowed_values::<S::Item, _>(overlapping_elements.as_slice(), GroupStyle::List);
-        this.fail_with_details(type_difference_detail::<S, O>(), |w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                is not disjoint from expected
-
-                Expected disjoint set: {other_rendered:#?}
-
-                Overlapping elements: {elements_rendered:#?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().collection(actual))
+            .relation("is not disjoint from")
+            .expected(this.render().collection(other))
+            .fact(
+                "Overlapping elements",
+                format_args!(
+                    "{:#?}",
+                    this.render()
+                        .borrowed_values::<S::Item, _>(
+                            overlapping_elements.as_slice(),
+                            GroupStyle::List
+                        )
+                        .sort_for_rendering(sorts_for_rendering::<S>())
+                ),
+            )
+            .notes(type_difference_detail::<S, O>())
+            .raise();
     }
 }
 

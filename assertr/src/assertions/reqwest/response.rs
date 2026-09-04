@@ -11,13 +11,12 @@
 //! `http`'s header types, so the two integrations meet on the same `HeaderValue`.
 
 use crate::AssertThat;
+use crate::failure::FailureKind;
 use crate::mode::{Mode, Panic};
 use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::Write;
-use indoc::writedoc;
 use reqwest::header::HeaderValue;
 
 /// Non-extracting assertions for [`reqwest::Response`].
@@ -64,15 +63,11 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
 
         let actual = self.actual().status();
         if actual != expected {
-            self.fail_with_details(url_detail(&self), |w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual}
-
-                    is not the expected status code
-
-                    Expected: {expected}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(format_args!("{actual}"))
+                .expected(format_args!("{expected}"))
+                .fact(URL, self.actual().url())
+                .raise();
         }
 
         self
@@ -81,35 +76,55 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
     #[track_caller]
     fn is_informational(self) -> Self {
         let actual = self.actual().status();
-        assert_status_class(&self, actual.is_informational(), "informational (1xx)");
+        assert_status_class(
+            &self,
+            actual.is_informational(),
+            "is not informational",
+            "1xx",
+        );
         self
     }
 
     #[track_caller]
     fn is_success(self) -> Self {
         let actual = self.actual().status();
-        assert_status_class(&self, actual.is_success(), "a success (2xx)");
+        assert_status_class(&self, actual.is_success(), "is not a success", "2xx");
         self
     }
 
     #[track_caller]
     fn is_redirection(self) -> Self {
         let actual = self.actual().status();
-        assert_status_class(&self, actual.is_redirection(), "a redirection (3xx)");
+        assert_status_class(
+            &self,
+            actual.is_redirection(),
+            "is not a redirection",
+            "3xx",
+        );
         self
     }
 
     #[track_caller]
     fn is_client_error(self) -> Self {
         let actual = self.actual().status();
-        assert_status_class(&self, actual.is_client_error(), "a client error (4xx)");
+        assert_status_class(
+            &self,
+            actual.is_client_error(),
+            "is not a client error",
+            "4xx",
+        );
         self
     }
 
     #[track_caller]
     fn is_server_error(self) -> Self {
         let actual = self.actual().status();
-        assert_status_class(&self, actual.is_server_error(), "a server error (5xx)");
+        assert_status_class(
+            &self,
+            actual.is_server_error(),
+            "is not a server error",
+            "5xx",
+        );
         self
     }
 
@@ -126,14 +141,13 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
 
         let name = name.as_ref();
         if let Some(value) = self.actual().headers().get(name) {
-            let actual = render_value(value);
-            self.fail_with_details(url_detail(&self), |w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is the value of header {name:?}, which was not expected to be present
-                "}
-            });
+            self.failure(FailureKind::Membership)
+                .actual(header_names(&self))
+                .relation("contains the header")
+                .unexpected(name)
+                .fact(URL, self.actual().url())
+                .fact("Value", format_args!("{:?}", render_value(value)))
+                .raise();
         }
 
         self
@@ -148,30 +162,21 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
 
         match self.actual().headers().get(name) {
             None => {
-                let actual = header_names(&self);
-                let mut details = url_detail(&self);
-                details.push(format!("Expected value: {expected:?}"));
-                self.fail_with_details(details, |w: &mut String| {
-                    writedoc! {w, r"
-                        Actual: {actual:#?}
-
-                        does not contain the expected header
-
-                        Expected: {name:?}
-                    "}
-                });
+                self.failure(FailureKind::Equality)
+                    .actual(header_names(&self))
+                    .relation("does not contain the header")
+                    .expected(name)
+                    .fact(URL, self.actual().url())
+                    .fact("Expected value", format_args!("{expected:?}"))
+                    .raise();
             }
             Some(value) if value.as_bytes() != expected.as_bytes() => {
-                let actual = render_value(value);
-                self.fail_with_details(url_detail(&self), |w: &mut String| {
-                    writedoc! {w, r"
-                        Actual: {actual:#?}
-
-                        is not the expected value of header {name:?}
-
-                        Expected: {expected:?}
-                    "}
-                });
+                self.failure(FailureKind::Equality)
+                    .actual(render_value(value))
+                    .expected(expected)
+                    .fact(URL, self.actual().url())
+                    .fact("Header", format_args!("{name:?}"))
+                    .raise();
             }
             Some(_) => {}
         }
@@ -252,7 +257,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
         }
 
         let location = core::panic::Location::caller();
-        let url = format!("URL: {}", self.actual().url());
+        let url = format!("{}", self.actual().url());
         get_text_at(self, location, url)
     }
 
@@ -271,7 +276,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
         }
 
         let location = core::panic::Location::caller();
-        let url = format!("URL: {}", self.actual().url());
+        let url = format!("{}", self.actual().url());
         async move {
             use crate::actual::Actual;
 
@@ -280,19 +285,13 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
             let parsed = serde_json::from_str::<T>(this.actual().as_str());
 
             if let Err(error) = &parsed {
-                let actual = this.render().value(this.actual());
-                let expected_type = core::any::type_name::<T>();
-                this.fail_with_details_at(
-                    location,
-                    [url, format!("Error: {error}")],
-                    |w: &mut String| {
-                        writedoc! {w, r"
-                        Actual: {actual:#?}
-
-                        is not valid JSON for the expected type: {expected_type}
-                    "}
-                    },
-                );
+                this.failure_at(FailureKind::Other, location)
+                    .actual(this.render().value(this.actual()))
+                    .relation("is not valid JSON for the expected type")
+                    .fact(URL, url)
+                    .fact("Expected type", core::any::type_name::<T>())
+                    .fact("Error", error)
+                    .raise();
             }
 
             // Unreachable when the body did not deserialize: this trait is panic-mode only, so the
@@ -319,45 +318,34 @@ async fn get_text_at<'t, R>(
         })
         .await;
 
-    // The read failure gets its own message and its own details rather than a staged detail
+    // The read failure gets its own message and its own facts rather than a staged detail
     // message: a staged one would also be attached to every later failure of the chain, and
     // claim the body could not be read long after it was read successfully.
     if let Err(error) = this.actual() {
-        this.fail_with_details_at(
-            location,
-            [url, format!("Error: {error}")],
-            |w: &mut String| {
-                writedoc! {w, r"
-                Expected: Response body to be readable.
-
-                  Actual: Reading the response body failed!
-            "}
-            },
-        );
+        this.failure_at(FailureKind::Other, location)
+            .relation("has a body that could not be read")
+            .fact(URL, url)
+            .fact("Error", error)
+            .raise();
     }
 
     this.map(|it| Actual::Owned(it.unwrap_owned().expect("already checked")))
 }
 
-/// The request URL, as the one piece of evidence that tells two responses apart.
-fn url_detail<M: Mode, R>(this: &AssertThat<'_, reqwest::Response, M, R>) -> Vec<String> {
-    alloc::vec![format!("URL: {}", this.actual().url())]
-}
+/// The label of the fact carrying the request URL, the one piece of evidence that tells two
+/// responses apart.
+const URL: &str = "URL";
 
 /// Fails with the missing-header diagnostic shared by assertions and projections.
 #[track_caller]
 fn assert_header_present<M: Mode, R>(this: &AssertThat<'_, reqwest::Response, M, R>, name: &str) {
     if this.actual().headers().get(name).is_none() {
-        let actual = header_names(this);
-        this.fail_with_details(url_detail(this), |w: &mut String| {
-            writedoc! {w, r"
-                Actual: {actual:#?}
-
-                does not contain the expected header
-
-                Expected: {name:?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(header_names(this))
+            .relation("does not contain the header")
+            .expected(name)
+            .fact(URL, this.actual().url())
+            .raise();
     }
 }
 
@@ -380,19 +368,18 @@ fn render_value(value: &HeaderValue) -> String {
 fn assert_status_class<M: Mode, R>(
     this: &AssertThat<'_, reqwest::Response, M, R>,
     holds: bool,
-    class: &str,
+    relation: &'static str,
+    class: &'static str,
 ) {
     this.track_assertion();
 
     if !holds {
-        let actual = this.actual().status();
-        this.fail_with_details(url_detail(this), |w: &mut String| {
-            writedoc! {w, r"
-                Actual: {actual}
-
-                is not {class} status code
-            "}
-        });
+        this.failure(FailureKind::Other)
+            .actual(format_args!("{}", this.actual().status()))
+            .relation(relation)
+            .expected(format_args!("{class}"))
+            .fact(URL, this.actual().url())
+            .raise();
     }
 }
 
@@ -557,11 +544,9 @@ mod tests {
                 -------- assertr --------
                 Expression: `response(404, &[], "")`
 
-                Actual: 404 Not Found
-
-                is not the expected status code
-
                 Expected: 200 OK
+
+                  Actual: 404 Not Found
 
                 Details:
                   - URL: http://localhost/hello
@@ -581,11 +566,9 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(404, &[], "")`
 
-                        Actual: 404 Not Found
-
-                        is not the expected status code
-
                         Expected: 200 OK
+
+                          Actual: 404 Not Found
 
                         Details:
                           - URL: http://localhost/hello
@@ -599,7 +582,9 @@ mod tests {
 
                         Actual: 404 Not Found
 
-                        is not a success (2xx) status code
+                        is not a success
+
+                        Expected: 2xx
 
                         Details:
                           - URL: http://localhost/hello
@@ -641,7 +626,9 @@ mod tests {
 
                 Actual: 200 OK
 
-                is not informational (1xx) status code
+                is not informational
+
+                Expected: 1xx
 
                 Details:
                   - URL: http://localhost/hello
@@ -663,7 +650,9 @@ mod tests {
 
                         Actual: 200 OK
 
-                        is not informational (1xx) status code
+                        is not informational
+
+                        Expected: 1xx
 
                         Details:
                           - URL: http://localhost/hello
@@ -706,7 +695,9 @@ mod tests {
 
                 Actual: 500 Internal Server Error
 
-                is not a success (2xx) status code
+                is not a success
+
+                Expected: 2xx
 
                 Details:
                   - URL: http://localhost/hello
@@ -728,7 +719,9 @@ mod tests {
 
                         Actual: 500 Internal Server Error
 
-                        is not a success (2xx) status code
+                        is not a success
+
+                        Expected: 2xx
 
                         Details:
                           - URL: http://localhost/hello
@@ -770,7 +763,9 @@ mod tests {
 
                 Actual: 200 OK
 
-                is not a redirection (3xx) status code
+                is not a redirection
+
+                Expected: 3xx
 
                 Details:
                   - URL: http://localhost/hello
@@ -792,7 +787,9 @@ mod tests {
 
                         Actual: 200 OK
 
-                        is not a redirection (3xx) status code
+                        is not a redirection
+
+                        Expected: 3xx
 
                         Details:
                           - URL: http://localhost/hello
@@ -834,7 +831,9 @@ mod tests {
 
                 Actual: 500 Internal Server Error
 
-                is not a client error (4xx) status code
+                is not a client error
+
+                Expected: 4xx
 
                 Details:
                   - URL: http://localhost/hello
@@ -856,7 +855,9 @@ mod tests {
 
                         Actual: 500 Internal Server Error
 
-                        is not a client error (4xx) status code
+                        is not a client error
+
+                        Expected: 4xx
 
                         Details:
                           - URL: http://localhost/hello
@@ -898,7 +899,9 @@ mod tests {
 
                 Actual: 404 Not Found
 
-                is not a server error (5xx) status code
+                is not a server error
+
+                Expected: 5xx
 
                 Details:
                   - URL: http://localhost/hello
@@ -920,7 +923,9 @@ mod tests {
 
                         Actual: 404 Not Found
 
-                        is not a server error (5xx) status code
+                        is not a server error
+
+                        Expected: 5xx
 
                         Details:
                           - URL: http://localhost/hello
@@ -968,7 +973,7 @@ mod tests {
                     "x-api-key",
                 ]
 
-                does not contain the expected header
+                does not contain the header
 
                 Expected: "content-type"
 
@@ -994,7 +999,7 @@ mod tests {
                             "x-api-key",
                         ]
 
-                        does not contain the expected header
+                        does not contain the header
 
                         Expected: "content-type"
 
@@ -1035,12 +1040,17 @@ mod tests {
                 -------- assertr --------
                 Expression: `response(200, &[("x-api-key", "1234")], "")`
 
-                Actual: "1234"
+                Actual: [
+                    "x-api-key",
+                ]
 
-                is the value of header "x-api-key", which was not expected to be present
+                contains the header
+
+                Unexpected: "x-api-key"
 
                 Details:
                   - URL: http://localhost/hello
+                  - Value: "1234"
                 -------- assertr --------
             "#});
         }
@@ -1057,12 +1067,17 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(200, &[("x-api-key", "1234")], "")`
 
-                        Actual: "1234"
+                        Actual: [
+                            "x-api-key",
+                        ]
 
-                        is the value of header "x-api-key", which was not expected to be present
+                        contains the header
+
+                        Unexpected: "x-api-key"
 
                         Details:
                           - URL: http://localhost/hello
+                          - Value: "1234"
                         -------- assertr --------
                     "#});
                 },
@@ -1110,14 +1125,13 @@ mod tests {
                 -------- assertr --------
                 Expression: `ok_response()`
 
-                Actual: "text/plain"
-
-                is not the expected value of header "content-type"
-
                 Expected: "application/json"
+
+                  Actual: "text/plain"
 
                 Details:
                   - URL: http://localhost/hello
+                  - Header: "content-type"
                 -------- assertr --------
             "#});
         }
@@ -1136,7 +1150,7 @@ mod tests {
 
                 Actual: []
 
-                does not contain the expected header
+                does not contain the header
 
                 Expected: "content-type"
 
@@ -1162,14 +1176,13 @@ mod tests {
                         -------- assertr --------
                         Expression: `ok_response()`
 
-                        Actual: "text/plain"
-
-                        is not the expected value of header "content-type"
-
                         Expected: "application/json"
+
+                          Actual: "text/plain"
 
                         Details:
                           - URL: http://localhost/hello
+                          - Header: "content-type"
                         -------- assertr --------
                     "#});
                 },
@@ -1233,7 +1246,7 @@ mod tests {
                     "x-api-key",
                 ]
 
-                does not contain the expected header
+                does not contain the header
 
                 Expected: "content-type"
 
@@ -1346,6 +1359,7 @@ mod tests {
                 });
             })
             .has_type::<String>()
+            .contains("has a body that could not be read")
             .contains("URL: http://localhost/failing");
         }
     }
@@ -1444,10 +1458,11 @@ mod tests {
 
                 Actual: {body:?}
 
-                is not valid JSON for the expected type: {expected_type}
+                is not valid JSON for the expected type
 
                 Details:
                   - URL: http://localhost/hello
+                  - Expected type: {expected_type}
                   - Error: expected ident at line 1 column 2
                 -------- assertr --------
             "});
@@ -1501,10 +1516,11 @@ mod tests {
 
                 Actual: {body:?}
 
-                is not valid JSON for the expected type: {expected_type}
+                is not valid JSON for the expected type
 
                 Details:
                   - URL: http://localhost/hello
+                  - Expected type: {expected_type}
                   - Error: invalid type: string "old", expected u32 at line 1 column 25
                 -------- assertr --------
             "#});

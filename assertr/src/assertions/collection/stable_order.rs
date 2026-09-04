@@ -4,14 +4,10 @@
 //! module's public extension traits require [`StableOrder`](StableOrder), so unordered subjects do
 //! not implement a positional assertion family at all.
 
-use alloc::string::String;
-use core::fmt::Write;
-
-use indoc::writedoc;
-
 use super::{StableOrder, imp};
 use crate::{
     AssertThat, AssertrPartialEq, Mode, ValueRenderer,
+    failure::FailureKind,
     mode::{Capture, Panic},
 };
 
@@ -282,14 +278,10 @@ where
     {
         self.track_assertion();
         if self.actual().length() == 0 {
-            let actual = self.render().stable_collection(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    has no first element.
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(self.render().stable_collection(self.actual()))
+                .relation("has no first element")
+                .raise();
         }
 
         self.derive(|collection| {
@@ -307,14 +299,10 @@ where
     {
         self.track_assertion();
         if self.actual().length() == 0 {
-            let actual = self.render().stable_collection(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    has no last element.
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(self.render().stable_collection(self.actual()))
+                .relation("has no last element")
+                .raise();
         }
 
         self.derive(|collection| {
@@ -332,15 +320,11 @@ where
     {
         self.track_assertion();
         if self.actual().length() != 1 {
-            let actual = self.render().stable_collection(self.actual());
-            let length = self.actual().length();
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    does not contain exactly one element. It contains {length}.
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(self.render().stable_collection(self.actual()))
+                .relation("does not contain exactly one element")
+                .fact("Actual length", self.actual().length())
+                .raise();
         }
 
         self.derive(|collection| {
@@ -454,7 +438,7 @@ mod tests {
 
                     Actual: []
 
-                    has no first element.
+                    has no first element
                     -------- assertr --------
                 "});
         }
@@ -505,7 +489,10 @@ mod tests {
                         2,
                     ]
 
-                    does not contain exactly one element. It contains 2.
+                    does not contain exactly one element
+
+                    Details:
+                      - Actual length: 2
                     -------- assertr --------
                 "});
         }
@@ -544,13 +531,18 @@ mod tests {
                         3,
                     ]
 
-                    does not start with expected prefix: [
+                    does not start with
+
+                    Expected: [
                         1,
                         9,
                     ]
 
-                    Details:
-                      - Prefix differs at zero-based index 1.
+                    Nested failures:
+                      - At index 1:
+                        Expected: 9
+
+                          Actual: 2
                     -------- assertr --------
                 "});
         }
@@ -586,8 +578,8 @@ mod tests {
                     .starts_with_matching([is_one, is_two]);
             })
             .has_type::<String>()
-            .contains("does not start with elements matching the predicates.")
-            .contains("Element at zero-based index 1 does not match its prefix predicate.");
+            .contains("does not start with elements matching the predicates")
+            .contains("Nested failures:\n  - At index 1:\n    Actual: 3\n\n    does not match its predicate\n");
         }
     }
 
@@ -621,10 +613,8 @@ mod tests {
                     .starts_with_satisfying([is_one, is_two]);
             })
             .has_type::<String>()
-            .contains("does not start with elements satisfying the assertions.")
-            .contains(
-                "Element at index 1 does not satisfy its prefix assertions:\n    Expected: 2",
-            );
+            .contains("does not start with elements satisfying the assertions")
+            .contains("Nested failures:\n  - At index 1:\n    Expected: 2\n\n      Actual: 3\n");
         }
     }
 
@@ -650,8 +640,8 @@ mod tests {
                     .ends_with([2, 9]);
             })
             .has_type::<String>()
-            .contains("does not end with expected suffix")
-            .contains("Suffix differs at zero-based collection index 2.");
+            .contains("does not end with\n\nExpected: [\n    2,\n    9,\n]")
+            .contains("Nested failures:\n  - At index 2:\n    Expected: 9\n\n      Actual: 3\n");
         }
     }
 
@@ -685,8 +675,8 @@ mod tests {
                     .ends_with_matching([is_two, is_three]);
             })
             .has_type::<String>()
-            .contains("does not end with elements matching the predicates.")
-            .contains("Element at zero-based index 2 does not match its suffix predicate.");
+            .contains("does not end with elements matching the predicates")
+            .contains("Nested failures:\n  - At index 2:\n    Actual: 4\n\n    does not match its predicate\n");
         }
     }
 
@@ -720,10 +710,8 @@ mod tests {
                     .ends_with_satisfying([is_two, is_three]);
             })
             .has_type::<String>()
-            .contains("does not end with elements satisfying the assertions.")
-            .contains(
-                "Suffix element at index 2 does not satisfy its assertions:\n    Expected: 3",
-            );
+            .contains("does not end with elements satisfying the assertions")
+            .contains("Nested failures:\n  - At index 2:\n    Expected: 3\n\n      Actual: 4\n");
         }
     }
 
@@ -750,7 +738,9 @@ mod tests {
             })
             .has_type::<String>()
             .contains("Actual: [\n    1,\n    2,\n    3,\n]")
-            .contains("does not contain contiguous expected elements");
+            .contains(
+                "does not contain the contiguous subsequence\n\nExpected: [\n    1,\n    3,\n]",
+            );
         }
     }
 
@@ -786,7 +776,7 @@ mod tests {
                     .contains_contiguous_matching([is_one, is_three]);
             })
             .has_type::<String>()
-            .contains("does not contain contiguous elements matching the predicates.");
+            .contains("does not contain a contiguous subsequence matching the predicates");
         }
     }
 
@@ -822,10 +812,8 @@ mod tests {
                     .contains_contiguous_satisfying([is_one, is_three]);
             })
             .has_type::<String>()
-            .contains("does not contain contiguous elements satisfying the assertions.")
-            .contains(
-                "The final contiguous candidate did not satisfy the assertions:\n    Expected: 3",
-            );
+            .contains("does not contain a contiguous subsequence satisfying the assertions")
+            .contains("Nested failures:\n  - At index 1:\n    Expected: 3\n\n      Actual: 2\n");
         }
     }
 
@@ -894,9 +882,9 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    did not exactly match
+                    does not contain exactly
 
                     Expected: [
                         2,
@@ -937,9 +925,9 @@ mod tests {
                         Record {{
                             id: 1,
                         }},
-                    ],
+                    ]
 
-                    did not exactly match
+                    does not contain exactly
 
                     Expected: [
                         RecordAssertrEq {{
@@ -981,9 +969,9 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    did not exactly match
+                    does not contain exactly
 
                     Expected: [
                         3,
@@ -992,7 +980,7 @@ mod tests {
                     ]
 
                     Details:
-                      - The order of elements does not match!
+                      - Only the order of the elements differs.
                     -------- assertr --------
                 "});
         }
@@ -1025,9 +1013,9 @@ mod tests {
                         Record {{
                             id: 2,
                         }},
-                    ],
+                    ]
 
-                    did not exactly match
+                    does not contain exactly
 
                     Expected: [
                         RecordAssertrEq {{
@@ -1039,7 +1027,7 @@ mod tests {
                     ]
 
                     Details:
-                      - The order of elements does not match!
+                      - Only the order of the elements differs.
                     -------- assertr --------
                 "});
         }
@@ -1063,9 +1051,9 @@ mod tests {
                         Actual(
                             1,
                         ),
-                    ],
+                    ]
 
-                    did not exactly match
+                    does not contain exactly
 
                     Expected: [
                         Any,
@@ -1075,7 +1063,7 @@ mod tests {
                     ]
 
                     Details:
-                      - The order of elements does not match!
+                      - Only the order of the elements differs.
                     -------- assertr --------
                 "});
         }
@@ -1096,9 +1084,9 @@ mod tests {
                         1,
                         1,
                         2,
-                    ],
+                    ]
 
-                    did not exactly match
+                    does not contain exactly
 
                     Expected: [
                         1,
@@ -1161,13 +1149,19 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    did not exactly match predicates.
+                    does not exactly match the predicates
 
-                    Details:
-                      - Element at index 1 does not match its predicate: 2
-                      - Element at index 2 does not match its predicate: 3
+                    Nested failures:
+                      - At index 1:
+                        Actual: 2
+
+                        does not match its predicate
+                      - At index 2:
+                        Actual: 3
+
+                        does not match its predicate
                     -------- assertr --------
                 "});
         }
@@ -1189,12 +1183,13 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    did not exactly match predicates.
+                    does not exactly match the predicates
 
                     Details:
-                      - Number of elements (3) does not match number of predicates (2)!
+                      - Actual length: 3
+                      - Expected length: 2
                     -------- assertr --------
                 "});
         }
@@ -1250,8 +1245,8 @@ mod tests {
                     ]);
             })
             .has_type::<String>()
-            .contains("did not exactly satisfy the assertions.")
-            .contains("Element at index 1 does not satisfy its assertions:\n    Expected: 3");
+            .contains("does not exactly satisfy the assertions")
+            .contains("Nested failures:\n  - At index 1:\n    Expected: 3\n\n      Actual: 2\n");
         }
 
         #[test]
@@ -1264,7 +1259,7 @@ mod tests {
                     }]);
             })
             .has_type::<String>()
-            .contains("Number of elements (3) does not match number of assertions (1)!");
+            .contains("Details:\n  - Actual length: 3\n  - Expected length: 1\n");
         }
 
         #[test]
@@ -1274,9 +1269,9 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_exactly_satisfying([is_zero; 3]));
 
-            assert_that!(failures[0].details.as_slice())
-                .has_length(2)
-                .contains("... 2 more unsatisfied elements ...");
+            assert_that!(failures[0].children.as_slice()).has_length(1);
+            assert_that!(failures[0].facts.as_slice())
+                .contains_exactly([crate::Fact::note("... 2 more unsatisfied elements ...")]);
         }
     }
 }

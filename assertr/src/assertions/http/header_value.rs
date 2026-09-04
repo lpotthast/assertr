@@ -1,10 +1,9 @@
+use crate::failure::FailureKind;
 use crate::mode::{Mode, Panic};
 use crate::prelude::{BoolAssertions, PartialEqAssertions, PartialOrdAssertions};
 use crate::{AssertThat, ValueRenderer};
 use alloc::borrow::ToOwned;
 use alloc::string::String;
-use core::fmt::Write;
-use indoc::writedoc;
 
 /// Non-extracting assertions for [`http::HeaderValue`].
 #[allow(clippy::return_self_not_must_use)]
@@ -106,14 +105,10 @@ impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
         self.track_assertion();
 
         if self.actual().to_str().is_err() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:?}
-
-                    is not valid ASCII
-                "}
-            });
+            self.failure(FailureKind::Predicate)
+                .actual(self.render().value(self.actual()))
+                .relation("is not ASCII")
+                .raise();
         }
 
         self
@@ -130,14 +125,10 @@ impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
         if self.actual().to_str().is_ok() {
             self.satisfies_ref(|hv| hv.to_str().expect("already checked"), assertions)
         } else {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:?}
-
-                    is not valid ASCII
-                "}
-            });
+            self.failure(FailureKind::Predicate)
+                .actual(self.render().value(self.actual()))
+                .relation("is not ASCII")
+                .raise();
             self
         }
     }
@@ -202,14 +193,14 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(HttpHeaderValueAssertions::is_ascii);
-            assert_that!(opaque_failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(opaque_failures[0].description()).contains(SENTINEL);
 
             let visible = HeaderValue::from_static("visible");
             let projected_failures = assert_that!(visible)
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(HttpHeaderValueAssertions::is_sensitive);
-            assert_that!(projected_failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(projected_failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -340,9 +331,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Expected: true
+                    Actual: false
 
-                      Actual: false
+                    is not true
 
                     Messages:
                       - Expected a sensitive header value. You might have forgotten to call `set_sensitive(true)` on the header value.
@@ -387,9 +378,9 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Expected: false
+                    Actual: true
 
-                      Actual: true
+                    is not false
 
                     Messages:
                       - Expected an insensitive header value. You might have forgotten to call `set_sensitive(false)` on the header value.
@@ -429,7 +420,7 @@ mod tests {
 
                     Actual: " !\xff"
 
-                    is not valid ASCII
+                    is not ASCII
                     -------- assertr --------
                 "#});
         }
@@ -443,7 +434,7 @@ mod tests {
                 .capture(|it| it.is_ascii().is_not_empty());
 
             assert_that!(&failures).has_length(1);
-            assert_that!(&failures[0].description).contains("is not valid ASCII");
+            assert_that!(failures[0].description()).contains("is not ASCII");
         }
     }
 
@@ -485,7 +476,7 @@ mod tests {
 
                     Actual: "\xc3\x84"
 
-                    is not valid ASCII
+                    is not ASCII
                     -------- assertr --------
                 "#});
         }
@@ -502,7 +493,7 @@ mod tests {
 
                     Actual: " !\xff"
 
-                    is not valid ASCII
+                    is not ASCII
                     -------- assertr --------
                 "#});
         }
@@ -555,8 +546,8 @@ mod tests {
             assert_that!(&failures).has_length(1);
             assert_that!(failures.first())
                 .get_some()
-                .map(|it| it.borrowed().description.as_str().into())
-                .contains("is not valid ASCII");
+                .map(|it| it.borrowed().description().into())
+                .contains("is not ASCII");
         }
 
         #[test]
@@ -577,7 +568,7 @@ mod tests {
 
                 Actual: " !\xff"
 
-                is not valid ASCII
+                is not ASCII
                 -------- assertr --------
             "#});
         }

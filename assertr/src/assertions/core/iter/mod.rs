@@ -155,7 +155,7 @@ mod tests {
             .contains("84,")
             .contains("99,")
             .does_not_contain("83,")
-            .contains("zero-based index 99");
+            .contains("Decisive index: 99");
     }
 
     #[test]
@@ -208,11 +208,11 @@ mod tests {
 
         assert_that!(&failures).has_length(2);
         assert_that!(failures[0].messages.as_slice()).contains_exactly(["user context"]);
-        assert_that!(failures[0].details.as_slice())
-            .does_not_contain_matching(|it: &String| it.contains("Decisive element"));
+        assert_that!(failures[0].facts.as_slice())
+            .does_not_contain_matching(|it: &crate::Fact| it.label == "Decisive index");
         assert_that!(failures[1].messages.as_slice()).contains_exactly(["user context"]);
-        assert_that!(failures[1].details.as_slice())
-            .contains_matching(|it: &String| it.contains("Consumed 3 element(s)."))
-            .does_not_contain_matching(|it: &String| it.contains("Decisive element"));
+        assert_that!(failures[1].facts.as_slice())
+            .contains(crate::Fact::new("Consumed elements", "3"))
+            .does_not_contain_matching(|it: &crate::Fact| it.label == "Decisive index");
     }
 }

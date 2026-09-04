@@ -1,13 +1,12 @@
-use crate::{AssertThat, PanicValue, actual::Actual, mode::Panic};
-use alloc::borrow::Cow;
+use crate::{AssertThat, PanicValue, actual::Actual, failure::FailureKind, mode::Panic};
 use alloc::boxed::Box;
-use alloc::string::String;
-use alloc::vec::Vec;
-use core::any::{Any, type_name, type_name_of_val};
-use core::fmt::Write;
-use indoc::writedoc;
+use core::any::Any;
 
-use super::boxed::BoxAssertions;
+use super::boxed::{downcast, raise_type_mismatch};
+
+/// Explains the erased type name reported for a panic payload that is neither a `&str` nor a
+/// `String`.
+const ERASED_TYPE_NOTE: &str = "The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.";
 
 /// Downcasting assertions for [`PanicValue`] subjects.
 ///
@@ -30,11 +29,11 @@ pub trait PanicValueAssertions<'t, R = crate::DebugRenderer> {
 impl<'t, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R> {
     #[track_caller]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
-        self.map::<Box<dyn Any>>(|it| match it {
+        let boxed = self.map::<Box<dyn Any>>(|it| match it {
             Actual::Borrowed(b) => Actual::Borrowed(&b.0),
             Actual::Owned(o) => Actual::Owned(o.0),
-        })
-        .has_type::<E>()
+        });
+        downcast(boxed, FailureKind::Panic, ERASED_TYPE_NOTE)
     }
 
     #[track_caller]
@@ -44,34 +43,14 @@ impl<'t, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R>
     {
         self.track_assertion();
 
-        let any = &self.actual().0;
-        if let Some(casted) = any.downcast_ref::<E>() {
-            self.derive_owned(|_actual| casted)
-        } else {
-            let expected_type_name = type_name::<E>();
-
-            let is_str = any.downcast_ref::<&str>().is_some();
-            let is_string = any.downcast_ref::<String>().is_some();
-
-            let mut details = Vec::new();
-            let actual_type_name = if is_str {
-                Cow::Borrowed("&str")
-            } else if is_string {
-                Cow::Borrowed("String")
-            } else {
-                // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
-                details.push(String::from("The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code."));
-                Cow::Borrowed(type_name_of_val(&*self.actual().0))
-            };
-
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected panic value type: {expected_type_name}
-
-                      Actual panic value type: {actual_type_name}
-                "}
-            });
-            unreachable!("Panic mode always panics on fail")
+        match self.actual().0.downcast_ref::<E>() {
+            Some(casted) => self.derive_owned(|_actual| casted),
+            None => raise_type_mismatch::<_, _, E>(
+                self,
+                FailureKind::Panic,
+                &*self.actual().0,
+                ERASED_TYPE_NOTE,
+            ),
         }
     }
 }
@@ -130,9 +109,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `actual`
 
-                    Expected value type: u32
+                    Actual: String
 
-                      Actual value type: String
+                    is not of the expected type
+
+                    Expected: u32
                     -------- assertr --------
                 "});
         }
@@ -173,9 +154,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `actual`
 
-                Expected panic value type: u32
+                Actual: String
 
-                  Actual panic value type: String
+                is not of the expected type
+
+                Expected: u32
                 -------- assertr --------
             "});
         }
@@ -194,9 +177,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `actual`
 
-                Expected panic value type: u32
+                Actual: &str
 
-                  Actual panic value type: &str
+                is not of the expected type
+
+                Expected: u32
                 -------- assertr --------
             "});
         }
@@ -216,9 +201,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `actual`
 
-                Expected panic value type: u32
+                Actual: dyn core::any::Any
 
-                  Actual panic value type: dyn core::any::Any
+                is not of the expected type
+
+                Expected: u32
 
                 Details:
                   - The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.

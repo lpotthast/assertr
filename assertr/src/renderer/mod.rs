@@ -15,4 +15,6 @@ pub use presentation::{CollectionPresentation, GroupStyle, RenderingOrder};
 pub use type_info::{TypeHint, Typed};
 pub use value::{CustomRenderer, DebugRenderer, ValueRenderer};
 
+#[cfg(feature = "jiff")]
+pub(crate) use context::Compact;
 pub(crate) use context::omission;

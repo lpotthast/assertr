@@ -1,8 +1,5 @@
-use crate::{AssertThat, Mode, ValueRenderer};
-use alloc::string::String;
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 use core::cell::RefCell;
-use core::fmt::Write;
-use indoc::writedoc;
 
 /// Assertions for the dynamic borrow state of a [`RefCell`].
 #[allow(clippy::return_self_not_must_use)]
@@ -36,16 +33,13 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
                 .actual()
                 .try_borrow()
                 .expect("the borrow check already succeeded");
-            let actual = self
-                .render()
-                .struct_field(self.actual(), "RefCell", "value", &*value);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?} is not borrowed.
-
-                    Expected: RefCell to have an active borrow.
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(
+                    self.render()
+                        .struct_field(self.actual(), "RefCell", "value", &*value),
+                )
+                .relation("is not borrowed")
+                .raise();
         }
         self
     }
@@ -61,16 +55,13 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
                 .actual()
                 .try_borrow()
                 .expect("the borrow check already succeeded");
-            let actual = self
-                .render()
-                .struct_field(self.actual(), "RefCell", "value", &*value);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?} is not mutably borrowed.
-
-                    Expected: RefCell to be borrowed mutably.
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(
+                    self.render()
+                        .struct_field(self.actual(), "RefCell", "value", &*value),
+                )
+                .relation("is not mutably borrowed")
+                .raise();
         }
         self
     }
@@ -79,19 +70,15 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
     fn is_not_mutably_borrowed(self) -> Self {
         self.track_assertion();
         if self.actual().try_borrow().is_err() {
-            let actual = self.render().unavailable_struct_field(
-                self.actual(),
-                "RefCell",
-                "value",
-                "<borrowed>",
-            );
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?} is mutably borrowed.
-
-                    Expected: RefCell to not be borrowed mutably.
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().unavailable_struct_field(
+                    self.actual(),
+                    "RefCell",
+                    "value",
+                    "<borrowed>",
+                ))
+                .relation("is unexpectedly mutably borrowed")
+                .raise();
         }
         self
     }
@@ -122,7 +109,7 @@ mod tests {
                 .with_location(false)
                 .capture(RefCellAssertions::is_borrowed);
 
-            assert_that!(failures[0].description.as_str())
+            assert_that!(failures[0].description())
                 .contains("RefCell {")
                 .contains(SENTINEL);
         }
@@ -169,9 +156,9 @@ mod tests {
 
                     Actual: RefCell {{
                         value: 42,
-                    }} is not borrowed.
+                    }}
 
-                    Expected: RefCell to have an active borrow.
+                    is not borrowed
                     -------- assertr --------
                 "});
         }
@@ -241,9 +228,9 @@ mod tests {
 
                     Actual: RefCell {{
                         value: <borrowed>,
-                    }} is mutably borrowed.
+                    }}
 
-                    Expected: RefCell to not be borrowed mutably.
+                    is unexpectedly mutably borrowed
                     -------- assertr --------
                 "});
             drop(borrow);

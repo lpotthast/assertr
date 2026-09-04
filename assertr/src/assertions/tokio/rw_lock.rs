@@ -1,7 +1,5 @@
+use crate::failure::FailureKind;
 use crate::{AssertThat, Mode, ValueRenderer};
-use alloc::string::String;
-use core::fmt::Write;
-use indoc::writedoc;
 use tokio::sync::RwLock;
 
 /// Non-blocking assertions for Tokio's [`RwLock`] type.
@@ -37,6 +35,9 @@ pub trait TokioRwLockAssertions<T, R> {
         R: ValueRenderer<T>;
 }
 
+/// The label of the fact naming the observed lock state.
+const LOCK_STATE: &str = "Lock state";
+
 impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M, R> {
     #[track_caller]
     fn is_not_locked(self) -> Self
@@ -45,41 +46,34 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
     {
         self.track_assertion();
         if self.actual().try_write().is_err() {
-            // Cannot be locked for writing, must already be read- or write-locked than!
-            if self.actual().try_read().is_err() {
-                // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                let actual = self.render().unavailable_struct_field(
-                    self.actual(),
-                    "RwLock",
-                    "data",
-                    "<locked>",
-                );
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r"
-                        Actual: {actual:?}
-
-                        was expected to not be read- or write-locked, but it is!
-
-                        It is currently write-locked!
-                    "}
-                });
-            } else {
-                let value = self
-                    .actual()
-                    .try_read()
-                    .expect("the lock-state check already succeeded");
-                let actual = self
-                    .render()
-                    .struct_field(self.actual(), "RwLock", "data", &*value);
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r"
-                        Actual: {actual:?}
-
-                        was expected to not be read- or write-locked, but it is!
-
-                        It is currently read-locked!
-                    "}
-                });
+            // Cannot be locked for writing, so it is already read- or write-locked.
+            match self.actual().try_read() {
+                // RwLock allows multiple readers. It cannot be read again, so the existing lock
+                // is a write lock.
+                Err(_) => {
+                    self.failure(FailureKind::Other)
+                        .actual(self.render().unavailable_struct_field(
+                            self.actual(),
+                            "RwLock",
+                            "data",
+                            "<locked>",
+                        ))
+                        .relation("is unexpectedly locked")
+                        .fact(LOCK_STATE, "write-locked")
+                        .raise();
+                }
+                Ok(value) => {
+                    self.failure(FailureKind::Other)
+                        .actual(self.render().struct_field(
+                            self.actual(),
+                            "RwLock",
+                            "data",
+                            &*value,
+                        ))
+                        .relation("is unexpectedly locked")
+                        .fact(LOCK_STATE, "read-locked")
+                        .raise();
+                }
             }
         }
         self
@@ -92,43 +86,32 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
     {
         self.track_assertion();
         if self.actual().try_write().is_ok() {
-            // Can be locked for writing, must have zero locks than!
+            // Can be locked for writing, so it holds no lock at all.
             let value = self
                 .actual()
                 .try_read()
                 .expect("the lock-state check already succeeded");
-            let actual = self
-                .render()
-                .struct_field(self.actual(), "RwLock", "data", &*value);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:?}
-
-                    was expected to be read-locked, but it is not!
-
-                    It is not locked at all!
-                "}
-            });
-        } else {
-            // Cannot be locked for writing, must already be read- or write-locked than!
-            if self.actual().try_read().is_err() {
-                // RwLock allows multiple readers, but we cannot read again, so existing lock must be write-lock!
-                let actual = self.render().unavailable_struct_field(
+            self.failure(FailureKind::Other)
+                .actual(
+                    self.render()
+                        .struct_field(self.actual(), "RwLock", "data", &*value),
+                )
+                .relation("is not read-locked")
+                .fact(LOCK_STATE, "unlocked")
+                .raise();
+        } else if self.actual().try_read().is_err() {
+            // Cannot be locked for writing, and RwLock allows multiple readers, so a lock that
+            // cannot be read again is a write lock.
+            self.failure(FailureKind::Other)
+                .actual(self.render().unavailable_struct_field(
                     self.actual(),
                     "RwLock",
                     "data",
                     "<locked>",
-                );
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r"
-                        Actual: {actual:?}
-
-                        was expected to be read-locked, but it is not!
-
-                        It is currently write-locked!
-                    "}
-                });
-            }
+                ))
+                .relation("is not read-locked")
+                .fact(LOCK_STATE, "write-locked")
+                .raise();
         }
         self
     }
@@ -140,42 +123,30 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
     {
         self.track_assertion();
         if self.actual().try_write().is_ok() {
-            // Can be locked for writing, must have zero locks than!
+            // Can be locked for writing, so it holds no lock at all.
             let value = self
                 .actual()
                 .try_read()
                 .expect("the lock-state check already succeeded");
-            let actual = self
-                .render()
-                .struct_field(self.actual(), "RwLock", "data", &*value);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:?}
-
-                    was expected to be write-locked, but it is not!
-                "}
-            });
-        } else {
-            // Cannot be locked for writing, must already be read- or write-locked than!
-            if self.actual().try_read().is_ok() {
-                // RwLock allows multiple readers, and we can read again, so existing lock must be read-lock!
-                let value = self
-                    .actual()
-                    .try_read()
-                    .expect("the lock-state check already succeeded");
-                let actual = self
-                    .render()
-                    .struct_field(self.actual(), "RwLock", "data", &*value);
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r"
-                        Actual: {actual:?}
-
-                        was expected to be write-locked, but it is not!
-
-                        It is currently read-locked!
-                    "}
-                });
-            }
+            self.failure(FailureKind::Other)
+                .actual(
+                    self.render()
+                        .struct_field(self.actual(), "RwLock", "data", &*value),
+                )
+                .relation("is not write-locked")
+                .fact(LOCK_STATE, "unlocked")
+                .raise();
+        } else if let Ok(value) = self.actual().try_read() {
+            // Cannot be locked for writing, and RwLock allows multiple readers, so a lock that
+            // can be read again is a read lock.
+            self.failure(FailureKind::Other)
+                .actual(
+                    self.render()
+                        .struct_field(self.actual(), "RwLock", "data", &*value),
+                )
+                .relation("is not write-locked")
+                .fact(LOCK_STATE, "read-locked")
+                .raise();
         }
         self
     }
@@ -205,8 +176,9 @@ mod tests {
                 .with_location(false)
                 .capture(TokioRwLockAssertions::is_read_locked);
 
-            assert_that!(failures[0].description.as_str())
-                .contains(format!("RwLock {{ data: {SENTINEL} }}"));
+            assert_that!(failures[0].actual.as_deref()).is_equal_to(Some(
+                format!("RwLock {{\n    data: {SENTINEL},\n}}").as_str(),
+            ));
         }
     }
 
@@ -238,11 +210,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `&rw_lock`
 
-                    Actual: RwLock {{ data: <locked> }}
+                    Actual: RwLock {{
+                        data: <locked>,
+                    }}
 
-                    was expected to not be read- or write-locked, but it is!
+                    is unexpectedly locked
 
-                    It is currently write-locked!
+                    Details:
+                      - Lock state: write-locked
                     -------- assertr --------
                 "});
 
@@ -260,11 +235,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `&rw_lock`
 
-                    Actual: RwLock {{ data: 42 }}
+                    Actual: RwLock {{
+                        data: 42,
+                    }}
 
-                    was expected to not be read- or write-locked, but it is!
+                    is unexpectedly locked
 
-                    It is currently read-locked!
+                    Details:
+                      - Lock state: read-locked
                     -------- assertr --------
                 "});
 
@@ -320,11 +298,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `&rw_lock`
 
-                    Actual: RwLock {{ data: <locked> }}
+                    Actual: RwLock {{
+                        data: <locked>,
+                    }}
 
-                    was expected to be read-locked, but it is not!
+                    is not read-locked
 
-                    It is currently write-locked!
+                    Details:
+                      - Lock state: write-locked
                     -------- assertr --------
                 "});
 
@@ -341,11 +322,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `rw_lock`
 
-                    Actual: RwLock {{ data: 42 }}
+                    Actual: RwLock {{
+                        data: 42,
+                    }}
 
-                    was expected to be read-locked, but it is not!
+                    is not read-locked
 
-                    It is not locked at all!
+                    Details:
+                      - Lock state: unlocked
                     -------- assertr --------
                 "});
         }
@@ -388,11 +372,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `&rw_lock`
 
-                    Actual: RwLock {{ data: 42 }}
+                    Actual: RwLock {{
+                        data: 42,
+                    }}
 
-                    was expected to be write-locked, but it is not!
+                    is not write-locked
 
-                    It is currently read-locked!
+                    Details:
+                      - Lock state: read-locked
                     -------- assertr --------
                 "});
 
@@ -409,9 +396,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `rw_lock`
 
-                    Actual: RwLock {{ data: 42 }}
+                    Actual: RwLock {{
+                        data: 42,
+                    }}
 
-                    was expected to be write-locked, but it is not!
+                    is not write-locked
+
+                    Details:
+                      - Lock state: unlocked
                     -------- assertr --------
                 "});
         }

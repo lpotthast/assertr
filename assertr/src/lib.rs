@@ -21,7 +21,12 @@
 //! chain. Its variants cover borrowed, owned, and unsized projections.
 //!
 //! Panic mode stops at the first failure. Capture mode collects structured [`AssertionFailure`]
-//! values within [`AssertThat::capture`] or the fluent `verify` entry points.
+//! values within [`AssertThat::capture`] or the fluent `verify` entry points. A failure carries
+//! its rendered [`actual`](AssertionFailure::actual) and [`expected`](AssertionFailure::expected)
+//! values, the [`relation`](AssertionFailure::relation) between them, further
+//! [`facts`](AssertionFailure::facts), nested [`children`](AssertionFailure::children), and a
+//! [`kind`](AssertionFailure::kind) as data. Its text is rendered from those fields only at the
+//! panic or display boundary.
 //!
 //! ## Custom assertions
 //!
@@ -38,8 +43,17 @@
 //! - **Composition**: delegate to existing assertions through [`AssertThat::satisfies`] and
 //!   friends. Tracking, failure formatting, and capture-mode behavior come from the delegated
 //!   assertions.
-//! - **Leaf assertions**: call [`AssertThat::track_assertion`] first, then [`AssertThat::fail`] or
-//!   [`AssertThat::fail_with_details`] when the condition does not hold.
+//! - **Leaf assertions**: call [`AssertThat::track_assertion`] first, then, when the condition
+//!   does not hold, start a failure with [`AssertThat::failure`] and the [`FailureKind`] of the
+//!   assertion's family. The returned [`FailureBuilder`](failure::FailureBuilder) takes the
+//!   rendered [`actual`](failure::FailureBuilder::actual) value, the
+//!   [`relation`](failure::FailureBuilder::relation) sentence, the
+//!   [`expected`](failure::FailureBuilder::expected) or
+//!   [`unexpected`](failure::FailureBuilder::unexpected) value, labeled
+//!   [`fact`](failure::FailureBuilder::fact)s, and nested
+//!   [`child`](failure::FailureBuilder::child) failures, and
+//!   [`raise`](failure::FailureBuilder::raise) records or panics. The text of the failure is
+//!   rendered from these fields with the same grammar every built-in assertion uses.
 //!
 //! Render values shown by a leaf assertion through [`AssertThat::render`]. Its
 //! [`value`](renderer::RenderingContext::value), [`values`](renderer::RenderingContext::values), and
@@ -51,6 +65,7 @@
 //!
 //! ```
 //! use assertr::prelude::*;
+//! use assertr::failure::FailureKind;
 //!
 //! #[derive(Debug)]
 //! struct Person {
@@ -80,7 +95,7 @@
 //!         })
 //!     }
 //!
-//!     // Leaf: track first, then fail with a message of your own.
+//!     // Leaf: track first, then raise a failure built from rendered values.
 //!     #[track_caller]
 //!     fn has_name(self) -> Self
 //!     where
@@ -88,8 +103,10 @@
 //!     {
 //!         self.track_assertion();
 //!         if self.actual().name.is_empty() {
-//!             let actual = self.render().value(self.actual());
-//!             self.fail(format_args!("Expected a named person, but was {actual:#?}."));
+//!             self.failure(FailureKind::Predicate)
+//!                 .actual(self.render().value(self.actual()))
+//!                 .relation("has no name")
+//!                 .raise();
 //!         }
 //!         self
 //!     }
@@ -153,7 +170,7 @@ mod util;
 #[cfg(feature = "fluent")]
 pub use assertr_derive::fluent_expressions;
 pub use cmp::{AssertrPartialEq, Differences, Eq, EqContext, any, eq};
-pub use failure::AssertionFailure;
+pub use failure::{AssertionFailure, Fact, FailureKind};
 pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
 
 /// One glob import brings every assertion into scope.

@@ -1,8 +1,6 @@
-use alloc::string::String;
-use core::{borrow::Borrow, cmp::Ordering, fmt::Write};
-use indoc::writedoc;
+use core::{borrow::Borrow, cmp::Ordering};
 
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions for partially ordered values.
 ///
@@ -50,17 +48,11 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
         let expected = expected.borrow();
 
         if !matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
-            let actual = self.render().value(actual);
-            let expected = self.render().value(expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not less than
-
-                    Expected: {expected:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is not less than")
+                .expected(self.render().value(expected))
+                .raise();
         }
         self
     }
@@ -77,17 +69,11 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
         let expected = expected.borrow();
 
         if !matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
-            let actual = self.render().value(actual);
-            let expected = self.render().value(expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not greater than
-
-                    Expected: {expected:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is not greater than")
+                .expected(self.render().value(expected))
+                .raise();
         }
         self
     }
@@ -107,17 +93,11 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
             actual.partial_cmp(expected),
             Some(Ordering::Less | Ordering::Equal)
         ) {
-            let actual = self.render().value(actual);
-            let expected = self.render().value(expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not less or equal to
-
-                    Expected: {expected:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is not less or equal to")
+                .expected(self.render().value(expected))
+                .raise();
         }
         self
     }
@@ -137,17 +117,11 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
             actual.partial_cmp(expected),
             Some(Ordering::Greater | Ordering::Equal)
         ) {
-            let actual = self.render().value(actual);
-            let expected = self.render().value(expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not greater or equal to
-
-                    Expected: {expected:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(actual))
+                .relation("is not greater or equal to")
+                .expected(self.render().value(expected))
+                .raise();
         }
         self
     }

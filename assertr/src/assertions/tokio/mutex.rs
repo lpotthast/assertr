@@ -1,7 +1,5 @@
-use crate::util::failure::join_failures;
+use crate::failure::FailureKind;
 use crate::{AssertThat, Mode, ValueRenderer};
-use indoc::writedoc;
-use std::fmt::Write;
 use tokio::sync::Mutex;
 
 /// Non-blocking assertions for Tokio's [`Mutex`] type.
@@ -43,14 +41,10 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
         self.track_assertion();
         let actual = self.actual();
         if let Ok(guard) = actual.try_lock() {
-            let data = self.render().value(&*guard);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: Mutex {{ data: {data:#?} }}
-
-                    to be locked, but it wasn't!
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().struct_field(actual, "Mutex", "data", &*guard))
+                .relation("is not locked")
+                .raise();
         }
         self
     }
@@ -59,14 +53,14 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
     fn is_not_locked(self) -> Self {
         self.track_assertion();
         let actual = self.actual();
-        if let Err(_err) = actual.try_lock() {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: Mutex {{ data: <locked> }}
-
-                    to not be locked, but it was!
-                "}
-            });
+        if actual.try_lock().is_err() {
+            self.failure(FailureKind::Other)
+                .actual(
+                    self.render()
+                        .unavailable_struct_field(actual, "Mutex", "data", "<locked>"),
+                )
+                .relation("is unexpectedly locked")
+                .raise();
         }
         self
     }
@@ -78,35 +72,26 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
         R: ValueRenderer<T> + Clone,
     {
         self.track_assertion();
-        {
-            let actual = self.actual();
-            match actual.try_lock() {
-                Ok(guard) => {
-                    let failures = self.collect_element_failures(&*guard, assertions);
-                    if !failures.is_empty() {
-                        let data = self.render().value(&*guard);
-                        let details = [format!(
-                            "Contained data failures:\n{}",
-                            join_failures(&failures, self.render().max_items())
-                        )];
-                        self.fail_with_details(details, |w: &mut String| {
-                            writedoc! {w, r"
-                                Actual: Mutex {{ data: {data:#?} }}
-
-                                contains data that does not satisfy the assertions.
-                            "}
-                        });
-                    }
+        let actual = self.actual();
+        match actual.try_lock() {
+            Ok(guard) => {
+                let failures = self.collect_element_failures(&*guard, assertions);
+                if !failures.is_empty() {
+                    self.failure(FailureKind::Predicate)
+                        .actual(self.render().struct_field(actual, "Mutex", "data", &*guard))
+                        .relation("contains a value that does not satisfy the assertions")
+                        .children(failures)
+                        .raise();
                 }
-                Err(_error) => {
-                    self.fail(|w: &mut String| {
-                        writedoc! {w, r"
-                            Actual: Mutex {{ data: <locked> }}
-
-                            could not be inspected because it is locked.
-                        "}
-                    });
-                }
+            }
+            Err(_error) => {
+                self.failure(FailureKind::Predicate)
+                    .actual(
+                        self.render()
+                            .unavailable_struct_field(actual, "Mutex", "data", "<locked>"),
+                    )
+                    .relation("is unexpectedly locked")
+                    .raise();
             }
         }
         self
@@ -161,9 +146,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `mutex`
 
-                    Expected: Mutex {{ data: 42 }}
+                    Actual: Mutex {{
+                        data: 42,
+                    }}
 
-                    to be locked, but it wasn't!
+                    is not locked
                     -------- assertr --------
                 "});
         }
@@ -197,9 +184,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `&mutex`
 
-                    Expected: Mutex {{ data: <locked> }}
+                    Actual: Mutex {{
+                        data: <locked>,
+                    }}
 
-                    to not be locked, but it was!
+                    is unexpectedly locked
                     -------- assertr --------
                 "});
             drop(guard);
@@ -259,7 +248,6 @@ mod tests {
         #[test]
         fn panics_with_the_contained_failures_when_the_value_does_not_satisfy_the_assertions() {
             let mutex = Mutex::new(42);
-            let indented_blank_line = "    ";
 
             assert_that_panic_by(|| {
                 assert_that!(mutex)
@@ -273,14 +261,15 @@ mod tests {
                     -------- assertr --------
                     Expression: `mutex`
 
-                    Actual: Mutex {{ data: 42 }}
+                    Actual: Mutex {{
+                        data: 42,
+                    }}
 
-                    contains data that does not satisfy the assertions.
+                    contains a value that does not satisfy the assertions
 
-                    Details:
-                      - Contained data failures:
-                        Expected: 43
-                    {indented_blank_line}
+                    Nested failures:
+                      - Expected: 43
+
                           Actual: 42
                     -------- assertr --------
                 "});
@@ -303,9 +292,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `mutex`
 
-                    Actual: Mutex {{ data: <locked> }}
+                    Actual: Mutex {{
+                        data: <locked>,
+                    }}
 
-                    could not be inspected because it is locked.
+                    is unexpectedly locked
                     -------- assertr --------
                 "});
 
@@ -325,26 +316,32 @@ mod tests {
             assert_that!(failures).contains_exactly_satisfying([
                 |failure: AssertThat<AssertionFailure, Capture>| {
                     failure
-                        .satisfies(
-                            |failure| &failure.description,
-                            |description| {
-                                description.is_equal_to(formatdoc! {r"
-                                    Actual: Mutex {{ data: 42 }}
+                        .satisfies_owned(AssertionFailure::description, |description| {
+                            description.is_equal_to(formatdoc! {r"
+                                    Actual: Mutex {{
+                                        data: 42,
+                                    }}
 
-                                    contains data that does not satisfy the assertions.
+                                    contains a value that does not satisfy the assertions
                                 "});
-                            },
-                        )
+                        })
                         .satisfies(
-                            |failure| &failure.details,
-                            |details| {
-                                details.contains_exactly([formatdoc! {r"
-                                        Contained data failures:
-                                        Expected: 43
+                            |failure| &failure.children,
+                            |children| {
+                                children.contains_exactly_satisfying([
+                                    |child: AssertThat<AssertionFailure, Capture>| {
+                                        child.satisfies_owned(
+                                            AssertionFailure::description,
+                                            |description| {
+                                                description.is_equal_to(formatdoc! {r"
+                                                    Expected: 43
 
-                                          Actual: 42
-                                    "}
-                                .trim_end()]);
+                                                      Actual: 42
+                                                "});
+                                            },
+                                        );
+                                    },
+                                ]);
                             },
                         );
                 },

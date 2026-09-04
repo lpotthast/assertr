@@ -1,43 +1,29 @@
 use super::{
-    AssertThat, AssertrPartialEq, Borrow, Capture, Mode, PREVIEW_CAPACITY, PositionReporting,
-    Preview, String, Tail, ValueRenderer, Vec, VecDeque, Write, format, join_failures,
-    push_preview_details, writedoc,
+    AssertThat, AssertionFailure, AssertrPartialEq, Borrow, Capture, FailureKind, GroupStyle, Mode,
+    PREVIEW_CAPACITY, PositionReporting, Preview, Reference, Tail, ValueRenderer, Vec, VecDeque,
 };
-use crate::renderer::GroupStyle;
-use crate::renderer::omission;
 
 #[track_caller]
 fn fail_membership<S, T, Item, E: ?Sized, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     preview: &Preview<Item>,
-    expected: &E,
-    positive: bool,
+    kind: FailureKind,
+    relation: &'static str,
+    reference: Reference<'_, E>,
     decisive_index: Option<usize>,
 ) where
     Item: Borrow<T>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
-    let mut details = Vec::new();
-    push_preview_details(&mut details, preview, decisive_index);
-    let actual = this
-        .render()
-        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-    let expected = this.render().value(expected);
-    this.fail_with_details(details, |w: &mut String| {
-        if positive {
-            writedoc! {w, r"
-                Actual: {actual:#?}
-
-                does not contain expected: {expected:#?}
-            "}
-        } else {
-            writedoc! {w, r"
-                Actual: {actual:#?}
-
-                contains unexpected: {expected:#?}
-            "}
-        }
-    });
+    let failure = this
+        .failure(kind)
+        .actual(preview.rendered::<T, _, _, _>(this))
+        .relation(relation);
+    let failure = match reference {
+        Reference::Expected(expected) => failure.expected(this.render().value(expected)),
+        Reference::Unexpected(unexpected) => failure.unexpected(this.render().value(unexpected)),
+    };
+    preview.facts(failure, decisive_index).raise();
 }
 
 #[track_caller]
@@ -60,7 +46,14 @@ pub(crate) fn assert_contains<S, T, E, I, M: Mode, R>(
         }
     }
     let preview = tail.finish();
-    fail_membership(this, &preview, expected, true, None);
+    fail_membership(
+        this,
+        &preview,
+        FailureKind::Membership,
+        "does not contain",
+        Reference::Expected(expected),
+        None,
+    );
 }
 
 #[track_caller]
@@ -103,35 +96,30 @@ pub(crate) fn assert_contains_all<S, T, E, I, M: Mode, R>(
         .filter_map(|(expected, found)| (!found).then_some(expected))
         .collect::<Vec<_>>();
     let preview = tail.finish();
-    let mut details = Vec::new();
-    push_preview_details(&mut details, &preview, None);
-    let actual = this
-        .render()
-        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-    let expected = this
-        .render()
-        .borrowed_values::<E, _>(expected, GroupStyle::List);
-    let not_found = this
-        .render()
-        .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List);
-    this.fail_with_details(details, |w: &mut String| {
-        writedoc! {w, r"
-            Actual: {actual:#?}
-
-            does not contain all expected elements
-
-            Expected: {expected:#?}
-
-            Elements not found: {not_found:#?}
-        "}
-    });
+    let failure = this
+        .failure(FailureKind::Membership)
+        .actual(preview.rendered::<T, _, _, _>(this))
+        .relation("does not contain all of")
+        .expected(
+            this.render()
+                .borrowed_values::<E, _>(expected, GroupStyle::List),
+        )
+        .fact(
+            "Elements not found",
+            format_args!(
+                "{:#?}",
+                this.render()
+                    .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List)
+            ),
+        );
+    preview.facts(failure, None).raise();
 }
 
 #[track_caller]
 pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     iterator: I,
-    expected: &E,
+    not_expected: &E,
     positions: PositionReporting,
 ) where
     I: Iterator,
@@ -141,11 +129,19 @@ pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
 {
     let mut tail = Tail::new();
     for (index, item) in iterator.enumerate() {
-        let matches = AssertrPartialEq::eq(item.borrow(), expected, Some(&mut this.eq_context()));
+        let matches =
+            AssertrPartialEq::eq(item.borrow(), not_expected, Some(&mut this.eq_context()));
         tail.push(item);
         if matches {
             let preview = tail.finish();
-            fail_membership(this, &preview, expected, false, positions.index(index));
+            fail_membership(
+                this,
+                &preview,
+                FailureKind::Membership,
+                "contains",
+                Reference::Unexpected(not_expected),
+                positions.index(index),
+            );
             return;
         }
     }
@@ -155,32 +151,18 @@ pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
 fn fail_predicate_membership<S, T, Item, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     preview: &Preview<Item>,
-    positive: bool,
+    kind: FailureKind,
+    relation: &'static str,
     decisive_index: Option<usize>,
 ) where
     Item: Borrow<T>,
     R: ValueRenderer<T>,
 {
-    let mut details = Vec::new();
-    push_preview_details(&mut details, preview, decisive_index);
-    let actual = this
-        .render()
-        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-    this.fail_with_details(details, |w: &mut String| {
-        if positive {
-            writedoc! {w, r"
-            Actual: {actual:#?}
-
-            does not contain an element matching the predicate.
-        "}
-        } else {
-            writedoc! {w, r"
-            Actual: {actual:#?}
-
-            unexpectedly contains an element matching the predicate.
-        "}
-        }
-    });
+    let failure = this
+        .failure(kind)
+        .actual(preview.rendered::<T, _, _, _>(this))
+        .relation(relation);
+    preview.facts(failure, decisive_index).raise();
 }
 
 #[track_caller]
@@ -203,7 +185,13 @@ pub(crate) fn assert_contains_matching<S, T, P, I, M: Mode, R>(
         }
     }
     let preview = tail.finish();
-    fail_predicate_membership(this, &preview, true, None);
+    fail_predicate_membership(
+        this,
+        &preview,
+        FailureKind::Predicate,
+        "does not contain an element matching the predicate",
+        None,
+    );
 }
 
 #[track_caller]
@@ -224,64 +212,65 @@ pub(crate) fn assert_does_not_contain_matching<S, T, P, I, M: Mode, R>(
         tail.push(item);
         if matches {
             let preview = tail.finish();
-            fail_predicate_membership(this, &preview, false, positions.index(index));
+            fail_predicate_membership(
+                this,
+                &preview,
+                FailureKind::Predicate,
+                "contains an element matching the predicate",
+                positions.index(index),
+            );
             return;
         }
     }
 }
 
+/// Raises a `_satisfying` membership failure.
+///
+/// `unsatisfied` holds the failures of the last retained elements, in yield order, so that the
+/// element at offset `n` is the element at index `preview.start_index() + n`. They become the
+/// failure's children, tagged with their index when `positions` reports it. At most the
+/// rendering budget's item count of elements is kept.
 #[track_caller]
 fn fail_satisfying_membership<S, T, Item, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     preview: &Preview<Item>,
-    positive: bool,
+    kind: FailureKind,
+    relation: &'static str,
     positions: PositionReporting,
     decisive_index: Option<usize>,
-    failures: &VecDeque<Vec<String>>,
+    unsatisfied: VecDeque<Vec<AssertionFailure>>,
 ) where
     Item: Borrow<T>,
     R: ValueRenderer<T>,
 {
-    let mut details = Vec::new();
-    push_preview_details(&mut details, preview, decisive_index);
-    if positive {
-        let maximum = this.render().max_items();
-        for (offset, failures) in failures.iter().take(maximum).enumerate() {
-            let failures = join_failures(failures, this.render().max_items());
-            details.push(match positions {
-                PositionReporting::YieldOrder => format!(
-                    "Element at index {} does not satisfy the assertions:\n{failures}",
-                    preview.start_index() + offset
-                ),
-                PositionReporting::Unavailable => {
-                    format!("An element does not satisfy the assertions:\n{failures}")
-                }
+    let maximum = this.render().max_items();
+    let rendered = unsatisfied.len().min(maximum);
+    let omitted = if unsatisfied.is_empty() {
+        0
+    } else {
+        preview.consumed.saturating_sub(rendered)
+    };
+    let start = preview.start_index();
+    let children =
+        unsatisfied
+            .into_iter()
+            .take(maximum)
+            .enumerate()
+            .flat_map(|(offset, failures)| {
+                failures
+                    .into_iter()
+                    .map(move |failure| positions.locate(failure, start + offset))
             });
-        }
-        let rendered = failures.len().min(maximum);
-        let omitted = preview.consumed.saturating_sub(rendered);
-        if omitted != 0 {
-            details.push(omission(omitted, "unsatisfied element"));
-        }
-    }
-    let actual = this
-        .render()
-        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-    this.fail_with_details(details, |w: &mut String| {
-        if positive {
-            writedoc! {w,r"
-        Actual: {actual:#?}
 
-        does not contain an element satisfying the assertions.
-    "}
-        } else {
-            writedoc! {w,r"
-        Actual: {actual:#?}
-
-        unexpectedly contains an element satisfying the assertions.
-    "}
-        }
-    });
+    let failure = this
+        .failure(kind)
+        .actual(preview.rendered::<T, _, _, _>(this))
+        .relation(relation);
+    preview
+        .facts(failure, decisive_index)
+        .omitted(omitted, "unsatisfied element")
+        .children(children)
+        .raise();
 }
 
 #[track_caller]
@@ -310,7 +299,15 @@ pub(crate) fn assert_contains_satisfying<S, T, A, I, M: Mode, R>(
         retained.push_back(failures);
     }
     let preview = tail.finish();
-    fail_satisfying_membership(this, &preview, true, positions, None, &retained);
+    fail_satisfying_membership(
+        this,
+        &preview,
+        FailureKind::Predicate,
+        "does not contain an element satisfying the assertions",
+        positions,
+        None,
+        retained,
+    );
 }
 
 #[track_caller]
@@ -336,10 +333,11 @@ pub(crate) fn assert_does_not_contain_satisfying<S, T, A, I, M: Mode, R>(
             fail_satisfying_membership(
                 this,
                 &preview,
-                false,
+                FailureKind::Predicate,
+                "contains an element satisfying the assertions",
                 positions,
                 positions.index(index),
-                &VecDeque::new(),
+                VecDeque::new(),
             );
             return;
         }

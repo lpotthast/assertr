@@ -1,12 +1,8 @@
-use alloc::{
-    borrow::ToOwned,
-    string::{String, ToString},
-    vec::Vec,
-};
+use alloc::{borrow::ToOwned, vec::Vec};
 use core::future::Future;
 
 use crate::{
-    AssertThat,
+    AssertThat, AssertionFailure,
     actual::Actual,
     mode::{Capture, Mode},
 };
@@ -264,11 +260,13 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// raised. An empty result means that the element satisfies the assertions.
     ///
     /// Used by the collection assertions treating per-element assertions as a matching criterion.
+    /// The failures are structured, not rendered, so a candidate that a later element supersedes
+    /// costs no formatting, and a parent can attach them as its children.
     pub(crate) fn collect_element_failures<'e, U, A>(
         &self,
         element: &'e U,
         assertions: A,
-    ) -> Vec<String>
+    ) -> Vec<AssertionFailure>
     where
         A: for<'a> FnOnce(AssertThat<'a, U, Capture, R>),
         R: Clone,
@@ -281,8 +279,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
             .with_rendering_budget(self.state.rendering_budget)
             .with_location(self.state.print_location)
             .satisfies(|it| it, assertions);
-        let failures = sink.state.failures.take();
-        failures.iter().map(ToString::to_string).collect()
+        sink.state.failures.take()
     }
 }
 
@@ -308,7 +305,7 @@ mod tests {
                 )
             });
 
-        assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+        assert_that!(failures[0].description()).contains(SENTINEL);
     }
 
     #[test]
@@ -348,15 +345,12 @@ mod tests {
 
         assert_that!(failures.as_slice())
             .contains_exactly_matching([|it: &AssertionFailure| {
-                it.description.contains("Expected: 4")
+                it.description().contains("Expected: 4")
             }])
             .contains_exactly_satisfying([|it: AssertThat<AssertionFailure, Capture>| {
-                it.satisfies(
-                    |failure| &failure.description,
-                    |description| {
-                        description.contains("Expected: 4");
-                    },
-                );
+                it.satisfies_owned(AssertionFailure::description, |description| {
+                    description.contains("Expected: 4");
+                });
             }]);
     }
 
@@ -391,6 +385,6 @@ mod tests {
             });
 
         assert_that!(failures.as_slice())
-            .contains_exactly_matching([|it: &AssertionFailure| it.description.contains("xyz")]);
+            .contains_exactly_matching([|it: &AssertionFailure| it.description().contains("xyz")]);
     }
 }

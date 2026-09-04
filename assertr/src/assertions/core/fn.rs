@@ -1,22 +1,36 @@
 use crate::actual::Actual;
+use crate::failure::FailureKind;
 use crate::mode::Panic;
 use crate::{AssertThat, PanicValue};
-use alloc::{boxed::Box, format, string::String};
+use alloc::{boxed::Box, string::String};
 use core::any::Any;
-use core::fmt::Write;
 use core::panic::Location;
 #[cfg(feature = "std")]
 use core::task::Poll;
-use indoc::writedoc;
 
-fn panic_payload_detail(payload: &(dyn Any + Send)) -> Option<String> {
-    if let Some(message) = payload.downcast_ref::<&str>() {
-        Some(format!("Panic payload: {message:?}"))
-    } else {
-        payload
-            .downcast_ref::<String>()
-            .map(|message| format!("Panic payload: {message:?}"))
+/// The message of a panic payload raised through `panic!` or `panic_any` with a `&str` or a
+/// `String`. A payload of any other type carries no message that could be shown.
+fn panic_message(payload: &(dyn Any + Send)) -> Option<&str> {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+}
+
+/// Raises the failure of a `does_not_panic` assertion at `location`, with the panic message as
+/// evidence when the payload carries one.
+fn raise_unexpected_panic<T, R>(
+    this: &AssertThat<'_, T, Panic, R>,
+    payload: &(dyn Any + Send),
+    location: &'static Location<'static>,
+) {
+    let mut failure = this
+        .failure_at(FailureKind::Panic, location)
+        .relation("unexpectedly panicked");
+    if let Some(message) = panic_message(payload) {
+        failure = failure.fact("Panic message", format_args!("{message:?}"));
     }
+    failure.raise();
 }
 
 /// Awaits `future`, catching a panic raised while it is polled.
@@ -85,13 +99,9 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
             });
 
         if this.actual().is_ok() {
-            this.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: Function to panic when called.
-
-                      Actual: No panic occurred!
-                "}
-            });
+            this.failure(FailureKind::Panic)
+                .relation("did not panic")
+                .raise();
         }
 
         this.map(|it| match it {
@@ -122,13 +132,7 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
             });
 
         if let Err(payload) = this.actual() {
-            this.fail_with_details(panic_payload_detail(payload.as_ref()), |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: Function to not panic when called.
-
-                      Actual: Function panicked unexpectedly!
-                "}
-            });
+            raise_unexpected_panic(&this, payload.as_ref(), Location::caller());
         }
 
         this.map(|it| match it {
@@ -225,13 +229,9 @@ where
         .await;
 
     if this.actual().is_ok() {
-        this.fail_at(location, |w: &mut String| {
-            writedoc! {w, r"
-                Expected: Function to panic when called.
-
-                  Actual: No panic occurred!
-            "}
-        });
+        this.failure_at(FailureKind::Panic, location)
+            .relation("did not panic")
+            .raise();
     }
 
     this.map(|it| match it {
@@ -277,17 +277,7 @@ where
         .await;
 
     if let Err(payload) = this.actual() {
-        this.fail_with_details_at(
-            location,
-            panic_payload_detail(payload.as_ref()),
-            |w: &mut String| {
-                writedoc! {w, r"
-                Expected: Function to not panic when called.
-
-                  Actual: Function panicked unexpectedly!
-            "}
-            },
-        );
+        raise_unexpected_panic(&this, payload.as_ref(), location);
     }
 
     this.map(|it| match it {
@@ -364,9 +354,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `|| panic!("boom")`
 
-                    Expected value type: alloc::string::String
+                    Actual: &str
 
-                      Actual value type: &str
+                    is not of the expected type
+
+                    Expected: alloc::string::String
                     -------- assertr --------
                 "#});
             }
@@ -379,9 +371,7 @@ mod tests {
                         -------- assertr --------
                         Expression: `|| 42`
 
-                        Expected: Function to panic when called.
-
-                          Actual: No panic occurred!
+                        did not panic
                         -------- assertr --------
                     "});
             }
@@ -434,12 +424,10 @@ mod tests {
                     -------- assertr --------
                     Expression: `|| unimplemented!()`
 
-                    Expected: Function to not panic when called.
-
-                      Actual: Function panicked unexpectedly!
+                    unexpectedly panicked
 
                     Details:
-                      - Panic payload: "not implemented"
+                      - Panic message: "not implemented"
                     -------- assertr --------
                 "#});
             }
@@ -456,12 +444,10 @@ mod tests {
                     -------- assertr --------
                     Expression: `|| std::panic::panic_any(String::from("owned boom"))`
 
-                    Expected: Function to not panic when called.
-
-                      Actual: Function panicked unexpectedly!
+                    unexpectedly panicked
 
                     Details:
-                      - Panic payload: "owned boom"
+                      - Panic message: "owned boom"
                     -------- assertr --------
                 "#});
             }
@@ -542,9 +528,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `async || panic!("boom")`
 
-                    Expected value type: alloc::string::String
+                    Actual: &str
 
-                      Actual value type: &str
+                    is not of the expected type
+
+                    Expected: alloc::string::String
                     -------- assertr --------
                 "#});
             }
@@ -563,9 +551,7 @@ mod tests {
                         -------- assertr --------
                         Expression: `async || 42`
 
-                        Expected: Function to panic when called.
-
-                          Actual: No panic occurred!
+                        did not panic
                         -------- assertr --------
                     "});
             }
@@ -647,12 +633,10 @@ mod tests {
                     -------- assertr --------
                     Expression: `async || unimplemented!()`
 
-                    Expected: Function to not panic when called.
-
-                      Actual: Function panicked unexpectedly!
+                    unexpectedly panicked
 
                     Details:
-                      - Panic payload: "not implemented"
+                      - Panic message: "not implemented"
                     -------- assertr --------
                 "#});
             }
@@ -671,12 +655,10 @@ mod tests {
                     -------- assertr --------
                     Expression: `|| -> core::future::Ready<()> {{ panic!("before future") }}`
 
-                    Expected: Function to not panic when called.
-
-                      Actual: Function panicked unexpectedly!
+                    unexpectedly panicked
 
                     Details:
-                      - Panic payload: "before future"
+                      - Panic message: "before future"
                     -------- assertr --------
                 "#});
             }
@@ -697,12 +679,10 @@ mod tests {
                     -------- assertr --------
                     Expression: `async || {{ std::panic::panic_any(String::from("owned boom")) }}`
 
-                    Expected: Function to not panic when called.
-
-                      Actual: Function panicked unexpectedly!
+                    unexpectedly panicked
 
                     Details:
-                      - Panic payload: "owned boom"
+                      - Panic message: "owned boom"
                     -------- assertr --------
                 "#});
             }

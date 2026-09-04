@@ -1,14 +1,18 @@
 //! Shared streaming implementation for direct and borrowed iterator assertions.
 //!
-//! Per-failure diagnostics are accumulated in local `Vec<String>` buffers and handed to
-//! [`AssertThat::fail_with_details`], never stored on the assertion itself.
+//! Every assertion consumes only as much of the iterator as it needs, keeps a bounded preview of
+//! the consumed elements, and raises its failure through the crate-internal failure builder. The
+//! preview becomes the failure's actual value, and what the scan learned about consumption
+//! becomes its facts.
 
-use alloc::{collections::VecDeque, format, string::String, vec::Vec};
-use core::{borrow::Borrow, fmt::Write};
-use indoc::writedoc;
+use alloc::{collections::VecDeque, vec::Vec};
+use core::borrow::Borrow;
 
 use crate::{
-    AssertThat, AssertrPartialEq, Mode, ValueRenderer, mode::Capture, util::failure::join_failures,
+    AssertThat, AssertionFailure, AssertrPartialEq, Mode, ValueRenderer,
+    failure::{Fact, FailureBuilder, FailureKind, FailureTarget},
+    mode::Capture,
+    renderer::{GroupStyle, RenderedValues},
     util::matching::match_bipartite,
 };
 
@@ -27,8 +31,52 @@ impl<Item> Preview<Item> {
     fn start_index(&self) -> usize {
         self.omitted()
     }
+
+    /// The retained elements, rendered as the failure's actual value.
+    fn rendered<'a, T, S, M: Mode, R>(
+        &'a self,
+        this: &'a AssertThat<'_, S, M, R>,
+    ) -> RenderedValues<'a, T, Vec<Item>, R>
+    where
+        Item: Borrow<T>,
+        R: ValueRenderer<T>,
+    {
+        this.render()
+            .borrowed_values::<T, _>(&self.items, GroupStyle::List)
+    }
+
+    /// Attaches what the scan learned about consumption: how many elements were consumed, whether
+    /// the preview had to drop earlier ones, and the index of the element that decided the
+    /// assertion, if the caller reports positions.
+    fn facts<S: FailureTarget>(
+        &self,
+        failure: FailureBuilder<S>,
+        decisive_index: Option<usize>,
+    ) -> FailureBuilder<S> {
+        let mut failure = failure.fact("Consumed elements", self.consumed);
+        let omitted = self.omitted();
+        if omitted == 1 {
+            failure = failure.note(format_args!(
+                "The preview shows the last {} consumed elements. 1 earlier element was omitted.",
+                self.items.len()
+            ));
+        } else if omitted > 1 {
+            failure = failure.note(format_args!(
+                "The preview shows the last {} consumed elements. {omitted} earlier elements were omitted.",
+                self.items.len()
+            ));
+        }
+        if let Some(index) = decisive_index {
+            failure = failure.fact("Decisive index", index);
+        }
+        failure
+    }
 }
 
+/// Whether the position of an element within the iteration is meaningful to the caller.
+///
+/// Direct iterator assertions report yield positions. Borrowed `into_iter_*` assertions run over
+/// an arbitrary traversal and never mention positions.
 #[derive(Clone, Copy)]
 pub(crate) enum PositionReporting {
     YieldOrder,
@@ -42,7 +90,36 @@ impl PositionReporting {
             Self::Unavailable => None,
         }
     }
+
+    /// Tags a child raised for the element at `index` with its position, if positions are
+    /// meaningful.
+    fn locate(self, failure: AssertionFailure, index: usize) -> AssertionFailure {
+        match self {
+            Self::YieldOrder => failure.located_at(Fact::index(index)),
+            Self::Unavailable => failure,
+        }
+    }
 }
+
+/// The reference value of a membership failure, and whether the assertion looked for it or
+/// asserted its absence.
+enum Reference<'a, E: ?Sized> {
+    Expected(&'a E),
+    Unexpected(&'a E),
+}
+
+// Implemented by hand: a derive would demand `E: Copy`, but only references are held.
+impl<E: ?Sized> Clone for Reference<'_, E> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<E: ?Sized> Copy for Reference<'_, E> {}
+
+/// The failures of the elements that did not satisfy a positional criterion, each with the
+/// element's index in yield order.
+type UnsatisfiedElements = Vec<(usize, Vec<AssertionFailure>)>;
 
 struct Tail<Item> {
     items: VecDeque<Item>,
@@ -76,22 +153,53 @@ fn exact_size_hint<I: Iterator>(iterator: &I) -> Option<usize> {
     (upper == Some(lower)).then_some(lower)
 }
 
-fn push_preview_details<Item>(
-    details: &mut Vec<String>,
-    preview: &Preview<Item>,
-    decisive_index: Option<usize>,
-) {
-    details.push(format!("Consumed {} element(s).", preview.consumed));
-    if preview.omitted() > 0 {
-        details.push(format!(
-            "Actual preview contains the last {} consumed elements; {} earlier element(s) omitted.",
-            preview.items.len(),
-            preview.omitted()
-        ));
-    }
-    if let Some(index) = decisive_index {
-        details.push(format!("Decisive element is at zero-based index {index}."));
-    }
+/// Flattens the failures of unsatisfied elements into children, each located at its index in
+/// yield order. At most `maximum` elements are kept. Returns the children and the number of
+/// omitted elements.
+fn indexed_children(
+    mut unsatisfied: UnsatisfiedElements,
+    maximum: usize,
+) -> (Vec<AssertionFailure>, usize) {
+    let omitted = unsatisfied.len().saturating_sub(maximum);
+    unsatisfied.truncate(maximum);
+    let children = unsatisfied
+        .into_iter()
+        .flat_map(|(index, failures)| {
+            failures
+                .into_iter()
+                .map(move |failure| failure.located_at(Fact::index(index)))
+        })
+        .collect();
+    (children, omitted)
+}
+
+/// A child failure for an element that did not equal its expected counterpart.
+fn unequal_element<T, E, S, M: Mode, R>(
+    this: &AssertThat<'_, S, M, R>,
+    element: &T,
+    expected: &E,
+) -> AssertionFailure
+where
+    R: ValueRenderer<T> + ValueRenderer<E>,
+{
+    FailureBuilder::detached::<T>(FailureKind::Equality)
+        .actual(this.render().value(element))
+        .expected(this.render().value(expected))
+        .build()
+}
+
+/// A child failure for an element that did not match its predicate.
+fn unmatched_element<T, S, M: Mode, R>(
+    this: &AssertThat<'_, S, M, R>,
+    element: &T,
+) -> AssertionFailure
+where
+    R: ValueRenderer<T>,
+{
+    FailureBuilder::detached::<T>(FailureKind::Predicate)
+        .actual(this.render().value(element))
+        .relation("does not match its predicate")
+        .build()
 }
 
 mod cardinality;

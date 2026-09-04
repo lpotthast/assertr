@@ -1,8 +1,4 @@
-use alloc::string::String;
-use core::fmt::Write;
-use indoc::writedoc;
-
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions for boolean values.
 #[allow(clippy::return_self_not_must_use)]
@@ -27,17 +23,11 @@ impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
     {
         self.track_assertion();
         let actual = self.actual();
-        let expected = &true;
-        if actual != expected {
-            let actual = self.render().value(actual);
-            let expected = self.render().value(expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+        if !*actual {
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(actual))
+                .relation("is not true")
+                .raise();
         }
         self
     }
@@ -49,17 +39,11 @@ impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
     {
         self.track_assertion();
         let actual = self.actual();
-        let expected = &false;
-        if actual != expected {
-            let actual = self.render().value(actual);
-            let expected = self.render().value(expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+        if *actual {
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(actual))
+                .relation("is not false")
+                .raise();
         }
         self
     }
@@ -85,7 +69,7 @@ mod tests {
                 .with_location(false)
                 .capture(BoolAssertions::is_true);
 
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -112,9 +96,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `false`
 
-                    Expected: true
+                    Actual: false
 
-                      Actual: false
+                    is not true
                     -------- assertr --------
                 "});
         }
@@ -143,9 +127,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `true`
 
-                    Expected: false
+                    Actual: true
 
-                      Actual: true
+                    is not false
                     -------- assertr --------
                 "});
         }

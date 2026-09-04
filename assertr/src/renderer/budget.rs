@@ -22,14 +22,16 @@
 ///     .capture(|it| it.contains(0));
 ///
 /// assert_eq!(
-///     failures[0].description,
+///     failures[0].description(),
 ///     concat!(
 ///         "Actual: [\n",
 ///         "    123... 3 more characters ...,\n",
 ///         "    234... 3 more characters ...,\n",
 ///         "] (... 1 more element ...)\n",
 ///         "\n",
-///         "does not contain expected: 0\n",
+///         "does not contain\n",
+///         "\n",
+///         "Expected: 0\n",
 ///     ),
 /// );
 /// ```

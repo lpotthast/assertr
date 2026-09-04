@@ -1,10 +1,9 @@
 use crate::assertions::core::strip_quotation_marks;
+use crate::failure::FailureKind;
 use crate::{AssertThat, Mode, mode::Panic};
 use alloc::format;
-use alloc::string::String;
 use core::any::{TypeId, type_name};
-use core::fmt::{Display, Write};
-use indoc::writedoc;
+use core::fmt::Display;
 use rootcause::markers::Dynamic;
 
 /// Assertions for owned rootcause reports.
@@ -140,13 +139,11 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
         let actual = self.actual().children().len();
 
         if actual != expected {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected child report count: {expected:?}
-
-                      Actual child report count: {actual:?}
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(actual)
+                .relation("is not the expected child count")
+                .expected(expected)
+                .raise();
         }
         self
     }
@@ -157,13 +154,11 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
         let actual = self.actual().attachments().len();
 
         if actual != expected {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected attachment count: {expected:?}
-
-                      Actual attachment count: {actual:?}
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(actual)
+                .relation("is not the expected attachment count")
+                .expected(expected)
+                .raise();
         }
         self
     }
@@ -186,13 +181,11 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
         let expected = format!("{expected}");
 
         if actual != expected {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected current context display: {expected:?}
-
-                      Actual current context display: {actual:?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(actual)
+                .relation("is not the expected current context display value")
+                .expected(expected)
+                .raise();
         }
         self
     }
@@ -205,13 +198,11 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
         let expected = strip_quotation_marks(expected.as_ref());
 
         if actual != expected {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected current context debug: {expected:?}
-
-                      Actual current context debug: {actual:?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(actual)
+                .relation("is not the expected current context debug string")
+                .expected(expected)
+                .raise();
         }
         self
     }
@@ -395,21 +386,19 @@ impl<'t, O, T, R> RootcauseDynamicReportExtractAssertions<'t, R>
     }
 }
 
+#[track_caller]
 fn assert_current_context_type<E: 'static, T, M: Mode, R>(
     assertion: &AssertThat<'_, T, M, R>,
     actual_type_id: TypeId,
     actual_type_name: &'static str,
 ) {
     if actual_type_id != TypeId::of::<E>() {
-        let expected_type_name = type_name::<E>();
-
-        assertion.fail(|w: &mut String| {
-            writedoc! {w, r"
-                Expected current context type: {expected_type_name}
-
-                  Actual current context type: {actual_type_name}
-            "}
-        });
+        assertion
+            .failure(FailureKind::Variant)
+            .actual(format_args!("{actual_type_name}"))
+            .relation("is not the expected current context type")
+            .expected(format_args!("{}", type_name::<E>()))
+            .raise();
     }
 }
 
@@ -511,11 +500,12 @@ mod tests {
 
                 Actual: ReportCollection{trailing_space}
 
-
-                does not have the correct length
+                does not have the expected length
 
                 Expected: 1
-                  Actual: 0
+
+                Details:
+                  - Actual length: 0
                 -------- assertr --------
             ", trailing_space = " "});
         }
@@ -563,9 +553,11 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
-                Expected child report count: 1
+                Actual: 0
 
-                  Actual child report count: 0
+                is not the expected child count
+
+                Expected: 1
                 -------- assertr --------
             "});
         }
@@ -601,9 +593,11 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
-                Expected attachment count: 1
+                Actual: 2
 
-                  Actual attachment count: 2
+                is not the expected attachment count
+
+                Expected: 1
                 -------- assertr --------
             "});
         }
@@ -637,9 +631,11 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
-                Expected current context type: alloc::string::String
+                Actual: {actual_type}
 
-                  Actual current context type: {actual_type}
+                is not the expected current context type
+
+                Expected: alloc::string::String
                 -------- assertr --------
             ", actual_type = core::any::type_name::<TestError>()});
         }
@@ -673,9 +669,11 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
-                Expected current context display: "other"
+                Actual: "root"
 
-                  Actual current context display: "root"
+                is not the expected current context display value
+
+                Expected: "other"
                 -------- assertr --------
             "#});
         }
@@ -712,9 +710,11 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
-                Expected current context debug: "other"
+                Actual: "TestError(\"root\")"
 
-                  Actual current context debug: "TestError(\"root\")"
+                is not the expected current context debug string
+
+                Expected: "other"
                 -------- assertr --------
             "#});
         }
@@ -842,9 +842,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `report!("root")`
 
-                    Expected current context type: alloc::string::String
+                    Actual: &str
 
-                      Actual current context type: &str
+                    is not the expected current context type
+
+                    Expected: alloc::string::String
                     -------- assertr --------
                 "#});
             }

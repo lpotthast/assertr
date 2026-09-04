@@ -19,6 +19,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// ```
     /// use assertr::prelude::*;
+    /// use assertr::failure::FailureKind;
     ///
     /// trait EvenAssertions<R = DebugRenderer> {
     ///     fn is_even(self) -> Self
@@ -34,8 +35,10 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///     {
     ///         self.track_assertion();
     ///         if self.actual() % 2 != 0 {
-    ///             let actual = self.render().value(self.actual());
-    ///             self.fail(format_args!("Expected an even value, but was {actual:#?}."));
+    ///             self.failure(FailureKind::Predicate)
+    ///                 .actual(self.render().value(self.actual()))
+    ///                 .relation("is not even")
+    ///                 .raise();
     ///         }
     ///         self
     ///     }
@@ -161,13 +164,13 @@ mod tests {
         let bounded = assert_that!(&values)
             .with_location(false)
             .capture(|it| it.contains(999));
-        assert_that!(bounded[0].description.as_str()).contains("... 4 more elements ...");
+        assert_that!(bounded[0].description()).contains("... 4 more elements ...");
 
         let unlimited = assert_that!(&values)
             .with_rendering_budget(RenderingBudget::unlimited())
             .with_location(false)
             .capture(|it| it.contains(999));
-        assert_that!(unlimited[0].description.as_str()).does_not_contain("more elements");
+        assert_that!(unlimited[0].description()).does_not_contain("more elements");
     }
 
     #[test]
@@ -184,8 +187,7 @@ mod tests {
                 )
             });
 
-        assert_that!(failures[0].description.as_str())
-            .contains("Actual: 123... 3 more characters ...");
+        assert_that!(failures[0].description()).contains("Actual: 123... 3 more characters ...");
     }
 
     #[test]
@@ -195,7 +197,7 @@ mod tests {
             .with_location(false)
             .capture(|it| it.is_equal_to(Secret(2)));
 
-        assert_that!(failures[0].description.as_str())
+        assert_that!(failures[0].description())
             .contains("Expected: Secret(2)")
             .contains("Actual: Secret(1)");
     }

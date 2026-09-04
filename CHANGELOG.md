@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `StableOrderExtractAssertions` provides `get_first`, `get_last`, and `get_single`.
   `RandomAccessExtractAssertions` provides `get_at`. These panic-mode projections borrow the assertion chain and the
   selected element.
+- `AssertionFailure` exposes every part of a failure as data: the rendered `actual` and `expected` values, the
+  `relation` between them, the `unexpected` value of a negated assertion, `facts` (a list of `Fact { label, value }`),
+  nested `children`, and a `FailureKind` tag in `kind`. `AssertionFailure::description()` renders the
+  assertion-specific text from those fields. `Fact` and `FailureKind` are re-exported at the crate root. Nested
+  failures raised by `_satisfying` assertions, and the elements rejected by positional or `_matching` assertions, are
+  `children` located by a `Fact::INDEX` or `Fact::KEY` fact instead of pre-rendered detail strings.
 
 ### Changed
 
@@ -45,8 +51,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `RENDERING_ORDER: renderer::RenderingOrder`, and keeps lookup separate in `MapLookup`. `CollectionStyle` was replaced
   by `renderer::GroupStyle` for explicitly styled ad-hoc groups passed to `RenderingContext::values`,
   `RenderingContext::borrowed_values`, or `EqContext::render_values`.
-- `AssertionFailure` formatting now separates chain messages under `Messages:` from assertion
-  evidence under `Details:`.
+- **Breaking:** The `AssertionFailure::description` and `AssertionFailure::details` fields were removed. The text of
+  a failure is derived from its fields: call `description()` for the assertion-specific text, format the failure
+  with `Display` for the complete report, or read `facts` for the evidence that `details` carried, each `Fact`
+  formatting as `label: value`.
+- **Breaking:** `AssertThat::fail`, `AssertThat::fail_with_details`, and the `failure::Failure` trait were removed.
+  Custom leaf assertions raise failures the way built-in ones do: `AssertThat::failure(kind)` returns a
+  `failure::FailureBuilder` that takes the rendered `actual`, the `relation`, the `expected` or `unexpected` value,
+  labeled facts, notes, and nested children, and `raise()` records or panics. `FailureBuilder::detached` builds a
+  child failure, and `AssertionFailure::located_at` with `Fact::index` or `Fact::key` locates it in the parent's
+  subject.
+- Every built-in failure is rendered from its fields by one grammar: `Actual:`, the relation sentence, `Expected:`
+  (or `Unexpected:` for a negated assertion), then `Messages:` (chain messages), `Details:` (one bullet per fact as
+  `label: value`), and `Nested failures:` (children indented one level and introduced by `At index N:` or
+  `At key K:`). A failure without a relation is a direct comparison and keeps the aligned `Expected:` / `Actual:` pair.
+  Relations are lowercase sentences without trailing periods and never embed a value. Text matched by downstream tests
+  changes accordingly: `does not contain expected: 4` is now `does not contain` followed by `Expected: 4`,
+  `contains unexpected: 2` is now `contains` followed by `Unexpected: 2`, `was expected to be empty, but it is not!`
+  is now `is not empty`, `does not have the correct length` with an aligned length pair is now
+  `does not have the expected length`, `Expected: 2`, and an `Actual length` fact, `is not of expected variant:
+  Option::Some` is now `is not the expected variant` followed by `Expected: Option::Some`, `Values were expected to be
+  different.` is now `is equal to` followed by `Unexpected:`, and nested per-element failures move from `Details:` to
+  `Nested failures:`.
+- Facts and children listing the elements of a set or map without a deterministic iteration order are sorted by
+  rendered text, and a collection assertion no longer renders the failures of a rejected candidate element to text
+  while it is still looking for a satisfying one.
+- Positional assertions (`starts_with`, `ends_with`, `contains_exactly`, and their `_matching` variants, on
+  collections and iterators) report the first rejected element as a nested failure at its index instead of describing
+  the position in prose. Map assertions report a value that differs, fails its predicate, or fails its assertions as a
+  nested failure at its key. Explicit iterator diagnostics carry their scan state as labeled facts (`Consumed
+  elements`, `Reported length`, `Exhausted at index`, `Extra element at index`).
+- `TokioWatchReceiverAssertions::has_changed` and `has_not_changed` no longer require renderer bounds, because their
+  failures render no value.
 - **Breaking:** `HasLength` is implemented for `str` and `[T]` directly and forwarded through blanket `&T` and
   `&mut T` implementations; the separate reference implementations were removed. Downstream types that implement it
   for both `T` and `&T` must drop the reference implementation. The trait remains dyn-compatible and contains only

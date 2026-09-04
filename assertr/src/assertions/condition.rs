@@ -1,6 +1,4 @@
-use alloc::string::ToString;
-
-use crate::{AssertThat, Mode, condition::AssertrCondition};
+use crate::{AssertThat, Mode, condition::AssertrCondition, failure::FailureKind};
 
 /// Assertions that apply a reusable [`AssertrCondition`] to the subject.
 ///
@@ -14,8 +12,9 @@ use crate::{AssertThat, Mode, condition::AssertrCondition};
 pub trait ConditionAssertions<T> {
     /// Asserts that the subject matches the given condition.
     ///
-    /// On failure, the condition's error is exposed verbatim as an
-    /// [`AssertionFailure::details`](crate::AssertionFailure::details) entry.
+    /// On failure, the condition's error is exposed verbatim as an unlabeled note in
+    /// [`AssertionFailure::facts`](crate::AssertionFailure::facts), and therefore as an
+    /// [`AssertionFailure::facts`](crate::AssertionFailure::facts) note.
     ///
     /// Pass `&condition` to keep the condition usable for further assertions.
     #[cfg_attr(feature = "fluent", fluent_alias("be"))]
@@ -30,7 +29,10 @@ impl<T, M: Mode, R> ConditionAssertions<T> for AssertThat<'_, T, M, R> {
     fn is<C: AssertrCondition<T>>(self, condition: C) -> Self {
         self.track_assertion();
         if let Err(err) = condition.test(self.actual()) {
-            self.fail_with_details([err.to_string()], "Condition did not match.\n");
+            self.failure(FailureKind::Predicate)
+                .relation("does not match the condition")
+                .note(err)
+                .raise();
         }
         self
     }
@@ -56,8 +58,9 @@ where
 {
     /// Asserts that every element of the subject matches the given condition.
     ///
-    /// On failure, each offending element's condition error is exposed verbatim as an
-    /// [`AssertionFailure::details`](crate::AssertionFailure::details) entry of its own failure.
+    /// On failure, each offending element's condition error is exposed verbatim as an unlabeled
+    /// note in the [`AssertionFailure::facts`](crate::AssertionFailure::facts) of its own failure,
+    /// and therefore as an [`AssertionFailure::facts`](crate::AssertionFailure::facts) note.
     fn are<C: AssertrCondition<T>>(self, condition: C) -> Self;
 
     /// Readability synonym of [`are`](IterableConditionAssertions::are).
@@ -73,10 +76,10 @@ where
         self.track_assertion();
         for actual in self.actual() {
             if let Err(err) = condition.test(actual) {
-                self.fail_with_details(
-                    [err.to_string()],
-                    "Condition did not match for an element.\n",
-                );
+                self.failure(FailureKind::Predicate)
+                    .relation("does not match the condition")
+                    .note(err)
+                    .raise();
             }
         }
         self

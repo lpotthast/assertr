@@ -1,12 +1,7 @@
 //! Indexed extraction for collections supporting constant-time random access.
 
-use alloc::string::String;
-use core::fmt::Write;
-
-use indoc::writedoc;
-
 use super::RandomAccess;
-use crate::{AssertThat, ValueRenderer, mode::Panic};
+use crate::{AssertThat, ValueRenderer, failure::FailureKind, mode::Panic};
 
 /// Panic-mode indexed extraction from collections with [`RandomAccess`].
 ///
@@ -39,15 +34,12 @@ where
     {
         self.track_assertion();
         if self.actual().element_at(index).is_none() {
-            let actual = self.render().stable_collection(self.actual());
-            let length = self.actual().length();
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    has no element at index {index}. Its length is {length}.
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(self.render().stable_collection(self.actual()))
+                .relation("has no element at the index")
+                .expected(index)
+                .fact("Actual length", self.actual().length())
+                .raise();
         }
 
         self.derive(|collection| {
@@ -103,7 +95,12 @@ mod tests {
                         2,
                     ]
 
-                    has no element at index 2. Its length is 2.
+                    has no element at the index
+
+                    Expected: 2
+
+                    Details:
+                      - Actual length: 2
                     -------- assertr --------
                 "});
         }

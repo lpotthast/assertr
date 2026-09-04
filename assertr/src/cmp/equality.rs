@@ -299,7 +299,7 @@ mod tests {
                     })
                 });
 
-            assert_that!(failures[0].details[0].as_str())
+            assert_that!(failures[0].facts[0].value.as_str())
                 .contains(format!("expected {SENTINEL}, but was {SENTINEL}"));
         }
     }

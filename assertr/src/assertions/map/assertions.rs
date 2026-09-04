@@ -66,7 +66,8 @@ pub trait MapAssertions<K, V, R> {
     /// Asserts that the map has `key` and its value satisfies `assertions`.
     ///
     /// The assertions run in capture mode against the value. If any fail, this method raises one
-    /// map-level failure carrying every captured value failure as diagnostic detail.
+    /// map-level failure carrying every captured value failure as a nested failure located at
+    /// the key.
     fn contains_entry_satisfying<A, Q>(self, key: &Q, assertions: A) -> Self
     where
         Q: ?Sized,
@@ -117,8 +118,8 @@ pub trait MapAssertions<K, V, R> {
     /// Asserts that the map contains exactly the given keys and that each value satisfies the
     /// assertions paired with its key. Missing and unexpected keys are failures.
     ///
-    /// Each value's assertions run in capture mode. Every captured failure is retained in the
-    /// map-level diagnostic under its expected key.
+    /// Each value's assertions run in capture mode. Every captured failure is retained as a
+    /// nested failure of the map-level diagnostic, located at its expected key.
     fn contains_exactly_entries_satisfying<EK, A, I>(self, assertions: I) -> Self
     where
         EK: MapKeyQuery<K>,
@@ -314,12 +315,13 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_exactly_entries([("x", 10), ("y", 20), ("z", 30)]));
 
-            assert_that!(failures[0].description.as_str())
-                .contains("Expected entries: [")
+            assert_that!(failures[0].description())
+                .contains("Expected: [")
                 .contains("] (... 2 more entries ...)");
-            assert_that!(failures[0].details.iter().any(|detail| {
-                detail.starts_with("Unexpected entries: [")
-                    && detail.contains("] (... 2 more entries ...)")
+            assert_that!(failures[0].facts.iter().any(|fact| {
+                fact.label == "Unexpected entries"
+                    && fact.value.starts_with('[')
+                    && fact.value.contains("] (... 2 more entries ...)")
             }))
             .is_true();
         }
@@ -369,7 +371,9 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    does not contain expected key: "baz"
+                    does not contain key
+
+                    Expected: "baz"
                     -------- assertr --------
                 "#});
         }
@@ -421,7 +425,9 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    contains unexpected key: "foo"
+                    contains key
+
+                    Unexpected: "foo"
                     -------- assertr --------
                 "#});
         }
@@ -464,7 +470,9 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    does not contain expected value: "baz"
+                    does not contain value
+
+                    Expected: "baz"
                     -------- assertr --------
                 "#});
         }
@@ -530,7 +538,9 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    contains unexpected value: "bar"
+                    contains value
+
+                    Unexpected: "bar"
                     -------- assertr --------
                 "#});
         }
@@ -603,7 +613,9 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    does not contain expected key: "baz"
+                    does not contain key
+
+                    Expected: "baz"
                     -------- assertr --------
                 "#});
         }
@@ -626,10 +638,13 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    does not contain expected value at key: "foo"
+                    does not contain the expected value at a key
 
-                    Expected value: "someValue"
-                      Actual value: "bar"
+                    Nested failures:
+                      - At key "foo":
+                        Expected: "someValue"
+
+                          Actual: "bar"
                     -------- assertr --------
                 "#});
         }
@@ -691,7 +706,9 @@ mod tests {
                         "retries": 3,
                     }}
 
-                    does not contain expected key: "timeout"
+                    does not contain key
+
+                    Expected: "timeout"
                     -------- assertr --------
                 "#});
         }
@@ -704,10 +721,10 @@ mod tests {
                     .contains_entry_satisfying("retries", is_positive_and_large);
             })
             .has_type::<String>()
-            .contains("does not contain an entry satisfying the assertions at key: \"retries\"")
-            .contains("Value at key \"retries\" does not satisfy the assertions:")
-            .contains("Expected: 0")
-            .contains("Expected: 10");
+            .contains("does not contain a value satisfying the assertions at a key")
+            .contains(
+                "Nested failures:\n  - At key \"retries\":\n    Actual: -3\n\n    is not greater than\n\n    Expected: 0\n  - At key \"retries\":\n    Actual: -3\n\n    is not greater than\n\n    Expected: 10\n",
+            );
         }
 
         #[test]
@@ -717,7 +734,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_entry_satisfying("value", is_renderer_expected_two));
 
-            assert_that!(failures[0].details[0].as_str()).contains(SENTINEL);
+            assert_that!(failures[0].children[0].description()).contains(SENTINEL);
         }
     }
 
@@ -772,9 +789,12 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    contains unexpected entry at key: "foo"
+                    contains the entry
 
-                    Unexpected value: "bar"
+                    Unexpected: (
+                        "foo",
+                        "bar",
+                    )
                     -------- assertr --------
                 "#});
         }
@@ -822,16 +842,17 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    does not contain all expected keys
+                    does not contain all of
 
-                    Expected keys: [
+                    Expected: [
                         "foo",
                         "baz",
                     ]
 
-                    Keys not found: [
-                        "baz",
-                    ]
+                    Details:
+                      - Keys not found: [
+                            "baz",
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -882,9 +903,9 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    does not exactly contain expected entries
+                    does not contain exactly
 
-                    Expected entries: [
+                    Expected: [
                         (
                             "foo",
                             "bar",
@@ -896,7 +917,8 @@ mod tests {
                     ]
 
                     Details:
-                      - Number of entries (1) does not match number of expected entries (2)!
+                      - Actual length: 1
+                      - Expected length: 2
                       - Keys not found: [
                             "baz",
                         ]
@@ -921,9 +943,9 @@ mod tests {
                         "a": 1,
                     }} (sorted for rendering)
 
-                    does not exactly contain expected entries
+                    does not contain exactly
 
-                    Expected entries: [
+                    Expected: [
                         (
                             "a",
                             1,
@@ -935,7 +957,8 @@ mod tests {
                     ]
 
                     Details:
-                      - Number of entries (1) does not match number of expected entries (2)!
+                      - Actual length: 1
+                      - Expected length: 2
                     -------- assertr --------
                 "#});
         }
@@ -962,9 +985,9 @@ mod tests {
                         "b": 2,
                     }}
 
-                    does not exactly contain expected entries
+                    does not contain exactly
 
-                    Expected entries: [
+                    Expected: [
                         (
                             "a",
                             1,
@@ -1003,12 +1026,13 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    does not exactly contain expected entries
+                    does not contain exactly
 
-                    Expected entries: []
+                    Expected: []
 
                     Details:
-                      - Number of entries (1) does not match number of expected entries (0)!
+                      - Actual length: 1
+                      - Expected length: 0
                       - Unexpected entries: [
                             (
                                 "foo",
@@ -1036,9 +1060,9 @@ mod tests {
                         "foo": "bar",
                     }} (sorted for rendering)
 
-                    does not exactly contain expected entries
+                    does not contain exactly
 
-                    Expected entries: [
+                    Expected: [
                         (
                             "foo",
                             "baz",
@@ -1049,8 +1073,58 @@ mod tests {
                       - Keys with unexpected values: [
                             "foo",
                         ]
+                    Nested failures:
+                      - At key "foo":
+                        Expected: "baz"
+
+                          Actual: "bar"
                     -------- assertr --------
                 "#});
+        }
+
+        #[test]
+        fn nested_failures_keep_the_order_of_the_expected_entries_for_an_ordered_map() {
+            use alloc::collections::BTreeMap;
+
+            let failures = assert_that!(BTreeMap::from([("a", 1), ("b", 2)]))
+                .with_location(false)
+                .capture(|it| it.contains_exactly_entries([("b", 0), ("a", 0)]));
+
+            let keys = failures[0]
+                .children
+                .iter()
+                .map(|child| child.facts[0].value.as_str())
+                .collect::<Vec<_>>();
+            assert_that!(keys).contains_exactly(["\"b\"", "\"a\""]);
+        }
+
+        #[test]
+        fn nested_failures_are_sorted_by_their_text_for_a_map_rendered_in_sorted_order() {
+            let failures = assert_that!(HashMap::from([("a", 1), ("b", 2)]))
+                .with_location(false)
+                .capture(|it| it.contains_exactly_entries([("b", 0), ("a", 0)]));
+
+            let keys = failures[0]
+                .children
+                .iter()
+                .map(|child| child.facts[0].value.as_str())
+                .collect::<Vec<_>>();
+            assert_that!(keys).contains_exactly(["\"a\"", "\"b\""]);
+        }
+
+        #[test]
+        fn limits_the_nested_value_failures_to_the_rendering_budget() {
+            use alloc::collections::BTreeMap;
+
+            let failures = assert_that!(BTreeMap::from([("a", 1), ("b", 2), ("c", 3)]))
+                .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
+                .with_location(false)
+                .capture(|it| it.contains_exactly_entries([("a", 0), ("b", 0), ("c", 0)]));
+
+            assert_that!(failures[0].children.as_slice()).has_length(1);
+            assert_that!(failures[0].children[0].facts[0].value.as_str()).is_equal_to("\"a\"");
+            assert_that!(failures[0].facts.as_slice())
+                .contains(crate::Fact::note("... 2 more unexpected values ..."));
         }
     }
 
@@ -1116,13 +1190,9 @@ mod tests {
 
                     does not exactly contain entries matching the predicates
 
-                    Expected keys: [
-                        "a",
-                        "missing",
-                    ]
-
                     Details:
-                      - Number of entries (1) does not match number of predicates (2)!
+                      - Actual length: 1
+                      - Expected length: 2
                       - Keys not found: [
                             "missing",
                         ]
@@ -1150,13 +1220,9 @@ mod tests {
 
                     does not exactly contain entries matching the predicates
 
-                    Expected keys: [
-                        "a",
-                        "a",
-                    ]
-
                     Details:
-                      - Number of entries (1) does not match number of predicates (2)!
+                      - Actual length: 1
+                      - Expected length: 2
                     -------- assertr --------
                 "#});
         }
@@ -1180,12 +1246,9 @@ mod tests {
 
                     does not exactly contain entries matching the predicates
 
-                    Expected keys: [
-                        "a",
-                    ]
-
                     Details:
-                      - Number of entries (2) does not match number of predicates (1)!
+                      - Actual length: 2
+                      - Expected length: 1
                       - Unexpected entries: [
                             (
                                 "extra",
@@ -1214,14 +1277,11 @@ mod tests {
 
                     does not exactly contain entries matching the predicates
 
-                    Expected keys: [
-                        "a",
-                    ]
+                    Nested failures:
+                      - At key "a":
+                        Actual: 1
 
-                    Details:
-                      - Keys with values not matching their predicates: [
-                            "a",
-                        ]
+                        does not match its predicate
                     -------- assertr --------
                 "#});
         }
@@ -1292,13 +1352,9 @@ mod tests {
 
                     does not exactly contain entries satisfying the assertions
 
-                    Expected keys: [
-                        "a",
-                        "missing",
-                    ]
-
                     Details:
-                      - Number of entries (1) does not match number of assertions (2)!
+                      - Actual length: 1
+                      - Expected length: 2
                       - Keys not found: [
                             "missing",
                         ]
@@ -1326,13 +1382,9 @@ mod tests {
 
                     does not exactly contain entries satisfying the assertions
 
-                    Expected keys: [
-                        "a",
-                        "a",
-                    ]
-
                     Details:
-                      - Number of entries (1) does not match number of assertions (2)!
+                      - Actual length: 1
+                      - Expected length: 2
                     -------- assertr --------
                 "#});
         }
@@ -1356,12 +1408,9 @@ mod tests {
 
                     does not exactly contain entries satisfying the assertions
 
-                    Expected keys: [
-                        "a",
-                    ]
-
                     Details:
-                      - Number of entries (2) does not match number of assertions (1)!
+                      - Actual length: 2
+                      - Expected length: 1
                       - Unexpected entries: [
                             (
                                 "extra",
@@ -1381,7 +1430,7 @@ mod tests {
             })
             .has_type::<String>()
             .contains("does not exactly contain entries satisfying the assertions")
-            .contains("Value at key \"a\" does not satisfy its assertions:\n    Expected: 2");
+            .contains("Nested failures:\n  - At key \"a\":\n    Expected: 2\n\n      Actual: 1\n");
         }
 
         #[test]
@@ -1393,9 +1442,10 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_exactly_entries_satisfying(assertions));
 
-            assert_that!(failures[0].details.as_slice())
-                .has_length(2)
-                .contains("... 2 more unsatisfied values ...");
+            assert_that!(failures[0].children.as_slice()).has_length(1);
+            assert_that!(failures[0].children[0].facts[0].value.as_str()).is_equal_to("\"a\"");
+            assert_that!(failures[0].facts.as_slice())
+                .contains_exactly([crate::Fact::note("... 2 more unsatisfied values ...")]);
         }
     }
 
@@ -1468,7 +1518,9 @@ mod tests {
                         "foo": "bar",
                     }}
 
-                    does not contain expected key: "baz"
+                    does not contain key
+
+                    Expected: "baz"
                     -------- assertr --------
                 "#});
         }
@@ -1489,10 +1541,13 @@ mod tests {
                         "foo": "bar",
                     }}
 
-                    does not contain expected value at key: "foo"
+                    does not contain the expected value at a key
 
-                    Expected value: "baz"
-                      Actual value: "bar"
+                    Nested failures:
+                      - At key "foo":
+                        Expected: "baz"
+
+                          Actual: "bar"
                     -------- assertr --------
                 "#});
         }

@@ -1,3 +1,4 @@
+use assertr::failure::Fact;
 use assertr::prelude::*;
 use indoc::formatdoc;
 
@@ -116,10 +117,12 @@ fn a_failing_condition_exposes_its_error_as_a_failure_detail() {
         .capture(|it| it.is(IsAlive {}));
 
     assert_that!(&failures).has_length(1);
-    assert_that!(failures[0].description.as_str()).is_equal_to("Condition did not match.\n");
-    // The condition's error arrives verbatim as a per-failure detail; no parsing of the
-    // description's framing text is required.
-    assert_that!(failures[0].details.as_slice()).contains_exactly(["\"Bob\" is dead!"]);
+    assert_that!(failures[0].description()).is_equal_to("does not match the condition\n");
+    // The condition's error arrives verbatim as an unlabeled note of the failure. No parsing of
+    // the description's framing text is required.
+    assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note("\"Bob\" is dead!")]);
+    assert_that!(failures[0].facts.as_slice())
+        .contains_exactly([assertr::Fact::note("\"Bob\" is dead!")]);
 }
 
 #[test]
@@ -144,12 +147,12 @@ fn each_failing_element_raises_its_own_failure_without_inventing_an_index() {
         .capture(|it| it.are(IsAlive {}));
 
     assert_that!(&failures).has_length(2);
-    assert_that!(failures[0].description.as_str())
-        .is_equal_to("Condition did not match for an element.\n");
-    assert_that!(failures[0].details.as_slice()).contains_exactly(["\"Kevin\" is dead!"]);
-    assert_that!(failures[1].description.as_str())
-        .is_equal_to("Condition did not match for an element.\n");
-    assert_that!(failures[1].details.as_slice()).contains_exactly(["\"Otto\" is dead!"]);
+    assert_that!(failures[0].description()).is_equal_to("does not match the condition\n");
+    assert_that!(failures[0].facts.as_slice())
+        .contains_exactly([assertr::Fact::note("\"Kevin\" is dead!")]);
+    assert_that!(failures[1].description()).is_equal_to("does not match the condition\n");
+    assert_that!(failures[1].facts.as_slice())
+        .contains_exactly([assertr::Fact::note("\"Otto\" is dead!")]);
 }
 
 #[test]
@@ -167,7 +170,7 @@ fn a_condition_failure_renders_the_error_under_details() {
         -------- assertr --------
         Expression: `bob`
 
-        Condition did not match.
+        does not match the condition
 
         Details:
           - "Bob" is dead!

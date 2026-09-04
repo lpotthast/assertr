@@ -264,7 +264,7 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(|it| it.contains(RendererExpected(2)));
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -316,7 +316,9 @@ mod tests {
                         3,
                     ]
 
-                    does not contain expected: 4
+                    does not contain
+
+                    Expected: 4
                     -------- assertr --------
                 "});
         }
@@ -358,7 +360,7 @@ mod tests {
                         3,
                     ]
 
-                    does not contain an element matching the given predicate.
+                    does not contain an element matching the predicate
                     -------- assertr --------
                 "});
         }
@@ -392,8 +394,8 @@ mod tests {
                     });
             })
             .has_type::<String>()
-            .contains("does not contain an element satisfying the given assertions.")
-            .contains("An element does not satisfy the assertions:\n    Expected: 7");
+            .contains("does not contain an element satisfying the assertions")
+            .contains("Nested failures:\n  - Expected: 7\n\n      Actual: 1\n  - Expected: 7\n\n      Actual: 2\n");
         }
 
         #[test]
@@ -412,11 +414,11 @@ mod tests {
                     })
                 });
 
-            assert_that!(failures[0].details.as_slice()).has_length(2);
-            assert_that!(failures[0].details[0].as_str())
-                .contains("Actual: 123... 3 more characters ...");
-            assert_that!(failures[0].details[1].as_str())
-                .is_equal_to("... 2 more unsatisfied elements ...");
+            assert_that!(failures[0].children.as_slice()).has_length(1);
+            assert_that!(failures[0].children[0].actual.as_deref())
+                .is_equal_to(Some("123... 3 more characters ..."));
+            assert_that!(failures[0].facts.as_slice())
+                .contains_exactly([crate::Fact::note("... 2 more unsatisfied elements ...")]);
         }
     }
 
@@ -468,16 +470,17 @@ mod tests {
                         2,
                     ]
 
-                    does not contain all expected elements
+                    does not contain all of
 
                     Expected: [
                         1,
                         42,
                     ]
 
-                    Elements not found: [
-                        42,
-                    ]
+                    Details:
+                      - Elements not found: [
+                            42,
+                        ]
                     -------- assertr --------
                 "});
         }
@@ -519,7 +522,9 @@ mod tests {
                         3,
                     ]
 
-                    unexpectedly contains elements matching the given predicate: [
+                    contains elements matching the predicate
+
+                    Unexpected: [
                         1,
                         3,
                     ]
@@ -567,7 +572,9 @@ mod tests {
                         3,
                     ]
 
-                    unexpectedly contains elements satisfying the given assertions: [
+                    contains elements satisfying the assertions
+
+                    Unexpected: [
                         2,
                         3,
                     ]
@@ -609,7 +616,9 @@ mod tests {
                         3,
                     ]
 
-                    contains unexpected: 2
+                    contains
+
+                    Unexpected: 2
                     -------- assertr --------
                 "});
         }
@@ -716,21 +725,23 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    Elements expected: [
+                    does not contain exactly in any order
+
+                    Expected: [
                         2,
                         3,
                         4,
                     ]
 
-                    Elements not found: [
-                        4,
-                    ]
-
-                    Elements not expected: [
-                        1,
-                    ]
+                    Details:
+                      - Elements not found: [
+                            4,
+                        ]
+                      - Elements not expected: [
+                            1,
+                        ]
                     -------- assertr --------
                 "});
         }
@@ -822,9 +833,9 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    did not exactly match predicates in any order.
+                    does not exactly match the predicates in any order
 
                     Details:
                       - Elements not matched: [
@@ -911,7 +922,7 @@ mod tests {
                     ]);
             })
             .has_type::<String>()
-            .contains("did not exactly satisfy the assertions in any order.")
+            .contains("does not exactly satisfy the assertions in any order")
             .contains("Elements not matched: [\n        1,\n    ]")
             .contains("Assertions not matched: 1");
         }

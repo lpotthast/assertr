@@ -1,11 +1,9 @@
 //! Assertions for resolving executable programs.
 
 use crate::mode::{Mode, Panic};
-use crate::{Actual, AssertThat, ValueRenderer};
+use crate::{Actual, AssertThat, ValueRenderer, failure::FailureKind};
 use alloc::borrow::Cow;
-use indoc::writedoc;
 use std::ffi::{OsStr, OsString};
-use std::fmt::Write;
 use std::path::PathBuf;
 
 /// A program name or path to resolve with [`which::which`].
@@ -93,16 +91,11 @@ impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Prog
         let found = which::which(program);
 
         if let Err(err) = &found {
-            let program = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r#"
-                    Expected program: {program:?}
-
-                    to exist, but it could not be found.
-
-                    Reason: "{err}"
-                "#}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(self.actual()))
+                .relation("was not found")
+                .fact("Reason", err)
+                .raise();
         }
 
         self
@@ -124,16 +117,11 @@ impl<'a, 't, R> ProgramAssertionsRequiringPanicMode<'t, R>
         let found = which::which(program);
 
         if let Err(err) = &found {
-            let program = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r#"
-                    Expected program: {program:?}
-
-                    to exist, but it could not be found.
-
-                    Reason: "{err}"
-                "#}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(self.actual()))
+                .relation("was not found")
+                .fact("Reason", err)
+                .raise();
         }
 
         self.map(|_| Actual::Owned(found.expect("present")))
@@ -167,7 +155,7 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(ProgramAssertions::exists);
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
 
             assert_that_panic_by(|| {
                 assert_that!(Program::from(MISSING))
@@ -258,11 +246,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `Program::from("someNonexistentProgram")`
 
-                    Expected program: Program("someNonexistentProgram")
+                    Actual: Program(
+                        "someNonexistentProgram",
+                    )
 
-                    to exist, but it could not be found.
+                    was not found
 
-                    Reason: "cannot find binary path"
+                    Details:
+                      - Reason: cannot find binary path
                     -------- assertr --------
                 "#});
 

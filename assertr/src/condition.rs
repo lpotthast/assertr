@@ -42,7 +42,7 @@ use core::fmt::Display;
 /// ```
 pub trait AssertrCondition<T> {
     /// Describes why a value did not match. On failure, exposed verbatim as an
-    /// [`AssertionFailure::details`](crate::AssertionFailure::details) entry.
+    /// [`AssertionFailure::facts`](crate::AssertionFailure::facts) note.
     type Error: Display;
 
     /// Tests whether `value` matches this condition.

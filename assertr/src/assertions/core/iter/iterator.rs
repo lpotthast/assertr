@@ -611,10 +611,12 @@ mod tests {
                         3,
                     ]
 
-                    does not contain expected: 4
+                    does not contain
+
+                    Expected: 4
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -656,10 +658,10 @@ mod tests {
                         3,
                     ]
 
-                    does not contain an element matching the predicate.
+                    does not contain an element matching the predicate
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -698,13 +700,14 @@ mod tests {
                     .contains_satisfying(is_seven);
             })
             .has_type::<String>()
-            .contains("does not contain an element satisfying the assertions.")
-            .contains("Element at index 0 does not satisfy the assertions:\n    Expected: 7")
-            .contains("Element at index 1 does not satisfy the assertions:\n    Expected: 7");
+            .contains("does not contain an element satisfying the assertions")
+            .contains(
+                "Nested failures:\n  - At index 0:\n    Expected: 7\n\n      Actual: 1\n  - At index 1:\n    Expected: 7\n\n      Actual: 2\n",
+            );
         }
 
         #[test]
-        fn rendering_budget_limits_unsatisfied_element_details() {
+        fn rendering_budget_limits_unsatisfied_element_children() {
             let failures = assert_that_owned!(0..20)
                 .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
                 .with_location(false)
@@ -714,15 +717,10 @@ mod tests {
                     })
                 });
 
-            assert_that!(
-                failures[0]
-                    .details
-                    .iter()
-                    .filter(|detail| detail.starts_with("Element at index "))
-                    .count()
-            )
-            .is_equal_to(1);
-            assert_that!(failures[0].details.last().map(String::as_str))
+            assert_that!(failures[0].children.as_slice()).has_length(1);
+            assert_that!(failures[0].children[0].facts.as_slice())
+                .contains(crate::Fact::new(crate::Fact::INDEX, "4"));
+            assert_that!(failures[0].facts.last().map(|fact| fact.value.as_str()))
                 .is_equal_to(Some("... 19 more unsatisfied elements ..."));
         }
     }
@@ -764,11 +762,13 @@ mod tests {
                         2,
                     ]
 
-                    contains unexpected: 2
+                    contains
+
+                    Unexpected: 2
 
                     Details:
-                      - Consumed 2 element(s).
-                      - Decisive element is at zero-based index 1.
+                      - Consumed elements: 2
+                      - Decisive index: 1
                     -------- assertr --------
                 "});
         }
@@ -809,11 +809,11 @@ mod tests {
                         2,
                     ]
 
-                    unexpectedly contains an element matching the predicate.
+                    contains an element matching the predicate
 
                     Details:
-                      - Consumed 2 element(s).
-                      - Decisive element is at zero-based index 1.
+                      - Consumed elements: 2
+                      - Decisive index: 1
                     -------- assertr --------
                 "});
         }
@@ -862,11 +862,11 @@ mod tests {
                         2,
                     ]
 
-                    unexpectedly contains an element satisfying the assertions.
+                    contains an element satisfying the assertions
 
                     Details:
-                      - Consumed 2 element(s).
-                      - Decisive element is at zero-based index 1.
+                      - Consumed elements: 2
+                      - Decisive index: 1
                     -------- assertr --------
                 "});
         }
@@ -914,14 +914,21 @@ mod tests {
                         2,
                     ]
 
-                    does not start with expected prefix: [
+                    does not start with
+
+                    Expected: [
                         1,
                         9,
                     ]
 
                     Details:
-                      - Consumed 2 element(s).
-                      - Decisive element is at zero-based index 1.
+                      - Consumed elements: 2
+                      - Decisive index: 1
+                    Nested failures:
+                      - At index 1:
+                        Expected: 9
+
+                          Actual: 2
                     -------- assertr --------
                 "});
         }
@@ -974,11 +981,16 @@ mod tests {
                         2,
                     ]
 
-                    does not start with elements matching the predicates.
+                    does not start with elements matching the predicates
 
                     Details:
-                      - Consumed 2 element(s).
-                      - Decisive element is at zero-based index 1.
+                      - Consumed elements: 2
+                      - Decisive index: 1
+                    Nested failures:
+                      - At index 1:
+                        Actual: 2
+
+                        does not match its predicate
                     -------- assertr --------
                 "});
         }
@@ -1017,10 +1029,8 @@ mod tests {
                     .starts_with_satisfying([is_one, is_nine]);
             })
             .has_type::<String>()
-            .contains("does not start with elements satisfying the assertions.")
-            .contains(
-                "Element at index 1 does not satisfy its prefix assertions:\n    Expected: 9",
-            );
+            .contains("does not start with elements satisfying the assertions")
+            .contains("Nested failures:\n  - At index 1:\n    Expected: 9\n\n      Actual: 2\n");
         }
     }
 
@@ -1067,13 +1077,20 @@ mod tests {
                         3,
                     ]
 
-                    does not end with expected suffix: [
+                    does not end with
+
+                    Expected: [
                         2,
                         9,
                     ]
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
+                    Nested failures:
+                      - At index 2:
+                        Expected: 9
+
+                          Actual: 3
                     -------- assertr --------
                 "});
         }
@@ -1127,10 +1144,15 @@ mod tests {
                         3,
                     ]
 
-                    does not end with elements matching the predicates.
+                    does not end with elements matching the predicates
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
+                    Nested failures:
+                      - At index 2:
+                        Actual: 3
+
+                        does not match its predicate
                     -------- assertr --------
                 "});
         }
@@ -1177,10 +1199,8 @@ mod tests {
                     .ends_with_satisfying([is_two, is_nine]);
             })
             .has_type::<String>()
-            .contains("does not end with elements satisfying the assertions.")
-            .contains(
-                "Suffix element at index 2 does not satisfy its assertions:\n    Expected: 9",
-            );
+            .contains("does not end with elements satisfying the assertions")
+            .contains("Nested failures:\n  - At index 2:\n    Expected: 9\n\n      Actual: 3\n");
         }
 
         #[test]
@@ -1190,8 +1210,9 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.ends_with_satisfying([is_zero; 3]));
 
-            assert_that!(failures[0].details.as_slice())
-                .contains("... 2 more unsatisfied suffix elements ...");
+            assert_that!(failures[0].children.as_slice()).has_length(1);
+            assert_that!(failures[0].facts.as_slice())
+                .contains(crate::Fact::note("... 2 more unsatisfied elements ..."));
         }
     }
 
@@ -1242,13 +1263,15 @@ mod tests {
                         3,
                     ]
 
-                    does not contain contiguous expected elements: [
+                    does not contain the contiguous subsequence
+
+                    Expected: [
                         2,
                         9,
                     ]
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -1309,10 +1332,10 @@ mod tests {
                         3,
                     ]
 
-                    does not contain contiguous elements matching the predicates.
+                    does not contain a contiguous subsequence matching the predicates
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -1356,8 +1379,8 @@ mod tests {
                     .contains_contiguous_satisfying([is_two, is_nine]);
             })
             .has_type::<String>()
-            .contains("does not contain contiguous elements satisfying the assertions.")
-            .contains("The final contiguous candidate did not satisfy the assertions:");
+            .contains("does not contain a contiguous subsequence satisfying the assertions")
+            .contains("Nested failures:\n  - At index 2:\n    Expected: 9\n\n      Actual: 3\n");
         }
     }
 
@@ -1400,9 +1423,9 @@ mod tests {
                     Actual: [
                         1,
                         2,
-                    ],
+                    ]
 
-                    did not exactly match
+                    does not contain exactly
 
                     Expected: [
                         1,
@@ -1411,8 +1434,13 @@ mod tests {
                     ]
 
                     Details:
-                      - Consumed 2 element(s).
-                      - Decisive element is at zero-based index 1.
+                      - Consumed elements: 2
+                      - Decisive index: 1
+                    Nested failures:
+                      - At index 1:
+                        Expected: 9
+
+                          Actual: 2
                     -------- assertr --------
                 "});
         }
@@ -1429,9 +1457,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`
 
-                    Actual: [],
+                    Actual: []
 
-                    did not exactly match
+                    does not contain exactly
 
                     Expected: [
                         1,
@@ -1439,8 +1467,9 @@ mod tests {
                     ]
 
                     Details:
-                      - Consumed 0 element(s).
-                      - Iterator reported an exact remaining length of 3; expected 2.
+                      - Consumed elements: 0
+                      - Reported length: 3
+                      - Expected length: 2
                     -------- assertr --------
                 "});
         }
@@ -1496,13 +1525,18 @@ mod tests {
                     Actual: [
                         1,
                         2,
-                    ],
+                    ]
 
-                    did not exactly match predicates.
+                    does not exactly match the predicates
 
                     Details:
-                      - Consumed 2 element(s).
-                      - Decisive element is at zero-based index 1.
+                      - Consumed elements: 2
+                      - Decisive index: 1
+                    Nested failures:
+                      - At index 1:
+                        Actual: 2
+
+                        does not match its predicate
                     -------- assertr --------
                 "});
         }
@@ -1545,8 +1579,8 @@ mod tests {
                     .contains_exactly_satisfying([is_one, is_nine]);
             })
             .has_type::<String>()
-            .contains("did not exactly satisfy the assertions.")
-            .contains("Element at index 1 does not satisfy its assertions:\n    Expected: 9");
+            .contains("does not exactly satisfy the assertions")
+            .contains("Nested failures:\n  - At index 1:\n    Expected: 9\n\n      Actual: 2\n");
         }
     }
 
@@ -1624,18 +1658,18 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    Elements expected: [
+                    does not contain exactly in any order
+
+                    Expected: [
                         1,
                         2,
                         9,
                     ]
 
-                    The elements did not match exactly in any order.
-
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -1692,12 +1726,12 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    did not exactly match predicates in any order.
+                    does not exactly match the predicates in any order
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -1737,8 +1771,10 @@ mod tests {
                     .contains_exactly_in_any_order_satisfying([positive, positive, positive]);
             })
             .has_type::<String>()
-            .contains("did not exactly satisfy the assertions in any order.")
-            .contains("Element at index 1 did not satisfy any available assertion:");
+            .contains("does not exactly satisfy the assertions in any order")
+            .contains(
+                "Nested failures:\n  - At index 1:\n    Actual: -1\n\n    is not greater than\n\n    Expected: 0\n",
+            );
         }
     }
 }

@@ -6,8 +6,8 @@
 //!
 //! - **Composition** - delegate to existing assertions through `satisfies` and friends. Tracking,
 //!   failure formatting and capture-mode behavior come from the assertions delegated to.
-//! - **Leaf assertions** - decide the outcome yourself: call `track_assertion()` first, then
-//!   `fail(...)` or `fail_with_details(...)` when the check does not hold.
+//! - **Leaf assertions** - decide the outcome yourself: call `track_assertion()` first, then raise
+//!   a failure through the `failure(kind)` builder when the check does not hold.
 //!
 //! Custom traits are the supported shape. Assertr's own `*Assertions` traits are public so their
 //! methods participate in method resolution, not as downstream implementation interfaces.
@@ -114,7 +114,7 @@ mod composed {
             .capture(|it| it.has_age(30));
 
         assert_that!(&failures).has_length(1);
-        assert_that!(&failures[0].description)
+        assert_that!(failures[0].description())
             .contains("Expected: 30")
             .contains("Actual: 12");
     }
@@ -124,6 +124,7 @@ mod leaf {
     use super::Person;
     use assertr::prelude::*;
     use assertr::renderer::TypeHint;
+    use assertr::{Fact, FailureKind};
     use core::fmt;
     use indoc::formatdoc;
 
@@ -145,9 +146,11 @@ mod leaf {
 
             let age = self.actual().age;
             if age < 18 {
-                self.fail(format_args!(
-                    "Expected the person to be an adult, but they are only {age} years old!"
-                ));
+                // A failure that renders no value needs no renderer capability.
+                self.failure(FailureKind::Ordering)
+                    .relation("is not an adult")
+                    .fact("Age", age)
+                    .raise();
             }
             self
         }
@@ -161,19 +164,15 @@ mod leaf {
 
             let actual = self.actual();
             if actual.age <= other.age {
-                // Per-failure diagnostics belong to the failure, not to the chain: they must not
-                // reappear in a later failure of the same chain.
-                self.fail_with_details(
-                    [
-                        format!("Actual person: {:#?}", self.render().value(actual)),
-                        format!("Compared to:   {:#?}", self.render().value(other)),
-                    ],
-                    format_args!(
-                        "Expected an age greater than {expected}, but was {age}!",
-                        expected = other.age,
-                        age = actual.age,
-                    ),
-                );
+                // Facts belong to the failure, not to the chain: they must not reappear in a
+                // later failure of the same chain.
+                self.failure(FailureKind::Ordering)
+                    .actual(self.render().value(actual))
+                    .relation("is not older than")
+                    .expected(self.render().value(other))
+                    .fact("Actual age", actual.age)
+                    .fact("Expected age", other.age)
+                    .raise();
             }
             self
         }
@@ -224,7 +223,10 @@ mod leaf {
             -------- assertr --------
             Expression: `person(12)`
 
-            Expected the person to be an adult, but they are only 12 years old!
+            is not an adult
+
+            Details:
+              - Age: 12
             -------- assertr --------
         "});
     }
@@ -238,30 +240,35 @@ mod leaf {
 
         assert_that!(&failures).has_length(1);
         assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("child"));
-        assert_that!(&failures[0].description)
-            .is_equal_to("Expected the person to be an adult, but they are only 12 years old!");
-        assert_that!(failures[0].details.as_slice()).is_empty();
+        assert_that!(failures[0].kind).is_equal_to(FailureKind::Ordering);
+        assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not an adult"));
+        assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::new("Age", "12")]);
         assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {"
             -------- assertr --------
             Subject: child
             Expression: `person(12)`
 
-            Expected the person to be an adult, but they are only 12 years old!
+            is not an adult
+
+            Details:
+              - Age: 12
             -------- assertr --------
         "});
     }
 
     #[test]
-    fn details_handed_to_fail_with_details_land_on_that_failure_only() {
+    fn facts_land_on_the_failure_that_raised_them_only() {
         let failures = assert_that!(person(12)).with_location(false).capture(|it| {
-            it.is_older_than(&person(40)) // fails with details
-                .is_adult() // fails without details
+            it.is_older_than(&person(40)) // fails with facts
+                .is_adult() // fails with one fact of its own
         });
 
         assert_that!(&failures).has_length(2);
-        assert_that!(failures[0].details.as_slice()).has_length(2);
-        assert_that!(&failures[0].details[0]).contains("Actual person:");
-        assert_that!(failures[1].details.as_slice()).is_empty();
+        assert_that!(failures[0].facts.as_slice()).contains_exactly([
+            Fact::new("Actual age", "12"),
+            Fact::new("Expected age", "40"),
+        ]);
+        assert_that!(failures[1].facts.as_slice()).contains_exactly([Fact::new("Age", "12")]);
     }
 
     #[test]
@@ -271,10 +278,15 @@ mod leaf {
             .with_location(false)
             .capture(|it| it.is_older_than(&person(40)));
 
-        assert_that!(failures[0].details.as_slice()).contains_exactly([
-            "Actual person: Person(age=12)",
-            "Compared to:   Person(age=40)",
-        ]);
+        assert_that!(failures[0].actual.as_deref()).is_equal_to(Some("Person(age=12)"));
+        assert_that!(failures[0].expected.as_deref()).is_equal_to(Some("Person(age=40)"));
+        assert_that!(failures[0].description()).is_equal_to(formatdoc! {"
+            Actual: Person(age=12)
+
+            is not older than
+
+            Expected: Person(age=40)
+        "});
     }
 
     #[test]
@@ -292,8 +304,8 @@ mod leaf {
 
     #[test]
     fn a_leaf_assertion_reports_its_own_call_site() {
-        // `#[track_caller]` on the custom method has to reach through the public `fail`, or every
-        // custom assertion would blame a line inside assertr.
+        // `#[track_caller]` on the custom method has to reach through the public `failure`, or
+        // every custom assertion would blame a line inside assertr.
         let failures = assert_that!(person(12)).capture(|it| it.is_adult());
 
         let location = failures[0].location.expect("location captured by default");
@@ -326,45 +338,94 @@ mod leaf {
     }
 }
 
-mod custom_failure_writer {
-    use assertr::failure::Failure;
+mod nested {
+    use super::Person;
+    use assertr::failure::FailureBuilder;
     use assertr::prelude::*;
+    use assertr::{Fact, FailureKind};
+    use indoc::formatdoc;
 
-    /// A downstream implementation of the [`Failure`] trait, proving it stays open for the
-    /// zero-allocation "write the description yourself" route.
-    struct Bullets<'a>(&'a [&'a str]);
-
-    impl Failure for Bullets<'_> {
-        fn write_to(self, target: &mut String) -> core::fmt::Result {
-            use core::fmt::Write as _;
-            for line in self.0 {
-                writeln!(target, "- {line}")?;
-            }
-            Ok(())
-        }
+    /// A downstream assertion over a group of people that reports each rejected member as a
+    /// nested failure located by its index, the way the built-in positional assertions do.
+    trait GroupAssertions<R = DebugRenderer> {
+        #[allow(clippy::wrong_self_convention)]
+        fn are_adults(self) -> Self
+        where
+            R: ValueRenderer<Person>;
     }
 
-    trait BulletAssertions {
-        fn fails_with_bullets(self) -> Self;
-    }
-
-    impl<M: Mode, R> BulletAssertions for AssertThat<'_, u32, M, R> {
+    impl<M: Mode, R> GroupAssertions<R> for AssertThat<'_, Vec<Person>, M, R> {
         #[track_caller]
-        fn fails_with_bullets(self) -> Self {
+        fn are_adults(self) -> Self
+        where
+            R: ValueRenderer<Person>,
+        {
             self.track_assertion();
-            self.fail(Bullets(&["first", "second"]));
+
+            let minors = self
+                .actual()
+                .iter()
+                .enumerate()
+                .filter(|(_, person)| person.age < 18)
+                .map(|(index, person)| {
+                    FailureBuilder::detached::<Person>(FailureKind::Ordering)
+                        .actual(self.render().value(person))
+                        .relation("is not an adult")
+                        .build()
+                        .located_at(Fact::index(index))
+                })
+                .collect::<Vec<_>>();
+            if !minors.is_empty() {
+                self.failure(FailureKind::Predicate)
+                    .relation("contains people who are not adults")
+                    .children(minors)
+                    .raise();
+            }
             self
         }
     }
 
+    fn person(age: u32) -> Person {
+        Person {
+            age,
+            meta: super::Metadata { alive: true },
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct AgeRenderer;
+
+    impl ValueRenderer<Person> for AgeRenderer {
+        fn fmt(&self, value: &Person, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "Person(age={})", value.age)
+        }
+    }
+
     #[test]
-    fn a_downstream_failure_impl_writes_the_description() {
-        let failures = assert_that!(1u32)
+    fn a_downstream_assertion_attaches_located_children() {
+        let failures = assert_that!(vec![person(30), person(12)])
+            .with_renderer(AgeRenderer)
             .with_location(false)
-            .capture(|it| it.fails_with_bullets());
+            .capture(|it| it.are_adults());
 
         assert_that!(&failures).has_length(1);
-        assert_that!(&failures[0].description).is_equal_to("- first\n- second\n");
+        let child = &failures[0].children[0];
+        assert_that!(child.kind).is_equal_to(FailureKind::Ordering);
+        assert_that!(child.actual.as_deref()).is_equal_to(Some("Person(age=12)"));
+        assert_that!(child.facts.as_slice()).contains_exactly([Fact::index(1)]);
+        assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {"
+            -------- assertr --------
+            Expression: `vec![person(30), person(12)]`
+
+            contains people who are not adults
+
+            Nested failures:
+              - At index 1:
+                Actual: Person(age=12)
+
+                is not an adult
+            -------- assertr --------
+        "});
     }
 }
 

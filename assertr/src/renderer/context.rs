@@ -350,6 +350,15 @@ pub struct RenderedValues<'a, T: ?Sized, C: ?Sized, R> {
     rendering: RenderingContext<'a, R>,
 }
 
+impl<T: ?Sized, C: ?Sized, R> RenderedValues<'_, T, C, R> {
+    /// Sorts the items by their rendered text and says so, for a group whose source order is not
+    /// deterministic.
+    pub(crate) fn sort_for_rendering(mut self, sort: bool) -> Self {
+        self.sorted_for_rendering = sort;
+        self
+    }
+}
+
 impl<T: ?Sized, C: Collection + ?Sized, R: ValueRenderer<T>> Debug for RenderedValues<'_, T, C, R>
 where
     C::Item: Borrow<T>,
@@ -492,6 +501,20 @@ where
             "entry",
             self.sorted_for_rendering,
         )
+    }
+}
+
+/// Renders a value in compact `Debug` form even where the failure grammar pretty-prints.
+///
+/// For a leaf whose alternate `Debug` form is less readable than its compact one, such as a
+/// `jiff::SignedDuration`, which prints raw nanoseconds when pretty-printed.
+#[cfg(feature = "jiff")]
+pub(crate) struct Compact<T>(pub(crate) T);
+
+#[cfg(feature = "jiff")]
+impl<T: Debug> Debug for Compact<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
     }
 }
 

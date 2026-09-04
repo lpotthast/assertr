@@ -1,8 +1,7 @@
+use crate::failure::FailureKind;
 use crate::mode::Mode;
 use crate::{AssertThat, ValueRenderer};
-use indoc::writedoc;
 use jiff::Span;
-use std::fmt::Write;
 
 /// Assertions for [`Span`].
 #[allow(clippy::return_self_not_must_use)]
@@ -33,18 +32,10 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
         self.track_assertion();
 
         if !self.actual().is_zero() {
-            let details = [String::from("Actual was not zero.")];
-
-            let expected = Span::new();
-            let actual = self.render().value(self.actual());
-            let expected = self.render().value(&expected);
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(self.actual()))
+                .expected(self.render().value(&Span::new()))
+                .raise();
         }
 
         self
@@ -58,14 +49,10 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
         self.track_assertion();
 
         if !self.actual().is_negative() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected value to be negative. But was
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(self.actual()))
+                .relation("is not negative")
+                .raise();
         }
 
         self
@@ -79,14 +66,10 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
         self.track_assertion();
 
         if !self.actual().is_positive() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected value to be positive. But was
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(self.render().value(self.actual()))
+                .relation("is not positive")
+                .raise();
         }
 
         self
@@ -114,7 +97,7 @@ mod tests {
                 .with_location(false)
                 .capture(SpanAssertions::is_zero);
 
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -147,9 +130,6 @@ mod tests {
                     Expected: 0s
 
                       Actual: 2h 30m
-
-                    Details:
-                      - Actual was not zero.
                     -------- assertr --------
                 "});
         }
@@ -181,9 +161,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `0.seconds()`
 
-                    Expected value to be negative. But was
+                    Actual: 0s
 
-                      Actual: 0s
+                    is not negative
                     -------- assertr --------
                 "});
         }
@@ -200,9 +180,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `2.hours().minutes(30)`
 
-                    Expected value to be negative. But was
+                    Actual: 2h 30m
 
-                      Actual: 2h 30m
+                    is not negative
                     -------- assertr --------
                 "});
         }
@@ -234,9 +214,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `0.seconds()`
 
-                    Expected value to be positive. But was
+                    Actual: 0s
 
-                      Actual: 0s
+                    is not positive
                     -------- assertr --------
                 "});
         }
@@ -253,9 +233,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `(-2).hours().minutes(30)`
 
-                    Expected value to be positive. But was
+                    Actual: 2h 30m ago
 
-                      Actual: 2h 30m ago
+                    is not positive
                     -------- assertr --------
                 "});
         }

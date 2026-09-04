@@ -4,17 +4,14 @@
 //! functions, so every map type produces identical failure messages.
 
 use alloc::collections::BTreeSet;
-use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::fmt::Write;
 use core::ptr;
-use indoc::writedoc;
 
 use super::{Map, MapKeyQuery, MapLookup};
-use crate::renderer::{GroupStyle, RenderingOrder, omission};
-use crate::util::failure::join_failures;
-use crate::{AssertThat, AssertrPartialEq, Mode, ValueRenderer, mode::Capture};
+use crate::failure::{Fact, FailureBuilder, FailureKind};
+use crate::renderer::{GroupStyle, RenderingOrder};
+use crate::{AssertThat, AssertionFailure, AssertrPartialEq, Mode, ValueRenderer, mode::Capture};
 
 /// The value stored under `key`, if any.
 fn value_of<'m, Mp, Q>(actual: &'m Mp, key: &Q) -> Option<&'m Mp::Value>
@@ -23,6 +20,32 @@ where
     Q: ?Sized,
 {
     actual.get_key_value(key).map(|(_, value)| value)
+}
+
+/// Whether diagnostics over `Mp`'s entries are sorted by their rendered text because the map has
+/// no deterministic iteration order.
+fn sorts_for_rendering<Mp: Map + ?Sized>() -> bool {
+    Mp::RENDERING_ORDER == RenderingOrder::SortByRenderedText
+}
+
+/// Flattens the failures raised for the values under the expected keys into the children of one
+/// failure. Every failure is already located at its key.
+///
+/// Keys keep the order the caller gave them. For a map whose rendering sorts entries by their
+/// text, the keys are sorted the same way, so the nested failures and the rendered map agree in
+/// order. At most `maximum` keys are kept. Returns the children and the number of omitted keys.
+fn keyed_children<Mp: Map + ?Sized>(
+    mut unsatisfied: Vec<Vec<AssertionFailure>>,
+    maximum: usize,
+) -> (Vec<AssertionFailure>, usize) {
+    if sorts_for_rendering::<Mp>() {
+        unsatisfied.sort_by_cached_key(|failures| {
+            failures.iter().map(ToString::to_string).collect::<String>()
+        });
+    }
+    let omitted = unsatisfied.len().saturating_sub(maximum);
+    unsatisfied.truncate(maximum);
+    (unsatisfied.into_iter().flatten().collect(), omitted)
 }
 
 /// The stored entries the expected keys resolved to, identified by the address of their stored
@@ -82,15 +105,11 @@ where
         return true;
     }
 
-    let rendered_actual = this.render().map(actual);
-    let expected = this.render().value(expected);
-    this.fail(|w: &mut String| {
-        writedoc! {w, r"
-            Actual: {rendered_actual:#?}
-
-            does not contain expected key: {expected:#?}
-        "}
-    });
+    this.failure(FailureKind::Membership)
+        .actual(this.render().map(actual))
+        .relation("does not contain key")
+        .expected(this.render().value(expected))
+        .raise();
     false
 }
 
@@ -108,15 +127,11 @@ pub(crate) fn assert_does_not_contain_key<Mp, Q, M, R>(
     let actual = this.actual();
 
     if value_of(actual, not_expected).is_some() {
-        let rendered_actual = this.render().map(actual);
-        let not_expected = this.render().value(not_expected);
-        this.fail(|w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                contains unexpected key: {not_expected:#?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().map(actual))
+            .relation("contains key")
+            .unexpected(this.render().value(not_expected))
+            .raise();
     }
 }
 
@@ -135,15 +150,11 @@ where
         let mut ctx = this.eq_context();
         <_ as AssertrPartialEq<_, R>>::eq(value, expected, Some(&mut ctx))
     }) {
-        let rendered_actual = this.render().map(actual);
-        let expected = this.render().value(expected);
-        this.fail(|w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                does not contain expected value: {expected:#?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().map(actual))
+            .relation("does not contain value")
+            .expected(this.render().value(expected))
+            .raise();
     }
 }
 
@@ -164,15 +175,11 @@ pub(crate) fn assert_does_not_contain_value<Mp, E, M, R>(
         let mut ctx = this.eq_context();
         <_ as AssertrPartialEq<_, R>>::eq(value, not_expected, Some(&mut ctx))
     }) {
-        let rendered_actual = this.render().map(actual);
-        let not_expected = this.render().value(not_expected);
-        this.fail(|w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                contains unexpected value: {not_expected:#?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().map(actual))
+            .relation("contains value")
+            .unexpected(this.render().value(not_expected))
+            .raise();
     }
 }
 
@@ -207,25 +214,22 @@ pub(crate) fn assert_contains_entry<Mp, E, Q, M, R>(
 
     let mut ctx = this.eq_context();
     if !AssertrPartialEq::eq(actual_value, value, Some(&mut ctx)) {
-        let mut details = Vec::new();
+        let mut unexpected_value = FailureBuilder::detached::<Mp::Value>(FailureKind::Equality)
+            .actual(this.render().value(actual_value))
+            .expected(this.render().value(value));
         if !ctx.differences.differences.is_empty() {
-            details.push(format!("Differences: {:#?}", ctx.differences));
+            unexpected_value =
+                unexpected_value.fact("Differences", format_args!("{:#?}", ctx.differences));
         }
-        let rendered_actual = this.render().map(actual);
-        let expected_key = this.render().value(key);
-        let expected_value = this.render().value(value);
-        let actual_value = this.render().value(actual_value);
-        this.fail_with_details(details, |w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                does not contain expected value at key: {expected_key:#?}
-
-                Expected value: {expected_value:#?}
-                  Actual value: {actual_value:#?}
-                ",
-            }
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().map(actual))
+            .relation("does not contain the expected value at a key")
+            .child(
+                unexpected_value
+                    .build()
+                    .located_at(Fact::key(this.render().value(key))),
+            )
+            .raise();
     }
 }
 
@@ -245,33 +249,25 @@ pub(crate) fn assert_contains_entry_satisfying<Mp, A, Q, M, R>(
     let actual = this.actual();
 
     let Some(value) = value_of(actual, key) else {
-        let rendered_actual = this.render().map(actual);
-        let expected_key = this.render().value(key);
-        this.fail(|w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                does not contain expected key: {expected_key:#?}
-            "}
-        });
+        this.failure(FailureKind::Predicate)
+            .actual(this.render().map(actual))
+            .relation("does not contain key")
+            .expected(this.render().value(key))
+            .raise();
         return;
     };
 
     let failures = this.collect_element_failures(value, assertions);
     if !failures.is_empty() {
-        let expected_key = this.render().value(key);
-        let details = alloc::vec![format!(
-            "Value at key {expected_key:#?} does not satisfy the assertions:\n{}",
-            join_failures(&failures, this.render().max_items())
-        )];
-        let rendered_actual = this.render().map(actual);
-        this.fail_with_details(details, |w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                does not contain an entry satisfying the assertions at key: {expected_key:#?}
-            "}
-        });
+        this.failure(FailureKind::Predicate)
+            .actual(this.render().map(actual))
+            .relation("does not contain a value satisfying the assertions at a key")
+            .children(
+                failures
+                    .into_iter()
+                    .map(|failure| failure.located_at(Fact::key(this.render().value(key)))),
+            )
+            .raise();
     }
 }
 
@@ -294,18 +290,11 @@ pub(crate) fn assert_does_not_contain_entry<Mp, E, Q, M, R>(
         let mut ctx = this.eq_context();
         <_ as AssertrPartialEq<_, R>>::eq(actual_value, value, Some(&mut ctx))
     }) {
-        let rendered_actual = this.render().map(actual);
-        let unexpected_key_rendered = this.render().value(key);
-        let unexpected_value_rendered = this.render().value(value);
-        this.fail(|w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                contains unexpected entry at key: {unexpected_key_rendered:#?}
-
-                Unexpected value: {unexpected_value_rendered:#?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().map(actual))
+            .relation("contains the entry")
+            .unexpected((this.render().value(key), this.render().value(value)))
+            .raise();
     }
 }
 
@@ -328,25 +317,22 @@ where
         .collect::<Vec<_>>();
 
     if !keys_not_found.is_empty() {
-        let expected_refs: Vec<&E> = expected.iter().collect();
-        let rendered_actual = this.render().map(actual);
-        let expected_rendered = this
-            .render()
-            .borrowed_values::<E, _>(expected_refs.as_slice(), GroupStyle::List);
-        let keys_not_found_rendered = this
-            .render()
-            .borrowed_values::<E, _>(keys_not_found.as_slice(), GroupStyle::List);
-        this.fail(|w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                does not contain all expected keys
-
-                Expected keys: {expected_rendered:#?}
-
-                Keys not found: {keys_not_found_rendered:#?}
-            "}
-        });
+        this.failure(FailureKind::Membership)
+            .actual(this.render().map(actual))
+            .relation("does not contain all of")
+            .expected(
+                this.render()
+                    .borrowed_values::<E, _>(expected, GroupStyle::List),
+            )
+            .fact(
+                "Keys not found",
+                format_args!(
+                    "{:#?}",
+                    this.render()
+                        .borrowed_values::<E, _>(keys_not_found.as_slice(), GroupStyle::List)
+                ),
+            )
+            .raise();
     }
 }
 
@@ -366,11 +352,9 @@ pub(crate) fn assert_contains_exactly_entries<Mp, K, EK, EV, M, R>(
     let actual_length = actual.length();
     let same_length = actual_length == expected.len();
 
-    let mut details = Vec::new();
-    let maximum = this.render().max_items();
-    let mut number_of_difference_details = 0_usize;
     let mut keys_not_found = Vec::new();
     let mut keys_with_unexpected_values = Vec::new();
+    let mut unexpected_values = Vec::new();
     let mut found = FoundEntries::new();
 
     for (expected_key, expected_value) in expected {
@@ -381,16 +365,19 @@ pub(crate) fn assert_contains_exactly_entries<Mp, K, EK, EV, M, R>(
                 let mut ctx = this.eq_context();
                 if !AssertrPartialEq::eq(actual_value, expected_value, Some(&mut ctx)) {
                     keys_with_unexpected_values.push(expected_key);
+                    let mut unexpected_value =
+                        FailureBuilder::detached::<Mp::Value>(FailureKind::Equality)
+                            .actual(this.render().value(actual_value))
+                            .expected(this.render().value(expected_value));
                     if !ctx.differences.differences.is_empty() {
-                        number_of_difference_details += 1;
-                        if number_of_difference_details <= maximum {
-                            let expected_key_rendered = this.render().value(expected_key);
-                            details.push(format!(
-                                "Differences at key {expected_key_rendered:#?}: {:#?}",
-                                ctx.differences
-                            ));
-                        }
+                        unexpected_value = unexpected_value
+                            .fact("Differences", format_args!("{:#?}", ctx.differences));
                     }
+                    unexpected_values.push(alloc::vec![
+                        unexpected_value
+                            .build()
+                            .located_at(Fact::key(this.render().value(expected_key)))
+                    ]);
                 }
             }
         }
@@ -398,59 +385,63 @@ pub(crate) fn assert_contains_exactly_entries<Mp, K, EK, EV, M, R>(
 
     let unexpected_entries = found.unexpected_entries(actual);
 
-    if !same_length
-        || !keys_not_found.is_empty()
-        || !unexpected_entries.is_empty()
-        || !keys_with_unexpected_values.is_empty()
+    if same_length
+        && keys_not_found.is_empty()
+        && unexpected_entries.is_empty()
+        && keys_with_unexpected_values.is_empty()
     {
-        let omitted = number_of_difference_details.saturating_sub(maximum);
-        if omitted != 0 {
-            details.push(omission(omitted, "entry difference"));
-        }
-        if !same_length {
-            details.push(format!(
-                "Number of entries ({actual_length}) does not match number of expected entries ({})!",
-                expected.len()
-            ));
-        }
-        if !keys_not_found.is_empty() {
-            let keys_not_found_rendered = this
-                .render()
-                .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List);
-            details.push(format!("Keys not found: {keys_not_found_rendered:#?}"));
-        }
-        if !unexpected_entries.is_empty() {
-            let unexpected_entries_rendered =
+        return;
+    }
+
+    let (children, omitted) = keyed_children::<Mp>(unexpected_values, this.render().max_items());
+    let mut failure = this
+        .failure(FailureKind::Equality)
+        .actual(this.render().map(actual))
+        .relation("does not contain exactly")
+        .expected(this.render().entry_list::<EK, EV, _, _, _>(expected, false));
+    if !same_length {
+        failure = failure
+            .fact("Actual length", actual_length)
+            .fact("Expected length", expected.len());
+    }
+    if !keys_not_found.is_empty() {
+        failure = failure.fact(
+            "Keys not found",
+            format_args!(
+                "{:#?}",
+                this.render()
+                    .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List)
+            ),
+        );
+    }
+    if !unexpected_entries.is_empty() {
+        failure = failure.fact(
+            "Unexpected entries",
+            format_args!(
+                "{:#?}",
                 this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
                     &unexpected_entries,
-                    Mp::RENDERING_ORDER == RenderingOrder::SortByRenderedText,
-                );
-            details.push(format!(
-                "Unexpected entries: {unexpected_entries_rendered:#?}"
-            ));
-        }
-        if !keys_with_unexpected_values.is_empty() {
-            let keys_with_unexpected_values_rendered = this
-                .render()
-                .borrowed_values::<EK, _>(keys_with_unexpected_values.as_slice(), GroupStyle::List);
-            details.push(format!(
-                "Keys with unexpected values: {keys_with_unexpected_values_rendered:#?}"
-            ));
-        }
-
-        let expected_rendered = this.render().entry_list::<EK, EV, _, _, _>(expected, false);
-        let rendered_actual = this.render().map(actual);
-
-        this.fail_with_details(details, |w: &mut String| {
-            writedoc! {w, r"
-                Actual: {rendered_actual:#?}
-
-                does not exactly contain expected entries
-
-                Expected entries: {expected_rendered:#?}
-            "}
-        });
+                    sorts_for_rendering::<Mp>(),
+                )
+            ),
+        );
     }
+    if !keys_with_unexpected_values.is_empty() {
+        failure = failure.fact(
+            "Keys with unexpected values",
+            format_args!(
+                "{:#?}",
+                this.render().borrowed_values::<EK, _>(
+                    keys_with_unexpected_values.as_slice(),
+                    GroupStyle::List
+                )
+            ),
+        );
+    }
+    failure
+        .omitted(omitted, "unexpected value")
+        .children(children)
+        .raise();
 }
 
 #[track_caller]
@@ -470,7 +461,7 @@ pub(crate) fn assert_contains_exactly_entries_matching<Mp, K, EK, P, M, R>(
     let same_length = actual_length == predicates.len();
 
     let mut keys_not_found = Vec::new();
-    let mut keys_not_matching = Vec::new();
+    let mut unmatched_values = Vec::new();
     let mut found = FoundEntries::new();
     for (expected_key, predicate) in predicates {
         match actual.get_key_value(<EK as MapKeyQuery<K>>::as_query(expected_key)) {
@@ -478,7 +469,13 @@ pub(crate) fn assert_contains_exactly_entries_matching<Mp, K, EK, P, M, R>(
             Some((stored_key, value)) => {
                 found.record(stored_key);
                 if !predicate(value) {
-                    keys_not_matching.push(expected_key);
+                    unmatched_values.push(alloc::vec![
+                        FailureBuilder::detached::<Mp::Value>(FailureKind::Predicate)
+                            .actual(this.render().value(value))
+                            .relation("does not match its predicate")
+                            .build()
+                            .located_at(Fact::key(this.render().value(expected_key)))
+                    ]);
                 }
             }
         }
@@ -489,57 +486,47 @@ pub(crate) fn assert_contains_exactly_entries_matching<Mp, K, EK, P, M, R>(
     if same_length
         && keys_not_found.is_empty()
         && unexpected_entries.is_empty()
-        && keys_not_matching.is_empty()
+        && unmatched_values.is_empty()
     {
         return;
     }
 
-    let mut details = Vec::new();
+    let (children, omitted) = keyed_children::<Mp>(unmatched_values, this.render().max_items());
+    let mut failure = this
+        .failure(FailureKind::Predicate)
+        .actual(this.render().map(actual))
+        .relation("does not exactly contain entries matching the predicates");
     if !same_length {
-        details.push(format!(
-            "Number of entries ({actual_length}) does not match number of predicates ({})!",
-            predicates.len()
-        ));
+        failure = failure
+            .fact("Actual length", actual_length)
+            .fact("Expected length", predicates.len());
     }
     if !keys_not_found.is_empty() {
-        details.push(format!(
-            "Keys not found: {:#?}",
-            this.render()
-                .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List)
-        ));
+        failure = failure.fact(
+            "Keys not found",
+            format_args!(
+                "{:#?}",
+                this.render()
+                    .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List)
+            ),
+        );
     }
     if !unexpected_entries.is_empty() {
-        let rendered = this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
-            &unexpected_entries,
-            Mp::RENDERING_ORDER == RenderingOrder::SortByRenderedText,
+        failure = failure.fact(
+            "Unexpected entries",
+            format_args!(
+                "{:#?}",
+                this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
+                    &unexpected_entries,
+                    sorts_for_rendering::<Mp>(),
+                )
+            ),
         );
-        details.push(format!("Unexpected entries: {rendered:#?}"));
     }
-    if !keys_not_matching.is_empty() {
-        details.push(format!(
-            "Keys with values not matching their predicates: {:#?}",
-            this.render()
-                .borrowed_values::<EK, _>(keys_not_matching.as_slice(), GroupStyle::List)
-        ));
-    }
-
-    let expected_keys = predicates
-        .iter()
-        .map(|(expected_key, _)| expected_key)
-        .collect::<Vec<_>>();
-    let expected_keys = this
-        .render()
-        .borrowed_values::<EK, _>(expected_keys.as_slice(), GroupStyle::List);
-    let rendered_actual = this.render().map(actual);
-    this.fail_with_details(details, |w: &mut String| {
-        writedoc! {w, r"
-            Actual: {rendered_actual:#?}
-
-            does not exactly contain entries matching the predicates
-
-            Expected keys: {expected_keys:#?}
-        "}
-    });
+    failure
+        .omitted(omitted, "unmatched value")
+        .children(children)
+        .raise();
 }
 
 #[track_caller]
@@ -558,10 +545,8 @@ pub(crate) fn assert_contains_exactly_entries_satisfying<Mp, K, EK, A, M, R>(
     let actual_length = actual.length();
     let same_length = actual_length == assertions.len();
 
-    let maximum = this.render().max_items();
     let mut keys_not_found = Vec::new();
-    let mut unsatisfied = Vec::new();
-    let mut number_of_unsatisfied_values = 0_usize;
+    let mut unsatisfied_values = Vec::new();
     let mut found = FoundEntries::new();
     for (expected_key, value_assertions) in assertions {
         match actual.get_key_value(<EK as MapKeyQuery<K>>::as_query(expected_key)) {
@@ -570,10 +555,14 @@ pub(crate) fn assert_contains_exactly_entries_satisfying<Mp, K, EK, A, M, R>(
                 found.record(stored_key);
                 let failures = this.collect_element_failures(value, value_assertions);
                 if !failures.is_empty() {
-                    number_of_unsatisfied_values += 1;
-                    if unsatisfied.len() < maximum {
-                        unsatisfied.push((expected_key, failures));
-                    }
+                    unsatisfied_values.push(
+                        failures
+                            .into_iter()
+                            .map(|failure| {
+                                failure.located_at(Fact::key(this.render().value(expected_key)))
+                            })
+                            .collect(),
+                    );
                 }
             }
         }
@@ -584,59 +573,45 @@ pub(crate) fn assert_contains_exactly_entries_satisfying<Mp, K, EK, A, M, R>(
     if same_length
         && keys_not_found.is_empty()
         && unexpected_entries.is_empty()
-        && number_of_unsatisfied_values == 0
+        && unsatisfied_values.is_empty()
     {
         return;
     }
 
-    let mut details = Vec::new();
+    let (children, omitted) = keyed_children::<Mp>(unsatisfied_values, this.render().max_items());
+    let mut failure = this
+        .failure(FailureKind::Predicate)
+        .actual(this.render().map(actual))
+        .relation("does not exactly contain entries satisfying the assertions");
     if !same_length {
-        details.push(format!(
-            "Number of entries ({actual_length}) does not match number of assertions ({})!",
-            assertions.len()
-        ));
+        failure = failure
+            .fact("Actual length", actual_length)
+            .fact("Expected length", assertions.len());
     }
     if !keys_not_found.is_empty() {
-        details.push(format!(
-            "Keys not found: {:#?}",
-            this.render()
-                .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List)
-        ));
+        failure = failure.fact(
+            "Keys not found",
+            format_args!(
+                "{:#?}",
+                this.render()
+                    .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List)
+            ),
+        );
     }
     if !unexpected_entries.is_empty() {
-        let rendered = this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
-            &unexpected_entries,
-            Mp::RENDERING_ORDER == RenderingOrder::SortByRenderedText,
+        failure = failure.fact(
+            "Unexpected entries",
+            format_args!(
+                "{:#?}",
+                this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
+                    &unexpected_entries,
+                    sorts_for_rendering::<Mp>(),
+                )
+            ),
         );
-        details.push(format!("Unexpected entries: {rendered:#?}"));
     }
-    for (expected_key, failures) in unsatisfied {
-        let expected_key = this.render().value(expected_key);
-        details.push(format!(
-            "Value at key {expected_key:#?} does not satisfy its assertions:\n{}",
-            join_failures(&failures, this.render().max_items())
-        ));
-    }
-    let omitted = number_of_unsatisfied_values.saturating_sub(maximum);
-    if omitted != 0 {
-        details.push(omission(omitted, "unsatisfied value"));
-    }
-
-    let expected_keys = assertions
-        .iter()
-        .map(|(expected_key, _)| expected_key)
-        .collect::<Vec<_>>();
-    let expected_keys = this
-        .render()
-        .borrowed_values::<EK, _>(expected_keys.as_slice(), GroupStyle::List);
-    let rendered_actual = this.render().map(actual);
-    this.fail_with_details(details, |w: &mut String| {
-        writedoc! {w, r"
-            Actual: {rendered_actual:#?}
-
-            does not exactly contain entries satisfying the assertions
-
-            Expected keys: {expected_keys:#?}
-        "}
-    });
+    failure
+        .omitted(omitted, "unsatisfied value")
+        .children(children)
+        .raise();
 }

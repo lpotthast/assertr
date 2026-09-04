@@ -171,8 +171,8 @@ mod tests {
             .capture(|it| it.into_iter_does_not_contain(2));
 
         assert_that!(failures).has_length(1);
-        assert_that!(failures[0].details.as_slice())
-            .does_not_contain_matching(|detail| detail.contains("index"));
+        assert_that!(failures[0].facts.as_slice())
+            .does_not_contain_matching(|fact: &crate::Fact| fact.label == crate::Fact::INDEX);
     }
 
     #[test]

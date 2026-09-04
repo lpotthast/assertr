@@ -1,9 +1,4 @@
-use alloc::string::String;
-use core::fmt::Write;
-
-use indoc::writedoc;
-
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// A Rust pattern together with the predicate and source text needed to assert that it matches.
 ///
@@ -84,14 +79,11 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
             predicate,
         } = pattern;
         if !predicate(self.actual()) {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected pattern: {description}
-
-                              Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Predicate)
+                .actual(self.render().value(self.actual()))
+                .relation("does not match the pattern")
+                .expected(format_args!("{description}"))
+                .raise();
         }
 
         self
@@ -110,14 +102,11 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
             predicate,
         } = pattern;
         if predicate(self.actual()) {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Unexpected pattern: {description}
-
-                              Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Predicate)
+                .actual(self.render().value(self.actual()))
+                .relation("matches the pattern")
+                .unexpected(format_args!("{description}"))
+                .raise();
         }
 
         self
@@ -221,11 +210,13 @@ mod tests {
                 -------- assertr --------
                 Expression: `Result::<(), TestError>::Err(TestError::MissingTokenQueryParam)`
 
-                Expected pattern: Err(TestError::MissingQueryParams)
-
-                          Actual: Err(
+                Actual: Err(
                     MissingTokenQueryParam,
                 )
+
+                does not match the pattern
+
+                Expected: Err(TestError::MissingQueryParams)
                 -------- assertr --------
             "});
         }
@@ -242,11 +233,13 @@ mod tests {
                         -------- assertr --------
                         Expression: `Some(42)`
 
-                        Expected pattern: None
-
-                                  Actual: Some(
+                        Actual: Some(
                             42,
                         )
+
+                        does not match the pattern
+
+                        Expected: None
                         -------- assertr --------
                     "});
                 },
@@ -270,9 +263,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `Opaque(1)`
 
-                Expected pattern: Opaque(2)
+                Actual: Opaque(1)
 
-                          Actual: Opaque(1)
+                does not match the pattern
+
+                Expected: Opaque(2)
                 -------- assertr --------
             "});
         }
@@ -328,11 +323,13 @@ mod tests {
                 -------- assertr --------
                 Expression: `Result::<(), TestError>::Err(TestError::MissingQueryParams)`
 
-                Unexpected pattern: Err(TestError::MissingQueryParams)
-
-                          Actual: Err(
+                Actual: Err(
                     MissingQueryParams,
                 )
+
+                matches the pattern
+
+                Unexpected: Err(TestError::MissingQueryParams)
                 -------- assertr --------
             "});
         }
@@ -349,11 +346,13 @@ mod tests {
                         -------- assertr --------
                         Expression: `Some(42)`
 
-                        Unexpected pattern: Some(42)
-
-                                  Actual: Some(
+                        Actual: Some(
                             42,
                         )
+
+                        matches the pattern
+
+                        Unexpected: Some(42)
                         -------- assertr --------
                     "});
                 },
@@ -377,9 +376,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `Opaque(1)`
 
-                Unexpected pattern: Opaque(1)
+                Actual: Opaque(1)
 
-                          Actual: Opaque(1)
+                matches the pattern
+
+                Unexpected: Opaque(1)
                 -------- assertr --------
             "});
         }

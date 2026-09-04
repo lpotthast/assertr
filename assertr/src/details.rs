@@ -35,7 +35,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// message set on the subject also shows up in failures of assertions derived from it through
     /// `satisfies` and friends. Use it for context that belongs to the test ("ids must be
     /// sorted"). Assertion implementations attach the evidence of one particular failure through
-    /// [`AssertThat::fail_with_details`] instead.
+    /// [`FailureBuilder::fact`](crate::failure::FailureBuilder::fact) instead.
     #[must_use]
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {
         self.state.detail_messages.borrow_mut().push(message.into());
@@ -63,7 +63,8 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ///
     /// Unlike the `with_` variants, this method borrows the assertion. Assertion implementations
     /// must not use it for per-failure diagnostics. Those belong to
-    /// [`AssertThat::fail_with_details`], which scopes them to a single failure.
+    /// [`FailureBuilder::fact`](crate::failure::FailureBuilder::fact), which scopes them to a
+    /// single failure.
     pub fn add_detail_message(&self, message: impl Into<String>) {
         self.state.detail_messages.borrow_mut().push(message.into());
     }

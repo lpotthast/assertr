@@ -1,8 +1,7 @@
+use crate::failure::FailureKind;
 use crate::mode::Mode;
-use crate::{AssertThat, ValueRenderer};
-use indoc::writedoc;
+use crate::{AssertThat, ValueRenderer, renderer::Compact};
 use jiff::SignedDuration;
-use std::fmt::Write;
 
 /// Assertions for [`SignedDuration`].
 #[allow(clippy::return_self_not_must_use)]
@@ -46,18 +45,10 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         self.track_assertion();
 
         if !self.actual().is_zero() {
-            let details = [String::from("Actual was not zero.")];
-
-            let expected = SignedDuration::ZERO;
-            let actual = self.render().value(self.actual());
-            let expected = self.render().value(&expected);
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(Compact(self.render().value(self.actual())))
+                .expected(Compact(self.render().value(&SignedDuration::ZERO)))
+                .raise();
         }
 
         self
@@ -71,14 +62,10 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         self.track_assertion();
 
         if !self.actual().is_negative() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {actual:#?} to be negative,
-
-                      Actual: {actual:#?},
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(Compact(self.render().value(self.actual())))
+                .relation("is not negative")
+                .raise();
         }
 
         self
@@ -92,14 +79,10 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         self.track_assertion();
 
         if !self.actual().is_positive() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {actual:#?} to be positive,
-
-                      Actual: {actual:#?},
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(Compact(self.render().value(self.actual())))
+                .relation("is not positive")
+                .raise();
         }
 
         self
@@ -116,20 +99,23 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         let min = expected - allowed_deviation;
         let max = expected + allowed_deviation;
         if !(actual >= min && actual <= max) {
-            let actual = self.render().value(&actual);
-            let expected = self.render().value(&expected);
-            let allowed_deviation = self.render().value(&allowed_deviation);
-            let min = self.render().value(&min);
-            let max = self.render().value(&max);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected value to be close to: {expected:?},
-                     with allowed deviation being: {allowed_deviation:?},
-                      but value was outside range: [{min:?}, {max:?}]
-
-                      Actual: {actual:?}
-                "}
-            });
+            self.failure(FailureKind::Ordering)
+                .actual(Compact(self.render().value(&actual)))
+                .relation("is not close to")
+                .expected(Compact(self.render().value(&expected)))
+                .fact(
+                    "Allowed deviation",
+                    format_args!("{:?}", self.render().value(&allowed_deviation)),
+                )
+                .fact(
+                    "Allowed range",
+                    format_args!(
+                        "[{:?}, {:?}]",
+                        self.render().value(&min),
+                        self.render().value(&max)
+                    ),
+                )
+                .raise();
         }
 
         self
@@ -158,7 +144,7 @@ mod tests {
                 .with_location(false)
                 .capture(SignedDurationAssertions::is_zero);
 
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -192,10 +178,7 @@ mod tests {
 
                     Expected: 0s
 
-                      Actual: 9000s
-
-                    Details:
-                      - Actual was not zero.
+                      Actual: 2h 30m
                     -------- assertr --------
                 "});
         }
@@ -229,9 +212,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `SignedDuration::ZERO`
 
-                    Expected: 0s to be negative,
+                    Actual: 0s
 
-                      Actual: 0s,
+                    is not negative
                     -------- assertr --------
                 "});
         }
@@ -248,9 +231,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `SignedDuration::from_secs(5)`
 
-                    Expected: 5s to be negative,
+                    Actual: 5s
 
-                      Actual: 5s,
+                    is not negative
                     -------- assertr --------
                 "});
         }
@@ -284,9 +267,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `SignedDuration::ZERO`
 
-                    Expected: 0s to be positive,
+                    Actual: 0s
 
-                      Actual: 0s,
+                    is not positive
                     -------- assertr --------
                 "});
         }
@@ -303,9 +286,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `SignedDuration::from_secs(-5)`
 
-                    Expected: -5s to be positive,
+                    Actual: 5s ago
 
-                      Actual: -5s,
+                    is not positive
                     -------- assertr --------
                 "});
         }
@@ -340,11 +323,15 @@ mod tests {
                     -------- assertr --------
                     Expression: `SignedDuration::from_secs_f32(0.3319)`
 
-                    Expected value to be close to: 333ms,
-                     with allowed deviation being: 1ms,
-                      but value was outside range: [332ms, 334ms]
+                    Actual: 331ms 900µs
 
-                      Actual: 331ms 900µs
+                    is not close to
+
+                    Expected: 333ms
+
+                    Details:
+                      - Allowed deviation: 1ms
+                      - Allowed range: [332ms, 334ms]
                     -------- assertr --------
                 "});
         }
@@ -380,11 +367,15 @@ mod tests {
                     -------- assertr --------
                     Expression: `SignedDuration::from_secs_f32(0.3341)`
 
-                    Expected value to be close to: 333ms,
-                     with allowed deviation being: 1ms,
-                      but value was outside range: [332ms, 334ms]
+                    Actual: 334ms 100µs
 
-                      Actual: 334ms 100µs
+                    is not close to
+
+                    Expected: 333ms
+
+                    Details:
+                      - Allowed deviation: 1ms
+                      - Allowed range: [332ms, 334ms]
                     -------- assertr --------
                 "});
         }

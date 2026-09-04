@@ -1,9 +1,8 @@
 use super::{
-    AssertThat, Borrow, Mode, PositionReporting, Preview, String, Tail, ValueRenderer, Vec, Write,
-    exact_size_hint, format, push_preview_details, writedoc,
+    AssertThat, Borrow, FailureKind, Mode, PositionReporting, Preview, Tail, ValueRenderer, Vec,
+    exact_size_hint,
 };
 
-use crate::renderer::GroupStyle;
 #[track_caller]
 pub(crate) fn assert_is_empty<S, T, I, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
@@ -19,18 +18,11 @@ pub(crate) fn assert_is_empty<S, T, I, M: Mode, R>(
             items: alloc::vec![item],
             consumed: 1,
         };
-        let mut details = Vec::new();
-        push_preview_details(&mut details, &preview, positions.index(0));
-        let actual = this
-            .render()
-            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-        this.fail_with_details(details, |w: &mut String| {
-            writedoc! {w,r"
-    Actual: {actual:#?}
-
-    is not empty.
-"}
-        });
+        let failure = this
+            .failure(FailureKind::Length)
+            .actual(preview.rendered::<T, _, _, _>(this))
+            .relation("is not empty");
+        preview.facts(failure, positions.index(0)).raise();
     }
 }
 
@@ -44,17 +36,14 @@ pub(crate) fn assert_is_not_empty<S, T, I, M: Mode, R>(
     R: ValueRenderer<T>,
 {
     if iterator.next().is_none() {
-        let preview: Vec<I::Item> = Vec::new();
-        let actual = this
-            .render()
-            .borrowed_values::<T, _>(&preview, GroupStyle::List);
-        this.fail(|w: &mut String| {
-            writedoc! {w,r"
-    Actual: {actual:#?}
-
-    is empty.
-"}
-        });
+        let preview: Preview<I::Item> = Preview {
+            items: Vec::new(),
+            consumed: 0,
+        };
+        this.failure(FailureKind::Length)
+            .actual(preview.rendered::<T, _, _, _>(this))
+            .relation("is unexpectedly empty")
+            .raise();
     }
 }
 
@@ -72,23 +61,19 @@ pub(crate) fn assert_has_length<S, T, I, M: Mode, R>(
         if actual == expected {
             return;
         }
-        let details = alloc::vec![format!(
-            "Iterator reported an exact remaining length of {actual}; no elements were consumed."
-        )];
-        let preview: Vec<I::Item> = Vec::new();
-        let rendered = this
-            .render()
-            .borrowed_values::<T, _>(&preview, GroupStyle::List);
-        this.fail_with_details(details, |w: &mut String| {
-            writedoc! {w,r"
-                Actual: {rendered:#?}
-
-                does not have the correct length
-
-                Expected: {expected}
-                Observed: {actual}
-            "}
-        });
+        let preview: Preview<I::Item> = Preview {
+            items: Vec::new(),
+            consumed: 0,
+        };
+        let failure = this
+            .failure(FailureKind::Length)
+            .actual(preview.rendered::<T, _, _, _>(this))
+            .relation("does not have the expected length")
+            .expected(expected);
+        preview
+            .facts(failure, None)
+            .fact("Actual length", actual)
+            .raise();
         return;
     }
     let mut tail = Tail::new();
@@ -104,24 +89,16 @@ pub(crate) fn assert_has_length<S, T, I, M: Mode, R>(
         return;
     }
     let preview = tail.finish();
-    let mut details = Vec::new();
-    push_preview_details(&mut details, &preview, None);
-    let actual = this
-        .render()
-        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-    let observed = if preview.consumed > expected {
-        format!("more than {expected}")
+    let failure = this
+        .failure(FailureKind::Length)
+        .actual(preview.rendered::<T, _, _, _>(this))
+        .relation("does not have the expected length")
+        .expected(expected);
+    let failure = preview.facts(failure, None);
+    if preview.consumed > expected {
+        failure.fact("Actual length", format_args!("more than {expected}"))
     } else {
-        format!("{}", preview.consumed)
-    };
-    this.fail_with_details(details, |w: &mut String| {
-        writedoc! {w,r"
-        Actual: {actual:#?}
-
-        does not have the correct length
-
-        Expected: {expected}
-        Observed: {observed}
-    "}
-    });
+        failure.fact("Actual length", preview.consumed)
+    }
+    .raise();
 }

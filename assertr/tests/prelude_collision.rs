@@ -277,7 +277,7 @@ fn a_custom_set_gets_every_set_and_collection_assertion() {
     assert_that!(&relation_failures).has_length(1);
     assert_that!(relation_failures[0].to_string())
         .contains("Actual: CustomSet {")
-        .contains("Expected superset: CustomSet {");
+        .contains("Expected: CustomSet {");
 
     #[cfg(feature = "fluent")]
     {

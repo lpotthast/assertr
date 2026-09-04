@@ -1,10 +1,9 @@
 use std::ffi::OsStr;
 use std::process::Command;
 
-use alloc::{format, string::String, vec::Vec};
-use core::fmt::Write;
-use indoc::writedoc;
+use alloc::vec::Vec;
 
+use crate::failure::FailureKind;
 use crate::mode::Mode;
 use crate::renderer::GroupStyle;
 use crate::{AssertThat, ValueRenderer};
@@ -29,18 +28,14 @@ impl<M: Mode, R> CommandAssertions<R> for AssertThat<'_, Command, M, R> {
         let actual: Vec<&OsStr> = self.actual().get_args().collect();
         let expected = expected.as_ref();
         if !actual.contains(&expected) {
-            let details = [format!("Consumed {} element(s).", actual.len())];
-            let actual = self
-                .render()
-                .borrowed_values::<OsStr, _>(&actual, GroupStyle::List);
-            let expected = self.render().value(expected);
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    does not contain expected: {expected:#?}
-                "}
-            });
+            self.failure(FailureKind::Membership)
+                .actual(
+                    self.render()
+                        .borrowed_values::<OsStr, _>(&actual, GroupStyle::List),
+                )
+                .relation("does not contain")
+                .expected(self.render().value(expected))
+                .raise();
         }
         self
     }
@@ -71,7 +66,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.has_arg("--expected"));
 
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -112,11 +107,10 @@ mod tests {
                 Actual: [
                     "--bar",
                 ]
-                
-                does not contain expected: "help"
 
-                Details:
-                  - Consumed 1 element(s).
+                does not contain
+
+                Expected: "help"
                 -------- assertr --------
             "#});
         }

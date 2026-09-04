@@ -1,11 +1,9 @@
 use crate::{
     AssertThat, ValueRenderer,
     actual::Actual,
+    failure::FailureKind,
     mode::{Mode, Panic},
 };
-use alloc::string::String;
-use core::fmt::Write;
-use indoc::writedoc;
 
 /// Panic-mode extraction from `Result` subjects.
 ///
@@ -43,13 +41,11 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
                 Err(error) => self.render().variant(self.actual(), "Err", error),
                 Ok(_) => unreachable!("already checked"),
             };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not of expected variant: Result::Ok
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(actual)
+                .relation("is not the expected variant")
+                .expected(format_args!("Result::Ok"))
+                .raise();
         }
 
         // Calling `unwrap` is safe here, as we would have seen a panic when the error is not present!
@@ -77,13 +73,11 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
                 Ok(value) => self.render().variant(self.actual(), "Ok", value),
                 Err(_) => unreachable!("already checked"),
             };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not of expected variant: Result::Err
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(actual)
+                .relation("is not the expected variant")
+                .expected(format_args!("Result::Err"))
+                .raise();
         }
 
         // Calling `unwrap_err` is safe here, as we would have seen a panic when the error is not present!
@@ -152,13 +146,11 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
                 Err(error) => self.render().variant(self.actual(), "Err", error),
                 Ok(_) => unreachable!("already checked"),
             };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not of expected variant: Result::Ok
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(actual)
+                .relation("is not the expected variant")
+                .expected(format_args!("Result::Ok"))
+                .raise();
         }
 
         self
@@ -176,13 +168,11 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
                 Ok(value) => self.render().variant(self.actual(), "Ok", value),
                 Err(_) => unreachable!("already checked"),
             };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not of expected variant: Result::Err
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(actual)
+                .relation("is not the expected variant")
+                .expected(format_args!("Result::Err"))
+                .raise();
         }
 
         self
@@ -209,13 +199,11 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
                 Err(error) => self.render().variant(self.actual(), "Err", error),
                 Ok(_) => unreachable!("already checked"),
             };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not of expected variant: Result::Ok
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(actual)
+                .relation("is not the expected variant")
+                .expected(format_args!("Result::Ok"))
+                .raise();
             self
         }
     }
@@ -241,13 +229,11 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
                 Ok(value) => self.render().variant(self.actual(), "Ok", value),
                 Err(_) => unreachable!("already checked"),
             };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not of expected variant: Result::Err
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(actual)
+                .relation("is not the expected variant")
+                .expected(format_args!("Result::Err"))
+                .raise();
             self
         }
     }
@@ -280,7 +266,7 @@ mod tests {
                 .with_location(false)
                 .capture(ResultAssertions::is_ok);
 
-            assert_that!(failures[0].description.as_str())
+            assert_that!(failures[0].description())
                 .contains("Err(")
                 .contains(SENTINEL);
         }
@@ -320,7 +306,9 @@ mod tests {
                         "someError",
                     )
 
-                    is not of expected variant: Result::Ok
+                    is not the expected variant
+
+                    Expected: Result::Ok
                     -------- assertr --------
                 "#});
         }
@@ -341,7 +329,9 @@ mod tests {
                             "someError",
                         )
 
-                        is not of expected variant: Result::Ok
+                        is not the expected variant
+
+                        Expected: Result::Ok
                         -------- assertr --------
                     "#});
                 },
@@ -383,7 +373,9 @@ mod tests {
                         42,
                     )
 
-                    is not of expected variant: Result::Err
+                    is not the expected variant
+
+                    Expected: Result::Err
                     -------- assertr --------
                 "});
         }
@@ -433,7 +425,9 @@ mod tests {
                         "someError",
                     )
 
-                    is not of expected variant: Result::Ok
+                    is not the expected variant
+
+                    Expected: Result::Ok
                     -------- assertr --------
                 "#});
         }
@@ -483,7 +477,9 @@ mod tests {
                         42,
                     )
 
-                    is not of expected variant: Result::Err
+                    is not the expected variant
+
+                    Expected: Result::Err
                     -------- assertr --------
                 "});
         }
@@ -560,7 +556,9 @@ mod tests {
                             "boom",
                         )
 
-                        is not of expected variant: Result::Ok
+                        is not the expected variant
+
+                        Expected: Result::Ok
                         -------- assertr --------
                     "#});
                 },
@@ -630,7 +628,9 @@ mod tests {
                             42,
                         )
 
-                        is not of expected variant: Result::Err
+                        is not the expected variant
+
+                        Expected: Result::Err
                         -------- assertr --------
                     "});
                 },

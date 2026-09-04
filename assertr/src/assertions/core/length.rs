@@ -1,10 +1,8 @@
 use crate::AssertThat;
 use crate::ValueRenderer;
 use crate::assertions::HasLength;
+use crate::failure::FailureKind;
 use crate::mode::Mode;
-use alloc::string::String;
-use core::fmt::Write;
-use indoc::writedoc;
 
 /// Assertions for subjects implementing [`HasLength`].
 ///
@@ -45,15 +43,10 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
     {
         self.track_assertion();
         if !self.actual().is_empty() {
-            let actual = self.actual();
-            let actual = self.render().value(actual).show_type_hint(true);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    was expected to be empty, but it is not!
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(self.render().value(self.actual()).show_type_hint(true))
+                .relation("is not empty")
+                .raise();
         }
         self
     }
@@ -65,15 +58,10 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
     {
         self.track_assertion();
         if self.actual().is_empty() {
-            let actual = self.actual();
-            let actual = self.render().value(actual).show_type_hint(true);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    was expected not to be empty, but it is!
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(self.render().value(self.actual()).show_type_hint(true))
+                .relation("is unexpectedly empty")
+                .raise();
         }
         self
     }
@@ -86,18 +74,12 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
         self.track_assertion();
         let actual_len = self.actual().length();
         if actual_len != expected {
-            let actual = self.actual();
-            let actual = self.render().value(actual).show_type_hint(true);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    does not have the correct length
-
-                    Expected: {expected:?}
-                      Actual: {actual_len:?}
-                "}
-            });
+            self.failure(FailureKind::Length)
+                .actual(self.render().value(self.actual()).show_type_hint(true))
+                .relation("does not have the expected length")
+                .expected(expected)
+                .fact("Actual length", actual_len)
+                .raise();
         }
         self
     }
@@ -148,7 +130,7 @@ mod tests {
                     3,
                 ]
 
-                was expected to be empty, but it is not!
+                is not empty
                 -------- assertr --------
             "});
         }
@@ -188,7 +170,7 @@ mod tests {
                         42,
                     ]
 
-                    was expected to be empty, but it is not!
+                    is not empty
                     -------- assertr --------
                 "});
         }
@@ -221,7 +203,7 @@ mod tests {
 
                 Actual: str "foo"
 
-                was expected to be empty, but it is not!
+                is not empty
                 -------- assertr --------
             "#});
         }
@@ -256,7 +238,7 @@ mod tests {
 
                     Actual: String "foo"
 
-                    was expected to be empty, but it is not!
+                    is not empty
                     -------- assertr --------
                 "#});
         }
@@ -296,7 +278,7 @@ mod tests {
                         42,
                     ]
 
-                    was expected to be empty, but it is not!
+                    is not empty
                     -------- assertr --------
                 "});
         }
@@ -339,7 +321,7 @@ mod tests {
                         "foo": "bar",
                     }}
 
-                    was expected to be empty, but it is not!
+                    is not empty
                     -------- assertr --------
                 "#});
         }
@@ -378,7 +360,7 @@ mod tests {
                         42,
                     ]
 
-                    was expected to be empty, but it is not!
+                    is not empty
                     -------- assertr --------
                 "});
         }
@@ -419,7 +401,7 @@ mod tests {
 
                     Actual: HashMap {{}}
 
-                    was expected not to be empty, but it is!
+                    is unexpectedly empty
                     -------- assertr --------
                 "});
         }
@@ -463,7 +445,7 @@ mod tests {
 
                     Actual: VecDeque []
 
-                    was expected not to be empty, but it is!
+                    is unexpectedly empty
                     -------- assertr --------
                 "});
         }
@@ -496,10 +478,12 @@ mod tests {
 
                     Actual: str "foo bar"
 
-                    does not have the correct length
+                    does not have the expected length
 
                     Expected: 42
-                      Actual: 7
+
+                    Details:
+                      - Actual length: 7
                     -------- assertr --------
                 "#});
         }
@@ -534,10 +518,12 @@ mod tests {
 
                     Actual: String "foo bar"
 
-                    does not have the correct length
+                    does not have the expected length
 
                     Expected: 42
-                      Actual: 7
+
+                    Details:
+                      - Actual length: 7
                     -------- assertr --------
                 "#});
         }
@@ -604,10 +590,12 @@ mod tests {
                         42,
                     ]
 
-                    does not have the correct length
+                    does not have the expected length
 
                     Expected: 2
-                      Actual: 1
+
+                    Details:
+                      - Actual length: 1
                     -------- assertr --------
                 "});
         }
@@ -647,10 +635,12 @@ mod tests {
                         42,
                     ]
 
-                    does not have the correct length
+                    does not have the expected length
 
                     Expected: 2
-                      Actual: 1
+
+                    Details:
+                      - Actual length: 1
                     -------- assertr --------
                 "});
         }
@@ -694,10 +684,12 @@ mod tests {
                         42,
                     ]
 
-                    does not have the correct length
+                    does not have the expected length
 
                     Expected: 2
-                      Actual: 1
+
+                    Details:
+                      - Actual length: 1
                     -------- assertr --------
                 "});
         }
@@ -747,10 +739,12 @@ mod tests {
                     "foo": "bar",
                 }}
 
-                does not have the correct length
+                does not have the expected length
                 
                 Expected: 2
-                  Actual: 1
+                
+                Details:
+                  - Actual length: 1
                 -------- assertr --------
             "#});
         }

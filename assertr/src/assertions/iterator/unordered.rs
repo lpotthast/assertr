@@ -1,14 +1,15 @@
 use super::{
-    AssertThat, AssertrPartialEq, Borrow, Capture, Mode, PREVIEW_CAPACITY, PositionReporting,
-    Preview, String, ValueRenderer, Vec, Write, exact_size_hint, format, join_failures,
-    match_bipartite, push_preview_details, writedoc,
+    AssertThat, AssertionFailure, AssertrPartialEq, Borrow, Capture, FailureBuilder, FailureKind,
+    GroupStyle, Mode, PREVIEW_CAPACITY, PositionReporting, Preview, ValueRenderer, Vec,
+    exact_size_hint, match_bipartite,
 };
+use crate::failure::Attached;
 
-use crate::renderer::{GroupStyle, omission};
 struct Captured<Item> {
     items: Vec<Item>,
     known_length: Option<usize>,
 }
+
 fn capture_unordered<I: Iterator>(mut iterator: I, expected_len: usize) -> Captured<I::Item> {
     if let Some(actual) = exact_size_hint(&iterator)
         && actual != expected_len
@@ -31,6 +32,7 @@ fn capture_unordered<I: Iterator>(mut iterator: I, expected_len: usize) -> Captu
         known_length: None,
     }
 }
+
 fn bounded_preview<Item>(mut captured: Captured<Item>) -> Preview<Item> {
     let consumed = captured.items.len();
     if captured.items.len() > PREVIEW_CAPACITY {
@@ -43,45 +45,33 @@ fn bounded_preview<Item>(mut captured: Captured<Item>) -> Preview<Item> {
     }
 }
 
-fn push_known_length_detail(
-    details: &mut Vec<String>,
-    known_length: Option<usize>,
-    expected: usize,
-) {
-    if let Some(actual) = known_length {
-        details.push(format!(
-            "Iterator reported an exact remaining length of {actual}; expected {expected}."
-        ));
-    }
-}
-
+/// Starts the failure of an unordered exact assertion over the captured elements, with the
+/// preview facts and, when the iterator reported a differing length up front, that length.
 #[track_caller]
-fn fail_unordered<S, T, E, Item, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    mut details: Vec<String>,
-    preview: &Preview<Item>,
-    expected: &[E],
-    summary: &str,
-) where
+fn unordered_failure<'c, S, T, Item, M: Mode, R>(
+    this: &'c AssertThat<'_, S, M, R>,
+    captured: Captured<Item>,
+    kind: FailureKind,
+    relation: &'static str,
+    expected_len: usize,
+) -> FailureBuilder<Attached<'c>>
+where
     Item: Borrow<T>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T>,
 {
-    push_preview_details(&mut details, preview, None);
-    let actual = this
-        .render()
-        .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-    let expected = this
-        .render()
-        .borrowed_values::<E, _>(expected, GroupStyle::List);
-    this.fail_with_details(details, |w: &mut String| {
-        writedoc! {w,r"
-    Actual: {actual:#?},
-
-    Elements expected: {expected:#?}
-
-    {summary}
-"}
-    });
+    let known_length = captured.known_length;
+    let preview = bounded_preview(captured);
+    let failure = this
+        .failure(kind)
+        .actual(preview.rendered::<T, _, _, _>(this))
+        .relation(relation);
+    let failure = preview.facts(failure, None);
+    match known_length {
+        Some(actual) => failure
+            .fact("Reported length", actual)
+            .fact("Expected length", expected_len),
+        None => failure,
+    }
 }
 
 #[track_caller]
@@ -96,8 +86,6 @@ pub(crate) fn assert_contains_exactly_in_any_order<S, T, E, I, M: Mode, R>(
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     let captured = capture_unordered(iterator, expected.len());
-    let mut details = Vec::new();
-    push_known_length_detail(&mut details, captured.known_length, expected.len());
     let exact = captured.known_length.is_none()
         && match_bipartite(captured.items.len(), expected.len(), |a, e| {
             AssertrPartialEq::eq(
@@ -108,14 +96,18 @@ pub(crate) fn assert_contains_exactly_in_any_order<S, T, E, I, M: Mode, R>(
         })
         .is_exact();
     if !exact {
-        let preview = bounded_preview(captured);
-        fail_unordered(
+        unordered_failure::<_, T, _, _, _>(
             this,
-            details,
-            &preview,
-            expected,
-            "The elements did not match exactly in any order.",
-        );
+            captured,
+            FailureKind::Equality,
+            "does not contain exactly in any order",
+            expected.len(),
+        )
+        .expected(
+            this.render()
+                .borrowed_values::<E, _>(expected, GroupStyle::List),
+        )
+        .raise();
     }
 }
 
@@ -131,26 +123,20 @@ pub(crate) fn assert_contains_exactly_in_any_order_matching<S, T, P, I, M: Mode,
     R: ValueRenderer<T>,
 {
     let captured = capture_unordered(iterator, predicates.len());
-    let mut details = Vec::new();
-    push_known_length_detail(&mut details, captured.known_length, predicates.len());
     let exact = captured.known_length.is_none()
         && match_bipartite(captured.items.len(), predicates.len(), |a, p| {
             predicates[p](captured.items[a].borrow())
         })
         .is_exact();
     if !exact {
-        let preview = bounded_preview(captured);
-        push_preview_details(&mut details, &preview, None);
-        let actual = this
-            .render()
-            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-        this.fail_with_details(details, |w: &mut String| {
-            writedoc! {w,r"
-    Actual: {actual:#?},
-
-    did not exactly match predicates in any order.
-"}
-        });
+        unordered_failure::<_, T, _, _, _>(
+            this,
+            captured,
+            FailureKind::Predicate,
+            "does not exactly match the predicates in any order",
+            predicates.len(),
+        )
+        .raise();
     }
 }
 
@@ -167,11 +153,10 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<S, T, A, I, M: Mod
     R: ValueRenderer<T> + Clone,
 {
     let captured = capture_unordered(iterator, assertions.len());
-    let mut details = Vec::new();
-    push_known_length_detail(&mut details, captured.known_length, assertions.len());
+    // Failures are retained only for the elements the preview will show.
     let preview_start = captured.items.len().saturating_sub(PREVIEW_CAPACITY);
     let mut satisfied = Vec::new();
-    let mut retained_failures = Vec::new();
+    let mut retained_failures: Vec<Vec<AssertionFailure>> = Vec::new();
     if captured.known_length.is_none() {
         for (index, item) in captured.items.iter().enumerate() {
             let mut row = Vec::new();
@@ -180,7 +165,7 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<S, T, A, I, M: Mod
                 let failures = this.collect_element_failures(item.borrow(), assertion);
                 row.push(failures.is_empty());
                 if let Some(retained_row) = &mut retained_row {
-                    retained_row.push(failures);
+                    retained_row.extend(failures);
                 }
             }
             satisfied.push(row);
@@ -198,57 +183,35 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<S, T, A, I, M: Mod
     });
     if captured.known_length.is_some() || !result.is_exact() {
         let maximum = this.render().max_items();
-        let mut number_of_unsatisfied_elements = 0_usize;
-        for index in result
+        let mut unsatisfied = result
             .unmatched_actual
             .iter()
             .copied()
             .filter(|index| *index >= preview_start)
-        {
-            if let Some(row) = retained_failures.get(index - preview_start) {
-                let mut joined_failures = Vec::new();
-                let mut number_of_unsatisfied_assertions = 0_usize;
-                for failures in row.iter().filter(|failures| !failures.is_empty()) {
-                    number_of_unsatisfied_assertions += 1;
-                    if joined_failures.len() < maximum {
-                        joined_failures.push(join_failures(failures, maximum));
-                    }
-                }
-                let omitted_assertions = number_of_unsatisfied_assertions.saturating_sub(maximum);
-                if omitted_assertions != 0 {
-                    joined_failures.push(omission(omitted_assertions, "unsatisfied assertion"));
-                }
-                let joined = joined_failures.join("\n");
-                if !joined.is_empty() {
-                    number_of_unsatisfied_elements += 1;
-                    if number_of_unsatisfied_elements <= maximum {
-                        details.push(match positions {
-                            PositionReporting::YieldOrder => format!(
-                                "Element at index {index} did not satisfy any available assertion:\n{joined}"
-                            ),
-                            PositionReporting::Unavailable => format!(
-                                "An element did not satisfy any available assertion:\n{joined}"
-                            ),
-                        });
-                    }
-                }
-            }
-        }
-        let omitted = number_of_unsatisfied_elements.saturating_sub(maximum);
-        if omitted != 0 {
-            details.push(omission(omitted, "unsatisfied element"));
-        }
-        let preview = bounded_preview(captured);
-        push_preview_details(&mut details, &preview, None);
-        let actual = this
-            .render()
-            .borrowed_values::<T, _>(&preview.items, GroupStyle::List);
-        this.fail_with_details(details, |w: &mut String| {
-            writedoc! {w,r"
-        Actual: {actual:#?},
-
-        did not exactly satisfy the assertions in any order.
-    "}
-        });
+            .filter_map(|index| {
+                let failures = core::mem::take(retained_failures.get_mut(index - preview_start)?);
+                (!failures.is_empty()).then_some((index, failures))
+            })
+            .collect::<Vec<_>>();
+        let omitted = unsatisfied.len().saturating_sub(maximum);
+        unsatisfied.truncate(maximum);
+        let children = unsatisfied
+            .into_iter()
+            .flat_map(|(index, failures)| {
+                failures
+                    .into_iter()
+                    .map(move |failure| positions.locate(failure, index))
+            })
+            .collect::<Vec<_>>();
+        unordered_failure::<_, T, _, _, _>(
+            this,
+            captured,
+            FailureKind::Predicate,
+            "does not exactly satisfy the assertions in any order",
+            assertions.len(),
+        )
+        .omitted(omitted, "unsatisfied element")
+        .children(children)
+        .raise();
     }
 }

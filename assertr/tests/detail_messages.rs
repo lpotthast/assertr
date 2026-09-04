@@ -24,11 +24,11 @@ fn assertion_details_are_scoped_to_the_failure_that_produced_them() {
         });
 
     assert_that!(&failures).has_length(2);
-    assert_that!(failures[0].details.as_slice())
-        .contains_matching(|it: &String| it.contains("Elements not matched:"));
-    assert_that!(&failures[1].description).contains("does not contain expected: 42");
-    assert_that!(failures[1].details.as_slice())
-        .does_not_contain_matching(|it: &String| it.contains("Elements not matched:"));
+    assert_that!(failures[0].facts.as_slice())
+        .contains_matching(|it: &assertr::Fact| it.label == "Elements not matched");
+    assert_that!(failures[1].description()).contains("does not contain\n\nExpected: 42");
+    assert_that!(failures[1].facts.as_slice())
+        .does_not_contain_matching(|it: &assertr::Fact| it.label == "Elements not matched");
 }
 
 #[cfg(feature = "derive")]

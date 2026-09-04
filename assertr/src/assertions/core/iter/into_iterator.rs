@@ -355,10 +355,12 @@ mod tests {
                         3,
                     ]
 
-                    does not contain expected: 4
+                    does not contain
+
+                    Expected: 4
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -415,19 +417,18 @@ mod tests {
                         3,
                     ]
 
-                    does not contain all expected elements
+                    does not contain all of
 
                     Expected: [
                         2,
                         4,
                     ]
 
-                    Elements not found: [
-                        4,
-                    ]
-
                     Details:
-                      - Consumed 3 element(s).
+                      - Elements not found: [
+                            4,
+                        ]
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -533,10 +534,10 @@ mod tests {
                         3,
                     ]
 
-                    does not contain an element matching the predicate.
+                    does not contain an element matching the predicate
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -572,8 +573,11 @@ mod tests {
                     .into_iter_contains_satisfying(is_seven);
             })
             .has_type::<String>()
-            .contains("does not contain an element satisfying the assertions.")
-            .contains("An element does not satisfy the assertions:\n    Expected: 7");
+            .contains("does not contain an element satisfying the assertions")
+            .contains(
+                "Nested failures:\n  - Expected: 7\n\n      Actual: 1\n  - Expected: 7\n\n      Actual: 2\n",
+            )
+            .does_not_contain("At index");
         }
     }
 
@@ -614,10 +618,12 @@ mod tests {
                         2,
                     ]
 
-                    contains unexpected: 2
+                    contains
+
+                    Unexpected: 2
 
                     Details:
-                      - Consumed 2 element(s).
+                      - Consumed elements: 2
                     -------- assertr --------
                 "});
         }
@@ -657,10 +663,10 @@ mod tests {
                         2,
                     ]
 
-                    unexpectedly contains an element matching the predicate.
+                    contains an element matching the predicate
 
                     Details:
-                      - Consumed 2 element(s).
+                      - Consumed elements: 2
                     -------- assertr --------
                 "});
         }
@@ -708,10 +714,10 @@ mod tests {
                         2,
                     ]
 
-                    unexpectedly contains an element satisfying the assertions.
+                    contains an element satisfying the assertions
 
                     Details:
-                      - Consumed 2 element(s).
+                      - Consumed elements: 2
                     -------- assertr --------
                 "});
         }
@@ -769,18 +775,18 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    Elements expected: [
+                    does not contain exactly in any order
+
+                    Expected: [
                         1,
                         2,
                         9,
                     ]
 
-                    The elements did not match exactly in any order.
-
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -836,12 +842,12 @@ mod tests {
                         1,
                         2,
                         3,
-                    ],
+                    ]
 
-                    did not exactly match predicates in any order.
+                    does not exactly match the predicates in any order
 
                     Details:
-                      - Consumed 3 element(s).
+                      - Consumed elements: 3
                     -------- assertr --------
                 "});
         }
@@ -882,8 +888,11 @@ mod tests {
                     ]);
             })
             .has_type::<String>()
-            .contains("did not exactly satisfy the assertions in any order.")
-            .contains("An element did not satisfy any available assertion:");
+            .contains("does not exactly satisfy the assertions in any order")
+            .contains(
+                "Nested failures:\n  - Actual: -1\n\n    is not greater than\n\n    Expected: 0\n",
+            )
+            .does_not_contain("At index");
         }
     }
 
@@ -918,10 +927,10 @@ mod tests {
                         1,
                     ]
 
-                    is not empty.
+                    is not empty
 
                     Details:
-                      - Consumed 1 element(s).
+                      - Consumed elements: 1
                     -------- assertr --------
                 "});
         }
@@ -956,7 +965,7 @@ mod tests {
 
                     Actual: []
 
-                    is empty.
+                    is unexpectedly empty
                     -------- assertr --------
                 "});
         }
@@ -991,13 +1000,13 @@ mod tests {
 
                     Actual: []
 
-                    does not have the correct length
+                    does not have the expected length
 
                     Expected: 2
-                    Observed: 3
 
                     Details:
-                      - Iterator reported an exact remaining length of 3; no elements were consumed.
+                      - Consumed elements: 0
+                      - Actual length: 3
                     -------- assertr --------
                 "});
         }

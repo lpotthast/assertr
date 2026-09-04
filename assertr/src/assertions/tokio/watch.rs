@@ -1,9 +1,7 @@
+use crate::failure::FailureKind;
 use crate::mode::Panic;
 use crate::prelude::*;
-use alloc::string::String;
 use core::borrow::Borrow;
-use core::fmt::Write;
-use indoc::writedoc;
 
 /// Non-extracting assertions for [`tokio::sync::watch::Receiver`].
 #[allow(clippy::return_self_not_must_use)]
@@ -29,15 +27,10 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R>
         let actual = tokio::sync::watch::Receiver::borrow(self.actual());
         let expected = expected.borrow();
         if *actual != *expected {
-            let actual = self.render().value(&*actual);
-            let expected = self.render().value(expected);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(&*actual))
+                .expected(self.render().value(expected))
+                .raise();
         }
         drop(actual);
         self
@@ -50,43 +43,49 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R>
 pub trait TokioWatchReceiverExtractAssertions<T, R = crate::DebugRenderer> {
     /// Asserts that the current value has not been seen by this receiver.
     ///
-    /// A closed channel fails with its [`RecvError`](tokio::sync::watch::error::RecvError).
-    fn has_changed(self) -> Self
-    where
-        R: ValueRenderer<tokio::sync::watch::error::RecvError> + ValueRenderer<bool> + Clone;
+    /// A closed channel fails this assertion.
+    fn has_changed(self) -> Self;
 
     /// Asserts that the current value has already been seen by this receiver.
     ///
-    /// A closed channel fails with its [`RecvError`](tokio::sync::watch::error::RecvError).
-    fn has_not_changed(self) -> Self
-    where
-        R: ValueRenderer<tokio::sync::watch::error::RecvError> + ValueRenderer<bool> + Clone;
+    /// A closed channel fails this assertion.
+    fn has_not_changed(self) -> Self;
 }
 
 impl<T, R> TokioWatchReceiverExtractAssertions<T, R>
     for AssertThat<'_, tokio::sync::watch::Receiver<T>, Panic, R>
 {
     #[track_caller]
-    fn has_changed(self) -> Self
-    where
-        R: ValueRenderer<tokio::sync::watch::error::RecvError> + ValueRenderer<bool> + Clone,
-    {
-        self.derive_owned(tokio::sync::watch::Receiver::has_changed)
-            .with_detail_message("Expected a tokio `watch` channel to have changed.")
-            .get_ok()
-            .is_true();
+    fn has_changed(self) -> Self {
+        self.track_assertion();
+        match self.actual().has_changed() {
+            Ok(true) => {}
+            Ok(false) => self
+                .failure(FailureKind::Other)
+                .relation("has not changed")
+                .raise(),
+            Err(_closed) => self
+                .failure(FailureKind::Other)
+                .relation("is closed")
+                .raise(),
+        }
         self
     }
 
     #[track_caller]
-    fn has_not_changed(self) -> Self
-    where
-        R: ValueRenderer<tokio::sync::watch::error::RecvError> + ValueRenderer<bool> + Clone,
-    {
-        self.derive_owned(tokio::sync::watch::Receiver::has_changed)
-            .with_detail_message("Expected a tokio `watch` channel to have not changed.")
-            .get_ok()
-            .is_false();
+    fn has_not_changed(self) -> Self {
+        self.track_assertion();
+        match self.actual().has_changed() {
+            Ok(false) => {}
+            Ok(true) => self
+                .failure(FailureKind::Other)
+                .relation("has unexpectedly changed")
+                .raise(),
+            Err(_closed) => self
+                .failure(FailureKind::Other)
+                .relation("is closed")
+                .raise(),
+        }
         self
     }
 }
@@ -95,7 +94,7 @@ impl<T, R> TokioWatchReceiverExtractAssertions<T, R>
 mod tests {
     mod renderer_contract {
         use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use crate::test_support::{NoRenderer, assert_trait_impl};
 
         #[test]
         fn traits_are_implemented_without_renderer_support() {
@@ -110,17 +109,13 @@ mod tests {
         }
 
         #[test]
-        fn projected_boolean_failure_uses_the_active_renderer() {
-            let (_sender, receiver) = tokio::sync::watch::channel(());
+        fn change_state_assertions_require_no_renderer() {
+            let (_sender, mut receiver) = tokio::sync::watch::channel(());
+            receiver.mark_changed();
 
-            assert_that_panic_by(|| {
-                assert_that!(receiver)
-                    .with_renderer(SentinelRenderer)
-                    .with_location(false)
-                    .has_changed();
-            })
-            .has_type::<String>()
-            .contains(SENTINEL);
+            assert_that!(receiver)
+                .with_renderer(NoRenderer)
+                .has_changed();
         }
     }
 
@@ -212,12 +207,26 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Expected: true
+                    Expression: `rx`
 
-                      Actual: false
+                    has not changed
+                    -------- assertr --------
+                "});
+        }
 
-                    Messages:
-                      - Expected a tokio `watch` channel to have changed.
+        #[tokio::test]
+        async fn panics_when_the_channel_is_closed() {
+            let (tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            rx.mark_changed();
+            drop(tx);
+
+            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_changed())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `rx`
+
+                    is closed
                     -------- assertr --------
                 "});
         }
@@ -253,12 +262,26 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Expected: false
+                    Expression: `rx`
 
-                      Actual: true
+                    has unexpectedly changed
+                    -------- assertr --------
+                "});
+        }
 
-                    Messages:
-                      - Expected a tokio `watch` channel to have not changed.
+        #[tokio::test]
+        async fn panics_when_the_channel_is_closed() {
+            let (tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            rx.mark_unchanged();
+            drop(tx);
+
+            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_not_changed())
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `rx`
+
+                    is closed
                     -------- assertr --------
                 "});
         }

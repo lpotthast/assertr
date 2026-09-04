@@ -1,6 +1,5 @@
-use crate::{AssertThat, Mode, ValueRenderer};
-use indoc::writedoc;
-use std::fmt::Write;
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
+use core::fmt::{self, Debug, Display, Formatter};
 use std::ops::Deref;
 use std::{ffi::OsStr, path::Path};
 
@@ -96,26 +95,17 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         match actual.try_exists() {
             Ok(true) => {}
             Ok(false) => {
-                let actual = self.render().value(self.actual());
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r"
-                        Expected: {actual:#?}
-
-                        to exist, but it does not!
-                    "}
-                });
+                self.failure(FailureKind::Other)
+                    .actual(self.render().value(self.actual()))
+                    .relation("does not exist")
+                    .raise();
             }
             Err(err) => {
-                let actual = self.render().value(self.actual());
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r"
-                        Expected: {actual:#?}
-
-                        to exist, but it does not!
-
-                        Encountered std::io::Error: {err:#?}
-                    "}
-                });
+                self.failure(FailureKind::Other)
+                    .actual(self.render().value(self.actual()))
+                    .relation("does not exist")
+                    .fact("I/O error", err)
+                    .raise();
             }
         }
         self
@@ -128,20 +118,11 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
-
-        match actual.try_exists() {
-            Ok(true) => {
-                let actual = self.render().value(self.actual());
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r"
-                        Expected: {actual:#?}
-
-                        to not exist, but it does!
-                    "}
-                });
-            }
-            Ok(false) => {}
-            Err(_err) => {}
+        if matches!(actual.try_exists(), Ok(true)) {
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(self.actual()))
+                .relation("unexpectedly exists")
+                .raise();
         }
         self
     }
@@ -154,19 +135,11 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         self.track_assertion();
         let actual = P::deref(self.actual());
         if !actual.is_file() {
-            let exists = actual.exists();
-            let is_dir = actual.is_dir();
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {actual:#?}
-
-                    to be a file, but it is not!
-
-                    The path exists: {exists}
-                    The path is a directory: {is_dir}
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(self.render().value(self.actual()))
+                .relation("is not a file")
+                .note(entry_kind(actual))
+                .raise();
         }
         self
     }
@@ -179,19 +152,11 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         self.track_assertion();
         let actual = P::deref(self.actual());
         if !actual.is_dir() {
-            let exists = actual.exists();
-            let is_file = actual.is_file();
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {actual:#?}
-
-                    to be a directory, but it is not!
-
-                    The path exists: {exists}
-                    The path is a file: {is_file}
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(self.render().value(self.actual()))
+                .relation("is not a directory")
+                .note(entry_kind(actual))
+                .raise();
         }
         self
     }
@@ -204,14 +169,11 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         self.track_assertion();
         let actual = P::deref(self.actual());
         if !actual.is_symlink() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {actual:#?}
-
-                    to be a symlink, but it is not!
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(self.render().value(self.actual()))
+                .relation("is not a symlink")
+                .note(entry_kind(actual))
+                .raise();
         }
         self
     }
@@ -224,14 +186,10 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         self.track_assertion();
         let actual = P::deref(self.actual());
         if !actual.has_root() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {actual:#?}
-
-                    to be a root-path, but it is not!
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(self.actual()))
+                .relation("does not have a root")
+                .raise();
         }
         self
     }
@@ -244,14 +202,10 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
         self.track_assertion();
         let actual = P::deref(self.actual());
         if !actual.is_relative() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {actual:#?}
-
-                    to be a relative path, but it is not!
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(self.actual()))
+                .relation("is not relative")
+                .raise();
         }
         self
     }
@@ -263,29 +217,14 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
-        let expected_file_name = expected.as_ref();
-        let Some(actual_file_name) = actual.file_name() else {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Path: {actual:?}
-
-                    Expected filename: {expected_file_name:#?}
-                      Actual filename: <none>
-                "}
-            });
-            return self;
-        };
-        if actual_file_name != expected_file_name {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Path: {actual:?}
-
-                    Expected filename: {expected_file_name:#?}
-                      Actual filename: {actual_file_name:#?}
-                "}
-            });
+        let expected = expected.as_ref();
+        if actual.file_name() != Some(expected) {
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(self.actual()))
+                .relation("does not have the file name")
+                .expected(expected)
+                .fact("Actual file name", Component(actual.file_name()))
+                .raise();
         }
         self
     }
@@ -297,29 +236,14 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
-        let expected_file_stem = expected.as_ref();
-        let Some(actual_file_stem) = actual.file_stem() else {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Path: {actual:?}
-
-                    Expected filestem: {expected_file_stem:#?}
-                      Actual filestem: <none>
-                "}
-            });
-            return self;
-        };
-        if actual_file_stem != expected_file_stem {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Path: {actual:?}
-
-                    Expected filestem: {expected_file_stem:#?}
-                      Actual filestem: {actual_file_stem:#?}
-                "}
-            });
+        let expected = expected.as_ref();
+        if actual.file_stem() != Some(expected) {
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(self.actual()))
+                .relation("does not have the file stem")
+                .expected(expected)
+                .fact("Actual file stem", Component(actual.file_stem()))
+                .raise();
         }
         self
     }
@@ -331,29 +255,14 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
-        let expected_extension = expected.as_ref();
-        let Some(actual_extension) = actual.extension() else {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Path: {actual:?}
-
-                    Expected extension: {expected_extension:#?}
-                      Actual extension: <none>
-                "}
-            });
-            return self;
-        };
-        if actual_extension != expected_extension {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Path: {actual:?}
-
-                    Expected extension: {expected_extension:#?}
-                      Actual extension: {actual_extension:#?}
-                "}
-            });
+        let expected = expected.as_ref();
+        if actual.extension() != Some(expected) {
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(self.actual()))
+                .relation("does not have the extension")
+                .expected(expected)
+                .fact("Actual extension", Component(actual.extension()))
+                .raise();
         }
         self
     }
@@ -365,17 +274,14 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
-        let expected_prefix = expected.as_ref();
-        if !actual.starts_with(expected_prefix) {
-            let details = [String::from("Only whole path components are matched!")];
-            let actual = self.render().value(self.actual());
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Path: {actual:?}
-
-                    Did not start with expected prefix: {expected_prefix:#?}
-                "}
-            });
+        let expected = expected.as_ref();
+        if !actual.starts_with(expected) {
+            self.failure(FailureKind::Membership)
+                .actual(self.render().value(self.actual()))
+                .relation("does not start with")
+                .expected(expected)
+                .note("Only whole path components are matched.")
+                .raise();
         }
         self
     }
@@ -387,19 +293,42 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
-        let expected_postfix = expected.as_ref();
-        if !actual.ends_with(expected_postfix) {
-            let details = [String::from("Only whole path components are matched!")];
-            let actual = self.render().value(self.actual());
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Path: {actual:?}
-
-                    Did not end with expected postfix: {expected_postfix:#?}
-                "}
-            });
+        let expected = expected.as_ref();
+        if !actual.ends_with(expected) {
+            self.failure(FailureKind::Membership)
+                .actual(self.render().value(self.actual()))
+                .relation("does not end with")
+                .expected(expected)
+                .note("Only whole path components are matched.")
+                .raise();
         }
         self
+    }
+}
+
+/// What the file system holds at `path`, as the note of a failed kind check.
+fn entry_kind(path: &Path) -> &'static str {
+    if path.is_dir() {
+        "The path is a directory."
+    } else if path.is_file() {
+        "The path is a file."
+    } else if path.exists() {
+        "The path exists."
+    } else {
+        "The path does not exist."
+    }
+}
+
+/// An optional path component as a fact value: quoted and escaped like the expected component it
+/// is compared with, or `<none>` when the path has no such component.
+struct Component<'a>(Option<&'a OsStr>);
+
+impl Display for Component<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(component) => Debug::fmt(component, f),
+            None => f.write_str("<none>"),
+        }
     }
 }
 
@@ -427,7 +356,7 @@ mod tests {
             .with_location(false)
             .capture(PathAssertions::exists);
 
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -481,9 +410,9 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Expected: "src/assertions/std/some-non-existing-file.rs"
+                        Actual: "src/assertions/std/some-non-existing-file.rs"
 
-                        to exist, but it does not!
+                        does not exist
                         -------- assertr --------
                     "#});
             }
@@ -515,9 +444,9 @@ mod tests {
                 })
                 .has_type::<String>()
                 .contains("-------- assertr --------")
-                .contains("Expected: \"")
+                .contains("Actual: \"")
                 .contains("src/assertions/std/path.rs\"")
-                .contains("to not exist, but it does!");
+                .contains("unexpectedly exists");
             }
         }
 
@@ -549,9 +478,10 @@ mod tests {
                 })
                 .has_type::<String>()
                 .contains("-------- assertr --------")
-                .contains("Expected: \"")
+                .contains("Actual: \"")
                 .contains("src/assertions/std\"")
-                .contains("to be a file, but it is not!");
+                .contains("is not a file")
+                .contains("Details:\n  - The path is a directory.");
             }
         }
 
@@ -584,11 +514,10 @@ mod tests {
                 })
                 .has_type::<String>()
                 .contains("-------- assertr --------")
-                .contains("Expected: \"")
+                .contains("Actual: \"")
                 .contains("src/assertions/std/path.rs\"")
-                .contains("to be a directory, but it is not!")
-                .contains("The path exists: true")
-                .contains("The path is a file: true");
+                .contains("is not a directory")
+                .contains("Details:\n  - The path is a file.");
             }
         }
 
@@ -641,9 +570,12 @@ mod tests {
                     -------- assertr --------
                     Expression: `path`
 
-                    Expected: "{}"
+                    Actual: "{}"
 
-                    to be a symlink, but it is not!
+                    is not a symlink
+
+                    Details:
+                      - The path is a file.
                     -------- assertr --------
                 "#, source_relative_path!().display()});
             }
@@ -675,9 +607,9 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Expected: "foo/bar/baz.rs"
+                        Actual: "foo/bar/baz.rs"
 
-                        to be a root-path, but it is not!
+                        does not have a root
                         -------- assertr --------
                     "#});
             }
@@ -709,9 +641,9 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Expected: "/foo/bar/baz.rs"
+                        Actual: "/foo/bar/baz.rs"
 
-                        to be a relative path, but it is not!
+                        is not relative
                         -------- assertr --------
                     "#});
             }
@@ -747,10 +679,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
-    
-                        Expected filename: "some.json"
-                          Actual filename: "path.rs"
+                        Actual: "src/assertions/std/path.rs"
+
+                        does not have the file name
+
+                        Expected: "some.json"
+
+                        Details:
+                          - Actual file name: "path.rs"
                         -------- assertr --------
                     "#});
             }
@@ -766,10 +702,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `path`
 
-                    Path: "/"
+                    Actual: "/"
 
-                    Expected filename: "foo"
-                      Actual filename: <none>
+                    does not have the file name
+
+                    Expected: "foo"
+
+                    Details:
+                      - Actual file name: <none>
                     -------- assertr --------
                 "#});
             }
@@ -805,10 +745,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
-    
-                        Expected filestem: "some"
-                          Actual filestem: "path"
+                        Actual: "src/assertions/std/path.rs"
+
+                        does not have the file stem
+
+                        Expected: "some"
+
+                        Details:
+                          - Actual file stem: "path"
                         -------- assertr --------
                     "#});
             }
@@ -824,10 +768,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `path`
 
-                    Path: "/"
+                    Actual: "/"
 
-                    Expected filestem: "foo"
-                      Actual filestem: <none>
+                    does not have the file stem
+
+                    Expected: "foo"
+
+                    Details:
+                      - Actual file stem: <none>
                     -------- assertr --------
                 "#});
             }
@@ -863,10 +811,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
-    
-                        Expected extension: "json"
-                          Actual extension: "rs"
+                        Actual: "src/assertions/std/path.rs"
+
+                        does not have the extension
+
+                        Expected: "json"
+
+                        Details:
+                          - Actual extension: "rs"
                         -------- assertr --------
                     "#});
             }
@@ -882,10 +834,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `path`
 
-                    Path: "/"
+                    Actual: "/"
 
-                    Expected extension: "rs"
-                      Actual extension: <none>
+                    does not have the extension
+
+                    Expected: "rs"
+
+                    Details:
+                      - Actual extension: <none>
                     -------- assertr --------
                 "#});
             }
@@ -920,12 +876,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
+                        Actual: "src/assertions/std/path.rs"
 
-                        Did not start with expected prefix: "foobar"
+                        does not start with
+
+                        Expected: "foobar"
 
                         Details:
-                          - Only whole path components are matched!
+                          - Only whole path components are matched.
                         -------- assertr --------
                     "#});
             }
@@ -943,12 +901,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
+                        Actual: "src/assertions/std/path.rs"
 
-                        Did not start with expected prefix: "assert"
+                        does not start with
+
+                        Expected: "assert"
 
                         Details:
-                          - Only whole path components are matched!
+                          - Only whole path components are matched.
                         -------- assertr --------
                     "#});
             }
@@ -981,12 +941,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
+                        Actual: "src/assertions/std/path.rs"
 
-                        Did not end with expected postfix: "foobar"
+                        does not end with
+
+                        Expected: "foobar"
 
                         Details:
-                          - Only whole path components are matched!
+                          - Only whole path components are matched.
                         -------- assertr --------
                     "#});
             }
@@ -1002,12 +964,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
+                        Actual: "src/assertions/std/path.rs"
 
-                        Did not end with expected postfix: "ath.rs"
+                        does not end with
+
+                        Expected: "ath.rs"
 
                         Details:
-                          - Only whole path components are matched!
+                          - Only whole path components are matched.
                         -------- assertr --------
                     "#});
             }
@@ -1072,9 +1036,9 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Expected: "src/assertions/std/some-non-existing-file.rs"
+                        Actual: "src/assertions/std/some-non-existing-file.rs"
 
-                        to exist, but it does not!
+                        does not exist
                         -------- assertr --------
                     "#});
             }
@@ -1103,9 +1067,9 @@ mod tests {
                 assert_that_panic_by(|| assert_that!(path).with_location(false).does_not_exist())
                     .has_type::<String>()
                     .contains("-------- assertr --------")
-                    .contains("Expected: \"")
+                    .contains("Actual: \"")
                     .contains("src/assertions/std/path.rs\"")
-                    .contains("to not exist, but it does!");
+                    .contains("unexpectedly exists");
             }
         }
 
@@ -1137,9 +1101,10 @@ mod tests {
                 })
                 .has_type::<String>()
                 .contains("-------- assertr --------")
-                .contains("Expected: \"")
+                .contains("Actual: \"")
                 .contains("src/assertions/std\"")
-                .contains("to be a file, but it is not!");
+                .contains("is not a file")
+                .contains("Details:\n  - The path is a directory.");
             }
         }
 
@@ -1172,11 +1137,10 @@ mod tests {
                 })
                 .has_type::<String>()
                 .contains("-------- assertr --------")
-                .contains("Expected: \"")
+                .contains("Actual: \"")
                 .contains("src/assertions/std/path.rs\"")
-                .contains("to be a directory, but it is not!")
-                .contains("The path exists: true")
-                .contains("The path is a file: true");
+                .contains("is not a directory")
+                .contains("Details:\n  - The path is a file.");
             }
         }
 
@@ -1231,9 +1195,12 @@ mod tests {
                     -------- assertr --------
                     Expression: `path.to_path_buf()`
 
-                    Expected: "{}"
+                    Actual: "{}"
 
-                    to be a symlink, but it is not!
+                    is not a symlink
+
+                    Details:
+                      - The path is a file.
                     -------- assertr --------
                 "#, source_relative_path!().display()});
             }
@@ -1266,9 +1233,9 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Expected: "foo/bar/baz.rs"
+                        Actual: "foo/bar/baz.rs"
 
-                        to be a root-path, but it is not!
+                        does not have a root
                         -------- assertr --------
                     "#});
             }
@@ -1301,9 +1268,9 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Expected: "/foo/bar/baz.rs"
+                        Actual: "/foo/bar/baz.rs"
 
-                        to be a relative path, but it is not!
+                        is not relative
                         -------- assertr --------
                     "#});
             }
@@ -1340,10 +1307,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
-    
-                        Expected filename: "some.json"
-                          Actual filename: "path.rs"
+                        Actual: "src/assertions/std/path.rs"
+
+                        does not have the file name
+
+                        Expected: "some.json"
+
+                        Details:
+                          - Actual file name: "path.rs"
                         -------- assertr --------
                     "#});
             }
@@ -1359,10 +1330,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `path`
 
-                    Path: "/"
+                    Actual: "/"
 
-                    Expected filename: "foo"
-                      Actual filename: <none>
+                    does not have the file name
+
+                    Expected: "foo"
+
+                    Details:
+                      - Actual file name: <none>
                     -------- assertr --------
                 "#});
             }
@@ -1399,10 +1374,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
-    
-                        Expected filestem: "some"
-                          Actual filestem: "path"
+                        Actual: "src/assertions/std/path.rs"
+
+                        does not have the file stem
+
+                        Expected: "some"
+
+                        Details:
+                          - Actual file stem: "path"
                         -------- assertr --------
                     "#});
             }
@@ -1418,10 +1397,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `path`
 
-                    Path: "/"
+                    Actual: "/"
 
-                    Expected filestem: "foo"
-                      Actual filestem: <none>
+                    does not have the file stem
+
+                    Expected: "foo"
+
+                    Details:
+                      - Actual file stem: <none>
                     -------- assertr --------
                 "#});
             }
@@ -1458,10 +1441,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
-    
-                        Expected extension: "json"
-                          Actual extension: "rs"
+                        Actual: "src/assertions/std/path.rs"
+
+                        does not have the extension
+
+                        Expected: "json"
+
+                        Details:
+                          - Actual extension: "rs"
                         -------- assertr --------
                     "#});
             }
@@ -1477,10 +1464,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `path`
 
-                    Path: "/"
+                    Actual: "/"
 
-                    Expected extension: "rs"
-                      Actual extension: <none>
+                    does not have the extension
+
+                    Expected: "rs"
+
+                    Details:
+                      - Actual extension: <none>
                     -------- assertr --------
                 "#});
             }
@@ -1516,12 +1507,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
+                        Actual: "src/assertions/std/path.rs"
 
-                        Did not start with expected prefix: "foobar"
+                        does not start with
+
+                        Expected: "foobar"
 
                         Details:
-                          - Only whole path components are matched!
+                          - Only whole path components are matched.
                         -------- assertr --------
                     "#});
             }
@@ -1539,12 +1532,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
+                        Actual: "src/assertions/std/path.rs"
 
-                        Did not start with expected prefix: "assert"
+                        does not start with
+
+                        Expected: "assert"
 
                         Details:
-                          - Only whole path components are matched!
+                          - Only whole path components are matched.
                         -------- assertr --------
                     "#});
             }
@@ -1578,12 +1573,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
+                        Actual: "src/assertions/std/path.rs"
 
-                        Did not end with expected postfix: "foobar"
+                        does not end with
+
+                        Expected: "foobar"
 
                         Details:
-                          - Only whole path components are matched!
+                          - Only whole path components are matched.
                         -------- assertr --------
                     "#});
             }
@@ -1599,12 +1596,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `path`
 
-                        Path: "src/assertions/std/path.rs"
+                        Actual: "src/assertions/std/path.rs"
 
-                        Did not end with expected postfix: "ath.rs"
+                        does not end with
+
+                        Expected: "ath.rs"
 
                         Details:
-                          - Only whole path components are matched!
+                          - Only whole path components are matched.
                         -------- assertr --------
                     "#});
             }

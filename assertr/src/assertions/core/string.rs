@@ -1,7 +1,4 @@
-use crate::{AssertThat, Mode, ValueRenderer};
-use alloc::string::String;
-use core::fmt::Write;
-use indoc::writedoc;
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// String-specific assertions.
 ///
@@ -81,16 +78,10 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         // This iterator will yield no entries if the string is empty or all whitespace!
         if actual.split_whitespace().next().is_some() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    contains non-whitespace characters.
-
-                    Expected it to be empty or only containing whitespace.
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(self.actual()))
+                .relation("is not blank")
+                .raise();
         }
         self
     }
@@ -103,16 +94,10 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         self.track_assertion();
         let actual = self.actual().as_ref();
         if actual.split_whitespace().next().is_none() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is blank.
-
-                    Expected it to contain at least one non-whitespace character.
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(self.actual()))
+                .relation("is unexpectedly blank")
+                .raise();
         }
         self
     }
@@ -126,16 +111,10 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         // This iterator will yield no entries if the string is empty or all whitespace!
         if actual.split_ascii_whitespace().next().is_some() {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    contains non-ASCII-whitespace characters.
-
-                    Expected it to be empty or only containing ASCII whitespace.
-                "}
-            });
+            self.failure(FailureKind::Other)
+                .actual(self.render().value(self.actual()))
+                .relation("is not ASCII blank")
+                .raise();
         }
         self
     }
@@ -149,17 +128,11 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let expected = expected.as_ref();
         if !actual.eq_ignore_ascii_case(expected) {
-            let details = [String::from(
-                "Actual is not equal to expected, even when ignoring ASCII casing.",
-            )];
-            let actual = self.render().value(self.actual());
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(self.actual()))
+                .expected(expected)
+                .note("Values differ even when ignoring ASCII case.")
+                .raise();
         }
         self
     }
@@ -173,16 +146,11 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let expected = expected.as_ref();
         if !actual.contains(expected) {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    does not contain
-
-                    Expected: {expected:#?}
-                "}
-            });
+            self.failure(FailureKind::Membership)
+                .actual(self.render().value(self.actual()))
+                .relation("does not contain")
+                .expected(expected)
+                .raise();
         }
         self
     }
@@ -196,16 +164,11 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let unexpected = unexpected.as_ref();
         if actual.contains(unexpected) {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    contains
-
-                    Unexpected: {unexpected:#?}
-                "}
-            });
+            self.failure(FailureKind::Membership)
+                .actual(self.render().value(self.actual()))
+                .relation("contains")
+                .unexpected(unexpected)
+                .raise();
         }
         self
     }
@@ -219,16 +182,11 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let expected = expected.as_ref();
         if !actual.starts_with(expected) {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    does not start with
-
-                    Expected: {expected:#?}
-                "}
-            });
+            self.failure(FailureKind::Membership)
+                .actual(self.render().value(self.actual()))
+                .relation("does not start with")
+                .expected(expected)
+                .raise();
         }
         self
     }
@@ -242,16 +200,11 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let unexpected = unexpected.as_ref();
         if actual.starts_with(unexpected) {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    starts with
-
-                    Unexpected: {unexpected:#?}
-                "}
-            });
+            self.failure(FailureKind::Membership)
+                .actual(self.render().value(self.actual()))
+                .relation("starts with")
+                .unexpected(unexpected)
+                .raise();
         }
         self
     }
@@ -265,16 +218,11 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let expected = expected.as_ref();
         if !actual.ends_with(expected) {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    does not end with
-
-                    Expected: {expected:#?}
-                "}
-            });
+            self.failure(FailureKind::Membership)
+                .actual(self.render().value(self.actual()))
+                .relation("does not end with")
+                .expected(expected)
+                .raise();
         }
         self
     }
@@ -288,16 +236,11 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         let actual = self.actual().as_ref();
         let unexpected = unexpected.as_ref();
         if actual.ends_with(unexpected) {
-            let actual = self.render().value(self.actual());
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    ends with
-
-                    Unexpected: {unexpected:#?}
-                "}
-            });
+            self.failure(FailureKind::Membership)
+                .actual(self.render().value(self.actual()))
+                .relation("ends with")
+                .unexpected(unexpected)
+                .raise();
         }
         self
     }
@@ -347,9 +290,7 @@ mod tests {
 
                 Actual: "a"
 
-                contains non-whitespace characters.
-
-                Expected it to be empty or only containing whitespace.
+                is not blank
                 -------- assertr --------
             "#});
         }
@@ -385,9 +326,7 @@ mod tests {
 
                 Actual: "a"
 
-                contains non-ASCII-whitespace characters.
-
-                Expected it to be empty or only containing ASCII whitespace.
+                is not ASCII blank
                 -------- assertr --------
             "#});
         }
@@ -404,9 +343,7 @@ mod tests {
 
                 Actual: "\u{{a0}}"
 
-                contains non-ASCII-whitespace characters.
-
-                Expected it to be empty or only containing ASCII whitespace.
+                is not ASCII blank
                 -------- assertr --------
             "#});
         }
@@ -441,9 +378,7 @@ mod tests {
 
                 Actual: "\t \n"
 
-                is blank.
-
-                Expected it to contain at least one non-whitespace character.
+                is unexpectedly blank
                 -------- assertr --------
             "#});
         }
@@ -482,7 +417,7 @@ mod tests {
                   Actual: "foo"
 
                 Details:
-                  - Actual is not equal to expected, even when ignoring ASCII casing.
+                  - Values differ even when ignoring ASCII case.
                 -------- assertr --------
             "#});
         }
@@ -495,7 +430,7 @@ mod tests {
                     .is_equal_to_ignoring_ascii_case("STRAẞE");
             })
             .has_type::<String>()
-            .contains("ignoring ASCII casing");
+            .contains("ignoring ASCII case");
         }
     }
 
@@ -791,7 +726,7 @@ mod tests {
             let rendered = |failures: Vec<AssertionFailure>| {
                 failures
                     .iter()
-                    .map(|failure| failure.description.clone())
+                    .map(AssertionFailure::description)
                     .collect::<Vec<_>>()
             };
 

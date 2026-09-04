@@ -1,11 +1,11 @@
-use crate::{AssertThat, actual::Actual, mode::Panic};
-use alloc::borrow::Cow;
+use crate::{AssertThat, actual::Actual, failure::FailureKind, mode::Panic};
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::vec::Vec;
 use core::any::{Any, type_name, type_name_of_val};
-use core::fmt::Write;
-use indoc::writedoc;
+
+/// Explains the erased type name reported for a box whose payload is neither a `&str` nor a
+/// `String`.
+const ERASED_TYPE_NOTE: &str = "A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.";
 
 /// Downcasting assertions for `Box<dyn Any>` subjects.
 ///
@@ -27,105 +27,8 @@ pub trait BoxAssertions<'t, R> {
 
 impl<'t, R> BoxAssertions<'t, R> for AssertThat<'t, Box<dyn Any>, Panic, R> {
     #[track_caller]
-    #[allow(clippy::too_many_lines)]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
-        enum CastResult<'c, C> {
-            Owned(Box<C>),
-            Ref(&'c C),
-            Err {
-                actual: Actual<'c, Box<dyn Any>>,
-                actual_type_name: Cow<'static, str>,
-                actual_type_name_will_be_any: bool,
-            },
-        }
-
-        self.track_assertion();
-        let AssertThat { actual, state } = self;
-
-        let cast = match actual {
-            crate::actual::Actual::Borrowed(borrowed_boxed_any) => {
-                let is_str = borrowed_boxed_any.downcast_ref::<&str>().is_some();
-                let is_string = borrowed_boxed_any.downcast_ref::<String>().is_some();
-
-                let mut actual_type_name_will_be_any = false;
-                let actual_type_name = if is_str {
-                    Cow::Borrowed("&str")
-                } else if is_string {
-                    Cow::Borrowed("String")
-                } else {
-                    // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
-                    actual_type_name_will_be_any = true;
-                    Cow::Borrowed(type_name_of_val(&**borrowed_boxed_any))
-                };
-
-                borrowed_boxed_any.downcast_ref::<E>().map_or_else(
-                    || CastResult::Err {
-                        actual: Actual::Borrowed(borrowed_boxed_any),
-                        actual_type_name,
-                        actual_type_name_will_be_any,
-                    },
-                    |it| CastResult::Ref(it),
-                )
-            }
-            crate::actual::Actual::Owned(owned_box_any) => {
-                let is_str = owned_box_any.downcast_ref::<&str>().is_some();
-                let is_string = owned_box_any.downcast_ref::<String>().is_some();
-
-                let mut actual_type_name_will_be_any = false;
-                let actual_type_name = if is_str {
-                    Cow::Borrowed("&str")
-                } else if is_string {
-                    Cow::Borrowed("String")
-                } else {
-                    // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
-                    actual_type_name_will_be_any = true;
-                    Cow::Borrowed(type_name_of_val(&*owned_box_any))
-                };
-
-                owned_box_any.downcast::<E>().map_or_else(
-                    |actual| CastResult::Err {
-                        actual: Actual::Owned(actual),
-                        actual_type_name,
-                        actual_type_name_will_be_any,
-                    },
-                    |it| CastResult::Owned(it),
-                )
-            }
-        };
-
-        match cast {
-            CastResult::Owned(casted) => AssertThat {
-                actual: (*casted).into(),
-                state,
-            },
-            CastResult::Ref(casted) => AssertThat {
-                actual: casted.into(),
-                state,
-            },
-            CastResult::Err {
-                actual,
-                actual_type_name,
-                actual_type_name_will_be_any,
-            } => {
-                let assertion = AssertThat { actual, state };
-
-                let expected_type_name = type_name::<E>();
-
-                let mut details = Vec::new();
-                if actual_type_name_will_be_any {
-                    details.push(String::from("A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code."));
-                }
-
-                assertion.fail_with_details(details, |w: &mut String| {
-                    writedoc! {w, r"
-                        Expected value type: {expected_type_name}
-
-                          Actual value type: {actual_type_name}
-                    "}
-                });
-                unreachable!("Panic mode always panics on fail")
-            }
-        }
+        downcast(self, FailureKind::Variant, ERASED_TYPE_NOTE)
     }
 
     #[track_caller]
@@ -135,36 +38,88 @@ impl<'t, R> BoxAssertions<'t, R> for AssertThat<'t, Box<dyn Any>, Panic, R> {
     {
         self.track_assertion();
 
-        let any = &self.actual();
-        if let Some(casted) = any.downcast_ref::<E>() {
-            self.derive_owned(|_actual| casted)
-        } else {
-            let expected_type_name = type_name::<E>();
-
-            let is_str = any.downcast_ref::<&str>().is_some();
-            let is_string = any.downcast_ref::<String>().is_some();
-
-            let mut details = Vec::new();
-            let actual_type_name = if is_str {
-                Cow::Borrowed("&str")
-            } else if is_string {
-                Cow::Borrowed("String")
-            } else {
-                // Note: This call to `type_name_of_val` will just return "dyn core::any::Any"...
-                details.push(String::from("A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code."));
-                Cow::Borrowed(type_name_of_val(&**self.actual()))
-            };
-
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected value type: {expected_type_name}
-
-                      Actual value type: {actual_type_name}
-                "}
-            });
-            unreachable!("Panic mode always panics on fail")
+        match self.actual().downcast_ref::<E>() {
+            Some(casted) => self.derive_owned(|_actual| casted),
+            None => raise_type_mismatch::<_, _, E>(
+                self,
+                FailureKind::Variant,
+                &**self.actual(),
+                ERASED_TYPE_NOTE,
+            ),
         }
     }
+}
+
+/// Downcasts a boxed `Any` subject to `E`.
+///
+/// This is the body of every `has_type` over a `Box<dyn Any>`, shared with the panic-payload
+/// assertions. A box holding another type raises a failure of `kind`, with `erased_note`
+/// attached when that type cannot be named.
+#[track_caller]
+pub(super) fn downcast<'t, E: 'static, R>(
+    this: AssertThat<'t, Box<dyn Any>, Panic, R>,
+    kind: FailureKind,
+    erased_note: &'static str,
+) -> AssertThat<'t, E, Panic, R> {
+    this.track_assertion();
+    let AssertThat { actual, state } = this;
+
+    let actual = match actual {
+        Actual::Borrowed(boxed) => match boxed.downcast_ref::<E>() {
+            Some(casted) => {
+                return AssertThat {
+                    actual: Actual::Borrowed(casted),
+                    state,
+                };
+            }
+            None => Actual::Borrowed(boxed),
+        },
+        Actual::Owned(boxed) => match boxed.downcast::<E>() {
+            Ok(casted) => {
+                return AssertThat {
+                    actual: Actual::Owned(*casted),
+                    state,
+                };
+            }
+            Err(boxed) => Actual::Owned(boxed),
+        },
+    };
+
+    let this = AssertThat { actual, state };
+    raise_type_mismatch::<_, _, E>(&this, kind, &**this.actual(), erased_note)
+}
+
+/// Raises the failure of a downcast of `any` to `E` on a panic-mode chain and therefore never
+/// returns.
+///
+/// The payload types `panic!` produces, `&str` and `String`, are named. Any other type is
+/// reported as the erased `dyn Any`, explained by `erased_note`.
+#[track_caller]
+pub(super) fn raise_type_mismatch<T, R, E: 'static>(
+    this: &AssertThat<'_, T, Panic, R>,
+    kind: FailureKind,
+    any: &dyn Any,
+    erased_note: &'static str,
+) -> ! {
+    let (actual_type_name, erased) = if any.is::<&str>() {
+        ("&str", false)
+    } else if any.is::<String>() {
+        ("String", false)
+    } else {
+        // `type_name_of_val` cannot see through the trait object and yields "dyn core::any::Any".
+        (type_name_of_val(any), true)
+    };
+
+    let mut failure = this
+        .failure(kind)
+        .actual(format_args!("{actual_type_name}"))
+        .relation("is not of the expected type")
+        .expected(format_args!("{}", type_name::<E>()));
+    if erased {
+        failure = failure.note(erased_note);
+    }
+    failure.raise();
+    unreachable!("Panic mode always panics on fail")
 }
 
 #[cfg(test)]
@@ -230,9 +185,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `boxed_any`
 
-                    Expected value type: u32
+                    Actual: &str
 
-                      Actual value type: &str
+                    is not of the expected type
+
+                    Expected: u32
                     -------- assertr --------
                 "});
         }
@@ -252,9 +209,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `boxed_any`
 
-                Expected value type: u32
+                Actual: dyn core::any::Any
 
-                  Actual value type: dyn core::any::Any
+                is not of the expected type
+
+                Expected: u32
 
                 Details:
                   - A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
@@ -277,9 +236,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `boxed_any`
 
-                Expected value type: u32
+                Actual: dyn core::any::Any
 
-                  Actual value type: dyn core::any::Any
+                is not of the expected type
+
+                Expected: u32
 
                 Details:
                   - A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
@@ -324,9 +285,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `actual`
 
-                Expected value type: u32
+                Actual: String
 
-                  Actual value type: String
+                is not of the expected type
+
+                Expected: u32
                 -------- assertr --------
             "});
         }
@@ -345,9 +308,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `actual`
 
-                Expected value type: u32
+                Actual: &str
 
-                  Actual value type: &str
+                is not of the expected type
+
+                Expected: u32
                 -------- assertr --------
             "});
         }
@@ -367,9 +332,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `actual`
 
-                Expected value type: u32
+                Actual: dyn core::any::Any
 
-                  Actual value type: dyn core::any::Any
+                is not of the expected type
+
+                Expected: u32
 
                 Details:
                   - A Box<dyn Any> means that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.

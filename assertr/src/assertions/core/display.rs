@@ -1,11 +1,8 @@
 use alloc::format;
-use alloc::string::String;
 use core::fmt::Display;
-use core::fmt::Write;
-use indoc::writedoc;
 
 use crate::assertions::core::strip_quotation_marks;
-use crate::{AssertThat, Mode};
+use crate::{AssertThat, Mode, failure::FailureKind};
 
 /// Assertions over a subject's [`Display`] representation.
 #[allow(clippy::return_self_not_must_use)]
@@ -30,13 +27,10 @@ impl<T: Display, M: Mode, R> DisplayAssertions for AssertThat<'_, T, M, R> {
         let expected_str = strip_quotation_marks(expected_string.as_str());
 
         if actual_str != expected_str {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected_str:?}
-
-                      Actual: {actual_str:?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(actual_str)
+                .expected(expected_str)
+                .raise();
         }
         self
     }

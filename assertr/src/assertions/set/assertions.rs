@@ -127,7 +127,10 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_subset_of(&expected));
 
-            assert_that!(failures[0].details.as_slice()).is_empty();
+            assert_that!(failures[0].facts.as_slice()).contains_exactly([crate::Fact::new(
+                "Elements not in expected",
+                "[\n    \"extra\",\n]",
+            )]);
         }
 
         #[test]
@@ -167,15 +170,14 @@ mod tests {
                         "bar",
                     }} (sorted for rendering)
 
-                    is not a subset of expected
+                    is not a subset of
 
-                    Expected superset: BTreeSet {{}}
-
-                    Elements not in expected: [
-                        "bar",
-                    ]
+                    Expected: BTreeSet {{}}
 
                     Details:
+                      - Elements not in expected: [
+                            "bar",
+                        ] (sorted for rendering)
                       - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
                     -------- assertr --------
                 "#});
@@ -197,13 +199,14 @@ mod tests {
                         "bar",
                     }}
 
-                    is not a subset of expected
+                    is not a subset of
 
-                    Expected superset: BTreeSet {{}}
+                    Expected: BTreeSet {{}}
 
-                    Elements not in expected: [
-                        "bar",
-                    ]
+                    Details:
+                      - Elements not in expected: [
+                            "bar",
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -278,17 +281,16 @@ mod tests {
 
                     Actual: HashSet {{}} (sorted for rendering)
 
-                    is not a superset of expected
+                    is not a superset of
 
-                    Expected subset: BTreeSet {{
+                    Expected: BTreeSet {{
                         "bar",
                     }}
 
-                    Elements not in actual: [
-                        "bar",
-                    ]
-
                     Details:
+                      - Elements not in actual: [
+                            "bar",
+                        ]
                       - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
                     -------- assertr --------
                 "#});
@@ -308,15 +310,16 @@ mod tests {
 
                     Actual: BTreeSet {{}}
 
-                    is not a superset of expected
+                    is not a superset of
 
-                    Expected subset: BTreeSet {{
+                    Expected: BTreeSet {{
                         "bar",
                     }}
 
-                    Elements not in actual: [
-                        "bar",
-                    ]
+                    Details:
+                      - Elements not in actual: [
+                            "bar",
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -393,17 +396,16 @@ mod tests {
                         "foo",
                     }} (sorted for rendering)
 
-                    is not disjoint from expected
+                    is not disjoint from
 
-                    Expected disjoint set: BTreeSet {{
+                    Expected: BTreeSet {{
                         "foo",
                     }}
 
-                    Overlapping elements: [
-                        "foo",
-                    ]
-
                     Details:
+                      - Overlapping elements: [
+                            "foo",
+                        ] (sorted for rendering)
                       - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
                     -------- assertr --------
                 "#});
@@ -425,15 +427,16 @@ mod tests {
                         "foo",
                     }}
 
-                    is not disjoint from expected
+                    is not disjoint from
 
-                    Expected disjoint set: BTreeSet {{
+                    Expected: BTreeSet {{
                         "foo",
                     }}
 
-                    Overlapping elements: [
-                        "foo",
-                    ]
+                    Details:
+                      - Overlapping elements: [
+                            "foo",
+                        ]
                     -------- assertr --------
                 "#});
         }

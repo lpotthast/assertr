@@ -1,8 +1,6 @@
-use core::fmt::Write;
-use indoc::writedoc;
 use std::sync::{Mutex, TryLockError};
 
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions for the lock and poison state of [`Mutex`].
 ///
@@ -49,14 +47,16 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
                 Err(TryLockError::WouldBlock) => None,
             };
             if let Some(guard) = acquired {
-                let data = self.render().value(&*guard);
-                self.fail(|w: &mut String| {
-                    writedoc! {w, r"
-                        Expected: Mutex {{ data: {data:#?}, poisoned: {poisoned} }}
-
-                        to be locked, but it wasn't!
-                    ", poisoned = actual.is_poisoned()}
-                });
+                let mut failure = self
+                    .failure(FailureKind::Other)
+                    .actual(self.render().struct_field(actual, "Mutex", "data", &*guard))
+                    .relation("is not locked");
+                if actual.is_poisoned() {
+                    failure = failure.note("The mutex is poisoned.");
+                }
+                // Release the lock before raising, so a panic does not poison the mutex.
+                drop(guard);
+                failure.raise();
             }
         }
         self
@@ -67,13 +67,17 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if matches!(actual.try_lock(), Err(TryLockError::WouldBlock)) {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected: Mutex {{ data: <locked>, poisoned: {poisoned} }}
-
-                    to not be locked, but it was!
-                ", poisoned = actual.is_poisoned()}
-            });
+            let mut failure = self
+                .failure(FailureKind::Other)
+                .actual(
+                    self.render()
+                        .unavailable_struct_field(actual, "Mutex", "data", "<locked>"),
+                )
+                .relation("is unexpectedly locked");
+            if actual.is_poisoned() {
+                failure = failure.note("The mutex is poisoned.");
+            }
+            failure.raise();
         }
         self
     }
@@ -82,9 +86,9 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
     fn is_poisoned(self) -> Self {
         self.track_assertion();
         if !self.actual().is_poisoned() {
-            self.fail(|w: &mut String| {
-                writeln!(w, "Expected the mutex to be poisoned, but it was not!")
-            });
+            self.failure(FailureKind::Other)
+                .relation("is not poisoned")
+                .raise();
         }
         self
     }
@@ -93,9 +97,9 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
     fn is_not_poisoned(self) -> Self {
         self.track_assertion();
         if self.actual().is_poisoned() {
-            self.fail(|w: &mut String| {
-                writeln!(w, "Expected the mutex to not be poisoned, but it was!")
-            });
+            self.failure(FailureKind::Other)
+                .relation("is unexpectedly poisoned")
+                .raise();
         }
         self
     }
@@ -128,8 +132,7 @@ mod tests {
                 .with_location(false)
                 .capture(MutexAssertions::is_locked);
 
-            assert_that!(failures[0].description.as_str())
-                .contains(format!("Mutex {{ data: {SENTINEL}, poisoned: false }}"));
+            assert_that!(failures[0].description()).contains(format!("data: {SENTINEL},"));
         }
     }
 
@@ -178,9 +181,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `mutex`
 
-                    Expected: Mutex {{ data: 42, poisoned: false }}
+                    Actual: Mutex {{
+                        data: 42,
+                    }}
 
-                    to be locked, but it wasn't!
+                    is not locked
                     -------- assertr --------
                 "});
         }
@@ -194,9 +199,14 @@ mod tests {
                     -------- assertr --------
                     Expression: `mutex`
 
-                    Expected: Mutex {{ data: 42, poisoned: true }}
+                    Actual: Mutex {{
+                        data: 42,
+                    }}
 
-                    to be locked, but it wasn't!
+                    is not locked
+
+                    Details:
+                      - The mutex is poisoned.
                     -------- assertr --------
                 "});
         }
@@ -229,9 +239,11 @@ mod tests {
                     -------- assertr --------
                     Expression: `&mutex`
 
-                    Expected: Mutex {{ data: <locked>, poisoned: false }}
+                    Actual: Mutex {{
+                        data: <locked>,
+                    }}
 
-                    to not be locked, but it was!
+                    is unexpectedly locked
                     -------- assertr --------
                 "});
             drop(guard);
@@ -287,7 +299,7 @@ mod tests {
                 -------- assertr --------
                 Expression: `Mutex::new(42)`
 
-                Expected the mutex to be poisoned, but it was not!
+                is not poisoned
                 -------- assertr --------
             "});
         }
@@ -321,7 +333,7 @@ mod tests {
                 -------- assertr --------
                 Expression: `super::poisoned_mutex()`
 
-                Expected the mutex to not be poisoned, but it was!
+                is unexpectedly poisoned
                 -------- assertr --------
             "});
         }

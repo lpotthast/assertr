@@ -1,7 +1,4 @@
-use alloc::string::String;
-use core::fmt::Write;
-use indoc::writedoc;
-
+use crate::failure::FailureKind;
 use crate::mode::Mode;
 use crate::{AssertThat, ValueRenderer};
 
@@ -50,18 +47,11 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.eq_ignore_ascii_case(&expected) {
-            let details = [String::from(
-                "Actual is not equal to expected, even when ignoring casing.",
-            )];
-            let actual = self.render().value(actual);
-            let expected = self.render().value(&expected);
-            self.fail_with_details(details, |w: &mut String| {
-                writedoc! {w, r"
-                    Expected: {expected:#?}
-
-                      Actual: {actual:#?}
-                "}
-            });
+            self.failure(FailureKind::Equality)
+                .actual(self.render().value(actual))
+                .relation("is not equal to ignoring ASCII case")
+                .expected(self.render().value(&expected))
+                .raise();
         }
         self
     }
@@ -74,12 +64,10 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_lowercase() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected {actual:#?} to be lowercase, but it is not.
-                "}
-            });
+            self.failure(FailureKind::Predicate)
+                .actual(self.render().value(actual))
+                .relation("is not lowercase")
+                .raise();
         }
         self
     }
@@ -92,12 +80,10 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_uppercase() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected {actual:#?} to be uppercase, but it is not.
-                "}
-            });
+            self.failure(FailureKind::Predicate)
+                .actual(self.render().value(actual))
+                .relation("is not uppercase")
+                .raise();
         }
         self
     }
@@ -110,12 +96,10 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_ascii_lowercase() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected {actual:#?} to be an ascii-lowercase char, but it is not.
-                "}
-            });
+            self.failure(FailureKind::Predicate)
+                .actual(self.render().value(actual))
+                .relation("is not an ASCII lowercase letter")
+                .raise();
         }
         self
     }
@@ -128,12 +112,10 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
         self.track_assertion();
         let actual = self.actual();
         if !actual.is_ascii_uppercase() {
-            let actual = self.render().value(actual);
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Expected {actual:#?} to be an ascii-uppercase char, but it is not.
-                "}
-            });
+            self.failure(FailureKind::Predicate)
+                .actual(self.render().value(actual))
+                .relation("is not an ASCII uppercase letter")
+                .raise();
         }
         self
     }
@@ -159,7 +141,7 @@ mod tests {
                 .with_location(false)
                 .capture(CharAssertions::is_lowercase);
 
-            assert_that!(failures[0].description.as_str()).contains(SENTINEL);
+            assert_that!(failures[0].description()).contains(SENTINEL);
         }
     }
 
@@ -190,12 +172,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `'a'`
 
+                Actual: 'a'
+
+                is not equal to ignoring ASCII case
+
                 Expected: 'B'
-                
-                  Actual: 'a'
-                
-                Details:
-                  - Actual is not equal to expected, even when ignoring casing.
                 -------- assertr --------
             "});
         }
@@ -224,7 +205,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `'A'`
 
-                    Expected 'A' to be lowercase, but it is not.
+                    Actual: 'A'
+
+                    is not lowercase
                     -------- assertr --------
                 "});
         }
@@ -253,7 +236,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `'a'`
 
-                    Expected 'a' to be uppercase, but it is not.
+                    Actual: 'a'
+
+                    is not uppercase
                     -------- assertr --------
                 "});
         }
@@ -282,7 +267,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `'A'`
 
-                    Expected 'A' to be an ascii-lowercase char, but it is not.
+                    Actual: 'A'
+
+                    is not an ASCII lowercase letter
                     -------- assertr --------
                 "});
         }
@@ -311,7 +298,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `'a'`
 
-                    Expected 'a' to be an ascii-uppercase char, but it is not.
+                    Actual: 'a'
+
+                    is not an ASCII uppercase letter
                     -------- assertr --------
                 "});
         }

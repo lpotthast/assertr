@@ -1,8 +1,5 @@
-use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, mode::Panic};
-use alloc::string::String;
-use core::fmt::Write;
+use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, failure::FailureKind, mode::Panic};
 use core::option::Option;
-use indoc::writedoc;
 
 /// Panic-mode extraction from `Option` subjects.
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
@@ -23,13 +20,11 @@ impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, P
         self.track_assertion();
 
         if !self.actual().is_some() {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: None
-
-                    is not of expected variant: Option::Some
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(format_args!("None"))
+                .relation("is not the expected variant")
+                .expected(format_args!("Option::Some"))
+                .raise();
         }
 
         self.map(|actual| match actual {
@@ -73,13 +68,11 @@ impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<
         self.track_assertion();
 
         if !self.actual().is_some() {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: None
-
-                    is not of expected variant: Option::Some
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(format_args!("None"))
+                .relation("is not the expected variant")
+                .expected(format_args!("Option::Some"))
+                .raise();
         }
 
         self
@@ -97,13 +90,11 @@ impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<
                 Some(value) => self.render().variant(self.actual(), "Some", value),
                 None => unreachable!("already checked"),
             };
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: {actual:#?}
-
-                    is not of expected variant: Option::None
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(actual)
+                .relation("is not the expected variant")
+                .expected(format_args!("Option::None"))
+                .raise();
         }
 
         self
@@ -120,13 +111,11 @@ impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<
         if self.actual().is_some() {
             self.satisfies(|it| it.as_ref().unwrap(), assertions)
         } else {
-            self.fail(|w: &mut String| {
-                writedoc! {w, r"
-                    Actual: None
-
-                    is not of expected variant: Option::Some
-                "}
-            });
+            self.failure(FailureKind::Variant)
+                .actual(format_args!("None"))
+                .relation("is not the expected variant")
+                .expected(format_args!("Option::Some"))
+                .raise();
             self
         }
     }
@@ -159,7 +148,7 @@ mod tests {
                 .with_location(false)
                 .capture(OptionAssertions::is_none);
 
-            assert_that!(failures[0].description.as_str())
+            assert_that!(failures[0].description())
                 .contains("Some(")
                 .contains(SENTINEL);
         }
@@ -171,7 +160,7 @@ mod tests {
                 .with_location(false)
                 .capture(OptionAssertions::is_some);
 
-            assert_that!(failures[0].description.as_str()).contains("Actual: None");
+            assert_that!(failures[0].description()).contains("Actual: None");
         }
     }
 
@@ -206,7 +195,9 @@ mod tests {
 
                 Actual: None
 
-                is not of expected variant: Option::Some
+                is not the expected variant
+
+                Expected: Option::Some
                 -------- assertr --------
             "});
         }
@@ -225,7 +216,9 @@ mod tests {
 
                         Actual: None
 
-                        is not of expected variant: Option::Some
+                        is not the expected variant
+
+                        Expected: Option::Some
                         -------- assertr --------
                     "});
                 },
@@ -274,7 +267,9 @@ mod tests {
 
                 Actual: None
 
-                is not of expected variant: Option::Some
+                is not the expected variant
+
+                Expected: Option::Some
                 -------- assertr --------
             "});
         }
@@ -370,7 +365,9 @@ mod tests {
 
                         Actual: None
 
-                        is not of expected variant: Option::Some
+                        is not the expected variant
+
+                        Expected: Option::Some
                         -------- assertr --------
                     "});
                 },
@@ -391,7 +388,9 @@ mod tests {
 
                 Actual: None
 
-                is not of expected variant: Option::Some
+                is not the expected variant
+
+                Expected: Option::Some
                 -------- assertr --------
             "});
         }
@@ -431,7 +430,9 @@ mod tests {
                     42,
                 )
 
-                is not of expected variant: Option::None
+                is not the expected variant
+
+                Expected: Option::None
                 -------- assertr --------
             "});
         }
@@ -452,7 +453,9 @@ mod tests {
                             42,
                         )
 
-                        is not of expected variant: Option::None
+                        is not the expected variant
+
+                        Expected: Option::None
                         -------- assertr --------
                     "});
                 },
