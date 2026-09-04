@@ -1,4 +1,4 @@
-//! The one place that turns the fields of an [`AssertionFailure`] into text.
+//! Assertr's stable human-readable failure reporter.
 //!
 //! The body grammar is:
 //!
@@ -28,43 +28,86 @@
 use alloc::string::String;
 use core::fmt::{self, Display, Write};
 
-use super::{AssertionFailure, BANNER, Fact};
+use super::FailureReporter;
+use crate::{AssertionFailure, Fact, failure::BANNER, renderer::Rendered};
+
+/// Produces assertr's stable human-readable failure report.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TextReporter;
+
+impl TextReporter {
+    /// Produces the stable human-readable report for one failure.
+    #[must_use]
+    pub fn report(self, failure: &AssertionFailure) -> String {
+        <Self as FailureReporter>::report(&self, failure)
+    }
+}
+
+impl FailureReporter for TextReporter {
+    type Output = String;
+
+    fn report(&self, failure: &AssertionFailure) -> Self::Output {
+        let mut report = String::new();
+        report.push_str(BANNER);
+        write_report(failure, &mut report, false)
+            .expect("writing a text report to a String cannot fail");
+        report.push_str(BANNER);
+        report
+    }
+}
 
 /// Renders the description of a failure from its fields.
-pub(crate) fn body(
-    actual: Option<&str>,
+fn body(
+    actual: Option<&Rendered>,
     relation: Option<&str>,
-    expected: Option<&str>,
-    unexpected: Option<&str>,
+    expected: Option<&Rendered>,
+    unexpected: Option<&Rendered>,
 ) -> String {
     let mut body = String::new();
 
     if let (Some(actual), None, Some(expected), None) = (actual, relation, expected, unexpected) {
-        let _ = write!(body, "Expected: {expected}\n\n  Actual: {actual}\n");
+        body.push_str("Expected: ");
+        write_value(&mut body, expected);
+        body.push_str("\n\n  Actual: ");
+        write_value(&mut body, actual);
+        body.push('\n');
         return body;
     }
 
-    let paragraphs = [
-        actual.map(|actual| ("Actual: ", actual)),
-        relation.map(|relation| ("", relation)),
-        expected.map(|expected| ("Expected: ", expected)),
-        unexpected.map(|unexpected| ("Unexpected: ", unexpected)),
-    ];
-    for (label, text) in paragraphs.into_iter().flatten() {
+    if let Some(actual) = actual {
+        write_body_value(&mut body, "Actual: ", actual);
+    }
+    if let Some(relation) = relation {
         if !body.is_empty() {
             body.push('\n');
         }
-        let _ = writeln!(body, "{label}{}", text.trim_end_matches('\n'));
+        body.push_str(relation.trim_end_matches('\n'));
+        body.push('\n');
+    }
+    if let Some(expected) = expected {
+        write_body_value(&mut body, "Expected: ", expected);
+    }
+    if let Some(unexpected) = unexpected {
+        write_body_value(&mut body, "Unexpected: ", unexpected);
     }
     body
 }
 
-impl Display for AssertionFailure {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(BANNER)?;
-        write_report(self, f, false)?;
-        f.write_str(BANNER)
+fn write_body_value(body: &mut String, label: &str, value: &Rendered) {
+    if !body.is_empty() {
+        body.push('\n');
     }
+    body.push_str(label);
+    write_value(body, value);
+    body.push('\n');
+}
+
+fn write_value(output: &mut String, value: &Rendered) {
+    let mut rendered = String::new();
+    value
+        .write(&mut rendered, true)
+        .expect("writing a rendered value to a String cannot fail");
+    output.push_str(rendered.trim_end_matches('\n'));
 }
 
 /// Writes everything between the banners.
@@ -94,7 +137,12 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) ->
         w.write_str("\n")?;
     }
 
-    let description = failure.description();
+    let description = body(
+        failure.actual.as_ref(),
+        failure.relation.as_deref(),
+        failure.expected.as_ref(),
+        failure.unexpected.as_ref(),
+    );
     let has_body = !description.is_empty();
     w.write_str(&description)?;
 
@@ -123,7 +171,9 @@ impl Display for FactText<'_> {
             f.write_str(&self.0.label)?;
             f.write_str(": ")?;
         }
-        f.write_str(self.0.value.trim_end_matches('\n'))
+        let mut value = String::new();
+        self.0.value.write(&mut value, true)?;
+        f.write_str(value.trim_end_matches('\n'))
     }
 }
 
@@ -156,7 +206,9 @@ fn write_children(w: &mut dyn Write, children: &[AssertionFailure]) -> fmt::Resu
         w.write_str("  - ")?;
         let heading = child.facts.iter().find(|fact| fact.is_location());
         if let Some(heading) = heading {
-            writeln!(w, "At {} {}:", heading.label, heading.value)?;
+            write!(w, "At {} ", heading.label)?;
+            heading.value.write(w, false)?;
+            writeln!(w, ":")?;
             write_report(child, &mut Indented::at_line_start(w), true)?;
         } else {
             write_report(child, &mut Indented::continuing(w), false)?;
@@ -236,24 +288,34 @@ impl Write for Indented<'_> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
+    use crate::renderer::IntoRendered;
 
-    use super::body;
+    use super::{TextReporter, body};
 
     mod body_grammar {
         use super::*;
 
+        fn rendered(text: &str) -> crate::renderer::Rendered {
+            text.into_rendered()
+        }
+
         #[test]
         fn renders_a_direct_comparison_as_the_aligned_pair() {
-            assert_that!(body(Some("42"), None, Some("43"), None))
-                .is_equal_to("Expected: 43\n\n  Actual: 42\n");
+            assert_that!(body(
+                Some(&rendered("42")),
+                None,
+                Some(&rendered("43")),
+                None
+            ))
+            .is_equal_to("Expected: 43\n\n  Actual: 42\n");
         }
 
         #[test]
         fn renders_a_relation_between_actual_and_expected() {
             assert_that!(body(
-                Some("42"),
+                Some(&rendered("42")),
                 Some("is not greater than"),
-                Some("43"),
+                Some(&rendered("43")),
                 None
             ))
             .is_equal_to("Actual: 42\n\nis not greater than\n\nExpected: 43\n");
@@ -261,14 +323,24 @@ mod tests {
 
         #[test]
         fn renders_an_unexpected_value_after_the_relation() {
-            assert_that!(body(Some("[1, 2]"), Some("contains"), None, Some("2")))
-                .is_equal_to("Actual: [1, 2]\n\ncontains\n\nUnexpected: 2\n");
+            assert_that!(body(
+                Some(&rendered("[1, 2]")),
+                Some("contains"),
+                None,
+                Some(&rendered("2"))
+            ))
+            .is_equal_to("Actual: [1, 2]\n\ncontains\n\nUnexpected: 2\n");
         }
 
         #[test]
         fn leaves_absent_parts_out() {
-            assert_that!(body(Some("[]"), Some("is unexpectedly empty"), None, None))
-                .is_equal_to("Actual: []\n\nis unexpectedly empty\n");
+            assert_that!(body(
+                Some(&rendered("[]")),
+                Some("is unexpectedly empty"),
+                None,
+                None
+            ))
+            .is_equal_to("Actual: []\n\nis unexpectedly empty\n");
             assert_that!(body(None, Some("did not panic"), None, None))
                 .is_equal_to("did not panic\n");
             assert_that!(body(None, None, None, None)).is_equal_to("");
@@ -302,7 +374,7 @@ mod tests {
                 it
             });
 
-            assert_that!(failures[0].to_string()).is_equal_to(indoc::indoc! {"
+            assert_that!(TextReporter.report(&failures[0])).is_equal_to(indoc::indoc! {"
                 -------- assertr --------
                 Expression: `1`
 

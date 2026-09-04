@@ -266,7 +266,7 @@ mod tests {
                 .with_location(false)
                 .capture(ResultAssertions::is_ok);
 
-            assert_that!(failures[0].description())
+            assert_that!(TextReporter.report(&failures[0]))
                 .contains("Err(")
                 .contains(SENTINEL);
         }
@@ -321,7 +321,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `Result::<i32, String>::Err("someError".to_owned())`
 
@@ -527,7 +527,7 @@ mod tests {
                 });
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {"
+                    it.has_text_report(formatdoc! {"
                         -------- assertr --------
                         Actual: 42
 
@@ -548,7 +548,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `Result::<i32, String>::Err(String::from("boom"))`
 
@@ -599,7 +599,7 @@ mod tests {
                 });
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Actual: "boom"
 
@@ -620,7 +620,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_text_report(formatdoc! {r"
                         -------- assertr --------
                         Expression: `Result::<i32, String>::Ok(42)`
 

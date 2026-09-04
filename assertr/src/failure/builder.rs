@@ -2,17 +2,19 @@
 //!
 //! The builder collects the rendered values, the relation, the facts, and the children of one
 //! failure and turns them into an [`AssertionFailure`]. Its text is derived from those fields by
-//! [`super::display`], so assertion code never formats a failure body by hand and the grammar of
-//! every failure comes from one place.
+//! [`TextReporter`](crate::report::TextReporter), so assertion code never formats a failure body
+//! by hand and the grammar of every failure comes from one place.
 
 use alloc::{borrow::Cow, format, string::String, vec::Vec};
-use core::{
-    fmt::{Debug, Display},
-    panic::Location,
-};
+use core::{fmt::Display, panic::Location};
 
 use super::{AssertionFailure, Fact, FailureKind, Fallible};
-use crate::{AssertThat, details::WithDetail, mode::Mode};
+use crate::{
+    AssertThat,
+    details::WithDetail,
+    mode::Mode,
+    renderer::{IntoRendered, Rendered},
+};
 
 /// The chain a failure is raised on, seen through the pieces the builder needs from it.
 pub(crate) trait FailureSink: Fallible + WithDetail {
@@ -81,10 +83,10 @@ pub struct FailureBuilder<T: FailureTarget> {
     target: T,
     subject_type_name: &'static str,
     kind: FailureKind,
-    actual: Option<String>,
+    actual: Option<Rendered>,
     relation: Option<Cow<'static, str>>,
-    expected: Option<String>,
-    unexpected: Option<String>,
+    expected: Option<Rendered>,
+    unexpected: Option<Rendered>,
     facts: Vec<Fact>,
     children: Vec<AssertionFailure>,
 }
@@ -119,7 +121,7 @@ impl<'c> FailureBuilder<Attached<'c>> {
         if sink.captures() {
             sink.store_failure(failure);
         } else {
-            panic!("{failure}");
+            panic!("{}", crate::report::report_for_panic(&failure));
         }
     }
 }
@@ -155,10 +157,10 @@ impl<T: FailureTarget> FailureBuilder<T> {
         }
     }
 
-    /// Sets the rendered subject. Pass an adapter obtained from [`AssertThat::render`], which is
-    /// pretty-printed here.
-    pub fn actual(mut self, actual: impl Debug) -> Self {
-        self.actual = Some(format!("{actual:#?}"));
+    /// Sets the rendered subject. Pass an adapter obtained from [`AssertThat::render`]. It is
+    /// consumed into an owned value tree here, with every leaf rendered exactly once.
+    pub fn actual(mut self, actual: impl IntoRendered) -> Self {
+        self.actual = Some(actual.into_rendered());
         self
     }
 
@@ -173,21 +175,21 @@ impl<T: FailureTarget> FailureBuilder<T> {
     }
 
     /// Sets the rendered value the subject was compared with.
-    pub fn expected(mut self, expected: impl Debug) -> Self {
-        self.expected = Some(format!("{expected:#?}"));
+    pub fn expected(mut self, expected: impl IntoRendered) -> Self {
+        self.expected = Some(expected.into_rendered());
         self
     }
 
     /// Sets the rendered value a negated assertion found although it was not expected.
-    pub fn unexpected(mut self, unexpected: impl Debug) -> Self {
-        self.unexpected = Some(format!("{unexpected:#?}"));
+    pub fn unexpected(mut self, unexpected: impl IntoRendered) -> Self {
+        self.unexpected = Some(unexpected.into_rendered());
         self
     }
 
-    /// Attaches a labeled fact. Pass `format_args!("{rendered:#?}")` to pretty-print a rendering
-    /// adapter as the value.
-    pub fn fact(mut self, label: impl Into<Cow<'static, str>>, value: impl Display) -> Self {
-        self.facts.push(Fact::new(label, format!("{value}")));
+    /// Attaches a labeled rendered fact. Rendering adapters should be passed directly so their
+    /// structure and type metadata are retained.
+    pub fn fact(mut self, label: impl Into<Cow<'static, str>>, value: impl IntoRendered) -> Self {
+        self.facts.push(Fact::new(label, value));
         self
     }
 

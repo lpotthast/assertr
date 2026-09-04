@@ -1,4 +1,4 @@
-use alloc::{format, string::String, vec::Vec};
+use alloc::{boxed::Box, format, string::String, vec::Vec};
 use core::{
     borrow::Borrow,
     fmt::{self, Debug, Write},
@@ -11,8 +11,9 @@ use crate::assertions::{
 };
 
 use super::{
-    GroupStyle, RenderingOrder,
+    GroupStyle, IntoRendered, Rendered, RenderedBody, RenderingOrder,
     budget::RenderingBudget,
+    rendered::tuple_text,
     type_info::{TypeInfo, Typed},
     value::ValueRenderer,
 };
@@ -288,8 +289,7 @@ pub struct RenderedValue<'a, T: ?Sized, R> {
 
 impl<T: ?Sized, R: ValueRenderer<T>> Debug for RenderedValue<'_, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let output = render_leaf(self.value, self.rendering, f.alternate())?;
-        f.write_str(&output)
+        write_body(f, self.rendered_body(f.alternate()))
     }
 }
 
@@ -301,7 +301,7 @@ pub(crate) struct Variant<'a, T: ?Sized, R> {
 
 impl<T: ?Sized, R: ValueRenderer<T>> Debug for Variant<'_, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(self.name).field(&self.value).finish()
+        write_body(f, self.rendered_body(f.alternate()))
     }
 }
 
@@ -314,9 +314,7 @@ pub(crate) struct StructField<'a, T: ?Sized, R> {
 
 impl<T: ?Sized, R: ValueRenderer<T>> Debug for StructField<'_, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct(self.name)
-            .field(self.field, &self.value)
-            .finish()
+        write_body(f, self.rendered_body(f.alternate()))
     }
 }
 
@@ -329,9 +327,7 @@ pub(crate) struct UnavailableStructField {
 
 impl Debug for UnavailableStructField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct(self.name)
-            .field(self.field, &Verbatim(self.unavailable))
-            .finish()
+        write_body(f, self.rendered_body(f.alternate()))
     }
 }
 
@@ -364,35 +360,7 @@ where
     C::Item: Borrow<T>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let maximum = self.rendering.max_items();
-
-        if self.sorted_for_rendering {
-            let rendered = sorted_and_truncated(
-                self.items.elements().map(|value| {
-                    render_debug(
-                        &self
-                            .rendering
-                            .value_with_type_info(value.borrow(), self.item_type),
-                        f.alternate(),
-                    )
-                }),
-                maximum,
-            )?;
-            write_values(f, self.style, rendered.iter().map(|value| Verbatim(value)))?;
-        } else {
-            let rendered = self.items.elements().take(maximum).map(|value| {
-                self.rendering
-                    .value_with_type_info(value.borrow(), self.item_type)
-            });
-            write_values(f, self.style, rendered)?;
-        }
-
-        write_suffix(
-            f,
-            self.items.length().saturating_sub(maximum),
-            "element",
-            self.sorted_for_rendering,
-        )
+        write_body(f, self.rendered_body(f.alternate()))
     }
 }
 
@@ -410,48 +378,7 @@ where
     R: ValueRenderer<M::Key> + ValueRenderer<M::Value>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let maximum = self.rendering.max_items();
-
-        if self.sorted_for_rendering {
-            let rendered = sorted_and_truncated(
-                self.map.entries().map(|(key, value)| {
-                    Ok((
-                        render_debug(
-                            &self.rendering.value_with_type_info(key, self.key_type),
-                            f.alternate(),
-                        )?,
-                        render_debug(
-                            &self.rendering.value_with_type_info(value, self.value_type),
-                            f.alternate(),
-                        )?,
-                    ))
-                }),
-                maximum,
-            )?;
-            f.debug_map()
-                .entries(
-                    rendered
-                        .iter()
-                        .map(|(key, value)| (Verbatim(key), Verbatim(value))),
-                )
-                .finish()?;
-        } else {
-            f.debug_map()
-                .entries(self.map.entries().take(maximum).map(|(key, value)| {
-                    (
-                        self.rendering.value_with_type_info(key, self.key_type),
-                        self.rendering.value_with_type_info(value, self.value_type),
-                    )
-                }))
-                .finish()?;
-        }
-
-        write_suffix(
-            f,
-            self.map.length().saturating_sub(maximum),
-            "entry",
-            self.sorted_for_rendering,
-        )
+        write_body(f, self.rendered_body(f.alternate()))
     }
 }
 
@@ -473,34 +400,7 @@ where
     R: ValueRenderer<K> + ValueRenderer<V>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let maximum = self.rendering.max_items();
-        let tuples = self.entries.elements().map(|(key, value)| {
-            (
-                self.rendering
-                    .value_with_type_info(key.borrow(), self.key_type),
-                self.rendering
-                    .value_with_type_info(value.borrow(), self.value_type),
-            )
-        });
-
-        if self.sorted_for_rendering {
-            let rendered = sorted_and_truncated(
-                tuples.map(|tuple| render_debug(&tuple, f.alternate())),
-                maximum,
-            )?;
-            f.debug_list()
-                .entries(rendered.iter().map(|tuple| Verbatim(tuple)))
-                .finish()?;
-        } else {
-            f.debug_list().entries(tuples.take(maximum)).finish()?;
-        }
-
-        write_suffix(
-            f,
-            self.entries.length().saturating_sub(maximum),
-            "entry",
-            self.sorted_for_rendering,
-        )
+        write_body(f, self.rendered_body(f.alternate()))
     }
 }
 
@@ -508,22 +408,21 @@ where
 ///
 /// For a leaf whose alternate `Debug` form is less readable than its compact one, such as a
 /// `jiff::SignedDuration`, which prints raw nanoseconds when pretty-printed.
-#[cfg(feature = "jiff")]
 pub(crate) struct Compact<T>(pub(crate) T);
 
-#[cfg(feature = "jiff")]
 impl<T: Debug> Debug for Compact<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.0)
     }
 }
 
-/// Writes pre-rendered text without `Debug` escaping.
-struct Verbatim<'a>(&'a str);
+impl<T: IntoRendered> IntoRendered for Compact<T> {
+    fn into_rendered(self) -> Rendered {
+        self.0.into_rendered_compact().compact()
+    }
 
-impl Debug for Verbatim<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
+    fn into_rendered_compact(self) -> Rendered {
+        self.0.into_rendered_compact().compact()
     }
 }
 
@@ -543,7 +442,7 @@ fn render_leaf<T: ?Sized, R: ValueRenderer<T>>(
     value: &T,
     rendering: RenderingContext<'_, R>,
     alternate: bool,
-) -> Result<String, fmt::Error> {
+) -> Result<(String, usize), fmt::Error> {
     let value = FormatterFn(|f: &mut fmt::Formatter<'_>| rendering.renderer.fmt(value, f));
     let mut output = BoundedOutput::new(rendering.budget.max_leaf_characters());
     if alternate {
@@ -552,16 +451,6 @@ fn render_leaf<T: ?Sized, R: ValueRenderer<T>>(
         write!(output, "{value:?}")?;
     }
     Ok(output.finish())
-}
-
-fn render_debug<T: Debug + ?Sized>(value: &T, alternate: bool) -> Result<String, fmt::Error> {
-    let mut output = String::new();
-    if alternate {
-        write!(output, "{value:#?}")?;
-    } else {
-        write!(output, "{value:?}")?;
-    }
-    Ok(output)
 }
 
 /// Retains at most `maximum` characters of the text written to it and counts the rest.
@@ -583,11 +472,8 @@ impl BoundedOutput {
         }
     }
 
-    fn finish(mut self) -> String {
-        if self.omitted != 0 {
-            self.retained.push_str(&omission(self.omitted, "character"));
-        }
-        self.retained
+    fn finish(self) -> (String, usize) {
+        (self.retained, self.omitted)
     }
 }
 
@@ -609,46 +495,247 @@ impl Write for BoundedOutput {
     }
 }
 
-/// Renders every item so the items can be sorted by their text, then keeps the first `maximum`.
-///
-/// A zero budget renders nothing, so leaf renderers are never invoked for omitted output.
-fn sorted_and_truncated<T: Ord>(
-    rendered: impl Iterator<Item = Result<T, fmt::Error>>,
-    maximum: usize,
-) -> Result<Vec<T>, fmt::Error> {
-    if maximum == 0 {
-        return Ok(Vec::new());
-    }
-    let mut items = rendered.collect::<Result<Vec<_>, _>>()?;
-    items.sort_unstable();
-    items.truncate(maximum);
-    Ok(items)
+trait BuildRenderedBody {
+    fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody;
 }
 
-fn write_values<I>(f: &mut fmt::Formatter<'_>, style: GroupStyle, values: I) -> fmt::Result
+trait BuildRendered {
+    fn rendered(&self, pretty_leaves: bool) -> Rendered;
+}
+
+impl<D: BuildRenderedBody> BuildRendered for Typed<D> {
+    fn rendered(&self, pretty_leaves: bool) -> Rendered {
+        Rendered::typed(
+            self.body.rendered_body(pretty_leaves),
+            self.info.type_name,
+            self.info.hint,
+            self.show_type_hint,
+        )
+    }
+}
+
+impl<D: BuildRenderedBody> IntoRendered for Typed<D> {
+    fn into_rendered(self) -> Rendered {
+        self.rendered(true)
+    }
+
+    fn into_rendered_compact(self) -> Rendered {
+        self.rendered(false)
+    }
+}
+
+impl<T: ?Sized, R: ValueRenderer<T>> BuildRenderedBody for RenderedValue<'_, T, R> {
+    fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
+        let (text, omitted_characters) = render_leaf(self.value, self.rendering, pretty_leaves)
+            .expect("rendering a diagnostic leaf into a String cannot fail");
+        RenderedBody::Text {
+            text,
+            omitted_characters,
+        }
+    }
+}
+
+impl<T: ?Sized, R: ValueRenderer<T>> BuildRenderedBody for Variant<'_, T, R> {
+    fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
+        RenderedBody::Variant {
+            name: self.name,
+            value: Box::new(self.value.rendered(pretty_leaves)),
+        }
+    }
+}
+
+impl<T: ?Sized, R: ValueRenderer<T>> BuildRenderedBody for StructField<'_, T, R> {
+    fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
+        RenderedBody::Struct {
+            name: self.name,
+            fields: alloc::vec![(self.field, self.value.rendered(pretty_leaves))],
+        }
+    }
+}
+
+impl BuildRenderedBody for UnavailableStructField {
+    fn rendered_body(&self, _pretty_leaves: bool) -> RenderedBody {
+        RenderedBody::Struct {
+            name: self.name,
+            fields: alloc::vec![(
+                self.field,
+                Rendered {
+                    body: RenderedBody::Placeholder(self.unavailable),
+                    type_name: None,
+                    hint: super::TypeHint::Short,
+                    shows_type_hint: false,
+                    compact: false,
+                },
+            )],
+        }
+    }
+}
+
+impl<T: ?Sized, C: Collection + ?Sized, R: ValueRenderer<T>> BuildRenderedBody
+    for RenderedValues<'_, T, C, R>
 where
-    I: Iterator,
-    I::Item: Debug,
+    C::Item: Borrow<T>,
 {
-    match style {
-        GroupStyle::List => f.debug_list().entries(values).finish(),
-        GroupStyle::Set => f.debug_set().entries(values).finish(),
+    fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
+        let maximum = self.rendering.max_items();
+        let mut items = if self.sorted_for_rendering && maximum == 0 {
+            Vec::new()
+        } else {
+            self.items
+                .elements()
+                .take(if self.sorted_for_rendering {
+                    usize::MAX
+                } else {
+                    maximum
+                })
+                .map(|value| {
+                    self.rendering
+                        .value_with_type_info(value.borrow(), self.item_type)
+                        .rendered(pretty_leaves)
+                })
+                .collect::<Vec<_>>()
+        };
+        if self.sorted_for_rendering {
+            items.sort_by_cached_key(|item| item.text(pretty_leaves));
+            items.truncate(maximum);
+        }
+        RenderedBody::Group {
+            style: self.style,
+            items,
+            omitted: self.items.length().saturating_sub(maximum),
+            sorted: self.sorted_for_rendering,
+        }
     }
 }
 
-fn write_suffix(
-    f: &mut fmt::Formatter<'_>,
-    omitted: usize,
-    noun: &str,
-    sorted_for_rendering: bool,
-) -> fmt::Result {
-    if omitted != 0 {
-        write!(f, " ({})", omission(omitted, noun))?;
+impl<T: ?Sized, C: Collection + ?Sized, R: ValueRenderer<T>> IntoRendered
+    for RenderedValues<'_, T, C, R>
+where
+    C::Item: Borrow<T>,
+{
+    fn into_rendered(self) -> Rendered {
+        untyped(self.rendered_body(true))
     }
-    if sorted_for_rendering {
-        f.write_str(" (sorted for rendering)")?;
+
+    fn into_rendered_compact(self) -> Rendered {
+        untyped(self.rendered_body(false))
     }
-    Ok(())
+}
+
+impl<M: Map + ?Sized, R> BuildRenderedBody for MapEntries<'_, M, R>
+where
+    R: ValueRenderer<M::Key> + ValueRenderer<M::Value>,
+{
+    fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
+        let maximum = self.rendering.max_items();
+        let mut entries = if self.sorted_for_rendering && maximum == 0 {
+            Vec::new()
+        } else {
+            self.map
+                .entries()
+                .take(if self.sorted_for_rendering {
+                    usize::MAX
+                } else {
+                    maximum
+                })
+                .map(|(key, value)| {
+                    (
+                        self.rendering
+                            .value_with_type_info(key, self.key_type)
+                            .rendered(pretty_leaves),
+                        self.rendering
+                            .value_with_type_info(value, self.value_type)
+                            .rendered(pretty_leaves),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        if self.sorted_for_rendering {
+            entries.sort_by_cached_key(|(key, value)| {
+                (key.text(pretty_leaves), value.text(pretty_leaves))
+            });
+            entries.truncate(maximum);
+        }
+        RenderedBody::Map {
+            entries,
+            omitted: self.map.length().saturating_sub(maximum),
+            sorted: self.sorted_for_rendering,
+        }
+    }
+}
+
+impl<K: ?Sized, V: ?Sized, BK, BV, C: Collection<Item = (BK, BV)> + ?Sized, R> BuildRenderedBody
+    for EntryList<'_, K, V, C, R>
+where
+    BK: Borrow<K>,
+    BV: Borrow<V>,
+    R: ValueRenderer<K> + ValueRenderer<V>,
+{
+    fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
+        let maximum = self.rendering.max_items();
+        let mut entries = if self.sorted_for_rendering && maximum == 0 {
+            Vec::new()
+        } else {
+            self.entries
+                .elements()
+                .take(if self.sorted_for_rendering {
+                    usize::MAX
+                } else {
+                    maximum
+                })
+                .map(|(key, value)| {
+                    (
+                        self.rendering
+                            .value_with_type_info(key.borrow(), self.key_type)
+                            .rendered(pretty_leaves),
+                        self.rendering
+                            .value_with_type_info(value.borrow(), self.value_type)
+                            .rendered(pretty_leaves),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        if self.sorted_for_rendering {
+            entries.sort_by_cached_key(|(key, value)| tuple_text(key, value, pretty_leaves));
+            entries.truncate(maximum);
+        }
+        RenderedBody::EntryList {
+            entries,
+            omitted: self.entries.length().saturating_sub(maximum),
+            sorted: self.sorted_for_rendering,
+        }
+    }
+}
+
+impl<K: ?Sized, V: ?Sized, BK, BV, C: Collection<Item = (BK, BV)> + ?Sized, R> IntoRendered
+    for EntryList<'_, K, V, C, R>
+where
+    BK: Borrow<K>,
+    BV: Borrow<V>,
+    R: ValueRenderer<K> + ValueRenderer<V>,
+{
+    fn into_rendered(self) -> Rendered {
+        untyped(self.rendered_body(true))
+    }
+
+    fn into_rendered_compact(self) -> Rendered {
+        untyped(self.rendered_body(false))
+    }
+}
+
+fn untyped(body: RenderedBody) -> Rendered {
+    Rendered {
+        body,
+        type_name: None,
+        hint: super::TypeHint::Short,
+        shows_type_hint: false,
+        compact: false,
+    }
+}
+
+fn write_body(f: &mut fmt::Formatter<'_>, body: RenderedBody) -> fmt::Result {
+    let pretty = f.alternate();
+    untyped(body).write(f, pretty)
 }
 
 /// The marker standing in for output the budget omitted, such as `... 1_200 more elements ...`.

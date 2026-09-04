@@ -103,7 +103,7 @@ mod tests {
 
         assert_that!(failures.as_slice()).contains_exactly_satisfying([
             |it: AssertThat<AssertionFailure, Capture>| {
-                it.has_display_value(formatdoc! {"
+                it.has_text_report(formatdoc! {"
                     -------- assertr --------
                     Expression: `42`
 
@@ -116,7 +116,7 @@ mod tests {
                 "});
             },
             |it: AssertThat<AssertionFailure, Capture>| {
-                it.has_display_value(formatdoc! {"
+                it.has_text_report(formatdoc! {"
                     -------- assertr --------
                     Expression: `42`
 

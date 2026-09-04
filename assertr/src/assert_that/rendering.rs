@@ -74,7 +74,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///     .with_location(false)
     ///     .capture(|it| it.contains(5));
     ///
-    /// assert_that!(failures[0].to_string()).contains("... 2 more elements ...");
+    /// assert_that!(TextReporter.report(&failures[0])).contains("... 2 more elements ...");
     /// ```
     #[must_use]
     pub fn with_rendering_budget(mut self, budget: RenderingBudget) -> Self {
@@ -164,13 +164,13 @@ mod tests {
         let bounded = assert_that!(&values)
             .with_location(false)
             .capture(|it| it.contains(999));
-        assert_that!(bounded[0].description()).contains("... 4 more elements ...");
+        assert_that!(TextReporter.report(&bounded[0])).contains("... 4 more elements ...");
 
         let unlimited = assert_that!(&values)
             .with_rendering_budget(RenderingBudget::unlimited())
             .with_location(false)
             .capture(|it| it.contains(999));
-        assert_that!(unlimited[0].description()).does_not_contain("more elements");
+        assert_that!(TextReporter.report(&unlimited[0])).does_not_contain("more elements");
     }
 
     #[test]
@@ -187,7 +187,8 @@ mod tests {
                 )
             });
 
-        assert_that!(failures[0].description()).contains("Actual: 123... 3 more characters ...");
+        assert_that!(TextReporter.report(&failures[0]))
+            .contains("Actual: 123... 3 more characters ...");
     }
 
     #[test]
@@ -197,7 +198,7 @@ mod tests {
             .with_location(false)
             .capture(|it| it.is_equal_to(Secret(2)));
 
-        assert_that!(failures[0].description())
+        assert_that!(TextReporter.report(&failures[0]))
             .contains("Expected: Secret(2)")
             .contains("Actual: Secret(1)");
     }

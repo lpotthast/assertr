@@ -106,11 +106,8 @@ pub(crate) fn assert_contains_all<S, T, E, I, M: Mode, R>(
         )
         .fact(
             "Elements not found",
-            format_args!(
-                "{:#?}",
-                this.render()
-                    .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List)
-            ),
+            this.render()
+                .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List),
         );
     preview.facts(failure, None).raise();
 }

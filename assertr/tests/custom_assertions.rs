@@ -17,6 +17,13 @@
 // instead would be shorter but would stop demonstrating the API.
 #![allow(clippy::redundant_closure_for_method_calls)]
 
+fn text_opt(value: Option<&assertr::renderer::Rendered>) -> Option<&str> {
+    value.map(|value| match &value.body {
+        assertr::renderer::RenderedBody::Text { text, .. } => text.as_str(),
+        body => panic!("expected a text node, got {body:?}"),
+    })
+}
+
 #[derive(Debug, PartialEq)]
 struct Person {
     age: u32,
@@ -114,7 +121,7 @@ mod composed {
             .capture(|it| it.has_age(30));
 
         assert_that!(&failures).has_length(1);
-        assert_that!(failures[0].description())
+        assert_that!(TextReporter.report(&failures[0]))
             .contains("Expected: 30")
             .contains("Actual: 12");
     }
@@ -243,7 +250,7 @@ mod leaf {
         assert_that!(failures[0].kind).is_equal_to(FailureKind::Ordering);
         assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not an adult"));
         assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::new("Age", "12")]);
-        assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {"
+        assert_that!(TextReporter.report(&failures[0])).contains(formatdoc! {"
             -------- assertr --------
             Subject: child
             Expression: `person(12)`
@@ -278,9 +285,11 @@ mod leaf {
             .with_location(false)
             .capture(|it| it.is_older_than(&person(40)));
 
-        assert_that!(failures[0].actual.as_deref()).is_equal_to(Some("Person(age=12)"));
-        assert_that!(failures[0].expected.as_deref()).is_equal_to(Some("Person(age=40)"));
-        assert_that!(failures[0].description()).is_equal_to(formatdoc! {"
+        assert_that!(super::text_opt(failures[0].actual.as_ref()))
+            .is_equal_to(Some("Person(age=12)"));
+        assert_that!(super::text_opt(failures[0].expected.as_ref()))
+            .is_equal_to(Some("Person(age=40)"));
+        assert_that!(TextReporter.report(&failures[0])).contains(formatdoc! {"
             Actual: Person(age=12)
 
             is not older than
@@ -411,9 +420,9 @@ mod nested {
         assert_that!(&failures).has_length(1);
         let child = &failures[0].children[0];
         assert_that!(child.kind).is_equal_to(FailureKind::Ordering);
-        assert_that!(child.actual.as_deref()).is_equal_to(Some("Person(age=12)"));
+        assert_that!(super::text_opt(child.actual.as_ref())).is_equal_to(Some("Person(age=12)"));
         assert_that!(child.facts.as_slice()).contains_exactly([Fact::index(1)]);
-        assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {"
+        assert_that!(TextReporter.report(&failures[0])).is_equal_to(formatdoc! {"
             -------- assertr --------
             Expression: `vec![person(30), person(12)]`
 

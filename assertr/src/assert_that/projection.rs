@@ -305,7 +305,7 @@ mod tests {
                 )
             });
 
-        assert_that!(failures[0].description()).contains(SENTINEL);
+        assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
     }
 
     #[test]
@@ -345,12 +345,15 @@ mod tests {
 
         assert_that!(failures.as_slice())
             .contains_exactly_matching([|it: &AssertionFailure| {
-                it.description().contains("Expected: 4")
+                TextReporter.report(it).contains("Expected: 4")
             }])
             .contains_exactly_satisfying([|it: AssertThat<AssertionFailure, Capture>| {
-                it.satisfies_owned(AssertionFailure::description, |description| {
-                    description.contains("Expected: 4");
-                });
+                it.satisfies_owned(
+                    |failure| TextReporter.report(failure),
+                    |description| {
+                        description.contains("Expected: 4");
+                    },
+                );
             }]);
     }
 
@@ -384,7 +387,8 @@ mod tests {
                 )
             });
 
-        assert_that!(failures.as_slice())
-            .contains_exactly_matching([|it: &AssertionFailure| it.description().contains("xyz")]);
+        assert_that!(failures.as_slice()).contains_exactly_matching([|it: &AssertionFailure| {
+            TextReporter.report(it).contains("xyz")
+        }]);
     }
 }

@@ -117,7 +117,7 @@ fn a_failing_condition_exposes_its_error_as_a_failure_detail() {
         .capture(|it| it.is(IsAlive {}));
 
     assert_that!(&failures).has_length(1);
-    assert_that!(failures[0].description()).is_equal_to("does not match the condition\n");
+    assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not match the condition"));
     // The condition's error arrives verbatim as an unlabeled note of the failure. No parsing of
     // the description's framing text is required.
     assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note("\"Bob\" is dead!")]);
@@ -147,10 +147,10 @@ fn each_failing_element_raises_its_own_failure_without_inventing_an_index() {
         .capture(|it| it.are(IsAlive {}));
 
     assert_that!(&failures).has_length(2);
-    assert_that!(failures[0].description()).is_equal_to("does not match the condition\n");
+    assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not match the condition"));
     assert_that!(failures[0].facts.as_slice())
         .contains_exactly([assertr::Fact::note("\"Kevin\" is dead!")]);
-    assert_that!(failures[1].description()).is_equal_to("does not match the condition\n");
+    assert_that!(failures[1].relation.as_deref()).is_equal_to(Some("does not match the condition"));
     assert_that!(failures[1].facts.as_slice())
         .contains_exactly([assertr::Fact::note("\"Otto\" is dead!")]);
 }
@@ -166,7 +166,7 @@ fn a_condition_failure_renders_the_error_under_details() {
         .with_location(false)
         .capture(|it| it.is(IsAlive {}));
 
-    assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {r#"
+    assert_that!(TextReporter.report(&failures[0])).is_equal_to(formatdoc! {r#"
         -------- assertr --------
         Expression: `bob`
 

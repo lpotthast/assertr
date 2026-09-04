@@ -63,6 +63,11 @@ pub(crate) use crate::entry::assert_that_panic_by;
 pub use crate::eq;
 pub use crate::mode::{Capture, Mode, Panic};
 pub use crate::pattern;
+pub use crate::report::{FailureReporter, TextReporter};
+#[cfg(test)]
+pub(crate) use crate::test_support::FailureReportAssertions;
+#[cfg(test)]
+pub(crate) use crate::test_support::rendered_text;
 pub use crate::{AssertThat, AssertionFailure, DebugRenderer, RenderingBudget, ValueRenderer};
 #[cfg(feature = "fluent")]
 pub use crate::{IntoAssertContext, IntoOwnedAssertContext};

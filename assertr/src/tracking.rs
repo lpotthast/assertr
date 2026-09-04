@@ -32,17 +32,22 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ///
     /// use assertr::failure::FailureKind;
     ///
-    /// trait EvenAssertions {
-    ///     fn is_even(self) -> Self;
+    /// trait EvenAssertions<R = DebugRenderer> {
+    ///     fn is_even(self) -> Self
+    ///     where
+    ///         R: ValueRenderer<u32>;
     /// }
     ///
-    /// impl<M: Mode, R> EvenAssertions for AssertThat<'_, u32, M, R> {
+    /// impl<M: Mode, R> EvenAssertions<R> for AssertThat<'_, u32, M, R> {
     ///     #[track_caller]
-    ///     fn is_even(self) -> Self {
+    ///     fn is_even(self) -> Self
+    ///     where
+    ///         R: ValueRenderer<u32>,
+    ///     {
     ///         self.track_assertion();
     ///         if self.actual() % 2 != 0 {
     ///             self.failure(FailureKind::Predicate)
-    ///                 .actual(self.actual())
+    ///                 .actual(self.render().value(self.actual()))
     ///                 .relation("is not even")
     ///                 .raise();
     ///         }

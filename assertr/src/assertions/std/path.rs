@@ -104,7 +104,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
                 self.failure(FailureKind::Other)
                     .actual(self.render().value(self.actual()))
                     .relation("does not exist")
-                    .fact("I/O error", err)
+                    .fact("I/O error", format_args!("{err}"))
                     .raise();
             }
         }
@@ -222,8 +222,11 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
                 .relation("does not have the file name")
-                .expected(expected)
-                .fact("Actual file name", Component(actual.file_name()))
+                .expected(format_args!("{}", DebugValue(expected)))
+                .fact(
+                    "Actual file name",
+                    format_args!("{}", Component(actual.file_name())),
+                )
                 .raise();
         }
         self
@@ -241,8 +244,11 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
                 .relation("does not have the file stem")
-                .expected(expected)
-                .fact("Actual file stem", Component(actual.file_stem()))
+                .expected(format_args!("{}", DebugValue(expected)))
+                .fact(
+                    "Actual file stem",
+                    format_args!("{}", Component(actual.file_stem())),
+                )
                 .raise();
         }
         self
@@ -260,8 +266,11 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
                 .relation("does not have the extension")
-                .expected(expected)
-                .fact("Actual extension", Component(actual.extension()))
+                .expected(format_args!("{}", DebugValue(expected)))
+                .fact(
+                    "Actual extension",
+                    format_args!("{}", Component(actual.extension())),
+                )
                 .raise();
         }
         self
@@ -279,7 +288,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not start with")
-                .expected(expected)
+                .expected(format_args!("{}", DebugValue(expected)))
                 .note("Only whole path components are matched.")
                 .raise();
         }
@@ -298,7 +307,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not end with")
-                .expected(expected)
+                .expected(format_args!("{}", DebugValue(expected)))
                 .note("Only whole path components are matched.")
                 .raise();
         }
@@ -316,6 +325,15 @@ fn entry_kind(path: &Path) -> &'static str {
         "The path exists."
     } else {
         "The path does not exist."
+    }
+}
+
+/// Adapts a path-related value's quoted `Debug` form to the builder's verbatim text input.
+struct DebugValue<'a, T: ?Sized>(&'a T);
+
+impl<T: Debug + ?Sized> Display for DebugValue<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(self.0, f)
     }
 }
 
@@ -356,7 +374,7 @@ mod tests {
             .with_location(false)
             .capture(PathAssertions::exists);
 
-            assert_that!(failures[0].description()).contains(SENTINEL);
+            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
         }
     }
 

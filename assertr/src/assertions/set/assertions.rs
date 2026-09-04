@@ -127,10 +127,11 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_subset_of(&expected));
 
-            assert_that!(failures[0].facts.as_slice()).contains_exactly([crate::Fact::new(
-                "Elements not in expected",
-                "[\n    \"extra\",\n]",
-            )]);
+            assert_that!(failures[0].facts.as_slice()).has_length(1);
+            assert_that!(failures[0].facts[0].label.as_ref())
+                .is_equal_to("Elements not in expected");
+            assert_that!(rendered_text(&failures[0].facts[0].value))
+                .is_equal_to("[\n    \"extra\",\n]");
         }
 
         #[test]

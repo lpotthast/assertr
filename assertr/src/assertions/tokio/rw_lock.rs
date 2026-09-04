@@ -176,9 +176,8 @@ mod tests {
                 .with_location(false)
                 .capture(TokioRwLockAssertions::is_read_locked);
 
-            assert_that!(failures[0].actual.as_deref()).is_equal_to(Some(
-                format!("RwLock {{\n    data: {SENTINEL},\n}}").as_str(),
-            ));
+            assert_that!(failures[0].actual.as_ref().map(rendered_text))
+                .is_equal_to(Some(format!("RwLock {{\n    data: {SENTINEL},\n}}")));
         }
     }
 

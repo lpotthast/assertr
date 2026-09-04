@@ -38,8 +38,8 @@ impl<T: Debug, M: Mode, R> DebugAssertions for AssertThat<'_, T, M, R> {
 
         if actual_str != expected_str {
             self.failure(FailureKind::Equality)
-                .actual(actual_str)
-                .expected(expected_str)
+                .actual(format_args!("{actual_str:?}"))
+                .expected(format_args!("{expected_str:?}"))
                 .raise();
         }
         self
@@ -57,8 +57,8 @@ impl<T: Debug, M: Mode, R> DebugAssertions for AssertThat<'_, T, M, R> {
 
         if actual_str != expected_str {
             self.failure(FailureKind::Equality)
-                .actual(actual_str)
-                .expected(expected_str)
+                .actual(format_args!("{actual_str:?}"))
+                .expected(format_args!("{expected_str:?}"))
                 .raise();
         }
         self

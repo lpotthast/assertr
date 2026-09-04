@@ -1,6 +1,9 @@
 use crate::failure::FailureKind;
 use crate::mode::Mode;
-use crate::{AssertThat, ValueRenderer, renderer::Compact};
+use crate::{
+    AssertThat, ValueRenderer,
+    renderer::{Compact, GroupStyle},
+};
 use jiff::SignedDuration;
 
 /// Assertions for [`SignedDuration`].
@@ -99,21 +102,18 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         let min = expected - allowed_deviation;
         let max = expected + allowed_deviation;
         if !(actual >= min && actual <= max) {
+            let allowed_range = [min, max];
             self.failure(FailureKind::Ordering)
                 .actual(Compact(self.render().value(&actual)))
                 .relation("is not close to")
                 .expected(Compact(self.render().value(&expected)))
                 .fact(
                     "Allowed deviation",
-                    format_args!("{:?}", self.render().value(&allowed_deviation)),
+                    Compact(self.render().value(&allowed_deviation)),
                 )
                 .fact(
                     "Allowed range",
-                    format_args!(
-                        "[{:?}, {:?}]",
-                        self.render().value(&min),
-                        self.render().value(&max)
-                    ),
+                    Compact(self.render().values(&allowed_range, GroupStyle::List)),
                 )
                 .raise();
         }
@@ -144,7 +144,7 @@ mod tests {
                 .with_location(false)
                 .capture(SignedDurationAssertions::is_zero);
 
-            assert_that!(failures[0].description()).contains(SENTINEL);
+            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
         }
     }
 

@@ -4,21 +4,22 @@
 //! carry every part of a failure as data: the rendered [`actual`](AssertionFailure::actual) and
 //! [`expected`](AssertionFailure::expected) values, the [`relation`](AssertionFailure::relation)
 //! between them, additional [`facts`](AssertionFailure::facts), and nested
-//! [`children`](AssertionFailure::children). The human-readable text is produced from these fields
-//! by the [`Display`] implementation, so a reporter never has to parse prose.
+//! [`children`](AssertionFailure::children). Reporters consume these fields directly, so no
+//! machine-readable use needs to parse the human-readable text report.
 //!
 //! A leaf assertion raises a failure through [`AssertThat::failure`], which returns the
 //! [`FailureBuilder`] every built-in assertion uses.
 
 mod builder;
-mod display;
-
 use alloc::{borrow::Cow, string::String, vec::Vec};
-use core::fmt::Display;
 
 pub use builder::{Attached, Detached, FailureBuilder, FailureTarget};
 
-use crate::{AssertThat, prelude::Mode};
+use crate::{
+    AssertThat,
+    prelude::Mode,
+    renderer::{Compact, IntoRendered, Rendered},
+};
 
 /// Delimiter opening and closing every rendered failure message.
 pub(crate) const BANNER: &str = "-------- assertr --------\n";
@@ -55,15 +56,14 @@ pub enum FailureKind {
 ///
 /// Facts carry what is neither the expected nor the actual value: lengths, missing keys, unexpected
 /// elements, recorded differences, or a panic payload. A fact with an empty label is a plain note.
-/// [`Display`] renders a fact as `label: value`, or as the bare value when the label is empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Fact {
     /// What the value describes. Empty for a plain note.
     pub label: Cow<'static, str>,
 
-    /// The rendered evidence.
-    pub value: String,
+    /// The rendered evidence tree.
+    pub value: Rendered,
 }
 
 impl Fact {
@@ -78,44 +78,37 @@ impl Fact {
     pub const KEY: &'static str = "key";
 
     /// Creates a labeled fact.
-    pub fn new(label: impl Into<Cow<'static, str>>, value: impl Into<String>) -> Self {
+    pub fn new(label: impl Into<Cow<'static, str>>, value: impl IntoRendered) -> Self {
         Self {
             label: label.into(),
-            value: value.into(),
+            value: value.into_rendered(),
         }
     }
 
     /// Creates an unlabeled note.
-    pub fn note(value: impl Into<String>) -> Self {
+    pub fn note(value: impl IntoRendered) -> Self {
         Self::new("", value)
     }
 
     /// Creates the [`INDEX`](Self::INDEX) fact locating a nested failure at an element index.
     #[must_use]
     pub fn index(index: usize) -> Self {
-        Self::new(Self::INDEX, alloc::format!("{index}"))
+        Self::new(Self::INDEX, index)
     }
 
     /// Creates the [`KEY`](Self::KEY) fact locating a nested failure at a map key. Pass the key
     /// as an adapter obtained from [`AssertThat::render`], which is printed compactly here.
     #[must_use]
-    pub fn key(rendered_key: impl core::fmt::Debug) -> Self {
-        Self::new(Self::KEY, alloc::format!("{rendered_key:?}"))
+    pub fn key(rendered_key: impl IntoRendered) -> Self {
+        Self {
+            label: Cow::Borrowed(Self::KEY),
+            value: Compact(rendered_key).into_rendered(),
+        }
     }
 
     /// Whether this fact locates a nested failure within its parent's subject.
-    fn is_location(&self) -> bool {
+    pub(crate) fn is_location(&self) -> bool {
         self.label == Self::INDEX || self.label == Self::KEY
-    }
-}
-
-impl Display for Fact {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        if !self.label.is_empty() {
-            f.write_str(&self.label)?;
-            f.write_str(": ")?;
-        }
-        f.write_str(&self.value)
     }
 }
 
@@ -125,9 +118,9 @@ impl Display for Fact {
 /// Every part of a failure is exposed as its own field, so consumers can inspect failures
 /// programmatically or compose their own rendering without parsing formatted text.
 ///
-/// The complete human-readable form is produced by the [`Display`] implementation. In panic mode,
-/// it becomes the panic message. Capture mode retains the fields without formatting that complete
-/// message.
+/// The complete human-readable form is produced by
+/// [`TextReporter`](crate::report::TextReporter). In panic mode, the configured reporter's output
+/// becomes the panic message. Capture mode retains the fields without producing a report.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AssertionFailure {
@@ -151,22 +144,22 @@ pub struct AssertionFailure {
 
     /// The subject, rendered through the chain's [`ValueRenderer`](crate::ValueRenderer), if the
     /// assertion shows it.
-    pub actual: Option<String>,
+    pub actual: Option<Rendered>,
 
     /// The sentence between the actual and the expected value, such as `does not contain` or
     /// `is not greater than`. A failure without a relation is a direct comparison of
-    /// [`expected`](Self::expected) and [`actual`](Self::actual), which [`Display`] renders as an
-    /// aligned `Expected:` / `Actual:` pair.
+    /// [`expected`](Self::expected) and [`actual`](Self::actual), which the text reporter renders
+    /// as an aligned `Expected:` / `Actual:` pair.
     pub relation: Option<Cow<'static, str>>,
 
     /// The value the subject was compared with, rendered through the chain's
     /// [`ValueRenderer`](crate::ValueRenderer), if the assertion has one.
-    pub expected: Option<String>,
+    pub expected: Option<Rendered>,
 
     /// The value a negated assertion found, although it was not expected, rendered through the
     /// chain's [`ValueRenderer`](crate::ValueRenderer). Set by assertions such as
     /// `does_not_contain` and `is_not_equal_to` instead of [`expected`](Self::expected).
-    pub unexpected: Option<String>,
+    pub unexpected: Option<Rendered>,
 
     /// Evidence attached by the failing assertion itself and scoped to exactly this failure: the
     /// differences of an equality comparison, the elements a collection assertion could not find,
@@ -193,29 +186,9 @@ pub struct AssertionFailure {
 }
 
 impl AssertionFailure {
-    /// The assertion-specific text: the rendered subject, the relation, and the expected or
-    /// unexpected value, exactly as [`Display`] shows them, without the location, the subject
-    /// name, the expression, and the `Messages:`, `Details:`, and `Nested failures:` blocks.
-    ///
-    /// ```
-    /// use assertr::prelude::*;
-    ///
-    /// let failures = assert_that!(42).capture(|it| it.is_equal_to(43));
-    ///
-    /// assert_that!(failures[0].description()).is_equal_to("Expected: 43\n\n  Actual: 42\n");
-    /// ```
-    #[must_use]
-    pub fn description(&self) -> String {
-        display::body(
-            self.actual.as_deref(),
-            self.relation.as_deref(),
-            self.expected.as_deref(),
-            self.unexpected.as_deref(),
-        )
-    }
-
     /// Prepends a fact locating this failure within its parent's subject, such as
-    /// [`Fact::index`] or [`Fact::key`]. [`Display`] uses it as the heading of the nested failure.
+    /// [`Fact::index`] or [`Fact::key`]. The text reporter uses it as the heading of the nested
+    /// failure.
     #[must_use]
     pub fn located_at(mut self, fact: Fact) -> Self {
         self.facts.insert(0, fact);

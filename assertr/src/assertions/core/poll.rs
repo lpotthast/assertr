@@ -154,7 +154,7 @@ mod tests {
                 .with_location(false)
                 .capture(PollAssertions::is_pending);
 
-            assert_that!(failures[0].description())
+            assert_that!(TextReporter.report(&failures[0]))
                 .contains("Ready(")
                 .contains(SENTINEL);
         }
@@ -213,7 +213,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_text_report(formatdoc! {r"
                         -------- assertr --------
                         Expression: `Poll::<i32>::Pending`
 
@@ -319,7 +319,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {"
+                    it.has_text_report(formatdoc! {"
                         -------- assertr --------
                         Actual: 42
 
@@ -340,7 +340,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r"
+                    it.has_text_report(formatdoc! {r"
                         -------- assertr --------
                         Expression: `Poll::<i32>::Pending`
 

@@ -94,7 +94,7 @@ impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Prog
             self.failure(FailureKind::Other)
                 .actual(self.render().value(self.actual()))
                 .relation("was not found")
-                .fact("Reason", err)
+                .fact("Reason", format_args!("{err}"))
                 .raise();
         }
 
@@ -120,7 +120,7 @@ impl<'a, 't, R> ProgramAssertionsRequiringPanicMode<'t, R>
             self.failure(FailureKind::Other)
                 .actual(self.render().value(self.actual()))
                 .relation("was not found")
-                .fact("Reason", err)
+                .fact("Reason", format_args!("{err}"))
                 .raise();
         }
 
@@ -155,7 +155,7 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(ProgramAssertions::exists);
-            assert_that!(failures[0].description()).contains(SENTINEL);
+            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
 
             assert_that_panic_by(|| {
                 assert_that!(Program::from(MISSING))

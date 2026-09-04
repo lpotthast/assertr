@@ -130,7 +130,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         if !actual.eq_ignore_ascii_case(expected) {
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
-                .expected(expected)
+                .expected(format_args!("{expected:?}"))
                 .note("Values differ even when ignoring ASCII case.")
                 .raise();
         }
@@ -149,7 +149,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not contain")
-                .expected(expected)
+                .expected(format_args!("{expected:?}"))
                 .raise();
         }
         self
@@ -167,7 +167,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("contains")
-                .unexpected(unexpected)
+                .unexpected(format_args!("{unexpected:?}"))
                 .raise();
         }
         self
@@ -185,7 +185,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not start with")
-                .expected(expected)
+                .expected(format_args!("{expected:?}"))
                 .raise();
         }
         self
@@ -203,7 +203,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("starts with")
-                .unexpected(unexpected)
+                .unexpected(format_args!("{unexpected:?}"))
                 .raise();
         }
         self
@@ -221,7 +221,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not end with")
-                .expected(expected)
+                .expected(format_args!("{expected:?}"))
                 .raise();
         }
         self
@@ -239,7 +239,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("ends with")
-                .unexpected(unexpected)
+                .unexpected(format_args!("{unexpected:?}"))
                 .raise();
         }
         self
@@ -723,10 +723,13 @@ mod tests {
 
         #[test]
         fn all_string_like_subjects_produce_identical_descriptions() {
-            let rendered = |failures: Vec<AssertionFailure>| {
+            let rendered = |mut failures: Vec<AssertionFailure>| {
+                for failure in &mut failures {
+                    failure.expression = None;
+                }
                 failures
                     .iter()
-                    .map(AssertionFailure::description)
+                    .map(|failure| TextReporter.report(failure))
                     .collect::<Vec<_>>()
             };
 
@@ -771,7 +774,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(indoc::formatdoc! {r#"
+                    it.has_text_report(indoc::formatdoc! {r#"
                         -------- assertr --------
                         Expression: `"foobar"`
 

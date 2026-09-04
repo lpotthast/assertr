@@ -35,13 +35,13 @@ fn type_entry_point_uses_the_asserted_type_name() {
 }
 
 #[test]
-fn display_renders_a_subject_name_and_expression_as_separate_fields() {
+fn the_text_reporter_renders_a_subject_name_and_expression_as_separate_fields() {
     let failures = assert_that!(42)
         .with_subject_name("answer")
         .with_location(false)
         .capture(|it| it.is_equal_to(43));
 
-    assert_that!(failures[0].to_string()).is_equal_to(formatdoc! {"
+    assert_that!(TextReporter.report(&failures[0])).is_equal_to(formatdoc! {"
             -------- assertr --------
             Subject: answer
             Expression: `42`
@@ -54,20 +54,20 @@ fn display_renders_a_subject_name_and_expression_as_separate_fields() {
 }
 
 #[test]
-fn display_caps_expressions_to_one_line_and_one_hundred_characters() {
+fn the_text_reporter_caps_expressions_to_one_line_and_one_hundred_characters() {
     const LONG_EXPRESSION: &str = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvw";
 
     let failures = assert_that!(42)
         .with_expression("first line\nsecond line")
         .with_location(false)
         .capture(|it| it.is_equal_to(43));
-    assert_that!(failures[0].to_string()).contains("Expression: `first line...`\n\n");
+    assert_that!(TextReporter.report(&failures[0])).contains("Expression: `first line...`\n\n");
 
     let failures = assert_that!(42)
         .with_expression(LONG_EXPRESSION)
         .with_location(false)
         .capture(|it| it.is_equal_to(43));
-    let rendered = failures[0].to_string();
+    let rendered = TextReporter.report(&failures[0]);
     let expression_line = rendered
         .lines()
         .find(|line| line.starts_with("Expression:"))
@@ -85,8 +85,8 @@ fn derived_chains_start_without_the_root_expression() {
         .capture(|it| it.is_equal_to(43));
 
     assert_that!(failures[0].expression).is_none();
-    assert_that!(failures[0].to_string()).does_not_contain("Subject:");
-    assert_that!(failures[0].to_string()).does_not_contain("Expression:");
+    assert_that!(TextReporter.report(&failures[0])).does_not_contain("Subject:");
+    assert_that!(TextReporter.report(&failures[0])).does_not_contain("Expression:");
 }
 
 #[cfg(feature = "fluent")]

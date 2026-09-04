@@ -66,7 +66,7 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
             self.failure(FailureKind::Equality)
                 .actual(format_args!("{actual}"))
                 .expected(format_args!("{expected}"))
-                .fact(URL, self.actual().url())
+                .fact(URL, format_args!("{}", self.actual().url()))
                 .raise();
         }
 
@@ -142,10 +142,10 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
         let name = name.as_ref();
         if let Some(value) = self.actual().headers().get(name) {
             self.failure(FailureKind::Membership)
-                .actual(header_names(&self))
+                .actual(format_args!("{:#?}", header_names(&self)))
                 .relation("contains the header")
-                .unexpected(name)
-                .fact(URL, self.actual().url())
+                .unexpected(format_args!("{name:?}"))
+                .fact(URL, format_args!("{}", self.actual().url()))
                 .fact("Value", format_args!("{:?}", render_value(value)))
                 .raise();
         }
@@ -163,18 +163,18 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
         match self.actual().headers().get(name) {
             None => {
                 self.failure(FailureKind::Equality)
-                    .actual(header_names(&self))
+                    .actual(format_args!("{:#?}", header_names(&self)))
                     .relation("does not contain the header")
-                    .expected(name)
-                    .fact(URL, self.actual().url())
+                    .expected(format_args!("{name:?}"))
+                    .fact(URL, format_args!("{}", self.actual().url()))
                     .fact("Expected value", format_args!("{expected:?}"))
                     .raise();
             }
             Some(value) if value.as_bytes() != expected.as_bytes() => {
                 self.failure(FailureKind::Equality)
-                    .actual(render_value(value))
-                    .expected(expected)
-                    .fact(URL, self.actual().url())
+                    .actual(format_args!("{:?}", render_value(value)))
+                    .expected(format_args!("{expected:?}"))
+                    .fact(URL, format_args!("{}", self.actual().url()))
                     .fact("Header", format_args!("{name:?}"))
                     .raise();
             }
@@ -290,7 +290,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
                     .relation("is not valid JSON for the expected type")
                     .fact(URL, url)
                     .fact("Expected type", core::any::type_name::<T>())
-                    .fact("Error", error)
+                    .fact("Error", format_args!("{error}"))
                     .raise();
             }
 
@@ -325,7 +325,7 @@ async fn get_text_at<'t, R>(
         this.failure_at(FailureKind::Other, location)
             .relation("has a body that could not be read")
             .fact(URL, url)
-            .fact("Error", error)
+            .fact("Error", format_args!("{error}"))
             .raise();
     }
 
@@ -341,10 +341,10 @@ const URL: &str = "URL";
 fn assert_header_present<M: Mode, R>(this: &AssertThat<'_, reqwest::Response, M, R>, name: &str) {
     if this.actual().headers().get(name).is_none() {
         this.failure(FailureKind::Membership)
-            .actual(header_names(this))
+            .actual(format_args!("{:#?}", header_names(this)))
             .relation("does not contain the header")
-            .expected(name)
-            .fact(URL, this.actual().url())
+            .expected(format_args!("{name:?}"))
+            .fact(URL, format_args!("{}", this.actual().url()))
             .raise();
     }
 }
@@ -378,7 +378,7 @@ fn assert_status_class<M: Mode, R>(
             .actual(format_args!("{}", this.actual().status()))
             .relation(relation)
             .expected(format_args!("{class}"))
-            .fact(URL, this.actual().url())
+            .fact(URL, format_args!("{}", this.actual().url()))
             .raise();
     }
 }
@@ -562,7 +562,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(404, &[], "")`
 
@@ -576,7 +576,7 @@ mod tests {
                     "#});
                 },
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(404, &[], "")`
 
@@ -644,7 +644,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(200, &[], "")`
 
@@ -713,7 +713,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(500, &[], "")`
 
@@ -781,7 +781,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(200, &[], "")`
 
@@ -849,7 +849,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(500, &[], "")`
 
@@ -917,7 +917,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(404, &[], "")`
 
@@ -991,7 +991,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(200, &[("x-api-key", "1234")], "")`
 
@@ -1063,7 +1063,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `response(200, &[("x-api-key", "1234")], "")`
 
@@ -1172,7 +1172,7 @@ mod tests {
 
             assert_that!(failures).contains_exactly_satisfying([
                 |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_display_value(formatdoc! {r#"
+                    it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `ok_response()`
 

@@ -316,24 +316,27 @@ mod tests {
             assert_that!(failures).contains_exactly_satisfying([
                 |failure: AssertThat<AssertionFailure, Capture>| {
                     failure
-                        .satisfies_owned(AssertionFailure::description, |description| {
-                            description.is_equal_to(formatdoc! {r"
+                        .satisfies_owned(
+                            |failure| TextReporter.report(failure),
+                            |description| {
+                                description.contains(formatdoc! {r"
                                     Actual: Mutex {{
                                         data: 42,
                                     }}
 
                                     contains a value that does not satisfy the assertions
                                 "});
-                        })
+                            },
+                        )
                         .satisfies(
                             |failure| &failure.children,
                             |children| {
                                 children.contains_exactly_satisfying([
                                     |child: AssertThat<AssertionFailure, Capture>| {
                                         child.satisfies_owned(
-                                            AssertionFailure::description,
+                                            |failure| TextReporter.report(failure),
                                             |description| {
-                                                description.is_equal_to(formatdoc! {r"
+                                                description.contains(formatdoc! {r"
                                                     Expected: 43
 
                                                       Actual: 42

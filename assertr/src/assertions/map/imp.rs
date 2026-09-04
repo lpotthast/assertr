@@ -4,13 +4,14 @@
 //! functions, so every map type produces identical failure messages.
 
 use alloc::collections::BTreeSet;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::ptr;
 
 use super::{Map, MapKeyQuery, MapLookup};
 use crate::failure::{Fact, FailureBuilder, FailureKind};
 use crate::renderer::{GroupStyle, RenderingOrder};
+use crate::report::TextReporter;
 use crate::{AssertThat, AssertionFailure, AssertrPartialEq, Mode, ValueRenderer, mode::Capture};
 
 /// The value stored under `key`, if any.
@@ -40,7 +41,10 @@ fn keyed_children<Mp: Map + ?Sized>(
 ) -> (Vec<AssertionFailure>, usize) {
     if sorts_for_rendering::<Mp>() {
         unsatisfied.sort_by_cached_key(|failures| {
-            failures.iter().map(ToString::to_string).collect::<String>()
+            failures
+                .iter()
+                .map(|failure| TextReporter.report(failure))
+                .collect::<String>()
         });
     }
     let omitted = unsatisfied.len().saturating_sub(maximum);
@@ -326,11 +330,8 @@ where
             )
             .fact(
                 "Keys not found",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<E, _>(keys_not_found.as_slice(), GroupStyle::List)
-                ),
+                this.render()
+                    .borrowed_values::<E, _>(keys_not_found.as_slice(), GroupStyle::List),
             )
             .raise();
     }
@@ -407,35 +408,24 @@ pub(crate) fn assert_contains_exactly_entries<Mp, K, EK, EV, M, R>(
     if !keys_not_found.is_empty() {
         failure = failure.fact(
             "Keys not found",
-            format_args!(
-                "{:#?}",
-                this.render()
-                    .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List)
-            ),
+            this.render()
+                .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List),
         );
     }
     if !unexpected_entries.is_empty() {
         failure = failure.fact(
             "Unexpected entries",
-            format_args!(
-                "{:#?}",
-                this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
-                    &unexpected_entries,
-                    sorts_for_rendering::<Mp>(),
-                )
+            this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
+                &unexpected_entries,
+                sorts_for_rendering::<Mp>(),
             ),
         );
     }
     if !keys_with_unexpected_values.is_empty() {
         failure = failure.fact(
             "Keys with unexpected values",
-            format_args!(
-                "{:#?}",
-                this.render().borrowed_values::<EK, _>(
-                    keys_with_unexpected_values.as_slice(),
-                    GroupStyle::List
-                )
-            ),
+            this.render()
+                .borrowed_values::<EK, _>(keys_with_unexpected_values.as_slice(), GroupStyle::List),
         );
     }
     failure
@@ -504,22 +494,16 @@ pub(crate) fn assert_contains_exactly_entries_matching<Mp, K, EK, P, M, R>(
     if !keys_not_found.is_empty() {
         failure = failure.fact(
             "Keys not found",
-            format_args!(
-                "{:#?}",
-                this.render()
-                    .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List)
-            ),
+            this.render()
+                .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List),
         );
     }
     if !unexpected_entries.is_empty() {
         failure = failure.fact(
             "Unexpected entries",
-            format_args!(
-                "{:#?}",
-                this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
-                    &unexpected_entries,
-                    sorts_for_rendering::<Mp>(),
-                )
+            this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
+                &unexpected_entries,
+                sorts_for_rendering::<Mp>(),
             ),
         );
     }
@@ -591,22 +575,16 @@ pub(crate) fn assert_contains_exactly_entries_satisfying<Mp, K, EK, A, M, R>(
     if !keys_not_found.is_empty() {
         failure = failure.fact(
             "Keys not found",
-            format_args!(
-                "{:#?}",
-                this.render()
-                    .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List)
-            ),
+            this.render()
+                .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List),
         );
     }
     if !unexpected_entries.is_empty() {
         failure = failure.fact(
             "Unexpected entries",
-            format_args!(
-                "{:#?}",
-                this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
-                    &unexpected_entries,
-                    sorts_for_rendering::<Mp>(),
-                )
+            this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
+                &unexpected_entries,
+                sorts_for_rendering::<Mp>(),
             ),
         );
     }

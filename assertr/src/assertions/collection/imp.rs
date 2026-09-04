@@ -3,12 +3,12 @@
 //! The public [`CollectionAssertions`](super::CollectionAssertions) methods are thin wrappers
 //! around these functions, so every collection type produces identical failure messages.
 
-use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::{Collection, StableOrder};
 use crate::failure::{Fact, FailureBuilder, FailureKind};
 use crate::renderer::{GroupStyle, RenderingOrder};
+use crate::report::TextReporter;
 use crate::{
     AssertThat, AssertionFailure, AssertrPartialEq, EqContext, Mode, ValueRenderer, mode::Capture,
     util::matching::match_bipartite,
@@ -114,7 +114,7 @@ fn element_children<C: Collection + ?Sized>(
         unsatisfied.sort_by_cached_key(|failures| {
             failures
                 .iter()
-                .map(ToString::to_string)
+                .map(|failure| TextReporter.report(failure))
                 .collect::<alloc::string::String>()
         });
     }
@@ -213,11 +213,8 @@ where
             )
             .fact(
                 "Elements not found",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List)
-                ),
+                this.render()
+                    .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List),
             )
             .raise();
     }
@@ -729,23 +726,15 @@ where
         if !result.not_in_expected.is_empty() {
             failure = failure.fact(
                 "Elements not expected",
-                format_args!(
-                    "{:#?}",
-                    this.render().borrowed_values::<T, _>(
-                        result.not_in_expected.as_slice(),
-                        GroupStyle::List
-                    )
-                ),
+                this.render()
+                    .borrowed_values::<T, _>(result.not_in_expected.as_slice(), GroupStyle::List),
             );
         }
         if !result.not_in_actual.is_empty() {
             failure = failure.fact(
                 "Elements not found",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<E, _>(result.not_in_actual.as_slice(), GroupStyle::List)
-                ),
+                this.render()
+                    .borrowed_values::<E, _>(result.not_in_actual.as_slice(), GroupStyle::List),
             );
         }
         if only_differing_in_order {
@@ -889,22 +878,16 @@ pub(crate) fn assert_contains_exactly_in_any_order<C, T, E, M, R>(
         if !elements_not_found.is_empty() {
             failure = failure.fact(
                 "Elements not found",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<E, _>(elements_not_found.as_slice(), GroupStyle::List)
-                ),
+                this.render()
+                    .borrowed_values::<E, _>(elements_not_found.as_slice(), GroupStyle::List),
             );
         }
         if !elements_not_expected.is_empty() {
             failure = failure.fact(
                 "Elements not expected",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<T, _>(elements_not_expected.as_slice(), GroupStyle::List)
-                        .sort_for_rendering(sorts_for_rendering::<C>())
-                ),
+                this.render()
+                    .borrowed_values::<T, _>(elements_not_expected.as_slice(), GroupStyle::List)
+                    .sort_for_rendering(sorts_for_rendering::<C>()),
             );
         }
         failure.raise();
@@ -944,12 +927,9 @@ pub(crate) fn assert_contains_exactly_in_any_order_matching<C, T, P, M, R>(
                 .collect::<Vec<_>>();
             failure = failure.fact(
                 "Elements not matched",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<T, _>(not_matched.as_slice(), GroupStyle::List)
-                        .sort_for_rendering(sorts_for_rendering::<C>())
-                ),
+                this.render()
+                    .borrowed_values::<T, _>(not_matched.as_slice(), GroupStyle::List)
+                    .sort_for_rendering(sorts_for_rendering::<C>()),
             );
         }
         if !result.unmatched_expected.is_empty() {
@@ -1008,12 +988,9 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<C, T, A, M, R>(
                 .collect::<Vec<_>>();
             failure = failure.fact(
                 "Elements not matched",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<T, _>(not_matched.as_slice(), GroupStyle::List)
-                        .sort_for_rendering(sorts_for_rendering::<C>())
-                ),
+                this.render()
+                    .borrowed_values::<T, _>(not_matched.as_slice(), GroupStyle::List)
+                    .sort_for_rendering(sorts_for_rendering::<C>()),
             );
         }
         if !result.unmatched_expected.is_empty() {

@@ -22,11 +22,12 @@
 //!
 //! Panic mode stops at the first failure. Capture mode collects structured [`AssertionFailure`]
 //! values within [`AssertThat::capture`] or the fluent `verify` entry points. A failure carries
-//! its rendered [`actual`](AssertionFailure::actual) and [`expected`](AssertionFailure::expected)
-//! values, the [`relation`](AssertionFailure::relation) between them, further
+//! its structured rendered [`actual`](AssertionFailure::actual) and
+//! [`expected`](AssertionFailure::expected) values, the
+//! [`relation`](AssertionFailure::relation) between them, further
 //! [`facts`](AssertionFailure::facts), nested [`children`](AssertionFailure::children), and a
-//! [`kind`](AssertionFailure::kind) as data. Its text is rendered from those fields only at the
-//! panic or display boundary.
+//! [`kind`](AssertionFailure::kind) as data. A [`FailureReporter`](report::FailureReporter) puts
+//! that data to use. [`TextReporter`](report::TextReporter) produces the default panic message.
 //!
 //! ## Custom assertions
 //!
@@ -52,8 +53,9 @@
 //!   [`unexpected`](failure::FailureBuilder::unexpected) value, labeled
 //!   [`fact`](failure::FailureBuilder::fact)s, and nested
 //!   [`child`](failure::FailureBuilder::child) failures, and
-//!   [`raise`](failure::FailureBuilder::raise) records or panics. The text of the failure is
-//!   rendered from these fields with the same grammar every built-in assertion uses.
+//!   [`raise`](failure::FailureBuilder::raise) records or panics. Every diagnostic value passed to
+//!   the builder implements [`IntoRendered`](renderer::IntoRendered), so adapters remain
+//!   structured instead of being flattened into text.
 //!
 //! Render values shown by a leaf assertion through [`AssertThat::render`]. Its
 //! [`value`](renderer::RenderingContext::value), [`values`](renderer::RenderingContext::values), and
@@ -62,6 +64,8 @@
 //! rendered leaf always retains type metadata. Customize its hint and
 //! text visibility through [`Typed::with_type_hint`](renderer::Typed::with_type_hint) and
 //! [`Typed::show_type_hint`](renderer::Typed::show_type_hint).
+//! Calling [`IntoRendered::into_rendered`](renderer::IntoRendered::into_rendered) consumes an
+//! adapter into the same [`Rendered`](renderer::Rendered) tree stored by a failure.
 //!
 //! ```
 //! use assertr::prelude::*;
@@ -80,7 +84,7 @@
 //!
 //!     fn has_name(self) -> Self
 //!     where
-//!         R: ValueRenderer<Person>;
+//!         R: ValueRenderer<Person> + ValueRenderer<String>;
 //! }
 //!
 //! impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
@@ -99,13 +103,14 @@
 //!     #[track_caller]
 //!     fn has_name(self) -> Self
 //!     where
-//!         R: ValueRenderer<Person>,
+//!         R: ValueRenderer<Person> + ValueRenderer<String>,
 //!     {
 //!         self.track_assertion();
 //!         if self.actual().name.is_empty() {
 //!             self.failure(FailureKind::Predicate)
 //!                 .actual(self.render().value(self.actual()))
 //!                 .relation("has no name")
+//!                 .fact("Name", self.render().value(&self.actual().name))
 //!                 .raise();
 //!         }
 //!         self
@@ -162,6 +167,7 @@ mod details;
 pub mod failure;
 pub mod mode;
 pub mod renderer;
+pub mod report;
 #[cfg(test)]
 mod test_support;
 mod tracking;

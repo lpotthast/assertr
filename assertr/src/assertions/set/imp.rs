@@ -62,15 +62,12 @@ where
             .expected(this.render().collection(expected_superset))
             .fact(
                 "Elements not in expected",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<S::Item, _>(
-                            elements_not_in_expected.as_slice(),
-                            GroupStyle::List
-                        )
-                        .sort_for_rendering(sorts_for_rendering::<S>())
-                ),
+                this.render()
+                    .borrowed_values::<S::Item, _>(
+                        elements_not_in_expected.as_slice(),
+                        GroupStyle::List,
+                    )
+                    .sort_for_rendering(sorts_for_rendering::<S>()),
             )
             .notes(type_difference_detail::<S, O>())
             .raise();
@@ -100,15 +97,12 @@ where
             .expected(this.render().collection(expected_subset))
             .fact(
                 "Elements not in actual",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<S::Item, _>(
-                            elements_not_in_actual.as_slice(),
-                            GroupStyle::List
-                        )
-                        .sort_for_rendering(sorts_for_rendering::<O>())
-                ),
+                this.render()
+                    .borrowed_values::<S::Item, _>(
+                        elements_not_in_actual.as_slice(),
+                        GroupStyle::List,
+                    )
+                    .sort_for_rendering(sorts_for_rendering::<O>()),
             )
             .notes(type_difference_detail::<S, O>())
             .raise();
@@ -138,15 +132,12 @@ where
             .expected(this.render().collection(other))
             .fact(
                 "Overlapping elements",
-                format_args!(
-                    "{:#?}",
-                    this.render()
-                        .borrowed_values::<S::Item, _>(
-                            overlapping_elements.as_slice(),
-                            GroupStyle::List
-                        )
-                        .sort_for_rendering(sorts_for_rendering::<S>())
-                ),
+                this.render()
+                    .borrowed_values::<S::Item, _>(
+                        overlapping_elements.as_slice(),
+                        GroupStyle::List,
+                    )
+                    .sort_for_rendering(sorts_for_rendering::<S>()),
             )
             .notes(type_difference_detail::<S, O>())
             .raise();

@@ -182,7 +182,7 @@ mod tests {
             .capture(|it| it.contains(42));
 
         assert_that!(&failures).has_length(1);
-        assert_that!(failures[0].to_string()).contains("Actual: BTreeSet {");
+        assert_that!(TextReporter.report(&failures[0])).contains("Actual: BTreeSet {");
     }
 
     #[cfg(feature = "std")]

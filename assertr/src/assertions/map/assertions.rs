@@ -315,13 +315,13 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_exactly_entries([("x", 10), ("y", 20), ("z", 30)]));
 
-            assert_that!(failures[0].description())
+            assert_that!(TextReporter.report(&failures[0]))
                 .contains("Expected: [")
                 .contains("] (... 2 more entries ...)");
             assert_that!(failures[0].facts.iter().any(|fact| {
                 fact.label == "Unexpected entries"
-                    && fact.value.starts_with('[')
-                    && fact.value.contains("] (... 2 more entries ...)")
+                    && rendered_text(&fact.value).starts_with('[')
+                    && rendered_text(&fact.value).contains("] (... 2 more entries ...)")
             }))
             .is_true();
         }
@@ -734,7 +734,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_entry_satisfying("value", is_renderer_expected_two));
 
-            assert_that!(failures[0].children[0].description()).contains(SENTINEL);
+            assert_that!(TextReporter.report(&failures[0].children[0])).contains(SENTINEL);
         }
     }
 
@@ -1093,9 +1093,9 @@ mod tests {
             let keys = failures[0]
                 .children
                 .iter()
-                .map(|child| child.facts[0].value.as_str())
+                .map(|child| rendered_text(&child.facts[0].value))
                 .collect::<Vec<_>>();
-            assert_that!(keys).contains_exactly(["\"b\"", "\"a\""]);
+            assert_that!(keys).contains_exactly(["\"b\"".to_owned(), "\"a\"".to_owned()]);
         }
 
         #[test]
@@ -1107,9 +1107,9 @@ mod tests {
             let keys = failures[0]
                 .children
                 .iter()
-                .map(|child| child.facts[0].value.as_str())
+                .map(|child| rendered_text(&child.facts[0].value))
                 .collect::<Vec<_>>();
-            assert_that!(keys).contains_exactly(["\"a\"", "\"b\""]);
+            assert_that!(keys).contains_exactly(["\"a\"".to_owned(), "\"b\"".to_owned()]);
         }
 
         #[test]
@@ -1122,7 +1122,8 @@ mod tests {
                 .capture(|it| it.contains_exactly_entries([("a", 0), ("b", 0), ("c", 0)]));
 
             assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(failures[0].children[0].facts[0].value.as_str()).is_equal_to("\"a\"");
+            assert_that!(rendered_text(&failures[0].children[0].facts[0].value))
+                .is_equal_to("\"a\"");
             assert_that!(failures[0].facts.as_slice())
                 .contains(crate::Fact::note("... 2 more unexpected values ..."));
         }
@@ -1443,7 +1444,8 @@ mod tests {
                 .capture(|it| it.contains_exactly_entries_satisfying(assertions));
 
             assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(failures[0].children[0].facts[0].value.as_str()).is_equal_to("\"a\"");
+            assert_that!(rendered_text(&failures[0].children[0].facts[0].value))
+                .is_equal_to("\"a\"");
             assert_that!(failures[0].facts.as_slice())
                 .contains_exactly([crate::Fact::note("... 2 more unsatisfied values ...")]);
         }

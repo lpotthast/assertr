@@ -140,9 +140,9 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
 
         if actual != expected {
             self.failure(FailureKind::Length)
-                .actual(actual)
+                .actual(format_args!("{actual:?}"))
                 .relation("is not the expected child count")
-                .expected(expected)
+                .expected(format_args!("{expected:?}"))
                 .raise();
         }
         self
@@ -155,9 +155,9 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
 
         if actual != expected {
             self.failure(FailureKind::Length)
-                .actual(actual)
+                .actual(format_args!("{actual:?}"))
                 .relation("is not the expected attachment count")
-                .expected(expected)
+                .expected(format_args!("{expected:?}"))
                 .raise();
         }
         self
@@ -182,9 +182,9 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
 
         if actual != expected {
             self.failure(FailureKind::Equality)
-                .actual(actual)
+                .actual(format_args!("{actual:?}"))
                 .relation("is not the expected current context display value")
-                .expected(expected)
+                .expected(format_args!("{expected:?}"))
                 .raise();
         }
         self
@@ -199,9 +199,9 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
 
         if actual != expected {
             self.failure(FailureKind::Equality)
-                .actual(actual)
+                .actual(format_args!("{actual:?}"))
                 .relation("is not the expected current context debug string")
-                .expected(expected)
+                .expected(format_args!("{expected:?}"))
                 .raise();
         }
         self
@@ -779,7 +779,7 @@ mod tests {
 
                 assert_that!(failures).contains_exactly_satisfying([
                     |it: AssertThat<AssertionFailure, Capture>| {
-                        it.has_display_value(formatdoc! {r#"
+                        it.has_text_report(formatdoc! {r#"
                             -------- assertr --------
                             Expected: "other"
 

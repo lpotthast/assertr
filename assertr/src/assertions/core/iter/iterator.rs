@@ -720,8 +720,13 @@ mod tests {
             assert_that!(failures[0].children.as_slice()).has_length(1);
             assert_that!(failures[0].children[0].facts.as_slice())
                 .contains(crate::Fact::new(crate::Fact::INDEX, "4"));
-            assert_that!(failures[0].facts.last().map(|fact| fact.value.as_str()))
-                .is_equal_to(Some("... 19 more unsatisfied elements ..."));
+            assert_that!(
+                failures[0]
+                    .facts
+                    .last()
+                    .map(|fact| rendered_text(&fact.value))
+            )
+            .is_equal_to(Some("... 19 more unsatisfied elements ...".to_owned()));
         }
     }
 

@@ -299,7 +299,7 @@ mod tests {
                     })
                 });
 
-            assert_that!(failures[0].facts[0].value.as_str())
+            assert_that!(rendered_text(&failures[0].facts[0].value))
                 .contains(format!("expected {SENTINEL}, but was {SENTINEL}"));
         }
     }
@@ -333,7 +333,7 @@ mod tests {
                 })
             });
 
-            assert_that!(failures[0].to_string().as_str()).contains(indoc::indoc! {r"
+            assert_that!(TextReporter.report(&failures[0]).as_str()).contains(indoc::indoc! {r"
                 Expected: NestedParentAssertrEq {
                     child: Eq::Eq(ChildAssertrEq {
                         id: Eq::Eq(2),
@@ -364,7 +364,7 @@ mod tests {
                 })
             });
 
-            assert_that!(failures[0].to_string().as_str()).contains(indoc::indoc! {r"
+            assert_that!(TextReporter.report(&failures[0]).as_str()).contains(indoc::indoc! {r"
                 Expected: VecParentAssertrEq {
                     children: Eq::Eq([
                         ChildAssertrEq {
@@ -404,7 +404,7 @@ mod tests {
                 })
             });
 
-            assert_that!(failures[0].to_string().as_str()).contains(indoc::indoc! {r#"
+            assert_that!(TextReporter.report(&failures[0]).as_str()).contains(indoc::indoc! {r#"
                 Expected: MapParentAssertrEq {
                     children: Eq::Eq({
                         "first": ChildAssertrEq {

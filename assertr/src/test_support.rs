@@ -2,10 +2,41 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::{
-    AssertrPartialEq, EqContext, ValueRenderer,
+    AssertThat, AssertionFailure, AssertrPartialEq, EqContext, Mode, ValueRenderer,
     assertions::{HasLength, collection::Collection, map::Map, set::SetLookup},
+    failure::FailureKind,
+    renderer::Rendered,
     renderer::{CollectionPresentation, RenderingOrder},
+    report::TextReporter,
 };
+
+pub(crate) fn rendered_text(value: &Rendered) -> alloc::string::String {
+    let mut text = alloc::string::String::new();
+    value
+        .write(&mut text, true)
+        .expect("writing a rendered value to a String cannot fail");
+    text
+}
+
+pub(crate) trait FailureReportAssertions {
+    fn has_text_report(self, expected: impl AsRef<str>) -> Self;
+}
+
+impl<M: Mode, R> FailureReportAssertions for AssertThat<'_, AssertionFailure, M, R> {
+    #[track_caller]
+    fn has_text_report(self, expected: impl AsRef<str>) -> Self {
+        self.track_assertion();
+        let report = TextReporter.report(self.actual());
+        let expected = expected.as_ref();
+        if report != expected {
+            self.failure(FailureKind::Equality)
+                .actual(format_args!("{report:?}"))
+                .expected(format_args!("{expected:?}"))
+                .raise();
+        }
+        self
+    }
+}
 
 /// A set without a deterministic iteration order, like a `HashSet`, that is available in every
 /// feature configuration.

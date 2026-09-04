@@ -46,7 +46,7 @@ fn main() {
             data: any(),
         })
     });
-    failures[0].to_string().must().be_equal_to(formatdoc! {r#"
+    TextReporter.report(&failures[0]).must().be_equal_to(formatdoc! {r#"
             -------- assertr --------
             Expected: FooAssertrEq {{
                 id: Eq::Eq(2),

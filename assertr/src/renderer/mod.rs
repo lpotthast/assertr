@@ -6,15 +6,16 @@
 mod budget;
 mod context;
 mod presentation;
+mod rendered;
 mod type_info;
 mod value;
 
 pub use budget::{RenderingBudget, RenderingBudgetBuilder};
 pub use context::{RenderedValue, RenderedValues, RenderingContext};
 pub use presentation::{CollectionPresentation, GroupStyle, RenderingOrder};
+pub use rendered::{IntoRendered, Rendered, RenderedBody};
 pub use type_info::{TypeHint, Typed};
 pub use value::{CustomRenderer, DebugRenderer, ValueRenderer};
 
-#[cfg(feature = "jiff")]
 pub(crate) use context::Compact;
 pub(crate) use context::omission;

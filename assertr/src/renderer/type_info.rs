@@ -102,7 +102,7 @@ impl<D: Debug> Debug for Typed<D> {
 /// Removes reference prefixes, module qualification, and generic arguments from a
 /// [`core::any::type_name`] while keeping the structure of composite types such as slices,
 /// arrays, tuples, pointers, and function types.
-fn short_rust_type_name(type_name: &str) -> String {
+pub(super) fn short_rust_type_name(type_name: &str) -> String {
     let type_name = type_name.trim_start_matches('&');
     let type_name = type_name.strip_prefix("mut ").unwrap_or(type_name);
     let mut short = String::with_capacity(type_name.len());

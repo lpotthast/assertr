@@ -264,7 +264,7 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(|it| it.contains(RendererExpected(2)));
-            assert_that!(failures[0].description()).contains(SENTINEL);
+            assert_that!(TextReporter.report(&failures[0])).contains(SENTINEL);
         }
     }
 
@@ -415,8 +415,8 @@ mod tests {
                 });
 
             assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(failures[0].children[0].actual.as_deref())
-                .is_equal_to(Some("123... 3 more characters ..."));
+            assert_that!(failures[0].children[0].actual.as_ref().map(rendered_text))
+                .is_equal_to(Some("123... 3 more characters ...".to_owned()));
             assert_that!(failures[0].facts.as_slice())
                 .contains_exactly([crate::Fact::note("... 2 more unsatisfied elements ...")]);
         }

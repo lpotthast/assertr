@@ -15,17 +15,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `RenderingContext::value` returns a `renderer::Typed` adapter. `Typed::with_type_hint` selects the
   `renderer::TypeHint` (`Full`, `Short`, or `Label`) derived from the value's Rust type, and `Typed::show_type_hint`
   controls whether text output shows it. Hints are hidden by default.
+- `renderer::Rendered` and `RenderedBody` retain diagnostic values as typed trees of leaves, groups, maps, tuples,
+  variants, structs, and inaccessible placeholders. Truncation counts, presentation-only sorting, and locally compact
+  layout stay data.
+  `renderer::IntoRendered` consumes the lazy adapters returned by `AssertThat::render()` into the same tree stored in
+  a failure.
+- `report::FailureReporter` supports arbitrary uses of a structured failure through an associated output type.
+  `TextReporter` produces the default human-readable panic report. With `std`, `report::set_reporter` installs a
+  string-producing process-wide panic reporter once. Side-effect-only reporters can return `()` when applied directly
+  to captured failures.
 - `BinaryHeap` implements `HasLength` and `Collection`, so heaps support length and order-free collection assertions.
   Its diagnostic presentation is sorted and explicitly marked as such.
 - `StableOrderExtractAssertions` provides `get_first`, `get_last`, and `get_single`.
   `RandomAccessExtractAssertions` provides `get_at`. These panic-mode projections borrow the assertion chain and the
   selected element.
-- `AssertionFailure` exposes every part of a failure as data: the rendered `actual` and `expected` values, the
-  `relation` between them, the `unexpected` value of a negated assertion, `facts` (a list of `Fact { label, value }`),
-  nested `children`, and a `FailureKind` tag in `kind`. `AssertionFailure::description()` renders the
-  assertion-specific text from those fields. `Fact` and `FailureKind` are re-exported at the crate root. Nested
-  failures raised by `_satisfying` assertions, and the elements rejected by positional or `_matching` assertions, are
-  `children` located by a `Fact::INDEX` or `Fact::KEY` fact instead of pre-rendered detail strings.
+- `AssertionFailure` exposes every part of a failure as data: `actual`, `expected`, and `unexpected` are
+  `renderer::Rendered` value trees, `relation` is the sentence between them, `facts` retain labeled rendered trees,
+  nested failures are `children`, and `kind` is a `FailureKind` family tag. `Fact` and `FailureKind` are re-exported at
+  the crate root. Nested failures raised by `_satisfying` assertions, and the elements rejected by positional or
+  `_matching` assertions, are `children` located by a `Fact::INDEX` or `Fact::KEY` fact instead of pre-rendered detail
+  strings.
 
 ### Changed
 
@@ -51,16 +60,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `RENDERING_ORDER: renderer::RenderingOrder`, and keeps lookup separate in `MapLookup`. `CollectionStyle` was replaced
   by `renderer::GroupStyle` for explicitly styled ad-hoc groups passed to `RenderingContext::values`,
   `RenderingContext::borrowed_values`, or `EqContext::render_values`.
-- **Breaking:** The `AssertionFailure::description` and `AssertionFailure::details` fields were removed. The text of
-  a failure is derived from its fields: call `description()` for the assertion-specific text, format the failure
-  with `Display` for the complete report, or read `facts` for the evidence that `details` carried, each `Fact`
-  formatting as `label: value`.
+- **Breaking:** The `AssertionFailure::description` and `AssertionFailure::details` fields were removed. A failure and
+  its facts no longer implement `Display`. Use `TextReporter::report(&failure)` for the complete human-readable
+  report, or inspect `relation`, the `Rendered` value fields, and `facts` directly.
 - **Breaking:** `AssertThat::fail`, `AssertThat::fail_with_details`, and the `failure::Failure` trait were removed.
   Custom leaf assertions raise failures the way built-in ones do: `AssertThat::failure(kind)` returns a
   `failure::FailureBuilder` that takes the rendered `actual`, the `relation`, the `expected` or `unexpected` value,
-  labeled facts, notes, and nested children, and `raise()` records or panics. `FailureBuilder::detached` builds a
-  child failure, and `AssertionFailure::located_at` with `Fact::index` or `Fact::key` locates it in the parent's
-  subject.
+  labeled facts, notes, and nested children, and `raise()` records or panics. Values implement
+  `renderer::IntoRendered`; pass rendering adapters directly so structure is retained. `FailureBuilder::detached`
+  builds a child failure, and `AssertionFailure::located_at` with `Fact::index` or `Fact::key` locates it in the
+  parent's subject.
 - Every built-in failure is rendered from its fields by one grammar: `Actual:`, the relation sentence, `Expected:`
   (or `Unexpected:` for a negated assertion), then `Messages:` (chain messages), `Details:` (one bullet per fact as
   `label: value`), and `Nested failures:` (children indented one level and introduced by `At index N:` or
