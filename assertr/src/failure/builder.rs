@@ -18,10 +18,24 @@ use crate::{
 
 /// The chain a failure is raised on, seen through the pieces the builder needs from it.
 pub(crate) trait FailureSink: Fallible + WithDetail {
+    /// Whether failures are collected for later inspection (`true`) or raise an immediate panic
+    /// (`false`).
     fn captures(&self) -> bool;
-    fn print_location(&self) -> bool;
+
+    /// Whether the source location of the assertion should be included in assertion failures. This
+    /// pinpoints the location in user's code that failed. Typically turned off for internal assertr
+    /// unit tests, to avoid frequent failure message churn.
+    fn include_location(&self) -> bool;
+
+    /// User provided descriptive name of the thing assertions are made on.
     fn subject_name(&self) -> Option<String>;
+
+    /// Rust expression written inside an `assert_that!(...)` or fluent `.must(...)` call.
+    /// Typically, captured automatically by macro code.
     fn expression(&self) -> Option<&'static str>;
+
+    /// A context-specific adapter that produces panic text.
+    fn panic_presentation(&self) -> Option<&super::panic_presentation::PanicPresentation>;
 }
 
 impl<T, M: Mode, R> FailureSink for AssertThat<'_, T, M, R> {
@@ -29,8 +43,8 @@ impl<T, M: Mode, R> FailureSink for AssertThat<'_, T, M, R> {
         M::CAPTURES
     }
 
-    fn print_location(&self) -> bool {
-        self.state.print_location
+    fn include_location(&self) -> bool {
+        self.state.include_location
     }
 
     fn subject_name(&self) -> Option<String> {
@@ -39,6 +53,10 @@ impl<T, M: Mode, R> FailureSink for AssertThat<'_, T, M, R> {
 
     fn expression(&self) -> Option<&'static str> {
         self.state.expression
+    }
+
+    fn panic_presentation(&self) -> Option<&super::panic_presentation::PanicPresentation> {
+        self.state.panic_presentation.as_deref()
     }
 }
 
@@ -108,7 +126,7 @@ impl<'c> FailureBuilder<Attached<'c>> {
     /// Panics with the formatted failure message when not in capture mode.
     pub fn raise(self) {
         let Attached { sink, location } = self.target;
-        let location = if sink.print_location() {
+        let location = if sink.include_location() {
             Some(location)
         } else {
             None
@@ -121,7 +139,8 @@ impl<'c> FailureBuilder<Attached<'c>> {
         if sink.captures() {
             sink.store_failure(failure);
         } else {
-            panic!("{}", super::adapter::message_for_panic(&failure));
+            let text = super::panic_presentation::render(&failure, sink.panic_presentation());
+            panic!("{text}");
         }
     }
 }

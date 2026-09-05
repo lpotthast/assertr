@@ -21,10 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renderer::IntoRendered` consumes the lazy adapters returned by `AssertThat::render()` into the same tree stored in
   a failure.
 - `failure::adapter::Adapter<Input>` transforms structured failures and intermediate representations with typed
-  outputs and errors. `then`, `tap`, sequential `FanOut`, and `FailurePipeline::branch` compose linear and independent
-  processing paths. `ToHumanReadableText` produces the default typed text output. With `std`,
-  `set_failure_pipeline` installs a string-producing process-wide panic pipeline once and falls back to the
-  human-readable failure plus an adapter diagnostic if that pipeline errors or panics.
+  outputs and errors. `then` chains transformations, and `map_err` returns a `MapErr` adapter that changes the error
+  type while preserving successful output. `ToHumanReadableText` produces the built-in text representation,
+  and `StdOutLogger` is available for explicit processing with `std`. `AssertThat::with_panic_presentation`
+  selects an owned `'static` adapter returning `HumanReadableText` for panic mode and converts displayable errors to
+  strings internally. Mapped and derived assertions share the selected adapter without requiring `Clone`, `Send`, or
+  `Sync`. Adapters used explicitly may still borrow local data. `HumanReadableText::new` constructs text for custom
+  presentations and adapter chains.
+  Presentation runs on the asserting thread and defaults to `ToHumanReadableText`. Returned presentation errors
+  fall back to the built-in report with a diagnostic, as do unwinding adapter panics with `std`. Capture mode
+  retains structured failures without invoking presentation. Assertion failure reports are never automatically
+  logged to stdout.
 - `BinaryHeap` implements `HasLength` and `Collection`, so heaps support length and order-free collection assertions.
   Its diagnostic presentation is sorted and explicitly marked as such.
 - `StableOrderExtractAssertions` provides `get_first`, `get_last`, and `get_single`.

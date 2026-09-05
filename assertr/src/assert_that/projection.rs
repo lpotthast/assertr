@@ -277,7 +277,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         let sink = AssertThat::new_capturing(Actual::Borrowed(element))
             .with_renderer(self.state.renderer.clone())
             .with_rendering_budget(self.state.rendering_budget)
-            .with_location(self.state.print_location)
+            .with_location(self.state.include_location)
             .satisfies(|it| it, assertions);
         sink.state.failures.take()
     }

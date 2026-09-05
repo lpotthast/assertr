@@ -32,7 +32,7 @@ use core::{
     ops::Deref,
 };
 
-use super::Adapter;
+use super::super::Adapter;
 use crate::{AssertionFailure, Fact, failure::BANNER, renderer::Rendered};
 
 /// The typed human-readable representation of an assertion failure.
@@ -44,7 +44,13 @@ use crate::{AssertionFailure, Fact, failure::BANNER, renderer::Rendered};
 pub struct HumanReadableText(String);
 
 impl HumanReadableText {
-    /// Borrows the generated text.
+    /// Creates human-readable text for a custom failure presentation or adapter chain.
+    #[must_use]
+    pub fn new(text: impl Into<String>) -> Self {
+        Self(text.into())
+    }
+
+    /// Borrows the text.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0

@@ -5,6 +5,11 @@
 //! preview becomes the failure's actual value, and what the scan learned about consumption
 //! becomes its facts.
 
+mod cardinality;
+mod membership;
+mod positional;
+mod unordered;
+
 use alloc::{collections::VecDeque, vec::Vec};
 use core::borrow::Borrow;
 
@@ -14,6 +19,23 @@ use crate::{
     mode::Capture,
     renderer::{GroupStyle, RenderedValues},
     util::matching::match_bipartite,
+};
+
+pub(crate) use cardinality::{assert_has_length, assert_is_empty, assert_is_not_empty};
+pub(crate) use membership::{
+    assert_contains, assert_contains_all, assert_contains_matching, assert_contains_satisfying,
+    assert_does_not_contain, assert_does_not_contain_matching, assert_does_not_contain_satisfying,
+};
+pub(crate) use positional::{
+    assert_contains_contiguous, assert_contains_contiguous_matching,
+    assert_contains_contiguous_satisfying, assert_contains_exactly,
+    assert_contains_exactly_matching, assert_contains_exactly_satisfying, assert_ends_with,
+    assert_ends_with_matching, assert_ends_with_satisfying, assert_starts_with,
+    assert_starts_with_matching, assert_starts_with_satisfying,
+};
+pub(crate) use unordered::{
+    assert_contains_exactly_in_any_order, assert_contains_exactly_in_any_order_matching,
+    assert_contains_exactly_in_any_order_satisfying,
 };
 
 const PREVIEW_CAPACITY: usize = 16;
@@ -201,25 +223,3 @@ where
         .relation("does not match its predicate")
         .build()
 }
-
-mod cardinality;
-mod membership;
-mod positional;
-mod unordered;
-
-pub(crate) use cardinality::{assert_has_length, assert_is_empty, assert_is_not_empty};
-pub(crate) use membership::{
-    assert_contains, assert_contains_all, assert_contains_matching, assert_contains_satisfying,
-    assert_does_not_contain, assert_does_not_contain_matching, assert_does_not_contain_satisfying,
-};
-pub(crate) use positional::{
-    assert_contains_contiguous, assert_contains_contiguous_matching,
-    assert_contains_contiguous_satisfying, assert_contains_exactly,
-    assert_contains_exactly_matching, assert_contains_exactly_satisfying, assert_ends_with,
-    assert_ends_with_matching, assert_ends_with_satisfying, assert_starts_with,
-    assert_starts_with_matching, assert_starts_with_satisfying,
-};
-pub(crate) use unordered::{
-    assert_contains_exactly_in_any_order, assert_contains_exactly_in_any_order_matching,
-    assert_contains_exactly_in_any_order_satisfying,
-};

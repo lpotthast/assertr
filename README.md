@@ -146,6 +146,12 @@ Blanket implementations make general assertions available to user-defined types.
 
 ## Guides
 
+Failure reporting has three responsibilities:
+
+- **Failure construction:** Every assertion builds an `AssertionFailure` containing structured evidence.
+- **Failure handling:** Capture mode stores it. Panic mode asks a presentation adapter to produce the panic text.
+- **Presentation:** An adapter converts the failure into another representation. `.then()` allows intermediate transformations.
+
 The detailed material lives on the API item that owns it:
 
 - **Capture mode**: collect failures as structured `AssertionFailure` values instead of panicking. See
@@ -154,8 +160,14 @@ The detailed material lives on the API item that owns it:
 - **Failure adapters**: inspect retained value trees or transform failures through typed, chainable adapters. See
   [`Rendered`](https://docs.rs/assertr/latest/assertr/renderer/struct.Rendered.html),
   [`Adapter`](https://docs.rs/assertr/latest/assertr/failure/adapter/trait.Adapter.html),
-  [`FailurePipeline`](https://docs.rs/assertr/latest/assertr/failure/adapter/struct.FailurePipeline.html), and
-  [`ToHumanReadableText`](https://docs.rs/assertr/latest/assertr/failure/adapter/struct.ToHumanReadableText.html).
+  [`AdapterExt::map_err`](https://docs.rs/assertr/latest/assertr/failure/adapter/trait.AdapterExt.html#method.map_err),
+  and [`ToHumanReadableText`](https://docs.rs/assertr/latest/assertr/failure/adapter/struct.ToHumanReadableText.html).
+  Select panic presentation with
+  [`AssertThat::with_panic_presentation`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.with_panic_presentation)
+  for an owned `'static` adapter. It converts displayable errors to strings internally. Move or clone local data into
+  the adapter, or share owned data through `Rc`. Derived assertions share the adapter without requiring `Clone`.
+  Presentation returns `HumanReadableText` and defaults to `ToHumanReadableText`.
+  Capture mode retains structured failures for explicit adapter processing.
 - **Partial equality**: compare only some fields of a struct with `#[derive(AssertrEq)]`, including nested structs and
   collections of them. See [`AssertrEq`](https://docs.rs/assertr/latest/assertr/prelude/derive.AssertrEq.html).
 - **Rendering values without `Debug`**: swap the renderer that failure messages use. See

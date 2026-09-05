@@ -5,11 +5,10 @@
 //! differences.
 
 mod equality;
-
-pub use equality::{AssertrPartialEq, Differences, Eq, EqContext, any, eq};
-
 #[cfg(feature = "std")]
 /// Partial comparison for hash maps.
 pub mod hashmap;
 /// Partial comparison for slices.
 pub mod slice;
+
+pub use equality::{AssertrPartialEq, Differences, Eq, EqContext, any, eq};

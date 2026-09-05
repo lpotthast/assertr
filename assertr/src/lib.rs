@@ -5,9 +5,9 @@
 // or reference.
 #![allow(clippy::wrong_self_convention)]
 #![doc = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/",
-    env!("CARGO_PKG_README")
+env!("CARGO_MANIFEST_DIR"),
+"/",
+env!("CARGO_PKG_README")
 ))]
 //!
 //! ## Core model
@@ -28,8 +28,9 @@
 //! [`facts`](AssertionFailure::facts), nested [`children`](AssertionFailure::children), and a
 //! [`kind`](AssertionFailure::kind) as data. An
 //! [`Adapter`](failure::adapter::Adapter) transforms that data, and adapters compose into typed
-//! pipelines. [`ToHumanReadableText`](failure::adapter::ToHumanReadableText) produces the default
-//! panic message.
+//! chains. Capture mode stores failures without invoking presentation. Panic mode uses the
+//! context's [presentation adapter](AssertThat::with_panic_presentation) to produce the panic
+//! text, defaulting to [`ToHumanReadableText`](failure::adapter::ToHumanReadableText).
 //!
 //! ## Custom assertions
 //!
@@ -145,6 +146,30 @@ extern crate self as assertr;
 #[cfg(all(test, not(feature = "std")))]
 extern crate std;
 
+#[doc(hidden)]
+pub mod __private;
+pub mod actual;
+mod assert_that;
+pub mod assertions;
+pub mod cmp;
+pub mod condition;
+mod conversion;
+mod details;
+mod entry;
+pub mod failure;
+pub mod mode;
+/// One glob import brings every assertion into scope.
+///
+/// ```
+/// use assertr::prelude::*;
+/// ```
+pub mod prelude;
+pub mod renderer;
+#[cfg(test)]
+mod test_support;
+mod tracking;
+mod util;
+
 use actual::Actual;
 use alloc::{string::String, vec::Vec};
 use core::{
@@ -157,42 +182,16 @@ use failure::Fallible;
 use mode::Mode;
 use tracking::NumberOfAssertions;
 
-#[doc(hidden)]
-pub mod __private;
-pub mod actual;
-mod assert_that;
-pub mod assertions;
-pub mod cmp;
-pub mod condition;
-mod conversion;
-mod details;
-pub mod failure;
-pub mod mode;
-pub mod renderer;
-#[cfg(test)]
-mod test_support;
-mod tracking;
-mod util;
-
 #[cfg(feature = "fluent")]
 pub use assertr_derive::fluent_expressions;
 pub use cmp::{AssertrPartialEq, Differences, Eq, EqContext, any, eq};
-pub use failure::{AssertionFailure, Fact, FailureKind};
-pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
-
-/// One glob import brings every assertion into scope.
-///
-/// ```
-/// use assertr::prelude::*;
-/// ```
-pub mod prelude;
-
-mod entry;
 #[cfg(feature = "fluent")]
 pub use entry::{IntoAssertContext, IntoOwnedAssertContext};
 pub use entry::{PanicValue, Type, assert_that_type};
 #[cfg(feature = "std")]
 pub use entry::{assert_that_panic_by, assert_that_panic_by_async};
+pub use failure::{AssertionFailure, Fact, FailureKind};
+pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
 
 /// An assertion chain over a subject of type `T`.
 ///
@@ -213,26 +212,42 @@ pub struct AssertThat<'t, T, M: Mode, R = DebugRenderer> {
 }
 
 struct ChainState<'t, M: Mode, R> {
-    // Derived assertions can be created. Calling `.fail*` on them should propagate to the root assertion!
+    /// The parent receives assertion counts and captured failures from derived assertions.
     parent: Option<&'t dyn DynAssertThat>,
 
+    /// User provided descriptive name of the thing assertions are made on.
     subject_name: Option<String>,
+
+    /// Rust expression written inside an `assert_that!(...)` or fluent `.must(...)` call.
+    /// Typically, captured automatically by macro code.
     expression: Option<&'static str>,
+
     detail_messages: RefCell<Vec<String>>,
-    print_location: bool,
+
+    /// Whether the source location of the assertion should be included in assertion failures. This
+    /// pinpoints the location in user's code that failed. Typically turned off for internal assertr
+    /// unit tests, to avoid frequent failure message churn.
+    include_location: bool,
+
     rendering_budget: RenderingBudget,
+
+    /// An inherited context override for panic text. `None` uses `ToHumanReadableText`.
+    /// Capture mode never invokes presentation. Local adapters need not be thread-safe.
+    /// `Rc` shares the adapter with derived contexts without requiring the adapter to be `Clone`.
+    panic_presentation: Option<alloc::rc::Rc<failure::panic_presentation::PanicPresentation>>,
 
     number_of_assertions: RefCell<NumberOfAssertions>,
     failures: RefCell<Vec<AssertionFailure>>,
 
     mode: PhantomData<M>,
 
-    // `R` is intentionally not constrained by `ValueRenderer<T>` here. A chain must be able
-    // to install a renderer after construction (including for a non-`Debug` `T`), and projections
-    // preserve `R` while changing `T` even when the next assertion does not render the new subject.
-    // Each assertion method must instead declare the exact `ValueRenderer<U>` capabilities
-    // used by its failure path. Keep blanket assertion-trait impls renderer-unconstrained so one
-    // unavailable rendering capability does not hide the entire trait.
+    /// `R` is intentionally not constrained by `ValueRenderer<T>` here. A chain must be able to
+    /// install a renderer after construction (including for a non-`Debug` `T`), and projections
+    /// preserve `R` while changing `T` even when the next assertion does not render the new
+    /// subject. Each assertion method must instead declare the exact `ValueRenderer<U>`
+    /// capabilities used by its failure path. Keep blanket assertion-trait impls
+    /// renderer-unconstrained so one unavailable rendering capability does not hide the entire
+    /// trait.
     renderer: R,
 }
 

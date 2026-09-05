@@ -11,13 +11,12 @@
 mod assertions;
 mod imp;
 
-use alloc::collections::BTreeSet;
-
-pub use assertions::SetAssertions;
-
 #[cfg(feature = "std")]
 use crate::renderer::RenderingOrder;
 use crate::{assertions::collection::Collection, renderer::CollectionPresentation};
+use alloc::collections::BTreeSet;
+
+pub use assertions::SetAssertions;
 
 /// Native membership lookup capability for a set collection.
 ///

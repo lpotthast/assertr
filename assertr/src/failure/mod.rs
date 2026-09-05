@@ -9,18 +9,24 @@
 //!
 //! A leaf assertion raises a failure through [`AssertThat::failure`], which returns the
 //! [`FailureBuilder`] every built-in assertion uses.
+//!
+//! - **Failure construction:** Every assertion builds an [`AssertionFailure`] containing structured evidence.
+//! - **Failure handling:** Capture mode stores it. Panic mode asks a presentation adapter to produce the panic text.
+//! - **Presentation:** An [adapter](adapter::Adapter) converts the failure into another representation.
+//!   [`.then()`](adapter::AdapterExt::then) allows intermediate transformations.
 
 pub mod adapter;
 mod builder;
-use alloc::{borrow::Cow, string::String, vec::Vec};
-
-pub use builder::{Attached, Detached, FailureBuilder, FailureTarget};
+pub(crate) mod panic_presentation;
 
 use crate::{
     AssertThat,
     prelude::Mode,
     renderer::{Compact, IntoRendered, Rendered},
 };
+use alloc::{borrow::Cow, string::String, vec::Vec};
+
+pub use builder::{Attached, Detached, FailureBuilder, FailureTarget};
 
 /// Delimiter opening and closing every rendered failure message.
 pub(crate) const BANNER: &str = "-------- assertr --------\n";
@@ -120,9 +126,10 @@ impl Fact {
 /// programmatically or compose their own rendering without parsing formatted text.
 ///
 /// The complete human-readable form is produced by
-/// [`ToHumanReadableText`](adapter::ToHumanReadableText). In panic mode, the configured failure
-/// pipeline's output becomes the panic message. Capture mode retains the fields without running
-/// a pipeline.
+/// [`ToHumanReadableText`](adapter::ToHumanReadableText). Panic mode uses the selected
+/// [presentation adapter](crate::AssertThat::with_panic_presentation) to produce the panic text.
+/// Capture mode retains the fields without invoking presentation. Captured failures can be
+/// explicitly passed to any [adapter](adapter::Adapter).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AssertionFailure {
@@ -218,7 +225,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// This is the failure path of every leaf assertion, called after
     /// [`AssertThat::track_assertion`] when the condition does not hold. Fill in the rendered
     /// values, the relation, facts, and children, then call [`FailureBuilder::raise`], which
-    /// records the failure in capture mode and panics otherwise. See
+    /// records the failure in capture mode or panics immediately in panic mode. See
     /// [custom assertions](crate#custom-assertions) for the shape such an assertion takes.
     #[track_caller]
     pub fn failure(&self, kind: FailureKind) -> FailureBuilder<Attached<'_>> {

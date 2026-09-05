@@ -40,15 +40,12 @@
 //! [`SetLookup`](set::SetLookup) for set relations, or [`Map`](map::Map) with
 //! [`MapLookup`](map::MapLookup) for map assertions.
 
-mod has_length;
-
-pub use has_length::HasLength;
-
 pub mod alloc;
 pub mod collection;
 /// Assertions based on reusable [`crate::condition::AssertrCondition`] values.
 pub mod condition;
 pub mod core;
+mod has_length;
 #[cfg(feature = "http")]
 pub mod http;
 pub(crate) mod iterator;
@@ -68,3 +65,5 @@ pub mod set;
 pub mod std;
 #[cfg(feature = "tokio")]
 pub mod tokio;
+
+pub use has_length::HasLength;

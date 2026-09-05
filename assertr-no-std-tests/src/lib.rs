@@ -6,6 +6,7 @@ use assertr::prelude::*;
 
 #[allow(dead_code)]
 fn failure_adapters_compile_without_std() {
+    use alloc::string::{String, ToString};
     use core::convert::Infallible;
 
     use assertr::failure::adapter::{Adapter, AdapterExt, HumanReadableText, ToHumanReadableText};
@@ -23,7 +24,15 @@ fn failure_adapters_compile_without_std() {
 
     fn accepts_failure_adapter<A: Adapter<assertr::AssertionFailure>>(_adapter: A) {}
 
+    struct NoRenderer;
+
     accepts_failure_adapter(ToHumanReadableText.then(Sink));
+    let _assertion = assert_that!(1)
+        .with_renderer(NoRenderer)
+        .with_panic_presentation(ToHumanReadableText);
+    let presentation = ToHumanReadableText.map_err(|error| error.to_string());
+    let _adapter: &dyn Adapter<assertr::AssertionFailure, Output = HumanReadableText, Error = String> =
+        &presentation;
 }
 
 #[allow(dead_code)]
@@ -108,9 +117,80 @@ extern crate std;
 
 #[cfg(all(test, not(feature = "std")))]
 mod tests {
+    use alloc::{rc::Rc, string::String};
+    use core::{cell::Cell, convert::Infallible};
+
     use assertr::prelude::{
         BoolAssertions, IteratorAssertions, LengthAssertions, PartialEqAssertions,
     };
+    use assertr::{
+        AssertionFailure,
+        failure::adapter::{Adapter, HumanReadableText, ToHumanReadableText},
+    };
+
+    struct CountsPresentations(Rc<Cell<usize>>);
+
+    impl Adapter<AssertionFailure> for CountsPresentations {
+        type Output = HumanReadableText;
+        type Error = Infallible;
+
+        fn adapt(&self, failure: &AssertionFailure) -> Result<Self::Output, Self::Error> {
+            self.0.set(self.0.get() + 1);
+            ToHumanReadableText.adapt(failure)
+        }
+    }
+
+    #[test]
+    fn a_non_sync_presentation_runs_only_in_panic_mode_without_std() {
+        let count = Rc::new(Cell::new(0));
+        let failures = assertr::assert_that!(1)
+            .with_panic_presentation(CountsPresentations(Rc::clone(&count)))
+            .capture(|it| it.is_equal_to(2));
+        assert_eq!(failures.len(), 1);
+        assert_eq!(count.get(), 0);
+
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            assertr::assert_that!(1)
+                .with_panic_presentation(CountsPresentations(Rc::clone(&count)))
+                .is_equal_to(2);
+        }))
+        .unwrap_err();
+
+        assert!(
+            panic
+                .downcast_ref::<String>()
+                .unwrap()
+                .contains("Expected: 2\n\n  Actual: 1")
+        );
+        assert_eq!(count.get(), 1);
+    }
+
+    #[test]
+    fn a_presentation_error_falls_back_without_std() {
+        struct ReturnsError;
+
+        impl Adapter<AssertionFailure> for ReturnsError {
+            type Output = HumanReadableText;
+            type Error = &'static str;
+
+            fn adapt(&self, _: &AssertionFailure) -> Result<HumanReadableText, &'static str> {
+                Err("presentation unavailable")
+            }
+        }
+
+        let panic = std::panic::catch_unwind(|| {
+            assertr::assert_that!(1)
+                .with_panic_presentation(ReturnsError)
+                .is_equal_to(2);
+        })
+        .unwrap_err();
+        let message = panic.downcast_ref::<String>().unwrap();
+        assert!(message.contains("Expected: 2\n\n  Actual: 1"));
+        assert!(
+            message
+                .contains("The failure presentation returned an error: presentation unavailable")
+        );
+    }
 
     #[test]
     fn streaming_iterator_assertions_run_in_the_hosted_no_std_fixture() {

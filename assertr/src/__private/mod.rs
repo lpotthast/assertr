@@ -4,14 +4,14 @@
 //! `#[doc(hidden)]`, exempt from semver guarantees, and must never be named directly. The
 //! macros reach it through `$crate`, so no import is ever needed at a call site.
 
+pub mod assert_that_macro;
+#[cfg(feature = "fluent")]
+pub mod fluent_expressions;
+
 use core::fmt::{Debug, Formatter};
 
 use crate::assertions::core::pattern::Pattern;
 use crate::{DebugRenderer, Eq, ValueRenderer};
-
-pub mod assert_that_macro;
-#[cfg(feature = "fluent")]
-pub mod fluent_expressions;
 
 /// Constructor behind [`pattern!`](crate::pattern).
 ///

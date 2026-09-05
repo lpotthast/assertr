@@ -15,8 +15,9 @@ impl<'t, R> ChainState<'t, Panic, R> {
             subject_name: self.subject_name,
             expression: self.expression,
             detail_messages: RefCell::new(messages),
-            print_location: self.print_location,
+            include_location: self.include_location,
             rendering_budget: self.rendering_budget,
+            panic_presentation: self.panic_presentation,
             // `capture` validates the assertions performed by its closure, not work completed on
             // the panic-mode chain before capture began.
             number_of_assertions: RefCell::new(NumberOfAssertions::new()),
