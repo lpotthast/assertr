@@ -31,8 +31,9 @@ fn failure_adapters_compile_without_std() {
         .with_renderer(NoRenderer)
         .with_panic_presentation(ToHumanReadableText);
     let presentation = ToHumanReadableText.map_err(|error| error.to_string());
-    let _adapter: &dyn Adapter<assertr::AssertionFailure, Output = HumanReadableText, Error = String> =
+    let adapter: &dyn Adapter<assertr::AssertionFailure, Output = HumanReadableText, Error = String> =
         &presentation;
+    accepts_failure_adapter(adapter);
 }
 
 #[allow(dead_code)]
