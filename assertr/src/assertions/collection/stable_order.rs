@@ -4,7 +4,9 @@
 //! module's public extension traits require [`StableOrder`](StableOrder), so unordered subjects do
 //! not implement a positional assertion family at all.
 
-use super::{StableOrder, imp};
+use core::borrow::Borrow;
+
+use super::{StableOrder, identity, value};
 use crate::{
     AssertThat, AssertrPartialEq, Mode, ValueRenderer,
     failure::FailureKind,
@@ -30,6 +32,41 @@ use crate::{
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait StableOrderAssertions<T, R> {
+    /// Asserts that the collection borrows exactly the expected instances, in order.
+    ///
+    /// Lengths must match and every `Borrow<U>` target must match its expected reference using
+    /// [`core::ptr::eq`]. No equality or rendering support is required. See
+    /// [`CollectionAssertions::contains_same_instance_as`](super::CollectionAssertions::contains_same_instance_as)
+    /// for borrowed views, unsized targets, and pointer-identity caveats.
+    /// Arrays, slices, and vectors of expected references are accepted. An empty expectation may
+    /// need a type annotation, such as `[] as [&Key; 0]`.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// struct Key { _opaque: u8 }
+    /// let keys = [Key { _opaque: 1 }, Key { _opaque: 2 }];
+    /// let candidates = [&keys[1], &keys[0]];
+    /// assert_that!(candidates).contains_exactly_same_instances([&keys[1], &keys[0]]);
+    /// ```
+    ///
+    /// Order-free collections cannot use this positional assertion:
+    ///
+    /// ```compile_fail,E0277
+    /// use assertr::prelude::*;
+    /// use std::collections::BTreeSet;
+    ///
+    /// let values = [1, 2];
+    /// assert_that!(BTreeSet::from([&values[0], &values[1]]))
+    ///     .contains_exactly_same_instances([&values[0], &values[1]]);
+    /// ```
+    fn contains_exactly_same_instances<'e, U: ?Sized + 'e>(
+        self,
+        expected: impl AsRef<[&'e U]>,
+    ) -> Self
+    where
+        T: Borrow<U>;
+
     /// Asserts that the collection starts with elements equal to `expected`, in order.
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
@@ -115,12 +152,24 @@ where
     M: Mode,
 {
     #[track_caller]
+    fn contains_exactly_same_instances<'e, U: ?Sized + 'e>(
+        self,
+        expected: impl AsRef<[&'e U]>,
+    ) -> Self
+    where
+        C::Item: Borrow<U>,
+    {
+        identity::assert_contains_exactly_same_instances(&self, expected.as_ref());
+        self
+    }
+
+    #[track_caller]
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: AssertrPartialEq<E, R>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        imp::assert_starts_with(&self, expected.as_ref());
+        value::assert_starts_with(&self, expected.as_ref());
         self
     }
 
@@ -130,7 +179,7 @@ where
         P: Fn(&C::Item) -> bool,
         R: ValueRenderer<C::Item>,
     {
-        imp::assert_starts_with_matching(&self, predicates.as_ref());
+        value::assert_starts_with_matching(&self, predicates.as_ref());
         self
     }
 
@@ -140,7 +189,7 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: ValueRenderer<C::Item> + Clone,
     {
-        imp::assert_starts_with_satisfying(&self, assertions.as_ref());
+        value::assert_starts_with_satisfying(&self, assertions.as_ref());
         self
     }
 
@@ -150,7 +199,7 @@ where
         C::Item: AssertrPartialEq<E, R>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        imp::assert_ends_with(&self, expected.as_ref());
+        value::assert_ends_with(&self, expected.as_ref());
         self
     }
 
@@ -160,7 +209,7 @@ where
         P: Fn(&C::Item) -> bool,
         R: ValueRenderer<C::Item>,
     {
-        imp::assert_ends_with_matching(&self, predicates.as_ref());
+        value::assert_ends_with_matching(&self, predicates.as_ref());
         self
     }
 
@@ -170,7 +219,7 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: ValueRenderer<C::Item> + Clone,
     {
-        imp::assert_ends_with_satisfying(&self, assertions.as_ref());
+        value::assert_ends_with_satisfying(&self, assertions.as_ref());
         self
     }
 
@@ -180,7 +229,7 @@ where
         C::Item: AssertrPartialEq<E, R>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        imp::assert_contains_contiguous(&self, expected.as_ref());
+        value::assert_contains_contiguous(&self, expected.as_ref());
         self
     }
 
@@ -190,7 +239,7 @@ where
         P: Fn(&C::Item) -> bool,
         R: ValueRenderer<C::Item>,
     {
-        imp::assert_contains_contiguous_matching(&self, predicates.as_ref());
+        value::assert_contains_contiguous_matching(&self, predicates.as_ref());
         self
     }
 
@@ -200,7 +249,7 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: ValueRenderer<C::Item> + Clone,
     {
-        imp::assert_contains_contiguous_satisfying(&self, assertions.as_ref());
+        value::assert_contains_contiguous_satisfying(&self, assertions.as_ref());
         self
     }
 
@@ -210,7 +259,7 @@ where
         C::Item: AssertrPartialEq<E, R>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        imp::assert_contains_exactly(&self, expected.as_ref());
+        value::assert_contains_exactly(&self, expected.as_ref());
         self
     }
 
@@ -220,7 +269,7 @@ where
         R: ValueRenderer<C::Item>,
         P: Fn(&C::Item) -> bool,
     {
-        imp::assert_contains_exactly_matching(&self, expected.as_ref());
+        value::assert_contains_exactly_matching(&self, expected.as_ref());
         self
     }
 
@@ -230,7 +279,7 @@ where
         R: ValueRenderer<C::Item> + Clone,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
-        imp::assert_contains_exactly_satisfying(&self, assertions.as_ref());
+        value::assert_contains_exactly_satisfying(&self, assertions.as_ref());
         self
     }
 }

@@ -5,6 +5,65 @@
 
 use assertr::prelude::*;
 
+#[test]
+fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
+    use assertr::assertions::collection::{Collection as AssertrCollection, StableOrder};
+    use assertr::renderer::CollectionPresentation;
+    use core::borrow::Borrow;
+
+    struct Key {
+        _byte: u8,
+    }
+    struct Stored {
+        key: Key,
+    }
+    impl Borrow<Key> for Stored {
+        fn borrow(&self) -> &Key {
+            &self.key
+        }
+    }
+    struct Candidates([Stored; 2]);
+    impl HasLength for Candidates {
+        fn length(&self) -> usize {
+            self.0.len()
+        }
+    }
+    impl AssertrCollection for Candidates {
+        type Item = Stored;
+        const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+        fn elements(&self) -> impl Iterator<Item = &Stored> {
+            self.0.iter()
+        }
+    }
+    impl StableOrder for Candidates {}
+    struct NoRenderer;
+
+    let candidates = Candidates([
+        Stored {
+            key: Key { _byte: 1 },
+        },
+        Stored {
+            key: Key { _byte: 1 },
+        },
+    ]);
+    let other = Key { _byte: 1 };
+    let expected = [&candidates.0[0].key, &candidates.0[1].key];
+    assert_that!(expected[0])
+        .with_renderer(NoRenderer)
+        .is_same_instance_as(expected[0])
+        .is_not_same_instance_as(expected[1]);
+    assert_that!(candidates)
+        .with_renderer(NoRenderer)
+        .contains_same_instance_as(expected[0])
+        .does_not_contain_same_instance_as(&other)
+        .contains_exactly_same_instances(expected)
+        .contains_exactly_same_instances_in_any_order([expected[1], expected[0]]);
+    let failures = assert_that!(candidates)
+        .with_renderer(NoRenderer)
+        .capture(|it| it.contains_same_instance_as(&other));
+    assert_eq!(failures.len(), 1);
+}
+
 /// Stand-in for a downstream prelude (e.g. `bevy::prelude`) exporting its own `Condition` and
 /// `Collection` items.
 mod downstream_prelude {

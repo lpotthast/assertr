@@ -39,6 +39,18 @@ impl<R> Clone for RenderingContext<'_, R> {
 
 impl<R> Copy for RenderingContext<'_, R> {}
 
+/// Identity evidence is an address, independent of any ability to render the pointee.
+pub(crate) struct IdentityRenderer;
+
+impl<T: ?Sized> ValueRenderer<T> for IdentityRenderer {
+    fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Print only the memory address, using the same format for all output styles and Rust versions.
+        // Pointers may also carry extra information, such as a slice's length. If that information
+        // differs despite equal addresses, the assertion explains the mismatch in a separate note.
+        write!(f, "{:p}", core::ptr::from_ref(value).cast::<()>())
+    }
+}
+
 impl<'r, R> RenderingContext<'r, R> {
     pub(crate) const fn new(renderer: &'r R, budget: RenderingBudget) -> Self {
         Self { renderer, budget }
@@ -46,6 +58,12 @@ impl<'r, R> RenderingContext<'r, R> {
 
     pub(crate) const fn max_items(self) -> usize {
         self.budget.max_items()
+    }
+
+    /// Formats identity evidence with the same budget, without rendering subject contents or
+    /// changing the renderer carried by the assertion chain.
+    pub(crate) fn identities(self) -> RenderingContext<'static, IdentityRenderer> {
+        RenderingContext::new(&IdentityRenderer, self.budget)
     }
 
     /// Adapts one typed leaf value to [`Debug`] using the chain's renderer and output budget.
@@ -191,15 +209,22 @@ impl<'r, R> RenderingContext<'r, R> {
         'r: 'a,
         C: Collection + ?Sized,
     {
+        self.borrowed_collection::<C::Item, C>(collection)
+    }
+
+    /// A collection's borrowed item view, retaining its presentation and outer type information.
+    pub(crate) fn borrowed_collection<'a, T: ?Sized, C: Collection + ?Sized>(
+        self,
+        collection: &'a C,
+    ) -> Typed<RenderedValues<'a, T, C, R>>
+    where
+        'r: 'a,
+        C::Item: Borrow<T>,
+    {
         let presentation = C::PRESENTATION;
-        let body = RenderedValues {
-            items: collection,
-            item: PhantomData,
-            item_type: TypeInfo::of::<C::Item>(),
-            style: presentation.style(),
-            sorted_for_rendering: presentation.order() == RenderingOrder::SortByRenderedText,
-            rendering: self,
-        };
+        let body = self
+            .borrowed_values::<T, C>(collection, presentation.style())
+            .sort_for_rendering(presentation.order() == RenderingOrder::SortByRenderedText);
         Typed::new::<C>(body).show_type_hint(presentation.shows_type_hint())
     }
 
@@ -215,16 +240,21 @@ impl<'r, R> RenderingContext<'r, R> {
         'r: 'a,
         C: StableOrder + ?Sized,
     {
-        let presentation = C::PRESENTATION;
-        let body = RenderedValues {
-            items: collection,
-            item: PhantomData,
-            item_type: TypeInfo::of::<C::Item>(),
-            style: presentation.style(),
-            sorted_for_rendering: false,
-            rendering: self,
-        };
-        Typed::new::<C>(body).show_type_hint(presentation.shows_type_hint())
+        self.stable_borrowed_collection::<C::Item, C>(collection)
+    }
+
+    /// A stable-order collection's borrowed item view, always in semantic order.
+    pub(crate) fn stable_borrowed_collection<'a, T: ?Sized, C: StableOrder + ?Sized>(
+        self,
+        collection: &'a C,
+    ) -> Typed<RenderedValues<'a, T, C, R>>
+    where
+        'r: 'a,
+        C::Item: Borrow<T>,
+    {
+        let mut rendered = self.borrowed_collection::<T, C>(collection);
+        rendered.body.sorted_for_rendering = false;
+        rendered
     }
 
     /// The entries of a [`Map`], rendered with its type hint and iteration-order policy.

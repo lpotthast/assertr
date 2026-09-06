@@ -14,9 +14,10 @@
 //! [`RandomAccess`] only when arbitrary positions can be accessed in constant time.
 
 mod assertions;
-pub(crate) mod imp;
+mod identity;
 mod random_access;
 mod stable_order;
+pub(crate) mod value;
 
 use alloc::collections::{BinaryHeap, LinkedList, VecDeque};
 use alloc::vec::Vec;

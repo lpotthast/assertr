@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus
+  `contains_same_instance_as`, `does_not_contain_same_instance_as`, `contains_exactly_same_instances`, and
+  `contains_exactly_same_instances_in_any_order` for collections. They compare pointers without equality or renderer
+  bounds, including for opaque types in `no_std` builds. Collection checks compare borrowed targets, preserve duplicate
+  counts in exact comparisons, and require stable order for positional matching.
 - `AssertionFailure::subject_type_name` records the Rust type of the subject that raised the failure.
 - `RenderingBudget` limits rendered leaf values and repeated diagnostic items by default. `RenderingBudget::unlimited()`
   restores complete output.

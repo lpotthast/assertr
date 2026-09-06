@@ -44,6 +44,8 @@ use core::fmt;
 /// Generic assertions that treat their subject as opaque still require a renderer for the whole
 /// subject. This includes direct equality and length assertions. Each method signature shows the
 /// exact requirement.
+/// Identity assertions display pointer addresses through Assertr's internal formatter and require
+/// no value-renderer support. Their diagnostics still respect the chain's rendering budget.
 ///
 /// # `Clone` requirement
 ///

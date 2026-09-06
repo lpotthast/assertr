@@ -67,7 +67,7 @@ where
     V1: CompareElement<V2, R>,
 {
     let cmp_result =
-        crate::assertions::collection::imp::compare(slice1, slice2, ctx.as_deref_mut());
+        crate::assertions::collection::value::compare(slice1, slice2, ctx.as_deref_mut());
 
     if let Some(ctx) = ctx
         && !cmp_result.strictly_equal

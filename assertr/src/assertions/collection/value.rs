@@ -1,7 +1,9 @@
-//! Algorithms and diagnostics shared by every collection assertion.
+//! Value comparisons and predicate-based assertions for finite collections.
 //!
-//! The public [`CollectionAssertions`](super::CollectionAssertions) methods are thin wrappers
-//! around these functions, so every collection type produces identical failure messages.
+//! Implements membership and exact matching, plus prefix, suffix, and contiguous-subsequence
+//! checks, with diagnostics shared by all collection types. The `_matching` variants apply
+//! predicates, and the `_satisfying` variants run nested assertion callbacks. Slice equality
+//! also reuses [`compare`].
 
 use alloc::vec::Vec;
 
@@ -1002,7 +1004,7 @@ pub(crate) fn assert_contains_exactly_in_any_order_satisfying<C, T, A, M, R>(
 #[cfg(test)]
 mod tests {
     mod compare {
-        use crate::assertions::collection::imp::{ExactCompareResult, compare};
+        use crate::assertions::collection::value::{ExactCompareResult, compare};
         use crate::prelude::*;
         use crate::{AssertrPartialEq, DebugRenderer};
 

@@ -5,6 +5,30 @@ extern crate alloc;
 use assertr::prelude::*;
 
 #[allow(dead_code)]
+fn identity_assertions_compile_without_std() {
+    struct Key {
+        _byte: u8,
+    }
+    struct NoRenderer;
+    let keys = [Key { _byte: 1 }, Key { _byte: 2 }, Key { _byte: 3 }];
+    let candidates = [&keys[1], &keys[0]];
+    assert_that!(candidates[0])
+        .with_renderer(NoRenderer)
+        .is_same_instance_as(&keys[1])
+        .is_not_same_instance_as(&keys[0]);
+    assert_that!(alloc::collections::LinkedList::from(candidates))
+        .with_renderer(NoRenderer)
+        .contains_same_instance_as(&keys[1])
+        .does_not_contain_same_instance_as(&keys[2])
+        .contains_exactly_same_instances([&keys[1], &keys[0]])
+        .contains_exactly_same_instances_in_any_order([&keys[0], &keys[1]]);
+    let data = [1, 2];
+    assert_that!([&data[..1], &data[..]])
+        .with_renderer(NoRenderer)
+        .contains_exactly_same_instances_in_any_order([&data[..], &data[..1]]);
+}
+
+#[allow(dead_code)]
 fn failure_adapters_compile_without_std() {
     use alloc::string::{String, ToString};
     use core::convert::Infallible;
@@ -122,7 +146,8 @@ mod tests {
     use core::{cell::Cell, convert::Infallible};
 
     use assertr::prelude::{
-        BoolAssertions, IteratorAssertions, LengthAssertions, PartialEqAssertions,
+        BoolAssertions, CollectionAssertions, IdentityAssertions, IteratorAssertions,
+        LengthAssertions, PartialEqAssertions, StableOrderAssertions,
     };
     use assertr::{
         AssertionFailure,
@@ -130,6 +155,44 @@ mod tests {
     };
 
     struct CountsPresentations(Rc<Cell<usize>>);
+
+    #[test]
+    fn opaque_identity_assertions_capture_and_panic_without_std() {
+        struct Key {
+            _byte: u8,
+        }
+        struct NoRenderer;
+        super::identity_assertions_compile_without_std();
+        let keys = [Key { _byte: 1 }, Key { _byte: 1 }, Key { _byte: 1 }];
+        let failures = assertr::assert_that!(keys[0])
+            .with_renderer(NoRenderer)
+            .capture(|it| {
+                it.is_same_instance_as(&keys[1])
+                    .is_not_same_instance_as(&keys[0])
+            });
+        assert_eq!(failures.len(), 2);
+        let failures = assertr::assert_that!([&keys[0], &keys[1]])
+            .with_renderer(NoRenderer)
+            .capture(|it| {
+                it.contains_same_instance_as(&keys[2])
+                    .does_not_contain_same_instance_as(&keys[0])
+                    .contains_exactly_same_instances([&keys[1], &keys[0]])
+                    .contains_exactly_same_instances_in_any_order([&keys[0], &keys[0]])
+            });
+        assert_eq!(failures.len(), 4);
+        let panic = std::panic::catch_unwind(|| {
+            assertr::assert_that!(keys[0])
+                .with_renderer(NoRenderer)
+                .is_same_instance_as(&keys[1]);
+        })
+        .unwrap_err();
+        assert!(
+            panic
+                .downcast_ref::<String>()
+                .unwrap()
+                .contains("is not the same instance as")
+        );
+    }
 
     impl Adapter<AssertionFailure> for CountsPresentations {
         type Output = HumanReadableText;

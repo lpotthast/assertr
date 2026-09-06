@@ -1,6 +1,7 @@
 //! General-purpose assertions and assertions for core-language value families.
 //!
 //! - Equality, ordering, formatting, and patterns: [`PartialEqAssertions`](partial_eq::PartialEqAssertions),
+//!   [`IdentityAssertions`](identity::IdentityAssertions),
 //!   [`PartialOrdAssertions`](partial_ord::PartialOrdAssertions),
 //!   [`DebugAssertions`](debug::DebugAssertions), [`DisplayAssertions`](display::DisplayAssertions),
 //!   and [`PatternAssertions`](pattern::PatternAssertions)
@@ -29,6 +30,8 @@ pub mod display;
 #[cfg(feature = "std")]
 /// Assertions that invoke synchronous or asynchronous functions.
 pub mod r#fn;
+/// Reference-identity assertions without equality or rendering bounds.
+pub mod identity;
 /// Iterator and borrowed-iteration assertions.
 pub mod iter;
 /// Assertions for subjects implementing [`crate::assertions::HasLength`].
@@ -58,6 +61,7 @@ pub mod prelude {
     pub use super::char::CharAssertions;
     pub use super::debug::DebugAssertions;
     pub use super::display::DisplayAssertions;
+    pub use super::identity::IdentityAssertions;
     // All inner fn's are already std-gated, so we remove this otherwise noise-generating export.
     #[cfg(feature = "std")]
     pub use super::r#fn::AsyncFnOnceAssertions;

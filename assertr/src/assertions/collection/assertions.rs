@@ -1,13 +1,15 @@
 use alloc::vec::Vec;
+use core::borrow::Borrow;
 
-use super::{Collection, imp};
+use super::{Collection, identity, value};
 use crate::{AssertThat, AssertrPartialEq, Mode, ValueRenderer, mode::Capture};
 
 /// Assertions over the elements of a collection: slices, arrays, `Vec`, `VecDeque`, and every
 /// type implementing [`Collection`].
 ///
-/// The collection structure is rendered by Assertr, so methods require rendering support for the
-/// element type rather than the collection type.
+/// The collection structure is rendered by Assertr, so value-based methods require rendering
+/// support for the element type rather than the collection type. Identity methods display
+/// addresses and require no rendering support.
 ///
 /// For a type that supports borrowed traversal but does not implement [`Collection`], use
 /// [`IntoIteratorAssertions`](crate::assertions::core::iter::IntoIteratorAssertions). Its methods
@@ -15,6 +17,49 @@ use crate::{AssertThat, AssertrPartialEq, Mode, ValueRenderer, mode::Capture};
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
 pub trait CollectionAssertions<T, R> {
+    /// Asserts that at least one element borrows the same instance as `expected`.
+    ///
+    /// Compares `Borrow<U>` targets with [`core::ptr::eq`], without equality or rendering bounds.
+    /// Stored values, references, and smart pointers are supported. The expected reference's
+    /// type selects the borrowed view. For unsized targets, both address and metadata must match.
+    /// Trait-object equality inherits `ptr::eq`'s vtable caveats, and distinct zero-sized values
+    /// can have equal addresses. Identity is not a unique allocation or logical object ID.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// struct Key { _opaque: u8 }
+    /// let keys = [Key { _opaque: 1 }, Key { _opaque: 1 }];
+    /// assert_that!([&keys[0]])
+    ///     .contains_same_instance_as(&keys[0])
+    ///     .does_not_contain_same_instance_as(&keys[1]);
+    /// ```
+    fn contains_same_instance_as<U: ?Sized>(self, expected: &U) -> Self
+    where
+        T: Borrow<U>;
+
+    /// Asserts that no element borrows the same instance as `expected`.
+    ///
+    /// Uses the borrowed-target identity semantics of
+    /// [`contains_same_instance_as`](Self::contains_same_instance_as), without rendering bounds.
+    fn does_not_contain_same_instance_as<U: ?Sized>(self, expected: &U) -> Self
+    where
+        T: Borrow<U>;
+
+    /// Asserts that the collection borrows exactly the expected instances, ignoring order.
+    ///
+    /// Every expected occurrence must match a distinct actual occurrence, so duplicate counts
+    /// must match. Uses the borrowed-target identity semantics of
+    /// [`contains_same_instance_as`](Self::contains_same_instance_as), without rendering bounds.
+    /// Arrays, slices, and vectors of expected references are accepted. An empty expectation may
+    /// need a type annotation, such as `[] as [&Key; 0]`, to select the borrowed target.
+    fn contains_exactly_same_instances_in_any_order<'e, U: ?Sized + 'e>(
+        self,
+        expected: impl AsRef<[&'e U]>,
+    ) -> Self
+    where
+        T: Borrow<U>;
+
     /// Asserts that at least one element equals `expected`.
     fn contains<E>(self, expected: E) -> Self
     where
@@ -133,12 +178,42 @@ where
     M: Mode,
 {
     #[track_caller]
+    fn contains_same_instance_as<U: ?Sized>(self, expected: &U) -> Self
+    where
+        C::Item: Borrow<U>,
+    {
+        identity::assert_contains_same_instance_as(&self, expected);
+        self
+    }
+
+    #[track_caller]
+    fn does_not_contain_same_instance_as<U: ?Sized>(self, expected: &U) -> Self
+    where
+        C::Item: Borrow<U>,
+    {
+        identity::assert_does_not_contain_same_instance_as(&self, expected);
+        self
+    }
+
+    #[track_caller]
+    fn contains_exactly_same_instances_in_any_order<'e, U: ?Sized + 'e>(
+        self,
+        expected: impl AsRef<[&'e U]>,
+    ) -> Self
+    where
+        C::Item: Borrow<U>,
+    {
+        identity::assert_contains_exactly_same_instances_in_any_order(&self, expected.as_ref());
+        self
+    }
+
+    #[track_caller]
     fn contains<E>(self, expected: E) -> Self
     where
         C::Item: AssertrPartialEq<E, R>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        imp::assert_contains(&self, &expected);
+        value::assert_contains(&self, &expected);
         self
     }
 
@@ -148,7 +223,7 @@ where
         R: ValueRenderer<C::Item>,
         P: Fn(&C::Item) -> bool,
     {
-        imp::assert_contains_matching(&self, &predicate);
+        value::assert_contains_matching(&self, &predicate);
         self
     }
 
@@ -158,7 +233,7 @@ where
         R: ValueRenderer<C::Item> + Clone,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
-        imp::assert_contains_satisfying(&self, &assertions);
+        value::assert_contains_satisfying(&self, &assertions);
         self
     }
 
@@ -170,7 +245,7 @@ where
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
         let expected = expected.into_iter().collect::<Vec<_>>();
-        imp::assert_contains_all(&self, expected.as_slice());
+        value::assert_contains_all(&self, expected.as_slice());
         self
     }
 
@@ -180,7 +255,7 @@ where
         C::Item: AssertrPartialEq<E, R>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        imp::assert_does_not_contain(&self, &not_expected);
+        value::assert_does_not_contain(&self, &not_expected);
         self
     }
 
@@ -190,7 +265,7 @@ where
         R: ValueRenderer<C::Item>,
         P: Fn(&C::Item) -> bool,
     {
-        imp::assert_does_not_contain_matching(&self, &predicate);
+        value::assert_does_not_contain_matching(&self, &predicate);
         self
     }
 
@@ -200,7 +275,7 @@ where
         R: ValueRenderer<C::Item> + Clone,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
-        imp::assert_does_not_contain_satisfying(&self, &assertions);
+        value::assert_does_not_contain_satisfying(&self, &assertions);
         self
     }
 
@@ -210,7 +285,7 @@ where
         C::Item: AssertrPartialEq<E, R>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        imp::assert_contains_exactly_in_any_order(&self, expected.as_ref());
+        value::assert_contains_exactly_in_any_order(&self, expected.as_ref());
         self
     }
 
@@ -220,7 +295,7 @@ where
         R: ValueRenderer<C::Item>,
         P: Fn(&C::Item) -> bool,
     {
-        imp::assert_contains_exactly_in_any_order_matching(&self, expected.as_ref());
+        value::assert_contains_exactly_in_any_order_matching(&self, expected.as_ref());
         self
     }
 
@@ -230,7 +305,7 @@ where
         R: ValueRenderer<C::Item> + Clone,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
-        imp::assert_contains_exactly_in_any_order_satisfying(&self, assertions.as_ref());
+        value::assert_contains_exactly_in_any_order_satisfying(&self, assertions.as_ref());
         self
     }
 }
