@@ -4,9 +4,9 @@ use super::super::Adapter;
 
 /// An adapter that maps errors while preserving successful output.
 ///
-/// Construct it with [`AdapterExt::map_err`](crate::failure::adapter::AdapterExt::map_err).
-/// The mapper runs on each error from the wrapped adapter, on the calling thread. It does not
-/// run during construction or on success. Both the adapter and mapper may borrow local data.
+/// Construct it with [`AdapterExt::map_err`](crate::failure::adapter::AdapterExt::map_err). The
+/// mapper runs on each error from the wrapped adapter, on the calling thread. It does not run
+/// during construction or on success. Both the adapter and mapper may borrow local data.
 #[derive(Clone, Copy, Debug)]
 #[must_use]
 pub struct MapErr<A, F> {

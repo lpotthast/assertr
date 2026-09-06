@@ -5,7 +5,7 @@ use core::borrow::Borrow;
 
 /// Non-extracting assertions for [`tokio::sync::watch::Receiver`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait TokioWatchReceiverAssertions<T, R = crate::DebugRenderer> {
     /// Asserts that the receiver's current value equals `expected` without marking it seen.
     fn has_current_value(self, expected: impl Borrow<T>) -> Self
@@ -39,7 +39,7 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R>
 
 /// Panic-mode assertions over a watch receiver's change state.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait TokioWatchReceiverExtractAssertions<T, R = crate::DebugRenderer> {
     /// Asserts that the current value has not been seen by this receiver.
     ///

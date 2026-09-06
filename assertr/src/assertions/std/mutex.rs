@@ -7,7 +7,7 @@ use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 /// Lock state is observed with [`Mutex::try_lock`]. A successful or poisoned acquisition means
 /// unlocked. [`TryLockError::WouldBlock`] means locked.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait MutexAssertions<T, R> {
     /// Asserts that this mutex is locked.
     fn is_locked(self) -> Self

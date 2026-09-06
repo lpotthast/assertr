@@ -29,14 +29,12 @@ impl<'t, R> ChainState<'t, Panic, R> {
 }
 
 impl<'t, T, R> AssertThat<'t, T, Panic, R> {
-    /// Runs the given assertions in capture mode and returns the collected failures as
-    /// structured [`AssertionFailure`] values. An empty result means every assertion passed.
+    /// Runs the given assertions in capture mode and returns the collected failures as structured
+    /// [`AssertionFailure`] values. An empty result means every assertion passed.
     ///
-    /// The closure receives this assertion in capture mode and returns it, or a mapped
-    /// continuation, so its failures can be extracted.
-    ///
-    /// On a derived assertion, `capture` returns that child's failures instead of propagating them
-    /// to its panic-mode parent. Existing ancestor detail messages remain attached.
+    /// Use this when a test or validation step should report several failed checks together. The
+    /// closure receives this chain in capture mode and must return it, or a mapped continuation,
+    /// so its failures can be extracted. Keep the final assertion as the closure's return value.
     ///
     /// ```rust
     /// use assertr::prelude::*;
@@ -44,7 +42,26 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     /// let failures = assert_that!(42).capture(|it| it.is_less_than(0).is_equal_to(43));
     ///
     /// assert_that!(failures).has_length(2);
+    /// assert_eq!(failures[0].kind, assertr::FailureKind::Ordering);
+    ///
+    /// let report = ToHumanReadableText.render(&failures[0]);
+    /// assert!(report.contains("is not less than"));
     /// ```
+    ///
+    /// Each [`AssertionFailure`] exposes its values, relation, facts, and nested failures as data.
+    /// Inspect those fields directly or pass the failure to an [adapter](crate::failure::adapter).
+    /// [`ToHumanReadableText`](crate::failure::adapter::ToHumanReadableText) produces the default
+    /// report. Capture mode never invokes the chain's
+    /// [panic presentation](Self::with_panic_presentation).
+    ///
+    /// Assertions on [projections](Self::satisfies) within the closure contribute their failures
+    /// to the same result. Calling `capture` on an already-derived assertion instead starts a
+    /// separate collection for that child. Its failures do not propagate to the panic-mode parent,
+    /// and existing ancestor detail messages remain attached.
+    ///
+    /// With the `fluent` feature, `value.verify(...)` and `value.verify_owned(...)` enter capture
+    /// mode directly. `capture` itself needs no optional feature. It collects assertion failures,
+    /// but does not catch panics from user code.
     ///
     /// # Panics
     ///
@@ -60,8 +77,8 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
 
     fn into_capturing(self) -> AssertThat<'t, T, Capture, R> {
         // Sever the parent link: `capture` scopes failure collection to this chain, so failures
-        // must not propagate to (and get lost in) a panic-mode ancestor. Ancestor detail
-        // messages are preserved by flattening them into this chain.
+        // must not propagate to (and get lost in) a panic-mode ancestor. Ancestor detail messages
+        // are preserved by flattening them into this chain.
         let mut messages = Vec::new();
         self.collect_messages(&mut messages);
 
@@ -74,9 +91,9 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
 }
 
 impl<'t, T, R> AssertThat<'t, T, Capture, R> {
-    /// Runs the given assertion closure and extracts the collected failures from the assertion
-    /// it returns. Shared implementation of [`AssertThat::capture`] and the fluent `verify`
-    /// entry points.
+    /// Runs the given assertion closure and extracts the collected failures from the assertion it
+    /// returns. Shared implementation of [`AssertThat::capture`] and the fluent `verify` entry
+    /// points.
     #[track_caller]
     pub(crate) fn run_and_collect<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
     where

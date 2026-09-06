@@ -1,6 +1,6 @@
-// A `no_std` crate does not receive the standard prelude in its unit-test modules even though
-// the hosted test harness links `std`. Re-export the alloc prelude pieces those tests use,
-// without changing the production prelude or feature surface.
+// A `no_std` crate does not receive the standard prelude in its unit-test modules even though the
+// hosted test harness links `std`. Re-export the alloc prelude pieces those tests use, without
+// changing the production prelude or feature surface.
 #[cfg(all(test, not(feature = "std")))]
 pub(crate) use alloc::{
     borrow::ToOwned,
@@ -11,10 +11,6 @@ pub(crate) use alloc::{
     vec::Vec,
 };
 
-#[cfg(feature = "derive")]
-pub use assertr_derive::AssertrEq;
-
-pub use crate::any;
 pub use crate::assert_that;
 pub use crate::assert_that_owned;
 #[cfg(feature = "std")]
@@ -36,6 +32,7 @@ pub use crate::assertions::http::prelude::*;
 #[cfg(feature = "jiff")]
 pub use crate::assertions::jiff::prelude::*;
 pub use crate::assertions::map::MapAssertions;
+pub use crate::assertions::matcher::MatcherAssertions;
 #[cfg(feature = "num")]
 pub use crate::assertions::num::NumAssertions;
 #[cfg(feature = "program")]
@@ -58,11 +55,17 @@ pub use crate::condition::AssertrCondition;
 pub use crate::conversion::json;
 #[cfg(feature = "serde-toml")]
 pub use crate::conversion::toml;
+pub use crate::elements_are;
+pub use crate::elements_are_in_any_order;
+pub use crate::entries_are;
 #[cfg(all(test, not(feature = "std")))]
 pub(crate) use crate::entry::assert_that_panic_by;
-pub use crate::eq;
 pub use crate::failure::adapter::ToHumanReadableText;
+pub use crate::matchers;
+pub use crate::matchers::AssertrMatcher;
 pub use crate::mode::{Capture, Mode, Panic};
+#[cfg(feature = "matchers")]
+pub use crate::partial;
 pub use crate::pattern;
 #[cfg(test)]
 pub(crate) use crate::test_support::FailureReportAssertions;

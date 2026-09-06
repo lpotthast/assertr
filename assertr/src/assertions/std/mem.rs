@@ -2,7 +2,7 @@ use crate::{AssertThat, Mode, Type, failure::FailureKind};
 
 /// Static memory assertions for any type.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait MemAssertions {
     /// Asserts that [`core::mem::needs_drop`] returns `true` for the represented type.
     ///

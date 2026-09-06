@@ -17,13 +17,13 @@ fn fail_pending<T, M: Mode, R>(this: &AssertThat<'_, Poll<T>, M, R>) {
 
 /// Non-extracting assertions for `Poll` subjects.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait PollAssertions<'t, T, M: Mode, R> {
     /// Asserts that the subject is `Ready`.
     ///
-    /// Non-extracting: the subject stays the full `Poll`, so further assertions can be chained
-    /// in any mode. Use [`PollExtractAssertions::get_ready`] to extract the contained value in
-    /// panic mode, or [`PollAssertions::is_ready_satisfying`] to assert on it in any mode.
+    /// Non-extracting: the subject stays the full `Poll`, so further assertions can be chained in
+    /// any mode. Use [`PollExtractAssertions::get_ready`] to extract the contained value in panic
+    /// mode, or [`PollAssertions::is_ready_satisfying`] to assert on it in any mode.
     fn is_ready(self) -> Self;
 
     /// Asserts that the subject is `Pending`.
@@ -94,15 +94,15 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
 }
 
 /// Panic-mode extraction from `Poll` subjects.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait PollExtractAssertions<'t, T, R> {
     /// Asserts that the subject is `Ready`, then returns an assertion over its value.
     ///
     /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
     ///
     /// This is available only in `Panic` mode because `Pending` cannot produce a `T`. Use
-    /// [`PollAssertions::is_ready_satisfying`] for capture mode, or the
-    /// non-extracting [`PollAssertions::is_ready`] when the contained value is irrelevant.
+    /// [`PollAssertions::is_ready_satisfying`] for capture mode, or the non-extracting
+    /// [`PollAssertions::is_ready`] when the contained value is irrelevant.
     fn get_ready(self) -> AssertThat<'t, T, Panic, R>;
 }
 

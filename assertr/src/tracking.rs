@@ -2,9 +2,9 @@ use crate::{AssertThat, prelude::Mode};
 
 /// Counts the assertions performed on an assertion chain.
 ///
-/// [`AssertThat::capture`] uses the count to reject capture closures that perform no assertions.
-/// In panic mode, unused assertion contexts are caught at compile time instead, by the
-/// `#[must_use]` annotations on the entry points.
+/// [`AssertThat::capture`] uses the count to reject capture closures that perform no assertions. In
+/// panic mode, unused assertion contexts are caught at compile time instead, by the `#[must_use]`
+/// annotations on the entry points.
 pub(crate) struct NumberOfAssertions(pub(crate) usize);
 
 impl NumberOfAssertions {
@@ -16,10 +16,10 @@ impl NumberOfAssertions {
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Records that one assertion was performed on this chain.
     ///
-    /// Every assertion method must call this as its first statement, whether it ends up passing
-    /// or failing. [`AssertThat::capture`] and the fluent `verify` use the count to reject a
-    /// closure that performed no assertions at all, so an assertion that forgets to
-    /// track makes a passing capture closure panic as if it had been empty.
+    /// Every assertion method must call this as its first statement, whether it ends up passing or
+    /// failing. [`AssertThat::capture`] and the fluent `verify` use the count to reject a closure
+    /// that performed no assertions at all, so an assertion that forgets to track makes a passing
+    /// capture closure panic as if it had been empty.
     ///
     /// A handwritten leaf assertion calls this before raising a failure through
     /// [`AssertThat::failure`]. Assertions built by composing existing ones (through
@@ -57,12 +57,11 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ///
     /// assert_that!(42).is_even();
     /// ```
-    ///
     pub fn track_assertion(&self) {
         self.state.number_of_assertions.borrow_mut().0 += 1;
 
-        // Propagate to the parent, so that assertions made on a derived assertion also count
-        // for the chain it was derived from.
+        // Propagate to the parent, so that assertions made on a derived assertion also count for
+        // the chain it was derived from.
         if let Some(parent) = self.state.parent {
             parent.track_assertion_on_chain();
         }

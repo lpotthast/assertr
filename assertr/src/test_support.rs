@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::{
-    AssertThat, AssertionFailure, AssertrPartialEq, EqContext, Mode, ValueRenderer,
+    AssertThat, AssertionFailure, Mode, ValueRenderer,
     assertions::{HasLength, collection::Collection, map::Map, set::SetLookup},
     failure::{FailureKind, adapter::ToHumanReadableText},
     renderer::Rendered,
@@ -121,12 +121,8 @@ pub(crate) struct RendererActual(pub(crate) u32);
 #[derive(Clone, Copy)]
 pub(crate) struct RendererExpected(pub(crate) u32);
 
-impl AssertrPartialEq<RendererExpected, SentinelRenderer> for RendererActual {
-    fn eq(
-        &self,
-        other: &RendererExpected,
-        _ctx: Option<&mut EqContext<'_, SentinelRenderer>>,
-    ) -> bool {
+impl PartialEq<RendererExpected> for RendererActual {
+    fn eq(&self, other: &RendererExpected) -> bool {
         self.0 == other.0
     }
 }

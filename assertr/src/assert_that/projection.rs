@@ -1,11 +1,9 @@
-use alloc::{borrow::ToOwned, vec::Vec};
+use alloc::borrow::ToOwned;
+#[cfg(feature = "tokio")]
+use alloc::vec::Vec;
 use core::future::Future;
 
-use crate::{
-    AssertThat, AssertionFailure,
-    actual::Actual,
-    mode::{Capture, Mode},
-};
+use crate::{AssertThat, actual::Actual, mode::Mode};
 
 impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     pub(crate) fn replace_actual_with<'u, U>(
@@ -59,8 +57,8 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         }
     }
 
-    /// Asynchronously maps the assertion subject to a new owned subject while preserving the
-    /// chain state.
+    /// Asynchronously maps the assertion subject to a new owned subject while preserving the chain
+    /// state.
     #[must_use]
     pub async fn map_async<U: 't, Fut>(
         self,
@@ -86,8 +84,8 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// Failures and assertion counts propagate to the root. Use the `derive_*` methods when the
     /// child must be stored or chained. Use `satisfies_*` to return to the original subject after
-    /// asserting on the projection. A child starts a new diagnostic subject and therefore does
-    /// not inherit the parent's subject name or source expression.
+    /// asserting on the projection. A child starts a new diagnostic subject and therefore does not
+    /// inherit the parent's subject name or source expression.
     #[must_use]
     pub fn derive_owned<'u, U: 'u>(
         &'t self,
@@ -105,9 +103,22 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
 
     /// Derives a child assertion over a borrowed projection of the subject.
     ///
-    /// The child is `AssertThat<U>`, not `AssertThat<&U>`, so assertions implemented for `U`
-    /// remain available. Use [`AssertThat::derive_owned`] for a computed or cloned projection.
-    /// Failures and assertion counts propagate to the root.
+    /// The child is `AssertThat<U>`, not `AssertThat<&U>`, so assertions implemented for `U` remain
+    /// available. Use [`AssertThat::derive_owned`] for a computed or cloned projection. Failures
+    /// and assertion counts propagate to the root.
+    ///
+    /// Use this when you want to keep or chain the child assertion. Use [`Self::satisfies`] to
+    /// check a projection and continue with the original subject. Both preserve the active
+    /// renderer and inherit the root's diagnostic settings. The child starts with no subject name
+    /// or source expression of its own.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// let person = (String::from("Ada"), 36);
+    /// let root = assert_that!(person);
+    /// root.derive(|person| &person.0).starts_with("A").has_length(3);
+    /// ```
     #[must_use]
     pub fn derive<'u, U>(&'t self, mapper: impl FnOnce(&'t T) -> &'u U) -> AssertThat<'u, U, M, R>
     where
@@ -139,14 +150,22 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
 
     // It would be nice to optimize this, so that:
     // - we do not need separate satisfies, satisfies_owned and satisfies_ref methods
-    // - we use a `for<'a: 'b, 'b>` (see https://users.rust-lang.org/t/why-cant-i-use-lifetime-bounds-in-hrtbs/97277/2) bound for F and A,
-    //   telling the compiler that the returned values live shorter than the input.
+    // - we use a `for<'a: 'b, 'b>` (see https://users.rust-lang.org/t/why-cant-i-use-lifetime-bounds-in-hrtbs/97277/2)
+    //   bound for F and A, telling the compiler that the returned values live shorter than the
+    //   input.
     // - we can replace () with some type R (return), letting the user write more succinct closures.
 
     /// Runs the given assertions against a borrowed projection of the subject.
     ///
     /// The `satisfies_*` family creates a child assertion, passes it to `assertions`, and returns
-    /// the current chain. Child failures propagate to the root. The closure returns `()`.
+    /// the current chain. Use it to check fields or computed properties with the same assertions
+    /// you would use on a standalone value. The closure returns `()`, so end its final assertion
+    /// with a semicolon.
+    ///
+    /// Child failures follow the root's mode. They panic immediately in panic mode and join the
+    /// collected failures inside [`Self::capture`]. The child preserves the active renderer and
+    /// inherits detail messages, rendering budget, location settings, and panic presentation. Its
+    /// subject name and source expression start empty and can be set on the child.
     ///
     /// The variants differ only in how the projection is obtained and typed:
     ///
@@ -175,6 +194,11 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///         name.starts_with("f");
     ///     });
     /// ```
+    ///
+    /// Use [`Self::derive`] or [`Self::derive_owned`] to keep the child chain instead. To express
+    /// a reusable expectation across several fields or nested collections, see
+    /// [structural matching](mod@crate::matchers#structural-syntax). A domain-specific method can
+    /// wrap these projections as a [custom assertion](crate#custom-assertions).
     #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
@@ -259,27 +283,24 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// Runs `assertions` against `element` on a capture-mode assertion, returning every failure
     /// raised. An empty result means that the element satisfies the assertions.
     ///
-    /// Used by the collection assertions treating per-element assertions as a matching criterion.
-    /// The failures are structured, not rendered, so a candidate that a later element supersedes
-    /// costs no formatting, and a parent can attach them as its children.
+    /// Captures assertions on a locked value using the shared matcher capture helper. Leaf values
+    /// are rendered when failures are built. Presentation remains deferred.
+    #[cfg(feature = "tokio")]
     pub(crate) fn collect_element_failures<'e, U, A>(
         &self,
         element: &'e U,
         assertions: A,
-    ) -> Vec<AssertionFailure>
+    ) -> Vec<crate::AssertionFailure>
     where
-        A: for<'a> FnOnce(AssertThat<'a, U, Capture, R>),
+        A: for<'a> FnOnce(AssertThat<'a, U, crate::mode::Capture, R>),
         R: Clone,
     {
-        // The closure consumes the assertion handed to it, so failures are collected in a
-        // capture-mode sink the closure never owns: `satisfies` derives the handed-out
-        // assertion from the sink, letting its failures propagate there.
-        let sink = AssertThat::new_capturing(Actual::Borrowed(element))
-            .with_renderer(self.state.renderer.clone())
-            .with_rendering_budget(self.state.rendering_budget)
-            .with_location(self.state.include_location)
-            .satisfies(|it| it, assertions);
-        sink.state.failures.take()
+        crate::matchers::collect_assertions(
+            element,
+            self.render(),
+            self.state.include_location,
+            assertions,
+        )
     }
 }
 
@@ -344,9 +365,9 @@ mod tests {
         });
 
         assert_that!(failures.as_slice())
-            .contains_exactly_matching([|it: &AssertionFailure| {
-                ToHumanReadableText.render(it).contains("Expected: 4")
-            }])
+            .contains_exactly_matching(crate::matchers::predicate_list([
+                |it: &AssertionFailure| ToHumanReadableText.render(it).contains("Expected: 4"),
+            ]))
             .contains_exactly_satisfying([|it: AssertThat<AssertionFailure, Capture>| {
                 it.satisfies_owned(
                     |failure| ToHumanReadableText.render(failure),
@@ -387,8 +408,10 @@ mod tests {
                 )
             });
 
-        assert_that!(failures.as_slice()).contains_exactly_matching([|it: &AssertionFailure| {
-            ToHumanReadableText.render(it).contains("xyz")
-        }]);
+        assert_that!(failures.as_slice()).contains_exactly_matching(
+            crate::matchers::predicate_list([|it: &AssertionFailure| {
+                ToHumanReadableText.render(it).contains("xyz")
+            }]),
+        );
     }
 }

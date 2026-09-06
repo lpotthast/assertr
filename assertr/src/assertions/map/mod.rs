@@ -20,6 +20,7 @@ use core::borrow::Borrow;
 use crate::{assertions::HasLength, renderer::RenderingOrder};
 
 pub use assertions::MapAssertions;
+pub(crate) use imp::FoundEntries;
 
 /// A keyed collection supporting iteration over its entries.
 ///
@@ -52,9 +53,8 @@ pub trait Map: HasLength {
 ///
 /// Every assertion that queries a key (`contains_key`, `contains_entry`, `contains_keys`, the
 /// `contains_exactly_entries` family, and their negatives) requires the subject to implement
-/// `MapLookup<Q>` for the query type `Q`. `Q` may be an unsized borrowed view of
-/// [`Map::Key`], such as `str` for a `String` key, and is compared according to the contract of
-/// [`Borrow`].
+/// `MapLookup<Q>` for the query type `Q`. `Q` may be an unsized borrowed view of [`Map::Key`], such
+/// as `str` for a `String` key, and is compared according to the contract of [`Borrow`].
 ///
 /// The bounds live on the implementation, not on the trait, so each map demands exactly what its
 /// native lookup needs: `Q: Hash + Eq` for a `HashMap`, `Q: Ord` for a `BTreeMap`. A key type only
@@ -104,13 +104,13 @@ pub trait MapLookup<Q: ?Sized>: Map {
 /// Adapts one expected bulk key `E` to the query type a [`MapLookup`] implementation accepts.
 ///
 /// Rust can infer `Q` from the `&Q` argument of a single-key assertion. It cannot infer the same
-/// type from `E: Borrow<Q>` in a bulk assertion because every `E` also implements `Borrow<E>`.
-/// This associated type keeps `Q` out of the assertion method's generic arguments, so existing
-/// calls remain inference-friendly while bulk methods can use native borrowed lookup.
+/// type from `E: Borrow<Q>` in a bulk assertion because every `E` also implements `Borrow<E>`. This
+/// associated type keeps `Q` out of the assertion method's generic arguments, so existing calls
+/// remain inference-friendly while bulk methods can use native borrowed lookup.
 ///
 /// The standard `Borrow<K>` input forms (`K`, `&K`, `&mut K`, `Box<K>`, `Rc<K>`, `Arc<K>`, and
-/// `Cow<K>`) are implemented generically. String keys additionally accept the corresponding
-/// `str` views, so both of these compile without a turbofish:
+/// `Cow<K>`) are implemented generically. String keys additionally accept the corresponding `str`
+/// views, so both of these compile without a turbofish:
 ///
 /// ```
 /// use std::collections::BTreeMap;
@@ -122,9 +122,9 @@ pub trait MapLookup<Q: ?Sized>: Map {
 /// assert_that!(map).contains_exactly_entries([("a", 1)]);
 /// ```
 ///
-/// A custom expected-key wrapper or borrowed view implements this trait with the stored key as
-/// `K` and the map's [`MapLookup`] key as [`Query`](MapKeyQuery::Query). The trait is intentionally
-/// not re-exported from the prelude. Only adapter authors need to name it.
+/// A custom expected-key wrapper or borrowed view implements this trait with the stored key as `K`
+/// and the map's [`MapLookup`] key as [`Query`](MapKeyQuery::Query). The trait is intentionally not
+/// re-exported from the prelude. Only adapter authors need to name it.
 ///
 /// ```
 /// use assertr::assertions::map::MapKeyQuery;
@@ -536,10 +536,11 @@ mod tests {
             .does_not_contain_entry(&OrdOnlyKey(1), 2)
             .contains_keys([OrdOnlyKey(1), OrdOnlyKey(2)])
             .contains_exactly_entries([(OrdOnlyKey(1), 1), (OrdOnlyKey(2), 2)])
-            .contains_exactly_entries_matching([
-                (OrdOnlyKey(1), is_positive),
-                (OrdOnlyKey(2), is_positive),
-            ])
+            .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+                ([(OrdOnlyKey(1), is_positive), (OrdOnlyKey(2), is_positive)])
+                    .into_iter()
+                    .map(|(key, p)| (key, crate::matchers::predicate(p))),
+            ))
             .contains_exactly_entries_satisfying([
                 (OrdOnlyKey(1), satisfies_positive),
                 (OrdOnlyKey(2), satisfies_positive),
@@ -576,7 +577,11 @@ mod tests {
             .map(|key| (key.clone(), matches as fn(&i32) -> bool))
             .collect::<Vec<_>>();
         counts.reset();
-        assert_that!(map).contains_exactly_entries_matching(predicates);
+        assert_that!(map).contains_exactly_entries_matching(crate::matchers::entry_matchers(
+            (predicates)
+                .into_iter()
+                .map(|(key, p)| (key, crate::matchers::predicate(p))),
+        ));
         assert_that!(counts.equality.get()).is_less_than(linear_comparison_bound);
 
         let assertions = map
@@ -632,8 +637,8 @@ mod tests {
         assert_that!(counts.ordering.get()).is_equal_to(0);
     }
 
-    /// A key type that is `Hash` but not `Ord`: the ordinary case for a hand-written `HashMap`
-    /// key. Every key-querying assertion must be available with the map's own bounds alone.
+    /// A key type that is `Hash` but not `Ord`: the ordinary case for a hand-written `HashMap` key.
+    /// Every key-querying assertion must be available with the map's own bounds alone.
     #[cfg(feature = "std")]
     #[test]
     fn hash_map_adapter_looks_up_keys_that_only_implement_hash() {
@@ -660,10 +665,11 @@ mod tests {
             .does_not_contain_entry(&HashOnlyKey(1), 2)
             .contains_keys([HashOnlyKey(1), HashOnlyKey(2)])
             .contains_exactly_entries([(HashOnlyKey(1), 1), (HashOnlyKey(2), 2)])
-            .contains_exactly_entries_matching([
-                (HashOnlyKey(1), is_positive),
-                (HashOnlyKey(2), is_positive),
-            ])
+            .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+                ([(HashOnlyKey(1), is_positive), (HashOnlyKey(2), is_positive)])
+                    .into_iter()
+                    .map(|(key, p)| (key, crate::matchers::predicate(p))),
+            ))
             .contains_exactly_entries_satisfying([
                 (HashOnlyKey(1), satisfies_positive),
                 (HashOnlyKey(2), satisfies_positive),

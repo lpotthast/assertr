@@ -1,0 +1,5 @@
+error: duplicate matcher field
+ --> tests/partial/17-reject-duplicate-fields.rs:8:36
+  |
+8 |     let _ = partial!(Point { x: 1, x: 2 });
+  |                                    ^

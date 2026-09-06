@@ -11,7 +11,7 @@ const ERASED_TYPE_NOTE: &str = "A Box<dyn Any> means that the concrete type was 
 ///
 /// These methods are available only in panic mode because a failed downcast cannot produce the
 /// requested subject type.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait BoxAssertions<'t, R> {
     /// Asserts that the boxed value has type `E` and returns an assertion over that value.
     ///
@@ -53,8 +53,8 @@ impl<'t, R> BoxAssertions<'t, R> for AssertThat<'t, Box<dyn Any>, Panic, R> {
 /// Downcasts a boxed `Any` subject to `E`.
 ///
 /// This is the body of every `has_type` over a `Box<dyn Any>`, shared with the panic-payload
-/// assertions. A box holding another type raises a failure of `kind`, with `erased_note`
-/// attached when that type cannot be named.
+/// assertions. A box holding another type raises a failure of `kind`, with `erased_note` attached
+/// when that type cannot be named.
 #[track_caller]
 pub(super) fn downcast<'t, E: 'static, R>(
     this: AssertThat<'t, Box<dyn Any>, Panic, R>,
@@ -92,8 +92,8 @@ pub(super) fn downcast<'t, E: 'static, R>(
 /// Raises the failure of a downcast of `any` to `E` on a panic-mode chain and therefore never
 /// returns.
 ///
-/// The payload types `panic!` produces, `&str` and `String`, are named. Any other type is
-/// reported as the erased `dyn Any`, explained by `erased_note`.
+/// The payload types `panic!` produces, `&str` and `String`, are named. Any other type is reported
+/// as the erased `dyn Any`, explained by `erased_note`.
 #[track_caller]
 pub(super) fn raise_type_mismatch<T, R, E: 'static>(
     this: &AssertThat<'_, T, Panic, R>,

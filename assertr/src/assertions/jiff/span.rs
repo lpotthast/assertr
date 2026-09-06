@@ -5,7 +5,7 @@ use jiff::Span;
 
 /// Assertions for [`Span`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait SpanAssertions<R = crate::DebugRenderer> {
     /// Asserts that the span is zero.
     fn is_zero(self) -> Self

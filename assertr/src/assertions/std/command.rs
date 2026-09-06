@@ -10,7 +10,7 @@ use crate::{AssertThat, ValueRenderer};
 
 /// Assertions for process commands.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait CommandAssertions<R = crate::DebugRenderer> {
     /// Asserts that the command contains `expected` in its argument list.
     fn has_arg(self, expected: impl AsRef<OsStr>) -> Self

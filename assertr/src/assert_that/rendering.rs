@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::{
-    AssertThat, EqContext,
+    AssertThat,
     mode::Mode,
     renderer::{CustomRenderer, RenderingBudget, RenderingContext},
 };
@@ -10,8 +10,8 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// Returns this chain's diagnostic rendering context.
     ///
     /// Custom assertion implementations use [`RenderingContext::value`],
-    /// [`RenderingContext::values`], and [`RenderingContext::borrowed_values`] instead of formatting
-    /// diagnostic values directly. This honors both the active
+    /// [`RenderingContext::values`], and [`RenderingContext::borrowed_values`] instead of
+    /// formatting diagnostic values directly. This honors both the active
     /// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. A rendered value always
     /// retains type metadata. Customize its hint through
     /// [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) and its text visibility
@@ -51,10 +51,6 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         RenderingContext::new(&self.state.renderer, self.state.rendering_budget)
     }
 
-    pub(crate) fn eq_context(&self) -> EqContext<'_, R> {
-        EqContext::with_rendering(self.render())
-    }
-
     /// Sets the limits applied when this chain renders diagnostic values and collections.
     ///
     /// The budget is inherited by assertions derived through `satisfies`, `derive`, and related
@@ -84,8 +80,8 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
 
     /// Renders the subject with the given closure in failure messages instead of through `Debug`.
     ///
-    /// The closure has the shape of [`fmt::Debug::fmt`]. Use it to assert on a
-    /// subject that does not implement `Debug`:
+    /// The closure has the shape of [`fmt::Debug::fmt`]. Use it to assert on a subject that does
+    /// not implement `Debug`:
     ///
     /// ```
     /// use assertr::prelude::*;

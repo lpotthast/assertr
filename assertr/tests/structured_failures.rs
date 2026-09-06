@@ -3,10 +3,10 @@
 //! - `AssertThat::capture` runs assertions in capture mode inside a closure and returns the
 //!   collected failures, making a forgotten capture structurally impossible.
 //! - Captured failures are structured `AssertionFailure` values whose fields (location, subject
-//!   name, asserted expression, subject type, actual, relation, expected, unexpected,
-//!   facts, chain-level messages, children, kind) can be inspected without parsing formatted text.
-//! - Values become owned rendered trees when failures are built. Adapters decide how to use
-//!   those trees at the panic boundary or after capture.
+//!   name, asserted expression, subject type, actual, relation, expected, unexpected, facts,
+//!   chain-level messages, children, kind) can be inspected without parsing formatted text.
+//! - Values become owned rendered trees when failures are built. Adapters decide how to use those
+//!   trees at the panic boundary or after capture.
 
 use assertr::prelude::*;
 use assertr::{FailureKind, renderer::Rendered};
@@ -173,8 +173,8 @@ fn capture_on_a_derived_assertion_is_scoped_to_that_chain() {
 
     let failures = root.derive_owned(|v| v.1).capture(|it| it.is_equal_to(43));
 
-    // The derived chain's failures are returned locally instead of propagating to the
-    // panic-mode root, while ancestor detail messages are preserved.
+    // The derived chain's failures are returned locally instead of propagating to the panic-mode
+    // root, while ancestor detail messages are preserved.
     assert_that!(&failures).has_length(1);
     assert_that!(failures[0].messages.as_slice()).contains_exactly(["root context"]);
 
@@ -255,8 +255,8 @@ fn a_side_effect_only_adapter_can_consume_a_captured_failure() {
 }
 
 #[test]
-// The `if` around the panic keeps the closure's return type inferable; an `assert!` would
-// change the panic payload.
+// The `if` around the panic keeps the closure's return type inferable; an `assert!` would change
+// the panic payload.
 #[allow(clippy::manual_assert)]
 fn a_panic_inside_the_capture_closure_propagates_without_a_double_panic() {
     let result = std::panic::catch_unwind(|| {
@@ -580,9 +580,8 @@ mod fields {
         });
         let failure = &failures[0];
 
-        assert_that!(failure.kind).is_equal_to(FailureKind::Predicate);
-        assert_that!(failure.relation.as_deref())
-            .is_equal_to(Some("does not exactly satisfy the assertions"));
+        assert_that!(failure.kind).is_equal_to(FailureKind::Matching);
+        assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not match"));
         assert_that!(failure.facts.as_slice()).is_empty();
 
         assert_that!(failure.children.as_slice()).has_length(1);
@@ -590,14 +589,15 @@ mod fields {
         assert_that!(child.kind).is_equal_to(FailureKind::Equality);
         assert_that!(text_opt(child.actual.as_ref())).is_equal_to(Some("2"));
         assert_that!(text_opt(child.expected.as_ref())).is_equal_to(Some("3"));
-        assert_that!(child.facts.as_slice()).contains_exactly([Fact::new(Fact::INDEX, "1")]);
+        assert_that!(child.path).is_equal_to([assertr::failure::PathSegment::Index(1)]);
+        assert_that!(child.facts).is_empty();
         assert_that!(child.subject_type_name).is_equal_to(core::any::type_name::<i32>());
 
         assert_that!(ToHumanReadableText.render(failure)).ends_with(indoc::indoc! {"
-            does not exactly satisfy the assertions
+            does not match
 
             Nested failures:
-              - At index 1:
+              - At [1]:
                 Expected: 3
 
                   Actual: 2
@@ -608,18 +608,22 @@ mod fields {
     #[test]
     fn rejected_elements_of_a_matching_assertion_are_children_too() {
         let failures = assert_that!([1, 2, 3]).with_location(false).capture(|it| {
-            it.contains_exactly_matching([
+            it.contains_exactly_matching(assertr::matchers::predicate_list([
                 |it: &i32| *it == 1,
                 |it: &i32| *it == 9,
                 |it: &i32| *it == 3,
-            ])
+            ]))
         });
         let child = &failures[0].children[0];
 
-        assert_that!(child.kind).is_equal_to(FailureKind::Predicate);
-        assert_that!(text_opt(child.actual.as_ref())).is_equal_to(Some("2"));
-        assert_that!(child.relation.as_deref()).is_equal_to(Some("does not match its predicate"));
-        assert_that!(child.facts.as_slice()).contains_exactly([Fact::new(Fact::INDEX, "1")]);
+        assert_that!(child.kind).is_equal_to(FailureKind::Matching);
+        assert_that!(child.actual).is_none();
+        assert_that!(child.constraint.as_ref().unwrap().relation)
+            .is_equal_to("satisfies the predicate");
+        assert_that!(child.relation.as_deref())
+            .is_equal_to(Some("does not satisfy the constraint"));
+        assert_that!(child.path).is_equal_to([assertr::failure::PathSegment::Index(1)]);
+        assert_that!(child.facts).is_empty();
     }
 
     #[test]
@@ -713,5 +717,62 @@ mod fields {
         assert_that!(text_opt(child.actual.as_ref())).is_equal_to(Some("Secret#1"));
         assert_that!(text_opt(child.expected.as_ref())).is_equal_to(Some("Secret#2"));
         assert_that!(child.location.is_none()).is_true();
+    }
+}
+
+mod matcher_metadata {
+    use super::*;
+
+    #[test]
+    fn matcher_paths_and_constraints_preserve_metadata() {
+        use assertr::{
+            failure::PathSegment,
+            matchers::{all_of, equal_to, predicate},
+        };
+        let failures = assert_that!([1])
+            .with_subject_name("rows")
+            .with_detail_message("request context")
+            .capture(|it| {
+                it.matches(elements_are![all_of((
+                    equal_to(2),
+                    predicate(|_: &i32| false)
+                ))])
+            });
+        assert_that!(failures).has_length(1);
+        let root = &failures[0];
+        assert_that!(root.subject_name.as_deref()).is_equal_to(Some("rows"));
+        assert_that!(root.expression).is_equal_to(Some("[1]"));
+        assert_that!(root.messages).is_equal_to(["request context"]);
+        assert_that!(root.location.unwrap().file()).ends_with("structured_failures.rs");
+        assert_that!(root.children).has_length(2);
+        for child in &root.children {
+            assert_that!(child.path).is_equal_to([PathSegment::Index(0)]);
+            assert_that!(child.location).is_none();
+            assert_that!(child.expression).is_none();
+            assert_that!(child.messages).is_empty();
+        }
+        assert_that!(root.children[1].constraint.as_ref().unwrap().relation)
+            .is_equal_to("satisfies the predicate");
+    }
+
+    #[test]
+    fn typed_paths_take_precedence_over_legacy_location_facts() {
+        use assertr::failure::{FailureBuilder, PathSegment};
+        let child = FailureBuilder::detached::<i32>(FailureKind::Matching)
+            .path([
+                PathSegment::Field("rows"),
+                PathSegment::Index(1),
+                PathSegment::Field("id"),
+            ])
+            .relation("does not match")
+            .build()
+            .located_at(assertr::Fact::index(1));
+        let root = FailureBuilder::detached::<()>(FailureKind::Matching)
+            .child(child)
+            .build();
+        let text = ToHumanReadableText.render(&root);
+        assert_that!(text)
+            .contains("At .rows[1].id:")
+            .does_not_contain("At index");
     }
 }

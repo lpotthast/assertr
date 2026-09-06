@@ -13,8 +13,8 @@
 //! methods participate in method resolution, not as downstream implementation interfaces.
 
 // The capture closures below wrap a single custom assertion on purpose: `capture(|it| it.is_x())`
-// is the spelling users write and the one the documentation shows. Passing the method path
-// instead would be shorter but would stop demonstrating the API.
+// is the spelling users write and the one the documentation shows. Passing the method path instead
+// would be shorter but would stop demonstrating the API.
 #![allow(clippy::redundant_closure_for_method_calls)]
 
 fn text_opt(value: Option<&assertr::renderer::Rendered>) -> Option<&str> {
@@ -147,8 +147,8 @@ mod leaf {
     impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
         #[track_caller]
         fn is_adult(self) -> Self {
-            // Tracking comes first and happens unconditionally: a passing assertion must count
-            // just as much as a failing one.
+            // Tracking comes first and happens unconditionally: a passing assertion must count just
+            // as much as a failing one.
             self.track_assertion();
 
             let age = self.actual().age;
@@ -171,8 +171,8 @@ mod leaf {
 
             let actual = self.actual();
             if actual.age <= other.age {
-                // Facts belong to the failure, not to the chain: they must not reappear in a
-                // later failure of the same chain.
+                // Facts belong to the failure, not to the chain: they must not reappear in a later
+                // failure of the same chain.
                 self.failure(FailureKind::Ordering)
                     .actual(self.render().value(actual))
                     .relation("is not older than")
@@ -323,8 +323,8 @@ mod leaf {
 
     #[test]
     fn a_passing_leaf_assertion_counts_as_an_assertion() {
-        // Without `track_assertion`, `capture` would treat this closure as empty and panic. This
-        // is why the tracking hook is public rather than internal.
+        // Without `track_assertion`, `capture` would treat this closure as empty and panic. This is
+        // why the tracking hook is public rather than internal.
         let failures = assert_that!(person(30)).capture(|it| it.is_adult());
 
         assert_that!(failures.as_slice()).is_empty();
@@ -354,8 +354,8 @@ mod nested {
     use assertr::{Fact, FailureKind};
     use indoc::formatdoc;
 
-    /// A downstream assertion over a group of people that reports each rejected member as a
-    /// nested failure located by its index, the way the built-in positional assertions do.
+    /// A downstream assertion over a group of people that reports each rejected member as a nested
+    /// failure located by its index, the way the built-in positional assertions do.
     trait GroupAssertions<R = DebugRenderer> {
         #[allow(clippy::wrong_self_convention)]
         fn are_adults(self) -> Self
@@ -446,7 +446,7 @@ mod generated_fluent_aliases {
 
     use assertr::prelude::*;
 
-    #[assertr_derive::fluent_aliases]
+    #[assertr_macros::fluent_aliases]
     trait BorrowAssertions {
         #[fluent_alias("borrow_as")]
         fn is_borrowed_as<'a>(self, expected: &'a str) -> Self;
@@ -463,5 +463,53 @@ mod generated_fluent_aliases {
     #[test]
     fn aliases_support_late_bound_lifetimes() {
         "value".to_owned().must().borrow_as("expected");
+    }
+}
+
+mod matcher_authoring {
+    use assertr::{
+        matchers::{Description, MatchContext, MatchResult},
+        prelude::*,
+    };
+
+    struct AgeAtLeast(u32);
+    impl<R: ValueRenderer<u32>> AssertrMatcher<super::Person, R> for AgeAtLeast {
+        fn describe(&self, context: &MatchContext<'_, R>) -> Description {
+            Description::new("has at least the required age")
+                .expected(context.render().value(&self.0))
+        }
+        fn evaluate(
+            &self,
+            actual: &super::Person,
+            context: &mut MatchContext<'_, R>,
+        ) -> MatchResult {
+            context.scoped(assertr::failure::PathSegment::Field("age"), |context| {
+                assertr::matchers::ge(self.0).evaluate(&actual.age, context)
+            })
+        }
+    }
+    struct AgeRenderer;
+    impl ValueRenderer<u32> for AgeRenderer {
+        fn fmt(&self, value: &u32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "age={value}")
+        }
+    }
+    #[test]
+    fn downstream_matchers_compose_without_parent_rendering() {
+        let person = super::Person {
+            age: 12,
+            meta: super::Metadata { alive: true },
+        };
+        let matcher = assertr::matchers::all_of((AgeAtLeast(18), AgeAtLeast(21)));
+        let failures = assert_that!(person)
+            .with_renderer(AgeRenderer)
+            .capture(|it| it.matches(&matcher));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).has_length(2);
+        assert_that!(super::text_opt(failures[0].children[0].actual.as_ref()))
+            .is_equal_to(Some("age=12"));
+        assert_that!(person)
+            .with_renderer(AgeRenderer)
+            .does_not_match(&matcher);
     }
 }

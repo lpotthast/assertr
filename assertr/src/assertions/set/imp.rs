@@ -33,8 +33,8 @@ fn set_type_name<S: ?Sized>() -> &'static str {
     name
 }
 
-/// Whether diagnostics over `S`'s elements are sorted by their rendered text because the set has
-/// no deterministic iteration order.
+/// Whether diagnostics over `S`'s elements are sorted by their rendered text because the set has no
+/// deterministic iteration order.
 fn sorts_for_rendering<S: SetLookup + ?Sized>() -> bool {
     S::PRESENTATION.order() == RenderingOrder::SortByRenderedText
 }

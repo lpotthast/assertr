@@ -4,7 +4,7 @@ use crate::{AssertThat, ValueRenderer};
 
 /// Assertions for character values.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait CharAssertions<R = crate::DebugRenderer> {
     /// Asserts that the subject and `expected` are equal under ASCII case folding.
     fn is_equal_to_ignoring_ascii_case(self, expected: char) -> Self
@@ -31,11 +31,8 @@ pub trait CharAssertions<R = crate::DebugRenderer> {
     where
         R: ValueRenderer<char>;
 
-    //fn is_ascii(self) -> Self;
-    //fn is_whitespace(self) -> Self;
-    //fn is_alphabetic(self) -> Self;
-    //fn is_alphanumeric(self) -> Self;
-    //fn is_numeric(self) -> Self;
+    // fn is_ascii(self) -> Self; fn is_whitespace(self) -> Self; fn is_alphabetic(self) -> Self; fn
+    // is_alphanumeric(self) -> Self; fn is_numeric(self) -> Self;
 }
 
 impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {

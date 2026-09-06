@@ -1,7 +1,7 @@
 //! Concrete adapter implementations.
 //!
-//! Each child module conceptually defines one adapter. A module may also define the output,
-//! error, and private support types needed to make that adapter work.
+//! Each child module conceptually defines one adapter. A module may also define the output, error,
+//! and private support types needed to make that adapter work.
 
 mod human_readable;
 #[cfg(feature = "std")]

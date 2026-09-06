@@ -3,9 +3,9 @@ use core::fmt::{self, Debug};
 
 /// Controls the type hint attached to a rendered diagnostic value.
 ///
-/// A type hint is presentation metadata rather than the value's canonical Rust type. Assertr
-/// always captures the complete [`core::any::type_name`] independently. This policy selects the
-/// hint derived from that name when a text diagnostic chooses to show it.
+/// A type hint is presentation metadata rather than the value's canonical Rust type. Assertr always
+/// captures the complete [`core::any::type_name`] independently. This policy selects the hint
+/// derived from that name when a text diagnostic chooses to show it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum TypeHint {
@@ -16,8 +16,8 @@ pub enum TypeHint {
     ///
     /// Module qualification, reference prefixes, and generic arguments are omitted. For example,
     /// `alloc::collections::btree::map::BTreeMap<K, V>` is shown as `BTreeMap`. Slices, arrays,
-    /// tuples, and other composite types keep their structure and shorten every contained type
-    /// the same way, so `&[alloc::string::String]` is shown as `[String]`.
+    /// tuples, and other composite types keep their structure and shorten every contained type the
+    /// same way, so `&[alloc::string::String]` is shown as `[String]`.
     Short,
 
     /// Uses the given diagnostic label as the hint.
@@ -82,8 +82,8 @@ impl<D> Typed<D> {
 
     /// Controls whether text output shows this diagnostic value's type hint.
     ///
-    /// The complete Rust type name and configured hint remain attached when `show` is `false`.
-    /// This setting therefore does not affect future structured or machine-readable output.
+    /// The complete Rust type name and configured hint remain attached when `show` is `false`. This
+    /// setting therefore does not affect future structured or machine-readable output.
     pub fn show_type_hint(mut self, show: bool) -> Self {
         self.show_type_hint = show;
         self
@@ -100,8 +100,8 @@ impl<D: Debug> Debug for Typed<D> {
 }
 
 /// Removes reference prefixes, module qualification, and generic arguments from a
-/// [`core::any::type_name`] while keeping the structure of composite types such as slices,
-/// arrays, tuples, pointers, and function types.
+/// [`core::any::type_name`] while keeping the structure of composite types such as slices, arrays,
+/// tuples, pointers, and function types.
 pub(super) fn short_rust_type_name(type_name: &str) -> String {
     let type_name = type_name.trim_start_matches('&');
     let type_name = type_name.strip_prefix("mut ").unwrap_or(type_name);

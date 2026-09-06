@@ -1,0 +1,11 @@
+error[E0422]: cannot find struct, variant or union type `ThisDoesNotExist` in this scope
+ --> tests/partial/23-reject-unknown-unit-constructors.rs:5:40
+  |
+5 |     assert_that!(123).matches(partial!(ThisDoesNotExist));
+  |                                        ^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0422]: cannot find struct, variant or union type `ThisDoesNotExist` in this scope
+ --> tests/partial/23-reject-unknown-unit-constructors.rs:6:48
+  |
+6 |     assert_that!(123).matches(partial!(variant ThisDoesNotExist));
+  |                                                ^^^^^^^^^^^^^^^^ not found in this scope

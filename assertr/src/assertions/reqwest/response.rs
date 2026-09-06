@@ -21,7 +21,7 @@ use reqwest::header::HeaderValue;
 
 /// Non-extracting assertions for [`reqwest::Response`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ReqwestResponseAssertions {
     /// Asserts that the response has exactly this status code.
     fn has_status_code(self, expected: reqwest::StatusCode) -> Self;
@@ -189,7 +189,7 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
 ///
 /// Only available in `Panic` mode. Each projection can fail to produce a value, and a captured
 /// failure has no value to continue the chain with.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ReqwestResponseExtractAssertions<'t, R> {
     /// Asserts that the header is present, then continues the chain on a clone of its first value.
     ///
@@ -218,9 +218,9 @@ pub trait ReqwestResponseExtractAssertions<'t, R> {
     ///
     /// # Panics
     ///
-    /// Panics when the assertion only borrows its subject, when the body cannot be read, and
-    /// when the body is not valid JSON for `T`. Ownership is checked when this method is called,
-    /// before it returns the future.
+    /// Panics when the assertion only borrows its subject, when the body cannot be read, and when
+    /// the body is not valid JSON for `T`. Ownership is checked when this method is called, before
+    /// it returns the future.
     #[cfg(feature = "serde-json")]
     fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
@@ -318,9 +318,9 @@ async fn get_text_at<'t, R>(
         })
         .await;
 
-    // The read failure gets its own message and its own facts rather than a staged detail
-    // message: a staged one would also be attached to every later failure of the chain, and
-    // claim the body could not be read long after it was read successfully.
+    // The read failure gets its own message and its own facts rather than a staged detail message:
+    // a staged one would also be attached to every later failure of the chain, and claim the body
+    // could not be read long after it was read successfully.
     if let Err(error) = this.actual() {
         this.failure_at(FailureKind::Other, location)
             .relation("has a body that could not be read")
@@ -390,8 +390,8 @@ mod tests {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};
 
-        /// Renders a response by its status code only. It implements no other `ValueRenderer`,
-        /// so it proves which renderer capability each assertion actually requires.
+        /// Renders a response by its status code only. It implements no other `ValueRenderer`, so
+        /// it proves which renderer capability each assertion actually requires.
         struct StatusOnly;
 
         impl ValueRenderer<reqwest::Response> for StatusOnly {
@@ -1382,9 +1382,9 @@ mod tests {
         /// Drives a future to completion from a synchronous test.
         ///
         /// The failure tests below need `assert_that_panic_by`, whose closure has to be
-        /// `UnwindSafe`. A `reqwest::Response` is not, and neither is any future holding one
-        /// across an await, so the async form (`assert_that_panic_by_async`) cannot express them.
-        /// Building everything inside the closure keeps the closure's own captures unwind-safe.
+        /// `UnwindSafe`. A `reqwest::Response` is not, and neither is any future holding one across
+        /// an await, so the async form (`assert_that_panic_by_async`) cannot express them. Building
+        /// everything inside the closure keeps the closure's own captures unwind-safe.
         fn block_on<F: Future>(future: F) -> F::Output {
             tokio::runtime::Builder::new_current_thread()
                 .build()

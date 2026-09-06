@@ -390,3 +390,30 @@ fn captured_failures_support_explicit_chains_with_arbitrary_outputs() {
     chain.then(RecordLength(&recorded)).adapt(failure).unwrap();
     assert_eq!(recorded.get(), Some(DEFAULT_MESSAGE.len()));
 }
+
+mod matcher_capture {
+    use super::*;
+
+    #[test]
+    fn matcher_capture_preserves_data_without_invoking_presentation() {
+        let count = Rc::new(Cell::new(0));
+        let failures = assert_that!([1, 2])
+            .with_panic_presentation(CountPresentations(Rc::clone(&count)))
+            .capture(|it| {
+                it.matches(elements_are![
+                    1,
+                    assertr::matchers::predicate(|x: &i32| *x == 3)
+                ])
+            });
+        assert_that!(count.get()).is_equal_to(0);
+        let child = &failures[0].children[0];
+        assert_that!(child.path).is_equal_to([assertr::failure::PathSegment::Index(1)]);
+        assert_that!(child.constraint.as_ref().unwrap().relation)
+            .is_equal_to("satisfies the predicate");
+        let output = CountPresentations(Rc::clone(&count))
+            .adapt(&failures[0])
+            .unwrap();
+        assert_that!(count.get()).is_equal_to(1);
+        assert_that!(output).contains("At [1]:");
+    }
+}

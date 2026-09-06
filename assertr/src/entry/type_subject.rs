@@ -5,8 +5,7 @@ use crate::{AssertThat, actual::Actual, mode::Panic};
 /// A zero-sized subject standing for the type `T` itself.
 ///
 /// [`assert_that_type`] creates it. It represents properties of `T` rather than a value, and its
-/// accessors feed further facts about `T` into
-/// [`AssertThat::satisfies_owned`].
+/// accessors feed further facts about `T` into [`AssertThat::satisfies_owned`].
 pub struct Type<T> {
     phantom: PhantomData<T>,
 }
@@ -64,7 +63,20 @@ impl<T> Default for Type<T> {
 /// assert_that_type::<[u8; 4]>().satisfies_owned(|it| it.size(), |size| {
 ///     size.is_equal_to(4);
 /// });
+///
+/// assert_that_type::<u32>().satisfies_owned(|it| it.get_type_name(), |name| {
+///     name.is_equal_to("u32");
+/// });
 /// ```
+///
+/// The entry point and [`Type`] accessors need no optional feature. For example, without `std`
+/// you can check drop requirements with
+/// `satisfies_owned(|it| it.needs_drop(), |needed| { needed.is_false(); })`. A `false` result
+/// guarantees no drop side effects. A `true` result is conservative and need not mean that
+/// dropping the type runs code.
+///
+/// Type names are diagnostic descriptions from [`core::any::type_name`], whose format is not
+/// guaranteed. [`AssertThat::satisfies`] explains the projection family used by these checks.
 #[must_use]
 pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
     AssertThat::new_panicking(Actual::Owned(Type::<T>::new())).with_expression(type_name::<T>())

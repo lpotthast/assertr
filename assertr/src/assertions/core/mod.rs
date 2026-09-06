@@ -1,10 +1,12 @@
 //! General-purpose assertions and assertions for core-language value families.
 //!
-//! - Equality, ordering, formatting, and patterns: [`PartialEqAssertions`](partial_eq::PartialEqAssertions),
+//! - Equality, ordering, formatting, and patterns:
+//!   [`PartialEqAssertions`](partial_eq::PartialEqAssertions),
 //!   [`IdentityAssertions`](identity::IdentityAssertions),
 //!   [`PartialOrdAssertions`](partial_ord::PartialOrdAssertions),
-//!   [`DebugAssertions`](debug::DebugAssertions), [`DisplayAssertions`](display::DisplayAssertions),
-//!   and [`PatternAssertions`](pattern::PatternAssertions)
+//!   [`DebugAssertions`](debug::DebugAssertions),
+//!   [`DisplayAssertions`](display::DisplayAssertions), and
+//!   [`PatternAssertions`](pattern::PatternAssertions)
 //! - Primitive and structural values: [`BoolAssertions`](bool::BoolAssertions),
 //!   [`CharAssertions`](char::CharAssertions), [`LengthAssertions`](length::LengthAssertions),
 //!   [`RangeAssertions`](range::RangeAssertions), and

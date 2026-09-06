@@ -1,12 +1,12 @@
 //! Sequential composition of typed adapters.
 //!
-//! [`Then`] runs the first adapter, borrows its successful output as the next adapter's input,
-//! and returns the next adapter's output. [`ThenError`] retains the typed error and identifies
-//! the stage that failed. An error from the first stage prevents the next stage from running.
+//! [`Then`] runs the first adapter, borrows its successful output as the next adapter's input, and
+//! returns the next adapter's output. [`ThenError`] retains the typed error and identifies the
+//! stage that failed. An error from the first stage prevents the next stage from running.
 //!
-//! [`AdapterExt::then`](crate::failure::adapter::AdapterExt::then) constructs these chains.
-//! They run on the calling thread, work without `std`, and propagate panics to their caller.
-//! Composition does not choose how assertion failures are captured or presented in a panic.
+//! [`AdapterExt::then`](crate::failure::adapter::AdapterExt::then) constructs these chains. They
+//! run on the calling thread, work without `std`, and propagate panics to their caller. Composition
+//! does not choose how assertion failures are captured or presented in a panic.
 
 use core::{error::Error, fmt};
 

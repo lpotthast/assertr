@@ -1,7 +1,7 @@
 //! Presentation used exclusively when raising an assertion panic.
 //!
-//! Capture mode stores structured failures without invoking this module. General-purpose
-//! adapters remain independent of how assertion failures are handled.
+//! Capture mode stores structured failures without invoking this module. General-purpose adapters
+//! remain independent of how assertion failures are handled.
 
 use alloc::string::String;
 use core::fmt::Write;
@@ -28,8 +28,8 @@ pub(crate) fn render(
     };
 
     // Catch both adapter panics and panics from its error's Display implementation.
-    // AssertUnwindSafe is limited to this call: fallback uses independent failure data
-    // and never retries the adapter or relies on its state after unwinding.
+    // AssertUnwindSafe is limited to this call: fallback uses independent failure data and never
+    // retries the adapter or relies on its state after unwinding.
     #[cfg(feature = "std")]
     let result =
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| adapter.adapt(failure))) {

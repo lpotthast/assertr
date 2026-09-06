@@ -1,7 +1,7 @@
 /// The structural syntax used to render a group of diagnostic values.
 ///
-/// Collection subjects obtain their syntax from [`CollectionPresentation`]. Custom assertions
-/// and equality implementations pass this style directly when rendering an ad-hoc group.
+/// Collection subjects obtain their syntax from [`CollectionPresentation`]. Custom assertions and
+/// equality implementations pass this style directly when rendering an ad-hoc group.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GroupStyle {
@@ -13,9 +13,10 @@ pub enum GroupStyle {
 
 /// The order in which repeated items are shown in diagnostics.
 ///
-/// This is a presentation choice, not a behavioral capability. Sorting uses the final rendered
-/// text of each item. Assertions whose meaning depends on [`StableOrder`](crate::assertions::collection::StableOrder)
-/// always render the subject in iteration order so displayed positions retain their meaning.
+/// This is a presentation choice, not a behavioral capability. Sorting uses the final rendered text
+/// of each item. Assertions whose meaning depends on
+/// [`StableOrder`](crate::assertions::collection::StableOrder) always render the subject in
+/// iteration order so displayed positions retain their meaning.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum RenderingOrder {

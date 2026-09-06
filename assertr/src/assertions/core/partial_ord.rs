@@ -8,7 +8,7 @@ use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 /// therefore fail every ordering assertion. In particular, a floating-point comparison involving
 /// `NaN` does not satisfy either strict or inclusive ordering.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait PartialOrdAssertions<T, R> {
     /// Asserts that the subject is strictly less than `expected`.
     fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self

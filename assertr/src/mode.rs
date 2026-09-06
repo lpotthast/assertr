@@ -12,8 +12,8 @@ mod sealed {
 /// The mode of an assertion, deciding what happens when an assertion fails.
 ///
 /// This trait is sealed. [`Panic`] and [`Capture`] are its only implementations and are type-state
-/// markers, not extension points. Every assertion derived from a root assertion retains the
-/// root's mode.
+/// markers, not extension points. Every assertion derived from a root assertion retains the root's
+/// mode.
 pub trait Mode: sealed::Sealed + 'static {
     /// Whether failures are collected for later inspection (`true`) or raise an immediate panic
     /// (`false`).
@@ -22,8 +22,8 @@ pub trait Mode: sealed::Sealed + 'static {
 
 /// Panic mode, in which the first failure panics immediately.
 ///
-/// This is the default mode. Projections that cannot produce a continuation after failure, such
-/// as `get_ok`, are available only in this mode.
+/// This is the default mode. Projections that cannot produce a continuation after failure, such as
+/// `get_ok`, are available only in this mode.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Panic;
 

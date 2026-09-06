@@ -25,7 +25,7 @@ all-features = true
 # implicitly.
 default = ["std", "num"]
 full = [
-    "derive",
+    "matchers",
     "fluent",
     "http",
     "jiff",
@@ -39,8 +39,8 @@ full = [
     "tokio",
 ]
 std = ["num-traits?/std"]
-derive = ["dep:assertr-derive"]
-fluent = ["dep:assertr-derive"]
+matchers = ["dep:assertr-macros"]
+fluent = ["dep:assertr-macros"]
 num = ["dep:num-traits"]
 http = ["dep:http"]
 # The integrations below wrap crates that are themselves std-only. Their `std` edge is what
@@ -59,9 +59,9 @@ libm = ["num-traits?/libm"]
 
 [dependencies]
 # Exact pin: generated code uses `assertr::__private`, so the two crates only work in the
-# versions released together. A range requirement would let Cargo resolve a newer derive
+# versions released together. A range requirement would let Cargo resolve a newer macro crate
 # against an older assertr and produce generated code that does not compile.
-assertr-derive = { version = "=0.4.2", optional = true, path = "../assertr-derive" }
+assertr-macros = { version = "=0.5.0", optional = true, path = "../assertr-macros" }
 http = { version = "1.3.1", optional = true }
 indoc = "2.0.5"
 jiff = { version = "0.2.13", optional = true }

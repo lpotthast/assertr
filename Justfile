@@ -1,7 +1,7 @@
 # Every feature of the `assertr` crate, checked one at a time by `check-each-feature` and
 # friends. Cargo unifies features across a single invocation, so an integration that silently
 # depends on another feature only shows up when it is the only feature enabled.
-features := "derive fluent http jiff libm num program reqwest rootcause serde serde-json serde-toml std tokio"
+features := "matchers fluent http jiff libm num program reqwest rootcause serde serde-json serde-toml std tokio"
 
 # Lists all available commands.
 list:
@@ -18,7 +18,7 @@ install-tools:
 # Find the minimum supported rust version.
 msrv:
     cargo msrv find --path assertr
-    cargo msrv find --path assertr-derive
+    cargo msrv find --path assertr-macros
 
 # Check whether current changes require a breaking release.
 semver-checks:
@@ -33,7 +33,7 @@ check:
     cargo check -p assertr --all-targets --no-default-features --features num
     cargo check -p assertr --all-targets
     cargo check -p assertr --all-targets --all-features
-    cargo check -p assertr-derive --all-targets
+    cargo check -p assertr-macros --all-targets
     cargo check -p assertr-no-std-tests --all-targets
 
 # Check every feature on its own, so no feature can hide behind another's dependencies.
@@ -48,6 +48,8 @@ check-each-feature:
 # Check the two `no_std` configurations: hosted (with `alloc`) and embedded.
 check-no-std:
     cargo test -p assertr-no-std-tests
+    cargo test -p assertr-no-std-tests --features matchers
+    cargo check -p assertr-no-std-tests --features matchers --target thumbv8m.main-none-eabihf
     cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf
     cargo check -p assertr --lib --no-default-features --features num,libm --target thumbv8m.main-none-eabihf
 
@@ -58,7 +60,7 @@ clippy:
     cargo clippy -p assertr --all-targets --no-default-features --features num -- -D warnings -W clippy::pedantic
     cargo clippy -p assertr --all-targets -- -D warnings -W clippy::pedantic
     cargo clippy -p assertr --all-targets --all-features -- -D warnings -W clippy::pedantic
-    cargo clippy -p assertr-derive --all-targets -- -D warnings -W clippy::pedantic
+    cargo clippy -p assertr-macros --all-targets -- -D warnings -W clippy::pedantic
     cargo clippy -p assertr-no-std-tests --all-targets -- -D warnings -W clippy::pedantic
 
 # Run all tests.
@@ -68,7 +70,9 @@ test:
     cargo test -p assertr --no-default-features --features num
     cargo test -p assertr
     cargo test -p assertr --all-features
-    cargo test -p assertr-derive
+    cargo test -p assertr --no-default-features --features matchers
+    cargo test -p assertr --no-default-features --features matchers,fluent
+    cargo test -p assertr-macros
     cargo test -p assertr-no-std-tests
 
 # Build the crate documentation.
@@ -87,11 +91,11 @@ audit:
 tidy:
     cargo update --workspace
     cargo sort --workspace
-    cargo fmt --all
+    cargo +nightly fmt --all
 
 # Run the full non-mutating validation suite.
 verify:
-    cargo fmt --all -- --check
+    cargo +nightly fmt --all -- --check
     just check
     just check-each-feature
     just check-no-std

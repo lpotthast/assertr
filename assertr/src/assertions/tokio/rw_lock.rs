@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 /// configured reader limit can affect those attempts, so these methods report acquisition state,
 /// not a synchronized count of guards.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait TokioRwLockAssertions<T, R> {
     /// Asserts that `try_write` can acquire the lock.
     fn is_not_locked(self) -> Self
@@ -48,8 +48,8 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
         if self.actual().try_write().is_err() {
             // Cannot be locked for writing, so it is already read- or write-locked.
             match self.actual().try_read() {
-                // RwLock allows multiple readers. It cannot be read again, so the existing lock
-                // is a write lock.
+                // RwLock allows multiple readers. It cannot be read again, so the existing lock is
+                // a write lock.
                 Err(_) => {
                     self.failure(FailureKind::Other)
                         .actual(self.render().unavailable_struct_field(
@@ -137,8 +137,8 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                 .fact(LOCK_STATE, "unlocked")
                 .raise();
         } else if let Ok(value) = self.actual().try_read() {
-            // Cannot be locked for writing, and RwLock allows multiple readers, so a lock that
-            // can be read again is a read lock.
+            // Cannot be locked for writing, and RwLock allows multiple readers, so a lock that can
+            // be read again is a read lock.
             self.failure(FailureKind::Other)
                 .actual(
                     self.render()

@@ -7,13 +7,22 @@
 //! [`children`](AssertionFailure::children). Adapters consume these fields directly, so no
 //! machine-readable use needs to parse the human-readable text report.
 //!
-//! A leaf assertion raises a failure through [`AssertThat::failure`], which returns the
-//! [`FailureBuilder`] every built-in assertion uses.
+//! ## From assertion to report
 //!
-//! - **Failure construction:** Every assertion builds an [`AssertionFailure`] containing structured evidence.
-//! - **Failure handling:** Capture mode stores it. Panic mode asks a presentation adapter to produce the panic text.
-//! - **Presentation:** An [adapter](adapter::Adapter) converts the failure into another representation.
-//!   [`.then()`](adapter::AdapterExt::then) allows intermediate transformations.
+//! 1. **Construction:** A failed leaf assertion builds an [`AssertionFailure`] through
+//!    [`AssertThat::failure`] and [`FailureBuilder`]. Diagnostic values are rendered through the
+//!    chain's [renderer and budget](crate::renderer) into owned [`Rendered`] trees.
+//! 2. **Handling:** [`AssertThat::capture`] stores failures and returns them to the caller. Panic
+//!    mode stops at the first failure and asks the selected [presentation
+//!    adapter](AssertThat::with_panic_presentation) for panic text.
+//! 3. **Presentation:** An [adapter] reads the structured failure and produces another
+//!    representation. [`ToHumanReadableText`](adapter::ToHumanReadableText) produces the default
+//!    report. Capture mode leaves this step to the caller.
+//!
+//! Adapters receive rendered evidence, not the original Rust values. They can inspect structure,
+//! type metadata, and omission counts without parsing a report or rendering leaves again. For
+//! examples, start with [capturing failures](AssertThat::capture) or [processing them](adapter).
+//! To create failures in your own methods, see [custom assertions](crate#custom-assertions).
 
 pub mod adapter;
 mod builder;
@@ -41,6 +50,8 @@ pub enum FailureKind {
     /// The subject was compared for equality with a value, such as `is_equal_to` or
     /// `contains_exactly`.
     Equality,
+    /// An expected-side matcher rejected the subject.
+    Matching,
     /// The subject was compared by order or range, such as `is_greater_than` or `is_in_range`.
     Ordering,
     /// An element, key, entry, prefix, suffix, or subset was looked up, such as `contains` or
@@ -57,6 +68,22 @@ pub enum FailureKind {
     Panic,
     /// A failure of any other family.
     Other,
+}
+
+/// A relative location within a matched subject. Paths compose from parent to child.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PathSegment {
+    /// A named field.
+    Field(&'static str),
+    /// A tuple field.
+    TupleIndex(usize),
+    /// A required enum variant.
+    Variant(&'static str),
+    /// A position in a stable-order collection.
+    Index(usize),
+    /// A map key rendered with the active renderer.
+    Key(Rendered),
 }
 
 /// One labeled piece of evidence attached to an [`AssertionFailure`].
@@ -103,8 +130,8 @@ impl Fact {
         Self::new(Self::INDEX, index)
     }
 
-    /// Creates the [`KEY`](Self::KEY) fact locating a nested failure at a map key. Pass the key
-    /// as an adapter obtained from [`AssertThat::render`], which is printed compactly here.
+    /// Creates the [`KEY`](Self::KEY) fact locating a nested failure at a map key. Pass the key as
+    /// an adapter obtained from [`AssertThat::render`], which is printed compactly here.
     #[must_use]
     pub fn key(rendered_key: impl IntoRendered) -> Self {
         Self {
@@ -121,8 +148,8 @@ impl Fact {
 
 /// A single structured assertion failure.
 ///
-/// Capture-mode assertions (see [`AssertThat::capture`]) collect these instead of panicking.
-/// Every part of a failure is exposed as its own field, so consumers can inspect failures
+/// Capture-mode assertions (see [`AssertThat::capture`]) collect these instead of panicking. Every
+/// part of a failure is exposed as its own field, so consumers can inspect failures
 /// programmatically or compose their own rendering without parsing formatted text.
 ///
 /// The complete human-readable form is produced by
@@ -133,6 +160,13 @@ impl Fact {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AssertionFailure {
+    /// A structured matcher constraint, including its rendered operands and branches.
+    pub constraint: Option<crate::matchers::Description>,
+    /// Relative path from the parent subject.
+    pub path: Vec<PathSegment>,
+
+    /// Number of diagnostic children omitted by the rendering budget.
+    pub omitted_children: usize,
     /// Where the failing assertion was invoked. `None` when location printing was disabled via
     /// `with_location(false)`.
     pub location: Option<&'static core::panic::Location<'static>>,
@@ -155,8 +189,8 @@ pub struct AssertionFailure {
     /// assertion shows it.
     pub actual: Option<Rendered>,
 
-    /// The sentence between the actual and the expected value, such as `does not contain` or
-    /// `is not greater than`. A failure without a relation is a direct comparison of
+    /// The sentence between the actual and the expected value, such as `does not contain` or `is
+    /// not greater than`. A failure without a relation is a direct comparison of
     /// [`expected`](Self::expected) and [`actual`](Self::actual), which the human-readable adapter
     /// renders as an aligned `Expected:` / `Actual:` pair.
     pub relation: Option<Cow<'static, str>>,
@@ -176,9 +210,9 @@ pub struct AssertionFailure {
     /// bare value for a note.
     pub facts: Vec<Fact>,
 
-    /// User-provided detail messages (`with_detail_message` / `add_detail_message`) collected
-    /// from the assertion chain. Contains only the messages provided up to the point this
-    /// failure was raised. A message added later appears only in the failures raised after it.
+    /// User-provided detail messages (`with_detail_message` / `add_detail_message`) collected from
+    /// the assertion chain. Contains only the messages provided up to the point this failure was
+    /// raised. A message added later appears only in the failures raised after it.
     pub messages: Vec<String>,
 
     /// Failures raised by nested assertions, such as the per-element assertions of
@@ -195,9 +229,8 @@ pub struct AssertionFailure {
 }
 
 impl AssertionFailure {
-    /// Prepends a fact locating this failure within its parent's subject, such as
-    /// [`Fact::index`] or [`Fact::key`]. The human-readable adapter uses it as the heading of the
-    /// nested failure.
+    /// Prepends a fact locating this failure within its parent's subject, such as [`Fact::index`]
+    /// or [`Fact::key`]. The human-readable adapter uses it as the heading of the nested failure.
     #[must_use]
     pub fn located_at(mut self, fact: Fact) -> Self {
         self.facts.insert(0, fact);

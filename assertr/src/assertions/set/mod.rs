@@ -22,8 +22,8 @@ pub use assertions::SetAssertions;
 ///
 /// Implementing this trait declares that the collection has unique elements and can query
 /// membership according to the same equivalence relation that enforces that uniqueness.
-/// [`SetAssertions`] require this capability. This implementor-facing trait is not re-exported
-/// from the prelude.
+/// [`SetAssertions`] require this capability. This implementor-facing trait is not re-exported from
+/// the prelude.
 pub trait SetLookup: Collection {
     /// Whether `element` is a member, using the set's own lookup, such as hashing or ordering,
     /// rather than a linear scan over [`Collection::elements`].
@@ -147,16 +147,16 @@ mod tests {
 
         assert_that!(BTreeSet::from([1, 2, 3]))
             .contains(2)
-            .contains_matching(is_two)
+            .contains_matching(crate::matchers::predicate(is_two))
             .contains_satisfying(satisfies_two)
             .contains_all([1, 3])
             .does_not_contain(4)
-            .does_not_contain_matching(|it: &i32| *it > 7)
+            .does_not_contain_matching(crate::matchers::predicate(|it: &i32| *it > 7))
             .does_not_contain_satisfying(|it| {
                 it.is_equal_to(7);
             })
             .contains_exactly_in_any_order([3, 1, 2])
-            .contains_exactly_in_any_order_matching(predicates)
+            .contains_exactly_in_any_order_matching(crate::matchers::predicate_list(predicates))
             .contains_exactly_in_any_order_satisfying(assertions)
             .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
             .is_superset_of(BTreeSet::from([1]))
@@ -170,8 +170,9 @@ mod tests {
             .capture(|it| it.into_iter_does_not_contain(2));
 
         assert_that!(failures).has_length(1);
-        assert_that!(failures[0].facts.as_slice())
-            .does_not_contain_matching(|fact: &crate::Fact| fact.label == crate::Fact::INDEX);
+        assert_that!(failures[0].facts.as_slice()).does_not_contain_matching(
+            crate::matchers::predicate(|fact: &crate::Fact| fact.label == crate::Fact::INDEX),
+        );
     }
 
     #[test]

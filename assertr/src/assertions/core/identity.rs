@@ -8,14 +8,14 @@ use crate::{AssertThat, Mode, failure::FailureKind};
 ///
 /// # Which reference is compared?
 ///
-/// The subject is exactly the value returned by [`AssertThat::actual`]. The borrowing entry
-/// points unwrap one reference level for sized targets: `assert_that!(value)` and
-/// `assert_that!(&value)` both compare the address of `value`.
+/// The subject is exactly the value returned by [`AssertThat::actual`]. The borrowing entry points
+/// unwrap one reference level for sized targets: `assert_that!(value)` and `assert_that!(&value)`
+/// both compare the address of `value`.
 ///
-/// Owned references, reference-valued projections, and references to unsized targets retain
-/// their reference type as the subject. For `AssertThat<&T>`, `expected` is `&&T` and the
-/// assertion compares the storage of the reference itself. No additional dereferencing occurs.
-/// For collections, the identity methods on
+/// Owned references, reference-valued projections, and references to unsized targets retain their
+/// reference type as the subject. For `AssertThat<&T>`, `expected` is `&&T` and the assertion
+/// compares the storage of the reference itself. No additional dereferencing occurs. For
+/// collections, the identity methods on
 /// [`CollectionAssertions`](crate::assertions::collection::CollectionAssertions) and
 /// [`StableOrderAssertions`](crate::assertions::collection::StableOrderAssertions) compare each
 /// element's borrowed target instead.
@@ -31,7 +31,7 @@ use crate::{AssertThat, Mode, failure::FailureKind};
 ///     .is_not_same_instance_as(&keys[1]);
 /// ```
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait IdentityAssertions<T> {
     /// Asserts that the subject and `expected` refer to the same instance.
     fn is_same_instance_as(self, expected: &T) -> Self;

@@ -161,8 +161,7 @@ pub enum RenderedBody {
     Placeholder(&'static str),
 }
 
-/// Converts a lazy rendering adapter or verbatim diagnostic value into an owned [`Rendered`]
-/// tree.
+/// Converts a lazy rendering adapter or verbatim diagnostic value into an owned [`Rendered`] tree.
 pub trait IntoRendered {
     /// Renders the value once, using pretty leaf formatting where the renderer distinguishes it.
     fn into_rendered(self) -> Rendered;
@@ -373,4 +372,10 @@ fn write_suffix(
         f.write_str(" (sorted for rendering)")?;
     }
     Ok(())
+}
+
+impl super::IntoRendered for Rendered {
+    fn into_rendered(self) -> Self {
+        self
+    }
 }

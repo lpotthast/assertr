@@ -2,8 +2,8 @@
 //!
 //! Every assertion consumes only as much of the iterator as it needs, keeps a bounded preview of
 //! the consumed elements, and raises its failure through the crate-internal failure builder. The
-//! preview becomes the failure's actual value, and what the scan learned about consumption
-//! becomes its facts.
+//! equality preview becomes the failure's actual value. Matcher previews retain selected leaf
+//! evidence. What the scan learned about consumption becomes its facts.
 
 mod cardinality;
 mod membership;
@@ -14,29 +14,18 @@ use alloc::{collections::VecDeque, vec::Vec};
 use core::borrow::Borrow;
 
 use crate::{
-    AssertThat, AssertionFailure, AssertrPartialEq, Mode, ValueRenderer,
+    AssertThat, AssertionFailure, Mode, ValueRenderer,
     failure::{Fact, FailureBuilder, FailureKind, FailureTarget},
-    mode::Capture,
     renderer::{GroupStyle, RenderedValues},
     util::matching::match_bipartite,
 };
 
 pub(crate) use cardinality::{assert_has_length, assert_is_empty, assert_is_not_empty};
-pub(crate) use membership::{
-    assert_contains, assert_contains_all, assert_contains_matching, assert_contains_satisfying,
-    assert_does_not_contain, assert_does_not_contain_matching, assert_does_not_contain_satisfying,
-};
+pub(crate) use membership::{assert_contains, assert_contains_all, assert_does_not_contain};
 pub(crate) use positional::{
-    assert_contains_contiguous, assert_contains_contiguous_matching,
-    assert_contains_contiguous_satisfying, assert_contains_exactly,
-    assert_contains_exactly_matching, assert_contains_exactly_satisfying, assert_ends_with,
-    assert_ends_with_matching, assert_ends_with_satisfying, assert_starts_with,
-    assert_starts_with_matching, assert_starts_with_satisfying,
+    assert_contains_contiguous, assert_contains_exactly, assert_ends_with, assert_starts_with,
 };
-pub(crate) use unordered::{
-    assert_contains_exactly_in_any_order, assert_contains_exactly_in_any_order_matching,
-    assert_contains_exactly_in_any_order_satisfying,
-};
+pub(crate) use unordered::assert_contains_exactly_in_any_order;
 
 const PREVIEW_CAPACITY: usize = 16;
 
@@ -48,10 +37,6 @@ struct Preview<Item> {
 impl<Item> Preview<Item> {
     fn omitted(&self) -> usize {
         self.consumed.saturating_sub(self.items.len())
-    }
-
-    fn start_index(&self) -> usize {
-        self.omitted()
     }
 
     /// The retained elements, rendered as the failure's actual value.
@@ -97,8 +82,8 @@ impl<Item> Preview<Item> {
 
 /// Whether the position of an element within the iteration is meaningful to the caller.
 ///
-/// Direct iterator assertions report yield positions. Borrowed `into_iter_*` assertions run over
-/// an arbitrary traversal and never mention positions.
+/// Direct iterator assertions report yield positions. Borrowed `into_iter_*` assertions run over an
+/// arbitrary traversal and never mention positions.
 #[derive(Clone, Copy)]
 pub(crate) enum PositionReporting {
     YieldOrder,
@@ -112,19 +97,10 @@ impl PositionReporting {
             Self::Unavailable => None,
         }
     }
-
-    /// Tags a child raised for the element at `index` with its position, if positions are
-    /// meaningful.
-    fn locate(self, failure: AssertionFailure, index: usize) -> AssertionFailure {
-        match self {
-            Self::YieldOrder => failure.located_at(Fact::index(index)),
-            Self::Unavailable => failure,
-        }
-    }
 }
 
-/// The reference value of a membership failure, and whether the assertion looked for it or
-/// asserted its absence.
+/// The reference value of a membership failure, and whether the assertion looked for it or asserted
+/// its absence.
 enum Reference<'a, E: ?Sized> {
     Expected(&'a E),
     Unexpected(&'a E),
@@ -175,9 +151,9 @@ fn exact_size_hint<I: Iterator>(iterator: &I) -> Option<usize> {
     (upper == Some(lower)).then_some(lower)
 }
 
-/// Flattens the failures of unsatisfied elements into children, each located at its index in
-/// yield order. At most `maximum` elements are kept. Returns the children and the number of
-/// omitted elements.
+/// Flattens the failures of unsatisfied elements into children, each located at its index in yield
+/// order. At most `maximum` elements are kept. Returns the children and the number of omitted
+/// elements.
 fn indexed_children(
     mut unsatisfied: UnsatisfiedElements,
     maximum: usize,
@@ -211,15 +187,4 @@ where
 }
 
 /// A child failure for an element that did not match its predicate.
-fn unmatched_element<T, S, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    element: &T,
-) -> AssertionFailure
-where
-    R: ValueRenderer<T>,
-{
-    FailureBuilder::detached::<T>(FailureKind::Predicate)
-        .actual(this.render().value(element))
-        .relation("does not match its predicate")
-        .build()
-}
+pub(crate) mod matchers;

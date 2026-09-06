@@ -4,22 +4,23 @@
 //! module's public extension traits require [`StableOrder`](StableOrder), so unordered subjects do
 //! not implement a positional assertion family at all.
 
+use alloc::vec::Vec;
 use core::borrow::Borrow;
 
 use super::{StableOrder, identity, value};
 use crate::{
-    AssertThat, AssertrPartialEq, Mode, ValueRenderer,
+    AssertThat, Mode, ValueRenderer,
     failure::FailureKind,
     mode::{Capture, Panic},
 };
 
 /// Assertions over the elements of a collection whose order is stable and meaningful.
 ///
-/// This trait is implemented only for [`StableOrder`] subjects. A call on a set reports
-/// the missing capability and recommends `contains_exactly_in_any_order`.
+/// This trait is implemented only for [`StableOrder`] subjects. A call on a set reports the missing
+/// capability and recommends `contains_exactly_in_any_order`.
 ///
-/// The restriction is part of the trait implementation, not merely individual method bodies, so
-/// a set cannot satisfy a generic `StableOrderAssertions` bound:
+/// The restriction is part of the trait implementation, not merely individual method bodies, so a
+/// set cannot satisfy a generic `StableOrderAssertions` bound:
 ///
 /// ```compile_fail,E0277
 /// use std::collections::BTreeSet;
@@ -30,16 +31,16 @@ use crate::{
 /// requires_stable_order(assert_that!(BTreeSet::from([1, 2, 3])));
 /// ```
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection borrows exactly the expected instances, in order.
     ///
     /// Lengths must match and every `Borrow<U>` target must match its expected reference using
     /// [`core::ptr::eq`]. No equality or rendering support is required. See
     /// [`CollectionAssertions::contains_same_instance_as`](super::CollectionAssertions::contains_same_instance_as)
-    /// for borrowed views, unsized targets, and pointer-identity caveats.
-    /// Arrays, slices, and vectors of expected references are accepted. An empty expectation may
-    /// need a type annotation, such as `[] as [&Key; 0]`.
+    /// for borrowed views, unsized targets, and pointer-identity caveats. Arrays, slices, and
+    /// vectors of expected references are accepted. An empty expectation may need a type
+    /// annotation, such as `[] as [&Key; 0]`.
     ///
     /// ```
     /// use assertr::prelude::*;
@@ -70,14 +71,13 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection starts with elements equal to `expected`, in order.
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: AssertrPartialEq<E, R>,
+        T: PartialEq<E>,
         R: ValueRenderer<T> + ValueRenderer<E>;
 
-    /// Asserts that the collection's prefix matches `predicates` in order.
-    fn starts_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
+    /// Asserts that the collection's prefix matches the expected matcher list in order.
+    fn starts_with_matching<P>(self, expected: P) -> Self
     where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>;
+        P: crate::matchers::MatcherList<T, R>;
 
     /// Asserts that the collection's prefix satisfies `assertions` in order.
     fn starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
@@ -88,14 +88,13 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection ends with elements equal to `expected`, in order.
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: AssertrPartialEq<E, R>,
+        T: PartialEq<E>,
         R: ValueRenderer<T> + ValueRenderer<E>;
 
-    /// Asserts that the collection's suffix matches `predicates` in order.
-    fn ends_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
+    /// Asserts that the collection's suffix matches the expected matcher list in order.
+    fn ends_with_matching<P>(self, expected: P) -> Self
     where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>;
+        P: crate::matchers::MatcherList<T, R>;
 
     /// Asserts that the collection's suffix satisfies `assertions` in order.
     fn ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
@@ -106,14 +105,13 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection contains `expected` as a contiguous subsequence.
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: AssertrPartialEq<E, R>,
+        T: PartialEq<E>,
         R: ValueRenderer<T> + ValueRenderer<E>;
 
-    /// Asserts that a contiguous subsequence matches `predicates` in order.
-    fn contains_contiguous_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
+    /// Asserts that a contiguous subsequence matches the expected matcher list in order.
+    fn contains_contiguous_matching<P>(self, expected: P) -> Self
     where
-        P: Fn(&T) -> bool,
-        R: ValueRenderer<T>;
+        P: crate::matchers::MatcherList<T, R>;
 
     /// Asserts that a contiguous subsequence satisfies `assertions` in order.
     fn contains_contiguous_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
@@ -123,19 +121,18 @@ pub trait StableOrderAssertions<T, R> {
 
     /// Asserts positional equality with `expected`, including length.
     ///
-    /// `E` is the element type of the expected values, which only has to be comparable to `T`,
-    /// not identical to it. The expected values are accepted as anything viewable as `&[E]`, so
-    /// arrays, slices, and `Vec`s all work.
+    /// `E` is the element type of the expected values, which only has to be comparable to `T`, not
+    /// identical to it. The expected values are accepted as anything viewable as `&[E]`, so arrays,
+    /// slices, and `Vec`s all work.
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: AssertrPartialEq<E, R>,
+        T: PartialEq<E>,
         R: ValueRenderer<T> + ValueRenderer<E>;
 
-    /// Asserts that each element matches the predicate at the same position, including length.
-    fn contains_exactly_matching<P>(self, expected: impl AsRef<[P]>) -> Self
+    /// Asserts that each element matches the constraint at the same position, including length.
+    fn contains_exactly_matching<P>(self, expected: P) -> Self
     where
-        R: ValueRenderer<T>,
-        P: Fn(&T) -> bool;
+        P: crate::matchers::MatcherList<T, R>;
 
     /// Asserts that each element satisfies the assertions at the same position, including length.
     ///
@@ -166,7 +163,7 @@ where
     #[track_caller]
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: AssertrPartialEq<E, R>,
+        C::Item: PartialEq<E>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
         value::assert_starts_with(&self, expected.as_ref());
@@ -174,12 +171,12 @@ where
     }
 
     #[track_caller]
-    fn starts_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
+    fn starts_with_matching<P>(self, expected: P) -> Self
     where
-        P: Fn(&C::Item) -> bool,
-        R: ValueRenderer<C::Item>,
+        P: crate::matchers::MatcherList<C::Item, R>,
     {
-        value::assert_starts_with_matching(&self, predicates.as_ref());
+        self.track_assertion();
+        self.assert_matcher(&crate::matchers::starts_with_elements(expected), true);
         self
     }
 
@@ -189,14 +186,24 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: ValueRenderer<C::Item> + Clone,
     {
-        value::assert_starts_with_satisfying(&self, assertions.as_ref());
+        self.track_assertion();
+        self.assert_matcher(
+            &crate::matchers::starts_with_elements(
+                assertions
+                    .as_ref()
+                    .iter()
+                    .map(crate::matchers::satisfying)
+                    .collect::<Vec<_>>(),
+            ),
+            true,
+        );
         self
     }
 
     #[track_caller]
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: AssertrPartialEq<E, R>,
+        C::Item: PartialEq<E>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
         value::assert_ends_with(&self, expected.as_ref());
@@ -204,12 +211,12 @@ where
     }
 
     #[track_caller]
-    fn ends_with_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
+    fn ends_with_matching<P>(self, expected: P) -> Self
     where
-        P: Fn(&C::Item) -> bool,
-        R: ValueRenderer<C::Item>,
+        P: crate::matchers::MatcherList<C::Item, R>,
     {
-        value::assert_ends_with_matching(&self, predicates.as_ref());
+        self.track_assertion();
+        self.assert_matcher(&crate::matchers::ends_with_elements(expected), true);
         self
     }
 
@@ -219,14 +226,24 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: ValueRenderer<C::Item> + Clone,
     {
-        value::assert_ends_with_satisfying(&self, assertions.as_ref());
+        self.track_assertion();
+        self.assert_matcher(
+            &crate::matchers::ends_with_elements(
+                assertions
+                    .as_ref()
+                    .iter()
+                    .map(crate::matchers::satisfying)
+                    .collect::<Vec<_>>(),
+            ),
+            true,
+        );
         self
     }
 
     #[track_caller]
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: AssertrPartialEq<E, R>,
+        C::Item: PartialEq<E>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
         value::assert_contains_contiguous(&self, expected.as_ref());
@@ -234,12 +251,15 @@ where
     }
 
     #[track_caller]
-    fn contains_contiguous_matching<P>(self, predicates: impl AsRef<[P]>) -> Self
+    fn contains_contiguous_matching<P>(self, expected: P) -> Self
     where
-        P: Fn(&C::Item) -> bool,
-        R: ValueRenderer<C::Item>,
+        P: crate::matchers::MatcherList<C::Item, R>,
     {
-        value::assert_contains_contiguous_matching(&self, predicates.as_ref());
+        self.track_assertion();
+        self.assert_matcher(
+            &crate::matchers::contains_contiguous_elements(expected),
+            true,
+        );
         self
     }
 
@@ -249,14 +269,24 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: ValueRenderer<C::Item> + Clone,
     {
-        value::assert_contains_contiguous_satisfying(&self, assertions.as_ref());
+        self.track_assertion();
+        self.assert_matcher(
+            &crate::matchers::contains_contiguous_elements(
+                assertions
+                    .as_ref()
+                    .iter()
+                    .map(crate::matchers::satisfying)
+                    .collect::<Vec<_>>(),
+            ),
+            true,
+        );
         self
     }
 
     #[track_caller]
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: AssertrPartialEq<E, R>,
+        C::Item: PartialEq<E>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
         value::assert_contains_exactly(&self, expected.as_ref());
@@ -264,12 +294,12 @@ where
     }
 
     #[track_caller]
-    fn contains_exactly_matching<P>(self, expected: impl AsRef<[P]>) -> Self
+    fn contains_exactly_matching<P>(self, expected: P) -> Self
     where
-        R: ValueRenderer<C::Item>,
-        P: Fn(&C::Item) -> bool,
+        P: crate::matchers::MatcherList<C::Item, R>,
     {
-        value::assert_contains_exactly_matching(&self, expected.as_ref());
+        self.track_assertion();
+        self.assert_matcher(&crate::matchers::elements_are(expected), true);
         self
     }
 
@@ -279,16 +309,26 @@ where
         R: ValueRenderer<C::Item> + Clone,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
-        value::assert_contains_exactly_satisfying(&self, assertions.as_ref());
+        self.track_assertion();
+        self.assert_matcher(
+            &crate::matchers::elements_are(
+                assertions
+                    .as_ref()
+                    .iter()
+                    .map(crate::matchers::satisfying)
+                    .collect::<Vec<_>>(),
+            ),
+            true,
+        );
         self
     }
 }
 
 /// Panic-mode element extraction from collections with [`StableOrder`].
 ///
-/// These methods borrow the assertion chain and return an assertion borrowing the selected
-/// element. A failed extraction cannot produce an element, so the family is intentionally
-/// unavailable in capture mode.
+/// These methods borrow the assertion chain and return an assertion borrowing the selected element.
+/// A failed extraction cannot produce an element, so the family is intentionally unavailable in
+/// capture mode.
 ///
 /// Unordered collections do not expose first or last elements:
 ///
@@ -298,7 +338,7 @@ where
 ///
 /// assert_that!(BTreeSet::from([1, 2, 3])).get_first();
 /// ```
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait StableOrderExtractAssertions<'t, T, R> {
     /// Asserts that the collection is non-empty, then returns an assertion over its first element.
     fn get_first(&'t self) -> AssertThat<'t, T, Panic, R>
@@ -388,6 +428,42 @@ where
 #[cfg(test)]
 #[allow(clippy::trivially_copy_pass_by_ref)]
 mod tests {
+    use alloc::vec::Vec;
+
+    struct CountingCollection {
+        values: Vec<i32>,
+        visits: core::cell::Cell<usize>,
+    }
+
+    impl CountingCollection {
+        fn new() -> Self {
+            Self {
+                values: (1..=100_000).collect(),
+                visits: core::cell::Cell::new(0),
+            }
+        }
+    }
+
+    impl crate::assertions::HasLength for CountingCollection {
+        fn length(&self) -> usize {
+            self.values.len()
+        }
+    }
+
+    impl crate::assertions::collection::Collection for CountingCollection {
+        type Item = i32;
+        const PRESENTATION: crate::renderer::CollectionPresentation =
+            crate::renderer::CollectionPresentation::list();
+
+        fn elements(&self) -> impl Iterator<Item = &i32> {
+            self.values
+                .iter()
+                .inspect(|_| self.visits.set(self.visits.get() + 1))
+        }
+    }
+
+    impl crate::assertions::collection::StableOrder for CountingCollection {}
+
     mod renderer_contract {
         use crate::assertions::{
             HasLength,
@@ -611,12 +687,43 @@ mod tests {
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
-            [1, 2].must().start_with_matching([is_one, is_two]);
+            [1, 2]
+                .must()
+                .start_with_matching(crate::matchers::predicate_list([is_one, is_two]));
         }
 
         #[test]
         fn succeeds_for_matching_prefix_predicates() {
-            assert_that!([1, 2, 3]).starts_with_matching([is_one, is_two]);
+            assert_that!([1, 2, 3])
+                .starts_with_matching(crate::matchers::predicate_list([is_one, is_two]));
+        }
+
+        #[test]
+        fn traverses_only_the_requested_prefix() {
+            let actual = super::CountingCollection::new();
+            assert_that!(actual).starts_with_matching(matchers![]);
+            assert_that!(actual.visits.get()).is_equal_to(0);
+
+            assert_that!(actual).starts_with_matching(matchers![1, 2]);
+            assert_that!(actual.visits.get()).is_equal_to(2);
+
+            actual.visits.set(0);
+            let failures =
+                assert_that!(actual).capture(|it| it.starts_with_matching(matchers![1, 9]));
+            assert_that!(failures).has_length(1);
+            assert_that!(actual.visits.get()).is_equal_to(2);
+        }
+
+        #[test]
+        fn reports_missing_prefix_positions_and_actual_length() {
+            let failures = assert_that!([1]).capture(|it| it.starts_with_matching(matchers![1, 2]));
+            assert_that!(failures[0].children).has_length(2);
+            assert_that!(failures[0].children[0].path)
+                .is_equal_to(vec![crate::failure::PathSegment::Index(1)]);
+            assert_that!(crate::test_support::rendered_text(
+                &failures[0].children[1].facts[0].value
+            ))
+            .is_equal_to("1");
         }
 
         #[test]
@@ -624,11 +731,23 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 3])
                     .with_location(false)
-                    .starts_with_matching([is_one, is_two]);
+                    .starts_with_matching(crate::matchers::predicate_list([is_one, is_two]));
             })
             .has_type::<String>()
-            .contains("does not start with elements matching the predicates")
-            .contains("Nested failures:\n  - At index 1:\n    Actual: 3\n\n    does not match its predicate\n");
+            .is_equal_to(indoc::formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 3]`
+
+                does not match
+
+                Nested failures:
+                  - At [1]:
+                    does not satisfy the constraint
+
+                    Constraint:
+                        satisfies the predicate
+                -------- assertr --------
+            "});
         }
     }
 
@@ -655,6 +774,23 @@ mod tests {
         }
 
         #[test]
+        fn traverses_only_the_requested_prefix() {
+            let actual = super::CountingCollection::new();
+            let empty: [fn(AssertThat<i32, Capture>); 0] = [];
+            assert_that!(actual).starts_with_satisfying(empty);
+            assert_that!(actual.visits.get()).is_equal_to(0);
+
+            assert_that!(actual).starts_with_satisfying([is_one, is_two]);
+            assert_that!(actual.visits.get()).is_equal_to(2);
+
+            actual.visits.set(0);
+            let failures =
+                assert_that!(actual).capture(|it| it.starts_with_satisfying([is_two, is_one]));
+            assert_that!(failures).has_length(1);
+            assert_that!(actual.visits.get()).is_equal_to(2);
+        }
+
+        #[test]
         fn reports_nested_failures() {
             assert_that_panic_by(|| {
                 assert_that!([1, 3])
@@ -662,8 +798,19 @@ mod tests {
                     .starts_with_satisfying([is_one, is_two]);
             })
             .has_type::<String>()
-            .contains("does not start with elements satisfying the assertions")
-            .contains("Nested failures:\n  - At index 1:\n    Expected: 2\n\n      Actual: 3\n");
+            .is_equal_to(indoc::formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 3]`
+
+                does not match
+
+                Nested failures:
+                  - At [1]:
+                    Expected: 2
+
+                      Actual: 3
+                -------- assertr --------
+            "});
         }
     }
 
@@ -708,12 +855,15 @@ mod tests {
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
-            [1, 2, 3].must().end_with_matching([is_two, is_three]);
+            [1, 2, 3]
+                .must()
+                .end_with_matching(crate::matchers::predicate_list([is_two, is_three]));
         }
 
         #[test]
         fn succeeds_for_matching_suffix_predicates() {
-            assert_that!([1, 2, 3]).ends_with_matching([is_two, is_three]);
+            assert_that!([1, 2, 3])
+                .ends_with_matching(crate::matchers::predicate_list([is_two, is_three]));
         }
 
         #[test]
@@ -721,11 +871,23 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 4])
                     .with_location(false)
-                    .ends_with_matching([is_two, is_three]);
+                    .ends_with_matching(crate::matchers::predicate_list([is_two, is_three]));
             })
             .has_type::<String>()
-            .contains("does not end with elements matching the predicates")
-            .contains("Nested failures:\n  - At index 2:\n    Actual: 4\n\n    does not match its predicate\n");
+            .is_equal_to(indoc::formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2, 4]`
+
+                does not match
+
+                Nested failures:
+                  - At [2]:
+                    does not satisfy the constraint
+
+                    Constraint:
+                        satisfies the predicate
+                -------- assertr --------
+            "});
         }
     }
 
@@ -759,8 +921,19 @@ mod tests {
                     .ends_with_satisfying([is_two, is_three]);
             })
             .has_type::<String>()
-            .contains("does not end with elements satisfying the assertions")
-            .contains("Nested failures:\n  - At index 2:\n    Expected: 3\n\n      Actual: 4\n");
+            .is_equal_to(indoc::formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2, 4]`
+
+                does not match
+
+                Nested failures:
+                  - At [2]:
+                    Expected: 3
+
+                      Actual: 4
+                -------- assertr --------
+            "});
         }
     }
 
@@ -809,12 +982,13 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             [1, 3]
                 .must()
-                .contain_contiguous_matching([is_one, is_three]);
+                .contain_contiguous_matching(crate::matchers::predicate_list([is_one, is_three]));
         }
 
         #[test]
         fn succeeds_for_contiguous_matching_elements() {
-            assert_that!([0, 1, 3]).contains_contiguous_matching([is_one, is_three]);
+            assert_that!([0, 1, 3])
+                .contains_contiguous_matching(crate::matchers::predicate_list([is_one, is_three]));
         }
 
         #[test]
@@ -822,10 +996,30 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3])
                     .with_location(false)
-                    .contains_contiguous_matching([is_one, is_three]);
+                    .contains_contiguous_matching(crate::matchers::predicate_list([
+                        is_one, is_three,
+                    ]));
             })
             .has_type::<String>()
-            .contains("does not contain a contiguous subsequence matching the predicates");
+            .is_equal_to(indoc::formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2, 3]`
+
+                does not match
+
+                Nested failures:
+                  - At [1]:
+                    does not satisfy the constraint
+
+                    Constraint:
+                        satisfies the predicate
+                  - At [1]:
+                    does not satisfy the constraint
+
+                    Constraint:
+                        satisfies the predicate
+                -------- assertr --------
+            "});
         }
     }
 
@@ -861,33 +1055,26 @@ mod tests {
                     .contains_contiguous_satisfying([is_one, is_three]);
             })
             .has_type::<String>()
-            .contains("does not contain a contiguous subsequence satisfying the assertions")
-            .contains("Nested failures:\n  - At index 1:\n    Expected: 3\n\n      Actual: 2\n");
+            .is_equal_to(indoc::formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2]`
+
+                does not match
+
+                Nested failures:
+                  - At [1]:
+                    Expected: 3
+
+                      Actual: 2
+                -------- assertr --------
+            "});
         }
     }
 
     mod contains_exactly {
         use crate::prelude::*;
-        use crate::{AssertrPartialEq, EqContext};
+
         use indoc::formatdoc;
-
-        #[derive(Debug)]
-        struct Actual(u8);
-
-        #[derive(Debug)]
-        enum WildcardExpected {
-            Any,
-            Value(u8),
-        }
-
-        impl<R> AssertrPartialEq<WildcardExpected, R> for Actual {
-            fn eq(&self, other: &WildcardExpected, _ctx: Option<&mut EqContext<'_, R>>) -> bool {
-                match other {
-                    WildcardExpected::Any => true,
-                    WildcardExpected::Value(expected) => self.0 == *expected,
-                }
-            }
-        }
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -953,53 +1140,22 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "derive")]
-        fn reports_assertr_eq_field_differences() {
-            #[derive(Debug, AssertrEq)]
+        #[cfg(feature = "matchers")]
+        fn reports_selected_field_mismatches() {
             struct Record {
-                pub id: u32,
+                id: u32,
             }
-
-            assert_that_panic_by(|| {
-                assert_that!([Record { id: 1 }].as_slice())
-                    .with_location(false)
-                    .contains_exactly([RecordAssertrEq { id: eq(2) }]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `[Record {{ id: 1 }}].as_slice()`
-
-                    Actual: [
-                        Record {{
-                            id: 1,
-                        }},
-                    ]
-
-                    does not contain exactly
-
-                    Expected: [
-                        RecordAssertrEq {{
-                            id: Eq::Eq(2),
-                        }},
-                    ]
-
-                    Details:
-                      - Differences: [
-                            "id": expected 2, but was 1,
-                        ]
-                      - Elements not expected: [
-                            Record {{
-                                id: 1,
-                            }},
-                        ]
-                      - Elements not found: [
-                            RecordAssertrEq {{
-                                id: Eq::Eq(2),
-                            }},
-                        ]
-                    -------- assertr --------
-                "#});
+            let failures = assert_that!([Record { id: 1 }])
+                .capture(|it| it.contains_exactly_matching(matchers![partial!(Record { id: 2 })]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children[0].path).is_equal_to(vec![
+                crate::failure::PathSegment::Index(0),
+                crate::failure::PathSegment::Field("id"),
+            ]);
+            assert_that!(crate::test_support::rendered_text(
+                failures[0].children[0].expected.as_ref().unwrap()
+            ))
+            .is_equal_to("2");
         }
 
         #[test]
@@ -1035,86 +1191,23 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "derive")]
-        fn does_not_report_positional_field_differences_when_only_differing_in_order() {
-            #[derive(Debug, AssertrEq)]
+        #[cfg(feature = "matchers")]
+        fn unordered_structure_discards_positional_mismatches() {
             struct Record {
-                pub id: u32,
+                id: u32,
             }
-
-            assert_that_panic_by(|| {
-                assert_that!([Record { id: 1 }, Record { id: 2 }].as_slice())
-                    .with_location(false)
-                    .contains_exactly([
-                        RecordAssertrEq { id: eq(2) },
-                        RecordAssertrEq { id: eq(1) },
-                    ]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `[Record {{ id: 1 }}, Record {{ id: 2 }}].as_slice()`
-
-                    Actual: [
-                        Record {{
-                            id: 1,
-                        }},
-                        Record {{
-                            id: 2,
-                        }},
-                    ]
-
-                    does not contain exactly
-
-                    Expected: [
-                        RecordAssertrEq {{
-                            id: Eq::Eq(2),
-                        }},
-                        RecordAssertrEq {{
-                            id: Eq::Eq(1),
-                        }},
-                    ]
-
-                    Details:
-                      - Only the order of the elements differs.
-                    -------- assertr --------
-                "});
-        }
-
-        #[test]
-        fn recognizes_non_equivalence_matches_that_only_differ_in_order() {
-            assert_that_panic_by(|| {
-                assert_that!([Actual(2), Actual(1)].as_slice())
-                    .with_location(false)
-                    .contains_exactly([WildcardExpected::Any, WildcardExpected::Value(2)]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `[Actual(2), Actual(1)].as_slice()`
-
-                    Actual: [
-                        Actual(
-                            2,
-                        ),
-                        Actual(
-                            1,
-                        ),
-                    ]
-
-                    does not contain exactly
-
-                    Expected: [
-                        Any,
-                        Value(
-                            2,
-                        ),
-                    ]
-
-                    Details:
-                      - Only the order of the elements differs.
-                    -------- assertr --------
-                "});
+            let records = [Record { id: 1 }, Record { id: 2 }];
+            assert_that!(records).contains_exactly_in_any_order_matching(matchers![
+                partial!(Record { id: 2 }),
+                partial!(Record { id: 1 })
+            ]);
+            let failures = assert_that!(records).capture(|it| {
+                it.contains_exactly_matching(matchers![
+                    partial!(Record { id: 2 }),
+                    partial!(Record { id: 1 })
+                ])
+            });
+            assert_that!(failures[0].children).has_length(2);
         }
 
         #[test]
@@ -1162,20 +1255,37 @@ mod tests {
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
-            [1, 2, 3].as_slice().must().contain_exactly_matching([
-                |it: &i32| *it == 1,
-                |it: &i32| *it == 2,
-                |it: &i32| *it == 3,
-            ]);
+            [1, 2, 3]
+                .as_slice()
+                .must()
+                .contain_exactly_matching(crate::matchers::predicate_list([
+                    |it: &i32| *it == 1,
+                    |it: &i32| *it == 2,
+                    |it: &i32| *it == 3,
+                ]));
+        }
+
+        #[test]
+        fn wildcard_constraints_distinguish_positions_from_unordered_assignments() {
+            use crate::matchers::{anything, equal_to};
+            let failures = assert_that!([2, 1])
+                .capture(|it| it.contains_exactly_matching(matchers![anything(), equal_to(2)]));
+            assert_that!(failures[0].children).has_length(1);
+            assert_that!(failures[0].children[0].path)
+                .is_equal_to([crate::failure::PathSegment::Index(1)]);
+            assert_that!([2, 1])
+                .contains_exactly_in_any_order_matching(matchers![anything(), equal_to(2)]);
         }
 
         #[test]
         fn succeeds_when_each_element_matches_its_predicate() {
-            assert_that!([1, 2, 3].as_slice()).contains_exactly_matching([
-                move |it: &i32| *it == 1,
-                move |it: &i32| *it < 3,
-                move |it: &i32| *it > 2,
-            ]);
+            assert_that!([1, 2, 3].as_slice()).contains_exactly_matching(
+                crate::matchers::predicate_list([
+                    move |it: &i32| *it == 1,
+                    move |it: &i32| *it < 3,
+                    move |it: &i32| *it > 2,
+                ]),
+            );
         }
 
         #[test]
@@ -1183,36 +1293,32 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly_matching([
+                    .contains_exactly_matching(crate::matchers::predicate_list([
                         move |it: &i32| *it == 1,
                         move |it: &i32| *it == 3,
                         move |it: &i32| *it == 2,
-                    ]);
+                    ]));
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `[1, 2, 3].as_slice()`
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2, 3].as_slice()`
 
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
+                does not match
 
-                    does not exactly match the predicates
+                Nested failures:
+                  - At [1]:
+                    does not satisfy the constraint
 
-                    Nested failures:
-                      - At index 1:
-                        Actual: 2
+                    Constraint:
+                        satisfies the predicate
+                  - At [2]:
+                    does not satisfy the constraint
 
-                        does not match its predicate
-                      - At index 2:
-                        Actual: 3
-
-                        does not match its predicate
-                    -------- assertr --------
-                "});
+                    Constraint:
+                        satisfies the predicate
+                -------- assertr --------
+            "});
         }
 
         #[test]
@@ -1221,26 +1327,23 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly_matching(predicates);
+                    .contains_exactly_matching(crate::matchers::predicate_list(predicates));
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `[1, 2, 3].as_slice()`
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2, 3].as_slice()`
 
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
+                does not match
 
-                    does not exactly match the predicates
+                Nested failures:
+                  - does not have the required sequence
 
                     Details:
-                      - Actual length: 3
-                      - Expected length: 2
-                    -------- assertr --------
-                "});
+                      - actual length: 3
+                      - expected length: 2
+                -------- assertr --------
+            "});
         }
     }
 
@@ -1294,8 +1397,19 @@ mod tests {
                     ]);
             })
             .has_type::<String>()
-            .contains("does not exactly satisfy the assertions")
-            .contains("Nested failures:\n  - At index 1:\n    Expected: 3\n\n      Actual: 2\n");
+            .is_equal_to(indoc::formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2].as_slice()`
+
+                does not match
+
+                Nested failures:
+                  - At [1]:
+                    Expected: 3
+
+                      Actual: 2
+                -------- assertr --------
+            "});
         }
 
         #[test]
@@ -1308,7 +1422,20 @@ mod tests {
                     }]);
             })
             .has_type::<String>()
-            .contains("Details:\n  - Actual length: 3\n  - Expected length: 1\n");
+            .is_equal_to(indoc::formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2, 3].as_slice()`
+
+                does not match
+
+                Nested failures:
+                  - does not have the required sequence
+
+                    Details:
+                      - actual length: 3
+                      - expected length: 1
+                -------- assertr --------
+            "});
         }
 
         #[test]
@@ -1319,8 +1446,7 @@ mod tests {
                 .capture(|it| it.contains_exactly_satisfying([is_zero; 3]));
 
             assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(failures[0].facts.as_slice())
-                .contains_exactly([crate::Fact::note("... 2 more unsatisfied elements ...")]);
+            assert_that!(failures[0].omitted_children).is_equal_to(2);
         }
     }
 }

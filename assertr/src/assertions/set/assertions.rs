@@ -6,10 +6,10 @@ use crate::{AssertThat, Mode, ValueRenderer};
 /// Other element assertions come from
 /// [`CollectionAssertions`](crate::assertions::collection::CollectionAssertions).
 ///
-/// Every relation accepts any other set type, so a `HashSet` can be
-/// compared against a `BTreeSet`, and against a `HashSet` with a different hasher.
+/// Every relation accepts any other set type, so a `HashSet` can be compared against a `BTreeSet`,
+/// and against a `HashSet` with a different hasher.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait SetAssertions<T, R> {
     /// Asserts that every subject element belongs to `expected_superset`.
     fn is_subset_of<O>(self, expected_superset: O) -> Self

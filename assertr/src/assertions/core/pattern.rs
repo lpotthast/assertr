@@ -18,10 +18,11 @@ impl<P> Pattern<P> {
     }
 }
 
-/// Creates a pattern for use with [`PatternAssertions`].
+/// Creates a pattern for use with [`PatternAssertions`] or as a reusable matcher.
 ///
-/// The subject is matched by reference, so ordinary patterns benefit from Rust's match
-/// ergonomics and do not consume the assertion subject. Pattern guards are supported.
+/// The subject is matched by reference, so ordinary patterns benefit from Rust's match ergonomics
+/// and do not consume the assertion subject. Pattern guards are supported. Reusable matchers
+/// require `Fn` guards. Direct pattern assertions also accept `FnOnce` guards.
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -45,12 +46,25 @@ macro_rules! pattern {
     };
 }
 
+impl<A: ?Sized, R, P: Fn(&A) -> bool> crate::matchers::AssertrMatcher<A, R> for Pattern<P> {
+    fn describe(&self, _: &crate::matchers::MatchContext<'_, R>) -> crate::matchers::Description {
+        crate::matchers::Description::new("matches the pattern").expected(self.description)
+    }
+    fn evaluate(
+        &self,
+        actual: &A,
+        context: &mut crate::matchers::MatchContext<'_, R>,
+    ) -> crate::matchers::MatchResult {
+        context.outcome((self.predicate)(actual), |context| self.describe(context))
+    }
+}
+
 /// Assertions based on arbitrary Rust patterns.
 ///
 /// Failure diagnostics include the pattern's source text and the subject rendered through the
 /// active [`ValueRenderer`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait PatternAssertions<T, R> {
     /// Asserts that the subject matches `pattern`.
     fn is_matching<P>(self, pattern: Pattern<P>) -> Self
@@ -115,6 +129,15 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    mod matcher {
+        use crate::prelude::*;
+
+        #[test]
+        fn supports_pattern_guards() {
+            assert_that!(Some(2)).matches(pattern!(Some(value) if *value > 0));
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};
@@ -152,6 +175,12 @@ mod tests {
         fn succeeds_when_pattern_matches() {
             assert_that!(Result::<(), TestError>::Err(TestError::MissingQueryParams))
                 .is_matching(pattern!(Err(TestError::MissingQueryParams)));
+        }
+
+        #[test]
+        fn supports_consuming_one_shot_guards() {
+            let token = alloc::string::String::from("token");
+            assert_that!(Some(1)).is_matching(pattern!(Some(_) if { drop(token); true }));
         }
 
         #[test]

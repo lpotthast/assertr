@@ -1,17 +1,25 @@
-//! Typed adapters for structured assertion failures and other representations.
+//! Process structured failures and customize reports with typed adapters.
 //!
-//! [`Adapter`] transforms a borrowed input into an owned output, and [`AdapterExt::then`] chains
-//! transformations. Adapters retain their typed outputs and errors and run on the calling thread.
-//! [`AdapterExt::map_err`] changes an adapter's error type without changing its successful output.
-//! Adapters do not choose between capture and panic mode.
+//! Start with [`AssertThat::capture`](crate::AssertThat::capture) to collect failures. Read their
+//! [`AssertionFailure`](crate::AssertionFailure) fields directly when you need structured evidence,
+//! or use [`ToHumanReadableText::render`] for the same report that panic mode uses by default:
 //!
-//! [`ToHumanReadableText`] is the default panic presentation. An assertion context can select
-//! another text-producing adapter through
-//! [`with_panic_presentation`](crate::AssertThat::with_panic_presentation), which owns a `'static`
-//! adapter and converts its errors to strings internally. Derived assertions share that adapter
-//! without requiring it to implement `Clone`. Adapters used explicitly may still borrow local data.
-//! Capture mode retains structured failures without invoking presentation. Captured failures can
-//! be passed explicitly to any adapter, including chains with non-text outputs or side effects.
+//! ```
+//! use assertr::prelude::*;
+//!
+//! let failures = assert_that!(42).capture(|it| it.is_less_than(0).is_equal_to(43));
+//! let reports: Vec<_> = failures.iter().map(|failure| ToHumanReadableText.render(failure)).collect();
+//! assert_eq!(reports.len(), 2);
+//! assert!(reports[0].contains("is not less than"));
+//! ```
+//!
+//! ## Chain transformations
+//!
+//! [`Adapter`] transforms a borrowed input into an owned output. Import [`AdapterExt`] to chain
+//! compatible stages with [`then`](AdapterExt::then). The output need not be text. This example
+//! measures a rendered report, but an adapter can also consume an `AssertionFailure` directly to
+//! build a machine-readable representation from its fields and retained
+//! [`Rendered`](crate::renderer::Rendered) value trees.
 //!
 //! ```
 //! use core::convert::Infallible;
@@ -38,6 +46,25 @@
 //! let length = chain.adapt(&failures[0]).unwrap();
 //! assert!(length > 0);
 //! ```
+//!
+//! Each stage keeps its output and error types. [`ThenError`] identifies which stage failed, and
+//! [`AdapterExt::map_err`] changes an error type without changing successful output. Adapters run
+//! on the calling thread and may perform side effects. Use `()` as the output for a stage that
+//! only logs or records its input. Adapters used explicitly may borrow local data.
+//!
+//! ## Select panic presentation
+//!
+//! Pass an adapter producing [`HumanReadableText`] to
+//! [`AssertThat::with_panic_presentation`](crate::AssertThat::with_panic_presentation). Its example
+//! adds context to the default report. The context owns the adapter, so it must be `'static`.
+//! Move or clone any local data into it, or share owned data through `Rc`. Derived assertions share
+//! the adapter without requiring `Clone`. Displayable adapter errors become strings internally.
+//!
+//! Capture mode stores structured failures without running this presentation. Apply adapters
+//! explicitly to captured failures as shown above. To change individual diagnostic values before
+//! either mode handles a failure, configure a [value renderer](crate::renderer). The
+//! [failure model](crate::failure) explains how construction, handling, and presentation fit
+//! together.
 
 mod adapters;
 
@@ -51,9 +78,12 @@ pub use adapters::{HumanReadableText, MapErr, Then, ThenError, ToHumanReadableTe
 /// `()` as their output. The input is generic so the output of one adapter can be the input of the
 /// next one.
 ///
-/// This trait supports dynamic dispatch when both associated types are specified, for example
-/// `dyn Adapter<str, Output = usize, Error = String>`. Use [`AdapterExt::map_err`] when adapters
-/// with different error types need to share the same trait-object type.
+/// This trait supports dynamic dispatch when both associated types are specified, for example `dyn
+/// Adapter<str, Output = usize, Error = String>`. Use [`AdapterExt::map_err`] when adapters with
+/// different error types need to share the same trait-object type.
+///
+/// See the [adapter guide](crate::failure::adapter) for capture, composition, and panic
+/// presentation examples.
 pub trait Adapter<Input: ?Sized> {
     /// The owned value produced by this adapter.
     type Output;
@@ -81,8 +111,8 @@ impl<Input: ?Sized, A: Adapter<Input> + ?Sized> Adapter<Input> for &A {
 /// Fluent composition methods for adapters.
 ///
 /// This is separate from [`Adapter`] because that trait's generic input cannot always be inferred
-/// at the point where a chain is assembled. The resulting composition implements [`Adapter`]
-/// only when its adjacent stages have compatible types.
+/// at the point where a chain is assembled. The resulting composition implements [`Adapter`] only
+/// when its adjacent stages have compatible types.
 pub trait AdapterExt: Sized {
     /// Passes this adapter's successful output to `next`.
     fn then<Next>(self, next: Next) -> Then<Self, Next> {
@@ -91,8 +121,8 @@ pub trait AdapterExt: Sized {
 
     /// Maps this adapter's errors while preserving its successful output.
     ///
-    /// The mapper runs only when [`Adapter::adapt`] returns an error. It can produce any error
-    /// type and may borrow local data. Use `(&adapter).map_err(...)` to keep the original adapter.
+    /// The mapper runs only when [`Adapter::adapt`] returns an error. It can produce any error type
+    /// and may borrow local data. Use `(&adapter).map_err(...)` to keep the original adapter.
     ///
     /// ```
     /// use core::num::ParseIntError;

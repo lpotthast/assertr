@@ -11,9 +11,9 @@ use num_traits::{Num, Signed};
 
 /// Overflow-safe check of `hi - lo <= deviation`, given `lo <= hi` and `deviation >= 0`.
 ///
-/// The difference of same-signed values never overflows. When the values cross zero, the
-/// distance is compared piecewise so that neither `hi - lo` nor `-lo` is ever materialized
-/// (`lo` may be the minimum of a signed type).
+/// The difference of same-signed values never overflows. When the values cross zero, the distance
+/// is compared piecewise so that neither `hi - lo` nor `-lo` is ever materialized (`lo` may be the
+/// minimum of a signed type).
 fn distance_at_most<T>(lo: &T, hi: &T, deviation: &T) -> bool
 where
     T: Num + PartialOrd + Clone,
@@ -35,10 +35,10 @@ where
     }
 }
 
-/// Assertions for numeric values not already handled by
-/// [`crate::prelude::PartialEqAssertions`] and [`crate::prelude::PartialOrdAssertions`].
+/// Assertions for numeric values not already handled by [`crate::prelude::PartialEqAssertions`] and
+/// [`crate::prelude::PartialOrdAssertions`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait NumAssertions<T: Num> {
     /// The renderer carried by the assertion chain.
     type Renderer;
@@ -83,9 +83,8 @@ pub trait NumAssertions<T: Num> {
 
     /// Asserts that the subject is within `allowed_deviation` of `expected`.
     ///
-    /// A negative or NaN deviation fails the assertion. Boundary calculations avoid
-    /// overflowing the numeric type. Positive-infinite deviation accepts every comparable
-    /// non-NaN value.
+    /// A negative or NaN deviation fails the assertion. Boundary calculations avoid overflowing the
+    /// numeric type. Positive-infinite deviation accepts every comparable non-NaN value.
     fn is_close_to(self, expected: T, allowed_deviation: T) -> Self
     where
         T: PartialOrd,
@@ -613,8 +612,8 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_zero`. Only the fluent name is pinned here. The behavior is covered by
-    /// that module.
+    /// Synonym of `is_zero`. Only the fluent name is pinned here. The behavior is covered by that
+    /// module.
     mod is_additive_identity {
         #[cfg(feature = "fluent")]
         use crate::prelude::*;
@@ -657,8 +656,8 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_one`. Only the fluent name is pinned here. The behavior is covered by
-    /// that module.
+    /// Synonym of `is_one`. Only the fluent name is pinned here. The behavior is covered by that
+    /// module.
     mod is_multiplicative_identity {
         #[cfg(feature = "fluent")]
         use crate::prelude::*;

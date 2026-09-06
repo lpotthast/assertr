@@ -6,53 +6,60 @@ struct Person {
     age: u32,
 }
 
-/// Assertion-generated diagnostics are handed to the failure they belong to and are never stored
-/// on the assertion, so a later failure on the same chain cannot pick them up.
-#[test]
-fn assertion_details_are_scoped_to_the_failure_that_produced_them() {
-    use std::collections::VecDeque;
+/// Assertion-generated diagnostics are handed to the failure they belong to and are never stored on
+/// the assertion, so a later failure on the same chain cannot pick them up.
+mod assertion_details {
+    use super::*;
 
-    let failures = assert_that!(VecDeque::from([1, 2, 3]))
-        .with_location(false)
-        .capture(|it| {
-            it.contains_exactly_in_any_order_matching([
-                |it: &i32| *it == 1,
-                |it: &i32| *it == 2,
-                |it: &i32| *it == 9,
-            ])
-            .contains(42)
-        });
+    #[test]
+    fn assertion_details_are_scoped_to_the_failure_that_produced_them() {
+        use std::collections::VecDeque;
 
-    assert_that!(&failures).has_length(2);
-    assert_that!(failures[0].facts.as_slice())
-        .contains_matching(|it: &assertr::Fact| it.label == "Elements not matched");
-    assert_that!(ToHumanReadableText.render(&failures[1]))
-        .contains("does not contain\n\nExpected: 42");
-    assert_that!(failures[1].facts.as_slice())
-        .does_not_contain_matching(|it: &assertr::Fact| it.label == "Elements not matched");
+        let failures = assert_that!(VecDeque::from([1, 2, 3]))
+            .with_location(false)
+            .capture(|it| {
+                it.contains_exactly_in_any_order_matching(assertr::matchers::predicate_list([
+                    |it: &i32| *it == 1,
+                    |it: &i32| *it == 2,
+                    |it: &i32| *it == 9,
+                ]))
+                .contains(42)
+            });
+
+        assert_that!(&failures).has_length(2);
+        assert_that!(failures[0].children[0].relation.as_deref())
+            .is_equal_to(Some("has no distinct matching element"));
+        assert_that!(ToHumanReadableText.render(&failures[1]))
+            .contains("does not contain\n\nExpected: 42");
+        assert_that!(failures[1].children).is_empty();
+        assert_that!(failures[1].constraint).is_none();
+    }
 }
 
-#[cfg(feature = "derive")]
-#[test]
-fn equality_differences_are_scoped_to_the_failure_that_produced_them() {
-    #[derive(Debug, PartialEq, AssertrEq)]
-    struct Data {
-        pub age: u32,
+#[cfg(feature = "matchers")]
+mod matcher_differences {
+    use super::*;
+
+    #[test]
+    fn matcher_differences_are_scoped_to_the_failure_that_produced_them() {
+        #[derive(Debug, PartialEq)]
+        struct Data {
+            pub age: u32,
+        }
+
+        let failures = assert_that!(Data { age: 30 })
+            .with_location(false)
+            .capture(|it| {
+                it.matches(partial!(Data { age: 31 }))
+                    .matches(partial!(Data { age: 32 }))
+            });
+
+        assert_that!(&failures).has_length(2);
+        assert_that!(ToHumanReadableText.render(&failures[0]).as_str()).contains("Expected: 31");
+        assert_that!(ToHumanReadableText.render(&failures[1]).as_str())
+            .contains("Expected: 32")
+            .does_not_contain("Expected: 31");
     }
-
-    let failures = assert_that!(Data { age: 30 })
-        .with_location(false)
-        .capture(|it| {
-            it.is_equal_to(DataAssertrEq { age: eq(31) })
-                .is_equal_to(DataAssertrEq { age: eq(32) })
-        });
-
-    assert_that!(&failures).has_length(2);
-    assert_that!(ToHumanReadableText.render(&failures[0]).as_str())
-        .contains(r#""age": expected 31, but was 30"#);
-    assert_that!(ToHumanReadableText.render(&failures[1]).as_str())
-        .contains(r#""age": expected 32, but was 30"#)
-        .does_not_contain("expected 31");
 }
 
 #[test]

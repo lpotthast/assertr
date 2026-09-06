@@ -19,8 +19,8 @@ pub use type_subject::{Type, assert_that_type};
 /// `assert_that!(value)` borrows `value`, so a named value remains usable after the assertion.
 /// Temporaries and literals live until the end of the enclosing statement. For a sized pointee,
 /// `assert_that!(&value)` and `assert_that!(value)` are equivalent: a reference expression is
-/// unwrapped one level, so both yield an `AssertThat<Value>`. References to unsized targets such
-/// as `str` and `[T]` remain reference-typed subjects.
+/// unwrapped one level, so both yield an `AssertThat<Value>`. References to unsized targets such as
+/// `str` and `[T]` remain reference-typed subjects.
 ///
 /// For assertions that consume their subject, such as `panics()` on a closure or terminal iterator
 /// assertions, use [`crate::assert_that_owned!`] instead.
@@ -46,8 +46,8 @@ macro_rules! assert_that {
 /// Macro entry point into an assertion context that takes ownership of its input.
 ///
 /// Use this for assertions that consume their subject, such as `panics()` on a closure or terminal
-/// iterator assertions. Prefer [`assert_that!`] when ownership is not required because it keeps
-/// the value usable.
+/// iterator assertions. Prefer [`assert_that!`] when ownership is not required because it keeps the
+/// value usable.
 ///
 /// ```
 /// use assertr::prelude::*;

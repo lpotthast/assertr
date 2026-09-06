@@ -7,7 +7,7 @@ use alloc::string::String;
 
 /// Non-extracting assertions for [`http::HeaderValue`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait HttpHeaderValueAssertions<'t, M: Mode, R = crate::DebugRenderer> {
     /// Asserts that the header value contains no bytes.
     fn is_empty(self) -> Self
@@ -137,7 +137,7 @@ impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
 /// Panic-mode string extraction from [`HeaderValue`](http::HeaderValue) subjects.
 ///
 /// A rejected value cannot produce the requested `String`.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait HttpHeaderValueExtractAssertions<'t, R = crate::DebugRenderer> {
     /// Asserts that [`HeaderValue::to_str`](http::HeaderValue::to_str) accepts the value, then
     /// extracts it as an owned `String`.

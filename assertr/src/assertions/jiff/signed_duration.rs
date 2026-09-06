@@ -8,7 +8,7 @@ use jiff::SignedDuration;
 
 /// Assertions for [`SignedDuration`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait SignedDurationAssertions<R = crate::DebugRenderer> {
     /// Asserts that the duration is zero.
     fn is_zero(self) -> Self

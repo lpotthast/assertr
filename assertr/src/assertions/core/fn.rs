@@ -35,10 +35,10 @@ fn raise_unexpected_panic<T, R>(
 
 /// Awaits `future`, catching a panic raised while it is polled.
 ///
-/// This is the async counterpart of [`std::panic::catch_unwind`]. The future is pinned on the
-/// heap, so the poll loop needs no unsafe pin projection, and every individual poll is wrapped
-/// in `catch_unwind`. Once a poll panics, its payload is returned and the future is dropped
-/// without ever being polled again.
+/// This is the async counterpart of [`std::panic::catch_unwind`]. The future is pinned on the heap,
+/// so the poll loop needs no unsafe pin projection, and every individual poll is wrapped in
+/// `catch_unwind`. Once a poll panics, its payload is returned and the future is dropped without
+/// ever being polled again.
 #[cfg(feature = "std")]
 async fn catch_unwind_future<Fut>(future: Fut) -> Result<Fut::Output, Box<dyn Any + Send>>
 where
@@ -57,10 +57,10 @@ where
 
 /// Assertions that invoke a synchronous `FnOnce` subject.
 ///
-/// These methods are available only in panic mode because they change the subject type.
-/// Invoking `FnOnce` consumes it, so create the assertion with `assert_that_owned!` or
-/// `.must_owned()`. Calling either method on a borrowed subject panics.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+/// These methods are available only in panic mode because they change the subject type. Invoking
+/// `FnOnce` consumes it, so create the assertion with `assert_that_owned!` or `.must_owned()`.
+/// Calling either method on a borrowed subject panics.
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait FnOnceAssertions<'t, O, R = crate::DebugRenderer> {
     /// Asserts that invoking the function or dropping its output panics, then returns the payload.
     #[cfg(feature = "std")]
@@ -88,8 +88,7 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
                     // First, call the closure, receiving its output.
                     let res = std::panic::catch_unwind(core::panic::AssertUnwindSafe(f));
 
-                    // Then, we drop the output,
-                    // while catching any panics resulting from the `Drop` implementation.
+                    // Then, we drop the output, while catching any panics resulting from the `Drop` implementation.
                     let res = std::panic::catch_unwind(core::panic::AssertUnwindSafe(move || {
                         res.map(|value| drop(value))
                     }));
@@ -124,8 +123,7 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
                     )
                 }
                 Actual::Owned(f) => {
-                    // Catch a panic from the function call but retain its output for further
-                    // assertions. Dropping the output is therefore outside this unwind boundary.
+                    // Catch a panic from the function call but retain its output for further assertions. Dropping the output is therefore outside this unwind boundary.
                     let res = std::panic::catch_unwind(core::panic::AssertUnwindSafe(f));
                     Actual::Owned(res)
                 }
@@ -145,10 +143,10 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
 
 /// Assertions that invoke an async `FnOnce` subject and poll its returned future.
 ///
-/// These methods are available only in panic mode because they change the subject type.
-/// Invoking `FnOnce` consumes it, so create the assertion with `assert_that_owned!` or
-/// `.must_owned()`. Awaiting either method on a borrowed subject panics.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+/// These methods are available only in panic mode because they change the subject type. Invoking
+/// `FnOnce` consumes it, so create the assertion with `assert_that_owned!` or `.must_owned()`.
+/// Awaiting either method on a borrowed subject panics.
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait AsyncFnOnceAssertions<'t, O, R = crate::DebugRenderer> {
     /// Asserts that invoking the function, polling its future, or dropping its output panics, then
     /// returns the payload.
@@ -217,8 +215,8 @@ where
                 // Poll the future, receiving its output.
                 let res = catch_unwind_future(future).await;
 
-                // Then, we drop the output,
-                // while catching any panics resulting from the `Drop` implementation.
+                // Then, we drop the output, while catching any panics resulting from the `Drop`
+                // implementation.
                 let res = std::panic::catch_unwind(core::panic::AssertUnwindSafe(move || {
                     res.map(|value| drop(value))
                 }));
@@ -269,8 +267,7 @@ where
                     Err(payload) => return Err(payload),
                 };
 
-                // The output remains available for later assertions, so dropping it is outside
-                // this unwind boundary.
+                // The output remains available for later assertions, so dropping it is outside this unwind boundary.
                 catch_unwind_future(future).await
             }
         })

@@ -8,7 +8,7 @@ use std::{ffi::OsStr, path::Path};
 /// Blanket-implemented for path subjects that dereference to [`Path`], including [`Path`]
 /// references and owned [`std::path::PathBuf`] values.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait PathAssertions {
     /// The path subject rendered in failure diagnostics.
     type Subject: Deref<Target = Path>;
@@ -337,8 +337,8 @@ impl<T: Debug + ?Sized> Display for DebugValue<'_, T> {
     }
 }
 
-/// An optional path component as a fact value: quoted and escaped like the expected component it
-/// is compared with, or `<none>` when the path has no such component.
+/// An optional path component as a fact value: quoted and escaped like the expected component it is
+/// compared with, or `<none>` when the path has no such component.
 struct Component<'a>(Option<&'a OsStr>);
 
 impl Display for Component<'_> {

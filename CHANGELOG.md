@@ -9,117 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus
-  `contains_same_instance_as`, `does_not_contain_same_instance_as`, `contains_exactly_same_instances`, and
-  `contains_exactly_same_instances_in_any_order` for collections. They compare pointers without equality or renderer
-  bounds, including for opaque types in `no_std` builds. Collection checks compare borrowed targets, preserve duplicate
-  counts in exact comparisons, and require stable order for positional matching.
-- `AssertionFailure::subject_type_name` records the Rust type of the subject that raised the failure.
-- `RenderingBudget` limits rendered leaf values and repeated diagnostic items by default. `RenderingBudget::unlimited()`
-  restores complete output.
-- `RenderingContext::value` returns a `renderer::Typed` adapter. `Typed::with_type_hint` selects the
-  `renderer::TypeHint` (`Full`, `Short`, or `Label`) derived from the value's Rust type, and `Typed::show_type_hint`
-  controls whether text output shows it. Hints are hidden by default.
-- `renderer::Rendered` and `RenderedBody` retain diagnostic values as typed trees of leaves, groups, maps, tuples,
-  variants, structs, and inaccessible placeholders. Truncation counts, presentation-only sorting, and locally compact
-  layout stay data.
-  `renderer::IntoRendered` consumes the lazy adapters returned by `AssertThat::render()` into the same tree stored in
-  a failure.
-- `failure::adapter::Adapter<Input>` transforms structured failures and intermediate representations with typed
-  outputs and errors. `then` chains transformations, and `map_err` returns a `MapErr` adapter that changes the error
-  type while preserving successful output. `ToHumanReadableText` produces the built-in text representation,
-  and `StdOutLogger` is available for explicit processing with `std`. `AssertThat::with_panic_presentation`
-  selects an owned `'static` adapter returning `HumanReadableText` for panic mode and converts displayable errors to
-  strings internally. Mapped and derived assertions share the selected adapter without requiring `Clone`, `Send`, or
-  `Sync`. Adapters used explicitly may still borrow local data. `HumanReadableText::new` constructs text for custom
-  presentations and adapter chains.
-  Presentation runs on the asserting thread and defaults to `ToHumanReadableText`. Returned presentation errors
-  fall back to the built-in report with a diagnostic, as do unwinding adapter panics with `std`. Capture mode
-  retains structured failures without invoking presentation. Assertion failure reports are never automatically
-  logged to stdout.
-- `BinaryHeap` implements `HasLength` and `Collection`, so heaps support length and order-free collection assertions.
-  Its diagnostic presentation is sorted and explicitly marked as such.
-- `StableOrderExtractAssertions` provides `get_first`, `get_last`, and `get_single`.
-  `RandomAccessExtractAssertions` provides `get_at`. These panic-mode projections borrow the assertion chain and the
-  selected element.
-- `AssertionFailure` exposes every part of a failure as data: `actual`, `expected`, and `unexpected` are
-  `renderer::Rendered` value trees, `relation` is the sentence between them, `facts` retain labeled rendered trees,
-  nested failures are `children`, and `kind` is a `FailureKind` family tag. `Fact` and `FailureKind` are re-exported at
-  the crate root. Nested failures raised by `_satisfying` assertions, and the elements rejected by positional or
-  `_matching` assertions, are `children` located by a `Fact::INDEX` or `Fact::KEY` fact instead of pre-rendered detail
-  strings.
+- Composable expected-side matchers through `matches` and `does_not_match`, including predicates, assertion closures,
+  conditions, reusable `pattern!` matchers, and nested positional, unordered, or keyed expectations.
+  Runtime matchers and collection macros work in `no_std` with `alloc` without optional features.
+- `partial!` matches selected fields of structs and enum variants without derives or attributes on domain types,
+  rendering only selected leaves even under negation. Enable the new `matchers` feature, which does not require `std`.
+- Map assertions `contains_entry_matching` and `contains_value_matching` accept composed value matchers.
+- Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
+  exact comparisons of borrowed targets with duplicate counts, without equality or renderer bounds.
+- Borrowed panic-mode element projections through `get_first`, `get_last`, and `get_single` for `StableOrder`
+  collections, and `get_at` for `RandomAccess` collections.
+- `BinaryHeap` supports length and order-free collection assertions, with diagnostics sorted by rendered text.
+- `RenderingBudget` limits each diagnostic group to 256 items and each rendered leaf to 4,096 characters by default.
+  Configure it with `with_rendering_budget`, or use `RenderingBudget::unlimited()` to disable these limits.
+- `renderer::Typed` adapters retain Rust type metadata and offer configurable type hints, hidden by default for
+  individual values.
+- `failure::adapter::Adapter` and `AdapterExt` support typed failure processing with `then` and `map_err` chains,
+  including human-readable text and explicit stdout logging with `std`.
+- `with_panic_presentation` selects an owned `'static` text adapter shared by derived assertions, while capture mode
+  leaves presentation to the caller. Presentation errors fall back to the built-in report, as do unwinding adapter
+  panics with `std`.
 
 ### Changed
 
-- **Breaking:** Custom assertions now render diagnostics through `AssertThat::render().value(...)`, `.values(...)`, or
-  `.borrowed_values(...)`.
-  `AssertThat::render_value`, `AssertThat::render_values`, `Renderable`, and `RenderableValues` were removed. The
-  equivalent `EqContext` methods remain and return the same `renderer::Typed` and `renderer::RenderedValues` adapters.
-  `RenderingContext::values` accepts any `Collection` and infers its item type. `borrowed_values` explicitly selects a
-  different type borrowed by each item. Collection and map rendering adapters retain their sources by reference and
-  obtain elements or entries only when formatted, avoiding temporary collections of references.
-- **Breaking:** Container capabilities and diagnostic presentation are now independent. `Collection` inherits
-  `HasLength` and replaces `STYLE`, `TYPE_NAME`, `DETERMINISTIC_ITERATION`, `length()`, and the separate `Sequence`
-  marker with a required presentation-only `PRESENTATION: renderer::CollectionPresentation`. `StableOrder` is the
-  explicit capability for meaningful ordinal positions, and `RandomAccess: StableOrder` adds constant-time
-  `element_at`; `LinkedList` has only stable order, while slices, arrays, `Vec`, and `VecDeque` have both.
-  `StableOrderAssertions` replaces `SequenceAssertions` and owns every positional finite-collection assertion:
-  `starts_with`, `ends_with`, `contains_contiguous`, and `contains_exactly`, including their `_matching` and
-  `_satisfying` variants. The equivalent positional `into_iter_*` methods were removed. Explicitly asserted iterators
-  retain positional yield-stream assertions, while the remaining borrowed-iteration API is order-free. The
-  native-membership `Set` trait was renamed to `SetLookup` and now directly declares the set capability. `Map` likewise
-  inherits `HasLength`, replaces
-  `TYPE_NAME`, `DETERMINISTIC_ITERATION`, and `length()` with presentation-only
-  `RENDERING_ORDER: renderer::RenderingOrder`, and keeps lookup separate in `MapLookup`. `CollectionStyle` was replaced
-  by `renderer::GroupStyle` for explicitly styled ad-hoc groups passed to `RenderingContext::values`,
-  `RenderingContext::borrowed_values`, or `EqContext::render_values`.
-- **Breaking:** The `AssertionFailure::description` and `AssertionFailure::details` fields were removed. A failure and
-  its facts no longer implement `Display`. Use `ToHumanReadableText::render(&failure)` for the complete human-readable
-  output, or inspect `relation`, the `Rendered` value fields, and `facts` directly.
-- **Breaking:** `AssertThat::fail`, `AssertThat::fail_with_details`, and the `failure::Failure` trait were removed.
-  Custom leaf assertions raise failures the way built-in ones do: `AssertThat::failure(kind)` returns a
-  `failure::FailureBuilder` that takes the rendered `actual`, the `relation`, the `expected` or `unexpected` value,
-  labeled facts, notes, and nested children, and `raise()` records or panics. Values implement
-  `renderer::IntoRendered`; pass rendering adapters directly so structure is retained. `FailureBuilder::detached`
-  builds a child failure, and `AssertionFailure::located_at` with `Fact::index` or `Fact::key` locates it in the
-  parent's subject.
-- Every built-in failure is rendered from its fields by one grammar: `Actual:`, the relation sentence, `Expected:`
-  (or `Unexpected:` for a negated assertion), then `Messages:` (chain messages), `Details:` (one bullet per fact as
-  `label: value`), and `Nested failures:` (children indented one level and introduced by `At index N:` or
-  `At key K:`). A failure without a relation is a direct comparison and keeps the aligned `Expected:` / `Actual:` pair.
-  Relations are lowercase sentences without trailing periods and never embed a value. Text matched by downstream tests
-  changes accordingly: `does not contain expected: 4` is now `does not contain` followed by `Expected: 4`,
-  `contains unexpected: 2` is now `contains` followed by `Unexpected: 2`, `was expected to be empty, but it is not!`
-  is now `is not empty`, `does not have the correct length` with an aligned length pair is now
-  `does not have the expected length`, `Expected: 2`, and an `Actual length` fact, `is not of expected variant:
-  Option::Some` is now `is not the expected variant` followed by `Expected: Option::Some`, `Values were expected to be
-  different.` is now `is equal to` followed by `Unexpected:`, and nested per-element failures move from `Details:` to
-  `Nested failures:`.
-- Facts and children listing the elements of a set or map without a deterministic iteration order are sorted by
-  rendered text, and a collection assertion no longer renders the failures of a rejected candidate element to text
-  while it is still looking for a satisfying one.
-- Positional assertions (`starts_with`, `ends_with`, `contains_exactly`, and their `_matching` variants, on
-  collections and iterators) report the first rejected element as a nested failure at its index instead of describing
-  the position in prose. Map assertions report a value that differs, fails its predicate, or fails its assertions as a
-  nested failure at its key. Explicit iterator diagnostics carry their scan state as labeled facts (`Consumed
-  elements`, `Reported length`, `Exhausted at index`, `Extra element at index`).
-- `TokioWatchReceiverAssertions::has_changed` and `has_not_changed` no longer require renderer bounds, because their
-  failures render no value.
-- **Breaking:** `HasLength` is implemented for `str` and `[T]` directly and forwarded through blanket `&T` and
-  `&mut T` implementations; the separate reference implementations were removed. Downstream types that implement it
-  for both `T` and `&T` must drop the reference implementation. The trait remains dyn-compatible and contains only
-  length and emptiness methods.
-- Length diagnostics show the subject's short Rust type name, such as `Vec` or `[String]`, instead of its complete
-  `core::any::type_name`.
-- `renderer::CollectionPresentation` configures list or set syntax, type-hint visibility, and
-  `renderer::RenderingOrder::{PreserveIteration, SortByRenderedText}` independently of behavioral capabilities.
-  Positional collection diagnostics always preserve iteration order so displayed indexes cannot disagree with
-  displayed elements.
-- Order-free collection, borrowed-iteration, and iterable-condition diagnostics no longer describe traversal offsets
-  as element indexes. Explicit iterator assertions may still report positions in the iterator's yield stream.
-- Set relation diagnostics determine whether two sets have different underlying types from their canonical Rust type
-  names rather than their presentation hints. Transparent reference forwarding does not make otherwise identical sets
-  cross-type.
+- **Breaking:** Equality and collection or map value comparisons now require `PartialEq`, removing `AssertrPartialEq`
+  and the public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`.
+  Move custom comparison policies to expected-side `AssertrMatcher` implementations and matcher assertions.
+- **Breaking:** `assertr-macros` 0.5.0 replaces `assertr-derive` as the procedural macro crate. Direct users must update
+  their dependency and replace `assertr_derive::` paths with `assertr_macros::`.
+- **Breaking:** Removed the `AssertrEq` macro, its generated companion types and helper attributes, and `assertr`'s
+  `derive` feature. Use `matches(partial!(...))` with `features = ["matchers"]`.
+- **Breaking:** Collection, iterator, and map `*_matching` methods and fluent aliases now accept matchers instead of
+  bare predicates. Wrap closures with `predicate` and predicate arrays with `predicate_list`, and use `entries_are!`
+  or `entry_matchers` for keyed matcher lists.
+- **Breaking:** `StableOrder` and `StableOrderAssertions` replace `Sequence` and `SequenceAssertions`, and own
+  positional `starts_with`, `ends_with`, `contains_contiguous`, and `contains_exactly` assertions and their variants.
+  Replace the removed positional `into_iter_*` calls with these methods, or explicitly assert an owned iterator.
+- **Breaking:** Custom `Collection` and `Map` implementations must implement `HasLength` instead of declaring their
+  own `length` method. Replace collection `STYLE` and `TYPE_NAME` with `PRESENTATION: CollectionPresentation`, and map
+  `TYPE_NAME` with `RENDERING_ORDER: RenderingOrder`, using the types in `renderer`.
+- **Breaking:** Custom set implementations and bounds must rename `Set` to `SetLookup`.
+- **Breaking:** Collection assertions on `HashSet<T, S>` now require `S: BuildHasher`.
+  Add this bound to generic helpers.
+- **Breaking:** `HasLength` now forwards through blanket `&T` and `&mut T` implementations, with implementations on
+  `str` and `[T]` directly. Downstream types implementing it for both a value and its references must remove the
+  reference implementations.
+- **Breaking:** Captured failures replace `description` and `details` with `renderer::Rendered` value trees, relations,
+  labeled facts, nested children, matcher paths and constraints, subject type metadata, and `FailureKind` tags.
+  `AssertionFailure` no longer implements `Display`, so use `ToHumanReadableText.render(&failure)` for text.
+- **Breaking:** Custom leaf assertions must replace `fail`, `fail_with_details`, and the `failure::Failure` trait
+  with `self.failure(kind)` and `FailureBuilder`, supplying structured evidence before calling `raise()`.
+- **Breaking:** Custom diagnostic code must replace `render_value`, `render_values`, `Renderable`, and
+  `RenderableValues` with adapters from `AssertThat::render()`, passed directly to the failure builder.
+  Use `value`, `values`, or `borrowed_values`, and replace `CollectionStyle` with `renderer::GroupStyle`.
+- Failure reports use a consistent layout with separate values, relation sentences, chain messages, labeled facts,
+  and nested failures. Update diagnostic text snapshots, including positional indexes, map keys, and iterator scan
+  evidence.
+- Hash collection diagnostics sort values and per-element evidence by rendered text before applying item limits,
+  while positional diagnostics preserve iteration order. Order-free collection, borrowed-iteration, and
+  iterable-condition diagnostics no longer label traversal offsets as element indexes, and length diagnostics use
+  short Rust type names.
+- Unordered `*_matching` and `*_satisfying` checks evaluate each actual/expected pair at most once and retain its
+  diagnostic evidence.
+- `TokioWatchReceiverExtractAssertions::has_changed` and `has_not_changed` no longer require renderer or `Clone` bounds.
+
+### Fixed
+
+- Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 
 ## [0.7.1] - 2026-09-02
 

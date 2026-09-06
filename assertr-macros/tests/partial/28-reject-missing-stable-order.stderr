@@ -1,0 +1,23 @@
+error[E0277]: the collection has no stable, meaningful element order
+ --> tests/partial/28-reject-missing-stable-order.rs:5:65
+  |
+5 |     assert_that!(std::collections::BTreeSet::from([1])).matches(elements_are![1]);
+  |                                                         ------- ^^^^^^^^^^^^^^^^ no stable-order capability
+  |                                                         |
+  |                                                         required by a bound introduced by this call
+  |
+  = help: the trait `StableOrder` is not implemented for `BTreeSet<{integer}>`
+  = note: order-sensitive assertions require `StableOrder`; use an order-free assertion such as `contains_exactly_in_any_order` instead
+  = help: the following other types implement trait `StableOrder`:
+            &C
+            LinkedList<T>
+            Vec<T>
+            VecDeque<T>
+            [T; N]
+            [T]
+  = note: required for `ElementsAre<MatcherSequence<assertr::__private::Cons<assertr::__private::Normalize<{integer}, assertr::__private::EqualityKind>, assertr::__private::Nil>>>` to implement `AssertrMatcher<BTreeSet<{integer}>>`
+note: required by a bound in `matches`
+ --> $WORKSPACE/assertr/src/assertions/matcher.rs
+  |
+  |     fn matches<E: AssertrMatcher<T, R>>(self, expected: E) -> Self;
+  |                   ^^^^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`

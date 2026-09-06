@@ -10,7 +10,7 @@ use jiff::tz::TimeZone;
 
 /// Assertions for [`Zoned`] date-times.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ZonedAssertions<R = crate::DebugRenderer> {
     /// Asserts that the subject uses the same time-zone rules as `expected`.
     fn is_in_time_zone(self, expected: impl Borrow<TimeZone>) -> Self

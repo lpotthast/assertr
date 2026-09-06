@@ -15,9 +15,9 @@ use ::std::hash::BuildHasher;
 /// Implement it to make `is_empty`, `is_not_empty`, and `has_length` available on a custom type.
 /// Built-in implementations cover strings, collection families, and integer ranges.
 ///
-/// Integer ranges use their mathematical element count converted to `usize`. Asking for the
-/// length of a range whose count cannot be represented by `usize` panics with an explicit
-/// `range length exceeds usize::MAX` message.
+/// Integer ranges use their mathematical element count converted to `usize`. Asking for the length
+/// of a range whose count cannot be represented by `usize` panics with an explicit `range length
+/// exceeds usize::MAX` message.
 pub trait HasLength {
     /// Returns the finite number of elements or bytes according to the type's native length.
     fn length(&self) -> usize;

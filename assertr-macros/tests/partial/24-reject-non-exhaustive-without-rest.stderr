@@ -1,0 +1,25 @@
+error[E0638]: `..` required with struct marked as non-exhaustive
+ --> tests/partial/24-reject-non-exhaustive-without-rest.rs:6:35
+  |
+6 |     assert_that!(failure).matches(partial!(AssertionFailure {}));
+  |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `partial` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: add `..` at the end of the field list to ignore all other fields
+  |
+6 -     assert_that!(failure).matches(partial!(AssertionFailure {}));
+6 +     assert_that!(failure).matches(partial!(AssertionFailure {}.. });
+  |
+
+error: pattern requires `..` due to inaccessible fields
+ --> tests/partial/24-reject-non-exhaustive-without-rest.rs:6:35
+  |
+6 |     assert_that!(failure).matches(partial!(AssertionFailure {}));
+  |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `partial` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: ignore the inaccessible and unused fields
+  |
+6 -     assert_that!(failure).matches(partial!(AssertionFailure {}));
+6 +     assert_that!(failure).matches(partial!(AssertionFailure { .. });
+  |

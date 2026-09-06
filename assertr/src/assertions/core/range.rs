@@ -6,7 +6,7 @@ use core::ops::RangeBounds;
 use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions over a range subject's membership.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = crate::DebugRenderer> {
     /// Asserts that the range contains `expected`.
     fn contains_element(&self, expected: B)
@@ -23,7 +23,7 @@ pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = crate::DebugRendere
 
 /// Assertions over a value subject's membership in a range.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RangeAssertions<B, R = crate::DebugRenderer> {
     /// Asserts that the subject is within `expected`.
     fn is_in_range(self, expected: impl RangeBounds<B>) -> Self
@@ -361,8 +361,8 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_not_in_range`. Only the fluent name is pinned here. The behavior is covered by
-    /// that module.
+    /// Synonym of `is_not_in_range`. Only the fluent name is pinned here. The behavior is covered
+    /// by that module.
     mod is_outside_of_range {
         #[cfg(feature = "fluent")]
         use crate::prelude::*;

@@ -2,7 +2,7 @@ use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions for boolean values.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait BoolAssertions<R = crate::DebugRenderer> {
     /// Asserts that the subject is `true`.
     fn is_true(self) -> Self

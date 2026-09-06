@@ -8,7 +8,7 @@
 use alloc::{borrow::Cow, format, string::String, vec::Vec};
 use core::{fmt::Display, panic::Location};
 
-use super::{AssertionFailure, Fact, FailureKind, Fallible};
+use super::{AssertionFailure, Fact, FailureKind, Fallible, PathSegment};
 use crate::{
     AssertThat,
     details::WithDetail,
@@ -68,8 +68,8 @@ mod sealed {
 /// [`Detached`] as a value. This trait is sealed.
 pub trait FailureTarget: sealed::Sealed {}
 
-/// The target of a builder started by [`AssertThat::failure`]: the failure is raised on that
-/// chain by [`FailureBuilder::raise`].
+/// The target of a builder started by [`AssertThat::failure`]: the failure is raised on that chain
+/// by [`FailureBuilder::raise`].
 pub struct Attached<'c> {
     sink: &'c dyn FailureSink,
     location: &'static Location<'static>,
@@ -94,10 +94,13 @@ impl FailureTarget for Detached {}
 /// See [custom assertions](crate#custom-assertions) for a complete example.
 ///
 /// [`FailureBuilder::detached`] starts a failure that is not raised but returned by
-/// [`build`](Self::build), for the nested failures a parent attaches through
-/// [`child`](Self::child) and [`children`](Self::children).
+/// [`build`](Self::build), for the nested failures a parent attaches through [`child`](Self::child)
+/// and [`children`](Self::children).
 #[must_use = "a failure is only recorded by `raise` or `build`"]
 pub struct FailureBuilder<T: FailureTarget> {
+    path: Vec<PathSegment>,
+    omitted_children: usize,
+    constraint: Option<crate::matchers::Description>,
     target: T,
     subject_type_name: &'static str,
     kind: FailureKind,
@@ -164,6 +167,9 @@ impl FailureBuilder<Detached> {
 impl<T: FailureTarget> FailureBuilder<T> {
     fn new(target: T, subject_type_name: &'static str, kind: FailureKind) -> Self {
         Self {
+            path: Vec::new(),
+            omitted_children: 0,
+            constraint: None,
             target,
             subject_type_name,
             kind,
@@ -176,6 +182,24 @@ impl<T: FailureTarget> FailureBuilder<T> {
         }
     }
 
+    /// Attaches an independently described matcher constraint.
+    pub fn constraint(mut self, description: crate::matchers::Description) -> Self {
+        self.constraint = Some(description);
+        self
+    }
+
+    /// Sets the relative typed path of this failure.
+    pub fn path(mut self, path: impl IntoIterator<Item = PathSegment>) -> Self {
+        self.path.extend(path);
+        self
+    }
+
+    /// Records the number of omitted children without losing the truth result.
+    pub fn omitted_children(mut self, count: usize) -> Self {
+        self.omitted_children = count;
+        self
+    }
+
     /// Sets the rendered subject. Pass an adapter obtained from [`AssertThat::render`]. It is
     /// consumed into an owned value tree here, with every leaf rendered exactly once.
     pub fn actual(mut self, actual: impl IntoRendered) -> Self {
@@ -185,8 +209,8 @@ impl<T: FailureTarget> FailureBuilder<T> {
 
     /// Sets the sentence between the actual and the expected value, such as `does not contain`.
     ///
-    /// A failure without a relation is a direct comparison and renders as an aligned
-    /// `Expected:` / `Actual:` pair. A relation never embeds a value: values belong to
+    /// A failure without a relation is a direct comparison and renders as an aligned `Expected:` /
+    /// `Actual:` pair. A relation never embeds a value: values belong to
     /// [`expected`](Self::expected), [`unexpected`](Self::unexpected), or a [`fact`](Self::fact).
     pub fn relation(mut self, relation: impl Into<Cow<'static, str>>) -> Self {
         self.relation = Some(relation.into());
@@ -254,6 +278,9 @@ impl<T: FailureTarget> FailureBuilder<T> {
         messages: Vec<String>,
     ) -> AssertionFailure {
         AssertionFailure {
+            constraint: self.constraint,
+            path: self.path,
+            omitted_children: self.omitted_children,
             location,
             subject_name,
             expression,

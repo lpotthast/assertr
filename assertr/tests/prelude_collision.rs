@@ -261,8 +261,8 @@ fn a_custom_bag_gets_only_order_free_collection_assertions() {
         .contains("(sorted for rendering)");
 }
 
-/// The extension traits behind the set and map families are as collision-prone as `Collection`,
-/// so they are kept out of the prelude for the same reason: a downstream `Set` or `Map` must stay
+/// The extension traits behind the set and map families are as collision-prone as `Collection`, so
+/// they are kept out of the prelude for the same reason: a downstream `Set` or `Map` must stay
 /// usable as a bare name next to a glob-imported `assertr::prelude::*`.
 #[test]
 fn bare_set_and_map_names_stay_usable_next_to_a_second_glob_imported_prelude() {
@@ -408,7 +408,11 @@ fn a_custom_map_gets_every_map_assertion() {
         .contains_entry_satisfying("retries", satisfies_three)
         .contains_keys(["retries"])
         .contains_exactly_entries([("retries", 3)])
-        .contains_exactly_entries_matching([("retries", is_three)])
+        .contains_exactly_entries_matching(assertr::matchers::entry_matchers(
+            ([("retries", is_three)])
+                .into_iter()
+                .map(|(key, p)| (key, assertr::matchers::predicate(p))),
+        ))
         .contains_exactly_entries_satisfying([("retries", satisfies_three)])
         .has_length(1);
 
@@ -420,5 +424,26 @@ fn a_custom_map_gets_every_map_assertion() {
             .contain_key("retries")
             .contain_entry("retries", 3)
             .have_length(1);
+    }
+}
+
+mod matcher_names {
+    mod foreign_prelude {
+        pub struct Description;
+        pub struct Matcher;
+        pub fn equal_to() -> bool {
+            true
+        }
+        pub fn anything() -> bool {
+            true
+        }
+    }
+    #[test]
+    fn short_matcher_names_remain_available_to_other_preludes() {
+        use assertr::prelude::*;
+        use foreign_prelude::*;
+        let _ = (Description, Matcher);
+        assert_that!(equal_to() && anything()).is_true();
+        assert_that!(1).matches(assertr::matchers::equal_to(1));
     }
 }

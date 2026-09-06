@@ -1,19 +1,19 @@
-use crate::{AssertThat, AssertrPartialEq, Mode, ValueRenderer, failure::FailureKind};
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
-/// Equality and inequality assertions using [`AssertrPartialEq`].
+/// Equality and inequality assertions using [`PartialEq`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait PartialEqAssertions<T, R> {
     /// Asserts that the subject equals `expected`.
     fn is_equal_to<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E, R>,
+        T: PartialEq<E>,
         R: ValueRenderer<T> + ValueRenderer<E>;
 
     /// Asserts that the subject does not equal `expected`.
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E, R>,
+        T: PartialEq<E>,
         R: ValueRenderer<T> + ValueRenderer<E>;
 }
 
@@ -21,7 +21,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_equal_to<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E, R>,
+        T: PartialEq<E>,
         R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
@@ -29,16 +29,12 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
         let actual = self.actual();
         let expected = &expected;
 
-        let mut ctx = self.eq_context();
-
-        if !AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
-            let mut failure = self
+        if !crate::matchers::equals(actual, expected) {
+            let failure = self
                 .failure(FailureKind::Equality)
                 .actual(self.render().value(actual))
                 .expected(self.render().value(expected));
-            if !ctx.differences.differences.is_empty() {
-                failure = failure.fact("Differences", format_args!("{:#?}", ctx.differences));
-            }
+
             failure.raise();
         }
         self
@@ -47,7 +43,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
-        T: AssertrPartialEq<E, R>,
+        T: PartialEq<E>,
         R: ValueRenderer<T> + ValueRenderer<E>,
     {
         self.track_assertion();
@@ -55,9 +51,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
         let actual = self.actual();
         let expected = &expected;
 
-        let mut ctx = self.eq_context();
-
-        if AssertrPartialEq::eq(actual, expected, Some(&mut ctx)) {
+        if crate::matchers::equals(actual, expected) {
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(actual))
                 .relation("is equal to")
@@ -129,7 +123,7 @@ mod tests {
                     Expression: `"foo"`
 
                     Expected: "bar"
-                    
+
                       Actual: "foo"
                     -------- assertr --------
                 "#});

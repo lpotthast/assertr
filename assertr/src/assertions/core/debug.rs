@@ -5,7 +5,7 @@ use core::fmt::Debug;
 
 /// Assertions for values implementing [`Debug`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait DebugAssertions {
     /// Asserts that the subject has the expected `Debug` representation.
     ///
@@ -28,9 +28,9 @@ impl<T: Debug, M: Mode, R> DebugAssertions for AssertThat<'_, T, M, R> {
         let actual_string = format!("{:?}", self.actual());
 
         // Prevent debug formatting the expected value, as it is already in usable string form!
-        // Debug formatting it would lead to double-escaping of already escaped characters.
-        // But if the user has given a string, we must not mess with that input, as it should
-        // already represent the exact debug output of actual.
+        // Debug formatting it would lead to double-escaping of already escaped characters. But if
+        // the user has given a string, we must not mess with that input, as it should already
+        // represent the exact debug output of actual.
         let expected_string = expected.as_ref();
 
         let actual_str = strip_quotation_marks(actual_string.as_str());

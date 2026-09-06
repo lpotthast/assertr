@@ -1,0 +1,36 @@
+[package]
+name = "assertr-macros"
+version = "0.5.0"
+edition = "2024"
+rust-version = "1.89.0"
+autotests = false
+authors = ["Lukas Potthast <privat@lukas-potthast.de>"]
+license = "MIT OR Apache-2.0"
+readme = "../README.md"
+repository = "https://github.com/lpotthast/assertr"
+description = """
+Structural matcher and fluent assertion procedural macros.
+"""
+categories = ["development-tools::testing", "no-std"]
+keywords = ["assertions", "assert", "assert-that", "testing"]
+# The fluent-expression and partial-matcher fixtures require the matching runtime and remain workspace-only.
+include = ["/src/**", "/tests/progress.rs", "/LICENSE-*"]
+# Package contents were vetted with `cargo package --list`.
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro-crate = "3.5.0"
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+syn = { version = "3.0.3", features = ["extra-traits", "full", "visit-mut"] }
+
+[dev-dependencies]
+indoc = "2.0.5"
+renamed_assertr = { package = "assertr", version = "0.8.0", path = "../assertr", features = ["std", "fluent", "matchers"] }
+trybuild = { version = "1.0.103", features = ["diff"] }
+
+[[test]]
+name = "tests"
+path = "tests/progress.rs"

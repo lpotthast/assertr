@@ -1,8 +1,7 @@
 use super::{
-    AssertThat, AssertionFailure, AssertrPartialEq, Borrow, Capture, Fact, FailureBuilder,
-    FailureKind, GroupStyle, Mode, PREVIEW_CAPACITY, Preview, Tail, UnsatisfiedElements,
-    ValueRenderer, Vec, VecDeque, exact_size_hint, indexed_children, unequal_element,
-    unmatched_element,
+    AssertThat, AssertionFailure, Borrow, Fact, FailureBuilder, FailureKind, GroupStyle, Mode,
+    PREVIEW_CAPACITY, Preview, Tail, UnsatisfiedElements, ValueRenderer, Vec, VecDeque,
+    exact_size_hint, indexed_children, unequal_element,
 };
 use crate::failure::{Attached, FailureTarget};
 
@@ -31,8 +30,8 @@ impl ExactFailure {
         }
     }
 
-    /// Attaches the scan's outcome to the failure: the preview facts, what ended the scan, and
-    /// the failures of the decisive element as children located at its index.
+    /// Attaches the scan's outcome to the failure: the preview facts, what ended the scan, and the
+    /// failures of the decisive element as children located at its index.
     fn apply<S: FailureTarget, Item>(
         self,
         failure: FailureBuilder<S>,
@@ -100,11 +99,11 @@ pub(crate) fn assert_contains_exactly<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: AssertrPartialEq<E, R>,
+    T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     if let Err((preview, outcome)) = evaluate_exact(iterator, expected.len(), |index, item| {
-        if AssertrPartialEq::eq(item, &expected[index], Some(&mut this.eq_context())) {
+        if crate::matchers::equals(item, &expected[index]) {
             Ok(())
         } else {
             Err(alloc::vec![unequal_element(this, item, &expected[index])])
@@ -119,59 +118,6 @@ pub(crate) fn assert_contains_exactly<S, T, E, I, M: Mode, R>(
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
         outcome.apply(failure, &preview, expected.len()).raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_exactly_matching<S, T, P, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    predicates: &[P],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    P: Fn(&T) -> bool,
-    R: ValueRenderer<T>,
-{
-    if let Err((preview, outcome)) = evaluate_exact(iterator, predicates.len(), |index, item| {
-        if predicates[index](item) {
-            Ok(())
-        } else {
-            Err(alloc::vec![unmatched_element(this, item)])
-        }
-    }) {
-        let failure = this
-            .failure(FailureKind::Predicate)
-            .actual(preview.rendered::<T, _, _, _>(this))
-            .relation("does not exactly match the predicates");
-        outcome.apply(failure, &preview, predicates.len()).raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_exactly_satisfying<S, T, A, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    assertions: &[A],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-    R: ValueRenderer<T> + Clone,
-{
-    if let Err((preview, outcome)) = evaluate_exact(iterator, assertions.len(), |index, item| {
-        let failures = this.collect_element_failures(item, &assertions[index]);
-        if failures.is_empty() {
-            Ok(())
-        } else {
-            Err(failures)
-        }
-    }) {
-        let failure = this
-            .failure(FailureKind::Predicate)
-            .actual(preview.rendered::<T, _, _, _>(this))
-            .relation("does not exactly satisfy the assertions");
-        outcome.apply(failure, &preview, assertions.len()).raise();
     }
 }
 
@@ -197,8 +143,8 @@ impl PrefixFailure {
         }
     }
 
-    /// Attaches the scan's outcome to the failure: the preview facts, what ended the scan, and
-    /// the failures of the decisive element as children located at its index.
+    /// Attaches the scan's outcome to the failure: the preview facts, what ended the scan, and the
+    /// failures of the decisive element as children located at its index.
     fn apply<S: FailureTarget, Item>(
         self,
         failure: FailureBuilder<S>,
@@ -259,11 +205,11 @@ pub(crate) fn assert_starts_with<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: AssertrPartialEq<E, R>,
+    T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     if let Err((preview, outcome)) = evaluate_prefix(iterator, expected.len(), |index, item| {
-        if AssertrPartialEq::eq(item, &expected[index], Some(&mut this.eq_context())) {
+        if crate::matchers::equals(item, &expected[index]) {
             Ok(())
         } else {
             Err(alloc::vec![unequal_element(this, item, &expected[index])])
@@ -278,59 +224,6 @@ pub(crate) fn assert_starts_with<S, T, E, I, M: Mode, R>(
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
         outcome.apply(failure, &preview, expected.len()).raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_starts_with_matching<S, T, P, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    predicates: &[P],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    P: Fn(&T) -> bool,
-    R: ValueRenderer<T>,
-{
-    if let Err((preview, outcome)) = evaluate_prefix(iterator, predicates.len(), |index, item| {
-        if predicates[index](item) {
-            Ok(())
-        } else {
-            Err(alloc::vec![unmatched_element(this, item)])
-        }
-    }) {
-        let failure = this
-            .failure(FailureKind::Predicate)
-            .actual(preview.rendered::<T, _, _, _>(this))
-            .relation("does not start with elements matching the predicates");
-        outcome.apply(failure, &preview, predicates.len()).raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_starts_with_satisfying<S, T, A, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    assertions: &[A],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-    R: ValueRenderer<T> + Clone,
-{
-    if let Err((preview, outcome)) = evaluate_prefix(iterator, assertions.len(), |index, item| {
-        let failures = this.collect_element_failures(item, &assertions[index]);
-        if failures.is_empty() {
-            Ok(())
-        } else {
-            Err(failures)
-        }
-    }) {
-        let failure = this
-            .failure(FailureKind::Predicate)
-            .actual(preview.rendered::<T, _, _, _>(this))
-            .relation("does not start with elements satisfying the assertions");
-        outcome.apply(failure, &preview, assertions.len()).raise();
     }
 }
 
@@ -360,9 +253,9 @@ fn trim_preview<Item>(preview: &mut Preview<Item>) {
 
 /// Checks the retained tail against a per-element suffix criterion.
 ///
-/// Returns `None` when the iterator yielded fewer elements than the suffix needs. Otherwise
-/// returns the failures of the suffix elements that did not satisfy the criterion, each with its
-/// index in yield order.
+/// Returns `None` when the iterator yielded fewer elements than the suffix needs. Otherwise returns
+/// the failures of the suffix elements that did not satisfy the criterion, each with its index in
+/// yield order.
 fn check_suffix<T, Item, C>(
     preview: &Preview<Item>,
     criteria: &[C],
@@ -388,8 +281,8 @@ where
     Some(unsatisfied)
 }
 
-/// Starts a suffix failure over the trimmed preview. `unsatisfied` is `None` when the iterator
-/// was too short for the suffix and otherwise holds the failing suffix elements.
+/// Starts a suffix failure over the trimmed preview. `unsatisfied` is `None` when the iterator was
+/// too short for the suffix and otherwise holds the failing suffix elements.
 #[track_caller]
 fn suffix_failure<'c, S, T, Item, M: Mode, R>(
     this: &'c AssertThat<'_, S, M, R>,
@@ -430,7 +323,7 @@ pub(crate) fn assert_ends_with<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: AssertrPartialEq<E, R>,
+    T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     if expected.is_empty() {
@@ -438,7 +331,7 @@ pub(crate) fn assert_ends_with<S, T, E, I, M: Mode, R>(
     }
     let mut preview = collect_tail(iterator, expected.len());
     let unsatisfied = check_suffix::<T, _, _>(&preview, expected, |item, expected| {
-        if AssertrPartialEq::eq(item, expected, Some(&mut this.eq_context())) {
+        if crate::matchers::equals(item, expected) {
             Vec::new()
         } else {
             alloc::vec![unequal_element(this, item, expected)]
@@ -461,77 +354,11 @@ pub(crate) fn assert_ends_with<S, T, E, I, M: Mode, R>(
     }
 }
 
-#[track_caller]
-pub(crate) fn assert_ends_with_matching<S, T, P, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    predicates: &[P],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    P: Fn(&T) -> bool,
-    R: ValueRenderer<T>,
-{
-    if predicates.is_empty() {
-        return;
-    }
-    let mut preview = collect_tail(iterator, predicates.len());
-    let unsatisfied = check_suffix::<T, _, _>(&preview, predicates, |item, predicate| {
-        if predicate(item) {
-            Vec::new()
-        } else {
-            alloc::vec![unmatched_element(this, item)]
-        }
-    });
-    if !unsatisfied.as_ref().is_some_and(Vec::is_empty) {
-        suffix_failure(
-            this,
-            &mut preview,
-            FailureKind::Predicate,
-            "does not end with elements matching the predicates",
-            predicates.len(),
-            unsatisfied,
-        )
-        .raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_ends_with_satisfying<S, T, A, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    assertions: &[A],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-    R: ValueRenderer<T> + Clone,
-{
-    if assertions.is_empty() {
-        return;
-    }
-    let mut preview = collect_tail(iterator, assertions.len());
-    let unsatisfied = check_suffix::<T, _, _>(&preview, assertions, |item, assertion| {
-        this.collect_element_failures(item, assertion)
-    });
-    if !unsatisfied.as_ref().is_some_and(Vec::is_empty) {
-        suffix_failure(
-            this,
-            &mut preview,
-            FailureKind::Predicate,
-            "does not end with elements satisfying the assertions",
-            assertions.len(),
-            unsatisfied,
-        )
-        .raise();
-    }
-}
-
-/// Scans for a window of `pattern_len` consecutive elements satisfying `criterion`, which
-/// receives the window and the index of its first element in yield order.
+/// Scans for a window of `pattern_len` consecutive elements satisfying `criterion`, which receives
+/// the window and the index of its first element in yield order.
 ///
-/// On failure, returns the preview together with the failing elements of the last candidate
-/// window, each with its index in yield order.
+/// On failure, returns the preview together with the failing elements of the last candidate window,
+/// each with its index in yield order.
 fn find_contiguous<T, I>(
     iterator: I,
     pattern_len: usize,
@@ -579,13 +406,14 @@ pub(crate) fn assert_contains_contiguous<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: AssertrPartialEq<E, R>,
+    T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     if let Err((preview, _)) = find_contiguous::<T, _>(iterator, expected.len(), |_, window| {
-        let matched = window.iter().zip(expected).all(|(item, expected)| {
-            AssertrPartialEq::eq(item.borrow(), expected, Some(&mut this.eq_context()))
-        });
+        let matched = window
+            .iter()
+            .zip(expected)
+            .all(|(item, expected)| crate::matchers::equals(item.borrow(), expected));
         if matched { Ok(()) } else { Err(Vec::new()) }
     }) {
         let failure = this
@@ -597,73 +425,5 @@ pub(crate) fn assert_contains_contiguous<S, T, E, I, M: Mode, R>(
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
         preview.facts(failure, None).raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_contiguous_matching<S, T, P, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    predicates: &[P],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    P: Fn(&T) -> bool,
-    R: ValueRenderer<T>,
-{
-    if let Err((preview, _)) = find_contiguous::<T, _>(iterator, predicates.len(), |_, window| {
-        let matched = window
-            .iter()
-            .zip(predicates)
-            .all(|(item, predicate)| predicate(item.borrow()));
-        if matched { Ok(()) } else { Err(Vec::new()) }
-    }) {
-        let failure = this
-            .failure(FailureKind::Predicate)
-            .actual(preview.rendered::<T, _, _, _>(this))
-            .relation("does not contain a contiguous subsequence matching the predicates");
-        preview.facts(failure, None).raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_contiguous_satisfying<S, T, A, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    assertions: &[A],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-    R: ValueRenderer<T> + Clone,
-{
-    if let Err((preview, unsatisfied)) =
-        find_contiguous::<T, _>(iterator, assertions.len(), |start, window| {
-            let unsatisfied = window
-                .iter()
-                .zip(assertions)
-                .enumerate()
-                .filter_map(|(offset, (item, assertion))| {
-                    let failures = this.collect_element_failures(item.borrow(), assertion);
-                    (!failures.is_empty()).then_some((start + offset, failures))
-                })
-                .collect::<Vec<_>>();
-            if unsatisfied.is_empty() {
-                Ok(())
-            } else {
-                Err(unsatisfied)
-            }
-        })
-    {
-        let (children, omitted) = indexed_children(unsatisfied, this.render().max_items());
-        let failure = this
-            .failure(FailureKind::Predicate)
-            .actual(preview.rendered::<T, _, _, _>(this))
-            .relation("does not contain a contiguous subsequence satisfying the assertions");
-        preview
-            .facts(failure, None)
-            .omitted(omitted, "unsatisfied element")
-            .children(children)
-            .raise();
     }
 }

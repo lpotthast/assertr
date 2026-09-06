@@ -6,7 +6,7 @@ use crate::{AssertThat, Mode, failure::FailureKind};
 
 /// Assertions over a subject's [`Display`] representation.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait DisplayAssertions {
     /// Asserts that the subject and `expected` have the same `Display` representation.
     ///

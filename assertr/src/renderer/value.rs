@@ -7,30 +7,29 @@ use core::fmt;
 /// assertion method requires only the implementations its failure path uses.
 ///
 /// The renderer is tracked as type state on [`crate::AssertThat`] (the `R` type parameter) and
-/// defaults to [`DebugRenderer`], which delegates to [`fmt::Debug`]. Supply a custom renderer
-/// with [`crate::AssertThat::with_renderer`] (or [`crate::AssertThat::with_debug_format`] for an
-/// inline closure) for types that do not implement `Debug`.
+/// defaults to [`DebugRenderer`], which delegates to [`fmt::Debug`]. Supply a custom renderer with
+/// [`crate::AssertThat::with_renderer`] (or [`crate::AssertThat::with_debug_format`] for an inline
+/// closure) for types that do not implement `Debug`.
 ///
 /// # Capability bounds belong to methods
 ///
 /// [`crate::AssertThat`] does not require `R: ValueRenderer<T>` at the struct or assertion-trait
-/// implementation level. A chain must exist before installing a renderer for a non-`Debug`
-/// subject. Projections can change `T`, and some methods never render the subject.
+/// implementation level. A chain must exist before installing a renderer for a non-`Debug` subject.
+/// Projections can change `T`, and some methods never render the subject.
 ///
-/// Each assertion method therefore declares only the `ValueRenderer<U>` capabilities used by
-/// its own failure path. Blanket assertion-trait implementations remain available for every `R`.
-/// This keeps unrelated methods available and reports a missing capability on the method that
-/// needs it. Projection and extraction methods preserve `R` instead of resetting it to
-/// [`DebugRenderer`].
+/// Each assertion method therefore declares only the `ValueRenderer<U>` capabilities used by its
+/// own failure path. Blanket assertion-trait implementations remain available for every `R`. This
+/// keeps unrelated methods available and reports a missing capability on the method that needs it.
+/// Projection and extraction methods preserve `R` instead of resetting it to [`DebugRenderer`].
 ///
 /// Custom leaf assertions access the active renderer through
 /// [`AssertThat::render`](crate::AssertThat::render). Render every value included in their failure
 /// text with [`RenderingContext::value`](crate::renderer::RenderingContext::value),
 /// [`RenderingContext::values`](crate::renderer::RenderingContext::values), or
 /// [`RenderingContext::borrowed_values`](crate::renderer::RenderingContext::borrowed_values) so
-/// custom renderers and the chain's [`RenderingBudget`](crate::RenderingBudget) remain effective. Use
-/// [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) to customize the type metadata
-/// retained automatically for a leaf value, and
+/// custom renderers and the chain's [`RenderingBudget`](crate::RenderingBudget) remain effective.
+/// Use [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) to customize the type
+/// metadata retained automatically for a leaf value, and
 /// [`Typed::show_type_hint`](crate::renderer::Typed::show_type_hint) to control whether text output
 /// shows it.
 ///
@@ -43,18 +42,17 @@ use core::fmt;
 ///
 /// Generic assertions that treat their subject as opaque still require a renderer for the whole
 /// subject. This includes direct equality and length assertions. Each method signature shows the
-/// exact requirement.
-/// Identity assertions display pointer addresses through Assertr's internal formatter and require
-/// no value-renderer support. Their diagnostics still respect the chain's rendering budget.
+/// exact requirement. Identity assertions display pointer addresses through Assertr's internal
+/// formatter and require no value-renderer support. Their diagnostics still respect the chain's
+/// rendering budget.
 ///
 /// # `Clone` requirement
 ///
 /// Assertions that derive a child [`crate::AssertThat`] (notably the [`crate::AssertThat::derive`]
 /// and [`crate::AssertThat::satisfies`] families, `is_some_satisfying`, `is_ok_satisfying`, and
-/// assertion methods implemented by composing those operations) require the renderer to be
-/// `Clone` so each derived child receives its own copy. [`DebugRenderer`] is `Copy`, so the
-/// default adds no constraint. A custom renderer used in derived contexts must implement `Clone`
-/// or `Copy`.
+/// assertion methods implemented by composing those operations) require the renderer to be `Clone`
+/// so each derived child receives its own copy. [`DebugRenderer`] is `Copy`, so the default adds no
+/// constraint. A custom renderer used in derived contexts must implement `Clone` or `Copy`.
 ///
 /// # Pretty-printing
 ///

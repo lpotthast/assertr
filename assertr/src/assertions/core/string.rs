@@ -5,7 +5,7 @@ use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 /// Blanket-implemented for every subject that is `AsRef<str>`, so `&str`, `String`, `&String`,
 /// `Box<str>`, and `Cow<str>` all share one implementation and one set of failure messages.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait StrAssertions {
     /// The renderer carried by the assertion chain.
     type Renderer;

@@ -1,7 +1,7 @@
 //! Entry points of the `assert_that!` and `assert_that_owned!` macros.
 //!
-//! **Do not name these items directly.** They are reachable only because the macros expand to
-//! them through `$crate`.
+//! **Do not name these items directly.** They are reachable only because the macros expand to them
+//! through `$crate`.
 
 use core::ops::Deref;
 
@@ -25,10 +25,10 @@ pub struct Wrap<T> {
     pub inner: Fallback<T>,
 }
 
-// Inherent impl for shared-reference expressions - tried FIRST by method resolution.
-// The implicit `Sized` bound on `T` is intentional: unsized targets like `str` and `Path` fall
-// through to the `Fallback` path, keeping the reference itself as the subject. For example, an
-// `&str` subject satisfies the `S: AsRef<str>` bound of the blanket `StrAssertions` impl.
+// Inherent impl for shared-reference expressions - tried FIRST by method resolution. The implicit
+// `Sized` bound on `T` is intentional: unsized targets like `str` and `Path` fall through to the
+// `Fallback` path, keeping the reference itself as the subject. For example, an `&str` subject
+// satisfies the `S: AsRef<str>` bound of the blanket `StrAssertions` impl.
 impl<'a, T> Wrap<&'_ &'a T> {
     #[track_caller]
     #[must_use]
@@ -37,8 +37,8 @@ impl<'a, T> Wrap<&'_ &'a T> {
     }
 }
 
-// Inherent impl for mutable-reference expressions: reborrows immutably. The reborrow is limited
-// to the wrapper's own lifetime, so the resulting assertion must be consumed within the statement.
+// Inherent impl for mutable-reference expressions: reborrows immutably. The reborrow is limited to
+// the wrapper's own lifetime, so the resulting assertion must be consumed within the statement.
 impl<'x, T> Wrap<&'x &'_ mut T> {
     #[track_caller]
     #[must_use]
@@ -107,8 +107,8 @@ impl<'a> Wrap<&'_ &'a std::ffi::OsStr> {
     }
 }
 
-// Deref to Fallback so that when no inherent method above matches,
-// method resolution finds `Fallback::into_assert_that` via deref.
+// Deref to Fallback so that when no inherent method above matches, method resolution finds
+// `Fallback::into_assert_that` via deref.
 impl<T> Deref for Wrap<T> {
     type Target = Fallback<T>;
 
@@ -118,8 +118,8 @@ impl<T> Deref for Wrap<T> {
 }
 
 // Fallback impl: the borrow taken by the macro references the asserted place directly (keeping a
-// named value usable afterwards) or a temporary that lives until the end of the enclosing
-// statement (keeping assertions on literals and temporaries ergonomic).
+// named value usable afterwards) or a temporary that lives until the end of the enclosing statement
+// (keeping assertions on literals and temporaries ergonomic).
 impl<'t, T> Fallback<&'t T> {
     #[track_caller]
     #[must_use]

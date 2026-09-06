@@ -23,8 +23,8 @@ features, and API details.
   merely to hold `pub(crate)` items.
 - Do not bump versions or README dependency examples during ordinary development. For a release, derive the version
   from the changelog, move and date the entries, bump affected crates, update README versions and changelog comparison
-  links, then run the release workflows. Keep `assertr`'s exact `assertr-derive` requirement synchronized with the
-  derive crate because generated code depends on `assertr::__private`.
+  links, then run the release workflows. Keep `assertr`'s exact `assertr-macros` requirement synchronized with the
+  macro crate because generated code depends on `assertr::__private`.
 
 ## Design boundaries
 
@@ -46,8 +46,8 @@ features, and API details.
 - Put behavior, exact diagnostic tests, and built-in adapter tests beside the generic family that owns them. Keep
   downstream-implementor and `no_std` coverage in existing integration fixtures instead of duplicating every
   assertion across every adapter.
-- New assertion traits use `#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]`. Follow
-  `assertr-derive/src/fluent_aliases/naming.rs`. Use an explicit alias only when no rule applies, and
+- New assertion traits use `#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]`. Follow
+  `assertr-macros/src/fluent_aliases/naming.rs`. Use an explicit alias only when no rule applies, and
   `#[no_fluent_alias]` for deprecated names.
 - Keep trait implementations independent of renderer capabilities. Put renderer and `Clone` bounds on individual
   methods in both the trait and impl. Preserve the active renderer in projections and extractions. Add a `NoRenderer`

@@ -104,7 +104,6 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// assert_that!(42).is_greater_than(0).and().is_less_than(100);
     /// assert_that!(42).is_greater_than(0).is_less_than(100);
     /// ```
-    ///
     #[inline]
     #[must_use]
     pub fn and(self) -> Self {

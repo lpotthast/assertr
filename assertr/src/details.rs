@@ -1,17 +1,8 @@
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::Debug;
 
 use crate::{AssertThat, mode::Mode};
-
-pub(crate) struct DisplayString<'a>(pub(crate) &'a str);
-
-impl Debug for DisplayString<'_> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.0)
-    }
-}
 
 pub(crate) trait WithDetail {
     fn collect_messages(&self, collection: &mut Vec<String>);
@@ -33,8 +24,8 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ///
     /// Messages are collected from the failing assertion upward through all of its parents, so a
     /// message set on the subject also shows up in failures of assertions derived from it through
-    /// `satisfies` and friends. Use it for context that belongs to the test ("ids must be
-    /// sorted"). Assertion implementations attach the evidence of one particular failure through
+    /// `satisfies` and friends. Use it for context that belongs to the test ("ids must be sorted").
+    /// Assertion implementations attach the evidence of one particular failure through
     /// [`FailureBuilder::fact`](crate::failure::FailureBuilder::fact) instead.
     #[must_use]
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {

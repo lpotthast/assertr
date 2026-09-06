@@ -33,7 +33,11 @@ use core::{
 };
 
 use super::super::Adapter;
-use crate::{AssertionFailure, Fact, failure::BANNER, renderer::Rendered};
+use crate::{
+    AssertionFailure, Fact,
+    failure::{BANNER, PathSegment},
+    renderer::Rendered,
+};
 
 /// The typed human-readable representation of an assertion failure.
 ///
@@ -108,6 +112,11 @@ impl PartialEq<String> for HumanReadableText {
 }
 
 /// Converts an [`AssertionFailure`] to assertr's stable human-readable text.
+///
+/// Call [`render`](Self::render) on a captured failure for a [`HumanReadableText`] report. Use its
+/// [`Adapter`] implementation when composing a pipeline. The [adapter
+/// guide](crate::failure::adapter) demonstrates both forms and explains how to select a custom
+/// panic presentation.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ToHumanReadableText;
 
@@ -124,6 +133,14 @@ impl ToHumanReadableText {
         write_report(failure, &mut report, false)
             .expect("writing a text report to a String cannot fail");
         report.push_str(BANNER);
+        HumanReadableText(report)
+    }
+
+    /// Includes the path heading used when evidence is displayed inside a parent failure.
+    pub(crate) fn render_child(failure: &AssertionFailure) -> HumanReadableText {
+        let mut report = String::new();
+        write_children(&mut report, core::slice::from_ref(failure))
+            .expect("writing a text report to a String cannot fail");
         HumanReadableText(report)
     }
 }
@@ -193,8 +210,8 @@ fn write_value(output: &mut String, value: &Rendered) {
 
 /// Writes everything between the banners.
 ///
-/// `located` is set for a child whose position was already written as its heading, so the fact
-/// that carries the position is not repeated among its details.
+/// `located` is set for a child whose position was already written as its heading, so the fact that
+/// carries the position is not repeated among its details.
 fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) -> fmt::Result {
     if let Some(location) = failure.location {
         write!(
@@ -224,13 +241,27 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) ->
         failure.expected.as_ref(),
         failure.unexpected.as_ref(),
     );
-    let has_body = !description.is_empty();
+    let has_body = !description.is_empty() || failure.constraint.is_some();
     w.write_str(&description)?;
+    if let Some(constraint) = &failure.constraint {
+        if !description.is_empty() {
+            w.write_str("\n")?;
+        }
+        w.write_str("Constraint:\n")?;
+        write_constraint(constraint, &mut Indented::at_line_start(w))?;
+    }
 
+    let omission_note = (failure.omitted_children > 0).then(|| {
+        Fact::note(crate::renderer::omission(
+            failure.omitted_children,
+            "nested failure",
+        ))
+    });
     let facts = failure
         .facts
         .iter()
         .filter(|fact| !(located && fact.is_location()))
+        .chain(omission_note.iter())
         .collect::<alloc::vec::Vec<_>>();
     let has_blocks =
         !failure.messages.is_empty() || !facts.is_empty() || !failure.children.is_empty();
@@ -240,7 +271,32 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) ->
 
     write_entries(w, "Messages", failure.messages.iter().map(String::as_str))?;
     write_entries(w, "Details", facts.iter().map(|fact| FactText(fact)))?;
+
     write_children(w, &failure.children)
+}
+
+fn write_constraint(description: &crate::matchers::Description, w: &mut dyn Write) -> fmt::Result {
+    w.write_str(&body(
+        None,
+        Some(&description.relation),
+        description.expected.as_ref(),
+        None,
+    ))?;
+    if !description.children.is_empty() {
+        w.write_str("\nConstraints:\n")?;
+        for child in &description.children {
+            w.write_str("  - ")?;
+            write_constraint(child, &mut Indented::continuing(w))?;
+        }
+    }
+    if description.omitted_children > 0 {
+        writeln!(
+            w,
+            "{}",
+            crate::renderer::omission(description.omitted_children, "constraint")
+        )?;
+    }
+    Ok(())
 }
 
 /// A fact as `Display` text without a trailing newline.
@@ -286,7 +342,24 @@ fn write_children(w: &mut dyn Write, children: &[AssertionFailure]) -> fmt::Resu
     for child in children {
         w.write_str("  - ")?;
         let heading = child.facts.iter().find(|fact| fact.is_location());
-        if let Some(heading) = heading {
+        if !child.path.is_empty() {
+            w.write_str("At ")?;
+            for segment in &child.path {
+                match segment {
+                    PathSegment::Field(name) => write!(w, ".{name}")?,
+                    PathSegment::TupleIndex(index) => write!(w, ".{index}")?,
+                    PathSegment::Variant(name) => write!(w, "::{name}")?,
+                    PathSegment::Index(index) => write!(w, "[{index}]")?,
+                    PathSegment::Key(key) => {
+                        w.write_str("[")?;
+                        key.write(w, false)?;
+                        w.write_str("]")?;
+                    }
+                }
+            }
+            w.write_str(":\n")?;
+            write_report(child, &mut Indented::at_line_start(w), true)?;
+        } else if let Some(heading) = heading {
             write!(w, "At {} ", heading.label)?;
             heading.value.write(w, false)?;
             writeln!(w, ":")?;

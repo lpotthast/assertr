@@ -44,16 +44,26 @@ pub(crate) struct IdentityRenderer;
 
 impl<T: ?Sized> ValueRenderer<T> for IdentityRenderer {
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Print only the memory address, using the same format for all output styles and Rust versions.
-        // Pointers may also carry extra information, such as a slice's length. If that information
-        // differs despite equal addresses, the assertion explains the mismatch in a separate note.
+        // Print only the memory address, using the same format for all output styles and Rust
+        // versions. Pointers may also carry extra information, such as a slice's length. If that
+        // information differs despite equal addresses, the assertion explains the mismatch in a
+        // separate note.
         write!(f, "{:p}", core::ptr::from_ref(value).cast::<()>())
     }
 }
 
 impl<'r, R> RenderingContext<'r, R> {
-    pub(crate) const fn new(renderer: &'r R, budget: RenderingBudget) -> Self {
+    /// Creates a context with an explicit renderer and budget.
+    pub const fn new(renderer: &'r R, budget: RenderingBudget) -> Self {
         Self { renderer, budget }
+    }
+
+    pub(crate) const fn renderer(self) -> &'r R {
+        self.renderer
+    }
+
+    pub(crate) const fn budget(self) -> RenderingBudget {
+        self.budget
     }
 
     pub(crate) const fn max_items(self) -> usize {
@@ -69,8 +79,8 @@ impl<'r, R> RenderingContext<'r, R> {
     /// Adapts one typed leaf value to [`Debug`] using the chain's renderer and output budget.
     ///
     /// The returned adapter always retains `T`'s complete Rust type name and a short type hint.
-    /// Text output hides the hint by default; customize the metadata with
-    /// [`Typed::with_type_hint`] and its visibility with [`Typed::show_type_hint`].
+    /// Text output hides the hint by default; customize the metadata with [`Typed::with_type_hint`]
+    /// and its visibility with [`Typed::show_type_hint`].
     pub fn value<'a, T: ?Sized>(self, value: &'a T) -> Typed<RenderedValue<'a, T, R>>
     where
         'r: 'a,
@@ -95,8 +105,8 @@ impl<'r, R> RenderingContext<'r, R> {
 
     /// A typed `owner` rendered as a one-field tuple variant, such as `Err(value)`.
     ///
-    /// The returned adapter retains the owner's type information, while the inner value retains
-    /// its own independently.
+    /// The returned adapter retains the owner's type information, while the inner value retains its
+    /// own independently.
     pub(crate) fn variant<'a, O: ?Sized, T: ?Sized>(
         self,
         _owner: &O,
@@ -115,8 +125,8 @@ impl<'r, R> RenderingContext<'r, R> {
 
     /// A typed `owner` rendered as the named one-field struct and field.
     ///
-    /// The returned adapter retains the owner's type information, while the field value retains
-    /// its own independently.
+    /// The returned adapter retains the owner's type information, while the field value retains its
+    /// own independently.
     pub(crate) fn struct_field<'a, O: ?Sized, T: ?Sized>(
         self,
         _owner: &O,
@@ -230,8 +240,8 @@ impl<'r, R> RenderingContext<'r, R> {
 
     /// The elements of a stable-order collection, always rendered in their semantic order.
     ///
-    /// Positional diagnostics use this adapter instead of the collection's ordinary rendering
-    /// order so a displayed index always refers to the element shown at that position.
+    /// Positional diagnostics use this adapter instead of the collection's ordinary rendering order
+    /// so a displayed index always refers to the element shown at that position.
     pub(crate) fn stable_collection<'a, C>(
         self,
         collection: &'a C,
@@ -277,9 +287,9 @@ impl<'r, R> RenderingContext<'r, R> {
 
     /// A synthetic list of rendered key/value tuples with an explicit iteration-order policy.
     ///
-    /// Every key and value retains its respective type information. The list itself has no
-    /// invented outer Rust type. The adapter retains the collection by reference and obtains its
-    /// entries only when formatted.
+    /// Every key and value retains its respective type information. The list itself has no invented
+    /// outer Rust type. The adapter retains the collection by reference and obtains its entries
+    /// only when formatted.
     pub(crate) fn entry_list<
         'a,
         K: ?Sized,
@@ -485,8 +495,8 @@ fn render_leaf<T: ?Sized, R: ValueRenderer<T>>(
 
 /// Retains at most `maximum` characters of the text written to it and counts the rest.
 ///
-/// A leaf renderer's complete output never has to be held in memory: characters beyond the
-/// limit are counted for the omission marker and dropped as they arrive.
+/// A leaf renderer's complete output never has to be held in memory: characters beyond the limit
+/// are counted for the omission marker and dropped as they arrive.
 struct BoundedOutput {
     retained: String,
     remaining: usize,

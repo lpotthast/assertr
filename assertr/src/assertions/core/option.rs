@@ -2,15 +2,15 @@ use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, failure::FailureKin
 use core::option::Option;
 
 /// Panic-mode extraction from `Option` subjects.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait OptionExtractAssertions<'t, T, R> {
     /// Asserts that the subject is `Some`, then returns an assertion over its value.
     ///
     /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
     ///
     /// This is available only in `Panic` mode because `None` cannot produce a `T`. Use
-    /// [`OptionAssertions::is_some_satisfying`] for capture mode, or the
-    /// non-extracting [`OptionAssertions::is_some`] when the contained value is irrelevant.
+    /// [`OptionAssertions::is_some_satisfying`] for capture mode, or the non-extracting
+    /// [`OptionAssertions::is_some`] when the contained value is irrelevant.
     fn get_some(self) -> AssertThat<'t, T, Panic, R>;
 }
 
@@ -36,19 +36,19 @@ impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, P
 
 /// Non-extracting assertions for `Option` subjects.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait OptionAssertions<'t, T, M: Mode, R> {
     /// Asserts that the subject is `Some`.
     ///
-    /// Non-extracting: the subject stays the full `Option`, so further assertions can be chained
-    /// in any mode. Use [`OptionExtractAssertions::get_some`] to extract the contained value in
-    /// panic mode, or [`OptionAssertions::is_some_satisfying`] to assert on it in any mode.
+    /// Non-extracting: the subject stays the full `Option`, so further assertions can be chained in
+    /// any mode. Use [`OptionExtractAssertions::get_some`] to extract the contained value in panic
+    /// mode, or [`OptionAssertions::is_some_satisfying`] to assert on it in any mode.
     fn is_some(self) -> Self;
 
     /// Asserts that the subject is `None`.
     ///
-    /// Non-extracting: the subject stays the full `Option`, so further assertions can be chained
-    /// in any mode.
+    /// Non-extracting: the subject stays the full `Option`, so further assertions can be chained in
+    /// any mode.
     fn is_none(self) -> Self
     where
         R: ValueRenderer<T>;

@@ -57,7 +57,7 @@ impl AsRef<OsStr> for Program<'_> {
 }
 
 /// Non-extracting assertions for [`Program`] subjects.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ProgramAssertions<'t, 'a, M: Mode, R = crate::DebugRenderer> {
     /// Asserts that [`which::which`] resolves the program.
     fn exists(self) -> AssertThat<'t, Program<'a>, M, R>
@@ -66,7 +66,7 @@ pub trait ProgramAssertions<'t, 'a, M: Mode, R = crate::DebugRenderer> {
 }
 
 /// Panic-mode assertions that project a [`Program`] to its resolved path.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ProgramAssertionsRequiringPanicMode<'t, R = crate::DebugRenderer> {
     /// The program subject rendered in failure diagnostics.
     type Subject;

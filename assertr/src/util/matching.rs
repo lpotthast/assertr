@@ -1,15 +1,16 @@
 //! Maximum bipartite matching between actual values and expectations.
 //!
 //! Every unordered exact comparison (`contains_exactly_in_any_order` and its `_matching` /
-//! `_satisfying` variants on collections and iterators, the order-free fallback of `contains_exactly`,
-//! and [`crate::cmp::slice::compare`]) reduces to the same question: can each actual value be paired
-//! with exactly one expectation, and which ones are left over when it cannot? This module answers it
-//! once, for any relation given as a predicate over index pairs.
+//! `_satisfying` variants on collections and iterators, the order-free fallback of
+//! `contains_exactly`, and structural matcher policies) reduces to the same question: can each
+//! actual value be paired with exactly one expectation, and which ones are left over when it
+//! cannot? This module answers it once, for any relation given as a predicate over index pairs.
 
 use alloc::vec;
 use alloc::vec::Vec;
 
 pub(crate) struct BipartiteMatchResult {
+    pub(crate) matched_pairs: Vec<(usize, usize)>,
     pub(crate) unmatched_actual: Vec<usize>,
     pub(crate) unmatched_expected: Vec<usize>,
 }
@@ -39,15 +40,15 @@ struct PathStep {
 /// several expected predicates while a later value only matches one of them. The augmenting-path
 /// search below revisits earlier choices so an exact matching is found whenever one exists.
 ///
-/// Each value first looks for a free slot and only falls back to displacing an earlier
-/// assignment when there is none. Interchangeable expectations, such as the duplicates of a plain
-/// equality comparison, are therefore assigned in one comparison per value, without ever walking
-/// the chain of earlier assignments.
+/// Each value first looks for a free slot and only falls back to displacing an earlier assignment
+/// when there is none. Interchangeable expectations, such as the duplicates of a plain equality
+/// comparison, are therefore assigned in one comparison per value, without ever walking the chain
+/// of earlier assignments.
 ///
 /// A value that finds no free slot even through reassignment proves that none of the slots it
-/// visited can reach a free slot until the matching changes. Those marks are kept for the
-/// following values and cleared only after a successful assignment, so surplus duplicates share
-/// one exhausted search instead of repeating it.
+/// visited can reach a free slot until the matching changes. Those marks are kept for the following
+/// values and cleared only after a successful assignment, so surplus duplicates share one exhausted
+/// search instead of repeating it.
 ///
 /// The path is an explicit stack, so the input size cannot overflow the call stack.
 pub(crate) fn match_bipartite(
@@ -78,6 +79,11 @@ pub(crate) fn match_bipartite(
     }
 
     BipartiteMatchResult {
+        matched_pairs: expected_to_actual
+            .iter()
+            .enumerate()
+            .filter_map(|(expected, actual)| actual.map(|actual| (actual, expected)))
+            .collect(),
         unmatched_actual: matched_actual
             .iter()
             .enumerate()
@@ -238,8 +244,8 @@ mod tests {
                 .is_equal_to((expected_len..actual_len).collect::<Vec<_>>().as_slice());
             assert_that!(result.unmatched_expected).is_empty();
             // The first value that finds no free slot compares against every slot once while
-            // proving that no reassignment can free one. The remaining surplus values reuse
-            // that proof instead of repeating the search.
+            // proving that no reassignment can free one. The remaining surplus values reuse that
+            // proof instead of repeating the search.
             assert_that!(comparisons).is_equal_to(2 * expected_len);
         }
 
@@ -269,9 +275,8 @@ mod tests {
                 |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
             );
 
-            // The third `1` exhausts every reassignment through the first two predicates. That
-            // must neither block the `5` from taking its own predicate nor leave a predicate
-            // unmatched.
+            // The third `1` exhausts every reassignment through the first two predicates. That must
+            // neither block the `5` from taking its own predicate nor leave a predicate unmatched.
             assert_that!(result.unmatched_actual.as_slice()).is_equal_to([2, 3].as_slice());
             assert_that!(result.unmatched_expected).is_empty();
         }

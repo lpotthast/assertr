@@ -1,7 +1,6 @@
 use super::{
-    AssertThat, AssertionFailure, AssertrPartialEq, Borrow, Capture, FailureBuilder, FailureKind,
-    GroupStyle, Mode, PREVIEW_CAPACITY, PositionReporting, Preview, ValueRenderer, Vec,
-    exact_size_hint, match_bipartite,
+    AssertThat, Borrow, FailureBuilder, FailureKind, GroupStyle, Mode, PREVIEW_CAPACITY, Preview,
+    ValueRenderer, Vec, exact_size_hint, match_bipartite,
 };
 use crate::failure::Attached;
 
@@ -45,8 +44,8 @@ fn bounded_preview<Item>(mut captured: Captured<Item>) -> Preview<Item> {
     }
 }
 
-/// Starts the failure of an unordered exact assertion over the captured elements, with the
-/// preview facts and, when the iterator reported a differing length up front, that length.
+/// Starts the failure of an unordered exact assertion over the captured elements, with the preview
+/// facts and, when the iterator reported a differing length up front, that length.
 #[track_caller]
 fn unordered_failure<'c, S, T, Item, M: Mode, R>(
     this: &'c AssertThat<'_, S, M, R>,
@@ -82,17 +81,13 @@ pub(crate) fn assert_contains_exactly_in_any_order<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: AssertrPartialEq<E, R>,
+    T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
     let captured = capture_unordered(iterator, expected.len());
     let exact = captured.known_length.is_none()
         && match_bipartite(captured.items.len(), expected.len(), |a, e| {
-            AssertrPartialEq::eq(
-                captured.items[a].borrow(),
-                &expected[e],
-                Some(&mut this.eq_context()),
-            )
+            crate::matchers::equals(captured.items[a].borrow(), &expected[e])
         })
         .is_exact();
     if !exact {
@@ -107,111 +102,6 @@ pub(crate) fn assert_contains_exactly_in_any_order<S, T, E, I, M: Mode, R>(
             this.render()
                 .borrowed_values::<E, _>(expected, GroupStyle::List),
         )
-        .raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_exactly_in_any_order_matching<S, T, P, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    predicates: &[P],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    P: Fn(&T) -> bool,
-    R: ValueRenderer<T>,
-{
-    let captured = capture_unordered(iterator, predicates.len());
-    let exact = captured.known_length.is_none()
-        && match_bipartite(captured.items.len(), predicates.len(), |a, p| {
-            predicates[p](captured.items[a].borrow())
-        })
-        .is_exact();
-    if !exact {
-        unordered_failure::<_, T, _, _, _>(
-            this,
-            captured,
-            FailureKind::Predicate,
-            "does not exactly match the predicates in any order",
-            predicates.len(),
-        )
-        .raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_exactly_in_any_order_satisfying<S, T, A, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    assertions: &[A],
-    positions: PositionReporting,
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-    R: ValueRenderer<T> + Clone,
-{
-    let captured = capture_unordered(iterator, assertions.len());
-    // Failures are retained only for the elements the preview will show.
-    let preview_start = captured.items.len().saturating_sub(PREVIEW_CAPACITY);
-    let mut satisfied = Vec::new();
-    let mut retained_failures: Vec<Vec<AssertionFailure>> = Vec::new();
-    if captured.known_length.is_none() {
-        for (index, item) in captured.items.iter().enumerate() {
-            let mut row = Vec::new();
-            let mut retained_row = (index >= preview_start).then(Vec::new);
-            for assertion in assertions {
-                let failures = this.collect_element_failures(item.borrow(), assertion);
-                row.push(failures.is_empty());
-                if let Some(retained_row) = &mut retained_row {
-                    retained_row.extend(failures);
-                }
-            }
-            satisfied.push(row);
-            if let Some(retained_row) = retained_row {
-                retained_failures.push(retained_row);
-            }
-        }
-    }
-    let result = match_bipartite(captured.items.len(), assertions.len(), |a, p| {
-        satisfied
-            .get(a)
-            .and_then(|row| row.get(p))
-            .copied()
-            .unwrap_or(false)
-    });
-    if captured.known_length.is_some() || !result.is_exact() {
-        let maximum = this.render().max_items();
-        let mut unsatisfied = result
-            .unmatched_actual
-            .iter()
-            .copied()
-            .filter(|index| *index >= preview_start)
-            .filter_map(|index| {
-                let failures = core::mem::take(retained_failures.get_mut(index - preview_start)?);
-                (!failures.is_empty()).then_some((index, failures))
-            })
-            .collect::<Vec<_>>();
-        let omitted = unsatisfied.len().saturating_sub(maximum);
-        unsatisfied.truncate(maximum);
-        let children = unsatisfied
-            .into_iter()
-            .flat_map(|(index, failures)| {
-                failures
-                    .into_iter()
-                    .map(move |failure| positions.locate(failure, index))
-            })
-            .collect::<Vec<_>>();
-        unordered_failure::<_, T, _, _, _>(
-            this,
-            captured,
-            FailureKind::Predicate,
-            "does not exactly satisfy the assertions in any order",
-            assertions.len(),
-        )
-        .omitted(omitted, "unsatisfied element")
-        .children(children)
         .raise();
     }
 }

@@ -5,9 +5,9 @@ use crate::{AssertThat, ValueRenderer, failure::FailureKind, mode::Panic};
 
 /// Panic-mode indexed extraction from collections with [`RandomAccess`].
 ///
-/// The method borrows the assertion chain and returns an assertion borrowing the selected
-/// element. It is statically unavailable for stable-order collections such as linked lists and
-/// for unordered collections such as sets.
+/// The method borrows the assertion chain and returns an assertion borrowing the selected element.
+/// It is statically unavailable for stable-order collections such as linked lists and for unordered
+/// collections such as sets.
 ///
 /// ```compile_fail,E0599
 /// use assertr::prelude::*;
@@ -15,7 +15,7 @@ use crate::{AssertThat, ValueRenderer, failure::FailureKind, mode::Panic};
 ///
 /// assert_that!(LinkedList::from([1, 2, 3])).get_at(1);
 /// ```
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RandomAccessExtractAssertions<'t, T, R> {
     /// Asserts that `index` is in bounds, then returns an assertion over that element.
     fn get_at(&'t self, index: usize) -> AssertThat<'t, T, Panic, R>

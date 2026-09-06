@@ -1,12 +1,12 @@
 /// Limits the amount of diagnostic output produced by one assertion chain.
 ///
-/// The default allows 256 items in each repeated diagnostic group and retains 4,096 characters
-/// from each rendered leaf value. A group can be a collection, a map, or per-item assertion
-/// evidence. The leaf limit applies separately to every collection element and map key or value.
-/// An opaque value counts as one leaf, so the limit can truncate its whole representation. It is
-/// not a total character limit for the collection or failure. Truncated output always includes the
-/// number of omitted items or characters. Use [`RenderingBudget::unlimited`] to retain complete
-/// output regardless of size.
+/// The default allows 256 items in each repeated diagnostic group and retains 4,096 characters from
+/// each rendered leaf value. A group can be a collection, a map, or per-item assertion evidence.
+/// The leaf limit applies separately to every collection element and map key or value. An opaque
+/// value counts as one leaf, so the limit can truncate its whole representation. It is not a total
+/// character limit for the collection or failure. Truncated output always includes the number of
+/// omitted items or characters. Use [`RenderingBudget::unlimited`] to retain complete output
+/// regardless of size.
 ///
 /// ```
 /// use assertr::prelude::*;

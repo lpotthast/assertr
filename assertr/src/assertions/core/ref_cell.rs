@@ -3,7 +3,7 @@ use core::cell::RefCell;
 
 /// Assertions for the dynamic borrow state of a [`RefCell`].
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RefCellAssertions<T, R> {
     /// Asserts that the `RefCell` has an active shared or mutable borrow.
     fn is_borrowed(self) -> Self

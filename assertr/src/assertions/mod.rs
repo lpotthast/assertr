@@ -27,12 +27,12 @@
 //! # Renderer capabilities
 //!
 //! An assertion trait is implemented independently of the active renderer's capabilities. Each
-//! method requires only the [`ValueRenderer`](crate::ValueRenderer) implementations its
-//! own failure path uses. Consequently, a renderer that cannot format one value does not hide an
-//! entire assertion family, and projections preserve the active renderer until a later method
-//! needs a specific rendering capability. See
-//! [`ValueRenderer`](crate::ValueRenderer#capability-bounds-belong-to-methods) for the
-//! design rationale.
+//! method requires only the [`ValueRenderer`](crate::ValueRenderer) implementations its own failure
+//! path uses. Consequently, a renderer that cannot format one value does not hide an entire
+//! assertion family, and projections preserve the active renderer until a later method needs a
+//! specific rendering capability. See
+//! [`ValueRenderer`](crate::ValueRenderer#capability-bounds-belong-to-methods) for the design
+//! rationale.
 //!
 //! To extend an existing family to a custom type, implement [`HasLength`] for length assertions,
 //! [`Collection`](collection::Collection) for order-free element assertions,
@@ -52,6 +52,7 @@ pub(crate) mod iterator;
 #[cfg(feature = "jiff")]
 pub mod jiff;
 pub mod map;
+pub mod matcher;
 #[cfg(feature = "num")]
 pub mod num;
 #[cfg(feature = "program")]

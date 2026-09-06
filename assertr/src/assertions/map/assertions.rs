@@ -2,23 +2,29 @@ use alloc::vec::Vec;
 use core::borrow::Borrow;
 
 use super::{Map, MapKeyQuery, MapLookup, imp};
-use crate::{AssertThat, AssertrPartialEq, Mode, ValueRenderer, mode::Capture};
+use crate::{
+    AssertThat, Mode, ValueRenderer,
+    failure::{FailureKind, PathSegment},
+    matchers::{self, AssertrMatcher, Description, EntryMatcherList, MatchContext},
+    mode::Capture,
+    renderer::IntoRendered,
+};
 
 /// Assertions over the keys, values, and entries of a map: `BTreeMap`, `HashMap`, and every type
 /// implementing [`Map`].
 ///
-/// Single-key assertions accept `&Q`. Bulk keys implement [`MapKeyQuery<K>`], whose
-/// associated query type keeps borrowed lookup inference-friendly. Both go through the map's native
+/// Single-key assertions accept `&Q`. Bulk keys implement [`MapKeyQuery<K>`], whose associated
+/// query type keeps borrowed lookup inference-friendly. Both go through the map's native
 /// [`MapLookup<Q>`], so the bounds are the map's own: `Q: Hash + Eq` on a `HashMap`, `Q: Ord` on a
-/// `BTreeMap`. Because the standard maps look up any `Q` their key borrows as, a
-/// `HashMap<String, _>` can be queried with a `str`. The [`MapAssertions::Map`] associated type
-/// names the subject map so methods can express that requirement. Assertr renders the map
-/// structure. The renderer needs capabilities only for keys and values.
+/// `BTreeMap`. Because the standard maps look up any `Q` their key borrows as, a `HashMap<String,
+/// _>` can be queried with a `str`. The [`MapAssertions::Map`] associated type names the subject
+/// map so methods can express that requirement. Assertr renders the map structure. The renderer
+/// needs capabilities only for keys and values.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait MapAssertions<K, V, R> {
-    /// The subject map type. Assertions that query a key require it to implement
-    /// [`MapLookup`] for the query type.
+    /// The subject map type. Assertions that query a key require it to implement [`MapLookup`] for
+    /// the query type.
     type Map: Map<Key = K, Value = V>;
 
     /// Asserts that the map has an entry under `expected`, regardless of its value.
@@ -38,36 +44,35 @@ pub trait MapAssertions<K, V, R> {
     /// Asserts that at least one map value equals `expected`.
     fn contains_value<E>(self, expected: E) -> Self
     where
-        V: AssertrPartialEq<E, R>,
+        V: PartialEq<E>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E>;
 
     /// Asserts that no map value equals `not_expected`.
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
-        V: AssertrPartialEq<E, R>,
+        V: PartialEq<E>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E>;
 
     /// Asserts that the map maps `key` to `value`.
     ///
     /// `value` is accepted owned or borrowed. When the stored value type is itself a reference,
-    /// such as `&str`, a borrowed argument satisfies both `Borrow<str>` and `Borrow<&str>` and
-    /// the expected type `E` cannot be inferred. Name it with
-    /// `contains_entry::<&str, _>("k", "v")`.
+    /// such as `&str`, a borrowed argument satisfies both `Borrow<str>` and `Borrow<&str>` and the
+    /// expected type `E` cannot be inferred. Name it with `contains_entry::<&str, _>("k", "v")`.
     ///
-    /// This performs one assertion covering both key presence and value equality. A missing key
-    /// is reported once.
+    /// This performs one assertion covering both key presence and value equality. A missing key is
+    /// reported once.
     fn contains_entry<E, Q>(self, key: &Q, value: impl Borrow<E>) -> Self
     where
         Q: ?Sized,
         Self::Map: MapLookup<Q>,
-        V: AssertrPartialEq<E, R>,
+        V: PartialEq<E>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E>;
 
     /// Asserts that the map has `key` and its value satisfies `assertions`.
     ///
     /// The assertions run in capture mode against the value. If any fail, this method raises one
-    /// map-level failure carrying every captured value failure as a nested failure located at
-    /// the key.
+    /// map-level failure carrying every captured value failure as a nested failure located at the
+    /// key.
     fn contains_entry_satisfying<A, Q>(self, key: &Q, assertions: A) -> Self
     where
         Q: ?Sized,
@@ -77,14 +82,13 @@ pub trait MapAssertions<K, V, R> {
 
     /// Asserts that the map does not map `key` to `value`. This passes when the key is absent as
     /// well as when it is present with a different value. Like
-    /// [`contains_entry`](MapAssertions::contains_entry), it needs the expected type named when
-    /// the stored value type is a reference. Use
-    /// `does_not_contain_entry::<&str, _>("k", "v")`.
+    /// [`contains_entry`](MapAssertions::contains_entry), it needs the expected type named when the
+    /// stored value type is a reference. Use `does_not_contain_entry::<&str, _>("k", "v")`.
     fn does_not_contain_entry<E, Q>(self, key: &Q, value: impl Borrow<E>) -> Self
     where
         Q: ?Sized,
         Self::Map: MapLookup<Q>,
-        V: AssertrPartialEq<E, R>,
+        V: PartialEq<E>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E>;
 
     /// Asserts that every expected key is present. Extra map keys are allowed.
@@ -101,25 +105,22 @@ pub trait MapAssertions<K, V, R> {
     where
         EK: MapKeyQuery<K>,
         Self::Map: MapLookup<<EK as MapKeyQuery<K>>::Query>,
-        V: AssertrPartialEq<EV, R>,
+        V: PartialEq<EV>,
         I: IntoIterator<Item = (EK, EV)>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK> + ValueRenderer<EV>;
 
     /// Asserts that the map contains exactly the given keys and that each value matches the
     /// predicate paired with its key. Missing and unexpected keys are failures.
-    fn contains_exactly_entries_matching<EK, P, I>(self, predicates: I) -> Self
+    fn contains_exactly_entries_matching<L>(self, expected: L) -> Self
     where
-        EK: MapKeyQuery<K>,
-        Self::Map: MapLookup<<EK as MapKeyQuery<K>>::Query>,
-        P: Fn(&V) -> bool,
-        I: IntoIterator<Item = (EK, P)>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK>;
+        L: EntryMatcherList<Self::Map, R>,
+        R: ValueRenderer<K>;
 
     /// Asserts that the map contains exactly the given keys and that each value satisfies the
     /// assertions paired with its key. Missing and unexpected keys are failures.
     ///
-    /// Each value's assertions run in capture mode. Every captured failure is retained as a
-    /// nested failure of the map-level diagnostic, located at its expected key.
+    /// Each value's assertions run in capture mode. Every captured failure is retained as a nested
+    /// failure of the map-level diagnostic, located at its expected key.
     fn contains_exactly_entries_satisfying<EK, A, I>(self, assertions: I) -> Self
     where
         EK: MapKeyQuery<K>,
@@ -127,10 +128,23 @@ pub trait MapAssertions<K, V, R> {
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         I: IntoIterator<Item = (EK, A)>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK> + Clone;
+    /// Asserts that the value at a key satisfies a matcher.
+    #[track_caller]
+    fn contains_entry_matching<Q: ?Sized, E>(self, key: &Q, expected: E) -> Self
+    where
+        Self::Map: MapLookup<Q>,
+        E: AssertrMatcher<V, R>,
+        R: ValueRenderer<Q>;
+
+    /// Asserts that some map value satisfies a matcher.
+    #[track_caller]
+    fn contains_value_matching<E>(self, expected: E) -> Self
+    where
+        E: AssertrMatcher<V, R>;
 }
 
-// `K` and `V` are explicit impl parameters rather than written as `Mp::Key` / `Mp::Value`: a
-// method bound `Mp: MapLookup<Mp::Key>` is a bounds cycle (E0391), `Mp: MapLookup<K>` is not.
+// `K` and `V` are explicit impl parameters rather than written as `Mp::Key` / `Mp::Value`: a method
+// bound `Mp: MapLookup<Mp::Key>` is a bounds cycle (E0391), `Mp: MapLookup<K>` is not.
 impl<Mp, K, V, M, R> MapAssertions<K, V, R> for AssertThat<'_, Mp, M, R>
 where
     Mp: Map<Key = K, Value = V>,
@@ -163,7 +177,7 @@ where
     #[track_caller]
     fn contains_value<E>(self, expected: E) -> Self
     where
-        Mp::Value: AssertrPartialEq<E, R>,
+        Mp::Value: PartialEq<E>,
         R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E>,
     {
         imp::assert_contains_value(&self, &expected);
@@ -173,7 +187,7 @@ where
     #[track_caller]
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
-        Mp::Value: AssertrPartialEq<E, R>,
+        Mp::Value: PartialEq<E>,
         R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E>,
     {
         imp::assert_does_not_contain_value(&self, &not_expected);
@@ -185,7 +199,7 @@ where
     where
         Q: ?Sized,
         Mp: MapLookup<Q>,
-        Mp::Value: AssertrPartialEq<E, R>,
+        Mp::Value: PartialEq<E>,
         R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<Q> + ValueRenderer<E>,
     {
         imp::assert_contains_entry(&self, key, value.borrow());
@@ -200,8 +214,7 @@ where
         A: for<'a> Fn(AssertThat<'a, Mp::Value, Capture, R>),
         R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<Q> + Clone,
     {
-        imp::assert_contains_entry_satisfying(&self, key, &assertions);
-        self
+        self.contains_entry_matching(key, matchers::satisfying(assertions))
     }
 
     #[track_caller]
@@ -209,7 +222,7 @@ where
     where
         Q: ?Sized,
         Mp: MapLookup<Q>,
-        Mp::Value: AssertrPartialEq<E, R>,
+        Mp::Value: PartialEq<E>,
         R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<Q> + ValueRenderer<E>,
     {
         imp::assert_does_not_contain_entry(&self, key, value.borrow());
@@ -234,7 +247,7 @@ where
     where
         EK: MapKeyQuery<K>,
         Mp: MapLookup<<EK as MapKeyQuery<K>>::Query>,
-        Mp::Value: AssertrPartialEq<EV, R>,
+        Mp::Value: PartialEq<EV>,
         I: IntoIterator<Item = (EK, EV)>,
         R: ValueRenderer<Mp::Key>
             + ValueRenderer<Mp::Value>
@@ -247,16 +260,14 @@ where
     }
 
     #[track_caller]
-    fn contains_exactly_entries_matching<EK, P, I>(self, predicates: I) -> Self
+    fn contains_exactly_entries_matching<L>(self, expected: L) -> Self
     where
-        EK: MapKeyQuery<K>,
-        Mp: MapLookup<<EK as MapKeyQuery<K>>::Query>,
-        P: Fn(&Mp::Value) -> bool,
-        I: IntoIterator<Item = (EK, P)>,
-        R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<EK>,
+        L: EntryMatcherList<Self::Map, R>,
+        R: ValueRenderer<K>,
     {
-        let predicates = predicates.into_iter().collect::<Vec<_>>();
-        imp::assert_contains_exactly_entries_matching(&self, predicates.as_slice());
+        self.track_assertion();
+
+        self.assert_matcher(&matchers::entries_are(expected), true);
         self
     }
 
@@ -269,14 +280,166 @@ where
         I: IntoIterator<Item = (EK, A)>,
         R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<EK> + Clone,
     {
-        let assertions = assertions.into_iter().collect::<Vec<_>>();
-        imp::assert_contains_exactly_entries_satisfying(&self, assertions.as_slice());
+        self.contains_exactly_entries_matching(matchers::entry_matchers(
+            assertions
+                .into_iter()
+                .map(|(key, assertions)| (key, matchers::satisfying(assertions))),
+        ))
+    }
+
+    #[track_caller]
+    fn contains_entry_matching<Q: ?Sized, E>(self, key: &Q, expected: E) -> Self
+    where
+        Self::Map: MapLookup<Q>,
+        E: AssertrMatcher<V, R>,
+        R: ValueRenderer<Q>,
+    {
+        self.track_assertion();
+
+        let mut context = MatchContext::for_assertion(&self);
+        let evaluate = |context: &mut MatchContext<'_, R>| {
+            if let Some((_, value)) = self.actual().get_key_value(key) {
+                let result = expected.evaluate(value, context);
+                if !result.matched && context.evidence.is_empty() && context.omitted == 0 {
+                    context.outcome(false, |context| expected.describe(context));
+                }
+                result
+            } else {
+                context.outcome(false, |_| Description::new("contains the required key"))
+            }
+        };
+        let result = if context.is_diagnostic() {
+            let path = PathSegment::Key(self.render().value(key).into_rendered());
+            context.scoped(path, evaluate)
+        } else {
+            evaluate(&mut context)
+        };
+        if !result.matched {
+            self.failure(FailureKind::Matching)
+                .relation("does not contain a matching entry")
+                .omitted_children(context.omitted_children())
+                .children(context.into_failures())
+                .raise();
+        }
+        self
+    }
+
+    #[track_caller]
+    fn contains_value_matching<E>(self, expected: E) -> Self
+    where
+        E: AssertrMatcher<V, R>,
+    {
+        self.track_assertion();
+
+        let mut context =
+            MatchContext::for_assertion(&self).isolated_for_order(Self::Map::RENDERING_ORDER);
+        let mut matched = false;
+        for (_, value) in self.actual().entries() {
+            let mut branch = context.fork();
+            if expected.evaluate(value, &mut branch).matched {
+                matched = true;
+                break;
+            }
+            branch.commit();
+        }
+        if matched {
+            return self;
+        }
+        if context.evidence.is_empty() && context.omitted == 0 {
+            context.outcome(false, |context| expected.describe(context));
+        }
+        self.failure(FailureKind::Matching)
+            .relation("does not contain a matching value")
+            .omitted_children(context.omitted_children())
+            .children(context.into_failures())
+            .raise();
         self
     }
 }
 
 #[cfg(test)]
 mod tests {
+    mod contains_entry_matching {
+        use crate::{
+            matchers::{anything, equal_to},
+            prelude::*,
+        };
+        use alloc::collections::BTreeMap;
+
+        #[cfg(feature = "fluent")]
+        #[test]
+        fn fluent_alias_is_as_expected() {
+            BTreeMap::from([("a", 1)])
+                .must()
+                .contain_entry_matching("a", equal_to(1));
+        }
+
+        #[test]
+        fn preserves_borrowed_lookup_and_key_paths() {
+            let map = BTreeMap::from([(alloc::string::String::from("a"), 1)]);
+            assert_that!(map).contains_entry_matching("a", equal_to(1));
+            let failures =
+                assert_that!(map).capture(|it| it.contains_entry_matching("b", anything()));
+            assert_that!(&failures[0].children[0].path[0])
+                .is_matching(pattern!(crate::failure::PathSegment::Key(_)));
+        }
+
+        #[test]
+        fn zero_budget_does_not_render_keys() {
+            struct NeverRender;
+            impl ValueRenderer<str> for NeverRender {
+                fn fmt(&self, _: &str, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("omitted key rendered")
+                }
+            }
+            let map = BTreeMap::from([("a", 1)]);
+            let failures = assert_that!(map)
+                .with_renderer(NeverRender)
+                .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
+                .capture(|it| it.contains_entry_matching("b", anything()));
+            assert_that!(failures[0].omitted_children).is_equal_to(1);
+        }
+    }
+
+    mod contains_value_matching {
+        use crate::{matchers::predicate, prelude::*};
+        use alloc::collections::BTreeMap;
+
+        #[cfg(feature = "fluent")]
+        #[test]
+        fn fluent_alias_is_as_expected() {
+            BTreeMap::from([("a", 1)])
+                .must()
+                .contain_value_matching(predicate(|x: &i32| *x == 1));
+        }
+
+        #[test]
+        fn requires_neither_key_nor_value_rendering() {
+            assert_that!(BTreeMap::from([("a", 1)]))
+                .with_renderer(crate::test_support::NoRenderer)
+                .contains_value_matching(predicate(|x: &i32| *x == 1));
+        }
+
+        #[test]
+        fn sorts_candidate_evidence_before_limiting_it() {
+            use crate::{matchers::equal_to, test_support::UnorderedMap};
+
+            let capture = |entries| {
+                let actual = UnorderedMap(entries);
+                assert_that!(actual)
+                    .with_location(false)
+                    .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
+                    .capture(|it| it.contains_value_matching(equal_to(9)))
+            };
+            let expected = capture(vec![(1, 1), (2, 2), (3, 3)]);
+            let actual = capture(vec![(3, 3), (2, 2), (1, 1)]);
+            assert_that!(actual[0].children).has_length(1);
+            assert_that!(actual[0].omitted_children).is_equal_to(2);
+            assert_that!(ToHumanReadableText.render(&actual[0]))
+                .is_equal_to(ToHumanReadableText.render(&expected[0]));
+        }
+    }
+
     mod renderer_contract {
         use alloc::collections::BTreeMap;
 
@@ -485,9 +648,8 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "derive")]
-        fn can_check_for_derived_type() {
-            #[derive(Debug, PartialEq, AssertrEq)]
+        fn can_check_for_custom_type() {
+            #[derive(Debug, PartialEq)]
             struct Data {
                 data: u32,
             }
@@ -699,18 +861,19 @@ mod tests {
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("retries", 3)])`
+                -------- assertr --------
+                Expression: `BTreeMap::from([("retries", 3)])`
 
-                    Actual: BTreeMap {{
-                        "retries": 3,
-                    }}
+                does not contain a matching entry
 
-                    does not contain key
+                Nested failures:
+                  - At ["timeout"]:
+                    does not satisfy the constraint
 
-                    Expected: "timeout"
-                    -------- assertr --------
-                "#});
+                    Constraint:
+                        contains the required key
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -721,10 +884,27 @@ mod tests {
                     .contains_entry_satisfying("retries", is_positive_and_large);
             })
             .has_type::<String>()
-            .contains("does not contain a value satisfying the assertions at a key")
-            .contains(
-                "Nested failures:\n  - At key \"retries\":\n    Actual: -3\n\n    is not greater than\n\n    Expected: 0\n  - At key \"retries\":\n    Actual: -3\n\n    is not greater than\n\n    Expected: 10\n",
-            );
+            .is_equal_to(indoc::formatdoc! {r#"
+                -------- assertr --------
+                Expression: `BTreeMap::from([("retries", -3)])`
+
+                does not contain a matching entry
+
+                Nested failures:
+                  - At ["retries"]:
+                    Actual: -3
+
+                    is not greater than
+
+                    Expected: 0
+                  - At ["retries"]:
+                    Actual: -3
+
+                    is not greater than
+
+                    Expected: 10
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1152,15 +1332,24 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             BTreeMap::from([("a", 1)])
                 .must()
-                .contain_exactly_entries_matching([("a", is_one)]);
+                .contain_exactly_entries_matching(crate::matchers::entry_matchers(
+                    ([("a", is_one)])
+                        .into_iter()
+                        .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                ));
         }
 
         #[test]
         fn succeeds_when_the_keys_are_exact_and_each_value_matches() {
             let predicates: [(&str, Predicate); 2] = [("b", is_two), ("a", is_one)];
 
-            assert_that!(BTreeMap::from([("a", 1), ("b", 2)]))
-                .contains_exactly_entries_matching(predicates);
+            assert_that!(BTreeMap::from([("a", 1), ("b", 2)])).contains_exactly_entries_matching(
+                crate::matchers::entry_matchers(
+                    (predicates)
+                        .into_iter()
+                        .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                ),
+            );
         }
 
         #[test]
@@ -1168,7 +1357,11 @@ mod tests {
             let predicates: [(&str, Predicate); 2] = [("b", is_two), ("a", is_one)];
             let map = BTreeMap::from([(String::from("a"), 1), (String::from("b"), 2)]);
 
-            assert_that!(map).contains_exactly_entries_matching(predicates);
+            assert_that!(map).contains_exactly_entries_matching(crate::matchers::entry_matchers(
+                (predicates)
+                    .into_iter()
+                    .map(|(key, p)| (key, crate::matchers::predicate(p))),
+            ));
         }
 
         #[test]
@@ -1178,27 +1371,27 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(BTreeMap::from([("a", 2)]))
                     .with_location(false)
-                    .contains_exactly_entries_matching(predicates);
+                    .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+                        (predicates)
+                            .into_iter()
+                            .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                    ));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("a", 2)])`
+                -------- assertr --------
+                Expression: `BTreeMap::from([("a", 2)])`
 
-                    Actual: BTreeMap {{
-                        "a": 2,
-                    }}
+                does not match
 
-                    does not exactly contain entries matching the predicates
+                Nested failures:
+                  - At ["missing"]:
+                    does not satisfy the constraint
 
-                    Details:
-                      - Actual length: 1
-                      - Expected length: 2
-                      - Keys not found: [
-                            "missing",
-                        ]
-                    -------- assertr --------
-                "#});
+                    Constraint:
+                        contains the required key
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1208,24 +1401,40 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(BTreeMap::from([("a", 1)]))
                     .with_location(false)
-                    .contains_exactly_entries_matching(predicates);
+                    .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+                        (predicates)
+                            .into_iter()
+                            .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                    ));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("a", 1)])`
+                -------- assertr --------
+                Expression: `BTreeMap::from([("a", 1)])`
 
-                    Actual: BTreeMap {{
-                        "a": 1,
-                    }}
+                does not match
 
-                    does not exactly contain entries matching the predicates
+                Nested failures:
+                  - does not satisfy the constraint
 
-                    Details:
-                      - Actual length: 1
-                      - Expected length: 2
-                    -------- assertr --------
-                "#});
+                    Constraint:
+                        has exactly the matching entries
+
+                        Constraints:
+                          - has a matching entry
+
+                            Expected: "a"
+
+                            Constraints:
+                              - satisfies the predicate
+                          - has a matching entry
+
+                            Expected: "a"
+
+                            Constraints:
+                              - satisfies the predicate
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1233,31 +1442,24 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(BTreeMap::from([("a", 1), ("extra", 9)]))
                     .with_location(false)
-                    .contains_exactly_entries_matching([("a", is_one)]);
+                    .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+                        ([("a", is_one)])
+                            .into_iter()
+                            .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                    ));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("a", 1), ("extra", 9)])`
+                -------- assertr --------
+                Expression: `BTreeMap::from([("a", 1), ("extra", 9)])`
 
-                    Actual: BTreeMap {{
-                        "a": 1,
-                        "extra": 9,
-                    }}
+                does not match
 
-                    does not exactly contain entries matching the predicates
-
-                    Details:
-                      - Actual length: 2
-                      - Expected length: 1
-                      - Unexpected entries: [
-                            (
-                                "extra",
-                                9,
-                            ),
-                        ]
-                    -------- assertr --------
-                "#});
+                Nested failures:
+                  - At ["extra"]:
+                    has an unexpected key
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1265,26 +1467,59 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(BTreeMap::from([("a", 1)]))
                     .with_location(false)
-                    .contains_exactly_entries_matching([("a", is_two)]);
+                    .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+                        ([("a", is_two)])
+                            .into_iter()
+                            .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                    ));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("a", 1)])`
+                -------- assertr --------
+                Expression: `BTreeMap::from([("a", 1)])`
 
-                    Actual: BTreeMap {{
-                        "a": 1,
-                    }}
+                does not match
 
-                    does not exactly contain entries matching the predicates
+                Nested failures:
+                  - At ["a"]:
+                    does not satisfy the constraint
 
-                    Nested failures:
-                      - At key "a":
-                        Actual: 1
+                    Constraint:
+                        satisfies the predicate
+                -------- assertr --------
+            "#});
+        }
 
-                        does not match its predicate
-                    -------- assertr --------
-                "#});
+        #[test]
+        fn keyed_lists_can_be_reused_by_reference() {
+            let map = alloc::collections::BTreeMap::from([("a", 1)]);
+            let expected = entries_are![("a", 1)];
+            assert_that!(map)
+                .contains_exactly_entries_matching(&expected)
+                .contains_exactly_entries_matching(&expected);
+        }
+
+        #[test]
+        fn supports_large_homogeneous_keyed_lists() {
+            let map: BTreeMap<_, _> = (0..4096).map(|key| (key, key)).collect();
+            let expected = crate::matchers::entry_matchers(
+                (0..4096)
+                    .rev()
+                    .map(|key| (key, crate::matchers::equal_to(key))),
+            );
+
+            assert_that!(map).contains_exactly_entries_matching(expected);
+        }
+
+        #[test]
+        #[cfg(feature = "std")]
+        fn requires_no_ordering_for_hash_map_keys() {
+            #[derive(Debug, PartialEq, Eq, Hash)]
+            struct Key(u8);
+
+            let map = std::collections::HashMap::from([(Key(1), 10), (Key(2), 20)]);
+            assert_that!(map)
+                .contains_exactly_entries_matching(entries_are![(Key(2), 20), (Key(1), 10)]);
         }
     }
 
@@ -1326,6 +1561,18 @@ mod tests {
         }
 
         #[test]
+        fn supports_large_homogeneous_keyed_lists() {
+            let map: BTreeMap<_, _> = (0..4096).map(|key| (key, key)).collect();
+            let checks = (0..4096).rev().map(|key| {
+                (key, move |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(key);
+                })
+            });
+
+            assert_that!(map).contains_exactly_entries_satisfying(checks);
+        }
+
+        #[test]
         fn accepts_str_queries_for_string_keys() {
             let assertions: [(&str, ValueAssertions); 2] = [("b", is_two), ("a", is_one)];
             let map = BTreeMap::from([(String::from("a"), 1), (String::from("b"), 2)]);
@@ -1344,23 +1591,19 @@ mod tests {
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("a", 2)])`
+                -------- assertr --------
+                Expression: `BTreeMap::from([("a", 2)])`
 
-                    Actual: BTreeMap {{
-                        "a": 2,
-                    }}
+                does not match
 
-                    does not exactly contain entries satisfying the assertions
+                Nested failures:
+                  - At ["missing"]:
+                    does not satisfy the constraint
 
-                    Details:
-                      - Actual length: 1
-                      - Expected length: 2
-                      - Keys not found: [
-                            "missing",
-                        ]
-                    -------- assertr --------
-                "#});
+                    Constraint:
+                        contains the required key
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1374,20 +1617,32 @@ mod tests {
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("a", 1)])`
+                -------- assertr --------
+                Expression: `BTreeMap::from([("a", 1)])`
 
-                    Actual: BTreeMap {{
-                        "a": 1,
-                    }}
+                does not match
 
-                    does not exactly contain entries satisfying the assertions
+                Nested failures:
+                  - does not satisfy the constraint
 
-                    Details:
-                      - Actual length: 1
-                      - Expected length: 2
-                    -------- assertr --------
-                "#});
+                    Constraint:
+                        has exactly the matching entries
+
+                        Constraints:
+                          - has a matching entry
+
+                            Expected: "a"
+
+                            Constraints:
+                              - satisfies the assertions
+                          - has a matching entry
+
+                            Expected: "a"
+
+                            Constraints:
+                              - satisfies the assertions
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1399,27 +1654,16 @@ mod tests {
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("a", 1), ("extra", 9)])`
+                -------- assertr --------
+                Expression: `BTreeMap::from([("a", 1), ("extra", 9)])`
 
-                    Actual: BTreeMap {{
-                        "a": 1,
-                        "extra": 9,
-                    }}
+                does not match
 
-                    does not exactly contain entries satisfying the assertions
-
-                    Details:
-                      - Actual length: 2
-                      - Expected length: 1
-                      - Unexpected entries: [
-                            (
-                                "extra",
-                                9,
-                            ),
-                        ]
-                    -------- assertr --------
-                "#});
+                Nested failures:
+                  - At ["extra"]:
+                    has an unexpected key
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1430,8 +1674,19 @@ mod tests {
                     .contains_exactly_entries_satisfying([("a", is_two)]);
             })
             .has_type::<String>()
-            .contains("does not exactly contain entries satisfying the assertions")
-            .contains("Nested failures:\n  - At key \"a\":\n    Expected: 2\n\n      Actual: 1\n");
+            .is_equal_to(indoc::formatdoc! {r#"
+                -------- assertr --------
+                Expression: `BTreeMap::from([("a", 1)])`
+
+                does not match
+
+                Nested failures:
+                  - At ["a"]:
+                    Expected: 2
+
+                      Actual: 1
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1444,10 +1699,10 @@ mod tests {
                 .capture(|it| it.contains_exactly_entries_satisfying(assertions));
 
             assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(rendered_text(&failures[0].children[0].facts[0].value))
-                .is_equal_to("\"a\"");
-            assert_that!(failures[0].facts.as_slice())
-                .contains_exactly([crate::Fact::note("... 2 more unsatisfied values ...")]);
+            assert_that!(&failures[0].children[0].path[0]).is_matching(
+                pattern!(crate::failure::PathSegment::Key(key) if rendered_text(key) == "\"a\""),
+            );
+            assert_that!(failures[0].omitted_children).is_equal_to(2);
         }
     }
 
@@ -1486,7 +1741,11 @@ mod tests {
                 .not_contain_entry::<&str, _>("foo", "baz")
                 .contain_keys(["foo"])
                 .contain_exactly_entries([("foo", "bar")])
-                .contain_exactly_entries_matching([("foo", is_bar)])
+                .contain_exactly_entries_matching(crate::matchers::entry_matchers(
+                    ([("foo", is_bar)])
+                        .into_iter()
+                        .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                ))
                 .contain_exactly_entries_satisfying([("foo", satisfies_bar)]);
         }
 
@@ -1502,7 +1761,11 @@ mod tests {
                 .does_not_contain_entry::<&str, _>("foo", "baz")
                 .contains_keys(["foo"])
                 .contains_exactly_entries([("foo", "bar")])
-                .contains_exactly_entries_matching([("foo", is_bar)])
+                .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+                    ([("foo", is_bar)])
+                        .into_iter()
+                        .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                ))
                 .contains_exactly_entries_satisfying([("foo", satisfies_bar)]);
         }
 

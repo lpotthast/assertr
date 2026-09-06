@@ -7,11 +7,11 @@ use crate::{
 
 /// Panic-mode extraction from `Result` subjects.
 ///
-/// A failed variant assertion cannot produce the requested subject type.
-/// Use [`ResultAssertions::is_ok_satisfying`] or [`ResultAssertions::is_err_satisfying`] in
-/// capture mode. Use the non-extracting [`ResultAssertions::is_ok`] or
-/// [`ResultAssertions::is_err`] when the contained value is irrelevant.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+/// A failed variant assertion cannot produce the requested subject type. Use
+/// [`ResultAssertions::is_ok_satisfying`] or [`ResultAssertions::is_err_satisfying`] in capture
+/// mode. Use the non-extracting [`ResultAssertions::is_ok`] or [`ResultAssertions::is_err`] when
+/// the contained value is irrelevant.
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ResultExtractAssertions<'t, T, E, R> {
     /// Asserts that the subject is `Ok`, then returns an assertion over its value.
     ///
@@ -48,7 +48,8 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
                 .raise();
         }
 
-        // Calling `unwrap` is safe here, as we would have seen a panic when the error is not present!
+        // Calling `unwrap` is safe here, as we would have seen a panic when the error is not
+        // present!
         self.map(|it| match it {
             Actual::Owned(o) => Actual::Owned(match o {
                 Ok(ok) => ok,
@@ -80,7 +81,8 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
                 .raise();
         }
 
-        // Calling `unwrap_err` is safe here, as we would have seen a panic when the error is not present!
+        // Calling `unwrap_err` is safe here, as we would have seen a panic when the error is not
+        // present!
         self.map(|it| match it {
             Actual::Owned(o) => Actual::Owned(match o {
                 Ok(_) => unreachable!("already checked"),
@@ -96,22 +98,22 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
 
 /// Non-extracting assertions for `Result` subjects.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ResultAssertions<'t, M: Mode, T, E, R> {
     /// Asserts that the subject is `Ok`.
     ///
-    /// Non-extracting: the subject stays the full `Result`, so further assertions can be chained
-    /// in any mode. Use [`ResultExtractAssertions::get_ok`] to extract the contained value in
-    /// panic mode, or [`ResultAssertions::is_ok_satisfying`] to assert on it in any mode.
+    /// Non-extracting: the subject stays the full `Result`, so further assertions can be chained in
+    /// any mode. Use [`ResultExtractAssertions::get_ok`] to extract the contained value in panic
+    /// mode, or [`ResultAssertions::is_ok_satisfying`] to assert on it in any mode.
     fn is_ok(self) -> Self
     where
         R: ValueRenderer<E>;
 
     /// Asserts that the subject is `Err`.
     ///
-    /// Non-extracting: the subject stays the full `Result`, so further assertions can be chained
-    /// in any mode. Use [`ResultExtractAssertions::get_err`] to extract the contained error in
-    /// panic mode, or [`ResultAssertions::is_err_satisfying`] to assert on it in any mode.
+    /// Non-extracting: the subject stays the full `Result`, so further assertions can be chained in
+    /// any mode. Use [`ResultExtractAssertions::get_err`] to extract the contained error in panic
+    /// mode, or [`ResultAssertions::is_err_satisfying`] to assert on it in any mode.
     fn is_err(self) -> Self
     where
         R: ValueRenderer<T>;

@@ -4,7 +4,7 @@ use tokio::sync::Mutex;
 
 /// Non-blocking assertions for Tokio's [`Mutex`] type.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait TokioMutexAssertions<T, R> {
     /// Asserts that `try_lock` cannot acquire the mutex.
     fn is_locked(self) -> Self

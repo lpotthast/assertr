@@ -34,8 +34,8 @@ pub use stable_order::{StableOrderAssertions, StableOrderExtractAssertions};
 /// A collection whose elements can be inspected repeatedly by reference.
 ///
 /// Implementing this trait makes [`CollectionAssertions`] available. Its [`HasLength`] supertrait
-/// also provides `is_empty` and `has_length`. This implementor-facing trait is not re-exported
-/// from the prelude.
+/// also provides `is_empty` and `has_length`. This implementor-facing trait is not re-exported from
+/// the prelude.
 ///
 /// Indexed assertions and indexed diagnostics require [`StableOrder`]. Bags and sets have no
 /// indexes in assertr's model; their iteration offsets are never exposed as element positions. A
@@ -50,8 +50,8 @@ pub use stable_order::{StableOrderAssertions, StableOrderExtractAssertions};
 ///
 /// Use an order-free assertion such as `contains_exactly_in_any_order` instead.
 ///
-/// Assertr renders the collection structure. A custom [`ValueRenderer`](crate::ValueRenderer)
-/// needs to render only [`Item`](Collection::Item).
+/// Assertr renders the collection structure. A custom [`ValueRenderer`](crate::ValueRenderer) needs
+/// to render only [`Item`](Collection::Item).
 pub trait Collection: HasLength {
     /// The collection's element type.
     type Item;
@@ -204,8 +204,8 @@ impl<T> Collection for LinkedList<T> {
 
 impl<T> StableOrder for LinkedList<T> {}
 
-/// A heap iterates in its internal layout order, which is neither insertion nor priority order,
-/// so it is an order-free bag with arbitrary iteration.
+/// A heap iterates in its internal layout order, which is neither insertion nor priority order, so
+/// it is an order-free bag with arbitrary iteration.
 impl<T> Collection for BinaryHeap<T> {
     type Item = T;
     const PRESENTATION: CollectionPresentation = CollectionPresentation::list()
@@ -217,8 +217,8 @@ impl<T> Collection for BinaryHeap<T> {
     }
 }
 
-/// Makes shared-reference subjects such as `AssertThat<&[T]>` (the form `assert_that!` produces
-/// for unsized targets) and `AssertThat<&Vec<T>>` collections in their own right.
+/// Makes shared-reference subjects such as `AssertThat<&[T]>` (the form `assert_that!` produces for
+/// unsized targets) and `AssertThat<&Vec<T>>` collections in their own right.
 impl<C> Collection for &C
 where
     C: Collection + ?Sized,

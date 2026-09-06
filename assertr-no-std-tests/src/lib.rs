@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use assertr::matchers::{entry_matchers, predicate};
 use assertr::prelude::*;
 
 #[allow(dead_code)]
@@ -85,8 +86,8 @@ fn iterator_assertions_compile_without_std() {
         .into_iter_contains_exactly_in_any_order([2, 1]);
 }
 
-/// The set and map families live outside the `std` module, so `BTreeSet` and `BTreeMap` carry
-/// them into `no_std` builds.
+/// The set and map families live outside the `std` module, so `BTreeSet` and `BTreeMap` carry them
+/// into `no_std` builds.
 #[allow(dead_code)]
 fn set_and_map_assertions_compile_without_std() {
     use alloc::collections::{BTreeMap, BTreeSet};
@@ -104,7 +105,7 @@ fn set_and_map_assertions_compile_without_std() {
         .contains(2)
         .does_not_contain(4)
         .contains_all([1, 3])
-        .contains_matching(|it: &i32| *it > 2)
+        .contains_matching(predicate(|it: &i32| *it > 2))
         .contains_exactly_in_any_order([3, 2, 1])
         .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
         .is_superset_of(BTreeSet::from([1]))
@@ -119,7 +120,7 @@ fn set_and_map_assertions_compile_without_std() {
         .contains_entry_satisfying("a", satisfies_one)
         .contains_keys(["a"])
         .contains_exactly_entries([("a", 1)])
-        .contains_exactly_entries_matching([("a", is_one)])
+        .contains_exactly_entries_matching(entry_matchers([("a", predicate(is_one))]))
         .contains_exactly_entries_satisfying([("a", satisfies_one)])
         .has_length(1);
 }
@@ -142,6 +143,23 @@ extern crate std;
 
 #[cfg(all(test, not(feature = "std")))]
 mod tests {
+    mod matchers {
+        use assertr::matchers::ge;
+        use assertr::prelude::*;
+
+        #[cfg(feature = "matchers")]
+        #[test]
+        fn structural_matchers_work_with_alloc() {
+            crate::structural_matchers_without_std();
+        }
+
+        #[test]
+        fn runtime_matchers_need_no_features() {
+            assert_that!([1, 2]).matches(elements_are![1, 2]);
+            assert_that!(3).matches(ge(2));
+        }
+    }
+
     use alloc::{rc::Rc, string::String};
     use core::{cell::Cell, convert::Infallible};
 
@@ -301,4 +319,36 @@ mod tests {
 
         assertr::assert_that!(panic.downcast_ref::<&str>()).is_equal_to(Some(&"original panic"));
     }
+}
+
+/// Structural matching remains available with alloc and no std.
+#[cfg(feature = "matchers")]
+pub fn structural_matchers_without_std() {
+    use assertr::prelude::*;
+    struct Hidden;
+    struct NoRenderer;
+    #[allow(dead_code)]
+    struct Child {
+        id: u32,
+        hidden: Hidden,
+    }
+    let children = alloc::vec![Child {
+        id: 1,
+        hidden: Hidden
+    }];
+    assert_that!(children).matches(elements_are![partial!(Child { id: 1, .. })]);
+    assert_that!(children)
+        .with_renderer(NoRenderer)
+        .into_iter_contains_matching(partial!(Child {
+            id: assertr::matchers::anything(),
+            ..
+        }));
+    let map = alloc::collections::BTreeMap::from([(
+        "child",
+        Child {
+            id: 1,
+            hidden: Hidden,
+        },
+    )]);
+    assert_that!(map).matches(entries_are![("child", partial!(Child { id: 1, .. }))]);
 }

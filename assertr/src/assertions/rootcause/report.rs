@@ -8,7 +8,7 @@ use rootcause::markers::Dynamic;
 
 /// Assertions for owned rootcause reports.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RootcauseReportAssertions<R = crate::DebugRenderer> {
     /// Asserts that the report has exactly `expected` direct children.
     fn has_child_count(self, expected: usize) -> Self
@@ -103,7 +103,7 @@ where
 
 /// Assertions for borrowed rootcause report references.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RootcauseReportRefAssertions {
     /// Asserts that the report has exactly `expected` direct children.
     fn has_child_count(self, expected: usize) -> Self;
@@ -210,7 +210,7 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
 
 /// Assertions over the dynamically typed current context of an owned report.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RootcauseDynamicReportAssertions<'t, M: Mode, R = crate::DebugRenderer> {
     /// Asserts that this dynamic report's current context has type `E`, then runs additional
     /// assertions on it.
@@ -259,7 +259,7 @@ where
 
 /// Assertions over the dynamically typed current context of a report reference.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RootcauseDynamicReportRefAssertions<'r, M: Mode, R = crate::DebugRenderer> {
     /// Asserts that this dynamic report reference's current context has type `E`, then runs
     /// additional assertions on it.
@@ -307,7 +307,7 @@ where
 }
 
 /// Panic-mode extraction from a dynamic report reference.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RootcauseDynamicReportRefExtractAssertions<'t, R = crate::DebugRenderer> {
     /// Asserts that this dynamic report reference's current context has type `E`, then returns an
     /// `AssertThat<E>` borrowing it.
@@ -348,7 +348,7 @@ where
 }
 
 /// Panic-mode extraction from an owned dynamic report.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RootcauseDynamicReportExtractAssertions<'t, R = crate::DebugRenderer> {
     /// Asserts that this dynamic report's current context has type `E`, then returns an
     /// `AssertThat<E>` borrowing it.

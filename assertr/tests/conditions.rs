@@ -118,8 +118,8 @@ fn a_failing_condition_exposes_its_error_as_a_failure_detail() {
 
     assert_that!(&failures).has_length(1);
     assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not match the condition"));
-    // The condition's error arrives verbatim as an unlabeled note of the failure. No parsing of
-    // the description's framing text is required.
+    // The condition's error arrives verbatim as an unlabeled note of the failure. No parsing of the
+    // description's framing text is required.
     assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note("\"Bob\" is dead!")]);
     assert_that!(failures[0].facts.as_slice())
         .contains_exactly([assertr::Fact::note("\"Bob\" is dead!")]);
@@ -198,4 +198,36 @@ fn fluent_chains_use_be_for_values_and_have_for_iterables() {
         },
     ];
     people.must().have(HasNotName { unexpected: "Otto" });
+}
+
+mod matcher_adapter {
+    use super::*;
+
+    #[test]
+    fn conditions_compose_and_preserve_errors_without_renderers() {
+        use assertr::matchers::{all_of, condition};
+        struct NoRenderer;
+        let bob = Person {
+            name: "Bob",
+            meta: Metadata { alive: true },
+        };
+        let matcher = all_of((
+            condition(IsAlive {}),
+            condition(HasName { expected: "Bob" }),
+        ));
+        assert_that!(bob)
+            .with_renderer(NoRenderer)
+            .matches(&matcher);
+        let failures = assert_that!(bob)
+            .with_renderer(NoRenderer)
+            .capture(|it| it.does_not_match(&matcher));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).has_length(2);
+        assert_that!(failures[0].children[0].constraint).is_some();
+        let failures = assert_that!(bob)
+            .with_renderer(NoRenderer)
+            .capture(|it| it.matches(condition(HasName { expected: "Alice" })));
+        assert_that!(ToHumanReadableText.render(&failures[0]))
+            .contains("Person has unexpected name");
+    }
 }

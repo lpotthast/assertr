@@ -1,11 +1,11 @@
 //! Explicit stdout logging for human-readable failure reports.
 //!
-//! [`StdOutLogger`] writes and flushes [`HumanReadableText`] on the calling thread, returning
-//! any I/O error to its caller. It requires the `std` feature and can terminate an adapter chain
-//! that a caller runs explicitly on a captured failure.
+//! [`StdOutLogger`] writes and flushes [`HumanReadableText`] on the calling thread, returning any
+//! I/O error to its caller. It requires the `std` feature and can terminate an adapter chain that a
+//! caller runs explicitly on a captured failure.
 //!
-//! Neither capture mode nor panic-mode failure handling invokes this logger automatically.
-//! Its output is `()`, so it cannot be selected as a panic presentation adapter.
+//! Neither capture mode nor panic-mode failure handling invokes this logger automatically. Its
+//! output is `()`, so it cannot be selected as a panic presentation adapter.
 
 use std::io::{self, Write};
 
@@ -13,8 +13,8 @@ use super::{super::Adapter, HumanReadableText};
 
 /// Writes human-readable assertion failures to standard output.
 ///
-/// This is an explicit sink for processing captured failures. Panic presentation never selects
-/// it automatically, and its `()` output cannot be installed as a panic presentation.
+/// This is an explicit sink for processing captured failures. Panic presentation never selects it
+/// automatically, and its `()` output cannot be installed as a panic presentation.
 ///
 /// The text is flushed before the adapter returns so a subsequent panic cannot leave the report
 /// buffered. I/O failures are returned to the enclosing adapter chain.

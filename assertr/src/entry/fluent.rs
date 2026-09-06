@@ -49,26 +49,26 @@ use crate::{
 /// # Capturing source expressions
 ///
 /// A method cannot observe the source text of its receiver. Plain fluent calls therefore leave
-/// [`AssertionFailure::expression`] empty. Put [`#[assertr::fluent_expressions]`](crate::fluent_expressions)
-/// on a test function or inline test module to capture fluent entry calls written directly in that
-/// scope. A macro invocation may be the receiver, but calls produced by expanding a macro are not
-/// visible to the attribute and remain uncaptured. Place the attribute above `#[test]` and
-/// proc-macro test attributes such as `#[tokio::test]` or `#[rstest]` so it sees the original
-/// function body.
+/// [`AssertionFailure::expression`] empty. Put
+/// [`#[assertr::fluent_expressions]`](crate::fluent_expressions) on a test function or inline test
+/// module to capture fluent entry calls written directly in that scope. A macro invocation may be
+/// the receiver, but calls produced by expanding a macro are not visible to the attribute and
+/// remain uncaptured. Place the attribute above `#[test]` and proc-macro test attributes such as
+/// `#[tokio::test]` or `#[rstest]` so it sees the original function body.
 ///
 /// # Alias names
 ///
 /// The fluent names are derived mechanically from the assertion names. `is_x` becomes `be_x`,
 /// `has_x` becomes `have_x`, and other verbs turn imperative. For example, `contains` -> `contain`,
-/// `starts_with` -> `start_with`, `exists` -> `exist`, `panics` -> `panic`,
-/// `needs_drop` -> `need_drop`. Negations put `not` first, as in "must not be equal to".
-/// `is_not_x` -> `not_be_x`, `has_not_x` -> `not_have_x`, `does_not_x` -> `not_x`. The possessive
-/// `has_no_x` keeps its order as `have_no_x`. Namespace prefixes stay in front of the alias.
-/// `into_iter_contains` -> `into_iter_contain`. Explicit aliases cover names outside these rules,
-/// such as `is(condition)` -> `be(condition)`.
+/// `starts_with` -> `start_with`, `exists` -> `exist`, `panics` -> `panic`, `needs_drop` ->
+/// `need_drop`. Negations put `not` first, as in "must not be equal to". `is_not_x` -> `not_be_x`,
+/// `has_not_x` -> `not_have_x`, `does_not_x` -> `not_x`. The possessive `has_no_x` keeps its order
+/// as `have_no_x`. Namespace prefixes stay in front of the alias. `into_iter_contains` ->
+/// `into_iter_contain`. Explicit aliases cover names outside these rules, such as `is(condition)`
+/// -> `be(condition)`.
 ///
-/// This trait is re-exported by [`crate::prelude`]. Import the prelude and use method syntax rather than
-/// implementing this trait downstream. See the fluent entry-point guide above for reference
+/// This trait is re-exported by [`crate::prelude`]. Import the prelude and use method syntax rather
+/// than implementing this trait downstream. See the fluent entry-point guide above for reference
 /// normalization, ownership, and alias naming.
 #[cfg(feature = "fluent")]
 pub trait IntoAssertContext<'t> {
@@ -79,8 +79,8 @@ pub trait IntoAssertContext<'t> {
     #[must_use]
     fn must(self) -> AssertThat<'t, Self::Subject, Panic>;
 
-    /// Borrows the pointee and runs the given assertions in capture mode: failures do not panic
-    /// but are collected and returned as structured [`AssertionFailure`] values.
+    /// Borrows the pointee and runs the given assertions in capture mode: failures do not panic but
+    /// are collected and returned as structured [`AssertionFailure`] values.
     ///
     /// See [`AssertThat::capture`] for the capture-closure contract.
     #[must_use = "The captured failures must be inspected. Use `must()` to panic on failure instead."]
@@ -163,8 +163,8 @@ impl<'t> IntoAssertContext<'t> for &'t mut str {
 
 /// Fluent entry points that preserve ownership of their receiver.
 ///
-/// This trait is re-exported by [`crate::prelude`]. It is separate from [`IntoAssertContext`] so `must()`
-/// and `verify()` can consistently borrow reference pointees, while `must_owned()` and
+/// This trait is re-exported by [`crate::prelude`]. It is separate from [`IntoAssertContext`] so
+/// `must()` and `verify()` can consistently borrow reference pointees, while `must_owned()` and
 /// `verify_owned()` keep the exact type passed by the caller. Import the prelude and use method
 /// syntax rather than implementing this trait downstream.
 #[cfg(feature = "fluent")]

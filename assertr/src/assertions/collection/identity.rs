@@ -168,8 +168,8 @@ pub(super) fn assert_contains_exactly_same_instances_in_any_order<C, U: ?Sized, 
                     ),
             );
         }
-        // Unmatched pairs cannot have full pointer equality, so a shared address here proves
-        // that pointer metadata accounts for at least one difference.
+        // Unmatched pairs cannot have full pointer equality, so a shared address here proves that
+        // pointer metadata accounts for at least one difference.
         if unexpected.iter().any(|actual| {
             missing
                 .iter()

@@ -43,29 +43,29 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
 
     /// Selects the adapter that produces this context's panic text.
     ///
-    /// The default is [`ToHumanReadableText`](crate::failure::adapter::ToHumanReadableText).
-    /// This method takes ownership of an adapter returning [`HumanReadableText`], displayed by
-    /// the panic. The adapter must be `'static`, so it cannot borrow stack-local data. Move data
-    /// into the adapter, clone owned values such as [`String`], or share owned data through [`Rc`].
-    /// This bound does not require the adapter to live forever. It is dropped when the last
-    /// context using it is dropped, and the subject's borrow can still end at the context's last use.
+    /// The default is [`ToHumanReadableText`](crate::failure::adapter::ToHumanReadableText). This
+    /// method takes ownership of an adapter returning [`HumanReadableText`], displayed by the
+    /// panic. The adapter must be `'static`, so it cannot borrow stack-local data. Move data into
+    /// the adapter, clone owned values such as [`String`], or share owned data through [`Rc`]. This
+    /// bound does not require the adapter to live forever. It is dropped when the last context
+    /// using it is dropped, and the subject's borrow can still end at the context's last use.
     ///
-    /// The adapter's error can be any type implementing [`core::fmt::Display`]. This method
-    /// wraps the adapter to convert its errors to [`String`] only when presentation runs.
+    /// The adapter's error can be any type implementing [`core::fmt::Display`]. This method wraps
+    /// the adapter to convert its errors to [`String`] only when presentation runs.
     ///
     /// It runs on the asserting thread and needs neither `Send`, `Sync`, nor `Clone`. Mapped and
-    /// derived assertions share the adapter through an internal [`Rc`]. Calling this method
-    /// again replaces the selected presentation for this context.
+    /// derived assertions share the adapter through an internal [`Rc`]. Calling this method again
+    /// replaces the selected presentation for this context.
     ///
-    /// Presentation receives an already-built [`AssertionFailure`](crate::AssertionFailure).
-    /// Use [`with_renderer`](Self::with_renderer) to customize individual diagnostic values and
+    /// Presentation receives an already-built [`AssertionFailure`](crate::AssertionFailure). Use
+    /// [`with_renderer`](Self::with_renderer) to customize individual diagnostic values and
     /// [`with_rendering_budget`](Self::with_rendering_budget) to limit them before presentation.
     ///
     /// Capture mode stores structured failures without invoking presentation. In panic mode a
     /// returned adapter error falls back to the built-in report with a presentation diagnostic.
     /// With `std`, an unwinding adapter panic also uses this fallback. Without `std`, adapter
-    /// panics propagate because unwind catching is unavailable. Assertr never logs the report
-    /// to stdout automatically.
+    /// panics propagate because unwind catching is unavailable. Assertr never logs the report to
+    /// stdout automatically.
     ///
     /// ```no_run
     /// use core::convert::Infallible;

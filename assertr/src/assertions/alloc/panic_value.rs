@@ -12,7 +12,7 @@ const ERASED_TYPE_NOTE: &str = "The panic value can only be captured as Box<dyn 
 ///
 /// These methods are available only in panic mode because a failed downcast cannot produce the
 /// requested subject type.
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait PanicValueAssertions<'t, R = crate::DebugRenderer> {
     /// Asserts that the panic payload has type `E` and returns an assertion over that value.
     ///

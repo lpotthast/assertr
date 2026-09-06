@@ -23,10 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
-      - run: cargo fmt --all -- --check
+      - run: cargo +nightly fmt --all -- --check
 
   # Clippy also performs a full `cargo check`, so no separate check job is needed.
   clippy:
@@ -42,7 +42,7 @@ jobs:
       - run: cargo clippy -p assertr --all-targets --no-default-features --features num --locked -- -D warnings -W clippy::pedantic
       - run: cargo clippy -p assertr --all-targets --locked -- -D warnings -W clippy::pedantic
       - run: cargo clippy -p assertr --all-targets --all-features --locked -- -D warnings -W clippy::pedantic
-      - run: cargo clippy -p assertr-derive --all-targets --locked -- -D warnings -W clippy::pedantic
+      - run: cargo clippy -p assertr-macros --all-targets --locked -- -D warnings -W clippy::pedantic
       - run: cargo clippy -p assertr-no-std-tests --all-targets --locked -- -D warnings -W clippy::pedantic
 
   # Every feature on its own: Cargo unifies features within one invocation, so an integration
@@ -53,7 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         feature:
-          - derive
+          - matchers
           - fluent
           - http
           - jiff
@@ -84,7 +84,9 @@ jobs:
       - run: cargo test -p assertr --no-default-features --features num --locked
       - run: cargo test -p assertr --locked
       - run: cargo test -p assertr --all-features --locked
-      - run: cargo test -p assertr-derive --locked
+      - run: cargo test -p assertr --no-default-features --features matchers --locked
+      - run: cargo test -p assertr --no-default-features --features matchers,fluent --locked
+      - run: cargo test -p assertr-macros --locked
 
   doc:
     runs-on: ubuntu-latest
@@ -105,6 +107,8 @@ jobs:
           targets: thumbv8m.main-none-eabihf
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p assertr-no-std-tests --locked
+      - run: cargo test -p assertr-no-std-tests --features matchers --locked
+      - run: cargo check -p assertr-no-std-tests --features matchers --target thumbv8m.main-none-eabihf --locked
       - run: cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf --locked
       - run: cargo check -p assertr --lib --no-default-features --features num,libm --target thumbv8m.main-none-eabihf --locked
 
@@ -115,5 +119,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.89.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo check -p assertr --all-targets --all-features --locked
-      - run: cargo check -p assertr-derive --all-targets --locked
+      - run: cargo check -p assertr-macros --all-targets --locked
       - run: cargo test -p assertr-no-std-tests --locked

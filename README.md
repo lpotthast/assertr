@@ -18,7 +18,28 @@ assert_that!("hello, world!")
     .ends_with("!");
 ```
 
-Change the `"!"` to `"?"` and the test fails with:
+Match only the struct fields that matter with `partial!`. Enable the `matchers` feature for this example:
+
+```rust
+# #[cfg(feature = "matchers")]
+# {
+use assertr::prelude::*;
+
+struct User {
+    name: &'static str,
+    age: u32,
+}
+
+let user = User { name: "Alice", age: 30 };
+assert_that!(user).matches(partial!(User { name: "Alice", .. }));
+# }
+```
+
+Here `..` ignores the remaining fields. The struct needs no derives or annotations. Field expectations can also use
+constraints, existing assertion methods, and nested partial matches. See the
+[partial matching guide](https://docs.rs/assertr/latest/assertr/matchers/index.html).
+
+Changing `"!"` to `"?"` in the greeting assertion above produces:
 
 ```text
 -------- assertr --------
@@ -69,7 +90,7 @@ The default features are `std` and `num`. Everything else is opt-in:
 | `num`                                                      | Assertions for numeric types (`is_zero`, `is_positive`, `is_close_to`, ...).        |
 | `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
 | `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
-| `derive`                                                   | The `AssertrEq` derive macro for partial equality assertions.                       |
+| `matchers`                                                 | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
 | `serde-json`                                               | `json()` and `as_json()` conversions.                                               |
 | `serde-toml`                                               | `toml()` and `as_toml()` conversions.                                               |
 | `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
@@ -79,7 +100,7 @@ The default features are `std` and `num`. Everything else is opt-in:
 
 ### no_std
 
-Disable the default features. `derive`, `fluent`, `num`, `libm`, and `rootcause` support embedded `no_std` targets.
+Disable the default features. `matchers`, `fluent`, `num`, `libm`, and `rootcause` support embedded `no_std` targets.
 The `http` feature leaves Assertr in `no_std` mode but currently requires a hosted target through its dependencies.
 Every other feature enables `std`. Add `libm` next to `num` if numeric assertions need floating-point
 classifications. `libm` does not enable `num` by itself.
@@ -146,45 +167,23 @@ Blanket implementations make general assertions available to user-defined types.
 
 ## Guides
 
-Failure reporting has three responsibilities:
+These guides build on the quick start. Each lives with the API it explains and includes examples you can adapt:
 
-- **Failure construction:** Every assertion builds an `AssertionFailure` containing structured evidence.
-- **Failure handling:** Capture mode stores it. Panic mode asks a presentation adapter to produce the panic text.
-- **Presentation:** An adapter converts the failure into another representation. `.then()` allows intermediate transformations.
-
-The detailed material lives on the API item that owns it:
-
-- **Capture mode**: collect failures as structured `AssertionFailure` values instead of panicking. See
-  [`AssertThat::capture`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture) and
-  [`AssertionFailure`](https://docs.rs/assertr/latest/assertr/failure/struct.AssertionFailure.html).
-- **Failure adapters**: inspect retained value trees or transform failures through typed, chainable adapters. See
-  [`Rendered`](https://docs.rs/assertr/latest/assertr/renderer/struct.Rendered.html),
-  [`Adapter`](https://docs.rs/assertr/latest/assertr/failure/adapter/trait.Adapter.html),
-  [`AdapterExt::map_err`](https://docs.rs/assertr/latest/assertr/failure/adapter/trait.AdapterExt.html#method.map_err),
-  and [`ToHumanReadableText`](https://docs.rs/assertr/latest/assertr/failure/adapter/struct.ToHumanReadableText.html).
-  Select panic presentation with
-  [`AssertThat::with_panic_presentation`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.with_panic_presentation)
-  for an owned `'static` adapter. It converts displayable errors to strings internally. Move or clone local data into
-  the adapter, or share owned data through `Rc`. Derived assertions share the adapter without requiring `Clone`.
-  Presentation returns `HumanReadableText` and defaults to `ToHumanReadableText`.
-  Capture mode retains structured failures for explicit adapter processing.
-- **Partial equality**: compare only some fields of a struct with `#[derive(AssertrEq)]`, including nested structs and
-  collections of them. See [`AssertrEq`](https://docs.rs/assertr/latest/assertr/prelude/derive.AssertrEq.html).
-- **Rendering values without `Debug`**: swap the renderer that failure messages use. See
-  [`AssertThat::with_debug_format`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.with_debug_format),
-  [`AssertThat::with_renderer`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.with_renderer),
-  and [`ValueRenderer`](https://docs.rs/assertr/latest/assertr/renderer/trait.ValueRenderer.html). Type-specific
-  structural assertions compose leaf renderers into collection, map, range, and wrapper syntax. Generic assertions
-  that render the whole subject require a renderer for that subject.
-- **Assertions for custom types**: define an assertion trait and implement it on `AssertThat`, either by composing
-  existing assertions or by deciding the outcome yourself. See
-  [custom assertions](https://docs.rs/assertr/latest/assertr/#custom-assertions).
-- **Assertions on a part of the subject**: the projections
-  [`AssertThat::derive`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.derive) and
-  [`AssertThat::satisfies`](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.satisfies). See
-  [the core model](https://docs.rs/assertr/latest/assertr/#core-model).
-- **Assertions about types**: `needs_drop`, type name, and size. See
-  [`assert_that_type`](https://docs.rs/assertr/latest/assertr/fn.assert_that_type.html).
+- [Assert on part of a subject](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.satisfies):
+  check a field, a computed value, or a borrowed slice, then continue the original assertion chain.
+- [Match selected fields and nested values](https://docs.rs/assertr/latest/assertr/matchers/index.html):
+  use `partial!` with plain values, selected matcher constraints, or existing assertions through `satisfying`.
+  Nest expectations through structs, collections, and maps. Only `partial!` requires the `matchers` feature.
+- [Collect failures without panicking](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture):
+  run several checks, inspect their structured failures, and render a report when needed.
+- [Customize diagnostic values](https://docs.rs/assertr/latest/assertr/renderer/index.html):
+  render types without `Debug`, preserve a renderer across projections, and limit diagnostic output.
+- [Process failures and customize reports](https://docs.rs/assertr/latest/assertr/failure/adapter/index.html):
+  transform captured failures with adapters or select the presentation used by a panicking assertion.
+- [Write assertions for custom types](https://docs.rs/assertr/latest/assertr/#custom-assertions):
+  add chainable methods by composing existing assertions or building a structured failure yourself.
+- [Assert properties of a type](https://docs.rs/assertr/latest/assertr/fn.assert_that_type.html):
+  check size, type name, or drop requirements without constructing a value.
 
 ## API stability
 

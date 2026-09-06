@@ -5,10 +5,10 @@ use crate::{AssertThat, Mode, condition::AssertrCondition, failure::FailureKind}
 /// `has` is a readability alias of `is`. For example, `is(alive)` and `has(name("Bob"))`.
 ///
 /// With the `fluent` feature enabled, `be` is the fluent alias of `is`. For example,
-/// `person.must().be(alive)`. `has` has no fluent alias because `have`
-/// would be ambiguous with [`IterableConditionAssertions::have`] on iterable subjects.
+/// `person.must().be(alive)`. `has` has no fluent alias because `have` would be ambiguous with
+/// [`IterableConditionAssertions::have`] on iterable subjects.
 #[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_derive::fluent_aliases)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ConditionAssertions<T> {
     /// Asserts that the subject matches the given condition.
     ///
@@ -28,7 +28,7 @@ impl<T, M: Mode, R> ConditionAssertions<T> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is<C: AssertrCondition<T>>(self, condition: C) -> Self {
         self.track_assertion();
-        if let Err(err) = condition.test(self.actual()) {
+        if let Err(err) = crate::matchers::condition(&condition).test(self.actual()) {
             self.failure(FailureKind::Predicate)
                 .relation("does not match the condition")
                 .note(err)
@@ -46,8 +46,8 @@ impl<T, M: Mode, R> ConditionAssertions<T> for AssertThat<'_, T, M, R> {
 /// Assertions that apply a reusable condition to every element of an iterable subject.
 ///
 /// Each non-matching element raises its own failure, so capture mode reports every offending
-/// element. This order-free assertion never describes traversal offsets as collection indexes;
-/// the condition's error should identify the offending value when that context matters.
+/// element. This order-free assertion never describes traversal offsets as collection indexes; the
+/// condition's error should identify the offending value when that context matters.
 ///
 /// `have` is a readability alias of `are`. It also serves as the fluent spelling because
 /// `people.must().have(condition)` already reads imperatively.
@@ -75,7 +75,7 @@ where
     fn are<C: AssertrCondition<T>>(self, condition: C) -> Self {
         self.track_assertion();
         for actual in self.actual() {
-            if let Err(err) = condition.test(actual) {
+            if let Err(err) = crate::matchers::condition(&condition).test(actual) {
                 self.failure(FailureKind::Predicate)
                     .relation("does not match the condition")
                     .note(err)
