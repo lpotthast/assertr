@@ -6,7 +6,7 @@ pub(super) fn bounded_failures(
     matcher: &impl AssertrMatcher<UnorderedSet>,
     positive: bool,
     limit: usize,
-) -> Vec<AssertionFailure> {
+) -> crate::AssertionFailures {
     let actual = UnorderedSet(values.to_vec());
     assert_that!(actual)
         .with_location(false)

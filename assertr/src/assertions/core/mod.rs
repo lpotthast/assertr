@@ -88,13 +88,3 @@ pub mod prelude {
     pub use super::result::ResultExtractAssertions;
     pub use super::string::StrAssertions;
 }
-
-pub(crate) fn strip_quotation_marks(mut str: &str) -> &str {
-    if str.starts_with('"') {
-        str = str.strip_prefix('"').unwrap();
-    }
-    if str.ends_with('"') {
-        str = str.strip_suffix('"').unwrap();
-    }
-    str
-}

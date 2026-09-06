@@ -5,7 +5,7 @@ use super::{Map, MapKeyQuery, MapLookup, imp};
 use crate::{
     AssertThat, Mode, ValueRenderer,
     failure::{FailureKind, PathSegment},
-    matchers::{self, AssertrMatcher, Description, EntryMatcherList, MatchContext},
+    matchers::{self, AssertrMatcher, ConstraintDescription, EntryMatcherList, MatchContext},
     mode::Capture,
     renderer::IntoRendered,
 };
@@ -305,7 +305,9 @@ where
                 }
                 result
             } else {
-                context.outcome(false, |_| Description::new("contains the required key"))
+                context.outcome(false, |_| {
+                    ConstraintDescription::new("contains the required key")
+                })
             }
         };
         let result = if context.is_diagnostic() {

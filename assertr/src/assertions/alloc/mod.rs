@@ -7,6 +7,6 @@ pub mod panic_value;
 
 /// Assertion traits for heap-backed values and panic payloads.
 pub mod prelude {
-    pub use super::boxed::BoxAssertions;
-    pub use super::panic_value::PanicValueAssertions;
+    pub use super::boxed::{BoxAssertions, BoxExtractAssertions};
+    pub use super::panic_value::{PanicValueAssertions, PanicValueExtractAssertions};
 }

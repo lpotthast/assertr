@@ -14,6 +14,7 @@ install-tools:
     cargo +stable install cargo-audit --locked
     cargo +stable install cargo-msrv --locked
     cargo +stable install cargo-sort --locked
+    cargo +stable install cargo-rdme --version 2.2.2 --locked
 
 # Find the minimum supported rust version.
 msrv:
@@ -22,7 +23,11 @@ msrv:
 
 # Check whether current changes require a breaking release.
 semver-checks:
-    cargo semver-checks
+    cargo semver-checks -p assertr --baseline-version 0.7.1 --all-features
+
+# Enumerate intentional breaks even when the planned version permits them. Review the nonzero result.
+semver-audit:
+    cargo semver-checks -p assertr --baseline-version 0.7.1 --all-features --release-type patch
 
 # Check the code.
 check:
@@ -75,6 +80,14 @@ test:
     cargo test -p assertr-macros
     cargo test -p assertr-no-std-tests
 
+# Generate the README from the landing-page rustdoc in assertr/src/lib.rs.
+readme:
+    cargo rdme --force
+
+# Check that the generated README is up to date without modifying it.
+check-readme:
+    cargo rdme --check
+
 # Build the crate documentation.
 build-docs:
     RUSTDOCFLAGS="-D warnings" cargo doc --workspace --exclude assertr-no-std-tests --no-deps --all-features
@@ -87,15 +100,17 @@ open-docs:
 audit:
     cargo audit --deny warnings
 
-# Update all deps; sort all Cargo.toml deps; format all code.
+# Update dependencies, sort manifests, format code, and regenerate the README.
 tidy:
     cargo update --workspace
     cargo sort --workspace
     cargo +nightly fmt --all
+    just readme
 
 # Run the full non-mutating validation suite.
 verify:
     cargo +nightly fmt --all -- --check
+    just check-readme
     just check
     just check-each-feature
     just check-no-std

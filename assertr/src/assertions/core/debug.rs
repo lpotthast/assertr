@@ -1,28 +1,40 @@
-use crate::assertions::core::strip_quotation_marks;
-use crate::{AssertThat, Mode, failure::FailureKind};
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 use alloc::format;
 use core::fmt::Debug;
 
 /// Assertions for values implementing [`Debug`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait DebugAssertions {
+pub trait DebugAssertions<R = crate::DebugRenderer> {
     /// Asserts that the subject has the expected `Debug` representation.
     ///
-    /// One leading and one trailing double quote, when present, are removed from both
-    /// representations before comparison.
-    fn has_debug_string(self, expected: impl AsRef<str>) -> Self;
+    /// Compares the complete representation exactly, including quotes and escape sequences.
+    /// The expected text is used verbatim and is never Debug-formatted again.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// assert_that!(42).has_debug_string("42");
+    /// assert_that!("\n").has_debug_string(r#""\n""#);
+    /// ```
+    fn has_debug_string(self, expected: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<str>;
 
     /// Asserts that the subject and `expected` have the same `Debug` representation.
     ///
-    /// One leading and one trailing double quote, when present, are removed from both
-    /// representations before comparison.
-    fn has_debug_value(self, expected: impl Debug) -> Self;
+    /// Compares the complete representation exactly, including quotes and escape sequences.
+    /// Use [`has_debug_string`](Self::has_debug_string) for a preformatted expectation.
+    fn has_debug_value(self, expected: impl Debug) -> Self
+    where
+        R: ValueRenderer<str>;
 }
 
-impl<T: Debug, M: Mode, R> DebugAssertions for AssertThat<'_, T, M, R> {
+impl<T: Debug, M: Mode, R> DebugAssertions<R> for AssertThat<'_, T, M, R> {
     #[track_caller]
-    fn has_debug_string(self, expected: impl AsRef<str>) -> Self {
+    fn has_debug_string(self, expected: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<str>,
+    {
         self.track_assertion();
 
         let actual_string = format!("{:?}", self.actual());
@@ -33,32 +45,35 @@ impl<T: Debug, M: Mode, R> DebugAssertions for AssertThat<'_, T, M, R> {
         // represent the exact debug output of actual.
         let expected_string = expected.as_ref();
 
-        let actual_str = strip_quotation_marks(actual_string.as_str());
-        let expected_str = strip_quotation_marks(expected_string);
+        let actual_str = actual_string.as_str();
+        let expected_str = expected_string;
 
         if actual_str != expected_str {
             self.failure(FailureKind::Equality)
-                .actual(format_args!("{actual_str:?}"))
-                .expected(format_args!("{expected_str:?}"))
+                .actual(self.render().value(actual_str))
+                .expected(self.render().value(expected_str))
                 .raise();
         }
         self
     }
 
     #[track_caller]
-    fn has_debug_value(self, expected: impl Debug) -> Self {
+    fn has_debug_value(self, expected: impl Debug) -> Self
+    where
+        R: ValueRenderer<str>,
+    {
         self.track_assertion();
 
         let actual_string = format!("{:?}", self.actual());
         let expected_string = format!("{expected:?}");
 
-        let actual_str = strip_quotation_marks(actual_string.as_str());
-        let expected_str = strip_quotation_marks(expected_string.as_ref());
+        let actual_str = actual_string.as_str();
+        let expected_str = expected_string.as_str();
 
         if actual_str != expected_str {
             self.failure(FailureKind::Equality)
-                .actual(format_args!("{actual_str:?}"))
-                .expected(format_args!("{expected_str:?}"))
+                .actual(self.render().value(actual_str))
+                .expected(self.render().value(expected_str))
                 .raise();
         }
         self
@@ -74,7 +89,7 @@ mod tests {
         #[test]
         fn trait_is_implemented_without_renderer_support() {
             assert_trait_impl!(
-                AssertThat<'static, i32, Panic, NoRenderer> => DebugAssertions
+                AssertThat<'static, i32, Panic, NoRenderer> => DebugAssertions<NoRenderer>
             );
         }
     }
@@ -90,6 +105,54 @@ mod tests {
         }
 
         #[test]
+        fn preserves_quotes_escapes_and_unicode_exactly() {
+            for value in ["", "\"", "\\", "\n", "\r\n", "\t", "é🦀"] {
+                let expected = format!("{value:?}");
+                assert_that!(value).has_debug_string(&expected);
+                assert_that!(value).has_debug_value(value);
+                let without_quotes = &expected[1..expected.len() - 1];
+                assert_that!(assert_that!(value).capture(|it| it.has_debug_string(without_quotes)))
+                    .has_length(1);
+            }
+        }
+
+        #[test]
+        fn custom_debug_with_a_lone_quote_is_not_normalized() {
+            struct Quoted;
+            impl core::fmt::Debug for Quoted {
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    f.write_str("\"value")
+                }
+            }
+            assert_that!(Quoted).has_debug_string("\"value");
+            assert_that!(assert_that!(Quoted).capture(|it| it.has_debug_string("value")))
+                .has_length(1);
+        }
+
+        #[test]
+        fn diagnostics_use_the_renderer_and_budget_without_changing_truth() {
+            struct TextRenderer;
+            impl ValueRenderer<str> for TextRenderer {
+                fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    write!(f, "text:{value}")
+                }
+            }
+            let failures = assert_that!(123)
+                .with_renderer(TextRenderer)
+                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(5).build())
+                .capture(|it| it.has_debug_string("123").has_debug_string("456"));
+            assert_that!(failures).has_length(1);
+            assert_eq!(
+                rendered_text(failures[0].actual.as_ref().unwrap()),
+                "text:... 3 more characters ..."
+            );
+            assert_eq!(
+                rendered_text(failures[0].expected.as_ref().unwrap()),
+                "text:... 3 more characters ..."
+            );
+        }
+
+        #[test]
         fn succeeds_when_equal() {
             assert_that!(42).has_debug_string("42");
             assert_that!(42).has_debug_string("42");
@@ -99,7 +162,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal_on_static_string_containing_escaped_characters() {
-            assert_that!("\n").has_debug_string(r"\n");
+            assert_that!("\n").has_debug_string(r#""\n""#);
         }
 
         #[test]
@@ -150,13 +213,11 @@ mod tests {
                 assert_that!(42).has_debug_value(42);
             }
 
-            // Although `has_debug_string` should be used instead!
             #[test]
-            fn succeeds_when_equal_using_string_representation() {
-                assert_that!(42).has_debug_value("42");
-                assert_that!(42).has_debug_value("42");
-                assert_that!(42).has_debug_value("42".to_string());
-                assert_that!(42).has_debug_value("42".to_string());
+            fn distinguishes_values_from_formatted_expectations() {
+                let failures = assert_that!(42).capture(|it| it.has_debug_value("42"));
+                assert_that!(failures).has_length(1);
+                assert_that!(42).has_debug_string("42");
             }
 
             #[test]
@@ -181,8 +242,7 @@ mod tests {
 
             // That's why we also have `has_debug_string`.
             #[test]
-            fn panics_when_trying_to_compare_with_string_containing_escaped_characters_although_user_would_expect_this_to_be_successful()
-             {
+            fn distinguishes_a_newline_from_a_literal_escape_sequence() {
                 assert_that_panic_by(|| {
                     assert_that!("\n")
                         .with_location(false)
@@ -193,9 +253,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `"\n"`
 
-                    Expected: "\\\\n"
+                    Expected: "\"\\\\n\""
 
-                      Actual: "\\n"
+                      Actual: "\"\\n\""
                     -------- assertr --------
                 "#});
             }

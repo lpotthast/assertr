@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::{
     ValueRenderer,
     failure::{FailureBuilder, FailureKind},
@@ -18,8 +18,9 @@ where
     A: PartialOrd<E> + ?Sized,
     R: ValueRenderer<A> + ValueRenderer<E>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("is greater than or equal to").expected(context.render().value(&self.0))
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("is greater than or equal to")
+            .expected(context.render().value(&self.0))
     }
 
     fn evaluate(&self, actual: &A, context: &mut MatchContext<'_, R>) -> MatchResult {

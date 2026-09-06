@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 
 /// Explicitly dereferences an actual reference before matching. No actual values are moved.
 pub struct Dereferenced<M>(M);
@@ -12,7 +12,7 @@ impl<A: ?Sized, R, M> AssertrMatcher<&A, R> for Dereferenced<M>
 where
     M: AssertrMatcher<A, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
         self.0.describe(context)
     }
 

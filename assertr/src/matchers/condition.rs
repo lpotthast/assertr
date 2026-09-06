@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::{
     condition::AssertrCondition,
     failure::{FailureBuilder, FailureKind},
@@ -26,8 +26,8 @@ impl<A, R, C> AssertrMatcher<A, R> for Condition<C>
 where
     C: AssertrCondition<A>,
 {
-    fn describe(&self, _: &MatchContext<'_, R>) -> Description {
-        Description::new("satisfies the condition").expected(type_name::<C>())
+    fn describe(&self, _: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("satisfies the condition").expected(type_name::<C>())
     }
 
     fn evaluate(&self, actual: &A, context: &mut MatchContext<'_, R>) -> MatchResult {

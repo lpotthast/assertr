@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult, MatcherList};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, MatcherList};
 use crate::{
     assertions::collection::StableOrder,
     failure::{FailureBuilder, FailureKind, PathSegment},
@@ -57,8 +57,8 @@ where
     C: StableOrder + ?Sized,
     L: MatcherList<C::Item, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new(match self.position {
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new(match self.position {
             Position::Exact => "has exactly these positions",
             Position::Prefix => "starts with these positions",
             Position::Suffix => "ends with these positions",

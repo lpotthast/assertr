@@ -144,7 +144,7 @@ pub trait AdapterExt: Sized {
     /// assert_eq!(adapter.adapt("42"), Ok(42));
     /// assert!(adapter.adapt("not a number").is_err());
     /// ```
-    fn map_err<Input: ?Sized, F, Error>(self, mapper: F) -> MapErr<Self, F>
+    fn map_err<Input: ?Sized, F, Error>(self, mapper: F) -> MapErr<Self, F, Input>
     where
         Self: Adapter<Input>,
         F: Fn(Self::Error) -> Error,

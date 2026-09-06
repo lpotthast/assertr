@@ -7,15 +7,16 @@ use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions over a range subject's membership.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+#[allow(clippy::return_self_not_must_use)]
 pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = crate::DebugRenderer> {
     /// Asserts that the range contains `expected`.
-    fn contains_element(&self, expected: B)
+    fn contains_element(self, expected: B) -> Self
     where
         B: PartialOrd,
         R: ValueRenderer<B>;
 
     /// Asserts that the range does not contain `expected`.
-    fn does_not_contain_element(&self, expected: B)
+    fn does_not_contain_element(self, expected: B) -> Self
     where
         B: PartialOrd,
         R: ValueRenderer<B>;
@@ -52,37 +53,39 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
     for AssertThat<'_, Range, M, R>
 {
     #[track_caller]
-    fn contains_element(&self, expected: B)
+    fn contains_element(self, expected: B) -> Self
     where
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
         self.track_assertion();
         if !self.actual().contains(&expected) {
-            let range = render_range(self, self.actual());
+            let range = render_range(&self, self.actual());
             self.failure(FailureKind::Membership)
                 .actual(format_args!("{range}"))
                 .relation("does not contain")
                 .expected(self.render().value(&expected))
                 .raise();
         }
+        self
     }
 
     #[track_caller]
-    fn does_not_contain_element(&self, expected: B)
+    fn does_not_contain_element(self, expected: B) -> Self
     where
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
         self.track_assertion();
         if self.actual().contains(&expected) {
-            let range = render_range(self, self.actual());
+            let range = render_range(&self, self.actual());
             self.failure(FailureKind::Membership)
                 .actual(format_args!("{range}"))
                 .relation("contains")
                 .unexpected(self.render().value(&expected))
                 .raise();
         }
+        self
     }
 }
 
@@ -190,10 +193,7 @@ mod tests {
             let bound_failures = assert_that!(1..3)
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
-                .capture(|it| {
-                    it.contains_element(4);
-                    it
-                });
+                .capture(|it| it.contains_element(4));
             assert_that!(ToHumanReadableText.render(&bound_failures[0]))
                 .contains(format!("{SENTINEL}..{SENTINEL}"));
 

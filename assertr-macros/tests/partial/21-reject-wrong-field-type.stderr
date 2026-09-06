@@ -23,7 +23,7 @@ help: the following other types implement trait `AssertrMatcher<Actual, R>`
   = note: required for `matchers::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, assertr::__private::Normalize<&str, _>>` to implement `AssertrMatcher<Point>`
   = note: required for `assertr::__private::Cons<matchers::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, assertr::__private::Normalize<&str, _>>, assertr::__private::Nil>` to implement `MatcherList<Point, DebugRenderer>`
   = note: 1 redundant requirement hidden
-  = note: required for `PartialMatch<Point, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:42: 8:71}, assertr::__private::Cons<matchers::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, assertr::__private::Normalize<&str, _>>, assertr::__private::Nil>>` to implement `AssertrMatcher<Point>`
+  = note: required for `assertr::__private::PartialMatch<Point, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:42: 8:71}, assertr::__private::Cons<matchers::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, assertr::__private::Normalize<&str, _>>, assertr::__private::Nil>>` to implement `AssertrMatcher<Point>`
 note: required by a bound in `matches`
  --> $WORKSPACE/assertr/src/assertions/matcher.rs
   |

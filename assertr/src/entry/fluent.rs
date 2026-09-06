@@ -1,7 +1,5 @@
-use alloc::vec::Vec;
-
 use crate::{
-    AssertThat, AssertionFailure,
+    AssertThat, AssertionFailures,
     actual::Actual,
     mode::{Capture, Panic},
 };
@@ -49,7 +47,7 @@ use crate::{
 /// # Capturing source expressions
 ///
 /// A method cannot observe the source text of its receiver. Plain fluent calls therefore leave
-/// [`AssertionFailure::expression`] empty. Put
+/// [`crate::AssertionFailure::expression`] empty. Put
 /// [`#[assertr::fluent_expressions]`](crate::fluent_expressions) on a test function or inline test
 /// module to capture fluent entry calls written directly in that scope. A macro invocation may be
 /// the receiver, but calls produced by expanding a macro are not visible to the attribute and
@@ -80,11 +78,11 @@ pub trait IntoAssertContext<'t> {
     fn must(self) -> AssertThat<'t, Self::Subject, Panic>;
 
     /// Borrows the pointee and runs the given assertions in capture mode: failures do not panic but
-    /// are collected and returned as structured [`AssertionFailure`] values.
+    /// are collected and returned as structured [`crate::AssertionFailure`] values.
     ///
     /// See [`AssertThat::capture`] for the capture-closure contract.
     #[must_use = "The captured failures must be inspected. Use `must()` to panic on failure instead."]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(AssertThat<'t, Self::Subject, Capture>) -> AssertThat<'t, U, Capture, R2>;
 }
@@ -98,7 +96,7 @@ impl<'t, T: 't> IntoAssertContext<'t> for &'t T {
     }
 
     #[track_caller]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
@@ -115,7 +113,7 @@ impl<'t, T: 't> IntoAssertContext<'t> for &'t mut T {
     }
 
     #[track_caller]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
@@ -133,7 +131,7 @@ impl<'t, T: 't> IntoAssertContext<'t> for &'t mut [T] {
     }
 
     #[track_caller]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(AssertThat<'t, &'t [T], Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
@@ -152,7 +150,7 @@ impl<'t> IntoAssertContext<'t> for &'t mut str {
     }
 
     #[track_caller]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(AssertThat<'t, &'t str, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
@@ -181,7 +179,7 @@ pub trait IntoOwnedAssertContext<'t>: Sized {
     /// Use this when an assertion consumes its subject. Prefer [`IntoAssertContext::verify`] when
     /// ownership is not required.
     #[must_use = "The captured failures must be inspected. Use `must_owned()` to panic on failure instead."]
-    fn verify_owned<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    fn verify_owned<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         Self: 't,
         F: FnOnce(AssertThat<'t, Self, Capture>) -> AssertThat<'t, U, Capture, R2>;
@@ -194,7 +192,7 @@ impl<'t, T: 't> IntoOwnedAssertContext<'t> for T {
     }
 
     #[track_caller]
-    fn verify_owned<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    fn verify_owned<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {

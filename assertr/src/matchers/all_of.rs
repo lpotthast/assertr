@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult, MatcherList};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, MatcherList};
 
 /// A conjunction of constraints.
 pub struct AllOf<L>(L);
@@ -12,8 +12,8 @@ impl<A: ?Sized, R, L> AssertrMatcher<A, R> for AllOf<L>
 where
     L: MatcherList<A, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("satisfies all constraints")
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("satisfies all constraints")
             .omitted_children(self.0.len().saturating_sub(context.render().max_items()))
             .children(
                 (0..self.0.len().min(context.render().max_items()))

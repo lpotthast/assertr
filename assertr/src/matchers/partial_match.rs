@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult, MatcherList};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, MatcherList};
 use crate::failure::PathSegment;
 use core::marker::PhantomData;
 
@@ -62,8 +62,8 @@ where
     P: Fn(&A) -> bool,
     L: MatcherList<A, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("has the required structure")
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("has the required structure")
             .expected(self.name)
             .omitted_children(
                 self.fields

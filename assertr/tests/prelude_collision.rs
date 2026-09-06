@@ -429,7 +429,7 @@ fn a_custom_map_gets_every_map_assertion() {
 
 mod matcher_names {
     mod foreign_prelude {
-        pub struct Description;
+        pub struct ConstraintDescription;
         pub struct Matcher;
         pub fn equal_to() -> bool {
             true
@@ -439,10 +439,10 @@ mod matcher_names {
         }
     }
     #[test]
-    fn short_matcher_names_remain_available_to_other_preludes() {
+    fn matcher_names_remain_available_to_other_preludes() {
         use assertr::prelude::*;
         use foreign_prelude::*;
-        let _ = (Description, Matcher);
+        let _ = (ConstraintDescription, Matcher);
         assert_that!(equal_to() && anything()).is_true();
         assert_that!(1).matches(assertr::matchers::equal_to(1));
     }

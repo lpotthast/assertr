@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 
 /// An unconstrained wildcard.
 pub struct Anything;
@@ -10,8 +10,8 @@ pub const fn anything() -> Anything {
 }
 
 impl<A: ?Sized, R> AssertrMatcher<A, R> for Anything {
-    fn describe(&self, _: &MatchContext<'_, R>) -> Description {
-        Description::new("is anything")
+    fn describe(&self, _: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("is anything")
     }
 
     fn evaluate(&self, _: &A, context: &mut MatchContext<'_, R>) -> MatchResult {

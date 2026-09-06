@@ -6,6 +6,20 @@ use assertr::matchers::{entry_matchers, predicate};
 use assertr::prelude::*;
 
 #[allow(dead_code)]
+fn capture_errors_compile_without_std()
+-> Result<(), alloc::boxed::Box<dyn core::error::Error + Send + Sync>> {
+    use alloc::string::ToString;
+    let failures = assert_that_owned!(0..).capture(|it| it.starts_with([1, 2]));
+    assert_that!(failures).has_length(1);
+    let _report = failures.to_string();
+    let single = failures[0].clone();
+    let _: alloc::boxed::Box<dyn core::error::Error + Send + Sync> = single.into();
+    let result: Result<(), AssertionFailures> = Err(failures);
+    result?;
+    Ok(())
+}
+
+#[allow(dead_code)]
 fn identity_assertions_compile_without_std() {
     struct Key {
         _byte: u8,
@@ -55,7 +69,7 @@ fn failure_adapters_compile_without_std() {
     let _assertion = assert_that!(1)
         .with_renderer(NoRenderer)
         .with_panic_presentation(ToHumanReadableText);
-    let presentation = ToHumanReadableText.map_err(|error| error.to_string());
+    let presentation = ToHumanReadableText.map_err(|error: Infallible| error.to_string());
     let adapter: &dyn Adapter<assertr::AssertionFailure, Output = HumanReadableText, Error = String> =
         &presentation;
     accepts_failure_adapter(adapter);

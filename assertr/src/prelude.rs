@@ -40,7 +40,7 @@ pub use crate::assertions::program::Program;
 #[cfg(feature = "program")]
 pub use crate::assertions::program::ProgramAssertions;
 #[cfg(feature = "program")]
-pub use crate::assertions::program::ProgramAssertionsRequiringPanicMode;
+pub use crate::assertions::program::ProgramExtractAssertions;
 #[cfg(feature = "reqwest")]
 pub use crate::assertions::reqwest::prelude::*;
 #[cfg(feature = "rootcause")]
@@ -71,6 +71,8 @@ pub use crate::pattern;
 pub(crate) use crate::test_support::FailureReportAssertions;
 #[cfg(test)]
 pub(crate) use crate::test_support::rendered_text;
-pub use crate::{AssertThat, AssertionFailure, DebugRenderer, RenderingBudget, ValueRenderer};
+pub use crate::{
+    AssertThat, AssertionFailure, AssertionFailures, DebugRenderer, RenderingBudget, ValueRenderer,
+};
 #[cfg(feature = "fluent")]
 pub use crate::{IntoAssertContext, IntoOwnedAssertContext};

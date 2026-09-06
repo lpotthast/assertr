@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 
 /// A negated constraint.
 pub struct Not<M>(M);
@@ -12,8 +12,8 @@ impl<A: ?Sized, R, M> AssertrMatcher<A, R> for Not<M>
 where
     M: AssertrMatcher<A, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("does not match").children([self.0.describe(context)])
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("does not match").children([self.0.describe(context)])
     }
 
     fn evaluate(&self, actual: &A, context: &mut MatchContext<'_, R>) -> MatchResult {

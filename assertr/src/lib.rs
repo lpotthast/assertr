@@ -4,143 +4,236 @@
 // Allow functions named `is_*`, taking self by value instead of taking self by mutable reference or
 // reference.
 #![allow(clippy::wrong_self_convention)]
-#![doc = include_str!(concat!(
-env!("CARGO_MANIFEST_DIR"),
-"/",
-env!("CARGO_PKG_README")
-))]
+//! # assertr
 //!
-//! ## Core model
+//! [![Crates.io](https://img.shields.io/crates/v/assertr.svg)](https://crates.io/crates/assertr)
+//! [![Docs.rs](https://docs.rs/assertr/badge.svg)](https://docs.rs/assertr)
+//! [![CI](https://github.com/lpotthast/assertr/actions/workflows/ci.yml/badge.svg)](https://github.com/lpotthast/assertr/actions/workflows/ci.yml)
+//! [![MSRV](https://img.shields.io/badge/MSRV-1.89.0-blue.svg)](https://github.com/lpotthast/assertr/blob/main/assertr/Cargo.toml)
+//! [![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/assertr.svg)](#license)
 //!
-//! An [`AssertThat<T>`](AssertThat) holds an owned or borrowed [`Actual<T>`](Actual). Methods are
-//! selected by `T`, independent of ownership. Borrowing entry points normalize sized references to
-//! their pointee. Owned references and unsized targets remain reference-typed subjects.
+//! Assertr is a fluent assertion library for Rust. Assertions are methods on the subject, so a
+//! chain reads as a statement about one value and autocomplete lists only the assertions available
+//! for its type. A failure shows the subject, the expectation, and the relation that did not hold.
+//! Assertr supports `std` and `no_std` builds.
 //!
-//! [`AssertThat::derive`] creates a child assertion for part of a subject. Its failures propagate
-//! to the root. The [`AssertThat::satisfies`] family asserts on a child and returns the original
-//! chain. Its variants cover borrowed, owned, and unsized projections.
-//!
-//! Panic mode stops at the first failure. Capture mode collects structured [`AssertionFailure`]
-//! values within [`AssertThat::capture`] or the fluent `verify` entry points. A failure carries its
-//! structured rendered [`actual`](AssertionFailure::actual) and
-//! [`expected`](AssertionFailure::expected) values, the [`relation`](AssertionFailure::relation)
-//! between them, further [`facts`](AssertionFailure::facts), nested
-//! [`children`](AssertionFailure::children), and a [`kind`](AssertionFailure::kind) as data. An
-//! [`Adapter`](failure::adapter::Adapter) transforms that data, and adapters compose into typed
-//! chains. Capture mode stores failures without invoking presentation. Panic mode uses the
-//! context's [presentation adapter](AssertThat::with_panic_presentation) to produce the panic text,
-//! defaulting to [`ToHumanReadableText`](failure::adapter::ToHumanReadableText).
-//!
-//! ## Custom assertions
-//!
-//! Add a method such as `.is_adult()` when a domain check appears throughout your tests. For a
-//! single check on a field, start with [`AssertThat::satisfies`]. To describe selected fields and
-//! nested values together, use [`partial!`](mod@matchers#structural-syntax). Its field expectations
-//! can use existing assertion methods through [`matchers::satisfying`], including your custom ones.
-//!
-//! Existing assertion families also work with custom types that implement their capabilities.
-//! For example, [`HasLength`](assertions::HasLength) provides length assertions and
-//! [`Collection`](assertions::collection::Collection) provides order-free element assertions. See
-//! the [assertion families](assertions) before introducing a separate trait.
-//!
-//! ### Define a chainable method
-//!
-//! Define your own assertion trait and implement it for `AssertThat<'_, YourType, M, R>`. Use
-//! `M: Mode` so the same implementation works in panic and capture mode. Keep `R` unconstrained on
-//! the impl, and put renderer and `Clone` bounds on each method that needs them, in both the trait
-//! and impl. This keeps one method's rendering needs from hiding the entire trait. A default of
-//! `R = DebugRenderer` lets callers name the trait without specifying a renderer.
-//!
-//! For a chainable check, take and return `Self`. Mark the method `#[track_caller]` so failures
-//! report its caller's location. The example below shows two implementation styles:
-//!
-//! - **Composition:** Delegate to existing assertions through [`AssertThat::satisfies`] and
-//!   friends. Delegated assertions handle tracking, diagnostics, and capture mode. Do not call
-//!   [`AssertThat::track_assertion`] again in a method that only delegates.
-//! - **Leaf assertion:** Call [`AssertThat::track_assertion`] first. When the condition fails,
-//!   build structured evidence and raise it as described below.
-//!
-//! ### Build a leaf failure
-//!
-//! Start with [`AssertThat::failure`] and the [`FailureKind`] of the assertion's family. Supply
-//! the [`actual`](failure::FailureBuilder::actual) value, a lowercase
-//! [`relation`](failure::FailureBuilder::relation) sentence without embedded values or a trailing
-//! period, and any [`expected`](failure::FailureBuilder::expected) or
-//! [`unexpected`](failure::FailureBuilder::unexpected) value. Add labeled
-//! [`fact`](failure::FailureBuilder::fact)s, [`note`](failure::FailureBuilder::note)s, or nested
-//! [`children`](failure::FailureBuilder::children) for further evidence. Call
-//! [`raise`](failure::FailureBuilder::raise) to record the failure or panic according to the mode.
-//!
-//! Render diagnostic values through [`AssertThat::render`]. Its
-//! [`value`](renderer::RenderingContext::value), [`values`](renderer::RenderingContext::values),
-//! and [`borrowed_values`](renderer::RenderingContext::borrowed_values) adapters apply the active
-//! renderer and rendering budget. Pass these adapters directly to the builder. This preserves
-//! structured values and type metadata for [failure adapters](failure::adapter) and lets Assertr
-//! produce a consistent report. See the [rendering guide](renderer) for customization.
-//!
-//! ### Example
-//!
-//! ```
+//! ```rust
 //! use assertr::prelude::*;
-//! use assertr::failure::FailureKind;
 //!
-//! #[derive(Debug)]
-//! struct Person {
-//!     name: String,
+//! assert_that!("hello, world!")
+//!     .starts_with("hello")
+//!     .ends_with("!");
+//! ```
+//!
+//! Match only the struct fields that matter with `partial!`. Enable the `matchers` feature for this
+//! example:
+//!
+//! ```rust
+//! # #[cfg(feature = "matchers")]
+//! # {
+//! use assertr::prelude::*;
+//!
+//! struct User {
+//!     name: &'static str,
 //!     age: u32,
 //! }
 //!
-//! trait PersonAssertions<R = DebugRenderer> {
-//!     #[track_caller]
-//!     fn is_adult(self) -> Self
-//!     where
-//!         R: Clone + ValueRenderer<u32>;
-//!
-//!     #[track_caller]
-//!     fn has_name(self) -> Self
-//!     where
-//!         R: ValueRenderer<Person> + ValueRenderer<String>;
-//! }
-//!
-//! impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
-//!     // Composed: the delegated assertion tracks itself and formats the failure.
-//!     #[track_caller]
-//!     fn is_adult(self) -> Self
-//!     where
-//!         R: Clone + ValueRenderer<u32>,
-//!     {
-//!         self.satisfies(|person| &person.age, |age| {
-//!             age.is_greater_or_equal_to(18);
-//!         })
-//!     }
-//!
-//!     // Leaf: track first, then raise a failure built from rendered values.
-//!     #[track_caller]
-//!     fn has_name(self) -> Self
-//!     where
-//!         R: ValueRenderer<Person> + ValueRenderer<String>,
-//!     {
-//!         self.track_assertion();
-//!         if self.actual().name.is_empty() {
-//!             self.failure(FailureKind::Predicate)
-//!                 .actual(self.render().value(self.actual()))
-//!                 .relation("has no name")
-//!                 .fact("Name", self.render().value(&self.actual().name))
-//!                 .raise();
-//!         }
-//!         self
-//!     }
-//! }
-//!
-//! assert_that!(Person { name: "Ada".into(), age: 36 }).is_adult().has_name();
-//!
-//! let failures = assert_that!(Person { name: "".into(), age: 16 })
-//!     .capture(|person| person.is_adult().has_name());
-//! assert_eq!(failures.len(), 2);
+//! let user = User { name: "Alice", age: 30 };
+//! assert_that!(user).matches(partial!(User { name: "Alice", .. }));
+//! # }
 //! ```
 //!
-//! Assertr's own `*Assertions` traits are public for method discovery only. Implementing them for
-//! other types is not supported. See [API stability](#api-stability).
+//! Here `..` ignores the remaining fields. The struct needs no derives or annotations. Field
+//! expectations can also use constraints, existing assertion methods, and nested partial matches.
+//! See the [partial matching guide](https://docs.rs/assertr/latest/assertr/matchers/index.html).
+//!
+//! Changing `"!"` to `"?"` in the greeting assertion above produces:
+//!
+//! ```text
+//! -------- assertr --------
+//! Assertion failed at tests/greeting.rs:5:6
+//!
+//! Expression: `"hello, world!"`
+//!
+//! Actual: "hello, world!"
+//!
+//! does not end with
+//!
+//! Expected: "?"
+//! -------- assertr --------
+//! ```
+//!
+//! ## Why a fluent API
+//!
+//! The subject comes first. This distinguishes it from the expected value, and one chain replaces
+//! one `assert!` per assertion:
+//!
+//! ```rust
+//! let vec = vec![1, 2, 3];
+//! assert_eq!(vec.len(), 3);
+//! assert!(vec.contains(&2));
+//! ```
+//!
+//! becomes
+//!
+//! ```rust
+//! use assertr::prelude::*;
+//!
+//! let vec = vec![1, 2, 3];
+//! assert_that!(vec).has_length(3).contains(2);
+//! ```
+//!
+//! ## Installation
+//!
+//! ```toml
+//! [dependencies]
+//! assertr = "0.7.1"
+//! ```
+//!
+//! The default features are `std` and `num`. Everything else is opt-in:
+//!
+//! | feature                                                    | enables                                                                             |
+//! |------------------------------------------------------------|-------------------------------------------------------------------------------------|
+//! | `std`                                                      | Assertions for standard library types (`HashMap`, `Path`, `Command`, `Mutex`, ...). |
+//! | `num`                                                      | Assertions for numeric types (`is_zero`, `is_positive`, `is_close_to`, ...).        |
+//! | `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
+//! | `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
+//! | `matchers`                                                 | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
+//! | `serde-json`                                               | `json()` and `as_json()` conversions.                                               |
+//! | `serde-toml`                                               | `toml()` and `as_toml()` conversions.                                               |
+//! | `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
+//! | `program`                                                  | Assertions that resolve an executable name or path.                                 |
+//! | `http`, `jiff`, `reqwest`, `rootcause`, `tokio`            | Assertions for the types of the crate of the same name.                             |
+//! | `full`                                                     | All of the above.                                                                   |
+//!
+//! ### no_std
+//!
+//! Disable the default features. `matchers`, `fluent`, `num`, `libm`, and `rootcause` support
+//! embedded `no_std` targets. The `http` feature leaves Assertr in `no_std` mode but currently
+//! requires a hosted target through its dependencies. Every other feature enables `std`. Add `libm`
+//! next to `num` if numeric assertions need floating-point classifications. `libm` does not enable
+//! `num` by itself.
+//!
+//! ## Quick start
+//!
+//! Import the prelude. It brings the enabled assertion traits into scope, so autocomplete lists the
+//! methods available for the subject:
+//!
+//! ```rust
+//! use assertr::prelude::*;
+//!
+//! assert_that!("42".parse::<i32>()).is_ok_satisfying(|value| {
+//!     value.is_greater_than(0).is_less_than(100);
+//! });
+//! ```
+//!
+//! `assert_that!(value)` borrows its input. Named values stay usable after the assertion, and
+//! temporaries live until the end of the enclosing statement. The few assertions that consume their
+//! subject, such as `panics()` on a closure or terminal iterator assertions, need
+//! `assert_that_owned!(value)`, which takes ownership instead:
+//!
+//! ```rust
+//! use assertr::prelude::*;
+//!
+//! assert_that_owned!((1..=3).map(|n| n * n)).contains_exactly([1, 4, 9]);
+//! ```
+//!
+//! With the `fluent` feature, an assertion context can be entered from the value itself. `must()`
+//! panics on the first failure, `verify(...)` collects the failures and returns them. Both borrow.
+//! The consuming variants are named `must_owned()` and `verify_owned()`.
+//!
+//! ```rust
+//! use assertr::prelude::*;
+//!
+//! # #[cfg(feature = "fluent")]
+//! # {
+//! "hello, world!"
+//!     .must()
+//!     .start_with("hello")
+//!     .end_with("!");
+//!
+//! let failures = 3.verify(|it| it.be_equal_to(4));
+//! assert_that!(failures).has_length(1);
+//!
+//! let mut values = vec![1, 2, 3];
+//! let reference = &mut values;
+//! reference.must().contain(2).have_length(3);
+//! reference.push(4);
+//! # }
+//! ```
+//!
+//! Fluent names follow fixed rules. `is_x` becomes `be_x`, `has_x` becomes `have_x`, other verbs
+//! become imperative (`contains` -> `contain`), and negations put `not` first (`is_not_x` ->
+//! `not_be_x`). See [`IntoAssertContext`](https://docs.rs/assertr/latest/assertr/trait.IntoAssertContext.html) for the complete rules.
+//!
+//! ## Finding assertions
+//!
+//! Autocomplete on the subject is the fastest way. For a browsable reference, start with the
+//! [assertion families](https://docs.rs/assertr/latest/assertr/assertions/index.html) on docs.rs. Each assertion trait page
+//! is the authoritative list of its methods, signatures, and required bounds.
+//!
+//! Blanket implementations make general assertions available to user-defined types. A `PartialEq`
+//! type has `is_equal_to`, a `PartialOrd` type has `is_greater_than`, and a `HasLength` type has
+//! `has_length`.
+//!
+//! ## Guides
+//!
+//! These guides build on the quick start. Each lives with the API it explains and includes examples
+//! you can adapt:
+//!
+//! - [Assert on part of a subject](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.satisfies):
+//!   check a field, a computed value, or a borrowed slice, then continue the original assertion
+//!   chain.
+//! - [Match selected fields and nested values](https://docs.rs/assertr/latest/assertr/matchers/index.html):
+//!   use `partial!` with plain values, selected matcher constraints, or existing assertions through
+//!   `satisfying`. Nest expectations through structs, collections, and maps. Only `partial!`
+//!   requires the `matchers` feature.
+//! - [Collect failures without panicking](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture):
+//!   run several checks, inspect their structured failures, and render a report when needed.
+//! - [Customize diagnostic values](https://docs.rs/assertr/latest/assertr/renderer/index.html):
+//!   render types without `Debug`, preserve a renderer across projections, and limit diagnostic
+//!   output.
+//! - [Process failures and customize reports](https://docs.rs/assertr/latest/assertr/failure/adapter/index.html):
+//!   transform captured failures with adapters or select the presentation used by a panicking
+//!   assertion.
+//! - [Write assertions for custom types](https://docs.rs/assertr/latest/assertr/#custom-assertions):
+//!   add chainable methods by composing existing assertions or building a structured failure
+//!   yourself.
+//! - [Assert properties of a type](https://docs.rs/assertr/latest/assertr/fn.assert_that_type.html):
+//!   check size, type name, or drop requirements without constructing a value.
+//!
+//! ## API stability
+//!
+//! Publicly exported items follow the usual Semantic Versioning rules unless their documentation
+//! explicitly says otherwise. The `*Assertions` traits are public for method discovery, not as
+//! downstream implementation interfaces, so adding a method to one of them is considered
+//! compatible. `assertr::__private` is the explicitly unsupported macro plumbing and must not be
+//! named directly.
+//!
+//! ## MSRV
+//!
+//! The minimum supported Rust version is `1.89.0` for both crates. Version history is recorded in
+//! the changelog.
+//!
+//! ## Contributing
+//!
+//! Run `just install-tools` once, then `just verify` before submitting a pull request. Record
+//! notable changes under `## [Unreleased]`, or under the latest version section if it has not been
+//! published yet.
+//!
+//! The README is generated from the landing-page rustdoc in `assertr/src/lib.rs`. Edit that source,
+//! format it, then run `just readme`. `just check-readme` verifies that the generated README is
+//! current.
+//!
+//! ## License
+//!
+//! Licensed under either of:
+//!
+//! - Apache License, Version 2.0 ([LICENSE-APACHE](https://github.com/lpotthast/assertr/blob/main/LICENSE-APACHE))
+//! - MIT License ([LICENSE-MIT](https://github.com/lpotthast/assertr/blob/main/LICENSE-MIT))
+// cargo-rdme extracts the literal rustdoc above but does not expand this inclusion.
+// Keep these detailed guides on the crate documentation page, after the landing page.
+#![doc = include_str!("crate_docs.md")]
 
 extern crate alloc;
 extern crate core;
@@ -193,7 +286,7 @@ pub use entry::{IntoAssertContext, IntoOwnedAssertContext};
 pub use entry::{PanicValue, Type, assert_that_type};
 #[cfg(feature = "std")]
 pub use entry::{assert_that_panic_by, assert_that_panic_by_async};
-pub use failure::{AssertionFailure, Fact, FailureKind};
+pub use failure::{AssertionFailure, AssertionFailures, Fact, FailureKind};
 pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
 
 /// An assertion chain over a subject of type `T`.
@@ -215,23 +308,29 @@ pub struct AssertThat<'t, T, M: Mode, R = DebugRenderer> {
 }
 
 struct ChainState<'t, M: Mode, R> {
-    /// The parent receives assertion counts and captured failures from derived assertions.
+    /// Parent chain used to propagate assertion counts and captured failures and collect inherited
+    /// detail messages. `None` marks a root, including a new root created by `capture`.
     parent: Option<&'t dyn DynAssertThat>,
 
-    /// User provided descriptive name of the thing assertions are made on.
+    /// Optional user-provided subject name shown in failure diagnostics. Derived chains start
+    /// without a name because they describe a new subject.
     subject_name: Option<String>,
 
-    /// Rust expression written inside an `assert_that!(...)` or fluent `.must(...)` call.
-    /// Typically, captured automatically by macro code.
+    /// Source expression shown in failure diagnostics, usually recorded by an entry macro or
+    /// fluent-expression rewriting. Derived chains start without an expression.
     expression: Option<&'static str>,
 
+    /// Context messages attached to this chain, in insertion order. Failures collect these before
+    /// their ancestors' messages through `parent`. Interior mutability lets assertion
+    /// implementations add context through a shared reference.
     detail_messages: RefCell<Vec<String>>,
 
-    /// Whether the source location of the assertion should be included in assertion failures. This
-    /// pinpoints the location in user's code that failed. Typically turned off for internal
-    /// assertr unit tests, to avoid frequent failure message churn.
+    /// Whether failures record the assertion caller's file, line, and column. Derived chains
+    /// inherit this setting. Tests can disable it when comparing exact failure reports.
     include_location: bool,
 
+    /// Limits items per repeated diagnostic group and characters per rendered leaf. Derived chains
+    /// inherit these limits, which the rendering context applies in both panic and capture mode.
     rendering_budget: RenderingBudget,
 
     /// An inherited context override for panic text. `None` uses `ToHumanReadableText`. Capture
@@ -239,11 +338,19 @@ struct ChainState<'t, M: Mode, R> {
     /// adapter with derived contexts without requiring the adapter to be `Clone`.
     panic_presentation: Option<alloc::rc::Rc<failure::panic_presentation::PanicPresentation>>,
 
+    /// Includes assertions on derived chains, even when every assertion passed.
     number_of_assertions: RefCell<NumberOfAssertions>,
-    failures: RefCell<Vec<AssertionFailure>>,
 
+    /// Captured failures owned by this chain. Derived chains forward failures through `parent`.
+    failures: RefCell<AssertionFailures>,
+
+    /// Compile-time marker selecting immediate panics or failure collection. Derived chains retain
+    /// the same mode.
     mode: PhantomData<M>,
 
+    /// Active renderer for diagnostic leaf values, preserved by mappings and cloned for derived
+    /// chains.
+    ///
     /// `R` is intentionally not constrained by `ValueRenderer<T>` here. A chain must be able to
     /// install a renderer after construction (including for a non-`Debug` `T`), and projections
     /// preserve `R` while changing `T` even when the next assertion does not render the new

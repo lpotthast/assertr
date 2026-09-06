@@ -81,13 +81,6 @@ pub trait IntoIteratorAssertions<T, R> {
     fn into_iter_has_length(self, expected: usize) -> Self
     where
         R: ValueRenderer<T>;
-
-    #[deprecated(since = "0.6.2", note = "renamed to `into_iter_is_empty`")]
-    #[cfg_attr(feature = "fluent", no_fluent_alias)]
-    /// Deprecated forwarding name for [`IntoIteratorAssertions::into_iter_is_empty`].
-    fn into_iter_iterator_is_empty(self) -> Self
-    where
-        R: ValueRenderer<T>;
 }
 
 impl<T, I, M: Mode, R> IntoIteratorAssertions<T, R> for AssertThat<'_, I, M, R>
@@ -256,13 +249,6 @@ where
         self.track_assertion();
         iterator::assert_has_length::<_, T, _, _, _>(&self, self.actual().into_iter(), expected);
         self
-    }
-    #[track_caller]
-    fn into_iter_iterator_is_empty(self) -> Self
-    where
-        R: ValueRenderer<T>,
-    {
-        self.into_iter_is_empty()
     }
 }
 
@@ -1103,16 +1089,6 @@ mod tests {
                       - Actual length: 3
                     -------- assertr --------
                 "});
-        }
-    }
-
-    mod into_iter_iterator_is_empty {
-        use crate::prelude::*;
-
-        #[test]
-        #[allow(deprecated)]
-        fn deprecated_name_remains_available() {
-            assert_that!(Vec::<i32>::new()).into_iter_iterator_is_empty();
         }
     }
 

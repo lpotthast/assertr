@@ -26,6 +26,8 @@
 
 pub mod adapter;
 mod builder;
+mod failures;
+pub use failures::AssertionFailures;
 pub(crate) mod panic_presentation;
 
 use crate::{
@@ -152,16 +154,18 @@ impl Fact {
 /// part of a failure is exposed as its own field, so consumers can inspect failures
 /// programmatically or compose their own rendering without parsing formatted text.
 ///
-/// The complete human-readable form is produced by
+/// `Display` and `Debug` use the default plain report. This type also implements
+/// [`core::error::Error`] for ordinary Result propagation, without treating nested assertion
+/// evidence as an error cause chain. The complete human-readable form is produced by
 /// [`ToHumanReadableText`](adapter::ToHumanReadableText). Panic mode uses the selected
 /// [presentation adapter](crate::AssertThat::with_panic_presentation) to produce the panic text.
 /// Capture mode retains the fields without invoking presentation. Captured failures can be
 /// explicitly passed to any [adapter](adapter::Adapter).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AssertionFailure {
     /// A structured matcher constraint, including its rendered operands and branches.
-    pub constraint: Option<crate::matchers::Description>,
+    pub constraint: Option<crate::matchers::ConstraintDescription>,
     /// Relative path from the parent subject.
     pub path: Vec<PathSegment>,
 
@@ -274,3 +278,17 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         FailureBuilder::attached(self, core::any::type_name::<T>(), location, kind)
     }
 }
+
+impl core::fmt::Display for AssertionFailure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&adapter::ToHumanReadableText.render(self), f)
+    }
+}
+
+impl core::fmt::Debug for AssertionFailure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(self, f)
+    }
+}
+
+impl core::error::Error for AssertionFailure {}

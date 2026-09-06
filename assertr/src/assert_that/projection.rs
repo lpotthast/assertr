@@ -1,6 +1,4 @@
 use alloc::borrow::ToOwned;
-#[cfg(feature = "tokio")]
-use alloc::vec::Vec;
 use core::future::Future;
 
 use crate::{AssertThat, actual::Actual, mode::Mode};
@@ -290,7 +288,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         &self,
         element: &'e U,
         assertions: A,
-    ) -> Vec<crate::AssertionFailure>
+    ) -> crate::AssertionFailures
     where
         A: for<'a> FnOnce(AssertThat<'a, U, crate::mode::Capture, R>),
         R: Clone,

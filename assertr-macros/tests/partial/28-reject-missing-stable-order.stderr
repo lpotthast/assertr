@@ -10,6 +10,7 @@ error[E0277]: the collection has no stable, meaningful element order
   = note: order-sensitive assertions require `StableOrder`; use an order-free assertion such as `contains_exactly_in_any_order` instead
   = help: the following other types implement trait `StableOrder`:
             &C
+            AssertionFailures
             LinkedList<T>
             Vec<T>
             VecDeque<T>

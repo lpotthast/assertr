@@ -12,7 +12,7 @@ error[E0283]: type annotations needed
    = note: required for `matchers::field::Field<Score, i32, {closure@$DIR/tests/partial/26-reject-ambiguous-expectation.rs:28:63: 28:68}, assertr::__private::Normalize<Both, _>>` to implement `assertr::matchers::AssertrMatcher<Score>`
    = note: required for `assertr::__private::Cons<matchers::field::Field<Score, i32, {closure@$DIR/tests/partial/26-reject-ambiguous-expectation.rs:28:63: 28:68}, assertr::__private::Normalize<Both, _>>, assertr::__private::Nil>` to implement `MatcherList<Score, DebugRenderer>`
    = note: 1 redundant requirement hidden
-   = note: required for `PartialMatch<Score, {closure@$DIR/tests/partial/26-reject-ambiguous-expectation.rs:28:46: 28:77}, assertr::__private::Cons<matchers::field::Field<Score, i32, {closure@$DIR/tests/partial/26-reject-ambiguous-expectation.rs:28:63: 28:68}, assertr::__private::Normalize<Both, _>>, assertr::__private::Nil>>` to implement `assertr::matchers::AssertrMatcher<Score>`
+   = note: required for `assertr::__private::PartialMatch<Score, {closure@$DIR/tests/partial/26-reject-ambiguous-expectation.rs:28:46: 28:77}, assertr::__private::Cons<matchers::field::Field<Score, i32, {closure@$DIR/tests/partial/26-reject-ambiguous-expectation.rs:28:63: 28:68}, assertr::__private::Normalize<Both, _>>, assertr::__private::Nil>>` to implement `assertr::matchers::AssertrMatcher<Score>`
 note: required by a bound in `matches`
   --> $WORKSPACE/assertr/src/assertions/matcher.rs
    |

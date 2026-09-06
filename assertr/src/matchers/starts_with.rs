@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::{
     ValueRenderer,
     failure::{FailureBuilder, FailureKind},
@@ -21,8 +21,8 @@ where
     R: ValueRenderer<str>,
     E: AsRef<str>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("starts with").expected(context.render().value(self.0.as_ref()))
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("starts with").expected(context.render().value(self.0.as_ref()))
     }
 
     fn evaluate(&self, actual: &A, context: &mut MatchContext<'_, R>) -> MatchResult {

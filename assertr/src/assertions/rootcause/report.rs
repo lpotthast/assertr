@@ -1,6 +1,5 @@
-use crate::assertions::core::strip_quotation_marks;
 use crate::failure::FailureKind;
-use crate::{AssertThat, Mode, mode::Panic};
+use crate::{AssertThat, Mode, ValueRenderer, mode::Panic};
 use alloc::format;
 use core::any::{TypeId, type_name};
 use core::fmt::Display;
@@ -32,17 +31,17 @@ pub trait RootcauseReportAssertions<R = crate::DebugRenderer> {
     /// preformatted contexts without requiring the concrete context type.
     fn has_current_context_display_value(self, expected: impl Display) -> Self
     where
-        R: Clone;
+        R: Clone + ValueRenderer<str>;
 
     /// Asserts that the rootcause-formatted `Debug` representation of the current context equals
     /// `expected`.
     ///
     /// This uses `Report::format_current_context()`, honoring rootcause formatter hooks and
-    /// preformatted contexts without requiring the concrete context type. One leading and one
-    /// trailing double quote, when present, are removed before comparison.
+    /// preformatted contexts without requiring the concrete context type. Quotes and escape
+    /// sequences are compared exactly.
     fn has_current_context_debug_string(self, expected: impl AsRef<str>) -> Self
     where
-        R: Clone;
+        R: Clone + ValueRenderer<str>;
 }
 
 impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportAssertions<R>
@@ -83,7 +82,7 @@ where
     #[track_caller]
     fn has_current_context_display_value(self, expected: impl Display) -> Self
     where
-        R: Clone,
+        R: Clone + ValueRenderer<str>,
     {
         self.derive_owned(rootcause::Report::as_ref)
             .has_current_context_display_value(expected);
@@ -93,7 +92,7 @@ where
     #[track_caller]
     fn has_current_context_debug_string(self, expected: impl AsRef<str>) -> Self
     where
-        R: Clone,
+        R: Clone + ValueRenderer<str>,
     {
         self.derive_owned(rootcause::Report::as_ref)
             .has_current_context_debug_string(expected);
@@ -104,7 +103,7 @@ where
 /// Assertions for borrowed rootcause report references.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait RootcauseReportRefAssertions {
+pub trait RootcauseReportRefAssertions<R = crate::DebugRenderer> {
     /// Asserts that the report has exactly `expected` direct children.
     fn has_child_count(self, expected: usize) -> Self;
 
@@ -119,18 +118,22 @@ pub trait RootcauseReportRefAssertions {
     ///
     /// This uses `ReportRef::format_current_context()`, honoring rootcause formatter hooks and
     /// preformatted contexts without requiring the concrete context type.
-    fn has_current_context_display_value(self, expected: impl Display) -> Self;
+    fn has_current_context_display_value(self, expected: impl Display) -> Self
+    where
+        R: ValueRenderer<str>;
 
     /// Asserts that the rootcause-formatted `Debug` representation of the current context equals
     /// `expected`.
     ///
     /// This uses `ReportRef::format_current_context()`, honoring rootcause formatter hooks and
-    /// preformatted contexts without requiring the concrete context type. One leading and one
-    /// trailing double quote, when present, are removed before comparison.
-    fn has_current_context_debug_string(self, expected: impl AsRef<str>) -> Self;
+    /// preformatted contexts without requiring the concrete context type. Quotes and escape
+    /// sequences are compared exactly.
+    fn has_current_context_debug_string(self, expected: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<str>;
 }
 
-impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
+impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions<R>
     for AssertThat<'_, rootcause::ReportRef<'_, C, O, T>, M, R>
 {
     #[track_caller]
@@ -175,33 +178,39 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions
     }
 
     #[track_caller]
-    fn has_current_context_display_value(self, expected: impl Display) -> Self {
+    fn has_current_context_display_value(self, expected: impl Display) -> Self
+    where
+        R: ValueRenderer<str>,
+    {
         self.track_assertion();
         let actual = format!("{}", self.actual().format_current_context());
         let expected = format!("{expected}");
 
         if actual != expected {
             self.failure(FailureKind::Equality)
-                .actual(format_args!("{actual:?}"))
+                .actual(self.render().value(actual.as_ref()))
                 .relation("is not the expected current context display value")
-                .expected(format_args!("{expected:?}"))
+                .expected(self.render().value(expected.as_ref()))
                 .raise();
         }
         self
     }
 
     #[track_caller]
-    fn has_current_context_debug_string(self, expected: impl AsRef<str>) -> Self {
+    fn has_current_context_debug_string(self, expected: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<str>,
+    {
         self.track_assertion();
         let actual = format!("{:?}", self.actual().format_current_context());
-        let actual = strip_quotation_marks(actual.as_str());
-        let expected = strip_quotation_marks(expected.as_ref());
+        let actual = actual.as_str();
+        let expected = expected.as_ref();
 
         if actual != expected {
             self.failure(FailureKind::Equality)
-                .actual(format_args!("{actual:?}"))
+                .actual(self.render().value(actual.as_ref()))
                 .relation("is not the expected current context debug string")
-                .expected(format_args!("{expected:?}"))
+                .expected(self.render().value(expected.as_ref()))
                 .raise();
         }
         self
@@ -427,7 +436,7 @@ mod tests {
                 _: &AssertThat<'t, rootcause::ReportRef<'r, Dynamic, O, T>, Panic, R>,
             ) where
                 AssertThat<'t, rootcause::ReportRef<'r, Dynamic, O, T>, Panic, R>:
-                    RootcauseReportRefAssertions
+                    RootcauseReportRefAssertions<R>
                         + RootcauseDynamicReportRefAssertions<'r, Panic, R>
                         + RootcauseDynamicReportRefExtractAssertions<'t, R>,
             {
@@ -698,6 +707,18 @@ mod tests {
         fn succeeds_when_debug_string_matches() {
             assert_that!(report!(TestError("root")))
                 .has_current_context_debug_string(r#"TestError("root")"#);
+        }
+
+        #[test]
+        fn compares_complete_formatter_output_without_stripping_quotes() {
+            let report = report!("\n");
+            let formatted = format!("{:?}", report.format_current_context());
+            assert_that!(report).has_current_context_debug_string(&formatted);
+            assert_that!(report.as_ref()).has_current_context_debug_string(&formatted);
+            let failures = assert_that!(report)
+                .capture(|it| it.has_current_context_debug_string(format!("\"{formatted}\"")));
+            assert_that!(failures).has_length(1);
+            assert_that!(report).has_current_context_display_value("\n");
         }
 
         #[test]

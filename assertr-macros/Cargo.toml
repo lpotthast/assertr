@@ -28,7 +28,7 @@ syn = { version = "3.0.3", features = ["extra-traits", "full", "visit-mut"] }
 
 [dev-dependencies]
 indoc = "2.0.5"
-renamed_assertr = { package = "assertr", version = "0.8.0", path = "../assertr", features = ["std", "fluent", "matchers"] }
+renamed_assertr = { package = "assertr", path = "../assertr", features = ["std", "fluent", "matchers"] }
 trybuild = { version = "1.0.103", features = ["diff"] }
 
 [[test]]

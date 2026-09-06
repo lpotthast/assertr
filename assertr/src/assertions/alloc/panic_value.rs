@@ -1,19 +1,49 @@
-use crate::{AssertThat, PanicValue, actual::Actual, failure::FailureKind, mode::Panic};
+use crate::{
+    AssertThat, PanicValue,
+    actual::Actual,
+    failure::FailureKind,
+    mode::{Mode, Panic},
+};
 use alloc::boxed::Box;
 use core::any::Any;
 
-use super::boxed::{downcast, raise_type_mismatch};
+use super::boxed::{downcast, raise_type_mismatch, type_mismatch};
 
 /// Explains the erased type name reported for a panic payload that is neither a `&str` nor a
 /// `String`.
 const ERASED_TYPE_NOTE: &str = "The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.";
+
+/// Type checks for `PanicValue` subjects in panic and capture mode.
+/// Use [`PanicValueExtractAssertions::has_type`] to continue with the downcast payload.
+#[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+pub trait PanicValueAssertions<'t, R = crate::DebugRenderer> {
+    /// Asserts that the payload has type `E`, preserving the original subject.
+    fn is_of_type<E: 'static>(self) -> Self;
+}
+
+impl<'t, M: Mode, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, M, R> {
+    #[track_caller]
+    fn is_of_type<E: 'static>(self) -> Self {
+        self.track_assertion();
+        if !self.actual().0.is::<E>() {
+            type_mismatch::<_, _, _, E>(
+                &self,
+                FailureKind::Panic,
+                &*self.actual().0,
+                ERASED_TYPE_NOTE,
+            );
+        }
+        self
+    }
+}
 
 /// Downcasting assertions for [`PanicValue`] subjects.
 ///
 /// These methods are available only in panic mode because a failed downcast cannot produce the
 /// requested subject type.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PanicValueAssertions<'t, R = crate::DebugRenderer> {
+pub trait PanicValueExtractAssertions<'t, R = crate::DebugRenderer> {
     /// Asserts that the panic payload has type `E` and returns an assertion over that value.
     ///
     /// An owned subject produces an `AssertThat<E>` owning `E`. A borrowed subject produces an
@@ -26,7 +56,7 @@ pub trait PanicValueAssertions<'t, R = crate::DebugRenderer> {
         R: Clone;
 }
 
-impl<'t, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R> {
+impl<'t, R> PanicValueExtractAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R> {
     #[track_caller]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
         let boxed = self.map::<Box<dyn Any>>(|it| match it {
@@ -57,15 +87,64 @@ impl<'t, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R>
 
 #[cfg(test)]
 mod tests {
+    mod is_of_type {
+        use crate::prelude::*;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            let value: crate::PanicValue = crate::PanicValue(Box::new("foo"));
+            value.must().be_of_type::<&str>();
+        }
+
+        #[test]
+        fn checks_the_type_without_extracting_in_both_modes() {
+            let value: crate::PanicValue = crate::PanicValue(Box::new("foo"));
+            assert_that!(value)
+                .is_of_type::<&str>()
+                .has_type::<&str>()
+                .is_equal_to("foo");
+            let failures =
+                assert_that!(value).capture(|it| it.is_of_type::<String>().is_of_type::<&str>());
+            assert_that!(failures).has_length(1);
+            assert_eq!(failures[0].kind, crate::FailureKind::Panic);
+        }
+
+        #[test]
+        fn captures_the_exact_type_mismatch_report() {
+            let value: crate::PanicValue = crate::PanicValue(Box::new("foo"));
+            let failures = assert_that!(value)
+                .with_location(false)
+                .capture(PanicValueAssertions::is_of_type::<u32>);
+            assert_eq!(
+                failures[0].to_string(),
+                indoc::indoc! {"
+                -------- assertr --------
+                Expression: `value`
+
+                Actual: &str
+
+                is not of the expected type
+
+                Expected: u32
+                -------- assertr --------
+            "}
+            );
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(AssertThat<'static, crate::PanicValue, Capture, NoRenderer> => PanicValueAssertions<'static, NoRenderer>);
+            assert_trait_impl!(AssertThat<'static, crate::PanicValue, Panic, NoRenderer> => PanicValueAssertions<'static, NoRenderer>);
+
             assert_trait_impl!(
                 AssertThat<'static, crate::PanicValue, Panic, NoRenderer>
-                    => PanicValueAssertions<'static, NoRenderer>
+                    => PanicValueExtractAssertions<'static, NoRenderer>
             );
         }
     }

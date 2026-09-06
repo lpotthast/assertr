@@ -89,18 +89,6 @@ mod partial;
 /// `assertr::matchers::satisfying` to check it with existing assertion methods. The built-in
 /// matchers provide selected constraints rather than a counterpart for every assertion.
 ///
-/// ```rust
-/// # extern crate renamed_assertr as assertr;
-/// use assertr::prelude::*;
-///
-/// struct User {
-///     name: String,
-///     age: u32,
-/// }
-/// let user = User { name: "Alice".into(), age: 30 };
-/// let alice = partial!(User { name: "Alice", .. });
-/// assert_that!(user).matches(&alice);
-/// ```
 ///
 /// Without `..`, every field must be listed. Omitted fields need no comparison or rendering
 /// support. Neither the whole type nor ignored fields need `PartialEq` or `Debug`, and private

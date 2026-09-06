@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::{
     ValueRenderer,
     assertions::map::{Map, MapKeyQuery, MapLookup},
@@ -24,8 +24,8 @@ where
     M: AssertrMatcher<MapType::Value, R>,
     R: ValueRenderer<K>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("has a matching entry")
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("has a matching entry")
             .expected(context.render().value(&self.key))
             .children([self.matcher.describe(context)])
     }
@@ -35,7 +35,9 @@ where
             if let Some((_, value)) = actual.get_key_value(self.key.as_query()) {
                 self.matcher.evaluate(value, context)
             } else {
-                context.outcome(false, |_| Description::new("contains the required key"))
+                context.outcome(false, |_| {
+                    ConstraintDescription::new("contains the required key")
+                })
             }
         };
         if context.is_diagnostic() {

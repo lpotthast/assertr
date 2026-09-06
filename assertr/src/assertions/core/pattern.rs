@@ -47,8 +47,12 @@ macro_rules! pattern {
 }
 
 impl<A: ?Sized, R, P: Fn(&A) -> bool> crate::matchers::AssertrMatcher<A, R> for Pattern<P> {
-    fn describe(&self, _: &crate::matchers::MatchContext<'_, R>) -> crate::matchers::Description {
-        crate::matchers::Description::new("matches the pattern").expected(self.description)
+    fn describe(
+        &self,
+        _: &crate::matchers::MatchContext<'_, R>,
+    ) -> crate::matchers::ConstraintDescription {
+        crate::matchers::ConstraintDescription::new("matches the pattern")
+            .expected(self.description)
     }
     fn evaluate(
         &self,

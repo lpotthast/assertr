@@ -7,21 +7,34 @@ use super::super::Adapter;
 /// Construct it with [`AdapterExt::map_err`](crate::failure::adapter::AdapterExt::map_err). The
 /// mapper runs on each error from the wrapped adapter, on the calling thread. It does not run
 /// during construction or on success. Both the adapter and mapper may borrow local data.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 #[must_use]
-pub struct MapErr<A, F> {
+pub struct MapErr<A, F, Input: ?Sized> {
+    input: core::marker::PhantomData<fn(&Input)>,
     adapter: A,
     mapper: F,
 }
 
-impl<A, F> MapErr<A, F> {
-    /// Creates an adapter with the given error mapper.
-    pub const fn new(adapter: A, mapper: F) -> Self {
-        Self { adapter, mapper }
+impl<A: Clone, F: Clone, Input: ?Sized> Clone for MapErr<A, F, Input> {
+    fn clone(&self) -> Self {
+        Self::new(self.adapter.clone(), self.mapper.clone())
     }
 }
 
-impl<Input: ?Sized, A, F, Error> Adapter<Input> for MapErr<A, F>
+impl<A: Copy, F: Copy, Input: ?Sized> Copy for MapErr<A, F, Input> {}
+
+impl<A, F, Input: ?Sized> MapErr<A, F, Input> {
+    /// Creates an adapter with the given error mapper.
+    pub const fn new(adapter: A, mapper: F) -> Self {
+        Self {
+            adapter,
+            mapper,
+            input: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<Input: ?Sized, A, F, Error> Adapter<Input> for MapErr<A, F, Input>
 where
     A: Adapter<Input>,
     F: Fn(A::Error) -> Error,

@@ -8,19 +8,25 @@ use alloc::{borrow::Cow, vec::Vec};
 use core::ops::{Deref, DerefMut};
 
 /// Owned constraint data, independent of whether a subject satisfies it.
+///
+/// Fields are public so diagnostic consumers can inspect and transform the constraint tree,
+/// just as they can inspect and transform an [`AssertionFailure`].
+/// Construct descriptions with [`new`](Self::new) and the builder methods. This type is
+/// non-exhaustive so additional diagnostic fields can be introduced compatibly.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Description {
+#[non_exhaustive]
+pub struct ConstraintDescription {
     /// Lowercase relation without embedded values.
     pub relation: Cow<'static, str>,
     /// Rendered expected operand, if any.
     pub expected: Option<Rendered>,
     /// Composed constraints, in declaration order.
-    pub children: Vec<Description>,
+    pub children: Vec<ConstraintDescription>,
     /// Number of constraint branches omitted by the rendering budget.
     pub omitted_children: usize,
 }
 
-impl Description {
+impl ConstraintDescription {
     /// Describes a relation.
     pub fn new(relation: impl Into<Cow<'static, str>>) -> Self {
         Self {
@@ -55,6 +61,7 @@ impl Description {
 
 /// The truth result, independent of retained diagnostics or rendering limits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MatchResult {
     /// Whether the positive constraint matched.
     pub matched: bool,
@@ -176,7 +183,7 @@ impl<'r, R> MatchContext<'r, R> {
     pub fn outcome(
         &mut self,
         matched: bool,
-        description: impl FnOnce(&Self) -> Description,
+        description: impl FnOnce(&Self) -> ConstraintDescription,
     ) -> MatchResult {
         if matched != self.positive {
             if self.is_diagnostic() {

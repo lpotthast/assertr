@@ -24,3 +24,6 @@ pub use crate::matchers::normalize::{EqualityKind, MatcherKind, Normalize, norma
 
 pub use crate::matchers::field::field;
 pub use crate::matchers::partial_match::partial_match;
+
+#[doc(hidden)]
+pub use crate::matchers::partial_match::PartialMatch;

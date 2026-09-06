@@ -1,4 +1,6 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult, Predicate, predicate};
+use super::{
+    AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, Predicate, predicate,
+};
 use alloc::vec::Vec;
 
 pub(super) mod sealed {
@@ -19,7 +21,7 @@ pub trait MatcherList<A: ?Sized, R>: sealed::Sealed {
     }
 
     /// Describes one expectation slot. The slot must be less than `len()`.
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description;
+    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription;
 
     /// Evaluates one expectation slot. The slot must be less than `len()`.
     fn evaluate_at(
@@ -48,7 +50,7 @@ where
         self.0.len()
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description {
+    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
         self.0.describe_at(index, context)
     }
 
@@ -77,7 +79,7 @@ impl<A: ?Sized, R> MatcherList<A, R> for Nil {
         0
     }
 
-    fn describe_at(&self, _: usize, _: &MatchContext<'_, R>) -> Description {
+    fn describe_at(&self, _: usize, _: &MatchContext<'_, R>) -> ConstraintDescription {
         panic!("empty matcher list")
     }
 
@@ -95,7 +97,7 @@ where
         1 + self.1.len()
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description {
+    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
         if index == 0 {
             self.0.describe(context)
         } else {
@@ -127,7 +129,7 @@ where
         <[M]>::len(self)
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description {
+    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
         self[index].describe(context)
     }
 
@@ -153,7 +155,7 @@ macro_rules! homogeneous {
                 self.as_slice().len()
             }
 
-            fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description {
+            fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
                 self[index].describe(context)
             }
 
@@ -182,7 +184,7 @@ where
         (**self).len()
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description {
+    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
         (**self).describe_at(index, context)
     }
 
@@ -203,7 +205,7 @@ impl<A: ?Sized, R> MatcherList<A, R> for () {
         0
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description {
+    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
         <Nil as MatcherList<A, R>>::describe_at(&Nil, index, context)
     }
 
@@ -229,7 +231,7 @@ macro_rules! tuple {
                 $length
             }
 
-            fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description {
+            fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
                 match index {
                     $($slot => self.$slot.describe(context),)+
                     _ => panic!("matcher slot out of bounds"),

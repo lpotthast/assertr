@@ -1,8 +1,7 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::{
-    AssertThat, AssertionFailure, actual::Actual, mode::Capture, renderer::RenderingContext,
+    AssertThat, AssertionFailures, actual::Actual, mode::Capture, renderer::RenderingContext,
 };
-use alloc::vec::Vec;
 
 /// A matcher that checks a value with existing assertion methods. Construct it with [`satisfying`].
 pub struct Satisfying<F>(F);
@@ -76,8 +75,8 @@ where
     R: Clone,
     F: for<'a> Fn(AssertThat<'a, A, Capture, R>),
 {
-    fn describe(&self, _: &MatchContext<'_, R>) -> Description {
-        Description::new("satisfies the assertions")
+    fn describe(&self, _: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("satisfies the assertions")
     }
 
     fn evaluate(&self, actual: &A, context: &mut MatchContext<'_, R>) -> MatchResult {
@@ -104,7 +103,7 @@ pub(crate) fn collect_assertions<A, R, F>(
     rendering: RenderingContext<'_, R>,
     include_location: bool,
     assertions: F,
-) -> Vec<AssertionFailure>
+) -> AssertionFailures
 where
     R: Clone,
     F: for<'a> FnOnce(AssertThat<'a, A, Capture, R>),

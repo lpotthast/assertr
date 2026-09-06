@@ -723,7 +723,8 @@ mod tests {
 
         #[test]
         fn all_string_like_subjects_produce_identical_descriptions() {
-            let rendered = |mut failures: Vec<AssertionFailure>| {
+            let rendered = |failures: AssertionFailures| {
+                let mut failures = failures.into_vec();
                 for failure in &mut failures {
                     failure.expression = None;
                 }

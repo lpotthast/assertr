@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult, MatcherList};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, MatcherList};
 use crate::{
     assertions::collection::Collection,
     failure::{FailureBuilder, FailureKind},
@@ -21,8 +21,8 @@ where
     C: Collection + ?Sized,
     L: MatcherList<C::Item, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("has exactly these elements in any order")
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("has exactly these elements in any order")
             .omitted_children(self.0.len().saturating_sub(context.render().max_items()))
             .children(
                 (0..self.0.len().min(context.render().max_items()))

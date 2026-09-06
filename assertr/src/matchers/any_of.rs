@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult, MatcherList};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, MatcherList};
 use crate::failure::Fact;
 
 /// A disjunction of constraints.
@@ -13,8 +13,8 @@ impl<A: ?Sized, R, L> AssertrMatcher<A, R> for AnyOf<L>
 where
     L: MatcherList<A, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("satisfies any constraint")
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("satisfies any constraint")
             .omitted_children(self.0.len().saturating_sub(context.render().max_items()))
             .children(
                 (0..self.0.len().min(context.render().max_items()))

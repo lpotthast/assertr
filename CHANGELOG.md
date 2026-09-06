@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `with_panic_presentation` selects an owned `'static` text adapter shared by derived assertions, while capture mode
   leaves presentation to the caller. Presentation errors fall back to the built-in report, as do unwinding adapter
   panics with `std`.
+- `AssertionFailure` and the new `AssertionFailures` aggregate implement `core::error::Error`, with plain readable
+  `Display` and `Debug` reports that coexist with explicit presentation adapters.
+- Box and panic-payload `is_of_type` checks preserve the subject and work in panic and capture mode.
 
 ### Changed
 
@@ -56,12 +59,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   reference implementations.
 - **Breaking:** Captured failures replace `description` and `details` with `renderer::Rendered` value trees, relations,
   labeled facts, nested children, matcher paths and constraints, subject type metadata, and `FailureKind` tags.
-  `AssertionFailure` no longer implements `Display`, so use `ToHumanReadableText.render(&failure)` for text.
+  Read the structured fields directly or use `Display` and `ToHumanReadableText` for text.
 - **Breaking:** Custom leaf assertions must replace `fail`, `fail_with_details`, and the `failure::Failure` trait
   with `self.failure(kind)` and `FailureBuilder`, supplying structured evidence before calling `raise()`.
 - **Breaking:** Custom diagnostic code must replace `render_value`, `render_values`, `Renderable`, and
   `RenderableValues` with adapters from `AssertThat::render()`, passed directly to the failure builder.
   Use `value`, `values`, or `borrowed_values`, and replace `CollectionStyle` with `renderer::GroupStyle`.
+- **Breaking:** `capture`, `verify`, and `verify_owned` return `AssertionFailures` instead of a vector.
+  Use `into_vec()` where a vector is required.
+- **Breaking:** Import `BoxExtractAssertions` or `PanicValueExtractAssertions` for extracting `has_type` and
+  `has_type_ref` calls, or use the prelude. `BoxAssertions` and `PanicValueAssertions` now provide type checks.
+- **Breaking:** Program extraction moves to `ProgramExtractAssertions::get_resolved_path`, replacing
+  `ProgramAssertionsRequiringPanicMode::exists_and` and its fluent alias.
+- **Breaking:** Range `contains_element` and `does_not_contain_element` consume and return their assertion context.
+  Chain successive checks or start a new context instead of reusing a moved one.
+- **Breaking:** Debug and Display comparisons include quotes and escape sequences exactly, including rootcause's
+  current-context formatting. Use `has_debug_string("42")` for preformatted numeric expectations and include Debug's
+  surrounding quotes when expecting string output. Formatting diagnostics require `ValueRenderer<str>`.
 - Failure reports use a consistent layout with separate values, relation sentences, chain messages, labeled facts,
   and nested failures. Update diagnostic text snapshots, including positional indexes, map keys, and iterator scan
   evidence.
@@ -76,6 +90,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
+
+### Removed
+
+- **Breaking:** Removed deprecated `contains_exactly_matching_in_any_order`, `contain_exactly_matching_in_any_order`,
+  and `into_iter_iterator_is_empty`. Use `contains_exactly_in_any_order_matching`, its fluent alias, and
+  `into_iter_is_empty` respectively.
 
 ## [0.7.1] - 2026-09-02
 

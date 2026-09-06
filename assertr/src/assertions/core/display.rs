@@ -1,35 +1,38 @@
 use alloc::format;
 use core::fmt::Display;
 
-use crate::assertions::core::strip_quotation_marks;
-use crate::{AssertThat, Mode, failure::FailureKind};
+use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions over a subject's [`Display`] representation.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait DisplayAssertions {
+pub trait DisplayAssertions<R = crate::DebugRenderer> {
     /// Asserts that the subject and `expected` have the same `Display` representation.
     ///
-    /// One leading and one trailing double quote, when present, are removed from both
-    /// representations before comparison.
-    fn has_display_value(self, expected: impl Display) -> Self;
+    /// Compares the complete representation exactly, including quotes and escape sequences.
+    fn has_display_value(self, expected: impl Display) -> Self
+    where
+        R: ValueRenderer<str>;
 }
 
-impl<T: Display, M: Mode, R> DisplayAssertions for AssertThat<'_, T, M, R> {
+impl<T: Display, M: Mode, R> DisplayAssertions<R> for AssertThat<'_, T, M, R> {
     #[track_caller]
-    fn has_display_value(self, expected: impl Display) -> Self {
+    fn has_display_value(self, expected: impl Display) -> Self
+    where
+        R: ValueRenderer<str>,
+    {
         self.track_assertion();
 
         let actual_string = format!("{}", self.actual());
         let expected_string = format!("{expected}");
 
-        let actual_str = strip_quotation_marks(actual_string.as_str());
-        let expected_str = strip_quotation_marks(expected_string.as_str());
+        let actual_str = actual_string.as_str();
+        let expected_str = expected_string.as_str();
 
         if actual_str != expected_str {
             self.failure(FailureKind::Equality)
-                .actual(format_args!("{actual_str:?}"))
-                .expected(format_args!("{expected_str:?}"))
+                .actual(self.render().value(actual_str))
+                .expected(self.render().value(expected_str))
                 .raise();
         }
         self
@@ -45,7 +48,7 @@ mod tests {
         #[test]
         fn trait_is_implemented_without_renderer_support() {
             assert_trait_impl!(
-                AssertThat<'static, i32, Panic, NoRenderer> => DisplayAssertions
+                AssertThat<'static, i32, Panic, NoRenderer> => DisplayAssertions<NoRenderer>
             );
         }
     }
@@ -58,6 +61,17 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             42.must().have_display_value(42);
+        }
+
+        #[test]
+        fn quotes_and_escape_characters_are_significant() {
+            use crate::prelude::*;
+            for value in ["\"foo\"", "\"foo", "foo\"", "\n", "\\n", "é🦀"] {
+                assert_that!(value).has_display_value(value);
+                let failures = assert_that!(value).capture(|it| it.has_display_value("foo"));
+                assert_that!(failures).has_length(1);
+            }
+            assert_that!(42).has_display_value("42");
         }
 
         mod with_number {

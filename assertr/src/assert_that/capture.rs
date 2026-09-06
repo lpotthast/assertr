@@ -2,7 +2,7 @@ use alloc::{string::String, vec::Vec};
 use core::{cell::RefCell, marker::PhantomData};
 
 use crate::{
-    AssertThat, AssertionFailure, ChainState,
+    AssertThat, AssertionFailures, ChainState,
     details::WithDetail,
     mode::{Capture, Panic},
     tracking::NumberOfAssertions,
@@ -30,11 +30,13 @@ impl<'t, R> ChainState<'t, Panic, R> {
 
 impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     /// Runs the given assertions in capture mode and returns the collected failures as structured
-    /// [`AssertionFailure`] values. An empty result means every assertion passed.
+    /// [`crate::AssertionFailure`] values. An empty result means every assertion passed.
     ///
     /// Use this when a test or validation step should report several failed checks together. The
     /// closure receives this chain in capture mode and must return it, or a mapped continuation,
     /// so its failures can be extracted. Keep the final assertion as the closure's return value.
+    /// The returned [`AssertionFailures`] supports slice access, iteration, collection assertions,
+    /// and conversion to a vector through [`AssertionFailures::into_vec`].
     ///
     /// ```rust
     /// use assertr::prelude::*;
@@ -48,8 +50,9 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     /// assert!(report.contains("is not less than"));
     /// ```
     ///
-    /// Each [`AssertionFailure`] exposes its values, relation, facts, and nested failures as data.
-    /// Inspect those fields directly or pass the failure to an [adapter](crate::failure::adapter).
+    /// Each [`crate::AssertionFailure`] exposes its values, relation, facts, and nested failures as
+    /// data. Inspect those fields directly or pass the failure to an
+    /// [adapter](crate::failure::adapter).
     /// [`ToHumanReadableText`](crate::failure::adapter::ToHumanReadableText) produces the default
     /// report. Capture mode never invokes the chain's
     /// [panic presentation](Self::with_panic_presentation).
@@ -68,7 +71,7 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     /// Panics if the closure performed no assertions.
     #[track_caller]
     #[must_use = "the captured failures must be inspected; chain assertions without `capture` to panic on failure instead"]
-    pub fn capture<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    pub fn capture<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(AssertThat<'t, T, Capture, R>) -> AssertThat<'t, U, Capture, R2>,
     {
@@ -95,7 +98,7 @@ impl<'t, T, R> AssertThat<'t, T, Capture, R> {
     /// returns. Shared implementation of [`AssertThat::capture`] and the fluent `verify` entry
     /// points.
     #[track_caller]
-    pub(crate) fn run_and_collect<F, U: 't, R2>(self, assertions: F) -> Vec<AssertionFailure>
+    pub(crate) fn run_and_collect<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(Self) -> AssertThat<'t, U, Capture, R2>,
     {
@@ -112,6 +115,38 @@ impl<'t, T, R> AssertThat<'t, T, Capture, R> {
 mod tests {
     use crate::prelude::*;
     use indoc::formatdoc;
+
+    #[test]
+    fn returned_context_collects_projections_and_renderer_changes_once() {
+        let failures = assert_that!([1, 2])
+            .with_detail_message("root detail")
+            .capture(|it| {
+                it.derive(|values| &values[0]).is_equal_to(3);
+                it.with_renderer(DebugRenderer).contains(4)
+            });
+        assert_that!(failures).has_length(2);
+        for failure in &failures {
+            assert_that!(failure.messages).contains("root detail");
+        }
+    }
+
+    #[test]
+    fn owned_iterator_returns_a_context_that_finishes_capture() {
+        let failures = assert_that_owned!([1, 2].into_iter())
+            .capture(|it| -> AssertThat<'_, (), Capture> { it.contains(3) });
+        assert_that!(failures).has_length(1);
+        assert_that!(assert_that_owned!(0..).capture(|it| it.starts_with([0, 1]))).is_empty();
+    }
+
+    #[test]
+    #[cfg(feature = "fluent")]
+    #[crate::fluent_expressions]
+    fn fluent_verification_collects_returned_contexts() {
+        let failures = 1.verify(|it| it.be_equal_to(2));
+        assert_eq!(failures[0].expression, Some("1"));
+        assert_that!([1, 2].into_iter().verify_owned(|it| it.contain(3))).has_length(1);
+        assert_that!(1.verify(|it| it.be_equal_to(1))).is_empty();
+    }
 
     #[test]
     fn capture_yields_failures_and_does_not_panic() {

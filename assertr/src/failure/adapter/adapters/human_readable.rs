@@ -145,6 +145,22 @@ impl ToHumanReadableText {
     }
 }
 
+impl Adapter<crate::AssertionFailures> for ToHumanReadableText {
+    type Output = HumanReadableText;
+    type Error = Infallible;
+
+    fn adapt(&self, failures: &crate::AssertionFailures) -> Result<Self::Output, Self::Error> {
+        let mut report = String::new();
+        for (index, failure) in failures.iter().enumerate() {
+            if index != 0 {
+                report.push('\n');
+            }
+            report.push_str(self.render(failure).as_str());
+        }
+        Ok(HumanReadableText(report))
+    }
+}
+
 impl Adapter<AssertionFailure> for ToHumanReadableText {
     type Output = HumanReadableText;
     type Error = Infallible;
@@ -275,7 +291,10 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) ->
     write_children(w, &failure.children)
 }
 
-fn write_constraint(description: &crate::matchers::Description, w: &mut dyn Write) -> fmt::Result {
+fn write_constraint(
+    description: &crate::matchers::ConstraintDescription,
+    w: &mut dyn Write,
+) -> fmt::Result {
     w.write_str(&body(
         None,
         Some(&description.relation),

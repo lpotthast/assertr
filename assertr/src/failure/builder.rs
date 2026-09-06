@@ -100,7 +100,7 @@ impl FailureTarget for Detached {}
 pub struct FailureBuilder<T: FailureTarget> {
     path: Vec<PathSegment>,
     omitted_children: usize,
-    constraint: Option<crate::matchers::Description>,
+    constraint: Option<crate::matchers::ConstraintDescription>,
     target: T,
     subject_type_name: &'static str,
     kind: FailureKind,
@@ -183,7 +183,7 @@ impl<T: FailureTarget> FailureBuilder<T> {
     }
 
     /// Attaches an independently described matcher constraint.
-    pub fn constraint(mut self, description: crate::matchers::Description) -> Self {
+    pub fn constraint(mut self, description: crate::matchers::ConstraintDescription) -> Self {
         self.constraint = Some(description);
         self
     }

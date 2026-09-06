@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 
 /// An explicit matcher selection for macro shorthand.
 pub struct AsMatcher<M>(M);
@@ -12,7 +12,7 @@ impl<A: ?Sized, R, M> AssertrMatcher<A, R> for AsMatcher<M>
 where
     M: AssertrMatcher<A, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
         self.0.describe(context)
     }
 

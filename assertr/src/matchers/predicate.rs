@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use alloc::borrow::Cow;
 
 /// A boolean closure with an optional diagnostic description.
@@ -31,8 +31,8 @@ impl<A: ?Sized, R, F> AssertrMatcher<A, R> for Predicate<F>
 where
     F: Fn(&A) -> bool,
 {
-    fn describe(&self, _: &MatchContext<'_, R>) -> Description {
-        Description::new(self.description.clone())
+    fn describe(&self, _: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new(self.description.clone())
     }
 
     fn evaluate(&self, actual: &A, context: &mut MatchContext<'_, R>) -> MatchResult {

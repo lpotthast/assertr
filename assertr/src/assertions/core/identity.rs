@@ -155,21 +155,19 @@ mod tests {
         #[test]
         fn captures_distinct_equal_values_and_preserves_context() {
             let values = [42, 42];
+            let mut expected_line = 0;
             let failures = assert_that!(values[0])
                 .with_renderer(NoRenderer)
                 .with_subject_name("candidate")
                 .with_detail_message("identity matters")
                 .capture(|it| {
-                    let expected_line = line!() + 1;
+                    expected_line = line!() + 1;
                     let it = it.is_same_instance_as(&values[1]);
-                    assert_eq!(
-                        it.state.failures.borrow()[0].location.unwrap().line(),
-                        expected_line
-                    );
                     it.is_same_instance_as(&values[0])
                 });
             assert_eq!(failures.len(), 1);
             let failure = &failures[0];
+            assert_eq!(failure.location.unwrap().line(), expected_line);
             assert_eq!(failure.kind, FailureKind::Equality);
             assert_eq!(failure.subject_name.as_deref(), Some("candidate"));
             assert_eq!(failure.expression, Some("values[0]"));

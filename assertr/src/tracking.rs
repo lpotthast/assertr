@@ -101,4 +101,21 @@ mod tests {
         assert_that!(initial_assertions.state.number_of_assertions.borrow().0).is_equal_to(3);
         assert_that!(derived_assertions.state.number_of_assertions.borrow().0).is_equal_to(1);
     }
+
+    #[test]
+    fn capture_counts_each_assertion_once_across_projections_and_renderer_changes() {
+        let failures = assert_that!(42).is_equal_to(42).capture(|root| {
+            assert_eq!(root.state.number_of_assertions.borrow().0, 0);
+
+            let root = root.is_equal_to(42);
+            let child = root.derive_owned(|it| it * 2).is_equal_to(84);
+            assert_eq!(root.state.number_of_assertions.borrow().0, 2);
+            assert_eq!(child.state.number_of_assertions.borrow().0, 1);
+
+            let root = root.with_renderer(DebugRenderer).is_equal_to(43);
+            assert_eq!(root.state.number_of_assertions.borrow().0, 3);
+            root
+        });
+        assert_eq!(failures.len(), 1);
+    }
 }

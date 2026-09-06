@@ -1,6 +1,6 @@
 use super::{
-    AssertrMatcher, Description, EntryMatcherList, MatchContext, MatchResult, MatcherList,
-    entry_matcher_list::sealed as entry_list_sealed, lists::sealed as list_sealed,
+    AssertrMatcher, ConstraintDescription, EntryMatcherList, MatchContext, MatchResult,
+    MatcherList, entry_matcher_list::sealed as entry_list_sealed, lists::sealed as list_sealed,
 };
 use crate::{
     ValueRenderer,
@@ -23,8 +23,8 @@ where
     L: EntryMatcherList<MapType, R>,
     R: ValueRenderer<MapType::Key>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("has exactly the matching entries")
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("has exactly the matching entries")
             .omitted_children(self.0.len().saturating_sub(context.render().max_items()))
             .children(
                 (0..self.0.len().min(context.render().max_items()))
@@ -57,7 +57,9 @@ where
                                 .build(),
                         );
                     } else {
-                        extras.outcome(false, |_| Description::new("has an unexpected key"));
+                        extras.outcome(false, |_| {
+                            ConstraintDescription::new("has an unexpected key")
+                        });
                     }
                 }
             }
@@ -88,7 +90,7 @@ where
         self.0.len()
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> Description {
+    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
         self.0.describe_at(index, context)
     }
 

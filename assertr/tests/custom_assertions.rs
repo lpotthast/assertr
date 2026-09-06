@@ -468,14 +468,14 @@ mod generated_fluent_aliases {
 
 mod matcher_authoring {
     use assertr::{
-        matchers::{Description, MatchContext, MatchResult},
+        matchers::{ConstraintDescription, MatchContext, MatchResult},
         prelude::*,
     };
 
     struct AgeAtLeast(u32);
     impl<R: ValueRenderer<u32>> AssertrMatcher<super::Person, R> for AgeAtLeast {
-        fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-            Description::new("has at least the required age")
+        fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+            ConstraintDescription::new("has at least the required age")
                 .expected(context.render().value(&self.0))
         }
         fn evaluate(

@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::assertions::collection::Collection;
 
 /// Applies one constraint to every element of an order-free collection.
@@ -14,8 +14,9 @@ where
     C: Collection + ?Sized,
     M: AssertrMatcher<C::Item, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
-        Description::new("has every element matching").children([self.0.describe(context)])
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
+        ConstraintDescription::new("has every element matching")
+            .children([self.0.describe(context)])
     }
 
     fn evaluate(&self, actual: &C, context: &mut MatchContext<'_, R>) -> MatchResult {

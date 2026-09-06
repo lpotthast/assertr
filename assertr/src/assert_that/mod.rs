@@ -25,7 +25,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
             number_of_assertions: core::cell::RefCell::new(
                 crate::tracking::NumberOfAssertions::new(),
             ),
-            failures: core::cell::RefCell::new(alloc::vec::Vec::new()),
+            failures: core::cell::RefCell::new(crate::AssertionFailures::new()),
             mode: core::marker::PhantomData,
             renderer,
         }
@@ -43,7 +43,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
             number_of_assertions: core::cell::RefCell::new(
                 crate::tracking::NumberOfAssertions::new(),
             ),
-            failures: core::cell::RefCell::new(alloc::vec::Vec::new()),
+            failures: core::cell::RefCell::new(crate::AssertionFailures::new()),
             mode: core::marker::PhantomData,
             renderer,
         }

@@ -1,4 +1,4 @@
-use super::{AssertrMatcher, Description, MatchContext, MatchResult};
+use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::failure::PathSegment;
 use core::marker::PhantomData;
 
@@ -32,7 +32,7 @@ where
     P: for<'a> Fn(&'a A) -> Option<&'a T>,
     M: AssertrMatcher<T, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> Description {
+    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
         self.matcher.describe(context)
     }
 
@@ -42,7 +42,9 @@ where
                 self.matcher.evaluate(value, context)
             })
         } else {
-            context.outcome(false, |_| Description::new("has the required structure"))
+            context.outcome(false, |_| {
+                ConstraintDescription::new("has the required structure")
+            })
         }
     }
 }

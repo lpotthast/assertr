@@ -135,36 +135,6 @@ pub trait CollectionAssertions<T, R> {
     where
         R: ValueRenderer<T> + Clone,
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>);
-
-    /// Deprecated name of [`CollectionAssertions::contains_exactly_in_any_order_matching`].
-    #[deprecated(
-        since = "0.6.2",
-        note = "renamed to `contains_exactly_in_any_order_matching`"
-    )]
-    #[cfg_attr(feature = "fluent", no_fluent_alias)]
-    #[track_caller]
-    fn contains_exactly_matching_in_any_order<P>(self, expected: P) -> Self
-    where
-        Self: Sized,
-        P: crate::matchers::MatcherList<T, R>,
-    {
-        self.contains_exactly_in_any_order_matching(expected)
-    }
-
-    /// Deprecated name of the `contain_exactly_in_any_order_matching` fluent alias.
-    #[cfg(feature = "fluent")]
-    #[deprecated(
-        since = "0.6.2",
-        note = "renamed to `contain_exactly_in_any_order_matching`"
-    )]
-    #[track_caller]
-    fn contain_exactly_matching_in_any_order<P>(self, expected: P) -> Self
-    where
-        Self: Sized,
-        P: crate::matchers::MatcherList<T, R>,
-    {
-        self.contains_exactly_in_any_order_matching(expected)
-    }
 }
 
 impl<C, M, R> CollectionAssertions<C::Item, R> for AssertThat<'_, C, M, R>
@@ -772,7 +742,11 @@ mod tests {
                         Self::Any => true,
                         Self::Value(value) => actual.0 == *value,
                     },
-                    |_| crate::matchers::Description::new("matches the wildcard constraint"),
+                    |_| {
+                        crate::matchers::ConstraintDescription::new(
+                            "matches the wildcard constraint",
+                        )
+                    },
                 )
             }
         }
@@ -1000,20 +974,6 @@ mod tests {
                             satisfies the predicate
                 -------- assertr --------
             "});
-        }
-
-        #[test]
-        #[allow(deprecated)]
-        fn deprecated_names_remain_available() {
-            let predicates: [fn(&i32) -> bool; 2] = [|it| *it == 2, |it| *it == 1];
-
-            assert_that!([1, 2].as_slice()).contains_exactly_matching_in_any_order(
-                crate::matchers::predicate_list(predicates),
-            );
-
-            #[cfg(feature = "fluent")]
-            assert_that!([1, 2].as_slice())
-                .contain_exactly_matching_in_any_order(crate::matchers::predicate_list(predicates));
         }
 
         #[test]

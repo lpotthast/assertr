@@ -67,7 +67,7 @@ pub trait ProgramAssertions<'t, 'a, M: Mode, R = crate::DebugRenderer> {
 
 /// Panic-mode assertions that project a [`Program`] to its resolved path.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ProgramAssertionsRequiringPanicMode<'t, R = crate::DebugRenderer> {
+pub trait ProgramExtractAssertions<'t, R = crate::DebugRenderer> {
     /// The program subject rendered in failure diagnostics.
     type Subject;
 
@@ -75,7 +75,7 @@ pub trait ProgramAssertionsRequiringPanicMode<'t, R = crate::DebugRenderer> {
     /// resulting [`PathBuf`].
     ///
     /// This projection is available only in [`Panic`] mode because failure cannot produce a path.
-    fn exists_and(self) -> AssertThat<'t, PathBuf, Panic, R>
+    fn get_resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
     where
         R: ValueRenderer<Self::Subject>;
 }
@@ -102,13 +102,11 @@ impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Prog
     }
 }
 
-impl<'a, 't, R> ProgramAssertionsRequiringPanicMode<'t, R>
-    for AssertThat<'t, Program<'a>, Panic, R>
-{
+impl<'a, 't, R> ProgramExtractAssertions<'t, R> for AssertThat<'t, Program<'a>, Panic, R> {
     type Subject = Program<'a>;
 
     #[track_caller]
-    fn exists_and(self) -> AssertThat<'t, PathBuf, Panic, R>
+    fn get_resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
     where
         R: ValueRenderer<Program<'a>>,
     {
@@ -143,7 +141,7 @@ mod tests {
             );
             assert_trait_impl!(
                 AssertThat<'static, Program<'static>, Panic, NoRenderer>
-                    => ProgramAssertionsRequiringPanicMode<'static, NoRenderer>
+                    => ProgramExtractAssertions<'static, NoRenderer>
             );
         }
 
@@ -161,7 +159,7 @@ mod tests {
                 assert_that!(Program::from(MISSING))
                     .with_renderer(SentinelRenderer)
                     .with_location(false)
-                    .exists_and();
+                    .get_resolved_path();
             })
             .has_type::<String>()
             .contains(SENTINEL);
@@ -261,7 +259,7 @@ mod tests {
         }
     }
 
-    mod exists_and {
+    mod get_resolved_path {
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
@@ -269,7 +267,7 @@ mod tests {
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
-            Program::from("ls").must_owned().exist_and();
+            Program::from("ls").must_owned().get_resolved_path();
         }
 
         #[cfg(target_os = "linux")]
@@ -285,7 +283,7 @@ mod tests {
         #[test]
         fn succeeds_when_existent() {
             assert_that!(Program::from("ls"))
-                .exists_and()
+                .get_resolved_path()
                 .has_debug_value(expected_ls_location());
         }
 
@@ -297,7 +295,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(Program::from("ls"))
                     .with_location(false)
-                    .exists_and()
+                    .get_resolved_path()
                     .has_debug_value("/some/unexpected/location/ls");
             })
             .has_type::<String>()
@@ -305,9 +303,9 @@ mod tests {
                     -------- assertr --------
                     Expression: `Program::from("ls")`
 
-                    Expected: "/some/unexpected/location/ls"
+                    Expected: "\"/some/unexpected/location/ls\""
 
-                      Actual: "{}"
+                      Actual: "\"{}\""
                     -------- assertr --------
                 "#, expected_ls_location()});
 

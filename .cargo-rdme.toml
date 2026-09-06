@@ -1,0 +1,7 @@
+workspace-project = "assertr"
+readme-path = "README.md"
+line-terminator = "lf"
+heading-base-level = 0
+
+[entrypoint]
+type = "lib"
