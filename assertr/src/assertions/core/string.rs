@@ -1,4 +1,4 @@
-use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
+use crate::{AssertThat, Fact, Mode, ValueRenderer, failure::FailureKind};
 
 /// String-specific assertions.
 ///
@@ -32,37 +32,37 @@ pub trait StrAssertions {
     /// Asserts that the subject and `expected` are equal under ASCII case folding.
     fn is_equal_to_ignoring_ascii_case(self, expected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
 
     /// Asserts that the subject contains `expected` as a substring.
     fn contains(self, expected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
 
     /// Asserts that the subject does not contain `unexpected` as a substring.
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
 
     /// Asserts that the subject starts with `expected`.
     fn starts_with(self, expected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
 
     /// Asserts that the subject does not start with `unexpected`.
     fn does_not_start_with(self, unexpected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
 
     /// Asserts that the subject ends with `expected`.
     fn ends_with(self, expected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
 
     /// Asserts that the subject does not end with `unexpected`.
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
 }
 
 impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
@@ -122,7 +122,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     #[track_caller]
     fn is_equal_to_ignoring_ascii_case(self, expected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
         self.track_assertion();
         let actual = self.actual().as_ref();
@@ -130,8 +130,8 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
         if !actual.eq_ignore_ascii_case(expected) {
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
-                .expected(format_args!("{expected:?}"))
-                .note("Values differ even when ignoring ASCII case.")
+                .expected(self.render().value(expected))
+                .fact(Fact::note("Values differ even when ignoring ASCII case."))
                 .raise();
         }
         self
@@ -140,7 +140,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     #[track_caller]
     fn contains(self, expected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
         self.track_assertion();
         let actual = self.actual().as_ref();
@@ -149,7 +149,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not contain")
-                .expected(format_args!("{expected:?}"))
+                .expected(self.render().value(expected))
                 .raise();
         }
         self
@@ -158,7 +158,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     #[track_caller]
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
         self.track_assertion();
         let actual = self.actual().as_ref();
@@ -167,7 +167,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("contains")
-                .unexpected(format_args!("{unexpected:?}"))
+                .unexpected(self.render().value(unexpected))
                 .raise();
         }
         self
@@ -176,7 +176,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     #[track_caller]
     fn starts_with(self, expected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
         self.track_assertion();
         let actual = self.actual().as_ref();
@@ -185,7 +185,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not start with")
-                .expected(format_args!("{expected:?}"))
+                .expected(self.render().value(expected))
                 .raise();
         }
         self
@@ -194,7 +194,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     #[track_caller]
     fn does_not_start_with(self, unexpected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
         self.track_assertion();
         let actual = self.actual().as_ref();
@@ -203,7 +203,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("starts with")
-                .unexpected(format_args!("{unexpected:?}"))
+                .unexpected(self.render().value(unexpected))
                 .raise();
         }
         self
@@ -212,7 +212,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     #[track_caller]
     fn ends_with(self, expected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
         self.track_assertion();
         let actual = self.actual().as_ref();
@@ -221,7 +221,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not end with")
-                .expected(format_args!("{expected:?}"))
+                .expected(self.render().value(expected))
                 .raise();
         }
         self
@@ -230,7 +230,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     #[track_caller]
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
         self.track_assertion();
         let actual = self.actual().as_ref();
@@ -239,7 +239,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("ends with")
-                .unexpected(format_args!("{unexpected:?}"))
+                .unexpected(self.render().value(unexpected))
                 .raise();
         }
         self
@@ -395,6 +395,56 @@ mod tests {
         }
 
         #[test]
+        fn renders_original_operands_and_can_redact_them() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = String::from("private-value");
+            let operand = "other-value";
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.is_equal_to_ignoring_ascii_case(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Expected: custom("other-value")
+
+                  Actual: custom("private-value")
+
+                Details:
+                  - Values differ even when ignoring ASCII case.
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
+            assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.is_equal_to_ignoring_ascii_case(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Expected: <redacted>
+
+                  Actual: <redacted>
+
+                Details:
+                  - Values differ even when ignoring ASCII case.
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+        }
+
+        #[test]
         fn succeeds_when_equal_ignoring_ascii_case() {
             assert_that!("FoObAr").is_equal_to_ignoring_ascii_case("fOoBaR");
             assert_that!(String::from("FoObAr")).is_equal_to_ignoring_ascii_case("fOoBaR");
@@ -445,6 +495,54 @@ mod tests {
         }
 
         #[test]
+        fn renders_original_operands_and_can_redact_them() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = String::from("private-value");
+            let operand = "other-value";
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.contains(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom("private-value")
+
+                does not contain
+
+                Expected: custom("other-value")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
+            assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.contains(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                does not contain
+
+                Expected: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+        }
+
+        #[test]
         fn succeeds_when_expected_is_contained() {
             assert_that!("foobar").contains("foo");
             assert_that!("foobar").contains("bar");
@@ -478,7 +576,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(String::from("abc"))
                     .with_location(false)
-                    .with_debug_format(|value: &String, f| write!(f, "custom({value})"))
+                    .with_renderer(crate::test_support::CustomValueRenderer)
                     .contains("z");
             })
             .has_type::<String>()
@@ -486,11 +584,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `String::from("abc")`
 
-                Actual: custom(abc)
+                Actual: custom("abc")
 
                 does not contain
 
-                Expected: "z"
+                Expected: custom("z")
                 -------- assertr --------
             "#});
         }
@@ -504,6 +602,54 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             "foobar".must().not_contain("baz");
+        }
+
+        #[test]
+        fn renders_original_operands_and_can_redact_them() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = String::from("private-value");
+            let operand = "private";
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.does_not_contain(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom("private-value")
+
+                contains
+
+                Unexpected: custom("private")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
+            assert_custom_value(failures[0].unexpected.as_ref().unwrap(), operand);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.does_not_contain(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                contains
+
+                Unexpected: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &[subject.as_str(), operand]);
         }
 
         #[test]
@@ -545,6 +691,54 @@ mod tests {
         }
 
         #[test]
+        fn renders_original_operands_and_can_redact_them() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = String::from("private-value");
+            let operand = "other-value";
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.starts_with(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom("private-value")
+
+                does not start with
+
+                Expected: custom("other-value")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
+            assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.starts_with(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                does not start with
+
+                Expected: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+        }
+
+        #[test]
         fn succeeds_when_start_matches() {
             assert_that!("foo bar baz").starts_with("foo b");
             assert_that!(String::from("foo bar baz")).starts_with("foo b");
@@ -580,6 +774,54 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             "foo bar baz".must().not_start_with("oo");
+        }
+
+        #[test]
+        fn renders_original_operands_and_can_redact_them() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = String::from("private-value");
+            let operand = "private";
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.does_not_start_with(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom("private-value")
+
+                starts with
+
+                Unexpected: custom("private")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
+            assert_custom_value(failures[0].unexpected.as_ref().unwrap(), operand);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.does_not_start_with(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                starts with
+
+                Unexpected: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &[subject.as_str(), operand]);
         }
 
         #[test]
@@ -621,6 +863,54 @@ mod tests {
         }
 
         #[test]
+        fn renders_original_operands_and_can_redact_them() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = String::from("private-value");
+            let operand = "other-value";
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.ends_with(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom("private-value")
+
+                does not end with
+
+                Expected: custom("other-value")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
+            assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.ends_with(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                does not end with
+
+                Expected: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+        }
+
+        #[test]
         fn succeeds_when_end_matches() {
             assert_that!("foo bar baz").ends_with("r baz");
             assert_that!(String::from("foo bar baz")).ends_with("r baz");
@@ -656,6 +946,54 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             "foo bar baz".must().not_end_with("y");
+        }
+
+        #[test]
+        fn renders_original_operands_and_can_redact_them() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = String::from("private-value");
+            let operand = "value";
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.does_not_end_with(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom("private-value")
+
+                ends with
+
+                Unexpected: custom("value")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
+            assert_custom_value(failures[0].unexpected.as_ref().unwrap(), operand);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.does_not_end_with(operand));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                ends with
+
+                Unexpected: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &[subject.as_str(), operand]);
         }
 
         #[test]
@@ -698,6 +1036,12 @@ mod tests {
         impl ValueRenderer<&str> for StringRenderer {
             fn fmt(&self, value: &&str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 f.write_fmt(format_args!("string({value})"))
+            }
+        }
+
+        impl ValueRenderer<str> for StringRenderer {
+            fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "string({value})")
             }
         }
 
@@ -783,7 +1127,7 @@ mod tests {
 
                         does not contain
 
-                        Expected: "baz"
+                        Expected: string(baz)
                         -------- assertr --------
                     "#});
                 },

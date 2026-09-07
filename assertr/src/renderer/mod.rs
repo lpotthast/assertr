@@ -23,7 +23,8 @@
 //! map keys, or projections of other types, implement [`ValueRenderer<T>`](ValueRenderer) for each
 //! displayed type on one renderer and install it with
 //! [`AssertThat::with_renderer`](crate::AssertThat::with_renderer). That method includes a reusable
-//! renderer example. Projections preserve the renderer and require it to implement `Clone`.
+//! renderer example. Derived borrowed assertions require `Clone`. Owned mappings, Result
+//! extraction, and serialization conversions preserve the renderer without cloning it.
 //!
 //! ## Values and structure
 //!
@@ -37,6 +38,17 @@
 //! [adapter](crate::failure::adapter) reads this tree to produce a complete report. Use
 //! [`with_panic_presentation`](crate::AssertThat::with_panic_presentation) to change panic report
 //! layout. Value renderers apply before either capture or panic handling.
+//!
+//! Lengths, counts, user-supplied expected indices, and errors are evidence too. Methods displaying
+//! numeric evidence require `ValueRenderer<usize>`. Errors retain their original type, including
+//! condition errors. The default renderer requires `Debug`, while a custom renderer may support
+//! errors implementing neither `Debug` nor `Display`. There is no fallback renderer for evidence.
+//!
+//! Structural positions and diagnostic paths, matcher branch and expected-slot identifiers,
+//! omission summaries, type names, status-class labels such as `2xx`, and explicit diagnostic prose
+//! are formatted by Assertr. [`IntoRendered`] conversions from strings, formatting arguments, and
+//! primitives are verbatim and bypass the renderer and budget. Use them only for structural text
+//! or caller-authored prose. Pass evidence through rendering adapters, including notes.
 //!
 //! ## Sensitive values
 //!

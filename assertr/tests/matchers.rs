@@ -20,6 +20,11 @@ mod named_fields {
 
     struct Scalar;
 
+    impl ValueRenderer<usize> for Scalar {
+        fn fmt(&self, v: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            core::fmt::Debug::fmt(v, f)
+        }
+    }
     impl ValueRenderer<u32> for Scalar {
         fn fmt(&self, x: &u32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             write!(f, "id={x}")

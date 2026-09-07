@@ -1,5 +1,6 @@
 use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, MatcherList};
 use crate::{
+    Fact,
     assertions::collection::StableOrder,
     failure::{FailureBuilder, FailureKind, PathSegment},
 };
@@ -54,6 +55,7 @@ pub fn contains_contiguous_elements<L>(list: L) -> ElementsAre<L> {
 
 impl<C, R, L> AssertrMatcher<C, R> for ElementsAre<L>
 where
+    R: crate::ValueRenderer<usize>,
     C: StableOrder + ?Sized,
     L: MatcherList<C::Item, R>,
 {
@@ -115,17 +117,28 @@ where
                     });
                 }
             }
-            if (actual_length < expected_length
-                || (matches!(self.position, Position::Exact) && actual_length != expected_length))
-                && window.is_diagnostic()
+            if actual_length < expected_length
+                || (matches!(self.position, Position::Exact) && actual_length != expected_length)
             {
-                window.record(
-                    FailureBuilder::detached::<C>(FailureKind::Matching)
-                        .relation("does not have the required sequence")
-                        .fact("actual length", actual_length)
-                        .fact("expected length", expected_length)
-                        .build(),
-                );
+                if window.is_diagnostic() {
+                    window.record(
+                        FailureBuilder::detached::<C>(FailureKind::Matching)
+                            .relation("does not have the required sequence")
+                            .fact(Fact::labelled(
+                                "actual length",
+                                window.render().value(&actual_length),
+                            ))
+                            .fact(Fact::labelled(
+                                "expected length",
+                                window.render().value(&expected_length),
+                            ))
+                            .build(),
+                    );
+                } else if context.is_positive() {
+                    window.outcome(false, |context| {
+                        <Self as AssertrMatcher<C, R>>::describe(self, context)
+                    });
+                }
             }
             if matched {
                 if !context.is_positive() {
@@ -169,6 +182,13 @@ mod tests {
         }
     }
 
+    impl ValueRenderer<usize> for CountingRenderer<'_> {
+        fn fmt(&self, value: &usize, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.0.set(self.0.get() + 1);
+            write!(formatter, "{value}")
+        }
+    }
+
     #[test]
     fn supports_equality_shorthand() {
         assert_that!([1, 2]).matches(elements_are![1, 2]);
@@ -204,5 +224,93 @@ mod tests {
         assert_that!(failures).has_length(1);
         assert_that!(failures[0].children).has_length(1);
         assert_that!(renders.get()).is_equal_to(2);
+    }
+
+    mod evaluate {
+        use super::*;
+        use crate::{matchers::all_of, renderer::RenderedBody, test_support::CustomValueRenderer};
+        #[test]
+        fn preserves_sequence_length_metadata_and_budget_in_nested_failures() {
+            use indoc::formatdoc;
+
+            let failures = assert_that!([1, 2])
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
+                .capture(|it| it.matches(all_of((elements_are![1],))));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            -------- assertr --------
+            Expression: `[1, 2]`
+
+            does not match
+
+            Nested failures:
+              - does not have the required sequence
+
+                Details:
+                  - actual length: cus... 6 more characters ...
+                  - expected length: cus... 6 more characters ...
+            -------- assertr --------
+        "});
+
+            let child = &failures[0].children[0];
+            assert_eq!(child.facts.len(), 2);
+            for fact in &child.facts {
+                assert_eq!(fact.value.type_name, Some("usize"));
+                assert_eq!(
+                    fact.value.body,
+                    RenderedBody::Text {
+                        text: "cus".into(),
+                        omitted_characters: 6
+                    }
+                );
+            }
+        }
+
+        #[test]
+        fn a_zero_item_budget_preserves_length_failure_without_rendering_evidence() {
+            use indoc::formatdoc;
+            struct NeverRender;
+            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
+                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("rendered omitted evidence")
+                }
+            }
+            let failures = assert_that!([1, 2])
+                .with_renderer(NeverRender)
+                .with_location(false)
+                .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
+                .capture(|it| it.matches(elements_are![]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+        -------- assertr --------
+        Expression: `[1, 2]`
+
+        does not match
+
+        Details:
+          - ... 1 more nested failure ...
+        -------- assertr --------
+    "});
+            assert_that!(failures[0].omitted_children).is_equal_to(1);
+        }
+    }
+
+    mod probe {
+        use super::*;
+        use crate::matchers::MatchContext;
+        #[test]
+        fn length_mismatches_do_not_render_numeric_evidence() {
+            struct NeverRender;
+            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
+                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("probe rendered evidence")
+                }
+            }
+            let context = MatchContext::new(&NeverRender, RenderingBudget::default());
+            assert_that!(context.probe(&[1, 2], &elements_are![])).is_false();
+            assert_that!(context.into_failures()).is_empty();
+        }
     }
 }

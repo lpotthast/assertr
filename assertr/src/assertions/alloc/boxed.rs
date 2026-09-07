@@ -1,5 +1,5 @@
 use crate::{
-    AssertThat,
+    AssertThat, Fact,
     actual::Actual,
     failure::FailureKind,
     mode::{Mode, Panic},
@@ -157,7 +157,7 @@ pub(super) fn type_mismatch<T, M: Mode, R, E: 'static>(
         .relation("is not of the expected type")
         .expected(format_args!("{}", type_name::<E>()));
     if erased {
-        failure = failure.note(erased_note);
+        failure = failure.fact(Fact::note(erased_note));
     }
     failure.raise();
 }

@@ -1,5 +1,6 @@
 use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::{
+    Fact,
     condition::AssertrCondition,
     failure::{FailureBuilder, FailureKind},
 };
@@ -9,6 +10,9 @@ use core::any::type_name;
 pub struct Condition<C>(C);
 
 /// Adapts a domain condition without requiring a subject renderer.
+///
+/// Diagnostic evaluation renders the original error through `ValueRenderer<C::Error>`. The
+/// default renderer requires `Debug`. Probes never render condition errors.
 pub fn condition<C>(condition: C) -> Condition<C> {
     Condition(condition)
 }
@@ -25,6 +29,7 @@ impl<C> Condition<C> {
 impl<A, R, C> AssertrMatcher<A, R> for Condition<C>
 where
     C: AssertrCondition<A>,
+    R: crate::ValueRenderer<C::Error>,
 {
     fn describe(&self, _: &MatchContext<'_, R>) -> ConstraintDescription {
         ConstraintDescription::new("satisfies the condition").expected(type_name::<C>())
@@ -39,7 +44,7 @@ where
                     context.record(
                         FailureBuilder::detached::<A>(FailureKind::Predicate)
                             .relation("does not match the condition")
-                            .note(error)
+                            .fact(Fact::note(context.render().value(&error)))
                             .build(),
                     );
                 } else {
@@ -60,7 +65,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::condition;
-    use crate::{prelude::*, test_support::NoRenderer};
+    use crate::{prelude::*, test_support::CustomValueRenderer};
 
     struct IsEven;
 
@@ -77,19 +82,21 @@ mod tests {
     }
 
     #[test]
-    fn matches_without_a_renderer() {
+    fn matches_without_a_subject_renderer() {
         assert_that!(2)
-            .with_renderer(NoRenderer)
+            .with_renderer(CustomValueRenderer)
+            .with_location(false)
             .matches(condition(IsEven));
         assert_that!(1)
-            .with_renderer(NoRenderer)
+            .with_renderer(CustomValueRenderer)
+            .with_location(false)
             .does_not_match(condition(IsEven));
     }
 
     #[test]
     fn retains_the_condition_error() {
         let failures = assert_that!(1)
-            .with_renderer(NoRenderer)
+            .with_renderer(CustomValueRenderer)
             .capture(|it| it.matches(condition(IsEven)));
 
         assert_that!(failures).has_length(1);

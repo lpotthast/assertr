@@ -54,23 +54,27 @@ Start with [`AssertThat::failure`] and the [`FailureKind`] of the assertion's fa
 the [`actual`](failure::FailureBuilder::actual) value, a lowercase
 [`relation`](failure::FailureBuilder::relation) sentence without embedded values or a trailing
 period, and any [`expected`](failure::FailureBuilder::expected) or
-[`unexpected`](failure::FailureBuilder::unexpected) value. Add labeled
-[`fact`](failure::FailureBuilder::fact)s, [`note`](failure::FailureBuilder::note)s, or nested
+[`unexpected`](failure::FailureBuilder::unexpected) value. Add evidence through
+[`fact`](failure::FailureBuilder::fact) or [`facts`](failure::FailureBuilder::facts), constructing
+[`Fact::labelled`] values or [`Fact::note`] values as appropriate. Add nested
 [`children`](failure::FailureBuilder::children) for further evidence. Call
 [`raise`](failure::FailureBuilder::raise) to record the failure or panic according to the mode.
 
 Render diagnostic values through [`AssertThat::render`]. Its
 [`value`](renderer::RenderingContext::value), [`values`](renderer::RenderingContext::values),
 and [`borrowed_values`](renderer::RenderingContext::borrowed_values) adapters apply the active
-renderer and rendering budget. Pass these adapters directly to the builder. This preserves
-structured values and type metadata for [failure adapters](failure::adapter) and lets Assertr
-produce a consistent report. See the [rendering guide](renderer) for customization.
+renderer and rendering budget. Pass these adapters to the value setters or `Fact` constructors.
+This preserves structured values and type metadata for [failure adapters](failure::adapter) and lets Assertr
+produce a consistent report. Errors, lengths, counts, and expected indices are typed evidence too.
+Render notes with `.fact(Fact::note(self.render().value(&error)))`. Verbatim notes and primitive
+conversions are reserved for structural metadata and caller-authored prose. See the
+[rendering guide](renderer) for customization.
 
 ### Example
 
 ```
 use assertr::prelude::*;
-use assertr::failure::FailureKind;
+use assertr::failure::{Fact, FailureKind};
 
 #[derive(Debug)]
 struct Person {
@@ -113,7 +117,7 @@ impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
             self.failure(FailureKind::Predicate)
                 .actual(self.render().value(self.actual()))
                 .relation("has no name")
-                .fact("Name", self.render().value(&self.actual().name))
+                .fact(Fact::labelled("Name", self.render().value(&self.actual().name)))
                 .raise();
         }
         self

@@ -285,11 +285,11 @@ where
                 this.render()
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             )
-            .fact(
+            .fact(Fact::labelled(
                 "Keys not found",
                 this.render()
                     .borrowed_values::<E, _>(keys_not_found.as_slice(), GroupStyle::List),
-            )
+            ))
             .raise();
     }
 }
@@ -303,7 +303,11 @@ pub(crate) fn assert_contains_exactly_entries<Mp, K, EK, EV, M, R>(
     EK: MapKeyQuery<K>,
     Mp::Value: PartialEq<EV>,
     M: Mode,
-    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<EK> + ValueRenderer<EV>,
+    R: ValueRenderer<Mp::Key>
+        + ValueRenderer<Mp::Value>
+        + ValueRenderer<EK>
+        + ValueRenderer<EV>
+        + ValueRenderer<usize>,
 {
     this.track_assertion();
     let actual = this.actual();
@@ -356,31 +360,37 @@ pub(crate) fn assert_contains_exactly_entries<Mp, K, EK, EV, M, R>(
         .expected(this.render().entry_list::<EK, EV, _, _, _>(expected, false));
     if !same_length {
         failure = failure
-            .fact("Actual length", actual_length)
-            .fact("Expected length", expected.len());
+            .fact(Fact::labelled(
+                "Actual length",
+                this.render().value(&actual_length),
+            ))
+            .fact(Fact::labelled(
+                "Expected length",
+                this.render().value(&expected.len()),
+            ));
     }
     if !keys_not_found.is_empty() {
-        failure = failure.fact(
+        failure = failure.fact(Fact::labelled(
             "Keys not found",
             this.render()
                 .borrowed_values::<EK, _>(keys_not_found.as_slice(), GroupStyle::List),
-        );
+        ));
     }
     if !unexpected_entries.is_empty() {
-        failure = failure.fact(
+        failure = failure.fact(Fact::labelled(
             "Unexpected entries",
             this.render().entry_list::<Mp::Key, Mp::Value, _, _, _>(
                 &unexpected_entries,
                 sorts_for_rendering::<Mp>(),
             ),
-        );
+        ));
     }
     if !keys_with_unexpected_values.is_empty() {
-        failure = failure.fact(
+        failure = failure.fact(Fact::labelled(
             "Keys with unexpected values",
             this.render()
                 .borrowed_values::<EK, _>(keys_with_unexpected_values.as_slice(), GroupStyle::List),
-        );
+        ));
     }
     failure
         .omitted(omitted, "unexpected value")

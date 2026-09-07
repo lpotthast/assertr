@@ -28,7 +28,7 @@ where
             let mut branch = alternatives.isolated();
             let result = self.0.evaluate_at(index, actual, &mut branch);
             for failure in &mut branch.evidence {
-                failure.facts.push(Fact::new("branch", index));
+                failure.facts.push(Fact::labelled("branch", index));
             }
             if result.matched {
                 if !context.is_positive() {

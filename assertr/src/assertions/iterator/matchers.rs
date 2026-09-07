@@ -4,6 +4,7 @@ use super::{
     AssertThat, Borrow, Mode, PREVIEW_CAPACITY, PositionReporting, Vec, VecDeque, exact_size_hint,
 };
 use crate::{
+    Fact,
     failure::{FailureKind, PathSegment},
     matchers::{AssertrMatcher, MatchContext, MatcherList},
 };
@@ -14,14 +15,16 @@ fn raise<S, M: Mode, R>(
     context: MatchContext<'_, R>,
     relation: &'static str,
     consumed: usize,
-) {
+) where
+    R: crate::ValueRenderer<usize>,
+{
     this.failure(FailureKind::Matching)
         .relation(relation)
-        .fact("Consumed", consumed)
-        .fact(
+        .fact(Fact::labelled("Consumed", this.render().value(&consumed)))
+        .fact(Fact::labelled(
             "Preview starts at",
             consumed.saturating_sub(PREVIEW_CAPACITY),
-        )
+        ))
         .omitted_children(context.omitted_children())
         .children(context.into_failures())
         .raise();
@@ -38,6 +41,7 @@ pub(crate) fn membership<S, T, P, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     P: AssertrMatcher<T, R>,
+    R: crate::ValueRenderer<usize>,
 {
     let mut retained: VecDeque<MatchContext<'_, R>> = VecDeque::new();
     let mut consumed = 0;
@@ -101,6 +105,7 @@ pub(crate) fn exact_or_prefix<S, T, L, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     L: MatcherList<T, R>,
+    R: crate::ValueRenderer<usize>,
 {
     let expected_length = list.len();
     let mut context = MatchContext::for_assertion(this);
@@ -109,8 +114,14 @@ pub(crate) fn exact_or_prefix<S, T, L, I, M: Mode, R>(
     {
         this.failure(FailureKind::Matching)
             .relation("does not have the required sequence length")
-            .fact("Reported length", actual)
-            .fact("Expected length", expected_length)
+            .fact(Fact::labelled(
+                "Reported length",
+                this.render().value(&actual),
+            ))
+            .fact(Fact::labelled(
+                "Expected length",
+                this.render().value(&expected_length),
+            ))
             .raise();
         return;
     }
@@ -149,6 +160,7 @@ pub(crate) fn suffix_or_contiguous<S, T, L, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     L: MatcherList<T, R>,
+    R: crate::ValueRenderer<usize>,
 {
     let expected_length = list.len();
     if expected_length == 0 {
@@ -235,6 +247,7 @@ pub(crate) fn unordered<S, T, L, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     L: MatcherList<T, R>,
+    R: crate::ValueRenderer<usize>,
 {
     let expected_length = list.len();
     if let Some(actual) = exact_size_hint(&iterator)
@@ -242,8 +255,14 @@ pub(crate) fn unordered<S, T, L, I, M: Mode, R>(
     {
         this.failure(FailureKind::Matching)
             .relation("does not have the required number of elements")
-            .fact("Reported length", actual)
-            .fact("Expected length", expected_length)
+            .fact(Fact::labelled(
+                "Reported length",
+                this.render().value(&actual),
+            ))
+            .fact(Fact::labelled(
+                "Expected length",
+                this.render().value(&expected_length),
+            ))
             .raise();
         return;
     }

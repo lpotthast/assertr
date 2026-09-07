@@ -37,7 +37,7 @@ pub(super) fn assert_contains_same_instance_as<C, U: ?Sized, M, R>(
             .relation("does not contain the same instance as")
             .expected(rendering.value(expected));
         if same_address {
-            failure = failure.note(METADATA_NOTE);
+            failure = failure.fact(Fact::note(METADATA_NOTE));
         }
         failure.raise();
     }
@@ -75,6 +75,7 @@ pub(super) fn assert_contains_exactly_same_instances<C, U: ?Sized, M, R>(
     C: StableOrder,
     C::Item: Borrow<U>,
     M: Mode,
+    R: crate::ValueRenderer<usize>,
 {
     this.track_assertion();
     let actual = this.actual();
@@ -93,12 +94,18 @@ pub(super) fn assert_contains_exactly_same_instances<C, U: ?Sized, M, R>(
             .expected(rendering.borrowed_values::<U, _>(expected, GroupStyle::List));
         if actual.length() != expected.len() {
             failure = failure
-                .fact("Actual length", actual.length())
-                .fact("Expected length", expected.len());
+                .fact(Fact::labelled(
+                    "Actual length",
+                    this.render().value(&actual.length()),
+                ))
+                .fact(Fact::labelled(
+                    "Expected length",
+                    this.render().value(&expected.len()),
+                ));
         }
         if let Some((index, (element, expected))) = mismatch {
             if ptr::addr_eq(element, expected) {
-                failure = failure.note(METADATA_NOTE);
+                failure = failure.fact(Fact::note(METADATA_NOTE));
             }
             if rendering.max_items() == 0 {
                 failure = failure.omitted(1, "unmatched element");
@@ -153,20 +160,20 @@ pub(super) fn assert_contains_exactly_same_instances_in_any_order<C, U: ?Sized, 
             .relation("does not contain exactly the same instances in any order")
             .expected(rendering.borrowed_values::<U, _>(expected, GroupStyle::List));
         if !missing.is_empty() {
-            failure = failure.fact(
+            failure = failure.fact(Fact::labelled(
                 "Instances not found",
                 rendering.borrowed_values::<U, _>(&missing, GroupStyle::List),
-            );
+            ));
         }
         if !unexpected.is_empty() {
-            failure = failure.fact(
+            failure = failure.fact(Fact::labelled(
                 "Instances not expected",
                 rendering
                     .borrowed_values::<U, _>(&unexpected, GroupStyle::List)
                     .sort_for_rendering(
                         C::PRESENTATION.order() == RenderingOrder::SortByRenderedText,
                     ),
-            );
+            ));
         }
         // Unmatched pairs cannot have full pointer equality, so a shared address here proves that
         // pointer metadata accounts for at least one difference.
@@ -175,7 +182,7 @@ pub(super) fn assert_contains_exactly_same_instances_in_any_order<C, U: ?Sized, 
                 .iter()
                 .any(|expected| ptr::addr_eq(*actual, *expected))
         }) {
-            failure = failure.note(METADATA_NOTE);
+            failure = failure.fact(Fact::note(METADATA_NOTE));
         }
         failure.raise();
     }
@@ -185,8 +192,10 @@ pub(super) fn assert_contains_exactly_same_instances_in_any_order<C, U: ?Sized, 
 mod tests {
     use super::*;
     use crate::prelude::*;
-    use crate::renderer::{CollectionPresentation, Rendered, RenderedBody};
-    use crate::test_support::{NoRenderer, PreservedBag, UnorderedSet, rendered_text};
+    use crate::renderer::{CollectionPresentation, Rendered, RenderedBody, RenderingContext};
+    use crate::test_support::{
+        NoRenderer, NumericRenderer, PreservedBag, UnorderedSet, rendered_text,
+    };
     use indoc::formatdoc;
 
     struct Opaque {
@@ -366,11 +375,11 @@ mod tests {
             let keys = keys();
             let candidates = [&keys[1], &keys[2], &keys[0]];
             assert_that!(candidates)
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .contains_exactly_same_instances([&keys[1], &keys[2], &keys[0]]);
             let repeated = [&keys[0], &keys[0]];
             let assertion = assert_that!(repeated)
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .contains_exactly_same_instances([&keys[0], &keys[0]]);
             assert_eq!(assertion.state.number_of_assertions.borrow().0, 1);
         }
@@ -380,7 +389,7 @@ mod tests {
             let keys = keys();
             let actual = [&keys[1], &keys[0]];
             let failures = assert_that!(actual)
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .with_location(false)
                 .capture(|it| it.contains_exactly_same_instances([&keys[0], &keys[1]]));
             assert_eq!(failures.len(), 1);
@@ -423,20 +432,28 @@ mod tests {
                 (vec![&keys[0]], vec![&keys[0], &keys[0]]),
             ] {
                 let failures = assert_that!(actual)
-                    .with_renderer(NoRenderer)
+                    .with_renderer(NumericRenderer)
                     .capture(|it| it.contains_exactly_same_instances(&expected));
                 assert_eq!(failures.len(), 1);
                 assert_eq!(
                     failures[0].facts,
                     [
-                        Fact::new("Actual length", actual.len()),
-                        Fact::new("Expected length", expected.len()),
+                        Fact::labelled(
+                            "Actual length",
+                            RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+                                .value(&actual.len())
+                        ),
+                        Fact::labelled(
+                            "Expected length",
+                            RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+                                .value(&expected.len())
+                        ),
                     ]
                 );
                 assert!(failures[0].children.is_empty());
             }
             assert_that!([] as [&Opaque; 0])
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .contains_exactly_same_instances([] as [&Opaque; 0]);
         }
 
@@ -444,10 +461,52 @@ mod tests {
         fn checks_metadata_and_keeps_the_borrowed_child_type() {
             let data = [1, 2];
             let failures = assert_that!([&data[..1]])
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .capture(|it| it.contains_exactly_same_instances([&data[..]]));
             assert_eq!(failures[0].facts, [Fact::note(METADATA_NOTE)]);
             assert_eq!(failures[0].children[0].subject_type_name, "[i32]");
+        }
+
+        #[test]
+        fn length_facts_need_only_a_numeric_renderer() {
+            use crate::test_support::assert_custom_value;
+            struct Numbers;
+            impl ValueRenderer<usize> for Numbers {
+                fn fmt(
+                    &self,
+                    value: &usize,
+                    f: &mut core::fmt::Formatter<'_>,
+                ) -> core::fmt::Result {
+                    write!(f, "custom({value})")
+                }
+            }
+            let keys = keys();
+            let subject = [&keys[0]];
+            let failures = assert_that!(subject)
+                .with_renderer(Numbers)
+                .with_location(false)
+                .capture(|it| it.contains_exactly_same_instances([] as [&Opaque; 0]));
+
+            assert_custom_value(&failures[0].facts[0].value, &1_usize);
+            assert_custom_value(&failures[0].facts[1].value, &0_usize);
+            let pointer = format!("{:p}", subject[0]);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: [
+                    {pointer},
+                ]
+
+                does not contain exactly the same instances in order
+
+                Expected: []
+
+                Details:
+                  - Actual length: custom(1)
+                  - Expected length: custom(0)
+                -------- assertr --------
+            "});
         }
     }
 
@@ -575,7 +634,7 @@ mod tests {
             C::Item: Borrow<Opaque>,
         {
             assert_that!(actual)
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .contains_same_instance_as(expected[1])
                 .contains_exactly_same_instances(expected)
                 .contains_exactly_same_instances_in_any_order([
@@ -605,7 +664,7 @@ mod tests {
                 .contains_same_instance_as(&boxed);
             let actual = [boxed];
             assert_that!(actual)
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .contains_exactly_same_instances([actual[0].as_ref()]);
             let shared = Rc::new(Opaque { _byte: 1 });
             assert_that!([Rc::clone(&shared), Rc::clone(&shared)])
@@ -644,13 +703,13 @@ mod tests {
 
             let text = String::from("text");
             assert_that!([text.as_str()])
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .contains_same_instance_as(text.as_str())
                 .contains_exactly_same_instances([text.as_str()]);
             let key = Opaque { _byte: 1 };
             let object: &dyn Marker = &key;
             assert_that!([object])
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .contains_same_instance_as(object)
                 .contains_exactly_same_instances([object])
                 .contains_exactly_same_instances_in_any_order([object]);
@@ -724,7 +783,7 @@ mod tests {
                 .sort_by_key(|value| core::cmp::Reverse(format!("{value:p}", value = *value)));
             let actual = SortedPresentation(references);
             let failures = assert_that!(actual)
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .capture(|it| it.contains_exactly_same_instances([references[1], references[0]]));
             let rendered = failures[0].actual.as_ref().unwrap();
             assert!(matches!(
@@ -747,7 +806,7 @@ mod tests {
             let keys = keys();
             let actual = [&keys[0], &keys[1]];
             let failures = assert_that!(actual)
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .with_rendering_budget(
                     RenderingBudget::builder()
                         .max_items(1)
@@ -766,7 +825,7 @@ mod tests {
             assert_eq!(failures[0].children[0].facts, [Fact::index(1)]);
 
             let failures = assert_that!(actual)
-                .with_renderer(NoRenderer)
+                .with_renderer(NumericRenderer)
                 .with_rendering_budget(
                     RenderingBudget::builder()
                         .max_items(0)

@@ -26,74 +26,78 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator contains an element matching `expected`.
     fn contains_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
         P: crate::matchers::AssertrMatcher<T, R>,
-        't: 'u;
+        't: 'u,
+        R: ValueRenderer<usize>;
 
     /// Asserts that the iterator contains an element satisfying `assertions`.
     fn contains_satisfying<'u, A>(self, assertions: A) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator starts with elements equal to `expected`, in order.
     fn starts_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator's prefix matches the expected matcher list in order.
     fn starts_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
         P: crate::matchers::MatcherList<T, R>,
-        't: 'u;
+        't: 'u,
+        R: ValueRenderer<usize>;
 
     /// Asserts that the iterator's prefix satisfies `assertions` in order.
     fn starts_with_satisfying<'u, A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator ends with elements equal to `expected`, in order.
     fn ends_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator's suffix matches the expected matcher list in order.
     fn ends_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
         P: crate::matchers::MatcherList<T, R>,
-        't: 'u;
+        't: 'u,
+        R: ValueRenderer<usize>;
 
     /// Asserts that the iterator's suffix satisfies `assertions` in order.
     fn ends_with_satisfying<'u, A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator contains `expected` as a contiguous subsequence.
     fn contains_contiguous<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
     fn contains_contiguous_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
         P: crate::matchers::MatcherList<T, R>,
-        't: 'u;
+        't: 'u,
+        R: ValueRenderer<usize>;
 
     /// Asserts that a contiguous subsequence satisfies `assertions` in order.
     fn contains_contiguous_satisfying<'u, A>(
@@ -102,41 +106,43 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     ) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that no iterator element equals `not_expected`.
     fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that no iterator element matches `expected`.
     fn does_not_contain_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
         P: crate::matchers::AssertrMatcher<T, R>,
-        't: 'u;
+        't: 'u,
+        R: ValueRenderer<usize>;
 
     /// Asserts that no iterator element satisfies `assertions`.
     fn does_not_contain_satisfying<'u, A>(self, assertions: A) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts positional equality with `expected`, including length.
     fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that each element matches the constraint at the same position, including length.
     fn contains_exactly_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
         P: crate::matchers::MatcherList<T, R>,
-        't: 'u;
+        't: 'u,
+        R: ValueRenderer<usize>;
 
     /// Asserts that each element satisfies the assertions at the same position, including length.
     fn contains_exactly_satisfying<'u, A>(
@@ -145,7 +151,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     ) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts multiset equality with `expected`, ignoring order but preserving duplicate counts.
@@ -155,7 +161,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     ) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts one-to-one matching between elements and the expected matcher list, independent of
@@ -163,7 +169,8 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     fn contains_exactly_in_any_order_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
         P: crate::matchers::MatcherList<T, R>,
-        't: 'u;
+        't: 'u,
+        R: ValueRenderer<usize>;
 
     /// Asserts one-to-one matching between elements and `assertions`, independent of order.
     fn contains_exactly_in_any_order_satisfying<'u, A>(
@@ -172,7 +179,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     ) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u;
 }
 
@@ -184,7 +191,7 @@ where
     fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u,
     {
         let (iter, this) = take_iterator(self);
@@ -197,6 +204,7 @@ where
     where
         P: crate::matchers::AssertrMatcher<T, R>,
         't: 'u,
+        R: ValueRenderer<usize>,
     {
         let (iter, this) = take_iterator(self);
         iterator::matchers::membership::<_, T, _, _, _, _>(
@@ -213,7 +221,7 @@ where
     fn contains_satisfying<'u, A>(self, assertions: A) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u,
     {
         self.contains_matching(crate::matchers::satisfying(assertions))
@@ -223,7 +231,7 @@ where
     fn starts_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u,
     {
         let expected = expected.as_ref();
@@ -237,6 +245,7 @@ where
     where
         P: crate::matchers::MatcherList<T, R>,
         't: 'u,
+        R: ValueRenderer<usize>,
     {
         let (iter, this) = take_iterator(self);
         iterator::matchers::exact_or_prefix::<_, T, _, _, _, _>(&this, iter, &expected, false);
@@ -247,7 +256,7 @@ where
     fn starts_with_satisfying<'u, A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u,
     {
         self.starts_with_matching(
@@ -263,7 +272,7 @@ where
     fn ends_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u,
     {
         let expected = expected.as_ref();
@@ -277,6 +286,7 @@ where
     where
         P: crate::matchers::MatcherList<T, R>,
         't: 'u,
+        R: ValueRenderer<usize>,
     {
         let (iter, this) = take_iterator(self);
         iterator::matchers::suffix_or_contiguous::<_, T, _, _, _, _>(&this, iter, &expected, true);
@@ -287,7 +297,7 @@ where
     fn ends_with_satisfying<'u, A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u,
     {
         self.ends_with_matching(
@@ -303,7 +313,7 @@ where
     fn contains_contiguous<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u,
     {
         let expected = expected.as_ref();
@@ -317,6 +327,7 @@ where
     where
         P: crate::matchers::MatcherList<T, R>,
         't: 'u,
+        R: ValueRenderer<usize>,
     {
         let (iter, this) = take_iterator(self);
         iterator::matchers::suffix_or_contiguous::<_, T, _, _, _, _>(&this, iter, &expected, false);
@@ -330,7 +341,7 @@ where
     ) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u,
     {
         self.contains_contiguous_matching(
@@ -346,7 +357,7 @@ where
     fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u,
     {
         let (iter, this) = take_iterator(self);
@@ -364,6 +375,7 @@ where
     where
         P: crate::matchers::AssertrMatcher<T, R>,
         't: 'u,
+        R: ValueRenderer<usize>,
     {
         let (iter, this) = take_iterator(self);
         iterator::matchers::membership::<_, T, _, _, _, _>(
@@ -380,7 +392,7 @@ where
     fn does_not_contain_satisfying<'u, A>(self, assertions: A) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u,
     {
         self.does_not_contain_matching(crate::matchers::satisfying(assertions))
@@ -390,7 +402,7 @@ where
     fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u,
     {
         let expected = expected.as_ref();
@@ -404,6 +416,7 @@ where
     where
         P: crate::matchers::MatcherList<T, R>,
         't: 'u,
+        R: ValueRenderer<usize>,
     {
         let (iter, this) = take_iterator(self);
         iterator::matchers::exact_or_prefix::<_, T, _, _, _, _>(&this, iter, &expected, true);
@@ -417,7 +430,7 @@ where
     ) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u,
     {
         self.contains_exactly_matching(
@@ -436,7 +449,7 @@ where
     ) -> AssertThat<'u, (), M, R>
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
         't: 'u,
     {
         let expected = expected.as_ref();
@@ -450,6 +463,7 @@ where
     where
         P: crate::matchers::MatcherList<T, R>,
         't: 'u,
+        R: ValueRenderer<usize>,
     {
         let (iter, this) = take_iterator(self);
         iterator::matchers::unordered::<_, T, _, _, _, _>(&this, iter, &expected);
@@ -463,7 +477,7 @@ where
     ) -> AssertThat<'u, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u,
     {
         self.contains_exactly_in_any_order_matching(
@@ -487,6 +501,7 @@ fn take_iterator<'t, 'u, T, I, M: Mode, R>(
 where
     I: Iterator<Item = T>,
     't: 'u,
+    R: ValueRenderer<usize>,
 {
     this.track_assertion();
     let (actual, terminal) = this.replace_actual_with(Actual::Owned(()));
@@ -579,6 +594,37 @@ mod tests {
                     -------- assertr --------
                 "});
         }
+
+        #[test]
+        fn renders_numeric_evidence_with_the_active_renderer() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
+            use indoc::formatdoc;
+
+            let failures = assert_that_owned!([1, 2].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.contains(9));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2].into_iter()`
+
+                Actual: [
+                    custom(1),
+                    custom(2),
+                ]
+
+                does not contain
+
+                Expected: custom(9)
+
+                Details:
+                  - Consumed elements: custom(2)
+                -------- assertr --------
+            "});
+
+            assert_custom_fact(&failures[0], "Consumed elements", 2);
+        }
     }
 
     mod contains_matching {
@@ -645,6 +691,40 @@ mod tests {
             assert_that_owned!(iterator).contains_matching(crate::matchers::equal_to(3));
 
             assert_that!(calls.get()).is_equal_to(4);
+        }
+
+        #[test]
+        fn renders_numeric_evidence_with_the_active_renderer() {
+            use crate::matchers::equal_to;
+            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
+            use indoc::formatdoc;
+            let failures = assert_that_owned!([1, 2].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.contains_matching(equal_to(9)));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2].into_iter()`
+
+                does not contain a matching element
+
+                Details:
+                  - Consumed: custom(2)
+                  - Preview starts at: 0
+                Nested failures:
+                  - At [0]:
+                    Expected: custom(9)
+
+                      Actual: custom(1)
+                  - At [1]:
+                    Expected: custom(9)
+
+                      Actual: custom(2)
+                -------- assertr --------
+            "});
+
+            assert_custom_fact(&failures[0], "Consumed", 2);
         }
     }
 
@@ -931,6 +1011,39 @@ mod tests {
                     -------- assertr --------
                 "});
         }
+
+        #[test]
+        fn renders_numeric_evidence_with_the_active_renderer() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
+            use indoc::formatdoc;
+            let failures = assert_that_owned!([1, 2].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.starts_with([1, 2, 3]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2].into_iter()`
+
+                Actual: []
+
+                does not start with
+
+                Expected: [
+                    custom(1),
+                    custom(2),
+                    custom(3),
+                ]
+
+                Details:
+                  - Consumed elements: custom(0)
+                  - Reported length: custom(2)
+                  - Prefix length: custom(3)
+                -------- assertr --------
+            "});
+
+            assert_custom_fact(&failures[0], "Prefix length", 3);
+        }
     }
 
     mod starts_with_matching {
@@ -1112,6 +1225,41 @@ mod tests {
                           Actual: 3
                     -------- assertr --------
                 "});
+        }
+
+        #[test]
+        fn renders_numeric_evidence_with_the_active_renderer() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
+            use indoc::formatdoc;
+            let failures = assert_that_owned!([1, 2].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.ends_with([1, 2, 3]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2].into_iter()`
+
+                Actual: [
+                    custom(1),
+                    custom(2),
+                ]
+
+                does not end with
+
+                Expected: [
+                    custom(1),
+                    custom(2),
+                    custom(3),
+                ]
+
+                Details:
+                  - Consumed elements: custom(2)
+                  - Suffix length: custom(3)
+                -------- assertr --------
+            "});
+
+            assert_custom_fact(&failures[0], "Suffix length", 3);
         }
     }
 
@@ -1524,6 +1672,38 @@ mod tests {
                     -------- assertr --------
                 "});
         }
+
+        #[test]
+        fn renders_numeric_evidence_with_the_active_renderer() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
+            use indoc::formatdoc;
+            let failures = assert_that_owned!([1, 2].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.contains_exactly([1]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2].into_iter()`
+
+                Actual: []
+
+                does not contain exactly
+
+                Expected: [
+                    custom(1),
+                ]
+
+                Details:
+                  - Consumed elements: custom(0)
+                  - Reported length: custom(2)
+                  - Expected length: custom(1)
+                -------- assertr --------
+            "});
+
+            assert_custom_fact(&failures[0], "Reported length", 2);
+            assert_custom_fact(&failures[0], "Expected length", 1);
+        }
     }
 
     mod contains_exactly_matching {
@@ -1746,6 +1926,37 @@ mod tests {
                       - Consumed elements: 3
                     -------- assertr --------
                 "});
+        }
+
+        #[test]
+        fn renders_numeric_evidence_with_the_active_renderer() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
+            use indoc::formatdoc;
+            let failures = assert_that_owned!([1, 2].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.contains_exactly_in_any_order([1]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2].into_iter()`
+
+                Actual: []
+
+                does not contain exactly in any order
+
+                Expected: [
+                    custom(1),
+                ]
+
+                Details:
+                  - Consumed elements: custom(0)
+                  - Reported length: custom(2)
+                  - Expected length: custom(1)
+                -------- assertr --------
+            "});
+
+            assert_custom_fact(&failures[0], "Expected length", 1);
         }
     }
 

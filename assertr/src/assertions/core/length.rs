@@ -1,7 +1,7 @@
 use crate::AssertThat;
 use crate::ValueRenderer;
 use crate::assertions::HasLength;
-use crate::failure::FailureKind;
+use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
 
 /// Assertions for subjects implementing [`HasLength`].
@@ -29,7 +29,7 @@ pub trait LengthAssertions {
     /// Asserts that the subject has exactly `expected` elements or bytes.
     fn has_length(self, expected: usize) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<usize>;
 }
 
 impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
@@ -69,7 +69,7 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn has_length(self, expected: usize) -> Self
     where
-        R: ValueRenderer<T>,
+        R: ValueRenderer<T> + ValueRenderer<usize>,
     {
         self.track_assertion();
         let actual_len = self.actual().length();
@@ -77,8 +77,11 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
             self.failure(FailureKind::Length)
                 .actual(self.render().value(self.actual()).show_type_hint(true))
                 .relation("does not have the expected length")
-                .expected(expected)
-                .fact("Actual length", actual_len)
+                .expected(self.render().value(&expected))
+                .fact(Fact::labelled(
+                    "Actual length",
+                    self.render().value(&actual_len),
+                ))
                 .raise();
         }
         self
@@ -133,6 +136,20 @@ mod tests {
                 is not empty
                 -------- assertr --------
             "});
+        }
+
+        #[test]
+        fn requires_no_numeric_renderer() {
+            struct SubjectRenderer;
+            impl ValueRenderer<[i32; 0]> for SubjectRenderer {
+                fn fmt(&self, _: &[i32; 0], _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("success rendered")
+                }
+            }
+            assert_that!([] as [i32; 0])
+                .with_renderer(SubjectRenderer)
+                .with_location(false)
+                .is_empty();
         }
     }
 
@@ -598,6 +615,49 @@ mod tests {
                       - Actual length: 1
                     -------- assertr --------
                 "});
+        }
+
+        #[test]
+        fn renders_original_length_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{CustomValueRenderer, assert_custom_value};
+            let failures = assert_that!([1, 2])
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.has_length(3));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2]`
+
+                Actual: [i32; 2] custom([1, 2])
+
+                does not have the expected length
+
+                Expected: custom(3)
+
+                Details:
+                  - Actual length: custom(2)
+                -------- assertr --------
+            "});
+
+            assert_custom_value(failures[0].expected.as_ref().unwrap(), &3_usize);
+            assert_custom_value(&failures[0].facts[0].value, &2_usize);
+        }
+
+        #[test]
+        fn a_matching_length_does_not_render() {
+            struct NeverRender;
+            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
+                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("success rendered")
+                }
+            }
+            assert_that!([1, 2])
+                .with_renderer(NeverRender)
+                .with_location(false)
+                .has_length(2);
         }
     }
 

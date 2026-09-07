@@ -15,6 +15,7 @@ mod tests {
     use core::cell::Cell;
     use std::sync::{Arc, Mutex};
 
+    use crate::Fact;
     use crate::assertions::collection::Collection;
     use crate::prelude::*;
     use crate::renderer::CollectionPresentation;
@@ -209,12 +210,16 @@ mod tests {
         assert_that!(&failures).has_length(2);
         assert_that!(failures[0].messages.as_slice()).contains_exactly(["user context"]);
         assert_that!(failures[0].facts.as_slice()).does_not_contain_matching(
-            crate::matchers::predicate(|it: &crate::Fact| it.label == "Decisive index"),
+            crate::matchers::predicate(|it: &Fact| it.label == "Decisive index"),
         );
         assert_that!(failures[1].messages.as_slice()).contains_exactly(["user context"]);
         assert_that!(failures[1].facts.as_slice())
-            .contains(crate::Fact::new("Consumed elements", "3"))
-            .does_not_contain_matching(crate::matchers::predicate(|it: &crate::Fact| {
+            .contains(Fact::labelled(
+                "Consumed elements",
+                crate::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+                    .value(&3_usize),
+            ))
+            .does_not_contain_matching(crate::matchers::predicate(|it: &Fact| {
                 it.label == "Decisive index"
             }));
     }

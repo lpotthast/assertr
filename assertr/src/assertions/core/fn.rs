@@ -1,7 +1,7 @@
 use crate::actual::Actual;
-use crate::failure::FailureKind;
+use crate::failure::{Fact, FailureKind};
 use crate::mode::Panic;
-use crate::{AssertThat, PanicValue};
+use crate::{AssertThat, PanicValue, ValueRenderer};
 use alloc::{boxed::Box, string::String};
 use core::any::Any;
 use core::panic::Location;
@@ -23,12 +23,17 @@ fn raise_unexpected_panic<T, R>(
     this: &AssertThat<'_, T, Panic, R>,
     payload: &(dyn Any + Send),
     location: &'static Location<'static>,
-) {
+) where
+    R: ValueRenderer<str>,
+{
     let mut failure = this
         .failure_at(FailureKind::Panic, location)
         .relation("unexpectedly panicked");
     if let Some(message) = panic_message(payload) {
-        failure = failure.fact("Panic message", format_args!("{message:?}"));
+        failure = failure.fact(Fact::labelled(
+            "Panic message",
+            this.render().value(message),
+        ));
     }
     failure.raise();
 }
@@ -70,7 +75,9 @@ pub trait FnOnceAssertions<'t, O, R = crate::DebugRenderer> {
     ///
     /// Dropping the output is outside the caught unwind boundary.
     #[cfg(feature = "std")]
-    fn does_not_panic(self) -> AssertThat<'t, O, Panic, R>;
+    fn does_not_panic(self) -> AssertThat<'t, O, Panic, R>
+    where
+        R: ValueRenderer<str>;
 }
 
 impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F, Panic, R> {
@@ -112,7 +119,10 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
 
     #[track_caller]
     #[cfg(feature = "std")]
-    fn does_not_panic(self) -> AssertThat<'t, O, Panic, R> {
+    fn does_not_panic(self) -> AssertThat<'t, O, Panic, R>
+    where
+        R: ValueRenderer<str>,
+    {
         self.track_assertion();
 
         let this: AssertThat<Result<O, Box<dyn Any + Send + 'static>>, Panic, R> =
@@ -160,7 +170,8 @@ pub trait AsyncFnOnceAssertions<'t, O, R = crate::DebugRenderer> {
     #[cfg(feature = "std")]
     fn does_not_panic_async(self) -> impl Future<Output = AssertThat<'t, O, Panic, R>>
     where
-        O: 't;
+        O: 't,
+        R: ValueRenderer<str>;
 }
 
 impl<'t, Fut, O, R, F> AsyncFnOnceAssertions<'t, O, R> for AssertThat<'t, F, Panic, R>
@@ -179,6 +190,7 @@ where
     fn does_not_panic_async(self) -> impl Future<Output = AssertThat<'t, O, Panic, R>>
     where
         O: 't,
+        R: ValueRenderer<str>,
     {
         does_not_panic_async_at(self, Location::caller())
     }
@@ -248,6 +260,7 @@ where
     F: FnOnce() -> Fut + 't,
     Fut: Future<Output = O>,
     O: 't,
+    R: ValueRenderer<str>,
 {
     assertion.track_assertion();
 
@@ -382,6 +395,58 @@ mod tests {
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
                 (|| 42).must_owned().not_panic();
+            }
+
+            #[test]
+            fn string_payloads_use_the_active_renderer() {
+                use indoc::formatdoc;
+
+                use crate::test_support::{CustomValueRenderer, RedactingRenderer};
+                let message = "private-panic-value";
+                for owned in [false, true] {
+                    assert_that_panic_by(|| {
+                        assert_that_owned!(|| if owned {
+                            std::panic::panic_any(message.to_owned());
+                        } else {
+                            std::panic::panic_any(message);
+                        })
+                        .with_renderer(CustomValueRenderer)
+                        .with_location(false)
+                        .does_not_panic();
+                    })
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
+                        -------- assertr --------
+                        Expression: `|| if owned {{ std::panic::panic_any(message.to_owned()); }} else...`
+
+                        unexpectedly panicked
+
+                        Details:
+                          - Panic message: custom("private-panic-value")
+                        -------- assertr --------
+                    "#});
+                    assert_that_panic_by(|| {
+                        assert_that_owned!(|| if owned {
+                            std::panic::panic_any(message.to_owned());
+                        } else {
+                            std::panic::panic_any(message);
+                        })
+                        .with_renderer(RedactingRenderer)
+                        .with_location(false)
+                        .does_not_panic();
+                    })
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r"
+                        -------- assertr --------
+                        Expression: `|| if owned {{ std::panic::panic_any(message.to_owned()); }} else...`
+
+                        unexpectedly panicked
+
+                        Details:
+                          - Panic message: <redacted>
+                        -------- assertr --------
+                    "});
+                }
             }
 
             #[test]
@@ -576,6 +641,62 @@ mod tests {
             #[cfg(feature = "fluent")]
             async fn fluent_alias_is_as_expected() {
                 (async || 42).must_owned().not_panic_async().await;
+            }
+
+            #[tokio::test]
+            async fn string_payloads_use_the_active_renderer() {
+                use indoc::formatdoc;
+
+                use crate::test_support::{CustomValueRenderer, RedactingRenderer};
+                let message = "private-async-panic-value";
+                for owned in [false, true] {
+                    assert_that_panic_by_async(async || {
+                        assert_that_owned!(async || if owned {
+                            std::panic::panic_any(message.to_owned());
+                        } else {
+                            std::panic::panic_any(message);
+                        })
+                        .with_renderer(CustomValueRenderer)
+                        .with_location(false)
+                        .does_not_panic_async()
+                        .await;
+                    })
+                    .await
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r#"
+                        -------- assertr --------
+                        Expression: `async || if owned {{ std::panic::panic_any(message.to_owned()); }} else...`
+
+                        unexpectedly panicked
+
+                        Details:
+                          - Panic message: custom("private-async-panic-value")
+                        -------- assertr --------
+                    "#});
+                    assert_that_panic_by_async(async || {
+                        assert_that_owned!(async || if owned {
+                            std::panic::panic_any(message.to_owned());
+                        } else {
+                            std::panic::panic_any(message);
+                        })
+                        .with_renderer(RedactingRenderer)
+                        .with_location(false)
+                        .does_not_panic_async()
+                        .await;
+                    })
+                    .await
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r"
+                        -------- assertr --------
+                        Expression: `async || if owned {{ std::panic::panic_any(message.to_owned()); }} else...`
+
+                        unexpectedly panicked
+
+                        Details:
+                          - Panic message: <redacted>
+                        -------- assertr --------
+                    "});
+                }
             }
 
             #[tokio::test]

@@ -1,4 +1,4 @@
-use crate::failure::FailureKind;
+use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
 use crate::{
     AssertThat, ValueRenderer,
@@ -107,14 +107,14 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
                 .actual(Compact(self.render().value(&actual)))
                 .relation("is not close to")
                 .expected(Compact(self.render().value(&expected)))
-                .fact(
+                .fact(Fact::labelled(
                     "Allowed deviation",
                     Compact(self.render().value(&allowed_deviation)),
-                )
-                .fact(
+                ))
+                .fact(Fact::labelled(
                     "Allowed range",
                     Compact(self.render().values(&allowed_range, GroupStyle::List)),
-                )
+                ))
                 .raise();
         }
 

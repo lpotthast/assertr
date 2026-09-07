@@ -9,7 +9,7 @@
 //!   trees at the panic boundary or after capture.
 
 use assertr::prelude::*;
-use assertr::{FailureKind, renderer::Rendered};
+use assertr::{Fact, FailureKind, renderer::Rendered};
 use indoc::formatdoc;
 
 fn rendered_text(value: &Rendered) -> String {
@@ -118,7 +118,7 @@ fn messages_and_details_render_as_separate_plain_bullet_blocks() {
             it.track_assertion();
             it.failure(FailureKind::Other)
                 .relation("The assertion failed.")
-                .note("first detail\ncontinued detail")
+                .fact(Fact::note("first detail\ncontinued detail"))
                 .raise();
             it
         });
@@ -357,7 +357,11 @@ mod fields {
         assert_that!(failure.relation.as_deref())
             .is_equal_to(Some("does not have the expected length"));
         assert_that!(text_opt(failure.expected.as_ref())).is_equal_to(Some("2"));
-        assert_that!(failure.facts.as_slice()).contains_exactly([Fact::new("Actual length", "1")]);
+        assert_that!(failure.facts.as_slice()).contains_exactly([Fact::labelled(
+            "Actual length",
+            assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+                .value(&1_usize),
+        )]);
         assert_that!(failure.facts[0].label.as_ref()).is_equal_to("Actual length");
         assert_that!(text(&failure.facts[0].value)).is_equal_to("1");
     }
@@ -656,7 +660,7 @@ mod fields {
             it.track_assertion();
             it.failure(FailureKind::Other)
                 .relation("does not hold")
-                .note("some evidence")
+                .fact(Fact::note("some evidence"))
                 .raise();
             it
         });
@@ -766,7 +770,7 @@ mod matcher_metadata {
             ])
             .relation("does not match")
             .build()
-            .located_at(assertr::Fact::index(1));
+            .located_at(Fact::index(1));
         let root = FailureBuilder::detached::<()>(FailureKind::Matching)
             .child(child)
             .build();

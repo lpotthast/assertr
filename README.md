@@ -94,8 +94,8 @@ The default features are `std` and `num`. Everything else is opt-in:
 | `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
 | `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
 | `matchers`                                                 | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
-| `serde-json`                                               | `json()` and `as_json()` conversions.                                               |
-| `serde-toml`                                               | `toml()` and `as_toml()` conversions.                                               |
+| `serde-json`                                               | `as_json()` serializes to a JSON `Result` subject.                                               |
+| `serde-toml`                                               | `as_toml()` serializes to a TOML `Result` subject.                                               |
 | `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
 | `program`                                                  | Assertions that resolve an executable name or path.                                 |
 | `http`, `jiff`, `reqwest`, `rootcause`, `tokio`            | Assertions for the types of the crate of the same name.                             |

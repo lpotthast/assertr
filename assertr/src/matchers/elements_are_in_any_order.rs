@@ -1,5 +1,6 @@
 use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, MatcherList};
 use crate::{
+    Fact,
     assertions::collection::Collection,
     failure::{FailureBuilder, FailureKind},
     util::matching::match_bipartite,
@@ -18,6 +19,7 @@ pub fn elements_are_in_any_order<L>(list: L) -> ElementsAreInAnyOrder<L> {
 
 impl<C, R, L> AssertrMatcher<C, R> for ElementsAreInAnyOrder<L>
 where
+    R: crate::ValueRenderer<usize>,
     C: Collection + ?Sized,
     L: MatcherList<C::Item, R>,
 {
@@ -73,7 +75,7 @@ where
                         context.record_group(
                             FailureBuilder::detached::<C>(FailureKind::Matching)
                                 .relation("has no distinct matching element")
-                                .fact("expected slot", slot)
+                                .fact(Fact::labelled("expected slot", slot))
                                 .children(alternatives.evidence)
                                 .omitted_children(alternatives.omitted)
                                 .constraint(self.0.describe_at(slot, context))
@@ -94,14 +96,23 @@ where
                             }
                         }
                     }
-                    context.record_group(
-                        FailureBuilder::detached::<C>(FailureKind::Matching)
-                            .relation("has unexpected elements")
-                            .fact("unexpected count", result.unmatched_actual.len())
-                            .children(unexpected.evidence)
-                            .omitted_children(unexpected.omitted)
-                            .build(),
-                    );
+                    if context.is_diagnostic() {
+                        context.record_group(
+                            FailureBuilder::detached::<C>(FailureKind::Matching)
+                                .relation("has unexpected elements")
+                                .fact(Fact::labelled(
+                                    "unexpected count",
+                                    context.render().value(&result.unmatched_actual.len()),
+                                ))
+                                .children(unexpected.evidence)
+                                .omitted_children(unexpected.omitted)
+                                .build(),
+                        );
+                    } else {
+                        context.outcome(false, |context| {
+                            <Self as AssertrMatcher<C, R>>::describe(self, context)
+                        });
+                    }
                 }
             }
         }
@@ -160,5 +171,54 @@ mod tests {
     #[test]
     fn supports_overlapping_constraints() {
         assert_that!([1, 2]).matches(elements_are_in_any_order![ge(1), 1]);
+    }
+
+    mod evaluate {
+        use super::*;
+
+        #[test]
+        fn a_zero_item_budget_preserves_length_failure_without_rendering_evidence() {
+            use indoc::formatdoc;
+            struct NeverRender;
+            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
+                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("rendered omitted evidence")
+                }
+            }
+            let failures = assert_that!([1, 2])
+                .with_renderer(NeverRender)
+                .with_location(false)
+                .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
+                .capture(|it| it.matches(elements_are_in_any_order![]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+        -------- assertr --------
+        Expression: `[1, 2]`
+
+        does not match
+
+        Details:
+          - ... 1 more nested failure ...
+        -------- assertr --------
+    "});
+            assert_that!(failures[0].omitted_children).is_equal_to(1);
+        }
+    }
+
+    mod probe {
+        use super::*;
+        use crate::matchers::MatchContext;
+        #[test]
+        fn length_mismatches_do_not_render_numeric_evidence() {
+            struct NeverRender;
+            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
+                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("probe rendered evidence")
+                }
+            }
+            let context = MatchContext::new(&NeverRender, RenderingBudget::default());
+            assert_that!(context.probe(&[1, 2], &elements_are_in_any_order![])).is_false();
+            assert_that!(context.into_failures()).is_empty();
+        }
     }
 }

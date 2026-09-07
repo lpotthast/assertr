@@ -264,8 +264,9 @@
 //! quadratic space. Rendering limits bound retained output, not comparison work, and zero budgets
 //! do not change truth.
 //!
-//! [Conditions](crate::condition) retain their error-typed authoring trait and renderer-free
-//! assertions. Wrap them in [`condition(c)`](condition) to compose them.
+//! [Conditions](crate::condition) retain their error-typed authoring trait. Their assertions
+//! require rendering support for the condition error, but no subject renderer. Wrap them in
+//! [`condition(c)`](condition) to compose them.
 //! [`pattern!`](crate::pattern) constructs reusable matchers with `Fn` guards. Direct
 //! `is_matching(pattern! (...))` methods continue to support consuming `FnOnce` guards.
 //!

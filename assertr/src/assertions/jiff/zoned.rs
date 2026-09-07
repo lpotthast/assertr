@@ -1,9 +1,6 @@
-use crate::failure::FailureKind;
+use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
 use crate::{AssertThat, ValueRenderer};
-use alloc::borrow::ToOwned;
-use alloc::format;
-use alloc::string::String;
 use core::borrow::Borrow;
 use jiff::Zoned;
 use jiff::tz::TimeZone;
@@ -15,14 +12,14 @@ pub trait ZonedAssertions<R = crate::DebugRenderer> {
     /// Asserts that the subject uses the same time-zone rules as `expected`.
     fn is_in_time_zone(self, expected: impl Borrow<TimeZone>) -> Self
     where
-        R: ValueRenderer<Zoned>;
+        R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>;
 
     /// Asserts that the subject has an IANA time-zone name equal to `expected`.
     ///
     /// A subject using an unnamed fixed-offset or POSIX time zone fails this assertion.
     fn is_in_time_zone_named(self, expected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<Zoned>;
+        R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>;
 }
 
 /// The label of the fact naming the subject's time zone.
@@ -32,19 +29,21 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
     #[track_caller]
     fn is_in_time_zone(self, expected: impl Borrow<TimeZone>) -> Self
     where
-        R: ValueRenderer<Zoned>,
+        R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>,
     {
         self.track_assertion();
 
         let expected = expected.borrow();
         let actual = self.actual().time_zone();
         if actual != expected {
-            let expected = time_zone_name(expected);
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
                 .relation("is not in time zone")
-                .expected(format_args!("{expected}"))
-                .fact(ACTUAL_TIME_ZONE, time_zone_name(actual))
+                .expected(self.render().value(expected))
+                .fact(Fact::labelled(
+                    ACTUAL_TIME_ZONE,
+                    self.render().value(actual),
+                ))
                 .raise();
         }
         self
@@ -53,7 +52,7 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
     #[track_caller]
     fn is_in_time_zone_named(self, expected: impl AsRef<str>) -> Self
     where
-        R: ValueRenderer<Zoned>,
+        R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>,
     {
         self.track_assertion();
 
@@ -63,19 +62,15 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
                 .relation("is not in time zone")
-                .expected(format_args!("{expected}"))
-                .fact(ACTUAL_TIME_ZONE, time_zone_name(actual))
+                .expected(self.render().value(expected))
+                .fact(Fact::labelled(
+                    ACTUAL_TIME_ZONE,
+                    self.render().value(actual),
+                ))
                 .raise();
         }
         self
     }
-}
-
-/// The IANA name of a time zone, or its `Debug` form for a fixed-offset or POSIX time zone.
-fn time_zone_name(time_zone: &TimeZone) -> String {
-    time_zone
-        .iana_name()
-        .map_or_else(|| format!("{time_zone:?}"), ToOwned::to_owned)
 }
 
 #[cfg(test)]
@@ -121,6 +116,72 @@ mod tests {
         }
 
         #[test]
+        fn renders_original_zone_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            for subject in [
+                "2024-06-19 15:22[America/New_York]"
+                    .parse::<Zoned>()
+                    .unwrap(),
+                jiff::civil::date(2024, 6, 19)
+                    .at(15, 22, 0, 0)
+                    .to_zoned(TimeZone::fixed(tz::offset(5)))
+                    .unwrap(),
+            ] {
+                let operand = TimeZone::get("Europe/Berlin").unwrap();
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.is_in_time_zone(&operand));
+                let actual_zone = subject.time_zone();
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom({subject:?})
+
+                    is not in time zone
+
+                    Expected: custom(TimeZone(TZif("Europe/Berlin")))
+
+                    Details:
+                      - Actual time zone: custom({actual_zone:?})
+                    -------- assertr --------
+                "#});
+                assert_custom_value(failures[0].expected.as_ref().unwrap(), &operand);
+                assert_custom_value(&failures[0].facts[0].value, subject.time_zone());
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| it.is_in_time_zone(&operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: <redacted>
+
+                    is not in time zone
+
+                    Expected: <redacted>
+
+                    Details:
+                      - Actual time zone: <redacted>
+                    -------- assertr --------
+                "});
+
+                assert_redacted(
+                    &failures[0],
+                    &["Europe/Berlin", "America/New_York", "05:00"],
+                );
+            }
+        }
+
+        #[test]
         fn succeeds_when_matches() {
             let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
             let tz = TimeZone::get("America/New_York").expect("valid");
@@ -136,7 +197,7 @@ mod tests {
                 assert_that!(zdt).with_location(false).is_in_time_zone(tz);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `zdt`
 
@@ -144,12 +205,20 @@ mod tests {
 
                     is not in time zone
 
-                    Expected: Europe/Berlin
+                    Expected: TimeZone(
+                        TZif(
+                            "Europe/Berlin",
+                        ),
+                    )
 
                     Details:
-                      - Actual time zone: America/New_York
+                      - Actual time zone: TimeZone(
+                            TZif(
+                                "America/New_York",
+                            ),
+                        )
                     -------- assertr --------
-                "});
+                "#});
         }
 
         #[test]
@@ -164,7 +233,7 @@ mod tests {
                 assert_that!(zdt).with_location(false).is_in_time_zone(tz);
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `zdt`
 
@@ -172,12 +241,18 @@ mod tests {
 
                     is not in time zone
 
-                    Expected: Europe/Berlin
+                    Expected: TimeZone(
+                        TZif(
+                            "Europe/Berlin",
+                        ),
+                    )
 
                     Details:
-                      - Actual time zone: TimeZone(05:00:00)
+                      - Actual time zone: TimeZone(
+                            05:00:00,
+                        )
                     -------- assertr --------
-                "});
+                "#});
         }
     }
 
@@ -195,6 +270,72 @@ mod tests {
         }
 
         #[test]
+        fn renders_original_zone_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            for subject in [
+                "2024-06-19 15:22[America/New_York]"
+                    .parse::<Zoned>()
+                    .unwrap(),
+                jiff::civil::date(2024, 6, 19)
+                    .at(15, 22, 0, 0)
+                    .to_zoned(TimeZone::fixed(tz::offset(5)))
+                    .unwrap(),
+            ] {
+                let operand = "Europe/Berlin";
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.is_in_time_zone_named(operand));
+                let actual_zone = subject.time_zone();
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom({subject:?})
+
+                    is not in time zone
+
+                    Expected: custom("Europe/Berlin")
+
+                    Details:
+                      - Actual time zone: custom({actual_zone:?})
+                    -------- assertr --------
+                "#});
+                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                assert_custom_value(&failures[0].facts[0].value, subject.time_zone());
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| it.is_in_time_zone_named(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: <redacted>
+
+                    is not in time zone
+
+                    Expected: <redacted>
+
+                    Details:
+                      - Actual time zone: <redacted>
+                    -------- assertr --------
+                "});
+
+                assert_redacted(
+                    &failures[0],
+                    &["Europe/Berlin", "America/New_York", "05:00"],
+                );
+            }
+        }
+
+        #[test]
         fn succeeds_when_matches() {
             let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
             assert_that!(zdt).is_in_time_zone_named("America/New_York");
@@ -209,7 +350,7 @@ mod tests {
                     .is_in_time_zone_named("Europe/Berlin");
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `zdt`
 
@@ -217,12 +358,16 @@ mod tests {
 
                     is not in time zone
 
-                    Expected: Europe/Berlin
+                    Expected: "Europe/Berlin"
 
                     Details:
-                      - Actual time zone: America/New_York
+                      - Actual time zone: TimeZone(
+                            TZif(
+                                "America/New_York",
+                            ),
+                        )
                     -------- assertr --------
-                "});
+                "#});
         }
 
         #[test]
@@ -238,7 +383,7 @@ mod tests {
                     .is_in_time_zone_named("Europe/Berlin");
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+            .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `zdt`
 
@@ -246,12 +391,14 @@ mod tests {
 
                     is not in time zone
 
-                    Expected: Europe/Berlin
+                    Expected: "Europe/Berlin"
 
                     Details:
-                      - Actual time zone: TimeZone(05:00:00)
+                      - Actual time zone: TimeZone(
+                            05:00:00,
+                        )
                     -------- assertr --------
-                "});
+                "#});
         }
     }
 }

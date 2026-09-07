@@ -113,23 +113,29 @@ impl Fact {
     /// The label of the fact locating a nested failure at a rendered map key.
     pub const KEY: &'static str = "key";
 
-    /// Creates a labeled fact.
-    pub fn new(label: impl Into<Cow<'static, str>>, value: impl IntoRendered) -> Self {
+    /// Creates a labeled fact, rendering its value once into an owned evidence tree.
+    ///
+    /// Pass diagnostic values through [`AssertThat::render`] so the active renderer and budget
+    /// apply. Structural metadata and caller-authored prose may be passed as verbatim text.
+    pub fn labelled(label: impl Into<Cow<'static, str>>, value: impl IntoRendered) -> Self {
         Self {
             label: label.into(),
             value: value.into_rendered(),
         }
     }
 
-    /// Creates an unlabeled note.
+    /// Creates an unlabeled note, rendering its value once into an owned evidence tree.
+    ///
+    /// Pass diagnostic values through [`AssertThat::render`]. Caller-authored prose may be
+    /// supplied as verbatim text.
     pub fn note(value: impl IntoRendered) -> Self {
-        Self::new("", value)
+        Self::labelled("", value)
     }
 
     /// Creates the [`INDEX`](Self::INDEX) fact locating a nested failure at an element index.
     #[must_use]
     pub fn index(index: usize) -> Self {
-        Self::new(Self::INDEX, index)
+        Self::labelled(Self::INDEX, index)
     }
 
     /// Creates the [`KEY`](Self::KEY) fact locating a nested failure at a map key. Pass the key as

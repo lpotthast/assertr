@@ -4,6 +4,7 @@ use super::{
     exact_size_hint, indexed_children, unequal_element,
 };
 use crate::failure::{Attached, FailureTarget};
+use crate::renderer::RenderingContext;
 
 /// What ended an exact positional scan before it could succeed.
 enum ExactFailure {
@@ -32,19 +33,23 @@ impl ExactFailure {
 
     /// Attaches the scan's outcome to the failure: the preview facts, what ended the scan, and the
     /// failures of the decisive element as children located at its index.
-    fn apply<S: FailureTarget, Item>(
+    fn apply<S: FailureTarget, Item, R: ValueRenderer<usize>>(
         self,
         failure: FailureBuilder<S>,
         preview: &Preview<Item>,
+        rendering: RenderingContext<'_, R>,
         expected_len: usize,
     ) -> FailureBuilder<S> {
-        let failure = preview.facts(failure, self.decisive_index());
+        let failure = preview.facts(failure, rendering, self.decisive_index());
         match self {
             Self::KnownLength { actual } => failure
-                .fact("Reported length", actual)
-                .fact("Expected length", expected_len),
-            Self::Exhausted { index } => failure.fact("Exhausted at index", index),
-            Self::Extra { index } => failure.fact("Extra element at index", index),
+                .fact(Fact::labelled("Reported length", rendering.value(&actual)))
+                .fact(Fact::labelled(
+                    "Expected length",
+                    rendering.value(&expected_len),
+                )),
+            Self::Exhausted { index } => failure.fact(Fact::labelled("Exhausted at index", index)),
+            Self::Extra { index } => failure.fact(Fact::labelled("Extra element at index", index)),
             Self::Criterion { index, failures } => failure.children(
                 failures
                     .into_iter()
@@ -100,7 +105,7 @@ pub(crate) fn assert_contains_exactly<S, T, E, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     if let Err((preview, outcome)) = evaluate_exact(iterator, expected.len(), |index, item| {
         if crate::matchers::equals(item, &expected[index]) {
@@ -117,7 +122,9 @@ pub(crate) fn assert_contains_exactly<S, T, E, I, M: Mode, R>(
                 this.render()
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
-        outcome.apply(failure, &preview, expected.len()).raise();
+        outcome
+            .apply(failure, &preview, this.render(), expected.len())
+            .raise();
     }
 }
 
@@ -145,18 +152,22 @@ impl PrefixFailure {
 
     /// Attaches the scan's outcome to the failure: the preview facts, what ended the scan, and the
     /// failures of the decisive element as children located at its index.
-    fn apply<S: FailureTarget, Item>(
+    fn apply<S: FailureTarget, Item, R: ValueRenderer<usize>>(
         self,
         failure: FailureBuilder<S>,
         preview: &Preview<Item>,
+        rendering: RenderingContext<'_, R>,
         prefix_len: usize,
     ) -> FailureBuilder<S> {
-        let failure = preview.facts(failure, self.decisive_index());
+        let failure = preview.facts(failure, rendering, self.decisive_index());
         match self {
             Self::KnownTooShort { actual } => failure
-                .fact("Reported length", actual)
-                .fact("Prefix length", prefix_len),
-            Self::Exhausted { index } => failure.fact("Exhausted at index", index),
+                .fact(Fact::labelled("Reported length", rendering.value(&actual)))
+                .fact(Fact::labelled(
+                    "Prefix length",
+                    rendering.value(&prefix_len),
+                )),
+            Self::Exhausted { index } => failure.fact(Fact::labelled("Exhausted at index", index)),
             Self::Criterion { index, failures } => failure.children(
                 failures
                     .into_iter()
@@ -206,7 +217,7 @@ pub(crate) fn assert_starts_with<S, T, E, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     if let Err((preview, outcome)) = evaluate_prefix(iterator, expected.len(), |index, item| {
         if crate::matchers::equals(item, &expected[index]) {
@@ -223,7 +234,9 @@ pub(crate) fn assert_starts_with<S, T, E, I, M: Mode, R>(
                 this.render()
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
-        outcome.apply(failure, &preview, expected.len()).raise();
+        outcome
+            .apply(failure, &preview, this.render(), expected.len())
+            .raise();
     }
 }
 
@@ -294,7 +307,7 @@ fn suffix_failure<'c, S, T, Item, M: Mode, R>(
 ) -> FailureBuilder<Attached<'c>>
 where
     Item: Borrow<T>,
-    R: ValueRenderer<T>,
+    R: ValueRenderer<T> + ValueRenderer<usize>,
 {
     trim_preview(preview);
     let too_short = unsatisfied.is_none();
@@ -304,9 +317,12 @@ where
         .failure(kind)
         .actual(preview.rendered::<T, _, _, _>(this))
         .relation(relation);
-    let failure = preview.facts(failure, None);
+    let failure = preview.facts(failure, this.render(), None);
     let failure = if too_short {
-        failure.fact("Suffix length", suffix_len)
+        failure.fact(Fact::labelled(
+            "Suffix length",
+            this.render().value(&suffix_len),
+        ))
     } else {
         failure
     };
@@ -324,7 +340,7 @@ pub(crate) fn assert_ends_with<S, T, E, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     if expected.is_empty() {
         return;
@@ -407,7 +423,7 @@ pub(crate) fn assert_contains_contiguous<S, T, E, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     if let Err((preview, _)) = find_contiguous::<T, _>(iterator, expected.len(), |_, window| {
         let matched = window
@@ -424,6 +440,6 @@ pub(crate) fn assert_contains_contiguous<S, T, E, I, M: Mode, R>(
                 this.render()
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
-        preview.facts(failure, None).raise();
+        preview.facts(failure, this.render(), None).raise();
     }
 }

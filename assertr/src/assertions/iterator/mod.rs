@@ -16,7 +16,7 @@ use core::borrow::Borrow;
 use crate::{
     AssertThat, AssertionFailure, Mode, ValueRenderer,
     failure::{Fact, FailureBuilder, FailureKind, FailureTarget},
-    renderer::{GroupStyle, RenderedValues},
+    renderer::{GroupStyle, RenderedValues, RenderingContext},
     util::matching::match_bipartite,
 };
 
@@ -55,26 +55,30 @@ impl<Item> Preview<Item> {
     /// Attaches what the scan learned about consumption: how many elements were consumed, whether
     /// the preview had to drop earlier ones, and the index of the element that decided the
     /// assertion, if the caller reports positions.
-    fn facts<S: FailureTarget>(
+    fn facts<S: FailureTarget, R: ValueRenderer<usize>>(
         &self,
         failure: FailureBuilder<S>,
+        rendering: RenderingContext<'_, R>,
         decisive_index: Option<usize>,
     ) -> FailureBuilder<S> {
-        let mut failure = failure.fact("Consumed elements", self.consumed);
+        let mut failure = failure.fact(Fact::labelled(
+            "Consumed elements",
+            rendering.value(&self.consumed),
+        ));
         let omitted = self.omitted();
         if omitted == 1 {
-            failure = failure.note(format_args!(
+            failure = failure.fact(Fact::note(format_args!(
                 "The preview shows the last {} consumed elements. 1 earlier element was omitted.",
                 self.items.len()
-            ));
+            )));
         } else if omitted > 1 {
-            failure = failure.note(format_args!(
+            failure = failure.fact(Fact::note(format_args!(
                 "The preview shows the last {} consumed elements. {omitted} earlier elements were omitted.",
                 self.items.len()
-            ));
+            )));
         }
         if let Some(index) = decisive_index {
-            failure = failure.fact("Decisive index", index);
+            failure = failure.fact(Fact::labelled("Decisive index", index));
         }
         failure
     }

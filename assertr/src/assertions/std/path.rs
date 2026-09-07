@@ -1,5 +1,5 @@
-use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
-use core::fmt::{self, Debug, Display, Formatter};
+use crate::renderer::{IntoRendered, Rendered};
+use crate::{AssertThat, Fact, Mode, ValueRenderer, failure::FailureKind};
 use std::ops::Deref;
 use std::{ffi::OsStr, path::Path};
 
@@ -21,7 +21,7 @@ pub trait PathAssertions {
     /// An I/O error while checking existence is reported as an assertion failure.
     fn exists(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<std::io::Error>;
 
     /// Asserts that the path does not exist.
     ///
@@ -58,27 +58,27 @@ pub trait PathAssertions {
     /// Asserts that the final path component equals `expected`.
     fn has_file_name(self, expected: impl AsRef<OsStr>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<OsStr>;
 
     /// Asserts that the final path component without its extension equals `expected`.
     fn has_file_stem(self, expected: impl AsRef<OsStr>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<OsStr>;
 
     /// Asserts that the final path component's extension equals `expected`.
     fn has_extension(self, expected: impl AsRef<OsStr>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<OsStr>;
 
     /// Asserts that the path starts with `expected` by whole path components.
     fn starts_with(self, expected: impl AsRef<Path>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<Path>;
 
     /// Asserts that the path ends with `expected` by whole path components.
     fn ends_with(self, expected: impl AsRef<Path>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<Path>;
 }
 
 impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M, R> {
@@ -88,7 +88,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn exists(self) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
@@ -104,7 +104,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
                 self.failure(FailureKind::Other)
                     .actual(self.render().value(self.actual()))
                     .relation("does not exist")
-                    .fact("I/O error", format_args!("{err}"))
+                    .fact(Fact::labelled("I/O error", self.render().value(&err)))
                     .raise();
             }
         }
@@ -138,7 +138,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Variant)
                 .actual(self.render().value(self.actual()))
                 .relation("is not a file")
-                .note(entry_kind(actual))
+                .fact(Fact::note(entry_kind(actual)))
                 .raise();
         }
         self
@@ -155,7 +155,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Variant)
                 .actual(self.render().value(self.actual()))
                 .relation("is not a directory")
-                .note(entry_kind(actual))
+                .fact(Fact::note(entry_kind(actual)))
                 .raise();
         }
         self
@@ -172,7 +172,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Variant)
                 .actual(self.render().value(self.actual()))
                 .relation("is not a symlink")
-                .note(entry_kind(actual))
+                .fact(Fact::note(entry_kind(actual)))
                 .raise();
         }
         self
@@ -213,7 +213,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn has_file_name(self, expected: impl AsRef<OsStr>) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
@@ -222,11 +222,14 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
                 .relation("does not have the file name")
-                .expected(format_args!("{}", DebugValue(expected)))
-                .fact(
+                .expected(self.render().value(expected))
+                .fact(Fact::labelled(
                     "Actual file name",
-                    format_args!("{}", Component(actual.file_name())),
-                )
+                    actual.file_name().map_or_else(
+                        || Rendered::verbatim("<none>".into()),
+                        |component| self.render().value(component).into_rendered(),
+                    ),
+                ))
                 .raise();
         }
         self
@@ -235,7 +238,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn has_file_stem(self, expected: impl AsRef<OsStr>) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
@@ -244,11 +247,14 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
                 .relation("does not have the file stem")
-                .expected(format_args!("{}", DebugValue(expected)))
-                .fact(
+                .expected(self.render().value(expected))
+                .fact(Fact::labelled(
                     "Actual file stem",
-                    format_args!("{}", Component(actual.file_stem())),
-                )
+                    actual.file_stem().map_or_else(
+                        || Rendered::verbatim("<none>".into()),
+                        |component| self.render().value(component).into_rendered(),
+                    ),
+                ))
                 .raise();
         }
         self
@@ -257,7 +263,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn has_extension(self, expected: impl AsRef<OsStr>) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
@@ -266,11 +272,14 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Equality)
                 .actual(self.render().value(self.actual()))
                 .relation("does not have the extension")
-                .expected(format_args!("{}", DebugValue(expected)))
-                .fact(
+                .expected(self.render().value(expected))
+                .fact(Fact::labelled(
                     "Actual extension",
-                    format_args!("{}", Component(actual.extension())),
-                )
+                    actual.extension().map_or_else(
+                        || Rendered::verbatim("<none>".into()),
+                        |component| self.render().value(component).into_rendered(),
+                    ),
+                ))
                 .raise();
         }
         self
@@ -279,7 +288,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn starts_with(self, expected: impl AsRef<Path>) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<Path>,
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
@@ -288,8 +297,8 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not start with")
-                .expected(format_args!("{}", DebugValue(expected)))
-                .note("Only whole path components are matched.")
+                .expected(self.render().value(expected))
+                .fact(Fact::note("Only whole path components are matched."))
                 .raise();
         }
         self
@@ -298,7 +307,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn ends_with(self, expected: impl AsRef<Path>) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<Path>,
     {
         self.track_assertion();
         let actual = P::deref(self.actual());
@@ -307,8 +316,8 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
             self.failure(FailureKind::Membership)
                 .actual(self.render().value(self.actual()))
                 .relation("does not end with")
-                .expected(format_args!("{}", DebugValue(expected)))
-                .note("Only whole path components are matched.")
+                .expected(self.render().value(expected))
+                .fact(Fact::note("Only whole path components are matched."))
                 .raise();
         }
         self
@@ -325,28 +334,6 @@ fn entry_kind(path: &Path) -> &'static str {
         "The path exists."
     } else {
         "The path does not exist."
-    }
-}
-
-/// Adapts a path-related value's quoted `Debug` form to the builder's verbatim text input.
-struct DebugValue<'a, T: ?Sized>(&'a T);
-
-impl<T: Debug + ?Sized> Display for DebugValue<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(self.0, f)
-    }
-}
-
-/// An optional path component as a fact value: quoted and escaped like the expected component it is
-/// compared with, or `<none>` when the path has no such component.
-struct Component<'a>(Option<&'a OsStr>);
-
-impl Display for Component<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Some(component) => Debug::fmt(component, f),
-            None => f.write_str("<none>"),
-        }
     }
 }
 
@@ -408,6 +395,57 @@ mod tests {
             fn fluent_alias_is_as_expected() {
                 let path = source_path!();
                 path.as_path().must().exist();
+            }
+
+            #[test]
+            fn renders_the_original_io_error() {
+                use std::path::PathBuf;
+
+                use indoc::formatdoc;
+
+                use crate::test_support::{
+                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+                };
+                let subject = PathBuf::from("invalid\0private-path");
+                let error = subject.try_exists().unwrap_err();
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(PathAssertions::exists);
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("invalid\0private-path")
+
+                    does not exist
+
+                    Details:
+                      - I/O error: custom({error:?})
+                    -------- assertr --------
+                "#});
+
+                assert_custom_value(&failures[0].facts[0].value, &error);
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(PathAssertions::exists);
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: <redacted>
+
+                    does not exist
+
+                    Details:
+                      - I/O error: <redacted>
+                    -------- assertr --------
+                "});
+
+                assert_redacted(&failures[0], &["private-path", "nul byte"]);
             }
 
             #[test]
@@ -679,6 +717,123 @@ mod tests {
             }
 
             #[test]
+            #[cfg(unix)]
+            fn renderer_receives_non_utf8_components() {
+                use std::ffi::OsStr;
+                use std::path::PathBuf;
+
+                use indoc::formatdoc;
+
+                use crate::test_support::{CustomValueRenderer, assert_custom_value};
+                use std::os::unix::ffi::OsStrExt;
+                let subject = PathBuf::from(OsStr::from_bytes(b"private-\xff.bin"));
+                let operand = OsStr::from_bytes(b"other-\xfe.bin");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_file_name(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("private-\xFF.bin")
+
+                    does not have the file name
+
+                    Expected: custom("other-\xFE.bin")
+
+                    Details:
+                      - Actual file name: custom("private-\xFF.bin")
+                    -------- assertr --------
+                "#});
+
+                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                assert_custom_value(&failures[0].facts[0].value, subject.file_name().unwrap());
+            }
+
+            #[test]
+            fn renders_typed_components_including_absence() {
+                use std::ffi::OsStr;
+                use std::path::PathBuf;
+
+                use indoc::formatdoc;
+
+                use crate::test_support::{
+                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+                    rendered_text,
+                };
+                let subject = PathBuf::from("private-file.secret");
+                let operand = OsStr::new("other-file");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_file_name(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("private-file.secret")
+
+                    does not have the file name
+
+                    Expected: custom("other-file")
+
+                    Details:
+                      - Actual file name: custom("private-file.secret")
+                    -------- assertr --------
+                "#});
+
+                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                assert_custom_value(&failures[0].facts[0].value, subject.file_name().unwrap());
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_file_name(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: <redacted>
+
+                    does not have the file name
+
+                    Expected: <redacted>
+
+                    Details:
+                      - Actual file name: <redacted>
+                    -------- assertr --------
+                "});
+
+                assert_redacted(&failures[0], &["private-file", "secret", "other-file"]);
+                let subject = PathBuf::from("/");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_file_name(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("/")
+
+                    does not have the file name
+
+                    Expected: custom("other-file")
+
+                    Details:
+                      - Actual file name: <none>
+                    -------- assertr --------
+                "#});
+
+                assert_eq!(rendered_text(&failures[0].facts[0].value), "<none>");
+                assert_eq!(failures[0].facts[0].value.type_name, None);
+            }
+
+            #[test]
             fn succeeds_when_equal() {
                 let path = source_relative_path!();
                 assert_that!(path).has_file_name("path.rs");
@@ -742,6 +897,87 @@ mod tests {
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
                 source_relative_path!().must().have_file_stem("path");
+            }
+
+            #[test]
+            fn renders_typed_components_including_absence() {
+                use std::ffi::OsStr;
+                use std::path::PathBuf;
+
+                use indoc::formatdoc;
+
+                use crate::test_support::{
+                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+                    rendered_text,
+                };
+                let subject = PathBuf::from("private-file.secret");
+                let operand = OsStr::new("other-file");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_file_stem(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("private-file.secret")
+
+                    does not have the file stem
+
+                    Expected: custom("other-file")
+
+                    Details:
+                      - Actual file stem: custom("private-file")
+                    -------- assertr --------
+                "#});
+
+                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                assert_custom_value(&failures[0].facts[0].value, subject.file_stem().unwrap());
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_file_stem(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: <redacted>
+
+                    does not have the file stem
+
+                    Expected: <redacted>
+
+                    Details:
+                      - Actual file stem: <redacted>
+                    -------- assertr --------
+                "});
+
+                assert_redacted(&failures[0], &["private-file", "secret", "other-file"]);
+                let subject = PathBuf::from("/");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_file_stem(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("/")
+
+                    does not have the file stem
+
+                    Expected: custom("other-file")
+
+                    Details:
+                      - Actual file stem: <none>
+                    -------- assertr --------
+                "#});
+
+                assert_eq!(rendered_text(&failures[0].facts[0].value), "<none>");
+                assert_eq!(failures[0].facts[0].value.type_name, None);
             }
 
             #[test]
@@ -811,6 +1047,87 @@ mod tests {
             }
 
             #[test]
+            fn renders_typed_components_including_absence() {
+                use std::ffi::OsStr;
+                use std::path::PathBuf;
+
+                use indoc::formatdoc;
+
+                use crate::test_support::{
+                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+                    rendered_text,
+                };
+                let subject = PathBuf::from("private-file.secret");
+                let operand = OsStr::new("other-file");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_extension(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("private-file.secret")
+
+                    does not have the extension
+
+                    Expected: custom("other-file")
+
+                    Details:
+                      - Actual extension: custom("secret")
+                    -------- assertr --------
+                "#});
+
+                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                assert_custom_value(&failures[0].facts[0].value, subject.extension().unwrap());
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_extension(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: <redacted>
+
+                    does not have the extension
+
+                    Expected: <redacted>
+
+                    Details:
+                      - Actual extension: <redacted>
+                    -------- assertr --------
+                "});
+
+                assert_redacted(&failures[0], &["private-file", "secret", "other-file"]);
+                let subject = PathBuf::from("/");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.has_extension(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("/")
+
+                    does not have the extension
+
+                    Expected: custom("other-file")
+
+                    Details:
+                      - Actual extension: <none>
+                    -------- assertr --------
+                "#});
+
+                assert_eq!(rendered_text(&failures[0].facts[0].value), "<none>");
+                assert_eq!(failures[0].facts[0].value.type_name, None);
+            }
+
+            #[test]
             fn succeeds_when_equal() {
                 let path = source_relative_path!();
                 assert_that!(path).has_extension("rs");
@@ -873,6 +1190,62 @@ mod tests {
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
                 source_relative_path!().must().start_with("src");
+            }
+
+            #[test]
+            fn renders_original_path_operands() {
+                use std::path::Path;
+                use std::path::PathBuf;
+
+                use indoc::formatdoc;
+
+                use crate::test_support::{
+                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+                };
+                let subject = PathBuf::from("private/path");
+                let operand = Path::new("other/path");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.starts_with(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("private/path")
+
+                    does not start with
+
+                    Expected: custom("other/path")
+
+                    Details:
+                      - Only whole path components are matched.
+                    -------- assertr --------
+                "#});
+
+                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| it.starts_with(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: <redacted>
+
+                    does not start with
+
+                    Expected: <redacted>
+
+                    Details:
+                      - Only whole path components are matched.
+                    -------- assertr --------
+                "});
+
+                assert_redacted(&failures[0], &["private", "other/path"]);
             }
 
             #[test]
@@ -943,6 +1316,62 @@ mod tests {
             }
 
             #[test]
+            fn renders_original_path_operands() {
+                use std::path::Path;
+                use std::path::PathBuf;
+
+                use indoc::formatdoc;
+
+                use crate::test_support::{
+                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+                };
+                let subject = PathBuf::from("private/path");
+                let operand = Path::new("other/path");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.ends_with(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: custom("private/path")
+
+                    does not end with
+
+                    Expected: custom("other/path")
+
+                    Details:
+                      - Only whole path components are matched.
+                    -------- assertr --------
+                "#});
+
+                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| it.ends_with(operand));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `subject`
+
+                    Actual: <redacted>
+
+                    does not end with
+
+                    Expected: <redacted>
+
+                    Details:
+                      - Only whole path components are matched.
+                    -------- assertr --------
+                "});
+
+                assert_redacted(&failures[0], &["private", "other/path"]);
+            }
+
+            #[test]
             fn succeeds_when_postfix() {
                 let path = source_relative_path!();
                 assert_that!(path).ends_with("std/path.rs");
@@ -1008,6 +1437,16 @@ mod tests {
                 fn fmt(
                     &self,
                     value: &PathBuf,
+                    f: &mut core::fmt::Formatter<'_>,
+                ) -> core::fmt::Result {
+                    core::fmt::Debug::fmt(value, f)
+                }
+            }
+
+            impl ValueRenderer<std::ffi::OsStr> for NonCloneRenderer {
+                fn fmt(
+                    &self,
+                    value: &std::ffi::OsStr,
                     f: &mut core::fmt::Formatter<'_>,
                 ) -> core::fmt::Result {
                     core::fmt::Debug::fmt(value, f)

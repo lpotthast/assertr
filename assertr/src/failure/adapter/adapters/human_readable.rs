@@ -541,7 +541,7 @@ mod tests {
                 it.track_assertion();
                 it.failure(FailureKind::Predicate)
                     .relation("does not hold")
-                    .note("first note\nsecond line")
+                    .fact(Fact::note("first note\nsecond line"))
                     .child(child)
                     .raise();
                 it

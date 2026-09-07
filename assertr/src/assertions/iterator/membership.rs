@@ -2,6 +2,7 @@ use super::{
     AssertThat, Borrow, FailureKind, GroupStyle, Mode, PositionReporting, Preview, Reference, Tail,
     ValueRenderer, Vec,
 };
+use crate::Fact;
 
 #[track_caller]
 fn fail_membership<S, T, Item, E: ?Sized, M: Mode, R>(
@@ -13,7 +14,7 @@ fn fail_membership<S, T, Item, E: ?Sized, M: Mode, R>(
     decisive_index: Option<usize>,
 ) where
     Item: Borrow<T>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     let failure = this
         .failure(kind)
@@ -23,7 +24,9 @@ fn fail_membership<S, T, Item, E: ?Sized, M: Mode, R>(
         Reference::Expected(expected) => failure.expected(this.render().value(expected)),
         Reference::Unexpected(unexpected) => failure.unexpected(this.render().value(unexpected)),
     };
-    preview.facts(failure, decisive_index).raise();
+    preview
+        .facts(failure, this.render(), decisive_index)
+        .raise();
 }
 
 #[track_caller]
@@ -35,7 +38,7 @@ pub(crate) fn assert_contains<S, T, E, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     let mut tail = Tail::new();
     for item in iterator {
@@ -65,7 +68,7 @@ pub(crate) fn assert_contains_all<S, T, E, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     if expected.is_empty() {
         return;
@@ -102,12 +105,12 @@ pub(crate) fn assert_contains_all<S, T, E, I, M: Mode, R>(
             this.render()
                 .borrowed_values::<E, _>(expected, GroupStyle::List),
         )
-        .fact(
+        .fact(Fact::labelled(
             "Elements not found",
             this.render()
                 .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List),
-        );
-    preview.facts(failure, None).raise();
+        ));
+    preview.facts(failure, this.render(), None).raise();
 }
 
 #[track_caller]
@@ -120,7 +123,7 @@ pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     let mut tail = Tail::new();
     for (index, item) in iterator.enumerate() {

@@ -5,8 +5,8 @@
 //! [`ToHumanReadableText`](super::adapter::ToHumanReadableText), so assertion code never formats a
 //! failure body by hand and the grammar of every failure comes from one place.
 
-use alloc::{borrow::Cow, format, string::String, vec::Vec};
-use core::{fmt::Display, panic::Location};
+use alloc::{borrow::Cow, string::String, vec::Vec};
+use core::panic::Location;
 
 use super::{AssertionFailure, Fact, FailureKind, Fallible, PathSegment};
 use crate::{
@@ -229,22 +229,20 @@ impl<T: FailureTarget> FailureBuilder<T> {
         self
     }
 
-    /// Attaches a labeled rendered fact. Rendering adapters should be passed directly so their
-    /// structure and type metadata are retained.
-    pub fn fact(mut self, label: impl Into<Cow<'static, str>>, value: impl IntoRendered) -> Self {
-        self.facts.push(Fact::new(label, value));
+    /// Attaches one fact, preserving its rendered evidence and type metadata.
+    ///
+    /// Construct it with [`Fact::labelled`] or [`Fact::note`], passing diagnostic values through
+    /// [`AssertThat::render`]. Facts are already rendered and are not rendered again here.
+    pub fn fact(mut self, fact: Fact) -> Self {
+        self.facts.push(fact);
         self
     }
 
-    /// Attaches an unlabeled note, a complete sentence.
-    pub fn note(mut self, note: impl Display) -> Self {
-        self.facts.push(Fact::note(format!("{note}")));
-        self
-    }
-
-    /// Attaches unlabeled notes.
-    pub fn notes(mut self, notes: impl IntoIterator<Item = String>) -> Self {
-        self.facts.extend(notes.into_iter().map(Fact::note));
+    /// Appends facts in iteration order, after any facts already attached.
+    ///
+    /// Labeled facts and notes may be mixed. Their rendered evidence is preserved unchanged.
+    pub fn facts(mut self, facts: impl IntoIterator<Item = Fact>) -> Self {
+        self.facts.extend(facts);
         self
     }
 
@@ -254,7 +252,7 @@ impl<T: FailureTarget> FailureBuilder<T> {
         if omitted == 0 {
             self
         } else {
-            self.note(crate::renderer::omission(omitted, noun))
+            self.fact(Fact::note(crate::renderer::omission(omitted, noun)))
         }
     }
 
@@ -293,6 +291,159 @@ impl<T: FailureTarget> FailureBuilder<T> {
             messages,
             children: self.children,
             kind: self.kind,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::{cell::Cell, fmt};
+    use indoc::formatdoc;
+
+    use super::FailureBuilder;
+    use crate::{
+        Fact, FailureKind,
+        prelude::*,
+        renderer::{RenderedBody, RenderingContext},
+    };
+
+    struct Evidence;
+
+    struct EvidenceRenderer<'a>(&'a Cell<usize>);
+
+    impl ValueRenderer<Evidence> for EvidenceRenderer<'_> {
+        fn fmt(&self, _: &Evidence, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.0.set(self.0.get() + 1);
+            formatter.write_str("evidence")
+        }
+    }
+
+    mod fact {
+        use super::*;
+
+        #[test]
+        fn preserves_labelled_evidence_without_rendering_again() {
+            let renders = Cell::new(0);
+            let renderer = EvidenceRenderer(&renders);
+            let rendering = RenderingContext::new(
+                &renderer,
+                RenderingBudget::builder().max_leaf_characters(3).build(),
+            );
+            let fact = Fact::labelled("Reason", rendering.value(&Evidence));
+            assert_that!(renders.get()).is_equal_to(1);
+
+            let failure = FailureBuilder::detached::<()>(FailureKind::Other)
+                .relation("does not hold")
+                .fact(fact)
+                .build();
+
+            assert_that!(failure).has_text_report(formatdoc! {"
+                -------- assertr --------
+                does not hold
+
+                Details:
+                  - Reason: evi... 5 more characters ...
+                -------- assertr --------
+            "});
+            assert_that!(failure.facts[0].value.type_name)
+                .is_equal_to(Some(core::any::type_name::<Evidence>()));
+            assert_that!(failure.facts[0].value.body).is_equal_to(RenderedBody::Text {
+                text: "evi".into(),
+                omitted_characters: 5,
+            });
+            assert_that!(renders.get()).is_equal_to(1);
+        }
+
+        #[test]
+        fn preserves_note_evidence_without_rendering_again() {
+            let renders = Cell::new(0);
+            let renderer = EvidenceRenderer(&renders);
+            let rendering = RenderingContext::new(
+                &renderer,
+                RenderingBudget::builder().max_leaf_characters(3).build(),
+            );
+            let fact = Fact::note(rendering.value(&Evidence));
+            assert_that!(renders.get()).is_equal_to(1);
+
+            let failure = FailureBuilder::detached::<()>(FailureKind::Other)
+                .relation("does not hold")
+                .fact(fact)
+                .build();
+
+            assert_that!(failure).has_text_report(formatdoc! {"
+                -------- assertr --------
+                does not hold
+
+                Details:
+                  - evi... 5 more characters ...
+                -------- assertr --------
+            "});
+            assert_that!(failure.facts[0].label.as_ref()).is_empty();
+            assert_that!(failure.facts[0].value.type_name)
+                .is_equal_to(Some(core::any::type_name::<Evidence>()));
+            assert_that!(failure.facts[0].value.body).is_equal_to(RenderedBody::Text {
+                text: "evi".into(),
+                omitted_characters: 5,
+            });
+            assert_that!(renders.get()).is_equal_to(1);
+        }
+    }
+
+    mod facts {
+        use super::*;
+
+        #[test]
+        fn appends_mixed_arrays_and_iterators_in_order_without_rendering_again() {
+            let renders = Cell::new(0);
+            let renderer = EvidenceRenderer(&renders);
+            let rendering = RenderingContext::new(&renderer, RenderingBudget::default());
+            let failure = FailureBuilder::detached::<()>(FailureKind::Other)
+                .relation("does not hold")
+                .fact(Fact::note("First."))
+                .facts([
+                    Fact::labelled("Reason", rendering.value(&Evidence)),
+                    Fact::note(rendering.value(&Evidence)),
+                ])
+                .facts(["Next.", "Last."].into_iter().map(Fact::note))
+                .build();
+
+            assert_that!(failure).has_text_report(formatdoc! {"
+                -------- assertr --------
+                does not hold
+
+                Details:
+                  - First.
+                  - Reason: evidence
+                  - evidence
+                  - Next.
+                  - Last.
+                -------- assertr --------
+            "});
+            for fact in &failure.facts[1..3] {
+                assert_that!(fact.value.type_name)
+                    .is_equal_to(Some(core::any::type_name::<Evidence>()));
+            }
+            assert_that!(renders.get()).is_equal_to(2);
+        }
+
+        #[test]
+        fn an_empty_iterator_preserves_preceding_and_following_facts() {
+            let failure = FailureBuilder::detached::<()>(FailureKind::Other)
+                .relation("does not hold")
+                .fact(Fact::note("First."))
+                .facts(core::iter::empty())
+                .fact(Fact::labelled("Last", "unchanged"))
+                .build();
+
+            assert_that!(failure).has_text_report(formatdoc! {"
+                -------- assertr --------
+                does not hold
+
+                Details:
+                  - First.
+                  - Last: unchanged
+                -------- assertr --------
+            "});
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Indexed extraction for collections supporting constant-time random access.
 
 use super::RandomAccess;
-use crate::{AssertThat, ValueRenderer, failure::FailureKind, mode::Panic};
+use crate::{AssertThat, Fact, ValueRenderer, failure::FailureKind, mode::Panic};
 
 /// Panic-mode indexed extraction from collections with [`RandomAccess`].
 ///
@@ -20,7 +20,7 @@ pub trait RandomAccessExtractAssertions<'t, T, R> {
     /// Asserts that `index` is in bounds, then returns an assertion over that element.
     fn get_at(&'t self, index: usize) -> AssertThat<'t, T, Panic, R>
     where
-        R: ValueRenderer<T> + Clone;
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
 }
 
 impl<'t, C, R> RandomAccessExtractAssertions<'t, C::Item, R> for AssertThat<'t, C, Panic, R>
@@ -30,15 +30,18 @@ where
     #[track_caller]
     fn get_at(&'t self, index: usize) -> AssertThat<'t, C::Item, Panic, R>
     where
-        R: ValueRenderer<C::Item> + Clone,
+        R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
     {
         self.track_assertion();
         if self.actual().element_at(index).is_none() {
             self.failure(FailureKind::Length)
                 .actual(self.render().stable_collection(self.actual()))
                 .relation("has no element at the index")
-                .expected(index)
-                .fact("Actual length", self.actual().length())
+                .expected(self.render().value(&index))
+                .fact(Fact::labelled(
+                    "Actual length",
+                    self.render().value(&self.actual().length()),
+                ))
                 .raise();
         }
 
@@ -103,6 +106,63 @@ mod tests {
                       - Actual length: 2
                     -------- assertr --------
                 "});
+        }
+
+        #[test]
+        fn panics_with_rendered_index_and_length() {
+            use crate::test_support::CustomValueRenderer;
+            assert_that_panic_by(|| {
+                assert_that!([7])
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .get_at(9);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[7]`
+
+                Actual: [
+                    custom(7),
+                ]
+
+                has no element at the index
+
+                Expected: custom(9)
+
+                Details:
+                  - Actual length: custom(1)
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn extraction_preserves_the_renderer_and_budget() {
+            use indoc::formatdoc;
+
+            use crate::{renderer::RenderedBody, test_support::CustomValueRenderer};
+            let subject = [7];
+            let chain = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build());
+            let failures = chain.get_at(0).capture(|it| it.is_equal_to(8));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expected: cus... 6 more characters ...
+
+                  Actual: cus... 6 more characters ...
+                -------- assertr --------
+            "});
+
+            assert_eq!(
+                failures[0].actual.as_ref().unwrap().body,
+                RenderedBody::Text {
+                    text: "cus".into(),
+                    omitted_characters: 6
+                }
+            );
         }
     }
 }

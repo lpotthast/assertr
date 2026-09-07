@@ -12,12 +12,12 @@ pub trait RootcauseReportAssertions<R = crate::DebugRenderer> {
     /// Asserts that the report has exactly `expected` direct children.
     fn has_child_count(self, expected: usize) -> Self
     where
-        R: Clone;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that the report has exactly `expected` attachments.
     fn has_attachment_count(self, expected: usize) -> Self
     where
-        R: Clone;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that the report's current context has type `E`.
     fn has_current_context_type<E: 'static>(self) -> Self
@@ -52,7 +52,7 @@ where
     #[track_caller]
     fn has_child_count(self, expected: usize) -> Self
     where
-        R: Clone,
+        R: Clone + ValueRenderer<usize>,
     {
         self.derive_owned(rootcause::Report::as_ref)
             .has_child_count(expected);
@@ -62,7 +62,7 @@ where
     #[track_caller]
     fn has_attachment_count(self, expected: usize) -> Self
     where
-        R: Clone,
+        R: Clone + ValueRenderer<usize>,
     {
         self.derive_owned(rootcause::Report::as_ref)
             .has_attachment_count(expected);
@@ -105,10 +105,14 @@ where
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RootcauseReportRefAssertions<R = crate::DebugRenderer> {
     /// Asserts that the report has exactly `expected` direct children.
-    fn has_child_count(self, expected: usize) -> Self;
+    fn has_child_count(self, expected: usize) -> Self
+    where
+        R: ValueRenderer<usize>;
 
     /// Asserts that the report has exactly `expected` attachments.
-    fn has_attachment_count(self, expected: usize) -> Self;
+    fn has_attachment_count(self, expected: usize) -> Self
+    where
+        R: ValueRenderer<usize>;
 
     /// Asserts that the report's current context has type `E`.
     fn has_current_context_type<E: 'static>(self) -> Self;
@@ -137,30 +141,36 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions<R>
     for AssertThat<'_, rootcause::ReportRef<'_, C, O, T>, M, R>
 {
     #[track_caller]
-    fn has_child_count(self, expected: usize) -> Self {
+    fn has_child_count(self, expected: usize) -> Self
+    where
+        R: ValueRenderer<usize>,
+    {
         self.track_assertion();
         let actual = self.actual().children().len();
 
         if actual != expected {
             self.failure(FailureKind::Length)
-                .actual(format_args!("{actual:?}"))
+                .actual(self.render().value(&actual))
                 .relation("is not the expected child count")
-                .expected(format_args!("{expected:?}"))
+                .expected(self.render().value(&expected))
                 .raise();
         }
         self
     }
 
     #[track_caller]
-    fn has_attachment_count(self, expected: usize) -> Self {
+    fn has_attachment_count(self, expected: usize) -> Self
+    where
+        R: ValueRenderer<usize>,
+    {
         self.track_assertion();
         let actual = self.actual().attachments().len();
 
         if actual != expected {
             self.failure(FailureKind::Length)
-                .actual(format_args!("{actual:?}"))
+                .actual(self.render().value(&actual))
                 .relation("is not the expected attachment count")
-                .expected(format_args!("{expected:?}"))
+                .expected(self.render().value(&expected))
                 .raise();
         }
         self
@@ -543,6 +553,49 @@ mod tests {
         }
 
         #[test]
+        fn counts_are_rendered_as_typed_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = report!(TestError("private-context"));
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.has_child_count(9));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Actual: custom(0)
+
+                is not the expected child count
+
+                Expected: custom(9)
+                -------- assertr --------
+            "});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &0_usize);
+            assert_custom_value(failures[0].expected.as_ref().unwrap(), &9_usize);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.has_child_count(9));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Actual: <redacted>
+
+                is not the expected child count
+
+                Expected: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &["private-context", "9"]);
+        }
+
+        #[test]
         fn succeeds_when_expected_count_matches() {
             let mut report = report!(TestError("root"));
             report
@@ -583,6 +636,49 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let report = report!(TestError("root")).attach("metadata");
             report.must().have_attachment_count(2);
+        }
+
+        #[test]
+        fn counts_are_rendered_as_typed_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = report!(TestError("private-context"));
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.has_attachment_count(9));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Actual: custom(1)
+
+                is not the expected attachment count
+
+                Expected: custom(9)
+                -------- assertr --------
+            "});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &1_usize);
+            assert_custom_value(failures[0].expected.as_ref().unwrap(), &9_usize);
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.has_attachment_count(9));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Actual: <redacted>
+
+                is not the expected attachment count
+
+                Expected: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &["private-context", "9"]);
         }
 
         #[test]

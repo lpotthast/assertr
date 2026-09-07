@@ -135,3 +135,72 @@ macro_rules! assert_trait_impl {
 }
 
 pub(crate) use assert_trait_impl;
+
+/// Only renders numeric evidence, never referenced identity targets.
+pub(crate) struct NumericRenderer;
+impl ValueRenderer<usize> for NumericRenderer {
+    fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(value, f)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct CustomValueRenderer;
+impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for CustomValueRenderer {
+    fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "custom({value:?})")
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RedactingRenderer;
+impl<T: ?Sized> ValueRenderer<T> for RedactingRenderer {
+    fn fmt(&self, _: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("<redacted>")
+    }
+}
+
+pub(crate) fn assert_custom_value<T: fmt::Debug + ?Sized>(rendered: &Rendered, value: &T) {
+    assert_eq!(rendered.type_name, Some(core::any::type_name::<T>()));
+    assert_eq!(rendered_text(rendered), alloc::format!("custom({value:?})"));
+}
+
+pub(crate) fn assert_redacted(failure: &AssertionFailure, secrets: &[&str]) {
+    fn check_tree(failure: &AssertionFailure, secrets: &[&str]) {
+        // AssertionFailure's own Debug prints a report. Inspect its Rendered fields directly,
+        // including evidence held in constraints and paths, then recurse into every child.
+        let tree = alloc::format!(
+            "{:?} {:?} {:?} {:?} {:?} {:?}",
+            failure.actual,
+            failure.expected,
+            failure.unexpected,
+            failure.facts,
+            failure.constraint,
+            failure.path,
+        );
+        for secret in secrets {
+            assert!(!tree.contains(secret), "tree contains {secret}: {tree}");
+        }
+        for child in &failure.children {
+            check_tree(child, secrets);
+        }
+    }
+    check_tree(failure, secrets);
+    let report = ToHumanReadableText.render(failure);
+    assert!(report.contains("<redacted>"));
+    for secret in secrets {
+        assert!(
+            !report.contains(secret),
+            "report contains {secret}: {report}"
+        );
+    }
+}
+
+pub(crate) fn assert_custom_fact(failure: &AssertionFailure, label: &str, expected: usize) {
+    let fact = failure
+        .facts
+        .iter()
+        .find(|fact| fact.label == label)
+        .unwrap();
+    assert_custom_value(&fact.value, &expected);
+}

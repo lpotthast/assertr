@@ -10,12 +10,11 @@
 //! [`HttpHeaderValueAssertions`](crate::prelude::HttpHeaderValueAssertions): `reqwest` re-exports
 //! `http`'s header types, so the two integrations meet on the same `HeaderValue`.
 
-use crate::failure::FailureKind;
+use crate::failure::{Fact, FailureKind};
 use crate::mode::{Mode, Panic};
 use crate::renderer::{GroupStyle, IntoRendered, Rendered, RenderingContext, SensitiveValuePolicy};
 use crate::{AssertThat, ValueRenderer};
 use alloc::borrow::ToOwned;
-use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use reqwest::header::HeaderValue;
@@ -25,22 +24,34 @@ use reqwest::header::HeaderValue;
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ReqwestResponseAssertions<R = crate::DebugRenderer> {
     /// Asserts that the response has exactly this status code.
-    fn has_status_code(self, expected: reqwest::StatusCode) -> Self;
+    fn has_status_code(self, expected: reqwest::StatusCode) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>;
 
     /// Asserts that the status code is informational (`1xx`).
-    fn is_informational(self) -> Self;
+    fn is_informational(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>;
 
     /// Asserts that the status code indicates success (`2xx`).
-    fn is_success(self) -> Self;
+    fn is_success(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>;
 
     /// Asserts that the status code indicates a redirection (`3xx`).
-    fn is_redirection(self) -> Self;
+    fn is_redirection(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>;
 
     /// Asserts that the status code indicates a client error (`4xx`).
-    fn is_client_error(self) -> Self;
+    fn is_client_error(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>;
 
     /// Asserts that the status code indicates a server error (`5xx`).
-    fn is_server_error(self) -> Self;
+    fn is_server_error(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>;
 
     /// Asserts that the response has a header with this name, regardless of its value.
     ///
@@ -85,15 +96,21 @@ pub trait ReqwestResponseAssertions<R = crate::DebugRenderer> {
 
 impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Response, M, R> {
     #[track_caller]
-    fn has_status_code(self, expected: reqwest::StatusCode) -> Self {
+    fn has_status_code(self, expected: reqwest::StatusCode) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+    {
         self.track_assertion();
 
         let actual = self.actual().status();
         if actual != expected {
             self.failure(FailureKind::Equality)
-                .actual(format_args!("{actual}"))
-                .expected(format_args!("{expected}"))
-                .fact(URL, format_args!("{}", self.actual().url()))
+                .actual(self.render().value(&actual))
+                .expected(self.render().value(&expected))
+                .fact(Fact::labelled(
+                    URL,
+                    self.render().value(self.actual().url().as_str()),
+                ))
                 .raise();
         }
 
@@ -101,7 +118,10 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     }
 
     #[track_caller]
-    fn is_informational(self) -> Self {
+    fn is_informational(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+    {
         let actual = self.actual().status();
         assert_status_class(
             &self,
@@ -113,14 +133,20 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     }
 
     #[track_caller]
-    fn is_success(self) -> Self {
+    fn is_success(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+    {
         let actual = self.actual().status();
         assert_status_class(&self, actual.is_success(), "is not a success", "2xx");
         self
     }
 
     #[track_caller]
-    fn is_redirection(self) -> Self {
+    fn is_redirection(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+    {
         let actual = self.actual().status();
         assert_status_class(
             &self,
@@ -132,7 +158,10 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     }
 
     #[track_caller]
-    fn is_client_error(self) -> Self {
+    fn is_client_error(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+    {
         let actual = self.actual().status();
         assert_status_class(
             &self,
@@ -144,7 +173,10 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     }
 
     #[track_caller]
-    fn is_server_error(self) -> Self {
+    fn is_server_error(self) -> Self
+    where
+        R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+    {
         let actual = self.actual().status();
         assert_status_class(
             &self,
@@ -181,8 +213,11 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
                 )
                 .relation("contains the header")
                 .unexpected(self.render().value(name))
-                .fact(URL, self.render().value(self.actual().url().as_str()))
-                .fact("Value", render_header(self.render(), value))
+                .fact(Fact::labelled(
+                    URL,
+                    self.render().value(self.actual().url().as_str()),
+                ))
+                .fact(Fact::labelled("Value", render_header(self.render(), value)))
                 .raise();
         }
 
@@ -208,16 +243,25 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
                     )
                     .relation("does not contain the header")
                     .expected(self.render().value(name))
-                    .fact(URL, self.render().value(self.actual().url().as_str()))
-                    .fact("Expected value", self.render().value(expected))
+                    .fact(Fact::labelled(
+                        URL,
+                        self.render().value(self.actual().url().as_str()),
+                    ))
+                    .fact(Fact::labelled(
+                        "Expected value",
+                        self.render().value(expected),
+                    ))
                     .raise();
             }
             Some(value) if value.as_bytes() != expected.as_bytes() => {
                 self.failure(FailureKind::Equality)
                     .actual(render_header(self.render(), value))
                     .expected(self.render().value(expected))
-                    .fact(URL, self.render().value(self.actual().url().as_str()))
-                    .fact("Header", self.render().value(name))
+                    .fact(Fact::labelled(
+                        URL,
+                        self.render().value(self.actual().url().as_str()),
+                    ))
+                    .fact(Fact::labelled("Header", self.render().value(name)))
                     .raise();
             }
             Some(_) => {}
@@ -253,7 +297,9 @@ pub trait ReqwestResponseExtractAssertions<'t, R> {
     ///
     /// Panics when the assertion only borrows its subject, and when the body cannot be read.
     /// Ownership is checked when this method is called, before it returns the future.
-    fn get_text(self) -> impl Future<Output = AssertThat<'t, String, Panic, R>>;
+    fn get_text(self) -> impl Future<Output = AssertThat<'t, String, Panic, R>>
+    where
+        R: ValueRenderer<str> + ValueRenderer<reqwest::Error>;
 
     /// Reads the response body, deserializes it into `T`, and continues the chain on the value.
     ///
@@ -271,7 +317,10 @@ pub trait ReqwestResponseExtractAssertions<'t, R> {
     fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
         T: serde::de::DeserializeOwned + 't,
-        R: crate::ValueRenderer<String>;
+        R: crate::ValueRenderer<String>
+            + ValueRenderer<str>
+            + ValueRenderer<reqwest::Error>
+            + ValueRenderer<serde_json::Error>;
 }
 
 impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
@@ -297,7 +346,10 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     }
 
     #[track_caller]
-    fn get_text(self) -> impl Future<Output = AssertThat<'t, String, Panic, R>> {
+    fn get_text(self) -> impl Future<Output = AssertThat<'t, String, Panic, R>>
+    where
+        R: ValueRenderer<str> + ValueRenderer<reqwest::Error>,
+    {
         self.track_assertion();
         if matches!(&self.actual, crate::actual::Actual::Borrowed(_)) {
             panic!(
@@ -306,7 +358,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
         }
 
         let location = core::panic::Location::caller();
-        let url = format!("{}", self.actual().url());
+        let url = self.actual().url().as_str().to_owned();
         get_text_at(self, location, url)
     }
 
@@ -315,7 +367,10 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
         T: serde::de::DeserializeOwned + 't,
-        R: crate::ValueRenderer<String>,
+        R: crate::ValueRenderer<String>
+            + ValueRenderer<str>
+            + ValueRenderer<reqwest::Error>
+            + ValueRenderer<serde_json::Error>,
     {
         self.track_assertion();
         if matches!(&self.actual, crate::actual::Actual::Borrowed(_)) {
@@ -325,7 +380,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
         }
 
         let location = core::panic::Location::caller();
-        let url = format!("{}", self.actual().url());
+        let url = self.actual().url().as_str().to_owned();
         async move {
             use crate::actual::Actual;
 
@@ -337,9 +392,9 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
                 this.failure_at(FailureKind::Other, location)
                     .actual(this.render().value(this.actual()))
                     .relation("is not valid JSON for the expected type")
-                    .fact(URL, url)
-                    .fact("Expected type", core::any::type_name::<T>())
-                    .fact("Error", format_args!("{error}"))
+                    .fact(Fact::labelled(URL, this.render().value(url.as_str())))
+                    .fact(Fact::labelled("Expected type", core::any::type_name::<T>()))
+                    .fact(Fact::labelled("Error", this.render().value(error)))
                     .raise();
             }
 
@@ -354,7 +409,10 @@ async fn get_text_at<'t, R>(
     assertion: AssertThat<'t, reqwest::Response, Panic, R>,
     location: &'static core::panic::Location<'static>,
     url: String,
-) -> AssertThat<'t, String, Panic, R> {
+) -> AssertThat<'t, String, Panic, R>
+where
+    R: ValueRenderer<str> + ValueRenderer<reqwest::Error>,
+{
     use crate::actual::Actual;
 
     let this = assertion
@@ -373,8 +431,8 @@ async fn get_text_at<'t, R>(
     if let Err(error) = this.actual() {
         this.failure_at(FailureKind::Other, location)
             .relation("has a body that could not be read")
-            .fact(URL, url)
-            .fact("Error", format_args!("{error}"))
+            .fact(Fact::labelled(URL, this.render().value(url.as_str())))
+            .fact(Fact::labelled("Error", this.render().value(error)))
             .raise();
     }
 
@@ -399,7 +457,10 @@ where
             )
             .relation("does not contain the header")
             .expected(this.render().value(name))
-            .fact(URL, this.render().value(this.actual().url().as_str()))
+            .fact(Fact::labelled(
+                URL,
+                this.render().value(this.actual().url().as_str()),
+            ))
             .raise();
     }
 }
@@ -434,15 +495,20 @@ fn assert_status_class<M: Mode, R>(
     holds: bool,
     relation: &'static str,
     class: &'static str,
-) {
+) where
+    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+{
     this.track_assertion();
 
     if !holds {
         this.failure(FailureKind::Other)
-            .actual(format_args!("{}", this.actual().status()))
+            .actual(this.render().value(&this.actual().status()))
             .relation(relation)
-            .expected(format_args!("{class}"))
-            .fact(URL, format_args!("{}", this.actual().url()))
+            .expected(class)
+            .fact(Fact::labelled(
+                URL,
+                this.render().value(this.actual().url().as_str()),
+            ))
             .raise();
     }
 }
@@ -454,6 +520,30 @@ mod tests {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};
 
+        struct EvidenceRenderer;
+        impl ValueRenderer<str> for EvidenceRenderer {
+            fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::Debug::fmt(value, f)
+            }
+        }
+        impl ValueRenderer<reqwest::StatusCode> for EvidenceRenderer {
+            fn fmt(
+                &self,
+                value: &reqwest::StatusCode,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                core::fmt::Debug::fmt(value, f)
+            }
+        }
+        impl ValueRenderer<reqwest::Error> for EvidenceRenderer {
+            fn fmt(
+                &self,
+                value: &reqwest::Error,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                core::fmt::Debug::fmt(value, f)
+            }
+        }
         #[test]
         fn traits_are_implemented_without_response_renderer_support() {
             assert_trait_impl!(
@@ -490,30 +580,35 @@ mod tests {
         }
 
         #[test]
-        fn status_checks_do_not_require_a_renderer() {
+        fn status_checks_do_not_require_a_subject_renderer() {
             assert_that!(response(200, &[("content-type", "text/plain")], ""))
-                .with_renderer(NoRenderer)
+                .with_renderer(EvidenceRenderer)
+                .with_location(false)
                 .has_status_code(reqwest::StatusCode::OK)
                 .is_success();
 
             assert_that!(response(100, &[], ""))
-                .with_renderer(NoRenderer)
+                .with_renderer(EvidenceRenderer)
+                .with_location(false)
                 .is_informational();
             assert_that!(response(301, &[], ""))
-                .with_renderer(NoRenderer)
+                .with_renderer(EvidenceRenderer)
+                .with_location(false)
                 .is_redirection();
             assert_that!(response(404, &[], ""))
-                .with_renderer(NoRenderer)
+                .with_renderer(EvidenceRenderer)
+                .with_location(false)
                 .is_client_error();
             assert_that!(response(500, &[], ""))
-                .with_renderer(NoRenderer)
+                .with_renderer(EvidenceRenderer)
+                .with_location(false)
                 .is_server_error();
         }
 
         #[test]
         fn body_extractors_require_only_the_renderers_their_failure_paths_use() {
             let text = assert_that_owned!(response(200, &[], "text"))
-                .with_renderer(NoRenderer)
+                .with_renderer(EvidenceRenderer)
                 .get_text();
             drop(text);
 
@@ -531,6 +626,33 @@ mod tests {
                     }
                 }
 
+                impl ValueRenderer<str> for StringRenderer {
+                    fn fmt(
+                        &self,
+                        value: &str,
+                        f: &mut core::fmt::Formatter<'_>,
+                    ) -> core::fmt::Result {
+                        core::fmt::Debug::fmt(value, f)
+                    }
+                }
+                impl ValueRenderer<reqwest::Error> for StringRenderer {
+                    fn fmt(
+                        &self,
+                        value: &reqwest::Error,
+                        f: &mut core::fmt::Formatter<'_>,
+                    ) -> core::fmt::Result {
+                        core::fmt::Debug::fmt(value, f)
+                    }
+                }
+                impl ValueRenderer<serde_json::Error> for StringRenderer {
+                    fn fmt(
+                        &self,
+                        value: &serde_json::Error,
+                        f: &mut core::fmt::Formatter<'_>,
+                    ) -> core::fmt::Result {
+                        core::fmt::Debug::fmt(value, f)
+                    }
+                }
                 let json = assert_that_owned!(response(200, &[], "null"))
                     .with_renderer(StringRenderer)
                     .get_json::<serde_json::Value>();
@@ -669,6 +791,59 @@ mod tests {
         }
 
         #[test]
+        fn renders_status_and_url_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = response(404, &[], "");
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.has_status_code(reqwest::StatusCode::OK));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Expected: custom(200)
+
+                  Actual: custom(404)
+
+                Details:
+                  - URL: custom("http://localhost/hello")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
+            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+            assert_custom_value(
+                failures[0].expected.as_ref().unwrap(),
+                &reqwest::StatusCode::OK,
+            );
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.has_status_code(reqwest::StatusCode::OK));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Expected: <redacted>
+
+                  Actual: <redacted>
+
+                Details:
+                  - URL: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &["localhost/hello", "404"]);
+        }
+
+        #[test]
         fn succeeds_when_status_code_matches() {
             assert_that!(ok_response()).has_status_code(reqwest::StatusCode::OK);
         }
@@ -685,12 +860,12 @@ mod tests {
                 -------- assertr --------
                 Expression: `response(404, &[], "")`
 
-                Expected: 200 OK
+                Expected: 200
 
-                  Actual: 404 Not Found
+                  Actual: 404
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                 -------- assertr --------
             "#});
         }
@@ -707,12 +882,12 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(404, &[], "")`
 
-                        Expected: 200 OK
+                        Expected: 200
 
-                          Actual: 404 Not Found
+                          Actual: 404
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                         -------- assertr --------
                     "#});
                 },
@@ -721,14 +896,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(404, &[], "")`
 
-                        Actual: 404 Not Found
+                        Actual: 404
 
                         is not a success
 
                         Expected: 2xx
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                         -------- assertr --------
                     "#});
                 },
@@ -745,6 +920,60 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             response(100, &[], "").must().be_informational();
+        }
+
+        #[test]
+        fn renders_status_and_url_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = response(200, &[], "");
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_informational);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom(200)
+
+                is not informational
+
+                Expected: 1xx
+
+                Details:
+                  - URL: custom("http://localhost/hello")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
+            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_informational);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                is not informational
+
+                Expected: 1xx
+
+                Details:
+                  - URL: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &["localhost/hello", "200"]);
         }
 
         #[test]
@@ -765,14 +994,14 @@ mod tests {
                 -------- assertr --------
                 Expression: `response(200, &[], "")`
 
-                Actual: 200 OK
+                Actual: 200
 
                 is not informational
 
                 Expected: 1xx
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                 -------- assertr --------
             "#});
         }
@@ -789,14 +1018,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(200, &[], "")`
 
-                        Actual: 200 OK
+                        Actual: 200
 
                         is not informational
 
                         Expected: 1xx
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                         -------- assertr --------
                     "#});
                 },
@@ -813,6 +1042,60 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             response(200, &[], "").must().be_success();
+        }
+
+        #[test]
+        fn renders_status_and_url_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = response(404, &[], "");
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_success);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom(404)
+
+                is not a success
+
+                Expected: 2xx
+
+                Details:
+                  - URL: custom("http://localhost/hello")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
+            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_success);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                is not a success
+
+                Expected: 2xx
+
+                Details:
+                  - URL: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &["localhost/hello", "404"]);
         }
 
         #[test]
@@ -834,14 +1117,14 @@ mod tests {
                 -------- assertr --------
                 Expression: `response(500, &[], "")`
 
-                Actual: 500 Internal Server Error
+                Actual: 500
 
                 is not a success
 
                 Expected: 2xx
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                 -------- assertr --------
             "#});
         }
@@ -858,14 +1141,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(500, &[], "")`
 
-                        Actual: 500 Internal Server Error
+                        Actual: 500
 
                         is not a success
 
                         Expected: 2xx
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                         -------- assertr --------
                     "#});
                 },
@@ -882,6 +1165,60 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             response(301, &[], "").must().be_redirection();
+        }
+
+        #[test]
+        fn renders_status_and_url_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = response(200, &[], "");
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_redirection);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom(200)
+
+                is not a redirection
+
+                Expected: 3xx
+
+                Details:
+                  - URL: custom("http://localhost/hello")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
+            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_redirection);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                is not a redirection
+
+                Expected: 3xx
+
+                Details:
+                  - URL: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &["localhost/hello", "200"]);
         }
 
         #[test]
@@ -902,14 +1239,14 @@ mod tests {
                 -------- assertr --------
                 Expression: `response(200, &[], "")`
 
-                Actual: 200 OK
+                Actual: 200
 
                 is not a redirection
 
                 Expected: 3xx
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                 -------- assertr --------
             "#});
         }
@@ -926,14 +1263,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(200, &[], "")`
 
-                        Actual: 200 OK
+                        Actual: 200
 
                         is not a redirection
 
                         Expected: 3xx
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                         -------- assertr --------
                     "#});
                 },
@@ -950,6 +1287,60 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             response(404, &[], "").must().be_client_error();
+        }
+
+        #[test]
+        fn renders_status_and_url_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = response(200, &[], "");
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_client_error);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom(200)
+
+                is not a client error
+
+                Expected: 4xx
+
+                Details:
+                  - URL: custom("http://localhost/hello")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
+            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_client_error);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                is not a client error
+
+                Expected: 4xx
+
+                Details:
+                  - URL: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &["localhost/hello", "200"]);
         }
 
         #[test]
@@ -970,14 +1361,14 @@ mod tests {
                 -------- assertr --------
                 Expression: `response(500, &[], "")`
 
-                Actual: 500 Internal Server Error
+                Actual: 500
 
                 is not a client error
 
                 Expected: 4xx
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                 -------- assertr --------
             "#});
         }
@@ -994,14 +1385,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(500, &[], "")`
 
-                        Actual: 500 Internal Server Error
+                        Actual: 500
 
                         is not a client error
 
                         Expected: 4xx
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                         -------- assertr --------
                     "#});
                 },
@@ -1018,6 +1409,60 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             response(500, &[], "").must().be_server_error();
+        }
+
+        #[test]
+        fn renders_status_and_url_evidence() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = response(200, &[], "");
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_server_error);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom(200)
+
+                is not a server error
+
+                Expected: 5xx
+
+                Details:
+                  - URL: custom("http://localhost/hello")
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
+            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(ReqwestResponseAssertions::is_server_error);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                is not a server error
+
+                Expected: 5xx
+
+                Details:
+                  - URL: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(&failures[0], &["localhost/hello", "200"]);
         }
 
         #[test]
@@ -1038,14 +1483,14 @@ mod tests {
                 -------- assertr --------
                 Expression: `response(404, &[], "")`
 
-                Actual: 404 Not Found
+                Actual: 404
 
                 is not a server error
 
                 Expected: 5xx
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                 -------- assertr --------
             "#});
         }
@@ -1062,14 +1507,14 @@ mod tests {
                         -------- assertr --------
                         Expression: `response(404, &[], "")`
 
-                        Actual: 404 Not Found
+                        Actual: 404
 
                         is not a server error
 
                         Expected: 5xx
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                         -------- assertr --------
                     "#});
                 },
@@ -1792,6 +2237,56 @@ mod tests {
                 .is_equal_to("world");
         }
 
+        #[test]
+        fn body_errors_use_typed_renderers_and_can_be_redacted() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{CustomValueRenderer, RedactingRenderer};
+
+            assert_that_panic_by(|| {
+                block_on(async {
+                    assert_that_owned!(failing_response())
+                        .with_renderer(CustomValueRenderer)
+                        .with_location(false)
+                        .get_text()
+                        .await;
+                });
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `failing_response()`
+
+                has a body that could not be read
+
+                Details:
+                  - URL: custom("http://localhost/failing")
+                  - Error: custom(reqwest::Error {{ kind: Decode, url: "http://localhost/failing", source: reqwest::Error {{ kind: Body, source: Custom {{ kind: Other, error: "body read failed" }} }} }})
+                -------- assertr --------
+            "#});
+            assert_that_panic_by(|| {
+                block_on(async {
+                    assert_that_owned!(failing_response())
+                        .with_renderer(RedactingRenderer)
+                        .with_location(false)
+                        .get_text()
+                        .await;
+                });
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `failing_response()`
+
+                has a body that could not be read
+
+                Details:
+                  - URL: <redacted>
+                  - Error: <redacted>
+                -------- assertr --------
+            "});
+        }
+
         #[tokio::test]
         async fn extracts_the_body() {
             assert_that_owned!(ok_response())
@@ -1853,7 +2348,7 @@ mod tests {
             })
             .has_type::<String>()
             .contains("has a body that could not be read")
-            .contains("URL: http://localhost/failing");
+            .contains(r#"URL: "http://localhost/failing""#);
         }
     }
 
@@ -1896,6 +2391,63 @@ mod tests {
                     name: "Bob".to_owned(),
                     age: 42,
                 });
+        }
+
+        #[test]
+        fn body_errors_use_typed_renderers_and_can_be_redacted() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{CustomValueRenderer, RedactingRenderer};
+            let body = r#"{{"name":"private-body-name","age":"private-body-age"}}"#;
+            let expected_type = core::any::type_name::<Person>();
+            assert_that_panic_by(|| {
+                block_on(async {
+                    assert_that_owned!(json_response(body))
+                        .with_renderer(CustomValueRenderer)
+                        .with_location(false)
+                        .get_json::<Person>()
+                        .await;
+                });
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `json_response(body)`
+
+                Actual: custom("{{{{\"name\":\"private-body-name\",\"age\":\"private-body-age\"}}}}")
+
+                is not valid JSON for the expected type
+
+                Details:
+                  - URL: custom("http://localhost/hello")
+                  - Expected type: {expected_type}
+                  - Error: custom(Error("key must be a string", line: 1, column: 2))
+                -------- assertr --------
+            "#});
+            assert_that_panic_by(|| {
+                block_on(async {
+                    assert_that_owned!(json_response(body))
+                        .with_renderer(RedactingRenderer)
+                        .with_location(false)
+                        .get_json::<Person>()
+                        .await;
+                });
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `json_response(body)`
+
+                Actual: <redacted>
+
+                is not valid JSON for the expected type
+
+                Details:
+                  - URL: <redacted>
+                  - Expected type: {expected_type}
+                  - Error: <redacted>
+                -------- assertr --------
+            "});
         }
 
         #[tokio::test]
@@ -1945,7 +2497,7 @@ mod tests {
                 });
             })
             .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
+            .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
                 Expression: `json_response(body)`
 
@@ -1954,11 +2506,11 @@ mod tests {
                 is not valid JSON for the expected type
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                   - Expected type: {expected_type}
-                  - Error: expected ident at line 1 column 2
+                  - Error: Error("expected ident", line: 1, column: 2)
                 -------- assertr --------
-            "});
+            "#});
         }
 
         #[test]
@@ -2012,9 +2564,9 @@ mod tests {
                 is not valid JSON for the expected type
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                   - Expected type: {expected_type}
-                  - Error: invalid type: string "old", expected u32 at line 1 column 25
+                  - Error: Error("invalid type: string \"old\", expected u32", line: 1, column: 25)
                 -------- assertr --------
             "#});
         }

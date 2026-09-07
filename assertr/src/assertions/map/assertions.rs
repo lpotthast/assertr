@@ -107,7 +107,11 @@ pub trait MapAssertions<K, V, R> {
         Self::Map: MapLookup<<EK as MapKeyQuery<K>>::Query>,
         V: PartialEq<EV>,
         I: IntoIterator<Item = (EK, EV)>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK> + ValueRenderer<EV>;
+        R: ValueRenderer<K>
+            + ValueRenderer<V>
+            + ValueRenderer<EK>
+            + ValueRenderer<EV>
+            + ValueRenderer<usize>;
 
     /// Asserts that the map contains exactly the given keys and that each value matches the
     /// predicate paired with its key. Missing and unexpected keys are failures.
@@ -250,6 +254,7 @@ where
         Mp::Value: PartialEq<EV>,
         I: IntoIterator<Item = (EK, EV)>,
         R: ValueRenderer<Mp::Key>
+            + ValueRenderer<usize>
             + ValueRenderer<Mp::Value>
             + ValueRenderer<EK>
             + ValueRenderer<EV>,
@@ -1042,6 +1047,7 @@ mod tests {
 
     #[cfg(feature = "std")]
     mod contains_exactly_entries {
+        use crate::Fact;
         use crate::prelude::*;
         use indoc::formatdoc;
         use std::collections::HashMap;
@@ -1307,7 +1313,7 @@ mod tests {
             assert_that!(rendered_text(&failures[0].children[0].facts[0].value))
                 .is_equal_to("\"a\"");
             assert_that!(failures[0].facts.as_slice())
-                .contains(crate::Fact::note("... 2 more unexpected values ..."));
+                .contains(Fact::note("... 2 more unexpected values ..."));
         }
     }
 
@@ -1826,6 +1832,57 @@ mod tests {
                 .capture(|it| it.contains_entry::<&str, _>("baz", "bar"));
 
             assert_that!(failures).has_length(1);
+        }
+    }
+
+    mod contains_exactly_entries_on_btree_map {
+        use crate::prelude::*;
+        use alloc::collections::BTreeMap;
+
+        #[test]
+        #[cfg(feature = "fluent")]
+        fn fluent_alias_is_as_expected() {
+            BTreeMap::from([(1, 2)])
+                .must()
+                .contain_exactly_entries([(1, 2)]);
+        }
+        #[test]
+        fn renders_length_facts_with_the_active_renderer() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{CustomValueRenderer, assert_custom_value};
+            let subject = BTreeMap::from([(1, 2)]);
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| it.contains_exactly_entries([] as [(i32, i32); 0]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: BTreeMap {{
+                    custom(1): custom(2),
+                }}
+
+                does not contain exactly
+
+                Expected: []
+
+                Details:
+                  - Actual length: custom(1)
+                  - Expected length: custom(0)
+                  - Unexpected entries: [
+                        (
+                            custom(1),
+                            custom(2),
+                        ),
+                    ]
+                -------- assertr --------
+            "});
+
+            assert_custom_value(&failures[0].facts[0].value, &1_usize);
+            assert_custom_value(&failures[0].facts[1].value, &0_usize);
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::failure::FailureKind;
+use crate::failure::{Fact, FailureKind};
 use crate::{AssertThat, Mode, ValueRenderer};
 use tokio::sync::RwLock;
 
@@ -59,7 +59,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                             "<locked>",
                         ))
                         .relation("is unexpectedly locked")
-                        .fact(LOCK_STATE, "write-locked")
+                        .fact(Fact::labelled(LOCK_STATE, "write-locked"))
                         .raise();
                 }
                 Ok(value) => {
@@ -71,7 +71,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                             &*value,
                         ))
                         .relation("is unexpectedly locked")
-                        .fact(LOCK_STATE, "read-locked")
+                        .fact(Fact::labelled(LOCK_STATE, "read-locked"))
                         .raise();
                 }
             }
@@ -94,7 +94,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                         .struct_field(self.actual(), "RwLock", "data", &*value),
                 )
                 .relation("is not read-locked")
-                .fact(LOCK_STATE, "unlocked")
+                .fact(Fact::labelled(LOCK_STATE, "unlocked"))
                 .raise();
         } else if self.actual().try_read().is_err() {
             // Cannot be locked for writing, and RwLock allows multiple readers, so a lock that
@@ -107,7 +107,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                     "<locked>",
                 ))
                 .relation("is not read-locked")
-                .fact(LOCK_STATE, "write-locked")
+                .fact(Fact::labelled(LOCK_STATE, "write-locked"))
                 .raise();
         }
         self
@@ -128,7 +128,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                         .struct_field(self.actual(), "RwLock", "data", &*value),
                 )
                 .relation("is not write-locked")
-                .fact(LOCK_STATE, "unlocked")
+                .fact(Fact::labelled(LOCK_STATE, "unlocked"))
                 .raise();
         } else if let Ok(value) = self.actual().try_read() {
             // Cannot be locked for writing, and RwLock allows multiple readers, so a lock that can
@@ -139,7 +139,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
                         .struct_field(self.actual(), "RwLock", "data", &*value),
                 )
                 .relation("is not write-locked")
-                .fact(LOCK_STATE, "read-locked")
+                .fact(Fact::labelled(LOCK_STATE, "read-locked"))
                 .raise();
         }
         self

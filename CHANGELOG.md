@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   rendering only selected leaves even under negation. Enable the new `matchers` feature, which does not require `std`.
 - Map assertions `contains_entry_matching` and `contains_value_matching` accept composed value matchers.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
-  exact comparisons of borrowed targets with duplicate counts, without equality or renderer bounds.
+  exact comparisons of borrowed targets with duplicate counts, without equality or target renderer bounds.
 - Borrowed panic-mode element projections through `get_first`, `get_last`, and `get_single` for `StableOrder`
   collections, and `get_at` for `RandomAccess` collections.
 - `BinaryHeap` supports length and order-free collection assertions, with diagnostics sorted by rendered text.
@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking:** Removed `json()` and `toml()` adapters. `as_json()` and `as_toml()` return owned `Result` subjects
+  in both modes, preserving serialization errors, renderer, budget, and chain state without counting an assertion.
+  Replace `.map(json())` or `.as_json()` string chains with `.as_json().get_ok()` in panic mode.
+  In capture mode, return `.as_json().is_ok_satisfying(|json| { json.is_equal_to(expected); })` from the closure.
+  Apply the same migration to TOML.
 - **Breaking:** Equality and collection or map value comparisons now require `PartialEq`, removing `AssertrPartialEq`
   and the public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`.
   Move custom comparison policies to expected-side `AssertrMatcher` implementations and matcher assertions.
@@ -62,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Read the structured fields directly or use `Display` and `ToHumanReadableText` for text.
 - **Breaking:** Custom leaf assertions must replace `fail`, `fail_with_details`, and the `failure::Failure` trait
   with `self.failure(kind)` and `FailureBuilder`, supplying structured evidence before calling `raise()`.
+  Attach `Fact::labelled` and `Fact::note` values through `fact(Fact)` or `facts(IntoIterator<Item = Fact>)`.
 - **Breaking:** Custom diagnostic code must replace `render_value`, `render_values`, `Renderable`, and
   `RenderableValues` with adapters from `AssertThat::render()`, passed directly to the failure builder.
   Use `value`, `values`, or `borrowed_values`, and replace `CollectionStyle` with `renderer::GroupStyle`.
@@ -93,12 +99,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   primitive integers, `f32`, and `f64`. Add this bound to generic callers and implement `checked_distance` for custom
   numeric types. Floating-point comparisons use the rounded absolute distance, fixing incorrect results from rounded
   tolerance boundaries, while integer distances remain overflow-safe. The method no longer requires `Clone`.
-- **Breaking:** Reqwest response header assertions and `get_header` diagnostics now honor custom renderers and
-  rendering budgets. Custom renderer callers need `ValueRenderer<str>`, plus `ValueRenderer<HeaderValue>` for
-  `has_header_value` and `does_not_have_header`. Generic bounds use `ReqwestResponseAssertions<R>`. The default
-  still displays marked-sensitive header contents for test diagnostics, escaping non-ASCII bytes instead of
-  decoding them lossily. Custom renderers preserve the original sensitivity flag by default and can request an
-  unmarked diagnostic copy through `ValueRenderer::sensitive_value_policy` and `SensitiveValuePolicy::Reveal`.
+- **Breaking:** Assertion and matcher diagnostics honor the configured renderer and budget for string and path
+  operands, panic messages, response status codes and URLs, time zones, original errors, lengths, counts, and
+  expected indices. Add the corresponding method-level `ValueRenderer` bounds to custom renderer callers.
+  Condition traits and `ExactSizeIteratorAssertions` gain defaulted renderer parameters, and condition errors
+  require rendering support instead of `Display`. The default renderer uses `Debug`, including for errors.
+  Reqwest header diagnostics still display marked-sensitive contents by default, escaping non-ASCII bytes.
+  Custom renderers preserve the original sensitivity flag and can request an unmarked diagnostic copy through
+  `ValueRenderer::sensitive_value_policy` and `SensitiveValuePolicy::Reveal`.
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 - Tokio `RwLock` state assertions retain acquired guards when rendering failures, preventing lock reacquisition races.
 

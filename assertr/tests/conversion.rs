@@ -14,8 +14,10 @@ fn is_able_to_use_json_conversion() {
 
     let expected = r#"{"age":42}"#;
 
-    assert_that!(&person).map(json()).is_equal_to(expected);
-    assert_that!(&person).as_json().is_equal_to(expected);
+    assert_that!(&person)
+        .as_json()
+        .get_ok()
+        .is_equal_to(expected);
 }
 
 #[test]
@@ -33,7 +35,8 @@ fn is_able_to_use_toml_conversion() {
     };
 
     assert_that!(&config)
-        .map(toml())
+        .as_toml()
+        .get_ok()
         .is_equal_to(indoc::formatdoc! {r"
         value = 42
         list = [1, 2]
@@ -41,6 +44,7 @@ fn is_able_to_use_toml_conversion() {
 
     assert_that!(&config)
         .as_toml()
+        .get_ok()
         .is_equal_to(indoc::formatdoc! {r"
         value = 42
         list = [1, 2]

@@ -127,13 +127,14 @@ pub trait CollectionAssertions<T, R> {
     /// A maximum matching makes overlapping predicates order-independent.
     fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<T, R>;
+        P: crate::matchers::MatcherList<T, R>,
+        R: ValueRenderer<usize>;
 
     /// Asserts one-to-one matching between subject elements and assertion closures, independent of
     /// order. A maximum matching makes overlapping assertions order-independent.
     fn contains_exactly_in_any_order_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>);
 }
 
@@ -266,6 +267,7 @@ where
     fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
         P: crate::matchers::MatcherList<C::Item, R>,
+        R: ValueRenderer<usize>,
     {
         self.track_assertion();
         self.assert_matcher(&crate::matchers::elements_are_in_any_order(expected), true);
@@ -275,7 +277,7 @@ where
     #[track_caller]
     fn contains_exactly_in_any_order_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
-        R: ValueRenderer<C::Item> + Clone,
+        R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
         self.track_assertion();

@@ -7,7 +7,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::SetLookup;
-use crate::failure::FailureKind;
+use crate::failure::{Fact, FailureKind};
 use crate::renderer::{GroupStyle, RenderingOrder};
 use crate::{AssertThat, Mode, ValueRenderer};
 
@@ -60,7 +60,7 @@ where
             .actual(this.render().collection(actual))
             .relation("is not a subset of")
             .expected(this.render().collection(expected_superset))
-            .fact(
+            .fact(Fact::labelled(
                 "Elements not in expected",
                 this.render()
                     .borrowed_values::<S::Item, _>(
@@ -68,8 +68,8 @@ where
                         GroupStyle::List,
                     )
                     .sort_for_rendering(sorts_for_rendering::<S>()),
-            )
-            .notes(type_difference_detail::<S, O>())
+            ))
+            .facts(type_difference_detail::<S, O>().map(Fact::note))
             .raise();
     }
 }
@@ -95,7 +95,7 @@ where
             .actual(this.render().collection(actual))
             .relation("is not a superset of")
             .expected(this.render().collection(expected_subset))
-            .fact(
+            .fact(Fact::labelled(
                 "Elements not in actual",
                 this.render()
                     .borrowed_values::<S::Item, _>(
@@ -103,8 +103,8 @@ where
                         GroupStyle::List,
                     )
                     .sort_for_rendering(sorts_for_rendering::<O>()),
-            )
-            .notes(type_difference_detail::<S, O>())
+            ))
+            .facts(type_difference_detail::<S, O>().map(Fact::note))
             .raise();
     }
 }
@@ -130,7 +130,7 @@ where
             .actual(this.render().collection(actual))
             .relation("is not disjoint from")
             .expected(this.render().collection(other))
-            .fact(
+            .fact(Fact::labelled(
                 "Overlapping elements",
                 this.render()
                     .borrowed_values::<S::Item, _>(
@@ -138,8 +138,8 @@ where
                         GroupStyle::List,
                     )
                     .sort_for_rendering(sorts_for_rendering::<S>()),
-            )
-            .notes(type_difference_detail::<S, O>())
+            ))
+            .facts(type_difference_detail::<S, O>().map(Fact::note))
             .raise();
     }
 }

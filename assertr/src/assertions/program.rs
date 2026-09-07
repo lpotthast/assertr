@@ -1,7 +1,7 @@
 //! Assertions for resolving executable programs.
 
 use crate::mode::{Mode, Panic};
-use crate::{Actual, AssertThat, ValueRenderer, failure::FailureKind};
+use crate::{Actual, AssertThat, Fact, ValueRenderer, failure::FailureKind};
 use alloc::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
@@ -62,7 +62,7 @@ pub trait ProgramAssertions<'t, 'a, M: Mode, R = crate::DebugRenderer> {
     /// Asserts that [`which::which`] resolves the program.
     fn exists(self) -> AssertThat<'t, Program<'a>, M, R>
     where
-        R: ValueRenderer<Program<'a>>;
+        R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>;
 }
 
 /// Panic-mode assertions that project a [`Program`] to its resolved path.
@@ -77,14 +77,14 @@ pub trait ProgramExtractAssertions<'t, R = crate::DebugRenderer> {
     /// This projection is available only in [`Panic`] mode because failure cannot produce a path.
     fn get_resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
     where
-        R: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<Self::Subject> + ValueRenderer<which::Error>;
 }
 
 impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Program<'a>, M, R> {
     #[track_caller]
     fn exists(self) -> AssertThat<'t, Program<'a>, M, R>
     where
-        R: ValueRenderer<Program<'a>>,
+        R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
         self.track_assertion();
         let program = self.actual().as_ref();
@@ -94,7 +94,7 @@ impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Prog
             self.failure(FailureKind::Other)
                 .actual(self.render().value(self.actual()))
                 .relation("was not found")
-                .fact("Reason", format_args!("{err}"))
+                .fact(Fact::labelled("Reason", self.render().value(err)))
                 .raise();
         }
 
@@ -108,7 +108,7 @@ impl<'a, 't, R> ProgramExtractAssertions<'t, R> for AssertThat<'t, Program<'a>, 
     #[track_caller]
     fn get_resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
     where
-        R: ValueRenderer<Program<'a>>,
+        R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
         self.track_assertion();
         let program = self.actual().as_ref();
@@ -118,7 +118,7 @@ impl<'a, 't, R> ProgramExtractAssertions<'t, R> for AssertThat<'t, Program<'a>, 
             self.failure(FailureKind::Other)
                 .actual(self.render().value(self.actual()))
                 .relation("was not found")
-                .fact("Reason", format_args!("{err}"))
+                .fact(Fact::labelled("Reason", self.render().value(err)))
                 .raise();
         }
 
@@ -225,6 +225,63 @@ mod tests {
         }
 
         #[test]
+        fn lookup_errors_keep_the_original_type_and_can_be_redacted() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{
+                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            };
+            let subject = Program::from("assertr-private-missing-executable-987");
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(ProgramAssertions::exists);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: custom(Program("assertr-private-missing-executable-987"))
+
+                was not found
+
+                Details:
+                  - Reason: custom(CannotFindBinaryPath)
+                -------- assertr --------
+            "#});
+
+            assert_custom_value(
+                &failures[0].facts[0].value,
+                &which::Error::CannotFindBinaryPath,
+            );
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(ProgramAssertions::exists);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `subject`
+
+                Actual: <redacted>
+
+                was not found
+
+                Details:
+                  - Reason: <redacted>
+                -------- assertr --------
+            "});
+
+            assert_redacted(
+                &failures[0],
+                &[
+                    "assertr-private-missing-executable-987",
+                    "CannotFindBinaryPath",
+                ],
+            );
+        }
+
+        #[test]
         fn succeeds_when_existent() {
             assert_that!(Program::from("ls")).exists();
         }
@@ -251,7 +308,7 @@ mod tests {
                     was not found
 
                     Details:
-                      - Reason: cannot find binary path
+                      - Reason: CannotFindBinaryPath
                     -------- assertr --------
                 "#});
 
@@ -278,6 +335,52 @@ mod tests {
         #[cfg(target_os = "macos")]
         fn expected_ls_location() -> &'static str {
             "/bin/ls"
+        }
+
+        #[test]
+        fn lookup_error_extraction_uses_the_active_renderer() {
+            use indoc::formatdoc;
+
+            use crate::test_support::{CustomValueRenderer, RedactingRenderer};
+            let name = "assertr-private-missing-executable-987";
+            assert_that_panic_by(|| {
+                assert_that!(Program::from(name))
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .get_resolved_path();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `Program::from(name)`
+
+                Actual: custom(Program("assertr-private-missing-executable-987"))
+
+                was not found
+
+                Details:
+                  - Reason: custom(CannotFindBinaryPath)
+                -------- assertr --------
+            "#});
+            assert_that_panic_by(|| {
+                assert_that!(Program::from(name))
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .get_resolved_path();
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `Program::from(name)`
+
+                Actual: <redacted>
+
+                was not found
+
+                Details:
+                  - Reason: <redacted>
+                -------- assertr --------
+            "});
         }
 
         #[test]

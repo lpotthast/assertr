@@ -84,7 +84,7 @@ fn identity_assertions_compile_without_std() {
         .is_same_instance_as(&keys[1])
         .is_not_same_instance_as(&keys[0]);
     assert_that!(alloc::collections::LinkedList::from(candidates))
-        .with_renderer(NoRenderer)
+        .with_renderer(NumericRenderer)
         .contains_same_instance_as(&keys[1])
         .does_not_contain_same_instance_as(&keys[2])
         .contains_exactly_same_instances([&keys[1], &keys[0]])
@@ -209,6 +209,7 @@ extern crate std;
 
 #[cfg(all(test, not(feature = "std")))]
 mod tests {
+    use crate::NumericRenderer;
     #[test]
     fn borrowed_renderers_support_sensitivity_policy_without_std() {
         crate::sensitive_value_policy_compiles_without_std();
@@ -261,7 +262,7 @@ mod tests {
             });
         assert_eq!(failures.len(), 2);
         let failures = assertr::assert_that!([&keys[0], &keys[1]])
-            .with_renderer(NoRenderer)
+            .with_renderer(NumericRenderer)
             .capture(|it| {
                 it.contains_same_instance_as(&keys[2])
                     .does_not_contain_same_instance_as(&keys[0])
@@ -397,7 +398,6 @@ mod tests {
 pub fn structural_matchers_without_std() {
     use assertr::prelude::*;
     struct Hidden;
-    struct NoRenderer;
     #[allow(dead_code)]
     struct Child {
         id: u32,
@@ -409,7 +409,7 @@ pub fn structural_matchers_without_std() {
     }];
     assert_that!(children).matches(elements_are![partial!(Child { id: 1, .. })]);
     assert_that!(children)
-        .with_renderer(NoRenderer)
+        .with_renderer(NumericRenderer)
         .into_iter_contains_matching(partial!(Child {
             id: assertr::matchers::anything(),
             ..
@@ -422,4 +422,64 @@ pub fn structural_matchers_without_std() {
         },
     )]);
     assert_that!(map).matches(entries_are![("child", partial!(Child { id: 1, .. }))]);
+}
+
+struct NumericRenderer;
+impl assertr::ValueRenderer<usize> for NumericRenderer {
+    fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(value, f)
+    }
+}
+
+#[allow(dead_code)]
+fn typed_condition_and_numeric_evidence_compile_without_std() {
+    struct OpaqueError(u32);
+    struct Reject;
+    impl AssertrCondition<u32> for Reject {
+        type Error = OpaqueError;
+        fn test(&self, value: &u32) -> Result<(), OpaqueError> {
+            Err(OpaqueError(*value))
+        }
+    }
+    #[derive(Clone, Copy)]
+    struct ErrorRenderer;
+    impl ValueRenderer<OpaqueError> for ErrorRenderer {
+        fn fmt(&self, error: &OpaqueError, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "error({})", error.0)
+        }
+    }
+    fn condition_trait<A: ConditionAssertions<u32, ErrorRenderer>>() {}
+    fn iterable_trait<A: IterableConditionAssertions<u32, [u32; 1], ErrorRenderer>>() {}
+    fn iterator_trait<A: ExactSizeIteratorAssertions<NumericRenderer>>() {}
+    condition_trait::<AssertThat<'static, u32, Panic, ErrorRenderer>>();
+    iterable_trait::<AssertThat<'static, [u32; 1], Panic, ErrorRenderer>>();
+    iterator_trait::<AssertThat<'static, core::array::IntoIter<u32, 1>, Panic, NumericRenderer>>();
+    let failures = assert_that!(7_u32)
+        .with_renderer(ErrorRenderer)
+        .capture(|it| it.is(Reject));
+    assert_eq!(
+        failures[0].facts[0].value.type_name,
+        Some(core::any::type_name::<OpaqueError>())
+    );
+    let failures = assert_that!([7_u32])
+        .with_renderer(ErrorRenderer)
+        .capture(|it| it.are(Reject));
+    assert_eq!(failures.len(), 1);
+    let failures = assert_that!(7_u32)
+        .with_renderer(ErrorRenderer)
+        .capture(|it| it.matches(assertr::matchers::condition(Reject)));
+    assert_eq!(failures.len(), 1);
+    let failures = assert_that!([7_u32].into_iter())
+        .with_renderer(NumericRenderer)
+        .capture(|it| it.has_remaining_count(2));
+    assert_eq!(
+        failures[0].expected.as_ref().unwrap().type_name,
+        Some("usize")
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn typed_condition_and_numeric_evidence_run_without_std() {
+    typed_condition_and_numeric_evidence_compile_without_std();
 }

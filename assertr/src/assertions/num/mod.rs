@@ -2,7 +2,7 @@
 
 use crate::AssertThat;
 use crate::ValueRenderer;
-use crate::failure::FailureKind;
+use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
 use core::cmp::Ordering;
 #[cfg(any(feature = "std", feature = "libm"))]
@@ -219,8 +219,10 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
             let allowed_deviation = self.render().value(&allowed_deviation);
             self.failure(FailureKind::Ordering)
                 .relation("was given an invalid allowed deviation")
-                .fact("Allowed deviation", format_args!("{allowed_deviation:#?}"))
-                .note("The allowed deviation must be a non-negative number.")
+                .fact(Fact::labelled("Allowed deviation", allowed_deviation))
+                .fact(Fact::note(
+                    "The allowed deviation must be a non-negative number.",
+                ))
                 .raise();
             return self;
         }
@@ -235,7 +237,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
                 .actual(self.render().value(actual))
                 .relation("is not close to")
                 .expected(self.render().value(&expected))
-                .fact("Allowed deviation", format_args!("{allowed_deviation:#?}"))
+                .fact(Fact::labelled("Allowed deviation", allowed_deviation))
                 .raise();
         }
         self

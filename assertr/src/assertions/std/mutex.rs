@@ -1,6 +1,6 @@
 use std::sync::{Mutex, TryLockError};
 
-use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
+use crate::{AssertThat, Fact, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions for the lock and poison state of [`Mutex`].
 ///
@@ -52,7 +52,7 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
                     .actual(self.render().struct_field(actual, "Mutex", "data", &*guard))
                     .relation("is not locked");
                 if actual.is_poisoned() {
-                    failure = failure.note("The mutex is poisoned.");
+                    failure = failure.fact(Fact::note("The mutex is poisoned."));
                 }
                 // Release the lock before raising, so a panic does not poison the mutex.
                 drop(guard);
@@ -75,7 +75,7 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
                 )
                 .relation("is unexpectedly locked");
             if actual.is_poisoned() {
-                failure = failure.note("The mutex is poisoned.");
+                failure = failure.fact(Fact::note("The mutex is poisoned."));
             }
             failure.raise();
         }

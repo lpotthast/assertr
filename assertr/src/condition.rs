@@ -1,7 +1,5 @@
 //! Reusable, named predicates usable with `is` / `has` / `are` / `have`.
 
-use core::fmt::Display;
-
 /// A reusable, named predicate.
 ///
 /// Implement this trait on a type describing a domain property. Pass an instance to
@@ -41,9 +39,10 @@ use core::fmt::Display;
 /// assert_that!([2, 4, 6]).are(even);
 /// ```
 pub trait AssertrCondition<T> {
-    /// Describes why a value did not match. On failure, exposed verbatim as an
-    /// [`AssertionFailure::facts`](crate::AssertionFailure::facts) note.
-    type Error: Display;
+    /// Describes why a value did not match, rendered as an unlabeled failure note.
+    /// The active renderer must support this type. The default renderer requires `Debug`.
+    /// A custom renderer can support errors with neither `Debug` nor `Display`.
+    type Error;
 
     /// Tests whether `value` matches this condition.
     ///

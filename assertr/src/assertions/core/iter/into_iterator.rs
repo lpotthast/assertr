@@ -15,7 +15,7 @@ pub trait IntoIteratorAssertions<T, R> {
     fn into_iter_contains<E>(self, expected: E) -> Self
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>;
 
     /// Asserts that every expected element is present during one borrowed traversal.
     ///
@@ -27,40 +27,48 @@ pub trait IntoIteratorAssertions<T, R> {
     where
         T: PartialEq<E>,
         EI: IntoIterator<Item = E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>;
+
     /// Asserts that a borrowed traversal contains an element matching `expected`.
     fn into_iter_contains_matching<P>(self, expected: P) -> Self
     where
-        P: AssertrMatcher<T, R>;
+        P: AssertrMatcher<T, R>,
+        R: ValueRenderer<usize>;
     /// Asserts that a borrowed traversal contains an element satisfying `assertions`.
     fn into_iter_contains_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone;
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
+
     /// Asserts that no element in a borrowed traversal equals `not_expected`.
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>;
+
     /// Asserts that no element in a borrowed traversal matches `expected`.
     fn into_iter_does_not_contain_matching<P>(self, expected: P) -> Self
     where
-        P: AssertrMatcher<T, R>;
+        P: AssertrMatcher<T, R>,
+        R: ValueRenderer<usize>;
     /// Asserts that no element in a borrowed traversal satisfies `assertions`.
     fn into_iter_does_not_contain_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone;
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
+
     /// Asserts multiset equality with `expected`, ignoring order but preserving duplicate counts.
     fn into_iter_contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>;
+
     /// Asserts one-to-one matching between elements and the expected matcher list, independent of
     /// order.
     fn into_iter_contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
-        P: MatcherList<T, R>;
+        P: MatcherList<T, R>,
+        R: ValueRenderer<usize>;
     /// Asserts one-to-one matching between elements and `assertions`, independent of order.
     fn into_iter_contains_exactly_in_any_order_satisfying<A>(
         self,
@@ -68,11 +76,13 @@ pub trait IntoIteratorAssertions<T, R> {
     ) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone;
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
+
     /// Asserts that a borrowed traversal yields no elements.
     fn into_iter_is_empty(self) -> Self
     where
-        R: ValueRenderer<T>;
+        R: ValueRenderer<T> + ValueRenderer<usize>;
+
     /// Asserts that a borrowed traversal yields at least one element.
     fn into_iter_is_not_empty(self) -> Self
     where
@@ -80,7 +90,7 @@ pub trait IntoIteratorAssertions<T, R> {
     /// Asserts that a borrowed traversal yields exactly `expected` elements.
     fn into_iter_has_length(self, expected: usize) -> Self
     where
-        R: ValueRenderer<T>;
+        R: ValueRenderer<T> + ValueRenderer<usize>;
 }
 
 impl<T, I, M: Mode, R> IntoIteratorAssertions<T, R> for AssertThat<'_, I, M, R>
@@ -91,7 +101,7 @@ where
     fn into_iter_contains<E>(self, expected: E) -> Self
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
     {
         self.track_assertion();
         iterator::assert_contains::<_, T, _, _, _, _>(&self, self.actual().into_iter(), &expected);
@@ -102,7 +112,7 @@ where
     where
         T: PartialEq<E>,
         EI: IntoIterator<Item = E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
     {
         self.track_assertion();
         let expected = expected.into_iter().collect::<Vec<_>>();
@@ -117,6 +127,7 @@ where
     fn into_iter_contains_matching<P>(self, expected: P) -> Self
     where
         P: AssertrMatcher<T, R>,
+        R: ValueRenderer<usize>,
     {
         self.track_assertion();
         iterator::matchers::membership::<_, T, _, _, _, _>(
@@ -132,7 +143,7 @@ where
     fn into_iter_contains_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
     {
         self.into_iter_contains_matching(crate::matchers::satisfying(assertions))
     }
@@ -140,7 +151,7 @@ where
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
     {
         self.track_assertion();
         iterator::assert_does_not_contain::<_, T, _, _, _, _>(
@@ -155,6 +166,7 @@ where
     fn into_iter_does_not_contain_matching<P>(self, expected: P) -> Self
     where
         P: AssertrMatcher<T, R>,
+        R: ValueRenderer<usize>,
     {
         self.track_assertion();
         iterator::matchers::membership::<_, T, _, _, _, _>(
@@ -170,7 +182,7 @@ where
     fn into_iter_does_not_contain_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
     {
         self.into_iter_does_not_contain_matching(crate::matchers::satisfying(assertions))
     }
@@ -178,7 +190,7 @@ where
     fn into_iter_contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>,
+        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
     {
         self.track_assertion();
         let expected = expected.as_ref();
@@ -193,6 +205,7 @@ where
     fn into_iter_contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
         P: MatcherList<T, R>,
+        R: ValueRenderer<usize>,
     {
         self.track_assertion();
         iterator::matchers::unordered::<_, T, _, _, _, _>(
@@ -209,7 +222,7 @@ where
     ) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
     {
         self.into_iter_contains_exactly_in_any_order_matching(
             assertions
@@ -222,7 +235,7 @@ where
     #[track_caller]
     fn into_iter_is_empty(self) -> Self
     where
-        R: ValueRenderer<T>,
+        R: ValueRenderer<T> + ValueRenderer<usize>,
     {
         self.track_assertion();
         iterator::assert_is_empty::<_, T, _, _, _>(
@@ -244,7 +257,7 @@ where
     #[track_caller]
     fn into_iter_has_length(self, expected: usize) -> Self
     where
-        R: ValueRenderer<T>,
+        R: ValueRenderer<T> + ValueRenderer<usize>,
     {
         self.track_assertion();
         iterator::assert_has_length::<_, T, _, _, _>(&self, self.actual().into_iter(), expected);
@@ -479,11 +492,14 @@ mod tests {
         }
 
         #[test]
-        fn requires_no_renderer_for_opaque_elements() {
+        fn requires_no_element_renderer_for_opaque_elements() {
+            use crate::test_support::NumericRenderer;
+
             struct Opaque;
 
             assert_that!([Opaque])
-                .with_renderer(crate::test_support::NoRenderer)
+                .with_renderer(NumericRenderer)
+                .with_location(false)
                 .into_iter_contains_matching(matchers::anything());
         }
 
@@ -640,11 +656,14 @@ mod tests {
         }
 
         #[test]
-        fn requires_no_renderer_for_opaque_elements() {
+        fn requires_no_element_renderer_for_opaque_elements() {
+            use crate::test_support::NumericRenderer;
+
             struct Opaque;
 
             assert_that!([Opaque])
-                .with_renderer(crate::test_support::NoRenderer)
+                .with_renderer(NumericRenderer)
+                .with_location(false)
                 .into_iter_does_not_contain_matching(matchers::predicate(|_: &Opaque| false));
         }
 
@@ -837,11 +856,14 @@ mod tests {
         }
 
         #[test]
-        fn requires_no_renderer_for_opaque_elements() {
+        fn requires_no_element_renderer_for_opaque_elements() {
+            use crate::test_support::NumericRenderer;
+
             struct Opaque;
 
             assert_that!([Opaque, Opaque])
-                .with_renderer(crate::test_support::NoRenderer)
+                .with_renderer(NumericRenderer)
+                .with_location(false)
                 .into_iter_contains_exactly_in_any_order_matching(matchers![
                     matchers::anything(),
                     matchers::anything(),

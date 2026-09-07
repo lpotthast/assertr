@@ -2,6 +2,7 @@ use super::{
     AssertThat, Borrow, FailureBuilder, FailureKind, GroupStyle, Mode, PREVIEW_CAPACITY, Preview,
     ValueRenderer, Vec, exact_size_hint, match_bipartite,
 };
+use crate::Fact;
 use crate::failure::Attached;
 
 struct Captured<Item> {
@@ -56,7 +57,7 @@ fn unordered_failure<'c, S, T, Item, M: Mode, R>(
 ) -> FailureBuilder<Attached<'c>>
 where
     Item: Borrow<T>,
-    R: ValueRenderer<T>,
+    R: ValueRenderer<T> + ValueRenderer<usize>,
 {
     let known_length = captured.known_length;
     let preview = bounded_preview(captured);
@@ -64,11 +65,17 @@ where
         .failure(kind)
         .actual(preview.rendered::<T, _, _, _>(this))
         .relation(relation);
-    let failure = preview.facts(failure, None);
+    let failure = preview.facts(failure, this.render(), None);
     match known_length {
         Some(actual) => failure
-            .fact("Reported length", actual)
-            .fact("Expected length", expected_len),
+            .fact(Fact::labelled(
+                "Reported length",
+                this.render().value(&actual),
+            ))
+            .fact(Fact::labelled(
+                "Expected length",
+                this.render().value(&expected_len),
+            )),
         None => failure,
     }
 }
@@ -82,7 +89,7 @@ pub(crate) fn assert_contains_exactly_in_any_order<S, T, E, I, M: Mode, R>(
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     let captured = capture_unordered(iterator, expected.len());
     let exact = captured.known_length.is_none()

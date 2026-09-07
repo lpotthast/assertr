@@ -58,7 +58,8 @@ features, and API details.
 - Mark assertion methods `#[track_caller]` and call `self.track_assertion()` first. A composing method whose entire
   body delegates to tracked assertions must not track again.
 - Every leaf assertion, built-in or downstream, raises its failure through `self.failure(FailureKind::..)` with
-  `.actual(..)`, `.relation(..)`, `.expected(..)` or `.unexpected(..)`, labeled `.fact(..)`s, `.note(..)`s, and
+  `.actual(..)`, `.relation(..)`, `.expected(..)` or `.unexpected(..)`, `.fact(Fact::labelled(..))` or
+  `.fact(Fact::note(..))` (or `.facts(..)` for a group), and
   nested `.children(..)`, then `.raise()`. Never format a failure body by hand: `Display` renders every failure from
   its fields with one grammar. Relations are lowercase sentences without trailing periods and never embed values.
 - Add explicit negative assertions only when commonly useful and not already represented by an existing assertion.

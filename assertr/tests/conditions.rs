@@ -118,11 +118,16 @@ fn a_failing_condition_exposes_its_error_as_a_failure_detail() {
 
     assert_that!(&failures).has_length(1);
     assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not match the condition"));
-    // The condition's error arrives verbatim as an unlabeled note of the failure. No parsing of the
-    // description's framing text is required.
-    assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note("\"Bob\" is dead!")]);
-    assert_that!(failures[0].facts.as_slice())
-        .contains_exactly([assertr::Fact::note("\"Bob\" is dead!")]);
+    // The condition's error arrives as a typed rendered value as an unlabeled note of the failure.
+    // No parsing of the description's framing text is required.
+    assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note(
+        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+            .value(&String::from("\"Bob\" is dead!")),
+    )]);
+    assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note(
+        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+            .value(&String::from("\"Bob\" is dead!")),
+    )]);
 }
 
 #[test]
@@ -148,11 +153,15 @@ fn each_failing_element_raises_its_own_failure_without_inventing_an_index() {
 
     assert_that!(&failures).has_length(2);
     assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not match the condition"));
-    assert_that!(failures[0].facts.as_slice())
-        .contains_exactly([assertr::Fact::note("\"Kevin\" is dead!")]);
+    assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note(
+        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+            .value(&String::from("\"Kevin\" is dead!")),
+    )]);
     assert_that!(failures[1].relation.as_deref()).is_equal_to(Some("does not match the condition"));
-    assert_that!(failures[1].facts.as_slice())
-        .contains_exactly([assertr::Fact::note("\"Otto\" is dead!")]);
+    assert_that!(failures[1].facts.as_slice()).contains_exactly([Fact::note(
+        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+            .value(&String::from("\"Otto\" is dead!")),
+    )]);
 }
 
 #[test]
@@ -173,7 +182,7 @@ fn a_condition_failure_renders_the_error_under_details() {
         does not match the condition
 
         Details:
-          - "Bob" is dead!
+          - "\"Bob\" is dead!"
         -------- assertr --------
     "#});
 }
@@ -204,9 +213,14 @@ mod matcher_adapter {
     use super::*;
 
     #[test]
-    fn conditions_compose_and_preserve_errors_without_renderers() {
+    fn conditions_compose_and_preserve_errors_without_subject_renderers() {
         use assertr::matchers::{all_of, condition};
-        struct NoRenderer;
+        struct ErrorRenderer;
+        impl ValueRenderer<String> for ErrorRenderer {
+            fn fmt(&self, value: &String, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::Debug::fmt(value, f)
+            }
+        }
         let bob = Person {
             name: "Bob",
             meta: Metadata { alive: true },
@@ -216,16 +230,16 @@ mod matcher_adapter {
             condition(HasName { expected: "Bob" }),
         ));
         assert_that!(bob)
-            .with_renderer(NoRenderer)
+            .with_renderer(ErrorRenderer)
             .matches(&matcher);
         let failures = assert_that!(bob)
-            .with_renderer(NoRenderer)
+            .with_renderer(ErrorRenderer)
             .capture(|it| it.does_not_match(&matcher));
         assert_that!(failures).has_length(1);
         assert_that!(failures[0].children).has_length(2);
         assert_that!(failures[0].children[0].constraint).is_some();
         let failures = assert_that!(bob)
-            .with_renderer(NoRenderer)
+            .with_renderer(ErrorRenderer)
             .capture(|it| it.matches(condition(HasName { expected: "Alice" })));
         assert_that!(ToHumanReadableText.render(&failures[0]))
             .contains("Person has unexpected name");

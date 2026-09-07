@@ -53,7 +53,7 @@ fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
         .is_same_instance_as(expected[0])
         .is_not_same_instance_as(expected[1]);
     assert_that!(candidates)
-        .with_renderer(NoRenderer)
+        .with_renderer(NumericRenderer)
         .contains_same_instance_as(expected[0])
         .does_not_contain_same_instance_as(&other)
         .contains_exactly_same_instances(expected)
@@ -445,5 +445,12 @@ mod matcher_names {
         let _ = (ConstraintDescription, Matcher);
         assert_that!(equal_to() && anything()).is_true();
         assert_that!(1).matches(assertr::matchers::equal_to(1));
+    }
+}
+
+struct NumericRenderer;
+impl assertr::ValueRenderer<usize> for NumericRenderer {
+    fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(value, f)
     }
 }

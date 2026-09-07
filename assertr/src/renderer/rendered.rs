@@ -162,6 +162,12 @@ pub enum RenderedBody {
 }
 
 /// Converts a lazy rendering adapter or verbatim diagnostic value into an owned [`Rendered`] tree.
+///
+/// Conversions from text, formatting arguments, and primitive values are verbatim. They do not
+/// apply a renderer or budget and must not receive unrendered assertion evidence. Use
+/// [`RenderingContext::value`](super::RenderingContext::value) for tested values, including
+/// lengths, counts, expected indices, and errors. Paths, structural positions, omission summaries,
+/// type names, and explicit diagnostic prose remain owned by Assertr.
 pub trait IntoRendered {
     /// Renders the value once, using pretty leaf formatting where the renderer distinguishes it.
     fn into_rendered(self) -> Rendered;

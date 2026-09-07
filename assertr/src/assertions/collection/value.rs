@@ -134,11 +134,11 @@ where
                 this.render()
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             )
-            .fact(
+            .fact(Fact::labelled(
                 "Elements not found",
                 this.render()
                     .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List),
-            )
+            ))
             .raise();
     }
 }
@@ -173,7 +173,7 @@ where
     C: StableOrder<Item = T>,
     T: PartialEq<E>,
     M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     this.track_assertion();
     let actual = this.actual();
@@ -193,7 +193,10 @@ where
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
         if actual.length() < expected.len() {
-            failure = failure.fact("Actual length", actual.length());
+            failure = failure.fact(Fact::labelled(
+                "Actual length",
+                this.render().value(&actual.length()),
+            ));
         }
         if let Some((index, (element, expected))) = mismatch {
             failure = failure.child(
@@ -214,7 +217,7 @@ where
     C: StableOrder<Item = T>,
     T: PartialEq<E>,
     M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
     this.track_assertion();
     let actual = this.actual();
@@ -236,7 +239,10 @@ where
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
         if actual.length() < expected.len() {
-            failure = failure.fact("Actual length", actual.length());
+            failure = failure.fact(Fact::labelled(
+                "Actual length",
+                this.render().value(&actual.length()),
+            ));
         }
         if let Some((index, (element, expected))) = mismatch {
             failure = failure.child(
@@ -309,21 +315,21 @@ where
             );
 
         if !result.not_in_expected.is_empty() {
-            failure = failure.fact(
+            failure = failure.fact(Fact::labelled(
                 "Elements not expected",
                 this.render()
                     .borrowed_values::<T, _>(result.not_in_expected.as_slice(), GroupStyle::List),
-            );
+            ));
         }
         if !result.not_in_actual.is_empty() {
-            failure = failure.fact(
+            failure = failure.fact(Fact::labelled(
                 "Elements not found",
                 this.render()
                     .borrowed_values::<E, _>(result.not_in_actual.as_slice(), GroupStyle::List),
-            );
+            ));
         }
         if only_differing_in_order {
-            failure = failure.note("Only the order of the elements differs.");
+            failure = failure.fact(Fact::note("Only the order of the elements differs."));
         }
         failure.raise();
     }
@@ -371,19 +377,19 @@ pub(crate) fn assert_contains_exactly_in_any_order<C, T, E, M, R>(
                     .borrowed_values::<E, _>(expected, GroupStyle::List),
             );
         if !elements_not_found.is_empty() {
-            failure = failure.fact(
+            failure = failure.fact(Fact::labelled(
                 "Elements not found",
                 this.render()
                     .borrowed_values::<E, _>(elements_not_found.as_slice(), GroupStyle::List),
-            );
+            ));
         }
         if !elements_not_expected.is_empty() {
-            failure = failure.fact(
+            failure = failure.fact(Fact::labelled(
                 "Elements not expected",
                 this.render()
                     .borrowed_values::<T, _>(elements_not_expected.as_slice(), GroupStyle::List)
                     .sort_for_rendering(sorts_for_rendering::<C>()),
-            );
+            ));
         }
         failure.raise();
     }

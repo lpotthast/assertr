@@ -1,4 +1,4 @@
-use crate::{AssertThat, Mode, Type, failure::FailureKind};
+use crate::{AssertThat, Fact, Mode, Type, failure::FailureKind};
 
 /// Static memory assertions for any type.
 #[allow(clippy::return_self_not_must_use)]
@@ -19,8 +19,12 @@ impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
             self.failure(FailureKind::Other)
                 .actual(format_args!("{}", actual.get_type_name()))
                 .relation("does not need drop")
-                .note("Dropping a value of this type is guaranteed to have no side effect.")
-                .note("You may have forgotten to `impl Drop` for this type.")
+                .fact(Fact::note(
+                    "Dropping a value of this type is guaranteed to have no side effect.",
+                ))
+                .fact(Fact::note(
+                    "You may have forgotten to `impl Drop` for this type.",
+                ))
                 .raise();
         }
         self

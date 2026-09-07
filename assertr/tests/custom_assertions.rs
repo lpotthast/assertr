@@ -156,7 +156,7 @@ mod leaf {
                 // A failure that renders no value needs no renderer capability.
                 self.failure(FailureKind::Ordering)
                     .relation("is not an adult")
-                    .fact("Age", age)
+                    .fact(Fact::labelled("Age", age))
                     .raise();
             }
             self
@@ -177,8 +177,8 @@ mod leaf {
                     .actual(self.render().value(actual))
                     .relation("is not older than")
                     .expected(self.render().value(other))
-                    .fact("Actual age", actual.age)
-                    .fact("Expected age", other.age)
+                    .fact(Fact::labelled("Actual age", actual.age))
+                    .fact(Fact::labelled("Expected age", other.age))
                     .raise();
             }
             self
@@ -249,7 +249,7 @@ mod leaf {
         assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("child"));
         assert_that!(failures[0].kind).is_equal_to(FailureKind::Ordering);
         assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not an adult"));
-        assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::new("Age", "12")]);
+        assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::labelled("Age", "12")]);
         assert_that!(ToHumanReadableText.render(&failures[0])).contains(formatdoc! {"
             -------- assertr --------
             Subject: child
@@ -272,10 +272,10 @@ mod leaf {
 
         assert_that!(&failures).has_length(2);
         assert_that!(failures[0].facts.as_slice()).contains_exactly([
-            Fact::new("Actual age", "12"),
-            Fact::new("Expected age", "40"),
+            Fact::labelled("Actual age", "12"),
+            Fact::labelled("Expected age", "40"),
         ]);
-        assert_that!(failures[1].facts.as_slice()).contains_exactly([Fact::new("Age", "12")]);
+        assert_that!(failures[1].facts.as_slice()).contains_exactly([Fact::labelled("Age", "12")]);
     }
 
     #[test]
