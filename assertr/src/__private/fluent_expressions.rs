@@ -4,14 +4,15 @@ use core::ops::{Deref, DerefMut};
 
 use crate::{AssertThat, mode::Capture};
 
-/// Preserves the selected entry method's callback input and output constraints across the macro's
-/// expression-attachment closure.
-pub fn adapt_callback<A, B, F, G>(assertions: F, attach_expression: G) -> impl FnOnce(A) -> B
+/// Constrains an input to the original callback's argument type before attaching an expression.
+///
+/// The macro calls the callback directly so its `Fn`, `FnMut`, or `FnOnce` capabilities remain
+/// available on the generated closure.
+pub fn callback_input<A, B, F>(_: &F, input: A) -> A
 where
     F: FnOnce(A) -> B,
-    G: FnOnce(A) -> A,
 {
-    move |assertion| assertions(attach_expression(assertion))
+    input
 }
 
 /// Wrapper used to attach an expression only to capture-mode assertion callback inputs.

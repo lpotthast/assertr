@@ -138,18 +138,30 @@ fn adapt_verify_callback(
             Expr::Closure(closure)
         }
         Expr::Closure(closure) => Expr::Closure(closure),
-        assertions => syn::parse_quote_spanned! {span=>
-            #assertr::__private::fluent_expressions::adapt_callback(
-                #assertions,
-                move |__assertr_assertion| {
-                    #assertr::__private::fluent_expressions::AttachExpression::new(
-                        __assertr_assertion,
-                        ::core::stringify!(#receiver),
-                    )
-                    .attach()
-                },
-            )
-        },
+        assertions => {
+            let callback = Ident::new("__assertr_callback", Span::mixed_site());
+            let assertion = Ident::new("__assertr_assertion", Span::mixed_site());
+
+            syn::parse_quote_spanned! {span=>
+                {
+                    #[allow(unused_mut)]
+                    let mut #callback = #assertions;
+                    move |#assertion| {
+                        let #assertion = #assertr::__private::fluent_expressions::callback_input(
+                            &#callback,
+                            #assertion,
+                        );
+                        #callback(
+                            #assertr::__private::fluent_expressions::AttachExpression::new(
+                                #assertion,
+                                ::core::stringify!(#receiver),
+                            )
+                            .attach()
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

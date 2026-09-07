@@ -60,7 +60,8 @@ pub fn fluent_aliases(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// The rewrite keeps ordinary method resolution. A user-defined zero-argument `must` method is
 /// still called, after which the generated expression attachment fails to compile if its return
 /// type is not an assertion chain. User-defined `verify` and `verify_owned` methods likewise remain
-/// selected, and callback inputs unrelated to assertr pass through unchanged.
+/// selected, and callback inputs unrelated to assertr pass through unchanged. Rewritten callbacks
+/// retain their `Fn`, `FnMut`, or `FnOnce` capabilities.
 #[proc_macro_attribute]
 pub fn fluent_expressions(attr: TokenStream, item: TokenStream) -> TokenStream {
     if !attr.is_empty() {

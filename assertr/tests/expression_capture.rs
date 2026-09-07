@@ -126,6 +126,77 @@ fn fluent_attribute_preserves_unrelated_verify_methods() {
 #[cfg(feature = "fluent")]
 #[assertr::fluent_expressions]
 #[test]
+fn fluent_attribute_captures_expressions_with_callback_values() {
+    fn check(it: AssertThat<'_, i32, Capture>) -> AssertThat<'_, i32, Capture> {
+        it.is_equal_to(43)
+    }
+
+    let actual = 42;
+    let callback: fn(AssertThat<'_, i32, Capture>) -> AssertThat<'_, i32, Capture> = check;
+    let failures = actual.verify(callback);
+    assert_that!(failures[0].expression).is_equal_to(Some("actual"));
+    let failures = actual.verify_owned(callback);
+    assert_that!(failures[0].expression).is_equal_to(Some("actual"));
+
+    let mut calls = 0;
+    let mut callback = |it: AssertThat<'static, i32, Capture>| {
+        calls += 1;
+        it.is_equal_to(43)
+    };
+    let failures = 42.verify(&mut callback);
+    assert_that!(failures[0].expression).is_equal_to(Some("42"));
+    let failures = 42.verify_owned(callback);
+    assert_that!(failures[0].expression).is_equal_to(Some("42"));
+    assert_that!(calls).is_equal_to(2);
+
+    let expected = String::from("expected");
+    let callback = move |it: AssertThat<'static, String, Capture>| it.is_equal_to(expected);
+    let failures = String::from("actual").verify_owned(callback);
+    assert_that!(failures[0].expression).is_equal_to(Some("String::from(\"actual\")"));
+}
+
+#[cfg(feature = "fluent")]
+#[assertr::fluent_expressions]
+#[test]
+fn fluent_attribute_evaluates_callback_once_before_repeated_calls() {
+    struct User(i32);
+
+    impl User {
+        fn verify(self, mut operation: impl FnMut(i32) -> i32) -> i32 {
+            operation(self.0) + operation(self.0)
+        }
+
+        fn verify_owned(self, operation: impl FnMut(i32) -> i32) -> i32 {
+            Self::verify(self, operation)
+        }
+    }
+
+    let mut events = Vec::new();
+    let result = User(21).verify({
+        events.push("create");
+        |value| {
+            events.push("call");
+            value * 2
+        }
+    });
+    assert_that!(result).is_equal_to(84);
+    assert_that!(events).contains_exactly(["create", "call", "call"]);
+
+    events.clear();
+    let result = User(21).verify_owned({
+        events.push("create");
+        |value| {
+            events.push("call");
+            value * 2
+        }
+    });
+    assert_that!(result).is_equal_to(84);
+    assert_that!(events).contains_exactly(["create", "call", "call"]);
+}
+
+#[cfg(feature = "fluent")]
+#[assertr::fluent_expressions]
+#[test]
 fn fluent_attribute_captures_all_four_entry_receivers() {
     macro_rules! answer {
         () => {

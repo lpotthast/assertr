@@ -113,6 +113,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Range `is_outside_of_range` and standard and Tokio lock `is_free` aliases report the caller's assertion location.
 - Range diagnostics preserve excluded lower bounds using explicit bound tuples instead of inclusive-start notation.
 - `fluent_aliases` supports async assertion methods by awaiting the delegated call.
+- `fluent_expressions` preserves callback `Fn` and `FnMut` support for user-defined `verify` and
+  `verify_owned` methods, including callback variables and function pointers.
 
 ### Removed
 

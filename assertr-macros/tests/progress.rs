@@ -17,6 +17,7 @@ fn fluent_expressions() {
     t.compile_fail("tests/fluent_expressions/05-user-must.rs");
     t.pass("tests/fluent_expressions/06-user-verify.rs");
     t.pass("tests/fluent_expressions/07-user-verify-owned.rs");
+    t.pass("tests/fluent_expressions/08-callback-call-traits.rs");
 }
 
 mod partial {
