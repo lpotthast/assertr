@@ -116,18 +116,33 @@ fn a_failing_condition_exposes_its_error_as_a_failure_detail() {
         .with_location(false)
         .capture(|it| it.is(IsAlive {}));
 
-    assert_that!(&failures).has_length(1);
-    assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not match the condition"));
-    // The condition's error arrives as a typed rendered value as an unlabeled note of the failure.
-    // No parsing of the description's framing text is required.
-    assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note(
-        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
-            .value(&String::from("\"Bob\" is dead!")),
-    )]);
-    assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note(
-        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
-            .value(&String::from("\"Bob\" is dead!")),
-    )]);
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|item| item.relation.as_deref())
+                .is_equal_to(Some("does not match the condition"));
+            // The condition's error arrives as a typed rendered value as an unlabeled note of the
+            // failure. No parsing of the description's framing text is required.
+            element
+                .derive_owned(|item| item.facts.as_slice())
+                .contains_exactly([Fact::note(
+                    assertr::renderer::RenderingContext::new(
+                        &DebugRenderer,
+                        RenderingBudget::default(),
+                    )
+                    .value(&String::from("\"Bob\" is dead!")),
+                )]);
+            element
+                .derive_owned(|item| item.facts.as_slice())
+                .contains_exactly([Fact::note(
+                    assertr::renderer::RenderingContext::new(
+                        &DebugRenderer,
+                        RenderingBudget::default(),
+                    )
+                    .value(&String::from("\"Bob\" is dead!")),
+                )]);
+        },
+    ]);
 }
 
 #[test]
@@ -151,17 +166,36 @@ fn each_failing_element_raises_its_own_failure_without_inventing_an_index() {
         .with_location(false)
         .capture(|it| it.are(IsAlive {}));
 
-    assert_that!(&failures).has_length(2);
-    assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not match the condition"));
-    assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::note(
-        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
-            .value(&String::from("\"Kevin\" is dead!")),
-    )]);
-    assert_that!(failures[1].relation.as_deref()).is_equal_to(Some("does not match the condition"));
-    assert_that!(failures[1].facts.as_slice()).contains_exactly([Fact::note(
-        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
-            .value(&String::from("\"Otto\" is dead!")),
-    )]);
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|item| item.relation.as_deref())
+                .is_equal_to(Some("does not match the condition"));
+            element
+                .derive_owned(|item| item.facts.as_slice())
+                .contains_exactly([Fact::note(
+                    assertr::renderer::RenderingContext::new(
+                        &DebugRenderer,
+                        RenderingBudget::default(),
+                    )
+                    .value(&String::from("\"Kevin\" is dead!")),
+                )]);
+        },
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|item| item.relation.as_deref())
+                .is_equal_to(Some("does not match the condition"));
+            element
+                .derive_owned(|item| item.facts.as_slice())
+                .contains_exactly([Fact::note(
+                    assertr::renderer::RenderingContext::new(
+                        &DebugRenderer,
+                        RenderingBudget::default(),
+                    )
+                    .value(&String::from("\"Otto\" is dead!")),
+                )]);
+        },
+    ]);
 }
 
 #[test]
@@ -235,9 +269,17 @@ mod matcher_adapter {
         let failures = assert_that!(bob)
             .with_renderer(ErrorRenderer)
             .capture(|it| it.does_not_match(&matcher));
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).has_length(2);
-        assert_that!(failures[0].children[0].constraint).is_some();
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive(|value| &value.children)
+                    .contains_exactly_satisfying(
+                        [|child: AssertThat<AssertionFailure, Capture>| {
+                            child.derive(|child| &child.constraint).is_some();
+                        }; 2],
+                    );
+            },
+        ]);
         let failures = assert_that!(bob)
             .with_renderer(ErrorRenderer)
             .capture(|it| it.matches(condition(HasName { expected: "Alice" })));

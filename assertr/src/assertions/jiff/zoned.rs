@@ -144,8 +144,9 @@ mod tests {
                     .with_location(false)
                     .capture(|it| it.is_in_time_zone(&operand));
                 let actual_zone = subject.time_zone();
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -159,14 +160,17 @@ mod tests {
                       - Actual time zone: custom({actual_zone:?})
                     -------- assertr --------
                 "#});
-                assert_custom_value(failures[0].expected.as_ref().unwrap(), &operand);
-                assert_custom_value(&failures[0].facts[0].value, subject.time_zone());
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), &operand);
+                        assert_custom_value(&element.actual().facts[0].value, subject.time_zone());
+                    },
+                ]);
                 let failures = assert_that!(subject)
                     .with_renderer(RedactingRenderer)
                     .with_location(false)
                     .capture(|it| it.is_in_time_zone(&operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -181,10 +185,12 @@ mod tests {
                     -------- assertr --------
                 "});
 
-                assert_redacted(
-                    &failures[0],
-                    &["Europe/Berlin", "America/New_York", "05:00"],
-                );
+                        assert_redacted(
+                            element.actual(),
+                            &["Europe/Berlin", "America/New_York", "05:00"],
+                        );
+                    },
+                ]);
             }
         }
 
@@ -304,8 +310,9 @@ mod tests {
                     .with_location(false)
                     .capture(|it| it.is_in_time_zone_named(operand));
                 let actual_zone = subject.time_zone();
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -319,14 +326,17 @@ mod tests {
                       - Actual time zone: custom({actual_zone:?})
                     -------- assertr --------
                 "#});
-                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
-                assert_custom_value(&failures[0].facts[0].value, subject.time_zone());
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                        assert_custom_value(&element.actual().facts[0].value, subject.time_zone());
+                    },
+                ]);
                 let failures = assert_that!(subject)
                     .with_renderer(RedactingRenderer)
                     .with_location(false)
                     .capture(|it| it.is_in_time_zone_named(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -341,10 +351,12 @@ mod tests {
                     -------- assertr --------
                 "});
 
-                assert_redacted(
-                    &failures[0],
-                    &["Europe/Berlin", "America/New_York", "05:00"],
-                );
+                        assert_redacted(
+                            element.actual(),
+                            &["Europe/Berlin", "America/New_York", "05:00"],
+                        );
+                    },
+                ]);
             }
         }
 

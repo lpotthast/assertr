@@ -43,11 +43,16 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     ///
     /// let failures = assert_that!(42).capture(|it| it.is_less_than(0).is_equal_to(43));
     ///
-    /// assert_that!(failures).has_length(2);
-    /// assert_eq!(failures[0].kind, assertr::FailureKind::Ordering);
-    ///
-    /// let report = ToHumanReadableText.render(&failures[0]);
-    /// assert!(report.contains("is not less than"));
+    /// assert_that!(failures).contains_exactly_satisfying([
+    ///     |failure: AssertThat<AssertionFailure, Capture>| {
+    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::FailureKind::Ordering);
+    ///         failure.derive_owned(|failure| ToHumanReadableText.render(failure))
+    ///             .contains("is not less than");
+    ///     },
+    ///     |failure: AssertThat<AssertionFailure, Capture>| {
+    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::FailureKind::Equality);
+    ///     },
+    /// ]);
     /// ```
     ///
     /// Each [`crate::AssertionFailure`] exposes its values, relation, facts, and nested failures as
@@ -124,10 +129,13 @@ mod tests {
                 it.derive(|values| &values[0]).is_equal_to(3);
                 it.with_renderer(DebugRenderer).contains(4)
             });
-        assert_that!(failures).has_length(2);
-        for failure in &failures {
-            assert_that!(failure.messages).contains("root detail");
-        }
+        assert_that!(failures).contains_exactly_satisfying(
+            [|failure: AssertThat<crate::AssertionFailure, Capture>| {
+                failure
+                    .derive(|failure| &failure.messages)
+                    .contains("root detail");
+            }; 2],
+        );
     }
 
     #[test]

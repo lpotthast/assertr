@@ -207,20 +207,35 @@ mod tests {
             .with_detail_message("user context")
             .capture(|it| it.into_iter_does_not_contain(2).into_iter_contains(9));
 
-        assert_that!(&failures).has_length(2);
-        assert_that!(failures[0].messages.as_slice()).contains_exactly(["user context"]);
-        assert_that!(failures[0].facts.as_slice()).does_not_contain_matching(
-            crate::matchers::predicate(|it: &Fact| it.label == "Decisive index"),
-        );
-        assert_that!(failures[1].messages.as_slice()).contains_exactly(["user context"]);
-        assert_that!(failures[1].facts.as_slice())
-            .contains(Fact::labelled(
-                "Consumed elements",
-                crate::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
-                    .value(&3_usize),
-            ))
-            .does_not_contain_matching(crate::matchers::predicate(|it: &Fact| {
-                it.label == "Decisive index"
-            }));
+        assert_that!(&failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| value.messages.as_slice())
+                    .contains_exactly(["user context"]);
+                element
+                    .derive_owned(|value| value.facts.as_slice())
+                    .does_not_contain_matching(crate::matchers::predicate(|it: &Fact| {
+                        it.label == "Decisive index"
+                    }));
+            },
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|item| item.messages.as_slice())
+                    .contains_exactly(["user context"]);
+                element
+                    .derive_owned(|item| item.facts.as_slice())
+                    .contains(Fact::labelled(
+                        "Consumed elements",
+                        crate::renderer::RenderingContext::new(
+                            &DebugRenderer,
+                            RenderingBudget::default(),
+                        )
+                        .value(&3_usize),
+                    ))
+                    .does_not_contain_matching(crate::matchers::predicate(|it: &Fact| {
+                        it.label == "Decisive index"
+                    }));
+            },
+        ]);
     }
 }

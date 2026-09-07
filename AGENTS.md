@@ -3,6 +3,9 @@
 Run `just --list` to discover repository workflows. Read the manifests, source, and rustdoc for current structure,
 features, and API details.
 
+Start with the [architecture overview](knowledge/README.md) for chain state, assertion capabilities, failure
+processing, and rendering. Keep the relevant knowledge documents current when these contracts change.
+
 ## Working contract
 
 - Preserve the checkout exactly. Inspect `HEAD`, the index, and the worktree separately when relevant. Do not stage,

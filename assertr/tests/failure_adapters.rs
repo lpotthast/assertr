@@ -150,11 +150,13 @@ fn capture_and_success_do_not_invoke_a_non_sync_presentation() {
         .capture(|it| it.is_equal_to(2));
 
     assert_eq!(count.get(), 0);
-    assert_eq!(failures.len(), 1);
-    assert_eq!(
-        adapter.adapt(&failures[0]).unwrap().as_str(),
-        DEFAULT_MESSAGE
-    );
+    assert_that!(failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| adapter.adapt(value).unwrap())
+                .is_equal_to(DEFAULT_MESSAGE);
+        },
+    ]);
     assert_eq!(count.get(), 1);
 }
 

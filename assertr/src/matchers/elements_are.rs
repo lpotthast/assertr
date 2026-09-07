@@ -207,9 +207,14 @@ mod tests {
             .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
             .capture(|it| it.matches(elements_are![9, 9, 9]));
 
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).is_empty();
-        assert_that!(failures[0].omitted_children).is_greater_or_equal_to(3);
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element.derive(|value| &value.children).is_empty();
+                element
+                    .derive(|value| &value.omitted_children)
+                    .is_greater_or_equal_to(3);
+            },
+        ]);
         assert_that!(renders.get()).is_equal_to(0);
     }
 
@@ -221,8 +226,11 @@ mod tests {
             .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
             .capture(|it| it.matches(elements_are![9, 9, 9]));
 
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).has_length(1);
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element.derive(|value| &value.children).has_length(1);
+            },
+        ]);
         assert_that!(renders.get()).is_equal_to(2);
     }
 
@@ -238,8 +246,9 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
                 .capture(|it| it.matches(all_of((elements_are![1],))));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
             -------- assertr --------
             Expression: `[1, 2]`
 
@@ -253,19 +262,23 @@ mod tests {
                   - expected length: cus... 6 more characters ...
             -------- assertr --------
         "});
+                },
+            ]);
 
             let child = &failures[0].children[0];
-            assert_eq!(child.facts.len(), 2);
-            for fact in &child.facts {
-                assert_eq!(fact.value.type_name, Some("usize"));
-                assert_eq!(
-                    fact.value.body,
-                    RenderedBody::Text {
-                        text: "cus".into(),
-                        omitted_characters: 6
-                    }
-                );
-            }
+            assert_that!(child.facts).contains_exactly_satisfying(
+                [|fact: AssertThat<crate::Fact, Capture>| {
+                    fact.derive(|fact| &fact.value.type_name)
+                        .is_some_satisfying(|name| {
+                            name.is_equal_to("usize");
+                        });
+                    fact.derive(|fact| &fact.value.body)
+                        .is_equal_to(RenderedBody::Text {
+                            text: "cus".into(),
+                            omitted_characters: 6,
+                        });
+                }; 2],
+            );
         }
 
         #[test]
@@ -282,8 +295,9 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
                 .capture(|it| it.matches(elements_are![]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
         -------- assertr --------
         Expression: `[1, 2]`
 
@@ -293,7 +307,11 @@ mod tests {
           - ... 1 more nested failure ...
         -------- assertr --------
     "});
-            assert_that!(failures[0].omitted_children).is_equal_to(1);
+                    element
+                        .derive(|value| &value.omitted_children)
+                        .is_equal_to(1);
+                },
+            ]);
         }
     }
 

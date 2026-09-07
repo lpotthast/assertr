@@ -206,8 +206,9 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
                 .capture(|it| it.is(Reject));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -218,13 +219,16 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_condition_error(&failures[0]);
+                    assert_condition_error(element.actual());
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.is(Reject));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -235,7 +239,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["42"]);
+                    assert_redacted(element.actual(), &["42"]);
+                },
+            ]);
         }
     }
     mod has {
@@ -270,8 +276,9 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
                 .capture(|it| it.are(Reject));
-            assert_that!(failures).has_length(2);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying(
+                [|element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[42_u32, 43]`
 
@@ -281,21 +288,10 @@ mod tests {
                   - err... 6 more characters ...
                 -------- assertr --------
             "});
-            assert_that!(failures[1]).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[42_u32, 43]`
 
-                does not match the condition
-
-                Details:
-                  - err... 6 more characters ...
-                -------- assertr --------
-            "});
-
-            assert_eq!(failures.len(), 2);
-            for failure in &failures {
-                assert_condition_error(failure);
-            }
+                    assert_condition_error(element.actual());
+                }; 2],
+            );
         }
     }
     mod have {
@@ -343,8 +339,9 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
                 .capture(|it| it.matches(matcher));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `42_u32`
 
@@ -358,7 +355,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_condition_error(&failures[0].children[0]);
+                    assert_condition_error(&element.actual().children[0]);
+                },
+            ]);
         }
 
         #[test]
@@ -375,8 +374,9 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
                 .capture(|it| it.matches(condition(Reject)));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
             -------- assertr --------
             Expression: `42_u32`
 
@@ -386,7 +386,11 @@ mod tests {
               - ... 1 more nested failure ...
             -------- assertr --------
         "});
-            assert_that!(failures[0].omitted_children).is_equal_to(1);
+                    element
+                        .derive(|value| &value.omitted_children)
+                        .is_equal_to(1);
+                },
+            ]);
         }
     }
 }

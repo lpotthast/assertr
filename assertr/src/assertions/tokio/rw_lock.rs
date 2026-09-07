@@ -317,8 +317,9 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_read_locked().is_not_locked());
 
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `rw_lock`
 
@@ -332,6 +333,8 @@ mod tests {
                   - Lock state: unlocked
                 -------- assertr --------
             "});
+                },
+            ]);
         }
 
         #[tokio::test]
@@ -419,8 +422,9 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_write_locked().is_not_locked());
 
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `rw_lock`
 
@@ -434,6 +438,8 @@ mod tests {
                   - Lock state: unlocked
                 -------- assertr --------
             "});
+                },
+            ]);
         }
 
         #[tokio::test]

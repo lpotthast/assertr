@@ -571,8 +571,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.has_child_count(9));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Actual: custom(0)
 
@@ -582,14 +583,17 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &0_usize);
-            assert_custom_value(failures[0].expected.as_ref().unwrap(), &9_usize);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &0_usize);
+                    assert_custom_value(element.actual().expected.as_ref().unwrap(), &9_usize);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.has_child_count(9));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Actual: <redacted>
 
@@ -599,7 +603,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["private-context", "9"]);
+                    assert_redacted(element.actual(), &["private-context", "9"]);
+                },
+            ]);
         }
 
         #[test]
@@ -664,8 +670,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.has_attachment_count(9));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Actual: custom(1)
 
@@ -675,14 +682,17 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &1_usize);
-            assert_custom_value(failures[0].expected.as_ref().unwrap(), &9_usize);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &1_usize);
+                    assert_custom_value(element.actual().expected.as_ref().unwrap(), &9_usize);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.has_attachment_count(9));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Actual: <redacted>
 
@@ -692,7 +702,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["private-context", "9"]);
+                    assert_redacted(element.actual(), &["private-context", "9"]);
+                },
+            ]);
         }
 
         #[test]

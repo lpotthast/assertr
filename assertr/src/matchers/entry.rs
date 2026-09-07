@@ -73,9 +73,17 @@ mod tests {
         let failures = assert_that!(BTreeMap::from([("a", 1)]))
             .capture(|it| it.matches(entry("a", equal_to(2))));
 
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children[0].path).has_length(1);
-        assert_that!(failures[0].children[0].path[0]).is_matching(pattern!(PathSegment::Key(_)));
-        assert_that!(failures[0].children[0].kind).is_equal_to(FailureKind::Equality);
+        assert_that!(failures).contains_exactly_satisfying([
+            |item: AssertThat<AssertionFailure, Capture>| {
+                item.derive(|subject| &subject.children[0].path)
+                    .contains_exactly_satisfying([|element: AssertThat<PathSegment, Capture>| {
+                        element
+                            .derive(|value| value)
+                            .is_matching(pattern!(PathSegment::Key(_)));
+                    }]);
+                item.derive(|subject| &subject.children[0].kind)
+                    .is_equal_to(FailureKind::Equality);
+            },
+        ]);
     }
 }

@@ -61,11 +61,16 @@ mod named_fields {
                 ..
             }))
         });
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children[1].path).is_equal_to(vec![
-            assertr::failure::PathSegment::Field("children"),
-            assertr::failure::PathSegment::Index(1),
-            assertr::failure::PathSegment::Field("id"),
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive(|value| &value.children[1].path)
+                    .is_equal_to(vec![
+                        assertr::failure::PathSegment::Field("children"),
+                        assertr::failure::PathSegment::Index(1),
+                        assertr::failure::PathSegment::Field("id"),
+                    ]);
+            },
         ]);
         assert_that!(parent)
             .with_renderer(Scalar)
@@ -133,11 +138,17 @@ mod maps {
                 items: entries_are![("x", partial!(Item { id: 2 }))]
             }))
         });
-        assert_that!(failures[0].children[0].path).has_length(3);
-        let path = &failures[0].children[0].path;
-        assert_that!(path[0]).is_equal_to(PathSegment::Field("items"));
-        assert_that!(path[1]).is_matching(pattern!(PathSegment::Key(_)));
-        assert_that!(path[2]).is_equal_to(PathSegment::Field("id"));
+        assert_that!(failures[0].children[0].path).contains_exactly_satisfying([
+            |segment: AssertThat<PathSegment, Capture>| {
+                segment.is_equal_to(PathSegment::Field("items"));
+            },
+            |segment: AssertThat<PathSegment, Capture>| {
+                segment.is_matching(pattern!(PathSegment::Key(_)));
+            },
+            |segment: AssertThat<PathSegment, Capture>| {
+                segment.is_equal_to(PathSegment::Field("id"));
+            },
+        ]);
     }
 }
 

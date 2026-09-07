@@ -88,11 +88,16 @@ mod tests {
         let matcher = contains_matching(all_of(matchers![equal_to(9), equal_to(0)]));
         let failures = bounded_failures(&[3, 2, 1], &matcher, true, 1);
 
-        assert_that!(failures[0].children).has_length(1);
-        assert_that!(failures[0].omitted_children).is_equal_to(5);
-        assert_that!(failures[0].children[0].expected.as_ref()).is_equal_to(Some(
-            &MatchContext::default().render().value(&0).into_rendered(),
-        ));
+        assert_that!(failures[0].children).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                assert_that!(failures[0].omitted_children).is_equal_to(5);
+                element
+                    .derive_owned(|item| item.expected.as_ref())
+                    .is_equal_to(Some(
+                        &MatchContext::default().render().value(&0).into_rendered(),
+                    ));
+            },
+        ]);
         assert_bounded_order(&matcher, true);
     }
 
@@ -105,15 +110,29 @@ mod tests {
                 .with_rendering_budget(RenderingBudget::builder().max_items(limit).build())
                 .capture(|it| it.matches(contains_matching(equal_to(9))));
 
-            assert_that!(failures[0].children).has_length(limit);
-            assert_that!(failures[0].omitted_children).is_equal_to(3 - limit);
             assert_that!(renders.get()).is_equal_to(if limit == 0 { 0 } else { 6 });
-            if limit > 0 {
-                assert_that!(rendered_text(
-                    failures[0].children[0].actual.as_ref().unwrap(),
-                ))
-                .is_equal_to("7");
-            }
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure
+                        .derive(|failure| &failure.omitted_children)
+                        .is_equal_to(3 - limit);
+                    failure
+                        .derive(|failure| &failure.children)
+                        .contains_exactly_satisfying(vec![
+                            |child: AssertThat<
+                                AssertionFailure,
+                                Capture,
+                            >| {
+                                child
+                                    .derive(|child| &child.actual)
+                                    .is_some_satisfying(|actual| {
+                                        actual.derive_owned(rendered_text).is_equal_to("7");
+                                    });
+                            };
+                            limit
+                        ]);
+                },
+            ]);
         }
     }
 }

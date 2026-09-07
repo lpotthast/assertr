@@ -145,8 +145,9 @@ mod tests {
                         .$method()
                         .get_ok();
                     let failures = converted.capture(|it| it.is_equal_to("wrong"));
-                    assert_that!(failures).has_length(1);
-                    assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    assert_that!(failures).contains_exactly_satisfying([
+                        |element: AssertThat<AssertionFailure, Capture>| {
+                            element.derive(|value| value).has_text_report(formatdoc! {r"
                         -------- assertr --------
                         Subject: serialized subject
                         Expression: `subject`
@@ -157,17 +158,17 @@ mod tests {
                         -------- assertr --------
                     "});
 
-                    assert_eq!(
-                        failures[0].subject_name.as_deref(),
-                        Some("serialized subject")
-                    );
-                    assert_eq!(
-                        failures[0].actual.as_ref().unwrap().body,
-                        RenderedBody::Text {
-                            text: "<re".into(),
-                            omitted_characters: 7,
-                        }
-                    );
+                            element
+                                .derive_owned(|value| value.subject_name.as_deref())
+                                .is_equal_to(Some("serialized subject"));
+                            element
+                                .derive(|value| &value.actual.as_ref().unwrap().body)
+                                .is_equal_to(RenderedBody::Text {
+                                    text: "<re".into(),
+                                    omitted_characters: 7,
+                                });
+                        },
+                    ]);
                     let subject = Serialized {
                         calls: &calls,
                         fail: true,
@@ -185,8 +186,9 @@ mod tests {
                         .with_renderer(RedactingRenderer)
                         .with_location(false)
                         .capture(|it| it.$method().is_ok_satisfying(|_| {}));
-                    assert_that!(failures).has_length(1);
-                    assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                    assert_that!(failures).contains_exactly_satisfying([
+                        |element: AssertThat<AssertionFailure, Capture>| {
+                            element.derive(|value| value).has_text_report(formatdoc! {r"
                         -------- assertr --------
                         Expression: `subject`
 
@@ -200,7 +202,9 @@ mod tests {
                         -------- assertr --------
                     "});
 
-                    assert_redacted(&failures[0], &["private-serialization-value"]);
+                            assert_redacted(element.actual(), &["private-serialization-value"]);
+                        },
+                    ]);
                 }
             }
         };

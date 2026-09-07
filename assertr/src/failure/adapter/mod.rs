@@ -6,11 +6,18 @@
 //!
 //! ```
 //! use assertr::prelude::*;
+//! use assertr::failure::adapter::HumanReadableText;
 //!
 //! let failures = assert_that!(42).capture(|it| it.is_less_than(0).is_equal_to(43));
 //! let reports: Vec<_> = failures.iter().map(|failure| ToHumanReadableText.render(failure)).collect();
-//! assert_eq!(reports.len(), 2);
-//! assert!(reports[0].contains("is not less than"));
+//! assert_that!(reports).contains_exactly_satisfying([
+//!     |report: AssertThat<HumanReadableText, Capture>| {
+//!         report.contains("is not less than");
+//!     },
+//!     |report: AssertThat<HumanReadableText, Capture>| {
+//!         report.contains("Expected: 43");
+//!     },
+//! ]);
 //! ```
 //!
 //! ## Chain transformations

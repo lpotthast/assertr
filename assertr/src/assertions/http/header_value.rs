@@ -465,8 +465,13 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_ascii().is_not_empty());
 
-            assert_that!(&failures).has_length(1);
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains("is not ASCII");
+            assert_that!(&failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|value| ToHumanReadableText.render(value))
+                        .contains("is not ASCII");
+                },
+            ]);
         }
     }
 
@@ -592,11 +597,13 @@ mod tests {
                     s.starts_with("http");
                 })
             });
-            assert_that!(&failures).has_length(1);
-            assert_that!(failures.first())
-                .get_some()
-                .map(|it| ToHumanReadableText.render(it.borrowed()).into())
-                .contains("is not ASCII");
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure
+                        .derive_owned(|failure| ToHumanReadableText.render(failure))
+                        .contains("is not ASCII");
+                },
+            ]);
         }
 
         #[test]

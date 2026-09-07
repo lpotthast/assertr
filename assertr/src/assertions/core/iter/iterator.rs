@@ -609,8 +609,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.contains(9));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
@@ -628,7 +629,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_fact(&failures[0], "Consumed elements", 2);
+                    assert_custom_fact(element.actual(), "Consumed elements", 2);
+                },
+            ]);
         }
     }
 
@@ -715,8 +718,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.contains_matching(equal_to(9)));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
@@ -737,7 +741,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_fact(&failures[0], "Consumed", 2);
+                    assert_custom_fact(element.actual(), "Consumed", 2);
+                },
+            ]);
         }
     }
 
@@ -815,9 +821,13 @@ mod tests {
                     })
                 });
 
-            assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(failures[0].children[0].path)
-                .is_equal_to([crate::failure::PathSegment::Index(4)]);
+            assert_that!(failures[0].children.as_slice()).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.path)
+                        .is_equal_to([crate::failure::PathSegment::Index(4)]);
+                },
+            ]);
             assert_that!(failures[0].omitted_children).is_equal_to(19);
         }
     }
@@ -1073,8 +1083,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.starts_with([1, 2, 3]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
@@ -1095,7 +1106,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_fact(&failures[0], "Prefix length", 3);
+                    assert_custom_fact(element.actual(), "Prefix length", 3);
+                },
+            ]);
         }
     }
 
@@ -1309,8 +1322,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.ends_with([1, 2, 3]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
@@ -1333,11 +1347,14 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_fact(&failures[0], "Suffix length", 3);
+                    assert_custom_fact(element.actual(), "Suffix length", 3);
+                },
+            ]);
         }
     }
 
     mod ends_with_matching {
+        use crate::matchers::equal_to;
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -1401,6 +1418,44 @@ mod tests {
                         satisfies the predicate
                 -------- assertr --------
             "});
+        }
+
+        #[test]
+        fn short_iterators_report_matcher_descriptions_and_length() {
+            for values in [&[][..], &[1][..]] {
+                let consumed = values.len();
+                let failures = assert_that_owned!(values.iter().copied())
+                    .with_location(false)
+                    .capture(|it| it.ends_with_matching([equal_to(9), equal_to(10)]));
+
+                assert_that!(failures).contains_exactly_satisfying([
+                    |failure: AssertThat<AssertionFailure, Capture>| {
+                        failure.has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `values.iter().copied()`
+
+                    does not end with matching positions
+
+                    Constraint:
+                        ends with these positions
+
+                        Constraints:
+                          - is equal to
+
+                            Expected: 9
+                          - is equal to
+
+                            Expected: 10
+
+                    Details:
+                      - Consumed: {consumed}
+                      - Preview starts at: 0
+                      - Expected length: 2
+                    -------- assertr --------
+                    "});
+                    },
+                ]);
+            }
         }
     }
 
@@ -1553,6 +1608,7 @@ mod tests {
     }
 
     mod contains_contiguous_matching {
+        use crate::matchers::equal_to;
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -1629,6 +1685,44 @@ mod tests {
         #[test]
         fn stops_after_finding_a_window_in_an_infinite_iterator() {
             assert_that_owned!(0..).contains_contiguous_matching(matchers![5, 6]);
+        }
+
+        #[test]
+        fn short_iterators_report_matcher_descriptions_and_length() {
+            for values in [&[][..], &[1][..]] {
+                let consumed = values.len();
+                let failures = assert_that_owned!(values.iter().copied())
+                    .with_location(false)
+                    .capture(|it| it.contains_contiguous_matching([equal_to(9), equal_to(10)]));
+
+                assert_that!(failures).contains_exactly_satisfying([
+                    |failure: AssertThat<AssertionFailure, Capture>| {
+                        failure.has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `values.iter().copied()`
+
+                    does not contain matching contiguous positions
+
+                    Constraint:
+                        contains these contiguous positions
+
+                        Constraints:
+                          - is equal to
+
+                            Expected: 9
+                          - is equal to
+
+                            Expected: 10
+
+                    Details:
+                      - Consumed: {consumed}
+                      - Preview starts at: 0
+                      - Expected length: 2
+                    -------- assertr --------
+                    "});
+                    },
+                ]);
+            }
         }
     }
 
@@ -1803,8 +1897,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.contains_exactly([1]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
@@ -1823,8 +1918,10 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_fact(&failures[0], "Reported length", 2);
-            assert_custom_fact(&failures[0], "Expected length", 1);
+                    assert_custom_fact(element.actual(), "Reported length", 2);
+                    assert_custom_fact(element.actual(), "Expected length", 1);
+                },
+            ]);
         }
     }
 
@@ -2084,8 +2181,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.contains_exactly_in_any_order([1]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
@@ -2104,7 +2202,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_fact(&failures[0], "Expected length", 1);
+                    assert_custom_fact(element.actual(), "Expected length", 1);
+                },
+            ]);
         }
     }
 

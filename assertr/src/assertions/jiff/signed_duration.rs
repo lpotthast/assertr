@@ -446,10 +446,16 @@ mod tests {
                     for deviation in [SignedDuration::from_nanos(-1), SignedDuration::MIN] {
                         let failures =
                             assert_that!(actual).capture(|it| it.is_close_to(expected, deviation));
-                        assert_that!(failures).has_length(1);
-                        assert_that!(failures[0].kind).is_equal_to(FailureKind::Ordering);
-                        assert_that!(failures[0].relation.as_deref())
-                            .is_equal_to(Some("was given an invalid allowed deviation"));
+                        assert_that!(failures).contains_exactly_satisfying([
+                            |element: AssertThat<AssertionFailure, Capture>| {
+                                element
+                                    .derive(|value| &value.kind)
+                                    .is_equal_to(FailureKind::Ordering);
+                                element
+                                    .derive_owned(|value| value.relation.as_deref())
+                                    .is_equal_to(Some("was given an invalid allowed deviation"));
+                            },
+                        ]);
                     }
                 }
             }
@@ -464,13 +470,18 @@ mod tests {
                     .is_equal_to(SignedDuration::MAX)
             });
 
-            assert_that!(failures).has_length(2);
-            for failure in &failures {
-                assert_that!(failure.kind).is_equal_to(FailureKind::Ordering);
-            }
-            assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not close to"));
-            assert_that!(failures[1].relation.as_deref())
-                .is_equal_to(Some("was given an invalid allowed deviation"));
+            assert_that!(failures).contains_exactly_satisfying(
+                ["is not close to", "was given an invalid allowed deviation"].map(|relation| {
+                    move |failure: AssertThat<AssertionFailure, Capture>| {
+                        failure
+                            .derive(|failure| &failure.kind)
+                            .is_equal_to(FailureKind::Ordering);
+                        failure
+                            .derive_owned(|failure| failure.relation.as_deref())
+                            .is_equal_to(Some(relation));
+                    }
+                }),
+            );
         }
 
         #[test]
@@ -524,12 +535,25 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .capture(|it| it.is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1)));
 
-            assert_that!(failures).has_length(1);
-            let failure = &failures[0];
-            assert_that!(rendered_text(failure.actual.as_ref().unwrap())).is_equal_to(SENTINEL);
-            assert_that!(rendered_text(failure.expected.as_ref().unwrap())).is_equal_to(SENTINEL);
-            assert_that!(failure.facts).has_length(1);
-            assert_that!(rendered_text(&failure.facts[0].value)).is_equal_to(SENTINEL);
+            assert_that!(failures).contains_exactly_satisfying([
+                |subject: AssertThat<AssertionFailure, Capture>| {
+                    subject
+                        .derive_owned(|entry| rendered_text(entry.actual.as_ref().unwrap()))
+                        .is_equal_to(SENTINEL);
+                    subject
+                        .derive_owned(|entry| rendered_text(entry.expected.as_ref().unwrap()))
+                        .is_equal_to(SENTINEL);
+                    subject
+                        .derive(|entry| &entry.facts)
+                        .contains_exactly_satisfying([
+                            |element: AssertThat<crate::Fact, Capture>| {
+                                element
+                                    .derive_owned(|item| rendered_text(&item.value))
+                                    .is_equal_to(SENTINEL);
+                            },
+                        ]);
+                },
+            ]);
         }
 
         #[test]
@@ -538,8 +562,13 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .capture(|it| it.is_close_to(SignedDuration::MAX, SignedDuration::MIN));
 
-            assert_that!(failures).has_length(1);
-            assert_that!(rendered_text(&failures[0].facts[0].value)).is_equal_to(SENTINEL);
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|item| rendered_text(&item.facts[0].value))
+                        .is_equal_to(SENTINEL);
+                },
+            ]);
         }
 
         #[test]

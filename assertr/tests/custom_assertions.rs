@@ -120,10 +120,14 @@ mod composed {
             .with_location(false)
             .capture(|it| it.has_age(30));
 
-        assert_that!(&failures).has_length(1);
-        assert_that!(ToHumanReadableText.render(&failures[0]))
-            .contains("Expected: 30")
-            .contains("Actual: 12");
+        assert_that!(&failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .contains("Expected: 30")
+                    .contains("Actual: 12");
+            },
+        ]);
     }
 }
 
@@ -245,12 +249,23 @@ mod leaf {
             .with_location(false)
             .capture(|it| it.is_adult());
 
-        assert_that!(&failures).has_length(1);
-        assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("child"));
-        assert_that!(failures[0].kind).is_equal_to(FailureKind::Ordering);
-        assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not an adult"));
-        assert_that!(failures[0].facts.as_slice()).contains_exactly([Fact::labelled("Age", "12")]);
-        assert_that!(ToHumanReadableText.render(&failures[0])).contains(formatdoc! {"
+        assert_that!(&failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| value.subject_name.as_deref())
+                    .is_equal_to(Some("child"));
+                element
+                    .derive(|value| &value.kind)
+                    .is_equal_to(FailureKind::Ordering);
+                element
+                    .derive_owned(|value| value.relation.as_deref())
+                    .is_equal_to(Some("is not an adult"));
+                element
+                    .derive_owned(|value| value.facts.as_slice())
+                    .contains_exactly([Fact::labelled("Age", "12")]);
+                element
+                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .contains(formatdoc! {"
             -------- assertr --------
             Subject: child
             Expression: `person(12)`
@@ -261,6 +276,8 @@ mod leaf {
               - Age: 12
             -------- assertr --------
         "});
+            },
+        ]);
     }
 
     #[test]
@@ -270,12 +287,21 @@ mod leaf {
                 .is_adult() // fails with one fact of its own
         });
 
-        assert_that!(&failures).has_length(2);
-        assert_that!(failures[0].facts.as_slice()).contains_exactly([
-            Fact::labelled("Actual age", "12"),
-            Fact::labelled("Expected age", "40"),
+        assert_that!(&failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| value.facts.as_slice())
+                    .contains_exactly([
+                        Fact::labelled("Actual age", "12"),
+                        Fact::labelled("Expected age", "40"),
+                    ]);
+            },
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| value.facts.as_slice())
+                    .contains_exactly([Fact::labelled("Age", "12")]);
+            },
         ]);
-        assert_that!(failures[1].facts.as_slice()).contains_exactly([Fact::labelled("Age", "12")]);
     }
 
     #[test]
@@ -417,12 +443,26 @@ mod nested {
             .with_location(false)
             .capture(|it| it.are_adults());
 
-        assert_that!(&failures).has_length(1);
-        let child = &failures[0].children[0];
-        assert_that!(child.kind).is_equal_to(FailureKind::Ordering);
-        assert_that!(super::text_opt(child.actual.as_ref())).is_equal_to(Some("Person(age=12)"));
-        assert_that!(child.facts.as_slice()).contains_exactly([Fact::index(1)]);
-        assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {"
+        assert_that!(failures).contains_exactly_satisfying([
+            |failure: AssertThat<AssertionFailure, Capture>| {
+                failure
+                    .derive(|failure| &failure.children)
+                    .contains_exactly_satisfying([
+                        |child: AssertThat<AssertionFailure, Capture>| {
+                            child
+                                .derive(|child| &child.kind)
+                                .is_equal_to(FailureKind::Ordering);
+                            child
+                                .derive_owned(|child| super::text_opt(child.actual.as_ref()))
+                                .is_equal_to(Some("Person(age=12)"));
+                            child
+                                .derive(|child| &child.facts)
+                                .contains_exactly([Fact::index(1)]);
+                        },
+                    ]);
+                failure
+                    .derive_owned(|failure| ToHumanReadableText.render(failure))
+                    .is_equal_to(formatdoc! {"
             -------- assertr --------
             Expression: `vec![person(30), person(12)]`
 
@@ -434,7 +474,9 @@ mod nested {
 
                 is not an adult
             -------- assertr --------
-        "});
+            "});
+            },
+        ]);
     }
 }
 
@@ -535,10 +577,19 @@ mod matcher_authoring {
         let failures = assert_that!(person)
             .with_renderer(AgeRenderer)
             .capture(|it| it.matches(&matcher));
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).has_length(2);
-        assert_that!(super::text_opt(failures[0].children[0].actual.as_ref()))
-            .is_equal_to(Some("age=12"));
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive(|value| &value.children)
+                    .contains_exactly_satisfying(
+                        [|child: AssertThat<AssertionFailure, Capture>| {
+                            child
+                                .derive_owned(|child| super::text_opt(child.actual.as_ref()))
+                                .is_equal_to(Some("age=12"));
+                        }; 2],
+                    );
+            },
+        ]);
         assert_that!(person)
             .with_renderer(AgeRenderer)
             .does_not_match(&matcher);
@@ -697,11 +748,19 @@ mod generic_num_traits_bounds {
         let failures = assert_that!(Money(42))
             .with_renderer(Cents)
             .capture(|it| it.is_close_to(Money(40), Money(1)));
-        assert_that!(failures).has_length(1);
-        assert_that!(super::text_opt(failures[0].actual.as_ref())).is_equal_to(Some("42 cents"));
-        assert_that!(super::text_opt(failures[0].expected.as_ref())).is_equal_to(Some("40 cents"));
-        assert_that!(super::text_opt(Some(&failures[0].facts[0].value)))
-            .is_equal_to(Some("1 cents"));
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|item| super::text_opt(item.actual.as_ref()))
+                    .is_equal_to(Some("42 cents"));
+                element
+                    .derive_owned(|item| super::text_opt(item.expected.as_ref()))
+                    .is_equal_to(Some("40 cents"));
+                element
+                    .derive_owned(|item| super::text_opt(Some(&item.facts[0].value)))
+                    .is_equal_to(Some("1 cents"));
+            },
+        ]);
     }
 
     #[test]

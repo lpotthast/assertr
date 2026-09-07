@@ -427,8 +427,11 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.is_equal_to_ignoring_ascii_case(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -441,14 +444,17 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
-            assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &subject);
+                    assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.is_equal_to_ignoring_ascii_case(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -461,7 +467,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+                    assert_redacted(element.actual(), &[subject.as_str(), operand]);
+                },
+            ]);
         }
 
         #[test]
@@ -532,8 +540,11 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.contains(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -545,14 +556,17 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
-            assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &subject);
+                    assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.contains(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -564,7 +578,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+                    assert_redacted(element.actual(), &[subject.as_str(), operand]);
+                },
+            ]);
         }
 
         #[test]
@@ -647,8 +663,11 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.does_not_contain(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -660,14 +679,17 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
-            assert_custom_value(failures[0].unexpected.as_ref().unwrap(), operand);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &subject);
+                    assert_custom_value(element.actual().unexpected.as_ref().unwrap(), operand);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.does_not_contain(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -679,7 +701,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+                    assert_redacted(element.actual(), &[subject.as_str(), operand]);
+                },
+            ]);
         }
 
         #[test]
@@ -738,8 +762,11 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.starts_with(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -751,14 +778,17 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
-            assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &subject);
+                    assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.starts_with(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -770,7 +800,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+                    assert_redacted(element.actual(), &[subject.as_str(), operand]);
+                },
+            ]);
         }
 
         #[test]
@@ -829,8 +861,11 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.does_not_start_with(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -842,14 +877,17 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
-            assert_custom_value(failures[0].unexpected.as_ref().unwrap(), operand);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &subject);
+                    assert_custom_value(element.actual().unexpected.as_ref().unwrap(), operand);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.does_not_start_with(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -861,7 +899,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+                    assert_redacted(element.actual(), &[subject.as_str(), operand]);
+                },
+            ]);
         }
 
         #[test]
@@ -920,8 +960,11 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.ends_with(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -933,14 +976,17 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
-            assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &subject);
+                    assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.ends_with(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -952,7 +998,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+                    assert_redacted(element.actual(), &[subject.as_str(), operand]);
+                },
+            ]);
         }
 
         #[test]
@@ -1011,8 +1059,11 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.does_not_end_with(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1024,14 +1075,17 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject);
-            assert_custom_value(failures[0].unexpected.as_ref().unwrap(), operand);
+                    assert_custom_value(element.actual().actual.as_ref().unwrap(), &subject);
+                    assert_custom_value(element.actual().unexpected.as_ref().unwrap(), operand);
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.does_not_end_with(operand));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1043,7 +1097,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &[subject.as_str(), operand]);
+                    assert_redacted(element.actual(), &[subject.as_str(), operand]);
+                },
+            ]);
         }
 
         #[test]

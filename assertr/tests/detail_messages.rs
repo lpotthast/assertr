@@ -26,13 +26,20 @@ mod assertion_details {
                 .contains(42)
             });
 
-        assert_that!(&failures).has_length(2);
-        assert_that!(failures[0].children[0].relation.as_deref())
-            .is_equal_to(Some("has no distinct matching element"));
-        assert_that!(ToHumanReadableText.render(&failures[1]))
-            .contains("does not contain\n\nExpected: 42");
-        assert_that!(failures[1].children).is_empty();
-        assert_that!(failures[1].constraint).is_none();
+        assert_that!(&failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| value.children[0].relation.as_deref())
+                    .is_equal_to(Some("has no distinct matching element"));
+            },
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .contains("does not contain\n\nExpected: 42");
+                element.derive(|value| &value.children).is_empty();
+                element.derive(|value| &value.constraint).is_none();
+            },
+        ]);
     }
 }
 
@@ -54,11 +61,19 @@ mod matcher_differences {
                     .matches(partial!(Data { age: 32 }))
             });
 
-        assert_that!(&failures).has_length(2);
-        assert_that!(ToHumanReadableText.render(&failures[0]).as_str()).contains("Expected: 31");
-        assert_that!(ToHumanReadableText.render(&failures[1]).as_str())
-            .contains("Expected: 32")
-            .does_not_contain("Expected: 31");
+        assert_that!(&failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .contains("Expected: 31");
+            },
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .contains("Expected: 32")
+                    .does_not_contain("Expected: 31");
+            },
+        ]);
     }
 }
 

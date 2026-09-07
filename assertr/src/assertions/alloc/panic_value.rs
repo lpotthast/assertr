@@ -112,8 +112,13 @@ mod tests {
                 .is_equal_to("foo");
             let failures =
                 assert_that!(value).capture(|it| it.is_of_type::<String>().is_of_type::<&str>());
-            assert_that!(failures).has_length(1);
-            assert_eq!(failures[0].kind, crate::FailureKind::Panic);
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.kind)
+                        .is_equal_to(crate::FailureKind::Panic);
+                },
+            ]);
         }
 
         #[test]

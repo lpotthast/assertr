@@ -123,10 +123,17 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.matches(equal_to(2)));
 
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0].kind).is_equal_to(crate::FailureKind::Matching);
-            assert_that!(failures[0].children[0].kind).is_equal_to(crate::FailureKind::Equality);
-            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(indoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.kind)
+                        .is_equal_to(crate::FailureKind::Matching);
+                    element
+                        .derive(|value| &value.children[0].kind)
+                        .is_equal_to(crate::FailureKind::Equality);
+                    element
+                        .derive_owned(|value| ToHumanReadableText.render(value))
+                        .is_equal_to(indoc! {r"
                 -------- assertr --------
                 Expression: `1`
 
@@ -138,6 +145,8 @@ mod tests {
                       Actual: 1
                 -------- assertr --------
             "});
+                },
+            ]);
         }
     }
 

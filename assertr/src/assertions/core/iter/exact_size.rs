@@ -107,8 +107,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.has_remaining_count(3));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
@@ -121,8 +122,10 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_value(&failures[0].facts[0].value, &2_usize);
-            assert_custom_value(failures[0].expected.as_ref().unwrap(), &3_usize);
+                    assert_custom_value(&element.actual().facts[0].value, &2_usize);
+                    assert_custom_value(element.actual().expected.as_ref().unwrap(), &3_usize);
+                },
+            ]);
         }
 
         #[test]
@@ -184,8 +187,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(ExactSizeIteratorAssertions::has_no_remaining_elements);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
@@ -196,7 +200,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_value(&failures[0].facts[0].value, &2_usize);
+                    assert_custom_value(&element.actual().facts[0].value, &2_usize);
+                },
+            ]);
         }
 
         #[test]

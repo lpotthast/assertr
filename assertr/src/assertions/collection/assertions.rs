@@ -359,8 +359,13 @@ mod tests {
                 .with_subject_name("the elements")
                 .capture(|it| it.contains(4));
 
-            assert_that!(&failures).has_length(1);
-            assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("the elements"));
+            assert_that!(&failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|value| value.subject_name.as_deref())
+                        .is_equal_to(Some("the elements"));
+                },
+            ]);
         }
 
         #[test]
@@ -519,9 +524,13 @@ mod tests {
                     })
                 });
 
-            assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(failures[0].children[0].actual.as_ref().map(rendered_text))
-                .is_equal_to(Some("123... 3 more characters ...".to_owned()));
+            assert_that!(failures[0].children.as_slice()).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|value| value.actual.as_ref().map(rendered_text))
+                        .is_equal_to(Some("123... 3 more characters ...".to_owned()));
+                },
+            ]);
             assert_that!(failures[0].omitted_children).is_equal_to(2);
         }
     }

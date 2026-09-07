@@ -254,9 +254,12 @@ mod tests {
                 .with_renderer(NoRenderer)
                 .with_location(false)
                 .capture(|it| it.contains_same_instance_as(&keys[1]));
-            assert_eq!(failures.len(), 1);
-            assert_eq!(failures[0].kind, FailureKind::Membership);
-            assert_that!(failures[0]).has_text_report(formatdoc! {"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.kind)
+                        .is_equal_to(FailureKind::Membership);
+                    element.derive(|value| value).has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`
 
@@ -269,6 +272,8 @@ mod tests {
                 Expected: {e:p}
                 -------- assertr --------
             ", a = &keys[0], e = &keys[1]});
+                },
+            ]);
         }
 
         #[test]
@@ -288,12 +293,18 @@ mod tests {
             let failures = assert_that!([short])
                 .with_renderer(NoRenderer)
                 .capture(|it| it.contains_same_instance_as(long));
-            assert_eq!(failures.len(), 1);
-            assert_eq!(failures[0].facts, [Fact::note(METADATA_NOTE)]);
-            assert_eq!(
-                rendered_text(&items(failures[0].actual.as_ref().unwrap())[0]),
-                rendered_text(failures[0].expected.as_ref().unwrap()),
-            );
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.facts)
+                        .is_equal_to([Fact::note(METADATA_NOTE)]);
+                    element
+                        .derive_owned(|value| {
+                            rendered_text(&items(value.actual.as_ref().unwrap())[0])
+                        })
+                        .is_equal_to(rendered_text(element.actual().expected.as_ref().unwrap()));
+                },
+            ]);
         }
 
         #[test]
@@ -347,11 +358,18 @@ mod tests {
                 .with_renderer(NoRenderer)
                 .with_location(false)
                 .capture(|it| it.does_not_contain_same_instance_as(&keys[0]));
-            assert_eq!(failures.len(), 1);
-            assert!(failures[0].expected.is_none());
-            assert!(failures[0].facts.is_empty());
-            assert!(failures[0].children.is_empty());
-            assert_that!(failures[0]).has_text_report(formatdoc! {"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|value| value.expected.is_none())
+                        .is_true();
+                    element
+                        .derive_owned(|value| value.facts.is_empty())
+                        .is_true();
+                    element
+                        .derive_owned(|value| value.children.is_empty())
+                        .is_true();
+                    element.derive(|value| value).has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`
 
@@ -365,6 +383,8 @@ mod tests {
                 Unexpected: {a:p}
                 -------- assertr --------
             ", a = &keys[0]});
+                },
+            ]);
         }
 
         #[test]
@@ -419,10 +439,17 @@ mod tests {
                 .with_renderer(NumericRenderer)
                 .with_location(false)
                 .capture(|it| it.contains_exactly_same_instances([&keys[0], &keys[1]]));
-            assert_eq!(failures.len(), 1);
-            assert_eq!(failures[0].children.len(), 1);
-            assert_eq!(failures[0].children[0].facts, [Fact::index(0)]);
-            assert_that!(failures[0]).has_text_report(formatdoc! {"
+            assert_that!(failures).contains_exactly_satisfying([
+                |item: AssertThat<AssertionFailure, Capture>| {
+                    item.derive(|subject| &subject.children)
+                        .contains_exactly_satisfying([
+                            |element: AssertThat<AssertionFailure, Capture>| {
+                                element
+                                    .derive(|value| &value.facts)
+                                    .is_equal_to([Fact::index(0)]);
+                            },
+                        ]);
+                    item.derive(|subject| subject).has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`
 
@@ -447,6 +474,8 @@ mod tests {
                     Expected: {a:p}
                 -------- assertr --------
             ", a = &keys[0], b = &keys[1]});
+                },
+            ]);
         }
 
         #[test]
@@ -461,23 +490,25 @@ mod tests {
                 let failures = assert_that!(actual)
                     .with_renderer(NumericRenderer)
                     .capture(|it| it.contains_exactly_same_instances(&expected));
-                assert_eq!(failures.len(), 1);
-                assert_eq!(
-                    failures[0].facts,
-                    [
-                        Fact::labelled(
-                            "Actual length",
-                            RenderingContext::new(&DebugRenderer, RenderingBudget::default())
-                                .value(&actual.len())
-                        ),
-                        Fact::labelled(
-                            "Expected length",
-                            RenderingContext::new(&DebugRenderer, RenderingBudget::default())
-                                .value(&expected.len())
-                        ),
-                    ]
-                );
-                assert!(failures[0].children.is_empty());
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| &item.facts).is_equal_to([
+                            Fact::labelled(
+                                "Actual length",
+                                RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+                                    .value(&actual.len()),
+                            ),
+                            Fact::labelled(
+                                "Expected length",
+                                RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+                                    .value(&expected.len()),
+                            ),
+                        ]);
+                        element
+                            .derive_owned(|item| item.children.is_empty())
+                            .is_true();
+                    },
+                ]);
             }
             assert_that!([] as [&Opaque; 0])
                 .with_renderer(NumericRenderer)
@@ -581,9 +612,12 @@ mod tests {
                 .capture(|it| {
                     it.contains_exactly_same_instances_in_any_order([&keys[0], &keys[1], &keys[1]])
                 });
-            assert_eq!(failures.len(), 1);
-            assert!(failures[0].children.is_empty());
-            assert_that!(failures[0]).has_text_report(formatdoc! {"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|value| value.children.is_empty())
+                        .is_true();
+                    element.derive(|value| value).has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`
 
@@ -612,6 +646,8 @@ mod tests {
                     ]
                 -------- assertr --------
             ", a = &keys[0], b = &keys[1]});
+                },
+            ]);
         }
 
         #[test]
@@ -634,9 +670,16 @@ mod tests {
                 let failures = assert_that!(actual)
                     .with_renderer(NoRenderer)
                     .capture(|it| it.contains_exactly_same_instances_in_any_order(&expected));
-                assert_eq!(failures.len(), 1);
-                assert_eq!(failures[0].facts.len(), 1);
-                assert_eq!(failures[0].facts[0].label, label);
+                assert_that!(failures).contains_exactly_satisfying([
+                    |item: AssertThat<AssertionFailure, Capture>| {
+                        item.derive(|subject| &subject.facts)
+                            .contains_exactly_satisfying([
+                                |element: AssertThat<crate::Fact, Capture>| {
+                                    element.derive(|value| &value.label).is_equal_to(label);
+                                },
+                            ]);
+                    },
+                ]);
             }
         }
 
@@ -873,17 +916,26 @@ mod tests {
                         .contains_exactly_same_instances([&keys[0], &keys[2]])
                         .contains_exactly_same_instances_in_any_order([&keys[0], &keys[2]])
                 });
-            assert_eq!(failures.len(), 2);
-            for failure in &failures {
-                assert!(items(failure.actual.as_ref().unwrap()).is_empty());
-                assert!(failure.children.is_empty());
-            }
-            assert_eq!(
-                failures[0].facts,
-                [Fact::note("... 1 more unmatched element ...")]
-            );
-            assert!(items(&failures[1].facts[0].value).is_empty());
-            assert!(items(&failures[1].facts[1].value).is_empty());
+            assert_that!(failures).contains_exactly_satisfying([false, true].map(|unordered| {
+                move |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure
+                        .derive(|failure| &failure.actual)
+                        .is_some_satisfying(|actual| {
+                            actual.derive_owned(items).is_empty();
+                        });
+                    failure.derive(|failure| &failure.children).is_empty();
+                    let facts = failure.derive(|failure| &failure.facts);
+                    if unordered {
+                        facts.contains_exactly_satisfying(
+                            [|fact: AssertThat<Fact, Capture>| {
+                                fact.derive_owned(|fact| items(&fact.value)).is_empty();
+                            }; 2],
+                        );
+                    } else {
+                        facts.contains_exactly([Fact::note("... 1 more unmatched element ...")]);
+                    }
+                }
+            }));
         }
     }
 }

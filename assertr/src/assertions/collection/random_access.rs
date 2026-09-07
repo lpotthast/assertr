@@ -152,8 +152,9 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build());
             let failures = chain.get_at(0).capture(|it| it.is_equal_to(8));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expected: cus... 6 more characters ...
 
@@ -161,13 +162,14 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_eq!(
-                failures[0].actual.as_ref().unwrap().body,
-                RenderedBody::Text {
-                    text: "cus".into(),
-                    omitted_characters: 6
-                }
-            );
+                    element
+                        .derive(|value| &value.actual.as_ref().unwrap().body)
+                        .is_equal_to(RenderedBody::Text {
+                            text: "cus".into(),
+                            omitted_characters: 6,
+                        });
+                },
+            ]);
         }
     }
 }

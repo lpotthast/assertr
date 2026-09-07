@@ -13,6 +13,11 @@ fn main() {
     let failures = 42.verify(|it: AssertThat<'_, i32, Capture>| it.is_equal_to(43));
     assert_that!(failures[0].expression).is_equal_to(Some("42"));
     let failures = [1, 2].into_iter().verify_owned(|it| it.contains(3));
-    assert_that!(failures).has_length(1);
-    assert_that!(failures[0].expression).is_equal_to(Some("[1, 2].into_iter()"));
+    assert_that!(failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive(|value| &value.expression)
+                .is_equal_to(Some("[1, 2].into_iter()"));
+        },
+    ]);
 }

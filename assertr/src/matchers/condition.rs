@@ -99,9 +99,15 @@ mod tests {
             .with_renderer(CustomValueRenderer)
             .capture(|it| it.matches(condition(IsEven)));
 
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children[0].relation.as_deref())
-            .is_equal_to(Some("does not match the condition"));
-        assert_that!(ToHumanReadableText.render(&failures[0])).contains("value is odd");
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| value.children[0].relation.as_deref())
+                    .is_equal_to(Some("does not match the condition"));
+                element
+                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .contains("value is odd");
+            },
+        ]);
     }
 }

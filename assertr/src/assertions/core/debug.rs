@@ -146,15 +146,16 @@ mod tests {
                 .with_renderer(TextRenderer)
                 .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(5).build())
                 .capture(|it| it.has_debug_string("123").has_debug_string("456"));
-            assert_that!(failures).has_length(1);
-            assert_eq!(
-                rendered_text(failures[0].actual.as_ref().unwrap()),
-                "text:... 3 more characters ..."
-            );
-            assert_eq!(
-                rendered_text(failures[0].expected.as_ref().unwrap()),
-                "text:... 3 more characters ..."
-            );
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|value| rendered_text(value.actual.as_ref().unwrap()))
+                        .is_equal_to("text:... 3 more characters ...");
+                    element
+                        .derive_owned(|value| rendered_text(value.expected.as_ref().unwrap()))
+                        .is_equal_to("text:... 3 more characters ...");
+                },
+            ]);
         }
 
         #[test]

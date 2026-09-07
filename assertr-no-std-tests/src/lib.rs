@@ -62,9 +62,8 @@ fn capture_errors_compile_without_std()
 -> Result<(), alloc::boxed::Box<dyn core::error::Error + Send + Sync>> {
     use alloc::string::ToString;
     let failures = assert_that_owned!(0..).capture(|it| it.starts_with([1, 2]));
-    assert_that!(failures).has_length(1);
     let _report = failures.to_string();
-    let single = failures[0].clone();
+    let single = assert_that!(failures).get_single().actual().clone();
     let _: alloc::boxed::Box<dyn core::error::Error + Send + Sync> = single.into();
     let result: Result<(), AssertionFailures> = Err(failures);
     result?;

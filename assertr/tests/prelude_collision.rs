@@ -208,8 +208,13 @@ fn a_custom_collection_gets_every_collection_assertion() {
     let failures = assert_that!(Ring(vec![1, 2, 3]))
         .with_location(false)
         .capture(|it| it.contains(4));
-    assert_that!(&failures).has_length(1);
-    assert_that!(ToHumanReadableText.render(&failures[0])).contains("Actual: [");
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| ToHumanReadableText.render(value))
+                .contains("Actual: [");
+        },
+    ]);
 
     #[cfg(feature = "fluent")]
     {
@@ -327,16 +332,25 @@ fn a_custom_set_gets_every_set_and_collection_assertion() {
     let failures = assert_that!(CustomSet(vec![1, 2, 3]))
         .with_location(false)
         .capture(|it| it.contains(4));
-    assert_that!(&failures).has_length(1);
-    assert_that!(ToHumanReadableText.render(&failures[0])).contains("Actual: CustomSet {");
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| ToHumanReadableText.render(value))
+                .contains("Actual: CustomSet {");
+        },
+    ]);
 
     let relation_failures = assert_that!(CustomSet(vec![1, 2]))
         .with_location(false)
         .capture(|it| it.is_subset_of(CustomSet(vec![1])));
-    assert_that!(&relation_failures).has_length(1);
-    assert_that!(ToHumanReadableText.render(&relation_failures[0]))
-        .contains("Actual: CustomSet {")
-        .contains("Expected: CustomSet {");
+    assert_that!(&relation_failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| ToHumanReadableText.render(value))
+                .contains("Actual: CustomSet {")
+                .contains("Expected: CustomSet {");
+        },
+    ]);
 
     #[cfg(feature = "fluent")]
     {

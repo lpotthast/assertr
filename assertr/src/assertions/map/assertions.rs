@@ -1396,9 +1396,13 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_exactly_entries([("a", 0), ("b", 0), ("c", 0)]));
 
-            assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(rendered_text(&failures[0].children[0].facts[0].value))
-                .is_equal_to("\"a\"");
+            assert_that!(failures[0].children.as_slice()).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|item| rendered_text(&item.facts[0].value))
+                        .is_equal_to("\"a\"");
+                },
+            ]);
             assert_that!(failures[0].facts.as_slice())
                 .contains(Fact::note("... 2 more unexpected values ..."));
         }
@@ -1809,10 +1813,13 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.contains_exactly_entries_satisfying(assertions));
 
-            assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(&failures[0].children[0].path[0]).is_matching(
+            assert_that!(failures[0].children.as_slice()).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| &value.path[0]).is_matching(
                 pattern!(crate::failure::PathSegment::Key(key) if rendered_text(key) == "\"a\""),
             );
+                },
+            ]);
             assert_that!(failures[0].omitted_children).is_equal_to(2);
         }
     }
@@ -1959,8 +1966,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.contains_exactly_entries([] as [(i32, i32); 0]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1984,8 +1992,10 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_value(&failures[0].facts[0].value, &1_usize);
-            assert_custom_value(&failures[0].facts[1].value, &0_usize);
+                    assert_custom_value(&element.actual().facts[0].value, &1_usize);
+                    assert_custom_value(&element.actual().facts[1].value, &0_usize);
+                },
+            ]);
         }
     }
 }

@@ -150,9 +150,14 @@ mod tests {
         let expected = bounded_failures(&[9, 1, 2, 3], &matcher, true, 1);
         let actual = bounded_failures(&[9, 3, 2, 1], &matcher, true, 1);
 
-        assert_that!(actual[0].children).has_length(1);
-        assert_that!(actual[0].children[0].children).has_length(1);
-        assert_that!(actual[0].children[0].omitted_children).is_equal_to(2);
+        assert_that!(actual[0].children).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element.derive(|value| &value.children).has_length(1);
+                element
+                    .derive(|value| &value.omitted_children)
+                    .is_equal_to(2);
+            },
+        ]);
         assert_that!(ToHumanReadableText.render(&actual[0]))
             .is_equal_to(ToHumanReadableText.render(&expected[0]));
     }
@@ -162,10 +167,19 @@ mod tests {
         let failures = assert_that!([1, 2])
             .capture(|it| it.does_not_match(elements_are_in_any_order![ge(0), ge(0)]));
 
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).has_length(2);
-        assert_that!(failures[0].children[0].actual.as_ref())
-            .is_not_equal_to(failures[0].children[1].actual.as_ref());
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| {
+                        value
+                            .children
+                            .iter()
+                            .map(|child| rendered_text(child.actual.as_ref().unwrap()))
+                            .collect::<Vec<_>>()
+                    })
+                    .contains_exactly_in_any_order(["1", "2"]);
+            },
+        ]);
     }
 
     #[test]
@@ -190,8 +204,9 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
                 .capture(|it| it.matches(elements_are_in_any_order![]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
         -------- assertr --------
         Expression: `[1, 2]`
 
@@ -201,7 +216,11 @@ mod tests {
           - ... 1 more nested failure ...
         -------- assertr --------
     "});
-            assert_that!(failures[0].omitted_children).is_equal_to(1);
+                    element
+                        .derive(|value| &value.omitted_children)
+                        .is_equal_to(1);
+                },
+            ]);
         }
     }
 

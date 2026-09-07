@@ -169,10 +169,15 @@ mod tests {
             .with_location(false)
             .capture(|it| it.into_iter_does_not_contain(2));
 
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].facts.as_slice()).does_not_contain_matching(
-            crate::matchers::predicate(|fact: &crate::Fact| fact.label == crate::Fact::INDEX),
-        );
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| value.facts.as_slice())
+                    .does_not_contain_matching(crate::matchers::predicate(|fact: &crate::Fact| {
+                        fact.label == crate::Fact::INDEX
+                    }));
+            },
+        ]);
     }
 
     #[test]
@@ -181,8 +186,13 @@ mod tests {
             .with_location(false)
             .capture(|it| it.contains(42));
 
-        assert_that!(&failures).has_length(1);
-        assert_that!(ToHumanReadableText.render(&failures[0])).contains("Actual: BTreeSet {");
+        assert_that!(&failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .contains("Actual: BTreeSet {");
+            },
+        ]);
     }
 
     #[cfg(feature = "std")]

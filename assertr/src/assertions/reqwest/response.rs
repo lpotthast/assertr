@@ -810,8 +810,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.has_status_code(reqwest::StatusCode::OK));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -824,18 +825,24 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
-            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
-            assert_custom_value(
-                failures[0].expected.as_ref().unwrap(),
-                &reqwest::StatusCode::OK,
-            );
+                    assert_custom_value(
+                        element.actual().actual.as_ref().unwrap(),
+                        &subject.status(),
+                    );
+                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
+                    assert_custom_value(
+                        element.actual().expected.as_ref().unwrap(),
+                        &reqwest::StatusCode::OK,
+                    );
+                },
+            ]);
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(|it| it.has_status_code(reqwest::StatusCode::OK));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -848,7 +855,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["localhost/hello", "404"]);
+                    assert_redacted(element.actual(), &["localhost/hello", "404"]);
+                },
+            ]);
         }
 
         #[test]
@@ -947,8 +956,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_informational);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -963,15 +973,21 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
-            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+                    assert_custom_value(
+                        element.actual().actual.as_ref().unwrap(),
+                        &subject.status(),
+                    );
+                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
+                },
+            ]);
 
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_informational);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -986,7 +1002,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["localhost/hello", "200"]);
+                    assert_redacted(element.actual(), &["localhost/hello", "200"]);
+                },
+            ]);
         }
 
         #[test]
@@ -1074,8 +1092,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_success);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1090,15 +1109,21 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
-            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+                    assert_custom_value(
+                        element.actual().actual.as_ref().unwrap(),
+                        &subject.status(),
+                    );
+                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
+                },
+            ]);
 
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_success);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1113,7 +1138,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["localhost/hello", "404"]);
+                    assert_redacted(element.actual(), &["localhost/hello", "404"]);
+                },
+            ]);
         }
 
         #[test]
@@ -1202,8 +1229,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_redirection);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1218,15 +1246,21 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
-            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+                    assert_custom_value(
+                        element.actual().actual.as_ref().unwrap(),
+                        &subject.status(),
+                    );
+                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
+                },
+            ]);
 
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_redirection);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1241,7 +1275,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["localhost/hello", "200"]);
+                    assert_redacted(element.actual(), &["localhost/hello", "200"]);
+                },
+            ]);
         }
 
         #[test]
@@ -1329,8 +1365,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_client_error);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1345,15 +1382,21 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
-            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+                    assert_custom_value(
+                        element.actual().actual.as_ref().unwrap(),
+                        &subject.status(),
+                    );
+                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
+                },
+            ]);
 
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_client_error);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1368,7 +1411,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["localhost/hello", "200"]);
+                    assert_redacted(element.actual(), &["localhost/hello", "200"]);
+                },
+            ]);
         }
 
         #[test]
@@ -1456,8 +1501,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_server_error);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1472,15 +1518,21 @@ mod tests {
                 -------- assertr --------
             "#});
 
-            assert_custom_value(failures[0].actual.as_ref().unwrap(), &subject.status());
-            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+                    assert_custom_value(
+                        element.actual().actual.as_ref().unwrap(),
+                        &subject.status(),
+                    );
+                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
+                },
+            ]);
 
             let failures = assert_that!(subject)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
                 .capture(ReqwestResponseAssertions::is_server_error);
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `subject`
 
@@ -1495,7 +1547,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_redacted(&failures[0], &["localhost/hello", "200"]);
+                    assert_redacted(element.actual(), &["localhost/hello", "200"]);
+                },
+            ]);
         }
 
         #[test]
@@ -1592,8 +1646,9 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.has_header("missing").has_header("content-type"));
 
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `response`
 
@@ -1609,6 +1664,8 @@ mod tests {
                   - URL: <redacted text>
                 -------- assertr --------
             "});
+                },
+            ]);
         }
 
         #[test]
@@ -1729,8 +1786,11 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.does_not_have_header("x-api-key"));
 
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `response`
 
@@ -1747,6 +1807,8 @@ mod tests {
                   - Value: "secret-\xff"
                 -------- assertr --------
             "#});
+                },
+            ]);
             assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
         }
 
@@ -1758,8 +1820,9 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.does_not_have_header("x-api-key"));
 
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `response`
 
@@ -1776,6 +1839,8 @@ mod tests {
                   - Value: <redacted header>
                 -------- assertr --------
             "});
+                },
+            ]);
             let value = &failures[0].facts[1].value;
             assert_that!(value.type_name)
                 .is_equal_to(Some(core::any::type_name::<reqwest::header::HeaderValue>()));
@@ -1808,11 +1873,15 @@ mod tests {
                 })
                 .capture(|it| it.does_not_have_header("x-api-key"));
 
-            assert_that!(failures).has_length(1);
-            assert_that!(crate::test_support::rendered_text(
-                &failures[0].facts[1].value
-            ))
-            .is_equal_to(r#"revealed("secret-\xff")"#);
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|item| {
+                            crate::test_support::rendered_text(&item.facts[1].value)
+                        })
+                        .is_equal_to(r#"revealed("secret-\xff")"#);
+                },
+            ]);
             assert_that!(calls.get()).is_equal_to(1);
             assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
         }
@@ -1915,8 +1984,11 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.has_header_value("x-api-key", "secret-�"));
 
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| value)
+                        .has_text_report(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `response`
 
@@ -1929,6 +2001,8 @@ mod tests {
                   - Header: "x-api-key"
                 -------- assertr --------
             "#});
+                },
+            ]);
             assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
         }
 
@@ -1940,8 +2014,9 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.has_header_value("x-api-key", "another secret"));
 
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `response`
 
@@ -1954,8 +2029,13 @@ mod tests {
                   - Header: <redacted text>
                 -------- assertr --------
             "});
-            assert_that!(failures[0].actual.as_ref().expect("actual value").type_name)
-                .is_equal_to(Some(core::any::type_name::<reqwest::header::HeaderValue>()));
+                    element
+                        .derive_owned(|value| {
+                            value.actual.as_ref().expect("actual value").type_name
+                        })
+                        .is_equal_to(Some(core::any::type_name::<reqwest::header::HeaderValue>()));
+                },
+            ]);
             assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
         }
 
@@ -2026,12 +2106,20 @@ mod tests {
                     })
                     .capture(|it| it.has_header_value("x-api-key", "other"));
 
-                assert_that!(failures).has_length(1);
-                let actual = failures[0].actual.as_ref().expect("actual value");
-                assert_that!(crate::test_support::rendered_text(actual))
-                    .is_equal_to(r#"revealed("secret-\xff")"#);
-                assert_that!(actual.type_name)
-                    .is_equal_to(Some(core::any::type_name::<reqwest::header::HeaderValue>()));
+                assert_that!(failures).contains_exactly_satisfying([
+                    |failure: AssertThat<AssertionFailure, Capture>| {
+                        failure
+                            .derive(|failure| &failure.actual)
+                            .is_some_satisfying(|actual| {
+                                actual
+                                    .derive_owned(crate::test_support::rendered_text)
+                                    .is_equal_to(r#"revealed("secret-\xff")"#);
+                                actual.derive(|actual| &actual.type_name).is_equal_to(Some(
+                                    core::any::type_name::<reqwest::header::HeaderValue>(),
+                                ));
+                            });
+                    },
+                ]);
                 assert_that!(calls.get()).is_equal_to(1);
                 assert_that!(response.headers()["x-api-key"].is_sensitive()).is_equal_to(sensitive);
             }

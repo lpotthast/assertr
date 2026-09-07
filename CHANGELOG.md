@@ -84,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   surrounding quotes when expecting string output. Formatting diagnostics require `ValueRenderer<str>`.
 - Failure reports use a consistent layout with separate values, relation sentences, chain messages, labeled facts,
   and nested failures. Update diagnostic text snapshots, including positional indexes, map keys, and iterator scan
-  evidence.
+  evidence. Short iterator suffix and contiguous matcher failures include expected constraints and required lengths.
 - Hash collection diagnostics sort values and per-element evidence by rendered text before applying item limits,
   while positional diagnostics preserve iteration order. Order-free collection, borrowed-iteration, and
   iterable-condition diagnostics no longer label traversal offsets as element indexes, and length diagnostics use

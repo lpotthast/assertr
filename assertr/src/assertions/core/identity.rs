@@ -176,14 +176,28 @@ mod tests {
                     let it = it.is_same_instance_as(&values[1]);
                     it.is_same_instance_as(&values[0])
                 });
-            assert_eq!(failures.len(), 1);
-            let failure = &failures[0];
-            assert_eq!(failure.location.unwrap().line(), expected_line);
-            assert_eq!(failure.kind, FailureKind::Equality);
-            assert_eq!(failure.subject_name.as_deref(), Some("candidate"));
-            assert_eq!(failure.expression, Some("values[0]"));
-            assert_eq!(failure.messages, ["identity matters"]);
-            assert!(failure.unexpected.is_none());
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|value| value.location.unwrap().line())
+                        .is_equal_to(expected_line);
+                    element
+                        .derive(|value| &value.kind)
+                        .is_equal_to(FailureKind::Equality);
+                    element
+                        .derive_owned(|value| value.subject_name.as_deref())
+                        .is_equal_to(Some("candidate"));
+                    element
+                        .derive(|value| &value.expression)
+                        .is_equal_to(Some("values[0]"));
+                    element
+                        .derive(|value| &value.messages)
+                        .is_equal_to(["identity matters"]);
+                    element
+                        .derive_owned(|value| value.unexpected.is_none())
+                        .is_true();
+                },
+            ]);
         }
 
         #[test]
@@ -255,9 +269,12 @@ mod tests {
                 .with_renderer(NoRenderer)
                 .with_location(false)
                 .capture(|it| it.is_not_same_instance_as(&value));
-            assert_eq!(failures.len(), 1);
-            assert!(failures[0].expected.is_none());
-            assert_that!(failures[0]).has_text_report(formatdoc! {"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|item| item.expected.is_none())
+                        .is_true();
+                    element.derive(|item| item).has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `value`
 
@@ -268,6 +285,8 @@ mod tests {
                 Unexpected: {value:p}
                 -------- assertr --------
             ", value = &value});
+                },
+            ]);
         }
 
         #[test]

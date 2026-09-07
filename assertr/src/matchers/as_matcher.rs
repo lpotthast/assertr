@@ -40,7 +40,12 @@ mod tests {
 
         assert_that!(description.relation).is_equal_to("is positive");
         assert_that!(result.matched).is_false();
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].constraint.as_ref().unwrap().relation).is_equal_to("is positive");
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive(|value| &value.constraint.as_ref().unwrap().relation)
+                    .is_equal_to("is positive");
+            },
+        ]);
     }
 }

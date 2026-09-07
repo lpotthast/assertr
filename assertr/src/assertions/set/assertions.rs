@@ -135,11 +135,16 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_subset_of(&expected));
 
-            assert_that!(failures[0].facts.as_slice()).has_length(1);
-            assert_that!(failures[0].facts[0].label.as_ref())
-                .is_equal_to("Elements not in expected");
-            assert_that!(rendered_text(&failures[0].facts[0].value))
-                .is_equal_to("[\n    \"extra\",\n]");
+            assert_that!(failures[0].facts.as_slice()).contains_exactly_satisfying([
+                |element: AssertThat<crate::Fact, Capture>| {
+                    element
+                        .derive_owned(|item| item.label.as_ref())
+                        .is_equal_to("Elements not in expected");
+                    element
+                        .derive_owned(|item| rendered_text(&item.value))
+                        .is_equal_to("[\n    \"extra\",\n]");
+                },
+            ]);
         }
 
         #[test]

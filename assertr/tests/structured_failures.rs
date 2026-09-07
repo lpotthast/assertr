@@ -35,16 +35,31 @@ fn capture_returns_structured_failures_with_separated_fields() {
         .with_subject_name("answer")
         .capture(|it| it.with_detail_message("user context").is_equal_to(43));
 
-    assert_that!(&failures).has_length(1);
-    let failure = &failures[0];
-
-    assert_that!(failure.subject_name.as_deref()).is_equal_to(Some("answer"));
-    assert_that!(failure.expression).is_equal_to(Some("42"));
-    assert_that!(failure.subject_type_name).is_equal_to(core::any::type_name::<i32>());
-    assert_that!(failure.facts.as_slice()).is_empty();
-    assert_that!(failure.messages.as_slice()).contains_exactly(["user context"]);
-    assert_that!(text_opt(failure.expected.as_ref())).is_equal_to(Some("43"));
-    assert_that!(text_opt(failure.actual.as_ref())).is_equal_to(Some("42"));
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| value.subject_name.as_deref())
+                .is_equal_to(Some("answer"));
+            element
+                .derive(|value| &value.expression)
+                .is_equal_to(Some("42"));
+            element
+                .derive(|value| &value.subject_type_name)
+                .is_equal_to(core::any::type_name::<i32>());
+            element
+                .derive_owned(|value| value.facts.as_slice())
+                .is_empty();
+            element
+                .derive_owned(|value| value.messages.as_slice())
+                .contains_exactly(["user context"]);
+            element
+                .derive_owned(|value| text_opt(value.expected.as_ref()))
+                .is_equal_to(Some("43"));
+            element
+                .derive_owned(|value| text_opt(value.actual.as_ref()))
+                .is_equal_to(Some("42"));
+        },
+    ]);
     // Failures are plain values: cloneable and comparable.
     assert_that!(failures.clone() == failures).is_true();
 }
@@ -71,12 +86,24 @@ fn failures_arrive_in_assertion_order_and_carry_the_messages_provided_up_to_them
             .is_equal_to(1)
     });
 
-    assert_that!(&failures).has_length(2);
-    assert_that!(ToHumanReadableText.render(&failures[0])).contains("is not greater than");
-    assert_that!(ToHumanReadableText.render(&failures[1])).contains("Expected: 1");
-    // A message only reaches the failures raised after it was provided.
-    assert_that!(failures[0].messages.as_slice()).contains_exactly(["early"]);
-    assert_that!(failures[1].messages.as_slice()).contains_exactly(["early", "late"]);
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| ToHumanReadableText.render(value))
+                .contains("is not greater than");
+            element
+                .derive_owned(|value| value.messages.as_slice())
+                .contains_exactly(["early"]);
+        },
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| ToHumanReadableText.render(value))
+                .contains("Expected: 1");
+            element
+                .derive_owned(|value| value.messages.as_slice())
+                .contains_exactly(["early", "late"]);
+        },
+    ]);
 }
 
 #[test]
@@ -157,11 +184,24 @@ fn failures_from_derived_and_satisfies_assertions_reach_the_root() {
             it
         });
 
-    assert_that!(&failures).has_length(2);
-    assert_that!(ToHumanReadableText.render(&failures[0])).contains("xyz");
-    assert_that!(ToHumanReadableText.render(&failures[1])).contains("Expected: 9");
-    assert_that!(failures[0].subject_type_name).is_equal_to(core::any::type_name::<String>());
-    assert_that!(failures[1].subject_type_name).is_equal_to(core::any::type_name::<usize>());
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| ToHumanReadableText.render(value))
+                .contains("xyz");
+            element
+                .derive(|value| &value.subject_type_name)
+                .is_equal_to(core::any::type_name::<String>());
+        },
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| ToHumanReadableText.render(value))
+                .contains("Expected: 9");
+            element
+                .derive(|value| &value.subject_type_name)
+                .is_equal_to(core::any::type_name::<usize>());
+        },
+    ]);
 }
 
 #[test]
@@ -175,8 +215,13 @@ fn capture_on_a_derived_assertion_is_scoped_to_that_chain() {
 
     // The derived chain's failures are returned locally instead of propagating to the panic-mode
     // root, while ancestor detail messages are preserved.
-    assert_that!(&failures).has_length(1);
-    assert_that!(failures[0].messages.as_slice()).contains_exactly(["root context"]);
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| value.messages.as_slice())
+                .contains_exactly(["root context"]);
+        },
+    ]);
 
     // The root stays in panic mode and remains usable.
     root.is_equal_to(("foo".to_owned(), 42));
@@ -188,8 +233,13 @@ fn mapping_inside_the_capture_closure_is_supported() {
         .with_location(false)
         .capture(|it| it.map(|v| v.borrowed().len().into()).is_equal_to(4));
 
-    assert_that!(&failures).has_length(1);
-    assert_that!(failures[0].subject_type_name).is_equal_to(core::any::type_name::<usize>());
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive(|value| &value.subject_type_name)
+                .is_equal_to(core::any::type_name::<usize>());
+        },
+    ]);
 }
 
 #[test]
@@ -278,8 +328,13 @@ fn a_panic_inside_the_capture_closure_propagates_without_a_double_panic() {
 #[test]
 fn fluent_verify_and_verify_owned_return_structured_failures() {
     let failures = 42.verify(|it| it.with_location(false).be_equal_to(43));
-    assert_that!(&failures).has_length(1);
-    assert_that!(ToHumanReadableText.render(&failures[0])).contains("Expected: 43");
+    assert_that!(&failures).contains_exactly_satisfying([
+        |element: AssertThat<AssertionFailure, Capture>| {
+            element
+                .derive_owned(|value| ToHumanReadableText.render(value))
+                .contains("Expected: 43");
+        },
+    ]);
 
     assert_that!(42.verify(|it| it.be_equal_to(42))).is_empty();
 
@@ -291,7 +346,7 @@ fn fluent_verify_and_verify_owned_return_structured_failures() {
 mod fields {
     use super::{rendered_text, text, text_opt};
     use assertr::prelude::*;
-    use assertr::renderer::{RenderedBody, TypeHint};
+    use assertr::renderer::{Rendered, RenderedBody, TypeHint};
     use assertr::{Fact, FailureKind};
     use core::{cell::RefCell, fmt};
 
@@ -405,10 +460,17 @@ mod fields {
         assert_that!(*style).is_equal_to(assertr::renderer::GroupStyle::Set);
         assert_that!(*omitted).is_equal_to(1);
         assert_that!(*sorted).is_true();
-        assert_that!(items.as_slice()).has_length(2);
-        assert_that!(items[0].type_name).is_equal_to(Some(core::any::type_name::<i32>()));
-        assert_that!(text(&items[0])).is_equal_to("1");
-        assert_that!(text(&items[1])).is_equal_to("2");
+        assert_that!(items.as_slice()).contains_exactly_satisfying([
+            |element: AssertThat<Rendered, Capture>| {
+                element
+                    .derive(|value| &value.type_name)
+                    .is_equal_to(Some(core::any::type_name::<i32>()));
+                element.derive_owned(text).is_equal_to("1");
+            },
+            |element: AssertThat<Rendered, Capture>| {
+                element.derive_owned(text).is_equal_to("2");
+            },
+        ]);
     }
 
     #[test]
@@ -431,11 +493,22 @@ mod fields {
 
         assert_that!(*omitted).is_equal_to(1);
         assert_that!(*sorted).is_false();
-        assert_that!(entries.as_slice()).has_length(1);
-        assert_that!(entries[0].0.type_name).is_equal_to(Some(core::any::type_name::<i32>()));
-        assert_that!(entries[0].1.type_name).is_equal_to(Some(core::any::type_name::<i32>()));
-        assert_that!(text(&entries[0].0)).is_equal_to("1");
-        assert_that!(text(&entries[0].1)).is_equal_to("10");
+        assert_that!(entries.as_slice()).contains_exactly_satisfying([
+            |element: AssertThat<(Rendered, Rendered), Capture>| {
+                element
+                    .derive(|value| &value.0.type_name)
+                    .is_equal_to(Some(core::any::type_name::<i32>()));
+                element
+                    .derive(|value| &value.1.type_name)
+                    .is_equal_to(Some(core::any::type_name::<i32>()));
+                element
+                    .derive_owned(|value| text(&value.0))
+                    .is_equal_to("1");
+                element
+                    .derive_owned(|value| text(&value.1))
+                    .is_equal_to("10");
+            },
+        ]);
     }
 
     #[test]
@@ -457,9 +530,16 @@ mod fields {
 
         assert_that!(*omitted).is_equal_to(0);
         assert_that!(*sorted).is_false();
-        assert_that!(entries.as_slice()).has_length(1);
-        assert_that!(text(&entries[0].0)).is_equal_to("\"b\"");
-        assert_that!(text(&entries[0].1)).is_equal_to("2");
+        assert_that!(entries.as_slice()).contains_exactly_satisfying([
+            |element: AssertThat<(Rendered, Rendered), Capture>| {
+                element
+                    .derive_owned(|value| text(&value.0))
+                    .is_equal_to("\"b\"");
+                element
+                    .derive_owned(|value| text(&value.1))
+                    .is_equal_to("2");
+            },
+        ]);
     }
 
     #[test]
@@ -474,9 +554,14 @@ mod fields {
             panic!("expected a tuple node, got {:?}", unexpected.body);
         };
 
-        assert_that!(items.as_slice()).has_length(2);
-        assert_that!(text(&items[0])).is_equal_to("\"a\"");
-        assert_that!(text(&items[1])).is_equal_to("1");
+        assert_that!(items.as_slice()).contains_exactly_satisfying([
+            |element: AssertThat<Rendered, Capture>| {
+                element.derive_owned(text).is_equal_to("\"a\"");
+            },
+            |element: AssertThat<Rendered, Capture>| {
+                element.derive_owned(text).is_equal_to("1");
+            },
+        ]);
     }
 
     #[test]
@@ -501,9 +586,14 @@ mod fields {
         };
 
         assert_that!(values.compact).is_true();
-        assert_that!(items.as_slice()).has_length(2);
-        assert_that!(text(&items[0])).is_equal_to("4");
-        assert_that!(text(&items[1])).is_equal_to("6");
+        assert_that!(items.as_slice()).contains_exactly_satisfying([
+            |element: AssertThat<Rendered, Capture>| {
+                element.derive_owned(text).is_equal_to("4");
+            },
+            |element: AssertThat<Rendered, Capture>| {
+                element.derive_owned(text).is_equal_to("6");
+            },
+        ]);
         assert_that!(ToHumanReadableText.render(&failures[0])).contains("key: [4, 6]");
     }
 
@@ -537,10 +627,17 @@ mod fields {
             panic!("expected a struct node, got {:?}", actual.body);
         };
         assert_that!(*name).is_equal_to("RefCell");
-        assert_that!(fields.as_slice()).has_length(1);
-        assert_that!(fields[0].0).is_equal_to("value");
-        assert_that!(fields[0].1.type_name).is_equal_to(Some(core::any::type_name::<i32>()));
-        assert_that!(text(&fields[0].1)).is_equal_to("42");
+        assert_that!(fields.as_slice()).contains_exactly_satisfying([
+            |element: AssertThat<(&str, Rendered), Capture>| {
+                element.derive(|value| &value.0).is_equal_to("value");
+                element
+                    .derive(|value| &value.1.type_name)
+                    .is_equal_to(Some(core::any::type_name::<i32>()));
+                element
+                    .derive_owned(|value| text(&value.1))
+                    .is_equal_to("42");
+            },
+        ]);
     }
 
     #[test]
@@ -589,14 +686,26 @@ mod fields {
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not match"));
         assert_that!(failure.facts.as_slice()).is_empty();
 
-        assert_that!(failure.children.as_slice()).has_length(1);
-        let child = &failure.children[0];
-        assert_that!(child.kind).is_equal_to(FailureKind::Equality);
-        assert_that!(text_opt(child.actual.as_ref())).is_equal_to(Some("2"));
-        assert_that!(text_opt(child.expected.as_ref())).is_equal_to(Some("3"));
-        assert_that!(child.path).is_equal_to([assertr::failure::PathSegment::Index(1)]);
-        assert_that!(child.facts).is_empty();
-        assert_that!(child.subject_type_name).is_equal_to(core::any::type_name::<i32>());
+        assert_that!(failure.children.as_slice()).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive(|value| &value.kind)
+                    .is_equal_to(FailureKind::Equality);
+                element
+                    .derive_owned(|value| text_opt(value.actual.as_ref()))
+                    .is_equal_to(Some("2"));
+                element
+                    .derive_owned(|value| text_opt(value.expected.as_ref()))
+                    .is_equal_to(Some("3"));
+                element
+                    .derive(|value| &value.path)
+                    .is_equal_to([assertr::failure::PathSegment::Index(1)]);
+                element.derive(|value| &value.facts).is_empty();
+                element
+                    .derive(|value| &value.subject_type_name)
+                    .is_equal_to(core::any::type_name::<i32>());
+            },
+        ]);
 
         assert_that!(ToHumanReadableText.render(failure)).ends_with(indoc::indoc! {"
             does not match
@@ -743,21 +852,43 @@ mod matcher_metadata {
                     predicate(|_: &i32| false)
                 ))])
             });
-        assert_that!(failures).has_length(1);
-        let root = &failures[0];
-        assert_that!(root.subject_name.as_deref()).is_equal_to(Some("rows"));
-        assert_that!(root.expression).is_equal_to(Some("[1]"));
-        assert_that!(root.messages).is_equal_to(["request context"]);
-        assert_that!(root.location.unwrap().file()).ends_with("structured_failures.rs");
-        assert_that!(root.children).has_length(2);
-        for child in &root.children {
-            assert_that!(child.path).is_equal_to([PathSegment::Index(0)]);
-            assert_that!(child.location).is_none();
-            assert_that!(child.expression).is_none();
-            assert_that!(child.messages).is_empty();
-        }
-        assert_that!(root.children[1].constraint.as_ref().unwrap().relation)
-            .is_equal_to("satisfies the predicate");
+        assert_that!(failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(|value| value.subject_name.as_deref())
+                    .is_equal_to(Some("rows"));
+                element
+                    .derive(|value| &value.expression)
+                    .is_equal_to(Some("[1]"));
+                element
+                    .derive(|value| &value.messages)
+                    .is_equal_to(["request context"]);
+                element
+                    .derive_owned(|value| value.location.unwrap().file())
+                    .ends_with("structured_failures.rs");
+                element
+                    .derive(|value| &value.children)
+                    .contains_exactly_satisfying([false, true].map(|has_constraint| {
+                        move |child: AssertThat<AssertionFailure, Capture>| {
+                            child
+                                .derive(|child| &child.path)
+                                .contains_exactly([PathSegment::Index(0)]);
+                            child.derive(|child| &child.location).is_none();
+                            child.derive(|child| &child.expression).is_none();
+                            child.derive(|child| &child.messages).is_empty();
+                            if has_constraint {
+                                child.derive(|child| &child.constraint).is_some_satisfying(
+                                    |constraint| {
+                                        constraint
+                                            .derive(|constraint| &constraint.relation)
+                                            .is_equal_to("satisfies the predicate");
+                                    },
+                                );
+                            }
+                        }
+                    }));
+            },
+        ]);
     }
 
     #[test]

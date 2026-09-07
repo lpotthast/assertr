@@ -144,8 +144,9 @@ mod tests {
         #[test]
         fn reports_exact_size_hints_without_consuming_elements() {
             let failures = length([1, 2].into_iter(), 3, RenderingBudget::default());
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `()`
 
@@ -161,9 +162,11 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_value(failures[0].expected.as_ref().unwrap(), &3_usize);
-            assert_custom_fact(&failures[0], "Actual length", 2);
-            assert_custom_fact(&failures[0], "Consumed elements", 0);
+                    assert_custom_value(element.actual().expected.as_ref().unwrap(), &3_usize);
+                    assert_custom_fact(element.actual(), "Actual length", 2);
+                    assert_custom_fact(element.actual(), "Consumed elements", 0);
+                },
+            ]);
         }
         #[test]
         fn reports_a_minimum_length_when_the_scan_stops_early() {
@@ -172,8 +175,9 @@ mod tests {
                 1,
                 RenderingBudget::default(),
             );
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `()`
 
@@ -192,8 +196,10 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_fact(&failures[0], "Minimum actual length", 2);
-            assert_custom_fact(&failures[0], "Consumed elements", 2);
+                    assert_custom_fact(element.actual(), "Minimum actual length", 2);
+                    assert_custom_fact(element.actual(), "Consumed elements", 2);
+                },
+            ]);
         }
         #[test]
         fn limits_evidence_without_changing_consumption() {
@@ -205,8 +211,9 @@ mod tests {
                 1,
                 RenderingBudget::builder().max_leaf_characters(3).build(),
             );
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `()`
 
@@ -224,6 +231,8 @@ mod tests {
                   - Minimum actual length: cus... 6 more characters ...
                 -------- assertr --------
             "});
+                },
+            ]);
 
             assert_eq!(iterator.next(), Some(3));
             let fact = failures[0]

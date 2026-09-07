@@ -418,8 +418,9 @@ mod tests {
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(PathAssertions::exists);
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -432,13 +433,16 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_custom_value(&failures[0].facts[0].value, &error);
+                        assert_custom_value(&element.actual().facts[0].value, &error);
+                    },
+                ]);
                 let failures = assert_that!(subject)
                     .with_renderer(RedactingRenderer)
                     .with_location(false)
                     .capture(PathAssertions::exists);
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -451,7 +455,9 @@ mod tests {
                     -------- assertr --------
                 "});
 
-                assert_redacted(&failures[0], &["private-path", "nul byte"]);
+                        assert_redacted(element.actual(), &["private-path", "nul byte"]);
+                    },
+                ]);
             }
 
             #[test]
@@ -781,8 +787,9 @@ mod tests {
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.has_file_name(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -797,8 +804,13 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
-                assert_custom_value(&failures[0].facts[0].value, subject.file_name().unwrap());
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                        assert_custom_value(
+                            &element.actual().facts[0].value,
+                            subject.file_name().unwrap(),
+                        );
+                    },
+                ]);
             }
 
             #[test]
@@ -818,8 +830,9 @@ mod tests {
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.has_file_name(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -834,14 +847,20 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
-                assert_custom_value(&failures[0].facts[0].value, subject.file_name().unwrap());
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                        assert_custom_value(
+                            &element.actual().facts[0].value,
+                            subject.file_name().unwrap(),
+                        );
+                    },
+                ]);
                 let failures = assert_that!(subject)
                     .with_renderer(RedactingRenderer)
                     .with_location(false)
                     .capture(|it| it.has_file_name(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -856,14 +875,20 @@ mod tests {
                     -------- assertr --------
                 "});
 
-                assert_redacted(&failures[0], &["private-file", "secret", "other-file"]);
+                        assert_redacted(
+                            element.actual(),
+                            &["private-file", "secret", "other-file"],
+                        );
+                    },
+                ]);
                 let subject = PathBuf::from("/");
                 let failures = assert_that!(subject)
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.has_file_name(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -878,8 +903,14 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_eq!(rendered_text(&failures[0].facts[0].value), "<none>");
-                assert_eq!(failures[0].facts[0].value.type_name, None);
+                        element
+                            .derive_owned(|item| rendered_text(&item.facts[0].value))
+                            .is_equal_to("<none>");
+                        element
+                            .derive(|item| &item.facts[0].value.type_name)
+                            .is_equal_to(None);
+                    },
+                ]);
             }
 
             #[test]
@@ -971,8 +1002,9 @@ mod tests {
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.has_file_stem(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -987,14 +1019,20 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
-                assert_custom_value(&failures[0].facts[0].value, subject.file_stem().unwrap());
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                        assert_custom_value(
+                            &element.actual().facts[0].value,
+                            subject.file_stem().unwrap(),
+                        );
+                    },
+                ]);
                 let failures = assert_that!(subject)
                     .with_renderer(RedactingRenderer)
                     .with_location(false)
                     .capture(|it| it.has_file_stem(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1009,14 +1047,20 @@ mod tests {
                     -------- assertr --------
                 "});
 
-                assert_redacted(&failures[0], &["private-file", "secret", "other-file"]);
+                        assert_redacted(
+                            element.actual(),
+                            &["private-file", "secret", "other-file"],
+                        );
+                    },
+                ]);
                 let subject = PathBuf::from("/");
                 let failures = assert_that!(subject)
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.has_file_stem(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1031,8 +1075,14 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_eq!(rendered_text(&failures[0].facts[0].value), "<none>");
-                assert_eq!(failures[0].facts[0].value.type_name, None);
+                        element
+                            .derive_owned(|item| rendered_text(&item.facts[0].value))
+                            .is_equal_to("<none>");
+                        element
+                            .derive(|item| &item.facts[0].value.type_name)
+                            .is_equal_to(None);
+                    },
+                ]);
             }
 
             #[test]
@@ -1124,8 +1174,9 @@ mod tests {
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.has_extension(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1140,14 +1191,20 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
-                assert_custom_value(&failures[0].facts[0].value, subject.extension().unwrap());
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                        assert_custom_value(
+                            &element.actual().facts[0].value,
+                            subject.extension().unwrap(),
+                        );
+                    },
+                ]);
                 let failures = assert_that!(subject)
                     .with_renderer(RedactingRenderer)
                     .with_location(false)
                     .capture(|it| it.has_extension(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1162,14 +1219,20 @@ mod tests {
                     -------- assertr --------
                 "});
 
-                assert_redacted(&failures[0], &["private-file", "secret", "other-file"]);
+                        assert_redacted(
+                            element.actual(),
+                            &["private-file", "secret", "other-file"],
+                        );
+                    },
+                ]);
                 let subject = PathBuf::from("/");
                 let failures = assert_that!(subject)
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.has_extension(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1184,8 +1247,14 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_eq!(rendered_text(&failures[0].facts[0].value), "<none>");
-                assert_eq!(failures[0].facts[0].value.type_name, None);
+                        element
+                            .derive_owned(|item| rendered_text(&item.facts[0].value))
+                            .is_equal_to("<none>");
+                        element
+                            .derive(|item| &item.facts[0].value.type_name)
+                            .is_equal_to(None);
+                    },
+                ]);
             }
 
             #[test]
@@ -1275,8 +1344,11 @@ mod tests {
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.starts_with(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element
+                            .derive(|value| value)
+                            .has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1291,13 +1363,16 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                    },
+                ]);
                 let failures = assert_that!(subject)
                     .with_renderer(RedactingRenderer)
                     .with_location(false)
                     .capture(|it| it.starts_with(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1312,7 +1387,9 @@ mod tests {
                     -------- assertr --------
                 "});
 
-                assert_redacted(&failures[0], &["private", "other/path"]);
+                        assert_redacted(element.actual(), &["private", "other/path"]);
+                    },
+                ]);
             }
 
             #[test]
@@ -1404,8 +1481,11 @@ mod tests {
                     .with_renderer(CustomValueRenderer)
                     .with_location(false)
                     .capture(|it| it.ends_with(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element
+                            .derive(|value| value)
+                            .has_text_report(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1420,13 +1500,16 @@ mod tests {
                     -------- assertr --------
                 "#});
 
-                assert_custom_value(failures[0].expected.as_ref().unwrap(), operand);
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                    },
+                ]);
                 let failures = assert_that!(subject)
                     .with_renderer(RedactingRenderer)
                     .with_location(false)
                     .capture(|it| it.ends_with(operand));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `subject`
 
@@ -1441,7 +1524,9 @@ mod tests {
                     -------- assertr --------
                 "});
 
-                assert_redacted(&failures[0], &["private", "other/path"]);
+                        assert_redacted(element.actual(), &["private", "other/path"]);
+                    },
+                ]);
             }
 
             #[test]
@@ -1531,9 +1616,13 @@ mod tests {
                 .with_renderer(NonCloneRenderer)
                 .capture(|it| it.has_extension("toml"));
 
-            assert_that!(&failures).has_length(1);
-            assert_that!(failures[0].subject_name.as_deref())
-                .is_equal_to(Some("configuration path"));
+            assert_that!(&failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|value| value.subject_name.as_deref())
+                        .is_equal_to(Some("configuration path"));
+                },
+            ]);
         }
 
         mod exists {

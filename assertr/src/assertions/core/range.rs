@@ -254,11 +254,15 @@ mod tests {
                         RenderingBudget::builder().max_leaf_characters(4).build(),
                     )
                     .capture(|it| it.contains_element(1));
-                assert_that!(failures).has_length(1);
-                assert_eq!(
-                    rendered_text(failures[0].actual.as_ref().unwrap()),
-                    format!("(Excluded(<ren... 6 more characters ...), {rendered_end})"),
-                );
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element
+                            .derive_owned(|value| rendered_text(value.actual.as_ref().unwrap()))
+                            .is_equal_to(format!(
+                                "(Excluded(<ren... 6 more characters ...), {rendered_end})"
+                            ));
+                    },
+                ]);
             }
         }
     }
@@ -294,8 +298,9 @@ mod tests {
                 let failures = assert_that!(range)
                     .with_location(false)
                     .capture(|it| it.contains_element(1));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `range`
 
@@ -306,6 +311,8 @@ mod tests {
                     Expected: 1
                     -------- assertr --------
                 "});
+                    },
+                ]);
             }
         }
     }
@@ -337,8 +344,9 @@ mod tests {
                 let failures = assert_that!(range)
                     .with_location(false)
                     .capture(|it| it.does_not_contain_element(2));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `range`
 
@@ -349,6 +357,8 @@ mod tests {
                     Unexpected: 2
                     -------- assertr --------
                 "});
+                    },
+                ]);
             }
         }
     }
@@ -381,8 +391,9 @@ mod tests {
                 let failures = assert_that!(1)
                     .with_location(false)
                     .capture(|it| it.is_in_range(range));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `1`
 
@@ -393,6 +404,8 @@ mod tests {
                     Expected: {rendered_range}
                     -------- assertr --------
                 "});
+                    },
+                ]);
             }
         }
     }
@@ -425,8 +438,9 @@ mod tests {
                 let failures = assert_that!(2)
                     .with_location(false)
                     .capture(|it| it.is_not_in_range(range));
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
                     -------- assertr --------
                     Expression: `2`
 
@@ -437,6 +451,8 @@ mod tests {
                     Unexpected: {rendered_range}
                     -------- assertr --------
                 "});
+                    },
+                ]);
             }
         }
     }

@@ -742,8 +742,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.starts_with([1, 2]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1]`
 
@@ -763,7 +764,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_value(&failures[0].facts[0].value, &1_usize);
+                    assert_custom_value(&element.actual().facts[0].value, &1_usize);
+                },
+            ]);
         }
     }
 
@@ -819,13 +822,20 @@ mod tests {
         #[test]
         fn reports_missing_prefix_positions_and_actual_length() {
             let failures = assert_that!([1]).capture(|it| it.starts_with_matching(matchers![1, 2]));
-            assert_that!(failures[0].children).has_length(2);
-            assert_that!(failures[0].children[0].path)
-                .is_equal_to(vec![crate::failure::PathSegment::Index(1)]);
-            assert_that!(crate::test_support::rendered_text(
-                &failures[0].children[1].facts[0].value
-            ))
-            .is_equal_to("1");
+            assert_that!(failures[0].children).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.path)
+                        .is_equal_to(vec![crate::failure::PathSegment::Index(1)]);
+                },
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive_owned(|item| {
+                            crate::test_support::rendered_text(&item.facts[0].value)
+                        })
+                        .is_equal_to("1");
+                },
+            ]);
         }
 
         #[test]
@@ -964,8 +974,9 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .capture(|it| it.ends_with([1, 2]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|item| item).has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1]`
 
@@ -985,7 +996,9 @@ mod tests {
                 -------- assertr --------
             "});
 
-            assert_custom_value(&failures[0].facts[0].value, &1_usize);
+                    assert_custom_value(&element.actual().facts[0].value, &1_usize);
+                },
+            ]);
         }
     }
 
@@ -1340,15 +1353,23 @@ mod tests {
             }
             let failures = assert_that!([Record { id: 1 }])
                 .capture(|it| it.contains_exactly_matching(matchers![partial!(Record { id: 2 })]));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0].children[0].path).is_equal_to(vec![
-                crate::failure::PathSegment::Index(0),
-                crate::failure::PathSegment::Field("id"),
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.children[0].path)
+                        .is_equal_to(vec![
+                            crate::failure::PathSegment::Index(0),
+                            crate::failure::PathSegment::Field("id"),
+                        ]);
+                    element
+                        .derive_owned(|value| {
+                            crate::test_support::rendered_text(
+                                value.children[0].expected.as_ref().unwrap(),
+                            )
+                        })
+                        .is_equal_to("2");
+                },
             ]);
-            assert_that!(crate::test_support::rendered_text(
-                failures[0].children[0].expected.as_ref().unwrap()
-            ))
-            .is_equal_to("2");
         }
 
         #[test]
@@ -1471,9 +1492,13 @@ mod tests {
             use crate::matchers::{anything, equal_to};
             let failures = assert_that!([2, 1])
                 .capture(|it| it.contains_exactly_matching(matchers![anything(), equal_to(2)]));
-            assert_that!(failures[0].children).has_length(1);
-            assert_that!(failures[0].children[0].path)
-                .is_equal_to([crate::failure::PathSegment::Index(1)]);
+            assert_that!(failures[0].children).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.path)
+                        .is_equal_to([crate::failure::PathSegment::Index(1)]);
+                },
+            ]);
             assert_that!([2, 1])
                 .contains_exactly_in_any_order_matching(matchers![anything(), equal_to(2)]);
         }
