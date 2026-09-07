@@ -111,6 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 - Tokio `RwLock` state assertions retain acquired guards when rendering failures, preventing lock reacquisition races.
 - Range `is_outside_of_range` and standard and Tokio lock `is_free` aliases report the caller's assertion location.
+- Range diagnostics preserve excluded lower bounds using explicit bound tuples instead of inclusive-start notation.
 
 ### Removed
 

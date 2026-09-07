@@ -1,11 +1,13 @@
-use alloc::string::String;
-use core::fmt::Write;
-use core::ops::Bound;
+use alloc::{format, string::String};
+use core::ops::Bound::{Excluded, Included, Unbounded};
 use core::ops::RangeBounds;
 
 use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
 
 /// Assertions over a range subject's membership.
+///
+/// Diagnostics use Rust range notation when possible. Ranges with excluded lower bounds use
+/// explicit bound tuples, such as `(Excluded(1), Included(3))`.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 #[allow(clippy::return_self_not_must_use)]
 pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = crate::DebugRenderer> {
@@ -23,6 +25,8 @@ pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = crate::DebugRendere
 }
 
 /// Assertions over a value subject's membership in a range.
+///
+/// Ranges are displayed as described in [`RangeBoundAssertions`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RangeAssertions<B, R = crate::DebugRenderer> {
@@ -143,39 +147,47 @@ fn render_range<B, S, Range: RangeBounds<B> + ?Sized, M: Mode, R>(
 where
     R: ValueRenderer<B>,
 {
-    fn write_bound<B, S, M: Mode, R>(
-        to: &mut impl Write,
-        assert_that: &AssertThat<'_, S, M, R>,
-        bound: &B,
-    ) where
-        R: ValueRenderer<B>,
-    {
-        let bound = assert_that.render().value(bound);
-        to.write_fmt(format_args!("{bound:?}")).unwrap();
-    }
+    let rendering = assert_that.render();
+    let start = range.start_bound().map(|value| rendering.value(value));
+    let end = range.end_bound().map(|value| rendering.value(value));
 
-    let mut rendered = String::new();
-    match range.start_bound() {
-        Bound::Included(b) | Bound::Excluded(b) => write_bound(&mut rendered, assert_that, b),
-        Bound::Unbounded => {}
+    match (start, end) {
+        // Rust's range operators cannot express an excluded start. Format the bounds around
+        // their rendering adapters so the active renderer and budget still apply to each leaf.
+        (start @ Excluded(_), end) => format!("({start:?}, {end:?})"),
+        (Included(start), Included(end)) => format!("{start:?}..={end:?}"),
+        (Included(start), Excluded(end)) => format!("{start:?}..{end:?}"),
+        (Included(start), Unbounded) => format!("{start:?}.."),
+        (Unbounded, Included(end)) => format!("..={end:?}"),
+        (Unbounded, Excluded(end)) => format!("..{end:?}"),
+        (Unbounded, Unbounded) => "..".into(),
     }
-    rendered.write_str("..").unwrap();
-    match range.end_bound() {
-        Bound::Included(b) => {
-            rendered.write_char('=').unwrap();
-            write_bound(&mut rendered, assert_that, b);
-        }
-        Bound::Excluded(b) => write_bound(&mut rendered, assert_that, b),
-        Bound::Unbounded => {}
-    }
-    rendered
 }
 
 #[cfg(test)]
 mod tests {
+    use core::ops::Bound::{self, Excluded, Included, Unbounded};
+
+    use crate::prelude::*;
+    use indoc::formatdoc;
+
+    type Bounds = (Bound<i32>, Bound<i32>);
+
+    // Every range contains 2 and excludes 1. Cover ordinary notation and each excluded-start form.
+    const RANGE_CASES: [(Bounds, &str); 4] = [
+        ((Included(2), Excluded(3)), "2..3"),
+        ((Excluded(1), Included(3)), "(Excluded(1), Included(3))"),
+        ((Excluded(1), Excluded(3)), "(Excluded(1), Excluded(3))"),
+        ((Excluded(1), Unbounded), "(Excluded(1), Unbounded)"),
+    ];
+
     mod renderer_contract {
+        use core::ops::{Bound, RangeBounds};
+
         use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use crate::test_support::{
+            NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl, rendered_text,
+        };
 
         #[test]
         fn traits_are_implemented_without_renderer_support() {
@@ -206,11 +218,53 @@ mod tests {
                 .contains(SENTINEL)
                 .contains(format!("{SENTINEL}..={SENTINEL}"));
         }
+
+        #[test]
+        fn custom_ranges_with_excluded_starts_honor_the_renderer_and_budget() {
+            struct OpenStartRange {
+                start: i32,
+                end: Bound<i32>,
+            }
+
+            impl RangeBounds<i32> for OpenStartRange {
+                fn start_bound(&self) -> Bound<&i32> {
+                    Bound::Excluded(&self.start)
+                }
+
+                fn end_bound(&self) -> Bound<&i32> {
+                    self.end.as_ref()
+                }
+            }
+
+            for (end, rendered_end) in [
+                (
+                    Bound::Included(3),
+                    "Included(<ren... 6 more characters ...)",
+                ),
+                (
+                    Bound::Excluded(3),
+                    "Excluded(<ren... 6 more characters ...)",
+                ),
+                (Bound::Unbounded, "Unbounded"),
+            ] {
+                let range = OpenStartRange { start: 1, end };
+                let failures = assert_that!(range)
+                    .with_renderer(SentinelRenderer)
+                    .with_rendering_budget(
+                        RenderingBudget::builder().max_leaf_characters(4).build(),
+                    )
+                    .capture(|it| it.contains_element(1));
+                assert_that!(failures).has_length(1);
+                assert_eq!(
+                    rendered_text(failures[0].actual.as_ref().unwrap()),
+                    format!("(Excluded(<ren... 6 more characters ...), {rendered_end})"),
+                );
+            }
+        }
     }
 
     mod contains_element {
-        use crate::prelude::*;
-        use indoc::formatdoc;
+        use super::*;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -234,30 +288,30 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_element_is_not_contained() {
-            assert_that_panic_by(|| {
-                assert_that!("aa".."zz")
+        fn fails_when_element_is_not_contained() {
+            for (range, rendered_range) in RANGE_CASES {
+                assert_that!(range).contains_element(2);
+                let failures = assert_that!(range)
                     .with_location(false)
-                    .contains_element("zz");
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+                    .capture(|it| it.contains_element(1));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
                     -------- assertr --------
-                    Expression: `"aa".."zz"`
+                    Expression: `range`
 
-                    Actual: "aa".."zz"
+                    Actual: {rendered_range}
 
                     does not contain
 
-                    Expected: "zz"
+                    Expected: 1
                     -------- assertr --------
-                "#});
+                "});
+            }
         }
     }
 
     mod does_not_contain_element {
-        use crate::prelude::*;
-        use indoc::formatdoc;
+        use super::*;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -277,30 +331,30 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_element_is_contained() {
-            assert_that_panic_by(|| {
-                assert_that!("aa".."zz")
+        fn fails_when_element_is_contained() {
+            for (range, rendered_range) in RANGE_CASES {
+                assert_that!(range).does_not_contain_element(1);
+                let failures = assert_that!(range)
                     .with_location(false)
-                    .does_not_contain_element("cc");
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
+                    .capture(|it| it.does_not_contain_element(2));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
                     -------- assertr --------
-                    Expression: `"aa".."zz"`
+                    Expression: `range`
 
-                    Actual: "aa".."zz"
+                    Actual: {rendered_range}
 
                     contains
 
-                    Unexpected: "cc"
+                    Unexpected: 2
                     -------- assertr --------
-                "#});
+                "});
+            }
         }
     }
 
     mod is_in_range {
-        use crate::prelude::*;
-        use indoc::formatdoc;
+        use super::*;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -321,30 +375,30 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_not_in_range() {
-            assert_that_panic_by(|| {
-                assert_that!('A')
+        fn fails_when_not_in_range() {
+            for (range, rendered_range) in RANGE_CASES {
+                assert_that!(2).is_in_range(range);
+                let failures = assert_that!(1)
                     .with_location(false)
-                    .is_in_range('a'..='z')
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
+                    .capture(|it| it.is_in_range(range));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
                     -------- assertr --------
-                    Expression: `'A'`
+                    Expression: `1`
 
-                    Actual: 'A'
+                    Actual: 1
 
                     is not in range
 
-                    Expected: 'a'..='z'
+                    Expected: {rendered_range}
                     -------- assertr --------
                 "});
+            }
         }
     }
 
     mod is_not_in_range {
-        use crate::prelude::*;
-        use indoc::formatdoc;
+        use super::*;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -365,20 +419,25 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_in_range() {
-            assert_that_panic_by(|| assert_that!(5).with_location(false).is_not_in_range(0..=7))
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
+        fn fails_when_in_range() {
+            for (range, rendered_range) in RANGE_CASES {
+                assert_that!(1).is_not_in_range(range);
+                let failures = assert_that!(2)
+                    .with_location(false)
+                    .capture(|it| it.is_not_in_range(range));
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r"
                     -------- assertr --------
-                    Expression: `5`
+                    Expression: `2`
 
-                    Actual: 5
+                    Actual: 2
 
                     is in range
 
-                    Unexpected: 0..=7
+                    Unexpected: {rendered_range}
                     -------- assertr --------
                 "});
+            }
         }
     }
 
