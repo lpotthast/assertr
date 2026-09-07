@@ -271,6 +271,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("a"), is_blank());
+        }
+
+        #[test]
         fn succeeds_when_expected_is_blank() {
             assert_that!("").is_blank();
             assert_that!(" ").is_blank();
@@ -304,6 +309,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             "".must().be_blank_ascii();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("a"), is_blank_ascii());
         }
 
         #[test]
@@ -360,6 +370,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("\t \n"), is_not_blank());
+        }
+
+        #[test]
         fn succeeds_when_not_blank() {
             assert_that!("a").is_not_blank();
             assert_that!(" \n a \t").is_not_blank();
@@ -392,6 +407,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             "FoObAr".must().be_equal_to_ignoring_ascii_case("fOoBaR");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("foo"), is_equal_to_ignoring_ascii_case("bar"));
         }
 
         #[test]
@@ -492,6 +512,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             "foobar".must().contain("foo");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("foo bar baz"), contains("42"));
         }
 
         #[test]
@@ -605,6 +630,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("foo bar baz"), does_not_contain("o b"));
+        }
+
+        #[test]
         fn renders_original_operands_and_can_redact_them() {
             use indoc::formatdoc;
 
@@ -688,6 +718,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             "foo bar baz".must().start_with("foo b");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("foo bar baz"), starts_with("oo"));
         }
 
         #[test]
@@ -777,6 +812,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("foo bar baz"), does_not_start_with("foo"));
+        }
+
+        #[test]
         fn renders_original_operands_and_can_redact_them() {
             use indoc::formatdoc;
 
@@ -863,6 +903,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("foo bar baz"), ends_with("raz"));
+        }
+
+        #[test]
         fn renders_original_operands_and_can_redact_them() {
             use indoc::formatdoc;
 
@@ -946,6 +991,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             "foo bar baz".must().not_end_with("y");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("foo bar baz"), does_not_end_with("z"));
         }
 
         #[test]

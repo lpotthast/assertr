@@ -178,6 +178,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Poll::<i32>::Pending), is_ready());
+        }
+
+        #[test]
         fn succeeds_when_ready_and_retains_the_subject() {
             assert_that!(Poll::Ready(Foo { val: 42 }))
                 .is_ready()
@@ -242,6 +247,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Poll::<i32>::Pending), get_ready());
+        }
+
+        #[test]
         fn extracts_the_borrowed_inner_value() {
             let poll = Poll::Ready(Foo { val: 42 });
 
@@ -291,6 +301,14 @@ mod tests {
             Poll::Ready(42).must().be_ready_satisfying(|ready| {
                 ready.is_equal_to(42);
             });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Poll::<i32>::Pending),
+                is_ready_satisfying(|_| {})
+            );
         }
 
         #[test]
@@ -387,6 +405,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Poll::<Foo>::Pending.must().be_pending();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Poll::Ready(1)), is_pending());
         }
 
         #[test]

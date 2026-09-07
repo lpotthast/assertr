@@ -228,6 +228,15 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let keys = keys();
+            assert_caller_location!(
+                assert_that!([&keys[0]]),
+                contains_same_instance_as(&keys[1])
+            );
+        }
+
+        #[test]
         fn finds_the_borrowed_pointee_instead_of_the_reference_slot() {
             let keys = keys();
             let actual = [&keys[0], &keys[1]];
@@ -311,6 +320,15 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let keys = keys();
+            assert_caller_location!(
+                assert_that!([&keys[0]]),
+                does_not_contain_same_instance_as(&keys[0])
+            );
+        }
+
+        #[test]
         fn accepts_missing_instances_and_empty_collections() {
             let keys = keys();
             assert_that!([&keys[0]])
@@ -368,6 +386,15 @@ mod tests {
             [&keys[1], &keys[0]]
                 .must()
                 .contain_exactly_same_instances([&keys[1], &keys[0]]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let keys = keys();
+            assert_caller_location!(
+                assert_that!([&keys[0]]),
+                contains_exactly_same_instances([&keys[1]])
+            );
         }
 
         #[test]
@@ -520,6 +547,15 @@ mod tests {
             [&keys[0], &keys[1]]
                 .must()
                 .contain_exactly_same_instances_in_any_order([&keys[1], &keys[0]]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let keys = keys();
+            assert_caller_location!(
+                assert_that!([&keys[0]]),
+                contains_exactly_same_instances_in_any_order([&keys[1]])
+            );
         }
 
         #[test]

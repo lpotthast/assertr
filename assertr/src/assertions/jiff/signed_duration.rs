@@ -164,6 +164,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let duration: SignedDuration = "2h 30m".parse().unwrap();
+            assert_caller_location!(assert_that!(duration), is_zero());
+        }
+
+        #[test]
         fn succeeds_when_zero() {
             assert_that!(SignedDuration::ZERO).is_zero();
         }
@@ -197,6 +203,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             SignedDuration::from_secs(-5).must().be_negative();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(SignedDuration::ZERO), is_negative());
         }
 
         #[test]
@@ -252,6 +263,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             SignedDuration::from_secs(5).must().be_positive();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(SignedDuration::ZERO), is_positive());
         }
 
         #[test]
@@ -311,6 +327,14 @@ mod tests {
             SignedDuration::from_secs_f32(0.333).must().be_close_to(
                 SignedDuration::from_secs_f32(0.333),
                 SignedDuration::from_secs_f32(0.001),
+            );
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(SignedDuration::ZERO),
+                is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1))
             );
         }
 

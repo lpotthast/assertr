@@ -130,6 +130,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let cell = RefCell::new(42);
+            assert_caller_location!(assert_that!(&cell), is_borrowed());
+        }
+
+        #[test]
         fn succeeds_when_borrowed() {
             let cell = RefCell::new(42);
             let borrow = cell.borrow();
@@ -178,6 +184,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let cell = RefCell::new(42);
+            assert_caller_location!(assert_that!(cell), is_mutably_borrowed());
+        }
+
+        #[test]
         fn succeeds_when_mutably_borrowed() {
             let cell = RefCell::new(42);
             let borrow = cell.borrow_mut();
@@ -196,6 +208,13 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             RefCell::new(42).must().not_be_mutably_borrowed();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let cell = RefCell::new(42);
+            let _borrow = cell.borrow_mut();
+            assert_caller_location!(assert_that!(cell), is_not_mutably_borrowed());
         }
 
         #[test]

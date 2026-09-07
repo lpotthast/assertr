@@ -94,6 +94,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1, 2].into_iter()), has_remaining_count(3));
+        }
+
+        #[test]
         fn remaining_counts_are_rendered_usize_values() {
             use indoc::formatdoc;
 
@@ -163,6 +168,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2].into_iter()),
+                has_no_remaining_elements()
+            );
+        }
+
+        #[test]
         fn remaining_counts_are_rendered_usize_values() {
             use indoc::formatdoc;
 
@@ -220,6 +233,14 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             [1, 2].into_iter().must().have_remaining_elements();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1_i32; 0].into_iter()),
+                has_remaining_elements()
+            );
         }
 
         #[test]

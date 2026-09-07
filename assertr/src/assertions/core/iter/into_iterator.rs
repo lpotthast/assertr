@@ -302,6 +302,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(vec![1, 2, 3]), into_iter_contains(4));
+        }
+
+        #[test]
         fn succeeds_when_expected_is_contained() {
             assert_that!(vec![1, 2, 3]).into_iter_contains(2);
         }
@@ -350,6 +355,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             vec![1, 2, 3].must().into_iter_contain_all([1, 3]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(vec![1, 2, 3]), into_iter_contains_all([2, 4]));
         }
 
         #[test]
@@ -486,6 +496,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(vec![1, 2, 3]),
+                into_iter_contains_matching(matchers::predicate(|it: &i32| *it > 7))
+            );
+        }
+
+        #[test]
         fn succeeds_when_an_element_matches() {
             assert_that!(vec![1, 2, 3])
                 .into_iter_contains_matching(matchers::predicate(|it: &i32| *it % 2 == 0));
@@ -547,6 +565,14 @@ mod tests {
             vec![1, 2, 3].must().into_iter_contain_satisfying(is_two);
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(vec![1, 2]),
+                into_iter_contains_satisfying(is_seven)
+            );
+        }
+
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
@@ -600,6 +626,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(vec![1, 2, 3]), into_iter_does_not_contain(2));
+        }
+
+        #[test]
         fn succeeds_when_expected_is_not_contained() {
             assert_that!(vec![1, 2, 3]).into_iter_does_not_contain(4);
         }
@@ -647,6 +678,16 @@ mod tests {
             vec![1, 2, 3]
                 .must()
                 .into_iter_not_contain_matching(matchers::predicate(|it: &i32| *it > 7));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(vec![1, 2, 3]),
+                into_iter_does_not_contain_matching(matchers::predicate(|it: &i32| {
+                    *it % 2 == 0
+                }))
+            );
         }
 
         #[test]
@@ -706,6 +747,14 @@ mod tests {
             vec![1, 2, 3]
                 .must()
                 .into_iter_not_contain_satisfying(is_seven);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(vec![1, 2, 3]),
+                into_iter_does_not_contain_satisfying(is_two)
+            );
         }
 
         fn is_two(it: AssertThat<i32, Capture>) {
@@ -774,6 +823,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(vec![1, 2, 3]),
+                into_iter_contains_exactly_in_any_order([1, 2, 9])
+            );
+        }
+
+        #[test]
         fn succeeds_when_elements_match_in_another_order() {
             assert_that!(vec![2, 1, 1]).into_iter_contains_exactly_in_any_order([1, 2, 1]);
         }
@@ -830,6 +887,16 @@ mod tests {
                     is_at_most_two,
                     is_one,
                 ]));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(vec![1, 2, 3]),
+                into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
+                    is_one, is_two, is_nine,
+                ]))
+            );
         }
 
         fn is_at_most_two(value: &i32) -> bool {
@@ -931,6 +998,14 @@ mod tests {
                 .into_iter_contain_exactly_in_any_order_satisfying([positive, negative]);
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(vec![1, -1, 2]),
+                into_iter_contains_exactly_in_any_order_satisfying([positive, positive, positive,])
+            );
+        }
+
         fn positive(it: AssertThat<i32, Capture>) {
             it.is_greater_than(0);
         }
@@ -1009,6 +1084,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(vec![1]), into_iter_is_empty());
+        }
+
+        #[test]
         fn succeeds_when_empty() {
             assert_that!(Vec::<i32>::new()).into_iter_is_empty();
         }
@@ -1049,6 +1129,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Vec::<i32>::new()), into_iter_is_not_empty());
+        }
+
+        #[test]
         fn succeeds_when_not_empty() {
             assert_that!(vec![1]).into_iter_is_not_empty();
         }
@@ -1081,6 +1166,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             vec![1, 2].must().into_iter_have_length(2);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(vec![1, 2, 3]), into_iter_has_length(2));
         }
 
         #[test]

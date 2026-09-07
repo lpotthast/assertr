@@ -123,6 +123,17 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let values = [Opaque { _byte: 1 }, Opaque { _byte: 1 }];
+            let actual = &values[0];
+            let expected = &values[1];
+            assert_caller_location!(
+                assert_that!(actual).with_renderer(NoRenderer),
+                is_same_instance_as(expected)
+            );
+        }
+
+        #[test]
         fn accepts_opaque_values_and_normalizes_borrowed_references() {
             let mut value = Opaque { _byte: 1 };
             assert_that!(value).is_same_instance_as(&value);
@@ -217,6 +228,15 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let values = [Opaque { _byte: 1 }, Opaque { _byte: 1 }];
             values[0].must().not_be_same_instance_as(&values[1]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let value = Opaque { _byte: 1 };
+            assert_caller_location!(
+                assert_that!(value).with_renderer(NoRenderer),
+                is_not_same_instance_as(&value)
+            );
         }
 
         #[test]

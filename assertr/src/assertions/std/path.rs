@@ -398,6 +398,12 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                let path = Path::new("src/assertions/std/some-non-existing-file.rs");
+                assert_caller_location!(assert_that!(path), exists());
+            }
+
+            #[test]
             fn renders_the_original_io_error() {
                 use std::path::PathBuf;
 
@@ -485,6 +491,12 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                let path = source_path!();
+                assert_caller_location!(assert_that!(path.as_path()), does_not_exist());
+            }
+
+            #[test]
             fn succeeds_when_absent() {
                 let path = Path::new("../../foo/bar/baz.rs");
                 assert_that!(path).does_not_exist();
@@ -514,6 +526,13 @@ mod tests {
             fn fluent_alias_is_as_expected() {
                 let path = source_path!();
                 path.as_path().must().be_a_file();
+            }
+
+            #[test]
+            fn caller_location_is_as_expected() {
+                let path = source_path!();
+                let dir = path.parent().unwrap();
+                assert_caller_location!(assert_that!(dir).exists(), is_a_file());
             }
 
             #[test]
@@ -550,6 +569,12 @@ mod tests {
                 let path = source_path!();
                 let path = path.parent().expect("present");
                 path.must().be_a_directory();
+            }
+
+            #[test]
+            fn caller_location_is_as_expected() {
+                let path = source_path!();
+                assert_caller_location!(assert_that!(path.as_path()).exists(), is_a_directory());
             }
 
             #[test]
@@ -610,6 +635,12 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                let path = source_relative_path!();
+                assert_caller_location!(assert_that!(path), is_a_symlink());
+            }
+
+            #[test]
             fn succeeds_when_symlink() {
                 let link = TempSymlink::new("path-succeeds");
                 assert_that!(link.0.as_path()).is_a_symlink();
@@ -649,6 +680,12 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                let path = Path::new("foo/bar/baz.rs");
+                assert_caller_location!(assert_that!(path), has_a_root());
+            }
+
+            #[test]
             fn succeeds_when_root() {
                 let path = Path::new("/foo/bar/baz.rs");
                 assert_that!(path).has_a_root();
@@ -683,6 +720,12 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                let path = Path::new("/foo/bar/baz.rs");
+                assert_caller_location!(assert_that!(path), is_relative());
+            }
+
+            #[test]
             fn succeeds_when_relative() {
                 let path = Path::new("foo/bar/baz.rs");
                 assert_that!(path).is_relative();
@@ -714,6 +757,12 @@ mod tests {
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
                 source_relative_path!().must().have_file_name("path.rs");
+            }
+
+            #[test]
+            fn caller_location_is_as_expected() {
+                let path = Path::new("/");
+                assert_caller_location!(assert_that!(path), has_file_name("foo"));
             }
 
             #[test]
@@ -900,6 +949,12 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                let path = Path::new("/");
+                assert_caller_location!(assert_that!(path), has_file_stem("foo"));
+            }
+
+            #[test]
             fn renders_typed_components_including_absence() {
                 use std::ffi::OsStr;
                 use std::path::PathBuf;
@@ -1044,6 +1099,12 @@ mod tests {
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
                 source_relative_path!().must().have_extension("rs");
+            }
+
+            #[test]
+            fn caller_location_is_as_expected() {
+                let path = Path::new("/");
+                assert_caller_location!(assert_that!(path), has_extension("rs"));
             }
 
             #[test]
@@ -1193,6 +1254,12 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                let path = source_relative_path!();
+                assert_caller_location!(assert_that!(path), starts_with("assert"));
+            }
+
+            #[test]
             fn renders_original_path_operands() {
                 use std::path::Path;
                 use std::path::PathBuf;
@@ -1313,6 +1380,12 @@ mod tests {
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
                 source_relative_path!().must().end_with("std/path.rs");
+            }
+
+            #[test]
+            fn caller_location_is_as_expected() {
+                let path = source_relative_path!();
+                assert_caller_location!(assert_that!(path), ends_with("ath.rs"));
             }
 
             #[test]

@@ -105,6 +105,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(42), has_debug_string("foo"));
+        }
+
+        #[test]
         fn preserves_quotes_escapes_and_unicode_exactly() {
             for value in ["", "\"", "\\", "\n", "\r\n", "\t", "é🦀"] {
                 let expected = format!("{value:?}");
@@ -194,13 +199,17 @@ mod tests {
     }
 
     mod has_debug_value {
-        #[cfg(feature = "fluent")]
         use crate::prelude::*;
 
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             42.must().have_debug_value(42);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(42), has_debug_value(43));
         }
 
         mod with_number {

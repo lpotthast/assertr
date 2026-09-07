@@ -160,6 +160,22 @@ mod tests {
     }
 
     #[test]
+    fn adds_caller_tracking_when_the_original_does_not_declare_it() {
+        let original: TraitItemFn = parse_quote! {
+            fn is_ready(self) -> Self;
+        };
+        let alias = generate_alias(&original, "be_ready");
+        assert_eq!(
+            alias
+                .attrs
+                .iter()
+                .filter(|attribute| attribute.path().is_ident("track_caller"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn prepends_alias_documentation_and_preserves_original_method_attributes() {
         let original: TraitItemFn = parse_quote! {
             /// Returns whether the subject is ready.

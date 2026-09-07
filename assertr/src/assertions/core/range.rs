@@ -39,6 +39,7 @@ pub trait RangeAssertions<B, R = crate::DebugRenderer> {
         R: ValueRenderer<B>;
 
     /// Alias of [`RangeAssertions::is_not_in_range`].
+    #[track_caller]
     fn is_outside_of_range(self, expected: impl RangeBounds<B>) -> Self
     where
         Self: Sized,
@@ -218,6 +219,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("aa".."zz"), contains_element("zz"));
+        }
+
+        #[test]
         fn succeeds_when_element_is_contained() {
             assert_that!("aa"..="zz").contains_element("aa");
             assert_that!("aa"..="zz").contains_element("ab");
@@ -260,6 +266,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("aa".."zz"), does_not_contain_element("cc"));
+        }
+
+        #[test]
         fn succeeds_when_element_is_not_contained() {
             assert_that!("aa"..="zz").does_not_contain_element("a");
             assert_that!("aa"..="zz").does_not_contain_element("AA");
@@ -295,6 +306,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             'a'.must().be_in_range('a'..='z');
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!('A'), is_in_range('a'..='z'));
         }
 
         #[test]
@@ -337,6 +353,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(5), is_not_in_range(0..=7));
+        }
+
+        #[test]
         fn succeeds_when_not_in_range() {
             assert_that!(-1).is_not_in_range(0..=7);
             assert_that!(8).is_not_in_range(0..=7);
@@ -361,16 +382,20 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_not_in_range`. Only the fluent name is pinned here. The behavior is covered
-    /// by that module.
+    /// Synonym of `is_not_in_range`. The fluent name and caller location are pinned here. The
+    /// behavior is covered by that module.
     mod is_outside_of_range {
-        #[cfg(feature = "fluent")]
         use crate::prelude::*;
 
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             5.must().be_outside_of_range(1..3);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(5), is_outside_of_range(0..=10));
         }
     }
 }

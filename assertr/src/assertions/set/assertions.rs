@@ -101,6 +101,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeSet::from(["bar"])),
+                is_subset_of(BTreeSet::<&str>::new())
+            );
+        }
+
+        #[test]
         fn succeeds_when_actual_is_subset() {
             assert_that!(BTreeSet::from(["foo"])).is_subset_of(BTreeSet::from(["foo", "bar"]));
         }
@@ -231,6 +239,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeSet::<&str>::new()),
+                is_superset_of(BTreeSet::from(["bar"]))
+            );
+        }
+
+        #[test]
         fn succeeds_when_actual_is_superset() {
             assert_that!(BTreeSet::from(["foo", "bar"])).is_superset_of(BTreeSet::from(["foo"]));
         }
@@ -341,6 +357,14 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let set = BTreeSet::from(["foo"]);
             set.must().be_disjoint_from(BTreeSet::from(["bar"]));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeSet::from(["foo"])),
+                is_disjoint_from(BTreeSet::from(["foo"]))
+            );
         }
 
         #[test]

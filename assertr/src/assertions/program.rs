@@ -225,6 +225,16 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Program::from(
+                    "assertr-caller-test-program-that-does-not-exist"
+                )),
+                exists()
+            );
+        }
+
+        #[test]
         fn lookup_errors_keep_the_original_type_and_can_be_redacted() {
             use indoc::formatdoc;
 
@@ -325,6 +335,16 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Program::from("ls").must_owned().get_resolved_path();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Program::from(
+                    "assertr-caller-test-program-that-does-not-exist"
+                )),
+                get_resolved_path()
+            );
         }
 
         #[cfg(target_os = "linux")]

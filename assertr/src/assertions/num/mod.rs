@@ -433,6 +433,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(3), is_zero());
+        }
+
+        #[test]
         fn succeeds_when_zero() {
             assert_that!(0).is_zero();
         }
@@ -453,16 +458,20 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_zero`. Only the fluent name is pinned here. The behavior is covered by that
-    /// module.
+    /// Synonym of `is_zero`. The fluent name and caller location are pinned here.
+    /// The behavior is covered by that module.
     mod is_additive_identity {
-        #[cfg(feature = "fluent")]
         use crate::prelude::*;
 
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             0_i32.must().be_additive_identity();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(3), is_additive_identity());
         }
     }
 
@@ -474,6 +483,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             1_i32.must().be_one();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(3), is_one());
         }
 
         #[test]
@@ -497,16 +511,20 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_one`. Only the fluent name is pinned here. The behavior is covered by that
-    /// module.
+    /// Synonym of `is_one`. The fluent name and caller location are pinned here.
+    /// The behavior is covered by that module.
     mod is_multiplicative_identity {
-        #[cfg(feature = "fluent")]
         use crate::prelude::*;
 
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             1_i32.must().be_multiplicative_identity();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(3), is_multiplicative_identity());
         }
     }
 
@@ -518,6 +536,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             (-0.01_f64).must().be_negative();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(0.0), is_negative());
         }
 
         #[test]
@@ -573,6 +596,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(-1.23), is_positive());
+        }
+
+        #[test]
         fn succeeds_when_positive() {
             assert_that!(0.01).is_positive();
         }
@@ -613,6 +641,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             0.333_f64.must().be_close_to(0.333, 0.001);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1_i32), is_close_to(3, 1));
         }
 
         #[test]
@@ -790,6 +823,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1.23), is_nan());
+        }
+
+        #[test]
         fn succeeds_when_nan() {
             assert_that!(f32::nan()).is_nan();
         }
@@ -820,6 +858,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             0.3_f32.must().be_finite();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(f32::INFINITY), is_finite());
         }
 
         #[test]
@@ -879,6 +922,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1.23), is_infinite());
+        }
+
+        #[test]
         fn succeeds_when_positive_infinity() {
             assert_that!(f32::infinity()).is_infinite();
         }
@@ -916,6 +964,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let subnormal = f32::from_bits(1);
+            assert_caller_location!(assert_that!(subnormal), is_normal());
+        }
+
+        #[test]
         fn succeeds_when_normal() {
             assert_that!(f32::MIN_POSITIVE).is_normal();
         }
@@ -949,6 +1003,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             f32::from_bits(1).must().be_subnormal();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1.0_f32), is_subnormal());
         }
 
         #[test]

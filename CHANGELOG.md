@@ -110,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Jiff signed-duration tolerance assertions handle extreme values without arithmetic panics, including in capture mode.
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 - Tokio `RwLock` state assertions retain acquired guards when rendering failures, preventing lock reacquisition races.
+- Range `is_outside_of_range` and standard and Tokio lock `is_free` aliases report the caller's assertion location.
 
 ### Removed
 

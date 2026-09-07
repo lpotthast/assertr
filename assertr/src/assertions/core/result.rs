@@ -286,6 +286,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Result::<i32, String>::Err("someError".to_owned())),
+                is_ok()
+            );
+        }
+
+        #[test]
         fn succeeds_when_ok_and_retains_the_subject() {
             assert_that!(Result::<i32, ()>::Ok(42))
                 .is_ok()
@@ -353,6 +361,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Result::<i32, String>::Ok(42)), is_err());
+        }
+
+        #[test]
         fn succeeds_when_error_and_retains_the_subject() {
             assert_that!(Result::<(), i32>::Err(42))
                 .is_err()
@@ -392,6 +405,14 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Result::<i32, ()>::Ok(42).must().get_ok().is_equal_to(42);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Result::<i32, String>::Err("someError".to_owned())),
+                get_ok()
+            );
         }
 
         #[test]
@@ -444,6 +465,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Result::<(), i32>::Err(42).must().get_err().is_equal_to(42);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Result::<i32, String>::Ok(42)), get_err());
         }
 
         #[test]
@@ -500,6 +526,14 @@ mod tests {
                 .be_ok_satisfying(|ok_value| {
                     ok_value.is_equal_to(42);
                 });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Result::<i32, i32>::Err(1)),
+                is_ok_satisfying(|_| {})
+            );
         }
 
         #[test]
@@ -579,6 +613,14 @@ mod tests {
             Result::<(), i32>::Err(42).must().be_err_satisfying(|err| {
                 err.is_equal_to(42);
             });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Result::<i32, i32>::Ok(1)),
+                is_err_satisfying(|_| {})
+            );
         }
 
         #[test]

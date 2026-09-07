@@ -553,6 +553,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(assert_that!(report), has_child_count(1));
+            assert_caller_location!(assert_that!(report.as_ref()), has_child_count(1));
+        }
+
+        #[test]
         fn counts_are_rendered_as_typed_evidence() {
             use indoc::formatdoc;
 
@@ -639,6 +646,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(assert_that!(report), has_attachment_count(0));
+            assert_caller_location!(assert_that!(report.as_ref()), has_attachment_count(0));
+        }
+
+        #[test]
         fn counts_are_rendered_as_typed_evidence() {
             use indoc::formatdoc;
 
@@ -722,6 +736,16 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(assert_that!(report), has_current_context_type::<String>());
+            assert_caller_location!(
+                assert_that!(report.as_ref()),
+                has_current_context_type::<String>()
+            );
+        }
+
+        #[test]
         fn succeeds_when_type_matches() {
             assert_that!(report!(TestError("root"))).has_current_context_type::<TestError>();
         }
@@ -757,6 +781,19 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let report = report!(TestError("root"));
             report.must().have_current_context_display_value("root");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(
+                assert_that!(report),
+                has_current_context_display_value("other")
+            );
+            assert_caller_location!(
+                assert_that!(report.as_ref()),
+                has_current_context_display_value("other")
+            );
         }
 
         #[test]
@@ -797,6 +834,19 @@ mod tests {
             report
                 .must()
                 .have_current_context_debug_string(r#"TestError("root")"#);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(
+                assert_that!(report),
+                has_current_context_debug_string("other")
+            );
+            assert_caller_location!(
+                assert_that!(report.as_ref()),
+                has_current_context_debug_string("other")
+            );
         }
 
         #[test]
@@ -876,6 +926,19 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                let report = report!("root");
+                assert_caller_location!(
+                    assert_that!(report),
+                    has_current_context_satisfying::<u32, _>(|_| {})
+                );
+                assert_caller_location!(
+                    assert_that!(report.as_ref()),
+                    has_current_context_satisfying::<u32, _>(|_| {})
+                );
+            }
+
+            #[test]
             fn succeeds_when_callback_assertions_pass_in_panic_mode() {
                 assert_that!(report!("root")).has_current_context_satisfying::<&'static str, _>(
                     |context| {
@@ -928,6 +991,16 @@ mod tests {
             fn fluent_alias_is_as_expected() {
                 let report = report!("root");
                 report.must().have_current_context::<&'static str>();
+            }
+
+            #[test]
+            fn caller_location_is_as_expected() {
+                let report = report!("root");
+                assert_caller_location!(assert_that!(report), has_current_context::<String>());
+                assert_caller_location!(
+                    assert_that!(report.as_ref()),
+                    has_current_context::<String>()
+                );
             }
 
             #[test]

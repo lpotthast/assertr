@@ -188,6 +188,14 @@ mod tests {
                 .with_location(false)
                 .be(Accept);
         }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(42_u32).with_renderer(ErrorRenderer),
+                is(Reject)
+            );
+        }
         #[test]
         fn typed_errors_need_no_formatting_traits_or_subject_renderer() {
             use indoc::formatdoc;
@@ -230,8 +238,29 @@ mod tests {
             assert_redacted(&failures[0], &["42"]);
         }
     }
+    mod has {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(42_u32).with_renderer(ErrorRenderer),
+                has(Reject)
+            );
+        }
+    }
+
     mod are {
         use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([42_u32]).with_renderer(ErrorRenderer),
+                are(Reject)
+            );
+        }
+
         #[test]
         fn preserves_each_typed_error_and_budget() {
             use indoc::formatdoc;
@@ -284,6 +313,14 @@ mod tests {
                 .with_renderer(ErrorRenderer)
                 .with_location(false)
                 .have(Accept);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([42_u32]).with_renderer(ErrorRenderer),
+                have(Reject)
+            );
         }
     }
     mod matches {

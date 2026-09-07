@@ -58,6 +58,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that_type::<u32>(), needs_drop());
+        }
+
+        #[test]
         fn succeeds_when_type_needs_drop() {
             struct NeedsDrop;
             impl Drop for NeedsDrop {

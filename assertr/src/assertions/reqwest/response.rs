@@ -791,6 +791,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(response(404, &[], "")),
+                has_status_code(reqwest::StatusCode::OK)
+            );
+        }
+
+        #[test]
         fn renders_status_and_url_evidence() {
             use indoc::formatdoc;
 
@@ -923,6 +931,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(200, &[], "")), is_informational());
+        }
+
+        #[test]
         fn renders_status_and_url_evidence() {
             use indoc::formatdoc;
 
@@ -1042,6 +1055,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             response(200, &[], "").must().be_success();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(500, &[], "")), is_success());
         }
 
         #[test]
@@ -1168,6 +1186,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(200, &[], "")), is_redirection());
+        }
+
+        #[test]
         fn renders_status_and_url_evidence() {
             use indoc::formatdoc;
 
@@ -1287,6 +1310,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             response(404, &[], "").must().be_client_error();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(500, &[], "")), is_client_error());
         }
 
         #[test]
@@ -1412,6 +1440,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(404, &[], "")), is_server_error());
+        }
+
+        #[test]
         fn renders_status_and_url_evidence() {
             use indoc::formatdoc;
 
@@ -1531,6 +1564,14 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             ok_response().must().have_header("content-type");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(response(200, &[("x-api-key", "1234")], "")),
+                has_header("content-type")
+            );
         }
 
         #[test]
@@ -1666,6 +1707,14 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             ok_response().must().not_have_header("x-api-key");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(response(200, &[("x-api-key", "1234")], "")),
+                does_not_have_header("x-api-key")
+            );
         }
 
         #[test]
@@ -1836,6 +1885,14 @@ mod tests {
             ok_response()
                 .must()
                 .have_header_value("content-type", "text/plain");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(ok_response()),
+                has_header_value("content-type", "application/json")
+            );
         }
 
         #[test]
@@ -2104,6 +2161,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(ok_response()), get_header("missing-header"));
+        }
+
+        #[test]
         fn extracts_the_value_of_a_present_header() {
             assert_that!(ok_response())
                 .get_header("content-type")
@@ -2238,6 +2300,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(async assert_that_owned!(failing_response()), get_text());
+        }
+
+        #[test]
         fn body_errors_use_typed_renderers_and_can_be_redacted() {
             use indoc::formatdoc;
 
@@ -2311,20 +2378,6 @@ mod tests {
         }
 
         #[test]
-        fn failure_location_points_at_the_callers_assertion() {
-            let expected_line = line!() + 3;
-            let panic = assert_that_panic_by(|| {
-                block_on(async {
-                    assert_that_owned!(failing_response()).get_text().await;
-                });
-            });
-
-            panic
-                .has_type::<String>()
-                .contains(format!("Assertion failed at {}:{expected_line}:", file!()));
-        }
-
-        #[test]
         fn panics_synchronously_when_the_response_is_only_borrowed() {
             assert_that_panic_by(|| {
                 let response = ok_response();
@@ -2391,6 +2444,11 @@ mod tests {
                     name: "Bob".to_owned(),
                     age: 42,
                 });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(async assert_that_owned!(json_response("not json")), get_json::<Person>());
         }
 
         #[test]
@@ -2511,22 +2569,6 @@ mod tests {
                   - Error: Error("expected ident", line: 1, column: 2)
                 -------- assertr --------
             "#});
-        }
-
-        #[test]
-        fn failure_location_points_at_the_callers_assertion() {
-            let expected_line = line!() + 4;
-            let panic = assert_that_panic_by(|| {
-                block_on(async {
-                    assert_that_owned!(json_response("not json"))
-                        .get_json::<Person>()
-                        .await;
-                });
-            });
-
-            panic
-                .has_type::<String>()
-                .contains(format!("Assertion failed at {}:{expected_line}:", file!()));
         }
 
         #[test]

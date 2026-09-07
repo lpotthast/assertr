@@ -79,6 +79,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(vec![1, 2]), get_at(2));
+        }
+
+        #[test]
         fn returns_the_element_at_the_index() {
             assert_that!(vec![1, 2, 3]).get_at(1).is_equal_to(2);
         }

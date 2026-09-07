@@ -84,6 +84,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(false), is_true());
+        }
+
+        #[test]
         fn succeeds_when_true() {
             assert_that!(true).is_true();
         }
@@ -112,6 +117,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             false.must().be_false();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(true), is_false());
         }
 
         #[test]

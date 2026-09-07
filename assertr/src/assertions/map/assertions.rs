@@ -382,6 +382,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeMap::from([("a", 1)])),
+                contains_entry_matching("a", equal_to(2))
+            );
+        }
+
+        #[test]
         fn preserves_borrowed_lookup_and_key_paths() {
             let map = BTreeMap::from([(alloc::string::String::from("a"), 1)]);
             assert_that!(map).contains_entry_matching("a", equal_to(1));
@@ -418,6 +426,14 @@ mod tests {
             BTreeMap::from([("a", 1)])
                 .must()
                 .contain_value_matching(predicate(|x: &i32| *x == 1));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeMap::from([("a", 1)])),
+                contains_value_matching(crate::matchers::equal_to(2))
+            );
         }
 
         #[test]
@@ -513,6 +529,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_caller_location!(assert_that!(map), contains_key("baz"));
+        }
+
+        #[test]
         fn succeeds_when_key_is_present() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
@@ -562,6 +585,13 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let map = HashMap::from([("foo", "bar")]);
             map.must().not_contain_key("baz");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_caller_location!(assert_that!(map), does_not_contain_key("foo"));
         }
 
         #[test]
@@ -615,6 +645,13 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let map = HashMap::from([("foo", "bar")]);
             map.must().contain_value("bar");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_caller_location!(assert_that!(map), contains_value("baz"));
         }
 
         #[test]
@@ -683,6 +720,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_caller_location!(assert_that!(map), does_not_contain_value("bar"));
+        }
+
+        #[test]
         fn succeeds_when_value_is_absent() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
@@ -726,6 +770,16 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let map = HashMap::from([("foo", "bar")]);
             map.must().contain_entry::<&str, _>("foo", "bar");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_caller_location!(
+                assert_that!(map),
+                contains_entry::<&str, _>("baz", "someValue")
+            );
         }
 
         #[test]
@@ -848,6 +902,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeMap::from([("retries", 3)])),
+                contains_entry_satisfying("timeout", is_three)
+            );
+        }
+
+        #[test]
         fn succeeds_when_the_value_satisfies_all_assertions() {
             assert_that!(BTreeMap::from([("retries", 12)]))
                 .contains_entry_satisfying("retries", is_positive_and_large);
@@ -939,6 +1001,16 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let mut map = HashMap::new();
+            map.insert("foo", "bar");
+            assert_caller_location!(
+                assert_that!(map),
+                does_not_contain_entry::<&str, _>("foo", "bar")
+            );
+        }
+
+        #[test]
         fn succeeds_when_key_is_absent() {
             let mut map = HashMap::new();
             map.insert("foo", "bar");
@@ -1001,6 +1073,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let map = HashMap::from([("foo", "bar")]);
+            assert_caller_location!(assert_that!(map), contains_keys(["foo", "baz"]));
+        }
+
+        #[test]
         fn succeeds_when_all_keys_are_present() {
             let map = HashMap::from([("foo", "bar"), ("baz", "qux")]);
             assert_that!(map).contains_keys(["foo", "baz"]);
@@ -1058,6 +1136,15 @@ mod tests {
             let map = HashMap::from([("foo", "bar"), ("baz", "qux")]);
             map.must()
                 .contain_exactly_entries([("foo", "bar"), ("baz", "qux")]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let map = HashMap::from([("a", 1)]);
+            assert_caller_location!(
+                assert_that!(map),
+                contains_exactly_entries([("a", 1), ("a", 1)])
+            );
         }
 
         #[test]
@@ -1348,6 +1435,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeMap::from([("a", 1)])),
+                contains_exactly_entries_matching(crate::entries_are![("a", 2)])
+            );
+        }
+
+        #[test]
         fn succeeds_when_the_keys_are_exact_and_each_value_matches() {
             let predicates: [(&str, Predicate); 2] = [("b", is_two), ("a", is_one)];
 
@@ -1558,6 +1653,14 @@ mod tests {
             BTreeMap::from([("a", 1)])
                 .must()
                 .contain_exactly_entries_satisfying([("a", is_one)]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeMap::from([("a", 1)])),
+                contains_exactly_entries_satisfying([("a", is_two)])
+            );
         }
 
         #[test]

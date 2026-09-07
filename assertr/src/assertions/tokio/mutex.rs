@@ -15,6 +15,7 @@ pub trait TokioMutexAssertions<T, R> {
     fn is_not_locked(self) -> Self;
 
     /// Alias of [`TokioMutexAssertions::is_not_locked`].
+    #[track_caller]
     fn is_free(self) -> Self
     where
         Self: Sized,
@@ -129,6 +130,12 @@ mod tests {
             drop(guard);
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            let mutex = Mutex::new(42);
+            assert_caller_location!(assert_that!(mutex), is_locked());
+        }
+
         #[tokio::test]
         async fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
@@ -169,6 +176,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let mutex = Mutex::new(42);
+            let _guard = mutex.try_lock().unwrap();
+            assert_caller_location!(assert_that!(mutex), is_not_locked());
+        }
+
+        #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
             assert_that!(mutex).is_not_locked();
@@ -195,19 +209,24 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_not_locked`. Only the fluent name is pinned here. The behavior is covered by
-    /// that module.
+    /// Synonym of `is_not_locked`. The fluent name and caller location are pinned here. The
+    /// behavior is covered by that module.
     mod is_free {
-        #[cfg(feature = "fluent")]
         use tokio::sync::Mutex;
 
-        #[cfg(feature = "fluent")]
         use crate::prelude::*;
 
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Mutex::new(42).must().be_free();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let lock = Mutex::new(42);
+            let _guard = lock.try_lock().unwrap();
+            assert_caller_location!(assert_that!(lock), is_free());
         }
     }
 
@@ -223,6 +242,17 @@ mod tests {
             Mutex::new(42).must().have_value_satisfying(|value| {
                 value.is_equal_to(42);
             });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let mutex = Mutex::new(42);
+            assert_caller_location!(
+                assert_that!(mutex),
+                has_value_satisfying(|value| {
+                    value.is_equal_to(43);
+                })
+            );
         }
 
         #[test]

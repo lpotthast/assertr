@@ -236,6 +236,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+            assert_caller_location!(assert_that!(actual), is_empty());
+        }
+
+        #[test]
         fn succeeds_when_empty() {
             let actual = HeaderValue::from_str("").expect("valid header value");
 
@@ -271,6 +277,12 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.must().not_be_empty();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let actual = HeaderValue::from_str("").expect("valid header value");
+            assert_caller_location!(assert_that!(actual), is_not_empty());
         }
 
         #[test]
@@ -315,6 +327,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+            actual.set_sensitive(false);
+            assert_caller_location!(assert_that!(actual), is_sensitive());
+        }
+
+        #[test]
         fn succeeds_when_sensitive() {
             let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.set_sensitive(true);
@@ -352,6 +371,13 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
             actual.must().be_insensitive();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+            actual.set_sensitive(true);
+            assert_caller_location!(assert_that!(actual), is_insensitive());
         }
 
         #[test]
@@ -402,6 +428,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
+            assert_caller_location!(assert_that!(actual), is_ascii());
+        }
+
+        #[test]
         fn succeeds_when_ascii_and_retains_the_subject() {
             let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
 
@@ -448,6 +480,12 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let actual = HeaderValue::from_static("http/1.1");
             actual.must().get_ascii().is_equal_to("http/1.1");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
+            assert_caller_location!(assert_that!(actual), get_ascii());
         }
 
         #[test]
@@ -511,6 +549,17 @@ mod tests {
             actual.must().be_ascii_satisfying(|s| {
                 s.starts_with("http");
             });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
+            assert_caller_location!(
+                assert_that!(actual),
+                is_ascii_satisfying(|s| {
+                    s.starts_with("http");
+                })
+            );
         }
 
         #[test]

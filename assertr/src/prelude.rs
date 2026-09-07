@@ -54,8 +54,6 @@ pub use crate::condition::AssertrCondition;
 pub use crate::elements_are;
 pub use crate::elements_are_in_any_order;
 pub use crate::entries_are;
-#[cfg(all(test, not(feature = "std")))]
-pub(crate) use crate::entry::assert_that_panic_by;
 pub use crate::failure::adapter::ToHumanReadableText;
 pub use crate::matchers;
 pub use crate::matchers::AssertrMatcher;
@@ -65,6 +63,11 @@ pub use crate::partial;
 pub use crate::pattern;
 #[cfg(test)]
 pub(crate) use crate::test_support::FailureReportAssertions;
+#[cfg(test)]
+pub(crate) use crate::test_support::assert_caller_location;
+// Without the `std` feature, unit tests use a private helper backed by the hosted test harness.
+#[cfg(all(test, not(feature = "std")))]
+pub(crate) use crate::test_support::assert_that_panic_by;
 #[cfg(test)]
 pub(crate) use crate::test_support::rendered_text;
 pub use crate::{

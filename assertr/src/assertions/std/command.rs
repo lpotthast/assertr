@@ -84,6 +84,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let mut cmd = Command::new("foo");
+            cmd.arg("--bar");
+            assert_caller_location!(assert_that!(cmd), has_arg("help"));
+        }
+
+        #[test]
         fn succeeds_when_arg_present() {
             let mut cmd = Command::new("foo");
             cmd.arg("--bar").arg("--baz");

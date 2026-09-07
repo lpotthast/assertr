@@ -16,6 +16,7 @@ pub trait TokioRwLockAssertions<T, R> {
         R: ValueRenderer<T>;
 
     /// Alias of [`TokioRwLockAssertions::is_not_locked`].
+    #[track_caller]
     fn is_free(self) -> Self
     where
         Self: Sized,
@@ -204,6 +205,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let lock = RwLock::new(42);
+            let _guard = lock.try_write().unwrap();
+            assert_caller_location!(assert_that!(lock), is_not_locked());
+        }
+
+        #[test]
         fn succeeds_when_not_locked() {
             let rw_lock = RwLock::new(42);
             assert_that!(rw_lock).is_not_locked();
@@ -260,18 +268,23 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_not_locked`. Only the fluent name is pinned here. The behavior is covered by
-    /// that module.
+    /// Synonym of `is_not_locked`. The fluent name and caller location are pinned here. The
+    /// behavior is covered by that module.
     mod is_free {
-        #[cfg(feature = "fluent")]
         use crate::prelude::*;
-        #[cfg(feature = "fluent")]
         use tokio::sync::RwLock;
 
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             RwLock::new(42).must().be_free();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let lock = RwLock::new(42);
+            let _guard = lock.try_write().unwrap();
+            assert_caller_location!(assert_that!(lock), is_free());
         }
     }
 
@@ -288,6 +301,12 @@ mod tests {
             let rw_lock_read_guard = rw_lock.read().await;
             rw_lock.must().be_read_locked();
             drop(rw_lock_read_guard);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let rw_lock = RwLock::new(42);
+            assert_caller_location!(assert_that!(rw_lock), is_read_locked());
         }
 
         #[test]
@@ -384,6 +403,12 @@ mod tests {
             let rw_lock_write_guard = rw_lock.write().await;
             rw_lock.must().be_write_locked();
             drop(rw_lock_write_guard);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let rw_lock = RwLock::new(42);
+            assert_caller_location!(assert_that!(rw_lock), is_write_locked());
         }
 
         #[test]

@@ -54,13 +54,17 @@ mod tests {
     }
 
     mod has_display_value {
-        #[cfg(feature = "fluent")]
         use crate::prelude::*;
 
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             42.must().have_display_value(42);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(42), has_display_value("foo"));
         }
 
         #[test]

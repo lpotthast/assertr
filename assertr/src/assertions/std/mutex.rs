@@ -18,6 +18,7 @@ pub trait MutexAssertions<T, R> {
     fn is_not_locked(self) -> Self;
 
     /// Alias of [`MutexAssertions::is_not_locked`].
+    #[track_caller]
     fn is_free(self) -> Self
     where
         Self: Sized,
@@ -166,6 +167,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let mutex = Mutex::new(42);
+            assert_caller_location!(assert_that!(mutex), is_locked());
+        }
+
+        #[test]
         fn succeeds_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
@@ -225,6 +232,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let mutex = Mutex::new(42);
+            let _guard = mutex.lock().unwrap();
+            assert_caller_location!(assert_that!(mutex), is_not_locked());
+        }
+
+        #[test]
         fn succeeds_when_not_locked() {
             let mutex = Mutex::new(42);
             assert_that!(mutex).is_not_locked();
@@ -257,18 +271,23 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_not_locked`. Only the fluent name is pinned here. The behavior is covered by
-    /// that module.
+    /// Synonym of `is_not_locked`. The fluent name and caller location are pinned here. The
+    /// behavior is covered by that module.
     mod is_free {
-        #[cfg(feature = "fluent")]
         use crate::prelude::*;
-        #[cfg(feature = "fluent")]
         use std::sync::Mutex;
 
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Mutex::new(42).must().be_free();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let lock = Mutex::new(42);
+            let _guard = lock.lock().unwrap();
+            assert_caller_location!(assert_that!(lock), is_free());
         }
     }
 
@@ -281,6 +300,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             super::poisoned_mutex().must().be_poisoned();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that_owned!(Mutex::new(42)), is_poisoned());
         }
 
         #[test]
@@ -315,6 +339,14 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Mutex::new(42).must().not_be_poisoned();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!(super::poisoned_mutex()),
+                is_not_poisoned()
+            );
         }
 
         #[test]

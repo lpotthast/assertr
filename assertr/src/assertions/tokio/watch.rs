@@ -136,6 +136,17 @@ mod tests {
             rx.must().have_current_value(Person { name: "bob".into() });
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (_tx, rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            assert_caller_location!(
+                assert_that!(rx),
+                has_current_value(Person {
+                    name: "alice".into(),
+                })
+            );
+        }
+
         #[tokio::test]
         async fn succeeds_when_equal() {
             let (tx, rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
@@ -188,6 +199,13 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_changed();
             rx.must().have_changed();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            rx.mark_unchanged();
+            assert_caller_location!(assert_that!(rx), has_changed());
         }
 
         #[tokio::test]
@@ -243,6 +261,13 @@ mod tests {
             let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
             rx.mark_unchanged();
             rx.must().not_have_changed();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            rx.mark_changed();
+            assert_caller_location!(assert_that!(rx), has_not_changed());
         }
 
         #[tokio::test]

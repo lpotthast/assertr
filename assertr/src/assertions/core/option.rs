@@ -175,6 +175,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Option::<i32>::None), is_some());
+        }
+
+        #[test]
         fn succeeds_when_some_and_retains_the_subject() {
             assert_that!(Option::<i32>::Some(42))
                 .is_some()
@@ -237,6 +242,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Option::<i32>::None), get_some());
+        }
+
+        #[test]
         fn extracts_the_borrowed_inner_value() {
             let option = Some(String::from("value"));
 
@@ -285,6 +295,14 @@ mod tests {
             Option::<i32>::Some(42).must().be_some_satisfying(|some| {
                 some.is_equal_to(42);
             });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Option::<i32>::None),
+                is_some_satisfying(|_| {})
+            );
         }
 
         #[test]
@@ -405,6 +423,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Option::<i32>::None.must().be_none();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Option::<i32>::Some(42)), is_none());
         }
 
         #[test]

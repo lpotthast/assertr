@@ -339,6 +339,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1, 2, 3].as_slice()), contains(4));
+        }
+
+        #[test]
         fn succeeds_when_value_is_present() {
             assert_that!([1, 2, 3].as_slice()).contains(2);
         }
@@ -398,6 +403,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2, 3].as_slice()),
+                contains_matching(crate::matchers::predicate(|it: &i32| *it > 7))
+            );
+        }
+
+        #[test]
         fn succeeds_when_an_element_matches() {
             assert_that!([1, 2, 3].as_slice())
                 .contains_matching(crate::matchers::predicate(|it: &i32| *it % 2 == 0));
@@ -444,6 +457,16 @@ mod tests {
             [1, 2, 3].as_slice().must().contain_satisfying(|it| {
                 it.is_equal_to(2);
             });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2].as_slice()),
+                contains_satisfying(|it| {
+                    it.is_equal_to(7);
+                })
+            );
         }
 
         #[test]
@@ -514,6 +537,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1, 2].as_slice()), contains_all([1, 42]));
+        }
+
+        #[test]
         fn succeeds_when_all_expected_values_are_present() {
             assert_that!([1, 2, 3].as_slice()).contains_all([1, 3]);
         }
@@ -581,6 +609,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2, 3].as_slice()),
+                does_not_contain_matching(crate::matchers::predicate(|it: &i32| *it % 2 == 1))
+            );
+        }
+
+        #[test]
         fn succeeds_when_no_element_matches() {
             assert_that!([1, 2, 3].as_slice())
                 .does_not_contain_matching(crate::matchers::predicate(|it: &i32| *it > 7));
@@ -624,6 +660,16 @@ mod tests {
             [1, 2, 3].as_slice().must().not_contain_satisfying(|it| {
                 it.is_equal_to(7);
             });
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2, 3].as_slice()),
+                does_not_contain_satisfying(|it| {
+                    it.is_greater_than(1);
+                })
+            );
         }
 
         #[test]
@@ -671,6 +717,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             [1, 2, 3].as_slice().must().not_contain(4);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1, 2, 3].as_slice()), does_not_contain(2));
         }
 
         #[test]
@@ -760,6 +811,14 @@ mod tests {
                 .as_slice()
                 .must()
                 .contain_exactly_in_any_order([2, 3, 1]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1].as_slice()),
+                contains_exactly_in_any_order([1, 1])
+            );
         }
 
         #[test]
@@ -859,6 +918,14 @@ mod tests {
                     ]
                     .as_slice(),
                 ));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1]),
+                contains_exactly_in_any_order_matching([crate::matchers::equal_to(2)])
+            );
         }
 
         #[test]
@@ -1011,6 +1078,16 @@ mod tests {
                         it.is_equal_to(1);
                     },
                 ]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1]),
+                contains_exactly_in_any_order_satisfying([|it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(2);
+                }])
+            );
         }
 
         #[test]

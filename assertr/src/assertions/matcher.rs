@@ -95,6 +95,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1), matches(equal_to(2)));
+        }
+
+        #[test]
         fn trait_does_not_require_a_renderer() {
             crate::test_support::assert_trait_impl!(
                 AssertThat<'static, (), Panic, crate::test_support::NoRenderer>
@@ -143,6 +148,11 @@ mod tests {
         #[test]
         fn fluent_alias_is_as_expected() {
             1.must().not_match(equal_to(2));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1), does_not_match(equal_to(1)));
         }
 
         #[test]

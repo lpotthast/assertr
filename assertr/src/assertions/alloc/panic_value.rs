@@ -98,6 +98,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let value = crate::PanicValue(alloc::boxed::Box::new(1_i32));
+            assert_caller_location!(assert_that!(value), is_of_type::<u8>());
+        }
+
+        #[test]
         fn checks_the_type_without_extracting_in_both_modes() {
             let value: crate::PanicValue = crate::PanicValue(Box::new("foo"));
             assert_that!(value)
@@ -162,6 +168,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let value = crate::PanicValue(alloc::boxed::Box::new(1_i32));
+            assert_caller_location!(assert_that!(value), has_type::<u8>());
+        }
+
+        #[test]
         fn succeeds_when_type_matches() {
             let actual = PanicValue(Box::new(String::from("foo")));
 
@@ -208,6 +220,12 @@ mod tests {
             let actual = PanicValue(Box::new(String::from("foo")));
 
             actual.must().have_type_ref::<String>();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let value = crate::PanicValue(alloc::boxed::Box::new(1_i32));
+            assert_caller_location!(assert_that!(value), has_type_ref::<u8>());
         }
 
         #[test]

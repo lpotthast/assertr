@@ -553,6 +553,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that_owned!([1, 2, 3].into_iter()), contains(4));
+        }
+
+        #[test]
         fn succeeds_when_expected_is_contained() {
             assert_that_owned!([1, 2, 3].into_iter()).contains(2);
         }
@@ -638,6 +643,14 @@ mod tests {
                 .into_iter()
                 .must_owned()
                 .contain_matching(crate::matchers::predicate(|it: &i32| *it % 2 == 0));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_matching(crate::matchers::predicate(|it: &i32| *it > 7))
+            );
         }
 
         #[test]
@@ -740,6 +753,14 @@ mod tests {
                 .contain_satisfying(is_two);
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2].into_iter()),
+                contains_satisfying(is_seven)
+            );
+        }
+
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
@@ -812,6 +833,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                does_not_contain(2)
+            );
+        }
+
+        #[test]
         fn succeeds_when_expected_is_not_contained() {
             assert_that_owned!([1, 2, 3].into_iter()).does_not_contain(4);
         }
@@ -864,6 +893,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                does_not_contain_matching(crate::matchers::predicate(|it: &i32| *it % 2 == 0))
+            );
+        }
+
+        #[test]
         fn succeeds_when_no_element_matches() {
             assert_that_owned!([1, 2, 3].into_iter())
                 .does_not_contain_matching(crate::matchers::predicate(|it: &i32| *it > 7));
@@ -908,6 +945,14 @@ mod tests {
                 .into_iter()
                 .must_owned()
                 .not_contain_satisfying(is_seven);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                does_not_contain_satisfying(is_two)
+            );
         }
 
         fn is_two(it: AssertThat<i32, Capture>) {
@@ -959,6 +1004,14 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             [1, 2, 3].into_iter().must_owned().start_with([1, 2]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                starts_with([1, 9])
+            );
         }
 
         #[test]
@@ -1059,6 +1112,14 @@ mod tests {
                 .start_with_matching(crate::matchers::predicate_list([is_one, is_two]));
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                starts_with_matching(crate::matchers::predicate_list([is_one, is_nine]))
+            );
+        }
+
         fn is_one(value: &i32) -> bool {
             *value == 1
         }
@@ -1126,6 +1187,14 @@ mod tests {
                 .start_with_satisfying([is_one]);
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                starts_with_satisfying([is_one, is_nine])
+            );
+        }
+
         fn is_one(it: AssertThat<i32, Capture>) {
             it.is_equal_to(1);
         }
@@ -1174,6 +1243,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             [1, 2, 3].into_iter().must_owned().end_with([2, 3]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that_owned!([1, 2, 3].into_iter()), ends_with([2, 9]));
         }
 
         #[test]
@@ -1276,6 +1350,14 @@ mod tests {
                 .end_with_matching(crate::matchers::predicate_list([is_two, is_three]));
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                ends_with_matching(crate::matchers::predicate_list([is_two, is_nine]))
+            );
+        }
+
         fn is_two(value: &i32) -> bool {
             *value == 2
         }
@@ -1332,6 +1414,14 @@ mod tests {
                 .into_iter()
                 .must_owned()
                 .end_with_satisfying([is_two, is_three]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                ends_with_satisfying([is_two, is_nine])
+            );
         }
 
         fn is_two(it: AssertThat<i32, Capture>) {
@@ -1407,6 +1497,14 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_contiguous([2, 9])
+            );
+        }
+
+        #[test]
         fn succeeds_when_a_contiguous_match_exists() {
             assert_that_owned!([1, 2, 3].into_iter()).contains_contiguous([2, 3]);
         }
@@ -1465,6 +1563,14 @@ mod tests {
                 .into_iter()
                 .must_owned()
                 .contain_contiguous_matching(crate::matchers::predicate_list([is_one, is_two]));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_contiguous_matching(crate::matchers::predicate_list([is_two, is_nine,]))
+            );
         }
 
         fn is_one(value: &i32) -> bool {
@@ -1538,6 +1644,14 @@ mod tests {
                 .contain_contiguous_satisfying([is_two, is_three]);
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_contiguous_satisfying([is_two, is_nine])
+            );
+        }
+
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
@@ -1594,6 +1708,14 @@ mod tests {
                 .into_iter()
                 .must_owned()
                 .contain_exactly([1, 2, 3]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_exactly([1, 2])
+            );
         }
 
         #[test]
@@ -1718,6 +1840,16 @@ mod tests {
             );
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_exactly_matching(crate::matchers::predicate_list([
+                    is_one, is_nine, is_three,
+                ]))
+            );
+        }
+
         fn is_one(value: &i32) -> bool {
             *value == 1
         }
@@ -1792,6 +1924,14 @@ mod tests {
                 .into_iter()
                 .must_owned()
                 .contain_exactly_satisfying([is_one, is_two]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2].into_iter()),
+                contains_exactly_satisfying([is_one, is_nine])
+            );
         }
 
         fn is_one(it: AssertThat<i32, Capture>) {
@@ -1877,6 +2017,14 @@ mod tests {
                 .into_iter()
                 .must_owned()
                 .contain_exactly_in_any_order([1, 2, 1]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_exactly_in_any_order([1, 2, 9])
+            );
         }
 
         #[test]
@@ -1976,6 +2124,16 @@ mod tests {
                 ]));
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_exactly_in_any_order_matching(crate::matchers::predicate_list([
+                    is_one, is_two, is_nine,
+                ]))
+            );
+        }
+
         fn is_at_most_two(value: &i32) -> bool {
             *value <= 2
         }
@@ -2059,6 +2217,14 @@ mod tests {
                 .into_iter()
                 .must_owned()
                 .contain_exactly_in_any_order_satisfying([positive, negative]);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, -1, 2].into_iter()),
+                contains_exactly_in_any_order_satisfying([positive, positive, positive])
+            );
         }
 
         fn positive(it: AssertThat<i32, Capture>) {

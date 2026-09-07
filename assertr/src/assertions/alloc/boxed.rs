@@ -175,6 +175,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let value: alloc::boxed::Box<dyn core::any::Any> = alloc::boxed::Box::new(1_i32);
+            assert_caller_location!(assert_that!(value), is_of_type::<u8>());
+        }
+
+        #[test]
         fn checks_the_type_without_extracting_in_both_modes() {
             let value: Box<dyn core::any::Any> = Box::new("foo");
             assert_that!(value)
@@ -239,6 +245,12 @@ mod tests {
             let boxed_any: Box<dyn Any> = Box::new("foo");
 
             boxed_any.must().have_type::<&str>();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let value: alloc::boxed::Box<dyn core::any::Any> = alloc::boxed::Box::new(1_i32);
+            assert_caller_location!(assert_that!(value), has_type::<u8>());
         }
 
         #[test]
@@ -349,6 +361,12 @@ mod tests {
             let actual: Box<dyn Any> = Box::new(String::from("foo"));
 
             actual.must().have_type_ref::<String>();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let value: alloc::boxed::Box<dyn core::any::Any> = alloc::boxed::Box::new(1_i32);
+            assert_caller_location!(assert_that!(value), has_type_ref::<u8>());
         }
 
         #[test]

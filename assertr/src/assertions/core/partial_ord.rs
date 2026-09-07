@@ -153,6 +153,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(f32::NAN), is_less_than(0.0));
+        }
+
+        #[test]
         fn succeeds_when_less() {
             assert_that!(3).is_less_than(4);
             assert_that!(3).is_less_than(4);
@@ -191,6 +196,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(f32::NAN), is_greater_than(0.0));
+        }
+
+        #[test]
         fn succeeds_when_greater() {
             assert_that!(7).is_greater_than(6);
             assert_that!(7).is_greater_than(6);
@@ -226,6 +236,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             3.must().be_less_or_equal_to(3);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(f32::NAN), is_less_or_equal_to(0.0));
         }
 
         #[test]
@@ -270,6 +285,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             7.must().be_greater_or_equal_to(7);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(f32::NAN), is_greater_or_equal_to(0.0));
         }
 
         #[test]

@@ -168,6 +168,16 @@ mod tests {
             Some(42).must().be_matching(pattern!(Some(42)));
         }
 
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Result::<(), TestError>::Err(
+                    TestError::MissingTokenQueryParam
+                )),
+                is_matching(pattern!(Err(TestError::MissingQueryParams)))
+            );
+        }
+
         #[derive(Debug)]
         enum TestError {
             MissingQueryParams,
@@ -317,6 +327,14 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             Some(42).must().not_be_matching(pattern!(Some(43)));
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(Result::<(), TestError>::Err(TestError::MissingQueryParams)),
+                is_not_matching(pattern!(Err(TestError::MissingQueryParams)))
+            );
         }
 
         #[derive(Debug)]

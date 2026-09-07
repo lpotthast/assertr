@@ -328,6 +328,11 @@ mod tests {
             }
 
             #[test]
+            fn caller_location_is_as_expected() {
+                assert_caller_location!(assert_that_owned!(|| 42), panics());
+            }
+
+            #[test]
             fn succeeds_when_panic_occurs() {
                 assert_that_owned!(|| unimplemented!())
                     .panics()
@@ -395,6 +400,14 @@ mod tests {
             #[cfg(feature = "fluent")]
             fn fluent_alias_is_as_expected() {
                 (|| 42).must_owned().not_panic();
+            }
+
+            #[test]
+            fn caller_location_is_as_expected() {
+                assert_caller_location!(
+                    assert_that_owned!(|| panic!("subject panic")),
+                    does_not_panic()
+                );
             }
 
             #[test]
@@ -528,6 +541,11 @@ mod tests {
                 (async || unimplemented!()).must_owned().panic_async().await;
             }
 
+            #[test]
+            fn caller_location_is_as_expected() {
+                assert_caller_location!(async assert_that_owned!(|| async {}), panics_async());
+            }
+
             #[tokio::test]
             async fn succeeds_when_panic_occurs() {
                 assert_that_owned!(async || unimplemented!())
@@ -641,6 +659,11 @@ mod tests {
             #[cfg(feature = "fluent")]
             async fn fluent_alias_is_as_expected() {
                 (async || 42).must_owned().not_panic_async().await;
+            }
+
+            #[test]
+            fn caller_location_is_as_expected() {
+                assert_caller_location!(async assert_that_owned!(|| async { panic!("subject panic") }), does_not_panic_async());
             }
 
             #[tokio::test]

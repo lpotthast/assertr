@@ -66,8 +66,9 @@ features, and API details.
   Hand-write diagnostics that name the negation and preserve its evidence. There is no generic `.not()`. Allow at most
   one antonym synonym per positive assertion.
 - Give every assertion method its own test submodule. When `fluent` applies, the first test is
-  `fluent_alias_is_as_expected` with one passing fluent call. A pure delegating synonym gets only this alias pin and
-  does not duplicate behavior tests.
+  `fluent_alias_is_as_expected` with one passing fluent call. Follow it with `caller_location_is_as_expected`, using
+  `assert_caller_location!` and one failing call, without a `fluent` gate. The macro compares the exact caller location
+  without fixed line numbers. A pure delegating synonym gets these two pins and does not duplicate behavior tests.
 
 ## Documentation and dependencies
 

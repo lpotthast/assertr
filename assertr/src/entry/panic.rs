@@ -3,7 +3,7 @@ use core::any::Any;
 #[cfg(feature = "std")]
 use core::future::Future;
 
-#[cfg(any(feature = "std", all(test, not(feature = "std"))))]
+#[cfg(feature = "std")]
 use crate::{AssertThat, actual::Actual, mode::Panic};
 
 /// A captured panic payload used as the subject of panic-value assertions.
@@ -50,29 +50,6 @@ where
         AssertThat::new_panicking(Actual::Owned(fun)),
         core::panic::Location::caller(),
     )
-}
-
-#[cfg(all(test, not(feature = "std")))]
-pub(crate) mod no_std_test_support {
-    use super::{Actual, AssertThat, Panic, PanicValue};
-    use core::panic::AssertUnwindSafe;
-
-    /// Captures a panic for unit tests while the library itself is built without its `std` feature.
-    ///
-    /// The test harness is hosted and can therefore use `std`. This helper is crate-private and is
-    /// never present in a production build.
-    #[track_caller]
-    pub(crate) fn assert_that_panic_by<'t, R>(
-        fun: impl FnOnce() -> R + 't,
-    ) -> AssertThat<'t, PanicValue, Panic> {
-        let result = std::panic::catch_unwind(AssertUnwindSafe(fun));
-        let result = std::panic::catch_unwind(AssertUnwindSafe(move || result.map(drop)));
-        let panic = result
-            .flatten()
-            .expect_err("expected the tested function to panic");
-
-        AssertThat::new_panicking(Actual::Owned(PanicValue(panic)))
-    }
 }
 
 #[cfg(all(test, feature = "std"))]

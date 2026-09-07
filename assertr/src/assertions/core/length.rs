@@ -114,6 +114,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1]), is_empty());
+        }
+
+        #[test]
         fn succeeds_when_empty() {
             let arr: [i32; 0] = [];
             assert_that!(arr).is_empty();
@@ -437,6 +442,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(VecDeque::<i32>::new()), is_not_empty());
+        }
+
+        #[test]
         fn succeeds_when_not_empty() {
             assert_that!(VecDeque::from([42])).is_not_empty();
         }
@@ -578,6 +588,11 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let slice: &[i32] = [1, 2, 3].as_slice();
             slice.must().have_length(3);
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1].as_slice()), has_length(2));
         }
 
         #[test]

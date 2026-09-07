@@ -8,8 +8,6 @@ mod type_subject;
 #[cfg(feature = "fluent")]
 pub use fluent::{IntoAssertContext, IntoOwnedAssertContext};
 pub use panic::PanicValue;
-#[cfg(all(test, not(feature = "std")))]
-pub(crate) use panic::no_std_test_support::assert_that_panic_by;
 #[cfg(feature = "std")]
 pub use panic::{assert_that_panic_by, assert_that_panic_by_async};
 pub use type_subject::{Type, assert_that_type};

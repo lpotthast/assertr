@@ -153,6 +153,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!('a'), is_equal_to_ignoring_ascii_case('B'));
+        }
+
+        #[test]
         fn succeeds_when_equal_ignoring_ascii_case() {
             assert_that!('a').is_equal_to_ignoring_ascii_case('A');
         }
@@ -190,6 +195,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!('A'), is_lowercase());
+        }
+
+        #[test]
         fn succeeds_when_lowercase() {
             assert_that!('a').is_lowercase();
         }
@@ -218,6 +228,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             'A'.must().be_uppercase();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!('a'), is_uppercase());
         }
 
         #[test]
@@ -252,6 +267,11 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!('A'), is_ascii_lowercase());
+        }
+
+        #[test]
         fn succeeds_when_ascii_lowercase() {
             assert_that!('a').is_ascii_lowercase();
         }
@@ -280,6 +300,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             'A'.must().be_ascii_uppercase();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!('a'), is_ascii_uppercase());
         }
 
         #[test]

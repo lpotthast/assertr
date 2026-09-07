@@ -113,6 +113,12 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let duration: Span = 2.hours().minutes(30);
+            assert_caller_location!(assert_that!(duration), is_zero());
+        }
+
+        #[test]
         fn succeeds_when_zero() {
             assert_that!(Span::new()).is_zero();
         }
@@ -144,6 +150,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             (-2).hours().minutes(30).must().be_negative();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(0.seconds()), is_negative());
         }
 
         #[test]
@@ -197,6 +208,11 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             2.hours().minutes(30).must().be_positive();
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(0.seconds()), is_positive());
         }
 
         #[test]

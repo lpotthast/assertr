@@ -116,6 +116,13 @@ mod tests {
         }
 
         #[test]
+        fn caller_location_is_as_expected() {
+            let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
+            let tz = TimeZone::get("Europe/Berlin").expect("valid");
+            assert_caller_location!(assert_that!(zdt), is_in_time_zone(tz));
+        }
+
+        #[test]
         fn renders_original_zone_evidence() {
             use indoc::formatdoc;
 
@@ -267,6 +274,12 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
             zdt.must().be_in_time_zone_named("America/New_York");
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let zdt: Zoned = "2024-06-19 15:22[America/New_York]".parse().expect("valid");
+            assert_caller_location!(assert_that!(zdt), is_in_time_zone_named("Europe/Berlin"));
         }
 
         #[test]
