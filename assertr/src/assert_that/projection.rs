@@ -76,14 +76,23 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
 
     /// Derives a child assertion over an owned projection of the subject.
     ///
-    /// The mapper borrows the subject and returns an owned value. Use [`AssertThat::derive`] when
-    /// the projection borrows from the subject. A returned reference to an unsized target becomes
-    /// the child subject itself, as with [`AssertThat::satisfies_ref`].
+    /// The mapper borrows the parent and returns the child value. The result is stored as the
+    /// child subject, including when it is a reference to an unsized target. Use [`Self::derive`]
+    /// to borrow a sized field. Neither the parent nor the child value needs to implement `Clone`.
     ///
-    /// Failures and assertion counts propagate to the root. Use the `derive_*` methods when the
-    /// child must be stored or chained. Use `satisfies_*` to return to the original subject after
-    /// asserting on the projection. A child starts a new diagnostic subject and therefore does not
-    /// inherit the parent's subject name or source expression.
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// let name = String::from("Ada");
+    /// let name = assert_that!(name);
+    /// name.derive_owned(String::len).is_equal_to(3);
+    /// name.derive_owned(String::as_str).starts_with("A");
+    /// ```
+    ///
+    /// The child inherits diagnostic settings and propagates failures and assertion counts as
+    /// described in [`Self::derive`]. Projection itself does not count as an assertion.
+    /// Use [`Self::satisfies_owned`] to check a projection in a closure and return the original
+    /// chain.
     #[must_use]
     pub fn derive_owned<'u, U: 'u>(
         &'t self,
@@ -101,22 +110,49 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
 
     /// Derives a child assertion over a borrowed projection of the subject.
     ///
-    /// The child is `AssertThat<U>`, not `AssertThat<&U>`, so assertions implemented for `U` remain
-    /// available. Use [`AssertThat::derive_owned`] for a computed or cloned projection. Failures
-    /// and assertion counts propagate to the root.
-    ///
-    /// Use this when you want to keep or chain the child assertion. Use [`Self::satisfies`] to
-    /// check a projection and continue with the original subject. Both preserve the active
-    /// renderer and inherit the root's diagnostic settings. The child starts with no subject name
-    /// or source expression of its own.
+    /// The mapper returns `&U` and the child is `AssertThat<U>`, keeping assertions implemented
+    /// for `U` available. The parent remains usable, so check several fields in separate chains:
     ///
     /// ```
     /// use assertr::prelude::*;
     ///
     /// let person = (String::from("Ada"), 36);
-    /// let root = assert_that!(person);
-    /// root.derive(|person| &person.0).starts_with("A").has_length(3);
+    /// let person = assert_that!(person);
+    /// person.derive(|p| &p.0).starts_with("A").has_length(3);
+    /// person.derive(|p| &p.1).is_greater_or_equal_to(18);
     /// ```
+    ///
+    /// The child clones the active renderer and inherits detail messages, rendering budget,
+    /// location settings, and panic presentation. Its subject name and source expression start
+    /// empty. Failures and assertion counts propagate to the parent. Projection itself does not
+    /// count as an assertion, and neither the parent nor its field needs to implement `Clone`.
+    ///
+    /// In [`Self::capture`], return the parent after checking its children. A child borrows the
+    /// parent and cannot replace it as the closure's returned chain:
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// let failures = assert_that!((String::from("Ada"), 16)).capture(|person| {
+    ///     person.derive(|p| &p.0).starts_with("B");
+    ///     person.derive(|p| &p.1).is_greater_or_equal_to(18);
+    ///     person
+    /// });
+    /// assert_that!(failures).has_length(2);
+    /// ```
+    ///
+    /// The projection methods differ in what the mapper returns:
+    ///
+    /// | Method | Mapper returns |
+    /// |---|---|
+    /// | [`derive`](Self::derive) | `&U`, where `U: Sized`. |
+    /// | [`derive_owned`](Self::derive_owned) | A computed `U`, or a reference such as `&str` or `&[T]`. |
+    /// | [`derive_async`](Self::derive_async) | A future producing the child value. |
+    ///
+    /// Use [`Self::derive_owned`] for computed values, or for references to unsized targets such
+    /// as `str` and `[T]`. Use [`Self::satisfies`] to check a projection in a closure and return
+    /// the original chain. With the `fluent` feature, this method keeps the spelling `derive`, as
+    /// in `person.must().derive(|p| &p.1).be_greater_or_equal_to(18)`.
     #[must_use]
     pub fn derive<'u, U>(&'t self, mapper: impl FnOnce(&'t T) -> &'u U) -> AssertThat<'u, U, M, R>
     where
@@ -129,8 +165,24 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         }
     }
 
-    /// The async variant of [`AssertThat::derive_owned`]. The mapper's future produces the owned
-    /// projection. Async mappers cannot return a projection borrowing from their input.
+    /// The async variant of [`Self::derive_owned`].
+    ///
+    /// The mapper borrows the parent and returns a future producing the child value. A returned
+    /// reference becomes the child subject itself, as with [`Self::derive_owned`]. Await the
+    /// projection before chaining assertions:
+    ///
+    /// ```
+    /// # async fn example() {
+    /// use assertr::prelude::*;
+    ///
+    /// let person = (String::from("Ada"), 36);
+    /// let person = assert_that!(person);
+    /// person.derive_async(|p| async move { p.0.len() }).await.is_equal_to(3);
+    /// # }
+    /// ```
+    ///
+    /// The child inherits diagnostic settings and propagates failures and assertion counts as
+    /// described in [`Self::derive`]. Projection itself does not count as an assertion.
     #[must_use]
     pub async fn derive_async<'u, U: 'u, Fut: Future<Output = U>>(
         &'t self,
@@ -193,10 +245,11 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///     });
     /// ```
     ///
-    /// Use [`Self::derive`] or [`Self::derive_owned`] to keep the child chain instead. To express
-    /// a reusable expectation across several fields or nested collections, see
-    /// [structural matching](mod@crate::matchers#structural-syntax). A domain-specific method can
-    /// wrap these projections as a [custom assertion](crate#custom-assertions).
+    /// Use [`Self::derive`] or [`Self::derive_owned`] to project first and then chain assertions
+    /// directly on the child. To express a reusable expectation across several fields or nested
+    /// collections, see [structural matching](mod@crate::matchers#structural-syntax). A
+    /// domain-specific method can wrap these projections as a [custom
+    /// assertion](crate#custom-assertions).
     #[allow(clippy::return_self_not_must_use)]
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where

@@ -46,12 +46,11 @@ fn capture_returns_structured_failures_with_separated_fields() {
             element
                 .derive(|value| &value.subject_type_name)
                 .is_equal_to(core::any::type_name::<i32>());
+            element.derive_owned(AssertionFailure::facts).is_empty();
             element
-                .derive_owned(|value| value.facts.as_slice())
-                .is_empty();
-            element
-                .derive_owned(|value| value.messages.as_slice())
+                .derive_owned(AssertionFailure::messages)
                 .contains_exactly(["user context"]);
+            element.derive_owned(AssertionFailure::constraint).is_none();
             element
                 .derive_owned(|value| text_opt(value.expected.as_ref()))
                 .is_equal_to(Some("43"));
@@ -357,17 +356,17 @@ mod fields {
             .capture(|it| it.is_equal_to(43));
         let failure = &failures[0];
 
-        assert_that!(failure.kind).is_equal_to(FailureKind::Equality);
-        assert_that!(text_opt(failure.actual.as_ref())).is_equal_to(Some("42"));
-        assert_that!(failure.actual.as_ref().unwrap().type_name)
+        assert_that!(failure.kind()).is_equal_to(FailureKind::Equality);
+        assert_that!(text_opt(failure.actual())).is_equal_to(Some("42"));
+        assert_that!(failure.actual().unwrap().type_name())
             .is_equal_to(Some(core::any::type_name::<i32>()));
         assert_that!(failure.actual.as_ref().unwrap().hint).is_equal_to(TypeHint::Short);
         assert_that!(failure.actual.as_ref().unwrap().shows_type_hint).is_false();
-        assert_that!(failure.relation.as_deref()).is_none();
-        assert_that!(text_opt(failure.expected.as_ref())).is_equal_to(Some("43"));
-        assert_that!(text_opt(failure.unexpected.as_ref())).is_none();
-        assert_that!(failure.facts.as_slice()).is_empty();
-        assert_that!(failure.children.as_slice()).is_empty();
+        assert_that!(failure.relation()).is_none();
+        assert_that!(text_opt(failure.expected())).is_equal_to(Some("43"));
+        assert_that!(text_opt(failure.unexpected())).is_none();
+        assert_that!(failure.facts()).is_empty();
+        assert_that!(failure.children()).is_empty();
         assert_that!(ToHumanReadableText.render(failure))
             .contains("Expected: 43\n\n  Actual: 42\n");
     }
@@ -379,9 +378,9 @@ mod fields {
             .capture(|it| it.is_not_equal_to(42));
         let failure = &failures[0];
 
-        assert_that!(failure.relation.as_deref()).is_equal_to(Some("is equal to"));
-        assert_that!(text_opt(failure.expected.as_ref())).is_none();
-        assert_that!(text_opt(failure.unexpected.as_ref())).is_equal_to(Some("42"));
+        assert_that!(failure.relation()).is_equal_to(Some("is equal to"));
+        assert_that!(text_opt(failure.expected())).is_none();
+        assert_that!(text_opt(failure.unexpected())).is_equal_to(Some("42"));
         assert_that!(ToHumanReadableText.render(failure))
             .contains("Actual: 42\n\nis equal to\n\nUnexpected: 42\n");
     }
@@ -689,7 +688,7 @@ mod fields {
         assert_that!(failure.children.as_slice()).contains_exactly_satisfying([
             |element: AssertThat<AssertionFailure, Capture>| {
                 element
-                    .derive(|value| &value.kind)
+                    .derive_owned(AssertionFailure::kind)
                     .is_equal_to(FailureKind::Equality);
                 element
                     .derive_owned(|value| text_opt(value.actual.as_ref()))
@@ -779,9 +778,14 @@ mod fields {
         assert_that!(failure.kind).is_equal_to(FailureKind::Other);
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not hold"));
         assert_that!(ToHumanReadableText.render(failure)).contains("does not hold\n");
-        assert_that!(text_opt(failure.actual.as_ref())).is_none();
-        assert_that!(text_opt(failure.expected.as_ref())).is_none();
-        assert_that!(failure.facts.as_slice()).contains_exactly([Fact::note("some evidence")]);
+        assert_that!(text_opt(failure.actual())).is_none();
+        assert_that!(text_opt(failure.expected())).is_none();
+        assert_that!(failure.facts()).contains_exactly([Fact::note("some evidence")]);
+        let fact = assert_that!(failure.facts()[0]);
+        fact.derive_owned(Fact::label).is_empty();
+        fact.derive(Fact::value)
+            .derive_owned(Rendered::type_name)
+            .is_none();
     }
 
     #[derive(PartialEq)]
@@ -867,7 +871,7 @@ mod matcher_metadata {
                     .derive_owned(|value| value.location.unwrap().file())
                     .ends_with("structured_failures.rs");
                 element
-                    .derive(|value| &value.children)
+                    .derive_owned(AssertionFailure::children)
                     .contains_exactly_satisfying([false, true].map(|has_constraint| {
                         move |child: AssertThat<AssertionFailure, Capture>| {
                             child

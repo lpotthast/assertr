@@ -5,6 +5,49 @@ extern crate alloc;
 use assertr::matchers::{entry_matchers, predicate};
 use assertr::prelude::*;
 
+#[allow(dead_code)]
+fn projections_compile_without_renderer_support() {
+    struct Field {
+        byte: u8,
+    }
+    #[derive(Clone)]
+    struct NoRenderer;
+
+    let subject = (Field { byte: 1 }, Field { byte: 2 });
+    let root = assert_that!(subject).with_renderer(NoRenderer);
+    let child: AssertThat<Field, Panic, NoRenderer> = root.derive(|subject| &subject.0);
+    child.is_same_instance_as(&subject.0);
+    root.derive(|subject| &subject.1)
+        .is_same_instance_as(&subject.1);
+    let computed: AssertThat<Field, Panic, NoRenderer> = root.derive_owned(|_| Field { byte: 3 });
+    assert_eq!(computed.actual().byte, 3);
+    // Type-check the async projection on embedded targets without requiring an executor.
+    let projection = root.derive_async(|_| core::future::ready(Field { byte: 4 }));
+    drop(projection);
+
+    let failures = assert_that_owned!(subject)
+        .with_renderer(NoRenderer)
+        .capture(|root| {
+            root.derive(|subject| &subject.0)
+                .is_same_instance_as(&root.actual().0);
+            root
+        });
+    assert_that!(failures).is_empty();
+
+    let fact = assertr::Fact::note("evidence");
+    assert_that!(fact)
+        .with_renderer(NoRenderer)
+        .derive(assertr::Fact::value)
+        .derive(assertr::renderer::Rendered::body)
+        .is_same_instance_as(fact.value().body());
+}
+
+#[cfg(test)]
+#[test]
+fn projections_run_without_std() {
+    projections_compile_without_renderer_support();
+}
+
 #[cfg(feature = "num")]
 #[allow(dead_code)]
 fn numeric_assertions_compile_without_std() {

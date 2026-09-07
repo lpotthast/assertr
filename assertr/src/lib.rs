@@ -181,9 +181,10 @@
 //! These guides build on the quick start. Each lives with the API it explains and includes examples
 //! you can adapt:
 //!
-//! - [Assert on part of a subject](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.satisfies):
-//!   check a field, a computed value, or a borrowed slice, then continue the original assertion
-//!   chain.
+//! - [Assert on part of a subject](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.derive):
+//!   project a field with `derive`, then chain assertions on it. Check several fields from the same
+//!   parent, use `derive_owned` for computed values and borrowed slices, or await `derive_async`
+//!   projections.
 //! - [Match selected fields and nested values](https://docs.rs/assertr/latest/assertr/matchers/index.html):
 //!   use `partial!` with plain values, selected matcher constraints, or existing assertions through
 //!   `satisfying`. Nest expectations through structs, collections, and maps. Only `partial!`

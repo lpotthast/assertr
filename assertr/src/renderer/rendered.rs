@@ -89,6 +89,18 @@ impl Rendered {
             .expect("writing a rendered value to a String cannot fail");
         output
     }
+
+    /// Borrows the structural body of this diagnostic value.
+    #[must_use]
+    pub const fn body(&self) -> &RenderedBody {
+        &self.body
+    }
+
+    /// Returns the canonical Rust type name, or `None` for verbatim diagnostic text.
+    #[must_use]
+    pub const fn type_name(&self) -> Option<&'static str> {
+        self.type_name
+    }
 }
 
 /// The structural body of a [`Rendered`] diagnostic value.

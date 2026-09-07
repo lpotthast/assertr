@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Fact`, `Rendered`, and `AssertionFailure` provide read-only accessors for diagnostic values and evidence,
+  usable as function arguments to `derive` and `derive_owned`.
 - Composable expected-side matchers through `matches` and `does_not_match`, including predicates, assertion closures,
   conditions, reusable `pattern!` matchers, and nested positional, unordered, or keyed expectations.
   Runtime matchers and collection macros work in `no_std` with `alloc` without optional features.

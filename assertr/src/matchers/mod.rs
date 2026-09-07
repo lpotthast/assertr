@@ -208,8 +208,10 @@
 //!
 //! ## Projections and renderers
 //!
-//! Use [`AssertThat::satisfies`](crate::AssertThat::satisfies) to assert on a projection and then
-//! continue the original chain. Use `partial!` to describe several selected fields together or
+//! Use [`AssertThat::derive`](crate::AssertThat::derive) to project a field and chain assertions on
+//! it. The parent remains usable for other field checks.
+//! [`AssertThat::satisfies`](crate::AssertThat::satisfies) checks a projection in a closure and
+//! returns the original chain. Use `partial!` to describe several selected fields together or
 //! package them as an expectation that can be reused or nested in other matchers. The free function
 //! [`satisfying`] adapts assertion methods into a matcher for use within such an expectation.
 //!

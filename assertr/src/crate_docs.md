@@ -4,9 +4,12 @@ An [`AssertThat<T>`](AssertThat) holds an owned or borrowed [`Actual<T>`](Actual
 selected by `T`, independent of ownership. Borrowing entry points normalize sized references to
 their pointee. Owned references and unsized targets remain reference-typed subjects.
 
-[`AssertThat::derive`] creates a child assertion for part of a subject. Its failures propagate
-to the root. The [`AssertThat::satisfies`] family asserts on a child and returns the original
-chain. Its variants cover borrowed, owned, and unsized projections.
+[`AssertThat::derive`] creates a child assertion for a borrowed field. Project first, then chain
+assertions on the child. The parent remains usable for other field checks, and child failures
+propagate to the root. Use [`AssertThat::derive_owned`] for computed values and
+[`AssertThat::derive_async`] for asynchronous projections. The [`AssertThat::satisfies`] family
+asserts on a child in a closure and returns the original chain. Its variants cover borrowed,
+owned, and unsized projections.
 
 Panic mode stops at the first failure. Capture mode collects structured [`AssertionFailure`]
 values within [`AssertThat::capture`] or the fluent `verify` entry points. A failure carries its
@@ -22,7 +25,7 @@ defaulting to [`ToHumanReadableText`](failure::adapter::ToHumanReadableText).
 ## Custom assertions
 
 Add a method such as `.is_adult()` when a domain check appears throughout your tests. For a
-single check on a field, start with [`AssertThat::satisfies`]. To describe selected fields and
+single check on a field, start with [`AssertThat::derive`]. To describe selected fields and
 nested values together, use [`partial!`](mod@matchers#structural-syntax). Its field expectations
 can use existing assertion methods through [`matchers::satisfying`], including your custom ones.
 

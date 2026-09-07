@@ -3,8 +3,11 @@
 Run `just --list` to discover repository workflows. Read the manifests, source, and rustdoc for current structure,
 features, and API details.
 
-Start with the [architecture overview](knowledge/README.md) for chain state, assertion capabilities, failure
-processing, and rendering. Keep the relevant knowledge documents current when these contracts change.
+Start with the [architecture overview](knowledge/README.md) for chain state, assertion capabilities, failure processing,
+and rendering. Keep the relevant knowledge documents current when these contracts change.
+
+Consult the [glossary](knowledge/glossary.md) before introducing terminology. Reuse existing names when their meanings
+fit.
 
 ## Working contract
 
@@ -16,19 +19,19 @@ processing, and rendering. Keep the relevant knowledge documents current when th
 
 - Record only release-notable changes. Use `## [Unreleased]` by default. If the latest dated version section has not
   been published, merge changes into that section instead.
-- Describe the net difference from the exact immediately preceding release. Never describe an intermediate committed
-  or uncommitted design. Consolidate related entries so the final behavior is stated once.
+- Describe the net difference from the exact immediately preceding release. Never describe an intermediate committed or
+  uncommitted design. Consolidate related entries so the final behavior is stated once.
 - Reassess SemVer whenever an entry changes. Prefix breaking items with `- **Breaking:**`. Adding a method to an
   existing public `*Assertions` trait is explicitly non-breaking because these traits are for method discovery, not
   downstream implementation. Removing or incompatibly changing a method remains breaking.
 - Every public export follows normal SemVer rules unless documented otherwise. Macro-only plumbing belongs in the
   unsupported `__private` module. Other internals stay `pub(crate)` in private modules. Do not publish an empty module
   merely to hold `pub(crate)` items.
-- Do not bump versions or README dependency examples during ordinary development. For a release, derive the version
-  from the changelog, move and date the entries, bump affected crates, update README versions in the landing-page
-  rustdoc in `assertr/src/lib.rs`, regenerate with `just readme`, and update changelog comparison links, then run the
-  release workflows. Keep `assertr`'s exact `assertr-macros` requirement synchronized with the macro crate because
-  generated code depends on `assertr::__private`.
+- Do not bump versions or README dependency examples during ordinary development. For a release, derive the version from
+  the changelog, move and date the entries, bump affected crates, update README versions in the landing-page rustdoc in
+  `assertr/src/lib.rs`, regenerate with `just readme`, and update changelog comparison links, then run the release
+  workflows. Keep `assertr`'s exact `assertr-macros` requirement synchronized with the macro crate because generated
+  code depends on `assertr::__private`.
 
 ## Design boundaries
 
@@ -37,8 +40,8 @@ processing, and rendering. Keep the relevant knowledge documents current when th
   `RandomAccess`. Set relations require `SetLookup`. Map iteration uses `Map`, while key queries require `MapLookup`.
   Strings use `StrAssertions` and lengths use `HasLength`. Per-type traits are only for genuinely type-specific
   behavior.
-- Presentation never grants behavior. `CollectionPresentation` and `RenderingOrder` control diagnostics only and
-  remain independent of `StableOrder`, `RandomAccess`, and `SetLookup`.
+- Presentation never grants behavior. `CollectionPresentation` and `RenderingOrder` control diagnostics only and remain
+  independent of `StableOrder`, `RandomAccess`, and `SetLookup`.
 - Custom `ValueRenderer`s render leaves. Assertr owns structural syntax. Render every diagnostic value through
   `self.render()` and its adapters so the active renderer and `RenderingBudget` apply. Never format subjects directly
   with `Debug`.
@@ -48,23 +51,23 @@ processing, and rendering. Keep the relevant knowledge documents current when th
 ## Adding assertions
 
 - Put behavior, exact diagnostic tests, and built-in adapter tests beside the generic family that owns them. Keep
-  downstream-implementor and `no_std` coverage in existing integration fixtures instead of duplicating every
-  assertion across every adapter.
-- Prefer natural assertion names. Type-changing assertions do not require a `get_` prefix. Keep checking and
-  extracting behavior distinguishable, for example `is_of_type` checks and `has_type` extracts.
+  downstream-implementor and `no_std` coverage in existing integration fixtures instead of duplicating every assertion
+  across every adapter.
+- Prefer natural assertion names. Type-changing assertions do not require a `get_` prefix. Keep checking and extracting
+  behavior distinguishable, for example `is_of_type` checks and `has_type` extracts.
 - New assertion traits use `#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]`. Follow
   `assertr-macros/src/fluent_aliases/naming.rs`. Use an explicit alias only when no rule applies, and
   `#[no_fluent_alias]` for deprecated names.
-- Keep trait implementations independent of renderer capabilities. Put renderer and `Clone` bounds on individual
-  methods in both the trait and impl. Preserve the active renderer in projections and extractions. Add a `NoRenderer`
+- Keep trait implementations independent of renderer capabilities. Put renderer and `Clone` bounds on individual methods
+  in both the trait and impl. Preserve the active renderer in projections and extractions. Add a `NoRenderer`
   compile-time regression for a new trait or capability boundary.
-- Mark assertion methods `#[track_caller]` and call `self.track_assertion()` first. A composing method whose entire
-  body delegates to tracked assertions must not track again.
+- Mark assertion methods `#[track_caller]` and call `self.track_assertion()` first. A composing method whose entire body
+  delegates to tracked assertions must not track again.
 - Every leaf assertion, built-in or downstream, raises its failure through `self.failure(FailureKind::..)` with
   `.actual(..)`, `.relation(..)`, `.expected(..)` or `.unexpected(..)`, `.fact(Fact::labelled(..))` or
-  `.fact(Fact::note(..))` (or `.facts(..)` for a group), and
-  nested `.children(..)`, then `.raise()`. Never format a failure body by hand: `Display` renders every failure from
-  its fields with one grammar. Relations are lowercase sentences without trailing periods and never embed values.
+  `.fact(Fact::note(..))` (or `.facts(..)` for a group), and nested `.children(..)`, then `.raise()`. Never format a
+  failure body by hand: `Display` renders every failure from its fields with one grammar. Relations are lowercase
+  sentences without trailing periods and never embed values.
 - Add explicit negative assertions only when commonly useful and not already represented by an existing assertion.
   Hand-write diagnostics that name the negation and preserve its evidence. There is no generic `.not()`. Allow at most
   one antonym synonym per positive assertion.
@@ -81,8 +84,8 @@ processing, and rendering. Keep the relevant knowledge documents current when th
 - Every Rust block in the landing-page source must compile as a top-level doctest with minimal features. Keep hidden
   feature guards in the rustdoc source. Keep the README as a landing page and detailed guides in the owning API's
   rustdoc. `assertr/src/crate_docs.md` is appended to the crate documentation through `include_str!`, which cargo-rdme
-  does not expand. Keep explicit documentation URLs in the landing-page source so generation needs no nightly
-  toolchain for resolving Rust item links.
+  does not expand. Keep explicit documentation URLs in the landing-page source so generation needs no nightly toolchain
+  for resolving Rust item links.
 - Use the narrowest dependency and feature set that works. Prefer small local code over a dependency used for one
   function.
 - An MSRV bump updates `rust-version` in both crate manifests, the MSRV text and badge in the landing-page rustdoc,

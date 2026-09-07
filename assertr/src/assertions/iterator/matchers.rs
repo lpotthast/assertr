@@ -318,6 +318,7 @@ pub(crate) fn unordered<S, T, L, I, M: Mode, R>(
 #[cfg(test)]
 mod tests {
     use crate::{
+        Fact,
         matchers::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult},
         prelude::*,
         renderer::{Rendered, RenderedBody},
@@ -343,28 +344,21 @@ mod tests {
     }
 
     fn assert_truncated_value(
-        value: AssertThat<Rendered, Capture>,
+        value: &AssertThat<Rendered, Capture>,
         type_name: &str,
         omitted_characters: usize,
     ) {
         value
-            .satisfies(
-                |value| &value.type_name,
-                |name| {
-                    name.is_some_satisfying(|name| {
-                        name.is_equal_to(type_name);
-                    });
-                },
-            )
-            .satisfies(
-                |value| &value.body,
-                |body| {
-                    body.is_equal_to(RenderedBody::Text {
-                        text: "cus".into(),
-                        omitted_characters,
-                    });
-                },
-            );
+            .derive_owned(Rendered::type_name)
+            .is_some_satisfying(|name| {
+                name.is_equal_to(type_name);
+            });
+        value
+            .derive(Rendered::body)
+            .is_equal_to(RenderedBody::Text {
+                text: "cus".into(),
+                omitted_characters,
+            });
     }
 
     #[test]
@@ -396,7 +390,7 @@ mod tests {
                 assert_that!(failures).contains_exactly_satisfying([
                     |failure: AssertThat<AssertionFailure, Capture>| {
                         failure
-                            .derive(|failure| &failure.constraint)
+                            .derive_owned(AssertionFailure::constraint)
                             .is_some_satisfying(|constraint| {
                                 constraint
                                     .derive(|constraint| &constraint.omitted_children)
@@ -414,7 +408,7 @@ mod tests {
                                                         .derive(|child| &child.expected)
                                                         .is_some_satisfying(|expected| {
                                                             assert_truncated_value(
-                                                                expected,
+                                                                &expected,
                                                                 "i32",
                                                                 6 + index,
                                                             );
@@ -426,14 +420,10 @@ mod tests {
                             });
                         for label in ["Consumed", "Expected length"] {
                             failure
-                                .derive(|failure| &failure.facts)
+                                .derive_owned(AssertionFailure::facts)
                                 .contains_satisfying(|fact| {
-                                    fact.derive(|fact| &fact.label).is_equal_to(label);
-                                    assert_truncated_value(
-                                        fact.derive(|fact| &fact.value),
-                                        "usize",
-                                        6,
-                                    );
+                                    fact.derive_owned(Fact::label).is_equal_to(label);
+                                    assert_truncated_value(&fact.derive(Fact::value), "usize", 6);
                                 });
                         }
                     },

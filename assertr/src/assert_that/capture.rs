@@ -45,12 +45,12 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     ///
     /// assert_that!(failures).contains_exactly_satisfying([
     ///     |failure: AssertThat<AssertionFailure, Capture>| {
-    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::FailureKind::Ordering);
+    ///         failure.derive_owned(AssertionFailure::kind).is_equal_to(assertr::FailureKind::Ordering);
     ///         failure.derive_owned(|failure| ToHumanReadableText.render(failure))
     ///             .contains("is not less than");
     ///     },
     ///     |failure: AssertThat<AssertionFailure, Capture>| {
-    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::FailureKind::Equality);
+    ///         failure.derive_owned(AssertionFailure::kind).is_equal_to(assertr::FailureKind::Equality);
     ///     },
     /// ]);
     /// ```
@@ -62,7 +62,7 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     /// report. Capture mode never invokes the chain's
     /// [panic presentation](Self::with_panic_presentation).
     ///
-    /// Assertions on [projections](Self::satisfies) within the closure contribute their failures
+    /// Assertions on [projections](Self::derive) within the closure contribute their failures
     /// to the same result. Calling `capture` on an already-derived assertion instead starts a
     /// separate collection for that child. Its failures do not propagate to the panic-mode parent,
     /// and existing ancestor detail messages remain attached.

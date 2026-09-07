@@ -148,6 +148,18 @@ impl Fact {
         }
     }
 
+    /// Returns what this fact describes, or an empty string for a plain note.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// Borrows the rendered evidence tree.
+    #[must_use]
+    pub const fn value(&self) -> &Rendered {
+        &self.value
+    }
+
     /// Whether this fact locates a nested failure within its parent's subject.
     pub(crate) fn is_location(&self) -> bool {
         self.label == Self::INDEX || self.label == Self::KEY
@@ -159,6 +171,24 @@ impl Fact {
 /// Capture-mode assertions (see [`AssertThat::capture`]) collect these instead of panicking. Every
 /// part of a failure is exposed as its own field, so consumers can inspect failures
 /// programmatically or compose their own rendering without parsing formatted text.
+///
+/// Read-only accessors also work as projection functions. Use [`AssertThat::derive`] for
+/// borrowed sized values and [`AssertThat::derive_owned`] for slices, strings, optional views,
+/// and copied values:
+///
+/// ```
+/// use assertr::{prelude::*, Fact, renderer::Rendered};
+///
+/// let failures = assert_that!([1]).capture(|it| it.has_length(2));
+/// assert_that!(failures[0])
+///     .derive_owned(AssertionFailure::facts)
+///     .contains_satisfying(|fact| {
+///         fact.derive_owned(Fact::label).is_equal_to("Actual length");
+///         fact.derive(Fact::value)
+///             .derive_owned(Rendered::type_name)
+///             .is_equal_to(Some("usize"));
+///     });
+/// ```
 ///
 /// `Display` and `Debug` use the default plain report. This type also implements
 /// [`core::error::Error`] for ordinary Result propagation, without treating nested assertion
@@ -239,6 +269,60 @@ pub struct AssertionFailure {
 }
 
 impl AssertionFailure {
+    /// Borrows the structured matcher constraint, when present.
+    #[must_use]
+    pub const fn constraint(&self) -> Option<&crate::matchers::ConstraintDescription> {
+        self.constraint.as_ref()
+    }
+
+    /// Borrows the rendered subject, when present.
+    #[must_use]
+    pub const fn actual(&self) -> Option<&Rendered> {
+        self.actual.as_ref()
+    }
+
+    /// Returns the relation sentence, when present.
+    #[must_use]
+    pub fn relation(&self) -> Option<&str> {
+        self.relation.as_deref()
+    }
+
+    /// Borrows the rendered expected value, when present.
+    #[must_use]
+    pub const fn expected(&self) -> Option<&Rendered> {
+        self.expected.as_ref()
+    }
+
+    /// Borrows the rendered unexpected value, when present.
+    #[must_use]
+    pub const fn unexpected(&self) -> Option<&Rendered> {
+        self.unexpected.as_ref()
+    }
+
+    /// Borrows the evidence attached to this failure.
+    #[must_use]
+    pub fn facts(&self) -> &[Fact] {
+        &self.facts
+    }
+
+    /// Borrows the user-provided messages collected from the assertion chain.
+    #[must_use]
+    pub fn messages(&self) -> &[String] {
+        &self.messages
+    }
+
+    /// Borrows the failures raised by nested assertions.
+    #[must_use]
+    pub fn children(&self) -> &[Self] {
+        &self.children
+    }
+
+    /// Returns the assertion family that raised this failure.
+    #[must_use]
+    pub const fn kind(&self) -> FailureKind {
+        self.kind
+    }
+
     /// Prepends a fact locating this failure within its parent's subject, such as [`Fact::index`]
     /// or [`Fact::key`]. The human-readable adapter uses it as the heading of the nested failure.
     #[must_use]
