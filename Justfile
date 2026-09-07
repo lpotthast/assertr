@@ -53,7 +53,9 @@ check-each-feature:
 # Check the two `no_std` configurations: hosted (with `alloc`) and embedded.
 check-no-std:
     cargo test -p assertr-no-std-tests
+    cargo test -p assertr-no-std-tests --features num
     cargo test -p assertr-no-std-tests --features matchers
+    cargo check -p assertr-no-std-tests --features num --target thumbv8m.main-none-eabihf
     cargo check -p assertr-no-std-tests --features matchers --target thumbv8m.main-none-eabihf
     cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf
     cargo check -p assertr --lib --no-default-features --features num,libm --target thumbv8m.main-none-eabihf

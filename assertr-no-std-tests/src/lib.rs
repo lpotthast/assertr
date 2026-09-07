@@ -5,6 +5,30 @@ extern crate alloc;
 use assertr::matchers::{entry_matchers, predicate};
 use assertr::prelude::*;
 
+#[cfg(feature = "num")]
+#[allow(dead_code)]
+fn numeric_assertions_compile_without_std() {
+    use assertr::assertions::num::NumericDistance;
+
+    fn assert_close<T: NumericDistance + core::fmt::Debug>(actual: T, expected: T, deviation: T) {
+        assert_that_owned!(actual).is_close_to(expected, deviation);
+    }
+
+    assert_close(i128::MIN, -1, i128::MAX);
+    assert_close(0_u128, u128::MAX, u128::MAX);
+    assert_close(-1.0_f32, 16_777_216.0, 16_777_216.0);
+    assert_close(f64::INFINITY, f64::INFINITY, 0.0);
+    let failures = assert_that!(9_007_199_254_740_992_f64)
+        .capture(|it| it.is_close_to(9_007_199_254_740_994.0, 1.0));
+    assert_that!(failures).has_length(1);
+}
+
+#[cfg(all(test, feature = "num"))]
+#[test]
+fn numeric_assertions_run_without_std_or_libm() {
+    numeric_assertions_compile_without_std();
+}
+
 #[allow(dead_code)]
 fn sensitive_value_policy_compiles_without_std() {
     use assertr::renderer::{RenderingContext, SensitiveValuePolicy};

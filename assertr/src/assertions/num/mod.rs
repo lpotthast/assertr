@@ -9,31 +9,8 @@ use core::cmp::Ordering;
 use num_traits::Float;
 use num_traits::{Num, Signed};
 
-/// Overflow-safe check of `hi - lo <= deviation`, given `lo <= hi` and `deviation >= 0`.
-///
-/// The difference of same-signed values never overflows. When the values cross zero, the distance
-/// is compared piecewise so that neither `hi - lo` nor `-lo` is ever materialized (`lo` may be the
-/// minimum of a signed type).
-fn distance_at_most<T>(lo: &T, hi: &T, deviation: &T) -> bool
-where
-    T: Num + PartialOrd + Clone,
-{
-    let zero = T::zero();
-    if hi < &zero {
-        // Both negative: their difference never overflows.
-        hi.clone() - lo.clone() <= deviation.clone()
-    } else if lo >= &zero {
-        // Both non-negative: `lo >= 0` is trivially within a lower bound `hi - deviation <= 0`;
-        // otherwise that bound is safe to materialize.
-        deviation >= hi || lo >= &(hi.clone() - deviation.clone())
-    } else if deviation < hi {
-        // Crossing zero: the distance is `hi + |lo| > hi`, which already exceeds the deviation.
-        false
-    } else {
-        // `lo < 0 <= hi`: compare `lo` against `-(deviation - hi)` without negating `lo`.
-        lo >= &(zero - (deviation.clone() - hi.clone()))
-    }
-}
+mod numeric_distance;
+pub use numeric_distance::NumericDistance;
 
 /// Assertions for numeric values not already handled by [`crate::prelude::PartialEqAssertions`] and
 /// [`crate::prelude::PartialOrdAssertions`].
@@ -83,12 +60,21 @@ pub trait NumAssertions<T: Num> {
 
     /// Asserts that the subject is within `allowed_deviation` of `expected`.
     ///
-    /// A negative or NaN deviation fails the assertion. Boundary calculations avoid overflowing the
-    /// numeric type. Positive-infinite deviation accepts every comparable non-NaN value.
+    /// Compares the distance from [`NumericDistance::checked_distance`] to `allowed_deviation`,
+    /// inclusively. Integer distances use checked arithmetic. Floating-point distances use the
+    /// rounded result of `(actual - expected).abs()`. For example, `0.334_f64` is outside a
+    /// deviation of `0.001` from `0.333_f64`, because their floating-point distance is slightly
+    /// greater.
+    ///
+    /// A negative or NaN deviation fails the assertion, as do incomparable (including NaN) values.
+    /// Equal infinities have zero distance. Positive-infinite deviation accepts every comparable
+    /// non-NaN value, including when finite subtraction overflows to infinity.
+    ///
+    /// Custom numeric types must implement [`NumericDistance`]. Neither `Clone` nor floating-point
+    /// math features (`std` or `libm`) are required.
     fn is_close_to(self, expected: T, allowed_deviation: T) -> Self
     where
-        T: PartialOrd,
-        T: Clone,
+        T: NumericDistance,
         Self::Renderer: ValueRenderer<T>;
 
     /// Asserts that the subject is NaN.
@@ -217,8 +203,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_close_to(self, expected: T, allowed_deviation: T) -> Self
     where
-        T: PartialOrd,
-        T: Clone,
+        T: NumericDistance,
         R: ValueRenderer<T>,
     {
         self.track_assertion();
@@ -240,24 +225,9 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
             return self;
         }
 
-        // An infinite deviation is detectable without a `Float` bound: `inf - inf` is NaN and
-        // therefore incomparable to zero. NaN deviations were already rejected above.
-        let deviation_is_unbounded = (allowed_deviation.clone() - allowed_deviation.clone())
-            .partial_cmp(&zero)
-            .is_none();
-
-        // Checked before `partial_cmp` so equal infinities are accepted without computing their
-        // (NaN) distance.
-        let within_allowed_deviation = if actual == &expected {
-            true
-        } else {
-            match actual.partial_cmp(&expected) {
-                None => false,
-                Some(_) if deviation_is_unbounded => true,
-                Some(Ordering::Less) => distance_at_most(actual, &expected, &allowed_deviation),
-                Some(_) => distance_at_most(&expected, actual, &allowed_deviation),
-            }
-        };
+        let within_allowed_deviation = actual
+            .checked_distance(&expected)
+            .is_some_and(|distance| distance <= allowed_deviation);
 
         if !within_allowed_deviation {
             let allowed_deviation = self.render().value(&allowed_deviation);
@@ -374,140 +344,9 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, i32, Panic, NoRenderer> => NumAssertions<i32>
             );
-        }
-    }
-
-    // These helpers deliberately take `T` by value to model the signature available to downstream
-    // generic code, rather than proving the assertion bounds only for `&T`.
-    #[allow(clippy::needless_pass_by_value)]
-    mod generic_num_traits_bounds {
-        use core::fmt::Debug;
-        use core::ops::{Add, Div, Mul, Neg, Rem, Sub};
-
-        use num_traits::{Num, One, Signed, Zero};
-
-        use crate::prelude::*;
-
-        #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-        struct Money(i64);
-
-        impl Add for Money {
-            type Output = Self;
-
-            fn add(self, rhs: Self) -> Self {
-                Self(self.0 + rhs.0)
-            }
-        }
-
-        impl Sub for Money {
-            type Output = Self;
-
-            fn sub(self, rhs: Self) -> Self {
-                Self(self.0 - rhs.0)
-            }
-        }
-
-        impl Mul for Money {
-            type Output = Self;
-
-            fn mul(self, rhs: Self) -> Self {
-                Self(self.0 * rhs.0)
-            }
-        }
-
-        impl Div for Money {
-            type Output = Self;
-
-            fn div(self, rhs: Self) -> Self {
-                Self(self.0 / rhs.0)
-            }
-        }
-
-        impl Rem for Money {
-            type Output = Self;
-
-            fn rem(self, rhs: Self) -> Self {
-                Self(self.0 % rhs.0)
-            }
-        }
-
-        impl Neg for Money {
-            type Output = Self;
-
-            fn neg(self) -> Self {
-                Self(-self.0)
-            }
-        }
-
-        impl Zero for Money {
-            fn zero() -> Self {
-                Self(0)
-            }
-
-            fn is_zero(&self) -> bool {
-                self.0 == 0
-            }
-        }
-
-        impl One for Money {
-            fn one() -> Self {
-                Self(1)
-            }
-        }
-
-        impl Num for Money {
-            type FromStrRadixErr = <i64 as Num>::FromStrRadixErr;
-
-            fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-                i64::from_str_radix(str, radix).map(Self)
-            }
-        }
-
-        impl Signed for Money {
-            fn abs(&self) -> Self {
-                Self(self.0.abs())
-            }
-
-            fn abs_sub(&self, other: &Self) -> Self {
-                Self(Signed::abs_sub(&self.0, &other.0))
-            }
-
-            fn signum(&self) -> Self {
-                Self(self.0.signum())
-            }
-
-            fn is_positive(&self) -> bool {
-                self.0.is_positive()
-            }
-
-            fn is_negative(&self) -> bool {
-                self.0.is_negative()
-            }
-        }
-
-        fn assert_identities<T: Num + Debug>(zero: T, one: T) {
-            assert_that!(zero).is_zero().is_additive_identity();
-            assert_that!(one).is_one().is_multiplicative_identity();
-        }
-
-        fn assert_close_to<T: Num + PartialOrd + Clone + Debug>(
-            value: T,
-            expected: T,
-            deviation: T,
-        ) {
-            assert_that!(value).is_close_to(expected, deviation);
-        }
-
-        fn assert_sign<T: Num + Signed + Debug>(negative: T, positive: T) {
-            assert_that!(negative).is_negative();
-            assert_that!(positive).is_positive();
-        }
-
-        #[test]
-        fn a_user_defined_numeric_type_reaches_assertions_through_generic_bounds() {
-            assert_identities(Money(0), Money(1));
-            assert_close_to(Money(42), Money(40), Money(2));
-            assert_sign(Money(-7), Money(7));
+            assert_trait_impl!(
+                AssertThat<'static, f64, Panic, NoRenderer> => NumAssertions<f64>
+            );
         }
     }
 
@@ -763,6 +602,8 @@ mod tests {
     }
 
     mod is_close_to {
+        // The NumericDistance tests own the primitive arithmetic and special-value matrices.
+        // These tests cover tolerance handling, diagnostics, and integration.
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -798,12 +639,42 @@ mod tests {
 
         #[test]
         fn succeeds_when_actual_is_in_allowed_range() {
-            assert_that!(0.332).is_close_to(0.333, 0.001);
-            assert_that!(0.333).is_close_to(0.333, 0.001);
-            assert_that!(0.334).is_close_to(0.333, 0.001);
+            assert_that!(0.25).is_close_to(0.5, 0.25);
+            assert_that!(0.5).is_close_to(0.5, 0.25);
+            assert_that!(0.75).is_close_to(0.5, 0.25);
             assert_that!(0_u8).is_close_to(0, 1);
-            assert_that!(-100_i8).is_close_to(20, 120);
-            assert_that!(i8::MIN).is_close_to(-1, i8::MAX);
+        }
+
+        #[test]
+        fn reports_distance_beyond_a_rounded_subtraction_boundary() {
+            assert_that_panic_by(|| {
+                assert_that!(9_007_199_254_740_992_f64)
+                    .with_location(false)
+                    .is_close_to(9_007_199_254_740_994_f64, 1.0);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `9_007_199_254_740_992_f64`
+
+                Actual: 9007199254740992.0
+
+                is not close to
+
+                Expected: 9007199254740994.0
+
+                Details:
+                  - Allowed deviation: 1.0
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn rejects_decimal_distance_just_above_deviation() {
+            for (actual, expected) in [(0.334_f64, 0.333_f64), (0.333, 0.334)] {
+                let failures = assert_that!(actual).capture(|it| it.is_close_to(expected, 0.001));
+                assert_that!(failures).has_length(1);
+            }
         }
 
         #[test]
@@ -815,11 +686,7 @@ mod tests {
         fn positive_infinite_deviation_is_unbounded_for_comparable_values() {
             let deviation = f64::INFINITY;
 
-            assert_that!(-1.0).is_close_to(f64::INFINITY, deviation);
-            assert_that!(1.0).is_close_to(f64::NEG_INFINITY, deviation);
-            assert_that!(f64::INFINITY).is_close_to(-1.0, deviation);
-            assert_that!(f64::NEG_INFINITY).is_close_to(1.0, deviation);
-            assert_that!(f64::INFINITY).is_close_to(f64::NEG_INFINITY, deviation);
+            assert_that!(-f64::MAX).is_close_to(f64::MAX, deviation);
             assert_that!(f64::NEG_INFINITY).is_close_to(f64::INFINITY, deviation);
         }
 

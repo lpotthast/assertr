@@ -10,6 +10,7 @@ publish = false
 # features cannot be unified with those selected for the main `assertr` package.
 default = []
 matchers = ["assertr/matchers"]
+num = ["assertr/num"]
 std = ["assertr/std"]
 
 [dependencies]

@@ -513,3 +513,170 @@ mod matcher_authoring {
             .does_not_match(&matcher);
     }
 }
+
+// These helpers deliberately take `T` by value to model the signature available to downstream
+// generic code, rather than proving the assertion bounds only for `&T`.
+#[allow(clippy::needless_pass_by_value)]
+#[cfg(feature = "num")]
+mod generic_num_traits_bounds {
+    use core::fmt::Debug;
+    use core::ops::{Add, Div, Mul, Neg, Rem, Sub};
+
+    use num_traits::{Num, One, Signed, Zero};
+
+    use assertr::assertions::num::NumericDistance;
+    use assertr::prelude::*;
+
+    #[derive(Debug, PartialEq, PartialOrd)]
+    struct Money(i64);
+
+    impl Add for Money {
+        type Output = Self;
+
+        fn add(self, rhs: Self) -> Self {
+            Self(self.0 + rhs.0)
+        }
+    }
+
+    impl Sub for Money {
+        type Output = Self;
+
+        fn sub(self, rhs: Self) -> Self {
+            Self(self.0 - rhs.0)
+        }
+    }
+
+    impl Mul for Money {
+        type Output = Self;
+
+        fn mul(self, rhs: Self) -> Self {
+            Self(self.0 * rhs.0)
+        }
+    }
+
+    impl Div for Money {
+        type Output = Self;
+
+        fn div(self, rhs: Self) -> Self {
+            Self(self.0 / rhs.0)
+        }
+    }
+
+    impl Rem for Money {
+        type Output = Self;
+
+        fn rem(self, rhs: Self) -> Self {
+            Self(self.0 % rhs.0)
+        }
+    }
+
+    impl Neg for Money {
+        type Output = Self;
+
+        fn neg(self) -> Self {
+            Self(-self.0)
+        }
+    }
+
+    impl Zero for Money {
+        fn zero() -> Self {
+            Self(0)
+        }
+
+        fn is_zero(&self) -> bool {
+            self.0 == 0
+        }
+    }
+
+    impl One for Money {
+        fn one() -> Self {
+            Self(1)
+        }
+    }
+
+    impl Num for Money {
+        type FromStrRadixErr = <i64 as Num>::FromStrRadixErr;
+
+        fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
+            i64::from_str_radix(str, radix).map(Self)
+        }
+    }
+
+    impl NumericDistance for Money {
+        fn checked_distance(&self, other: &Self) -> Option<Self> {
+            self.0.checked_distance(&other.0).map(Self)
+        }
+    }
+
+    impl Signed for Money {
+        fn abs(&self) -> Self {
+            Self(self.0.abs())
+        }
+
+        fn abs_sub(&self, other: &Self) -> Self {
+            Self(Signed::abs_sub(&self.0, &other.0))
+        }
+
+        fn signum(&self) -> Self {
+            Self(self.0.signum())
+        }
+
+        fn is_positive(&self) -> bool {
+            self.0.is_positive()
+        }
+
+        fn is_negative(&self) -> bool {
+            self.0.is_negative()
+        }
+    }
+
+    fn assert_identities<T: Num + Debug>(zero: T, one: T) {
+        assert_that!(zero).is_zero().is_additive_identity();
+        assert_that!(one).is_one().is_multiplicative_identity();
+    }
+
+    fn assert_close_to<T: NumericDistance + Debug>(value: T, expected: T, deviation: T) {
+        assert_that!(value).is_close_to(expected, deviation);
+    }
+
+    fn assert_sign<T: Num + Signed + Debug>(negative: T, positive: T) {
+        assert_that!(negative).is_negative();
+        assert_that!(positive).is_positive();
+    }
+
+    #[test]
+    fn numeric_trait_is_available_without_renderer_support() {
+        struct NoRenderer;
+        fn accepts_numeric_assertions<T: Num, A: NumAssertions<T>>(_: &A) {}
+
+        let value = Money(42);
+        let assertion = assert_that!(value).with_renderer(NoRenderer);
+        accepts_numeric_assertions::<Money, _>(&assertion);
+    }
+
+    #[test]
+    fn a_custom_distance_preserves_the_renderer_without_clone_bounds() {
+        struct Cents;
+        impl ValueRenderer<Money> for Cents {
+            fn fmt(&self, value: &Money, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "{} cents", value.0)
+            }
+        }
+
+        let failures = assert_that!(Money(42))
+            .with_renderer(Cents)
+            .capture(|it| it.is_close_to(Money(40), Money(1)));
+        assert_that!(failures).has_length(1);
+        assert_that!(super::text_opt(failures[0].actual.as_ref())).is_equal_to(Some("42 cents"));
+        assert_that!(super::text_opt(failures[0].expected.as_ref())).is_equal_to(Some("40 cents"));
+        assert_that!(super::text_opt(Some(&failures[0].facts[0].value)))
+            .is_equal_to(Some("1 cents"));
+    }
+
+    #[test]
+    fn a_user_defined_numeric_type_reaches_assertions_through_generic_bounds() {
+        assert_identities(Money(0), Money(1));
+        assert_close_to(Money(42), Money(40), Money(2));
+        assert_sign(Money(-7), Money(7));
+    }
+}

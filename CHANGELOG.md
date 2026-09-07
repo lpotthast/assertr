@@ -89,6 +89,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Breaking:** `NumAssertions::is_close_to` now requires `assertions::num::NumericDistance`, implemented for all
+  primitive integers, `f32`, and `f64`. Add this bound to generic callers and implement `checked_distance` for custom
+  numeric types. Floating-point comparisons use the rounded absolute distance, fixing incorrect results from rounded
+  tolerance boundaries, while integer distances remain overflow-safe. The method no longer requires `Clone`.
 - **Breaking:** Reqwest response header assertions and `get_header` diagnostics now honor custom renderers and
   rendering budgets. Custom renderer callers need `ValueRenderer<str>`, plus `ValueRenderer<HeaderValue>` for
   `has_header_value` and `does_not_have_header`. Generic bounds use `ReqwestResponseAssertions<R>`. The default
