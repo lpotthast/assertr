@@ -480,30 +480,31 @@ mod fields {
     }
 
     #[test]
-    #[cfg(feature = "jiff")]
-    fn a_compact_structural_value_retains_its_tree_and_inline_layout() {
-        use jiff::SignedDuration;
+    fn a_compact_structural_key_retains_its_tree_and_inline_layout() {
+        use assertr::renderer::GroupStyle;
 
-        let failures = assert_that!(SignedDuration::from_secs(10))
-            .with_location(false)
-            .capture(|it| {
-                it.is_close_to(SignedDuration::from_secs(5), SignedDuration::from_secs(1))
-            });
-        let range = &failures[0]
+        let failures = assert_that!([4, 6]).with_location(false).capture(|it| {
+            it.track_assertion();
+            it.failure(FailureKind::Other)
+                .fact(Fact::key(it.render().values(it.actual(), GroupStyle::List)))
+                .raise();
+            it
+        });
+        let values = &failures[0]
             .facts
             .iter()
-            .find(|fact| fact.label == "Allowed range")
+            .find(|fact| fact.label == Fact::KEY)
             .unwrap()
             .value;
-        let RenderedBody::Group { items, .. } = &range.body else {
-            panic!("expected a group node, got {:?}", range.body);
+        let RenderedBody::Group { items, .. } = &values.body else {
+            panic!("expected a group node, got {:?}", values.body);
         };
 
-        assert_that!(range.compact).is_true();
+        assert_that!(values.compact).is_true();
         assert_that!(items.as_slice()).has_length(2);
-        assert_that!(text(&items[0])).is_equal_to("4s");
-        assert_that!(text(&items[1])).is_equal_to("6s");
-        assert_that!(ToHumanReadableText.render(&failures[0])).contains("Allowed range: [4s, 6s]");
+        assert_that!(text(&items[0])).is_equal_to("4");
+        assert_that!(text(&items[1])).is_equal_to("6");
+        assert_that!(ToHumanReadableText.render(&failures[0])).contains("key: [4, 6]");
     }
 
     #[test]

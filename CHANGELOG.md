@@ -107,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Reqwest header diagnostics still display marked-sensitive contents by default, escaping non-ASCII bytes.
   Custom renderers preserve the original sensitivity flag and can request an unmarked diagnostic copy through
   `ValueRenderer::sensitive_value_policy` and `SensitiveValuePolicy::Reveal`.
+- Jiff signed-duration tolerance assertions handle extreme values without arithmetic panics, including in capture mode.
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 - Tokio `RwLock` state assertions retain acquired guards when rendering failures, preventing lock reacquisition races.
 

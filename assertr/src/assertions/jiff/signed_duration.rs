@@ -1,9 +1,6 @@
 use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
-use crate::{
-    AssertThat, ValueRenderer,
-    renderer::{Compact, GroupStyle},
-};
+use crate::{AssertThat, ValueRenderer, renderer::Compact};
 use jiff::SignedDuration;
 
 /// Assertions for [`SignedDuration`].
@@ -25,15 +22,12 @@ pub trait SignedDurationAssertions<R = crate::DebugRenderer> {
     where
         R: ValueRenderer<SignedDuration>;
 
-    /// Asserts that the duration is within `allowed_deviation` of `expected`, including the
-    /// endpoints.
+    /// Asserts that the duration is within `allowed_deviation` of `expected`.
     ///
-    /// A negative `allowed_deviation` produces an empty range, so the assertion always fails.
+    /// Compares the exact absolute distance in nanoseconds to `allowed_deviation`, inclusively,
+    /// without overflowing even at [`SignedDuration::MIN`] or [`SignedDuration::MAX`].
     ///
-    /// # Panics
-    ///
-    /// Panics if adding or subtracting `allowed_deviation` from `expected` overflows
-    /// [`SignedDuration`].
+    /// A negative `allowed_deviation` is invalid and fails the assertion.
     fn is_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self
     where
         R: ValueRenderer<SignedDuration>;
@@ -98,11 +92,25 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     {
         self.track_assertion();
 
+        if allowed_deviation.is_negative() {
+            self.failure(FailureKind::Ordering)
+                .relation("was given an invalid allowed deviation")
+                .fact(Fact::labelled(
+                    "Allowed deviation",
+                    Compact(self.render().value(&allowed_deviation)),
+                ))
+                .fact(Fact::note(
+                    "The allowed deviation must be a non-negative duration.",
+                ))
+                .raise();
+            return self;
+        }
+
         let actual = *self.actual();
-        let min = expected - allowed_deviation;
-        let max = expected + allowed_deviation;
-        if !(actual >= min && actual <= max) {
-            let allowed_range = [min, max];
+        // The full MIN-to-MAX distance is less than 2^94 nanoseconds, so both subtraction and
+        // absolute value fit in i128.
+        let distance = (actual.as_nanos() - expected.as_nanos()).abs();
+        if distance > allowed_deviation.as_nanos() {
             self.failure(FailureKind::Ordering)
                 .actual(Compact(self.render().value(&actual)))
                 .relation("is not close to")
@@ -110,10 +118,6 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
                 .fact(Fact::labelled(
                     "Allowed deviation",
                     Compact(self.render().value(&allowed_deviation)),
-                ))
-                .fact(Fact::labelled(
-                    "Allowed range",
-                    Compact(self.render().values(&allowed_range, GroupStyle::List)),
                 ))
                 .raise();
         }
@@ -295,7 +299,9 @@ mod tests {
     }
 
     mod is_close_to {
+        use crate::failure::FailureKind;
         use crate::prelude::*;
+        use crate::test_support::{SENTINEL, SentinelRenderer, rendered_text};
         use indoc::formatdoc;
         use jiff::SignedDuration;
 
@@ -306,6 +312,210 @@ mod tests {
                 SignedDuration::from_secs_f32(0.333),
                 SignedDuration::from_secs_f32(0.001),
             );
+        }
+
+        #[test]
+        fn succeeds_for_equal_extremes() {
+            for value in [SignedDuration::MAX, SignedDuration::MIN] {
+                for deviation in [SignedDuration::ZERO, SignedDuration::from_secs(1)] {
+                    assert_that!(value).is_close_to(value, deviation);
+                }
+            }
+        }
+
+        #[test]
+        fn captures_no_failures_for_equal_extremes() {
+            for value in [SignedDuration::MAX, SignedDuration::MIN] {
+                for deviation in [SignedDuration::ZERO, SignedDuration::from_secs(1)] {
+                    let failures =
+                        assert_that!(value).capture(|it| it.is_close_to(value, deviation));
+                    assert_that!(failures).is_empty();
+                }
+            }
+        }
+
+        #[test]
+        fn compares_exact_distances_near_both_extremes() {
+            let second = SignedDuration::from_secs(1);
+            let nanosecond = SignedDuration::from_nanos(1);
+            for (a, b, failure_count) in [
+                (SignedDuration::MIN, SignedDuration::MIN + second, 0),
+                (SignedDuration::MAX, SignedDuration::MAX - second, 0),
+                (
+                    SignedDuration::MIN,
+                    SignedDuration::MIN + second + nanosecond,
+                    1,
+                ),
+                (
+                    SignedDuration::MAX,
+                    SignedDuration::MAX - second - nanosecond,
+                    1,
+                ),
+            ] {
+                for (actual, expected) in [(a, b), (b, a)] {
+                    let failures =
+                        assert_that!(actual).capture(|it| it.is_close_to(expected, second));
+                    assert_that!(failures).has_length(failure_count);
+                }
+            }
+        }
+
+        #[test]
+        fn compares_exact_distances_across_zero() {
+            let negative = SignedDuration::from_nanos(-1);
+            let positive = SignedDuration::from_nanos(1);
+            for (actual, expected) in [(negative, positive), (positive, negative)] {
+                for (deviation, failure_count) in [(2, 0), (1, 1)] {
+                    let failures = assert_that!(actual).capture(|it| {
+                        it.is_close_to(expected, SignedDuration::from_nanos(deviation))
+                    });
+                    assert_that!(failures).has_length(failure_count);
+                }
+            }
+        }
+
+        #[test]
+        fn handles_distances_at_and_beyond_the_maximum_duration() {
+            for (a, b, failure_count) in [
+                (SignedDuration::ZERO, SignedDuration::MAX, 0),
+                (SignedDuration::MIN, SignedDuration::from_secs(-1), 0),
+                (
+                    SignedDuration::MIN,
+                    SignedDuration::from_nanos(-999_999_999),
+                    1,
+                ),
+                (SignedDuration::ZERO, SignedDuration::MIN, 1),
+                (SignedDuration::MIN, SignedDuration::MAX, 1),
+            ] {
+                for (actual, expected) in [(a, b), (b, a)] {
+                    let failures = assert_that!(actual)
+                        .capture(|it| it.is_close_to(expected, SignedDuration::MAX));
+                    assert_that!(failures).has_length(failure_count);
+                }
+            }
+        }
+
+        #[test]
+        fn zero_deviation_rejects_a_one_nanosecond_distance() {
+            for (actual, expected) in [
+                (SignedDuration::ZERO, SignedDuration::from_nanos(1)),
+                (SignedDuration::from_nanos(1), SignedDuration::ZERO),
+            ] {
+                let failures = assert_that!(actual)
+                    .capture(|it| it.is_close_to(expected, SignedDuration::ZERO));
+                assert_that!(failures).has_length(1);
+            }
+        }
+
+        #[test]
+        fn rejects_negative_deviations_even_at_extremes() {
+            for actual in [
+                SignedDuration::MIN,
+                SignedDuration::ZERO,
+                SignedDuration::MAX,
+            ] {
+                for expected in [
+                    SignedDuration::MIN,
+                    SignedDuration::ZERO,
+                    SignedDuration::MAX,
+                ] {
+                    for deviation in [SignedDuration::from_nanos(-1), SignedDuration::MIN] {
+                        let failures =
+                            assert_that!(actual).capture(|it| it.is_close_to(expected, deviation));
+                        assert_that!(failures).has_length(1);
+                        assert_that!(failures[0].kind).is_equal_to(FailureKind::Ordering);
+                        assert_that!(failures[0].relation.as_deref())
+                            .is_equal_to(Some("was given an invalid allowed deviation"));
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn capture_collects_failures_and_allows_further_chaining() {
+            let failures = assert_that!(SignedDuration::MAX).capture(|it| {
+                it.is_close_to(SignedDuration::MIN, SignedDuration::MAX)
+                    .is_close_to(SignedDuration::MAX, SignedDuration::MIN)
+                    .is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1))
+                    .is_equal_to(SignedDuration::MAX)
+            });
+
+            assert_that!(failures).has_length(2);
+            for failure in &failures {
+                assert_that!(failure.kind).is_equal_to(FailureKind::Ordering);
+            }
+            assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not close to"));
+            assert_that!(failures[1].relation.as_deref())
+                .is_equal_to(Some("was given an invalid allowed deviation"));
+        }
+
+        #[test]
+        fn reports_extreme_values_without_overflowing() {
+            assert_that_panic_by(|| {
+                assert_that!(SignedDuration::ZERO)
+                    .with_location(false)
+                    .is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1));
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `SignedDuration::ZERO`
+
+                Actual: 0s
+
+                is not close to
+
+                Expected: 2562047788015215h 30m 7s 999ms 999µs 999ns
+
+                Details:
+                  - Allowed deviation: 1s
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn reports_negative_deviation() {
+            assert_that_panic_by(|| {
+                assert_that!(SignedDuration::ZERO)
+                    .with_location(false)
+                    .is_close_to(SignedDuration::ZERO, SignedDuration::from_secs(-1));
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `SignedDuration::ZERO`
+
+                was given an invalid allowed deviation
+
+                Details:
+                  - Allowed deviation: 1s ago
+                  - The allowed deviation must be a non-negative duration.
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn failures_render_all_duration_values_with_the_active_renderer() {
+            let failures = assert_that!(SignedDuration::MIN)
+                .with_renderer(SentinelRenderer)
+                .capture(|it| it.is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1)));
+
+            assert_that!(failures).has_length(1);
+            let failure = &failures[0];
+            assert_that!(rendered_text(failure.actual.as_ref().unwrap())).is_equal_to(SENTINEL);
+            assert_that!(rendered_text(failure.expected.as_ref().unwrap())).is_equal_to(SENTINEL);
+            assert_that!(failure.facts).has_length(1);
+            assert_that!(rendered_text(&failure.facts[0].value)).is_equal_to(SENTINEL);
+        }
+
+        #[test]
+        fn invalid_deviation_uses_the_active_renderer() {
+            let failures = assert_that!(SignedDuration::MAX)
+                .with_renderer(SentinelRenderer)
+                .capture(|it| it.is_close_to(SignedDuration::MAX, SignedDuration::MIN));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(rendered_text(&failures[0].facts[0].value)).is_equal_to(SENTINEL);
         }
 
         #[test]
@@ -331,7 +541,6 @@ mod tests {
 
                     Details:
                       - Allowed deviation: 1ms
-                      - Allowed range: [332ms, 334ms]
                     -------- assertr --------
                 "});
         }
@@ -375,7 +584,6 @@ mod tests {
 
                     Details:
                       - Allowed deviation: 1ms
-                      - Allowed range: [332ms, 334ms]
                     -------- assertr --------
                 "});
         }
