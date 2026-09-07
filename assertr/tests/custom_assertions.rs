@@ -450,6 +450,15 @@ mod generated_fluent_aliases {
     trait BorrowAssertions {
         #[fluent_alias("borrow_as")]
         fn is_borrowed_as<'a>(self, expected: &'a str) -> Self;
+
+        async fn is_valid(self) -> Self;
+
+        async fn has_values<T, const N: usize>(self, expected: [T; N]) -> [T; N]
+        where
+            Self: Sized,
+        {
+            core::future::ready(expected).await
+        }
     }
 
     impl<M: Mode, R> BorrowAssertions for AssertThat<'_, String, M, R> {
@@ -458,11 +467,33 @@ mod generated_fluent_aliases {
             self.track_assertion();
             self
         }
+
+        async fn is_valid(self) -> Self {
+            self.track_assertion();
+            core::future::ready(self).await
+        }
     }
 
     #[test]
     fn aliases_support_late_bound_lifetimes() {
         "value".to_owned().must().borrow_as("expected");
+    }
+
+    #[tokio::test]
+    async fn aliases_await_async_methods() {
+        "value"
+            .to_owned()
+            .must()
+            .be_valid()
+            .await
+            .borrow_as("expected");
+
+        let values: [String; 2] = "value"
+            .to_owned()
+            .must()
+            .have_values::<String, 2>(["first".to_owned(), "second".to_owned()])
+            .await;
+        assert_that!(values).is_equal_to(["first", "second"]);
     }
 }
 

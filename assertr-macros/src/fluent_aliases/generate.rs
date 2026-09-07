@@ -3,14 +3,14 @@
 use std::collections::BTreeSet;
 
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::ToTokens;
+use quote::{ToTokens, quote};
 use syn::{FnArg, GenericParam, Pat, TraitItemFn};
 
 /// Clones a trait method and turns it into a feature-gated delegating alias.
 ///
 /// The original method's attributes are copied. The alias receives `track_caller` when the original
 /// did not already have it and a `Self: Sized` bound, then forwards every original generic and
-/// value argument.
+/// value argument and awaits async methods.
 pub(super) fn generate_alias(original: &TraitItemFn, alias_name: &str) -> TraitItemFn {
     let mut alias = original.clone();
     alias.sig.ident = if alias_name == "match" {
@@ -44,13 +44,14 @@ pub(super) fn generate_alias(original: &TraitItemFn, alias_name: &str) -> TraitI
 
     let generics = generic_arguments(original);
     let arguments = value_arguments(&mut alias);
+    let await_delegation = original.sig.asyncness.map(|_| quote! { .await });
     alias.default = if generics.is_empty() {
         Some(syn::parse_quote! {
-            { self.#original_name(#(#arguments),*) }
+            { self.#original_name(#(#arguments),*) #await_delegation }
         })
     } else {
         Some(syn::parse_quote! {
-            { self.#original_name::<#(#generics),*>(#(#arguments),*) }
+            { self.#original_name::<#(#generics),*>(#(#arguments),*) #await_delegation }
         })
     };
     alias.semi_token = None;
