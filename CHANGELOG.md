@@ -100,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   decoding them lossily. Custom renderers preserve the original sensitivity flag by default and can request an
   unmarked diagnostic copy through `ValueRenderer::sensitive_value_policy` and `SensitiveValuePolicy::Reveal`.
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
+- Tokio `RwLock` state assertions retain acquired guards when rendering failures, preventing lock reacquisition races.
 
 ### Removed
 

@@ -85,12 +85,9 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
         R: ValueRenderer<T>,
     {
         self.track_assertion();
-        if self.actual().try_write().is_ok() {
-            // Can be locked for writing, so it holds no lock at all.
-            let value = self
-                .actual()
-                .try_read()
-                .expect("the lock-state check already succeeded");
+        if let Ok(value) = self.actual().try_write() {
+            // The lock was available. Keep this guard for diagnostics so another writer cannot
+            // intervene between observing the state and reading the value.
             self.failure(FailureKind::Other)
                 .actual(
                     self.render()
@@ -122,12 +119,9 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
         R: ValueRenderer<T>,
     {
         self.track_assertion();
-        if self.actual().try_write().is_ok() {
-            // Can be locked for writing, so it holds no lock at all.
-            let value = self
-                .actual()
-                .try_read()
-                .expect("the lock-state check already succeeded");
+        if let Ok(value) = self.actual().try_write() {
+            // The lock was available. Keep this guard for diagnostics so another writer cannot
+            // intervene between observing the state and reading the value.
             self.failure(FailureKind::Other)
                 .actual(
                     self.render()
@@ -154,6 +148,23 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
 
 #[cfg(test)]
 mod tests {
+    use core::fmt;
+
+    use crate::ValueRenderer;
+    use tokio::sync::RwLock;
+
+    struct WriteGuardCheckingRenderer<'a>(&'a RwLock<i32>);
+
+    impl ValueRenderer<i32> for WriteGuardCheckingRenderer<'_> {
+        fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            assert!(
+                self.0.try_read().is_err(),
+                "the write guard must remain held while rendering"
+            );
+            write!(f, "guarded({value})")
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
@@ -265,6 +276,7 @@ mod tests {
     }
 
     mod is_read_locked {
+        use super::WriteGuardCheckingRenderer;
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
@@ -276,6 +288,31 @@ mod tests {
             let rw_lock_read_guard = rw_lock.read().await;
             rw_lock.must().be_read_locked();
             drop(rw_lock_read_guard);
+        }
+
+        #[test]
+        fn retains_the_write_guard_until_the_failure_is_rendered() {
+            let rw_lock = RwLock::new(42);
+            let failures = assert_that!(rw_lock)
+                .with_renderer(WriteGuardCheckingRenderer(&rw_lock))
+                .with_location(false)
+                .capture(|it| it.is_read_locked().is_not_locked());
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `rw_lock`
+
+                Actual: RwLock {{
+                    data: guarded(42),
+                }}
+
+                is not read-locked
+
+                Details:
+                  - Lock state: unlocked
+                -------- assertr --------
+            "});
         }
 
         #[tokio::test]
@@ -335,6 +372,7 @@ mod tests {
     }
 
     mod is_write_locked {
+        use super::WriteGuardCheckingRenderer;
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
@@ -346,6 +384,31 @@ mod tests {
             let rw_lock_write_guard = rw_lock.write().await;
             rw_lock.must().be_write_locked();
             drop(rw_lock_write_guard);
+        }
+
+        #[test]
+        fn retains_the_write_guard_until_the_failure_is_rendered() {
+            let rw_lock = RwLock::new(42);
+            let failures = assert_that!(rw_lock)
+                .with_renderer(WriteGuardCheckingRenderer(&rw_lock))
+                .with_location(false)
+                .capture(|it| it.is_write_locked().is_not_locked());
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `rw_lock`
+
+                Actual: RwLock {{
+                    data: guarded(42),
+                }}
+
+                is not write-locked
+
+                Details:
+                  - Lock state: unlocked
+                -------- assertr --------
+            "});
         }
 
         #[tokio::test]
