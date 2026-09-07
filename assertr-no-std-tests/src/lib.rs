@@ -6,6 +6,34 @@ use assertr::matchers::{entry_matchers, predicate};
 use assertr::prelude::*;
 
 #[allow(dead_code)]
+fn sensitive_value_policy_compiles_without_std() {
+    use assertr::renderer::{RenderingContext, SensitiveValuePolicy};
+    use core::fmt;
+
+    struct BorrowedRenderer<'a>(&'a str);
+
+    impl ValueRenderer<str> for BorrowedRenderer<'_> {
+        fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}{value}", self.0)
+        }
+
+        fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
+            SensitiveValuePolicy::Reveal
+        }
+    }
+
+    let prefix = alloc::string::String::from("value: ");
+    let renderer = BorrowedRenderer(&prefix);
+    let erased: &dyn ValueRenderer<str> = &renderer;
+    assert_eq!(
+        erased.sensitive_value_policy(),
+        SensitiveValuePolicy::Reveal
+    );
+    let value = RenderingContext::new(&renderer, RenderingBudget::unlimited()).value("original");
+    assert_eq!(alloc::format!("{value:?}"), "value: original");
+}
+
+#[allow(dead_code)]
 fn capture_errors_compile_without_std()
 -> Result<(), alloc::boxed::Box<dyn core::error::Error + Send + Sync>> {
     use alloc::string::ToString;
@@ -157,6 +185,11 @@ extern crate std;
 
 #[cfg(all(test, not(feature = "std")))]
 mod tests {
+    #[test]
+    fn borrowed_renderers_support_sensitivity_policy_without_std() {
+        crate::sensitive_value_policy_compiles_without_std();
+    }
+
     mod matchers {
         use assertr::matchers::ge;
         use assertr::prelude::*;

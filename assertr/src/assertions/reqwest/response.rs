@@ -10,9 +10,10 @@
 //! [`HttpHeaderValueAssertions`](crate::prelude::HttpHeaderValueAssertions): `reqwest` re-exports
 //! `http`'s header types, so the two integrations meet on the same `HeaderValue`.
 
-use crate::AssertThat;
 use crate::failure::FailureKind;
 use crate::mode::{Mode, Panic};
+use crate::renderer::{GroupStyle, IntoRendered, Rendered, RenderingContext, SensitiveValuePolicy};
+use crate::{AssertThat, ValueRenderer};
 use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
@@ -22,7 +23,7 @@ use reqwest::header::HeaderValue;
 /// Non-extracting assertions for [`reqwest::Response`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ReqwestResponseAssertions {
+pub trait ReqwestResponseAssertions<R = crate::DebugRenderer> {
     /// Asserts that the response has exactly this status code.
     fn has_status_code(self, expected: reqwest::StatusCode) -> Self;
 
@@ -44,19 +45,45 @@ pub trait ReqwestResponseAssertions {
     /// Asserts that the response has a header with this name, regardless of its value.
     ///
     /// Header names are matched case-insensitively, as HTTP requires.
-    fn has_header(self, name: impl AsRef<str>) -> Self;
+    /// Failure diagnostics render header names and the URL through `ValueRenderer<str>`.
+    fn has_header(self, name: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<str>;
 
     /// Asserts that the response has no header with this name.
-    fn does_not_have_header(self, name: impl AsRef<str>) -> Self;
+    ///
+    /// Failure diagnostics show the first header value. By default, its contents are displayed
+    /// even when marked with [`HeaderValue::set_sensitive(true)`](HeaderValue::set_sensitive),
+    /// so test failures expose the value being asserted. Non-ASCII bytes use hexadecimal escapes.
+    /// The rendering budget still applies.
+    ///
+    /// Custom renderers default to [`SensitiveValuePolicy::Preserve`], receiving the original
+    /// header and sensitivity flag. Opting into [`SensitiveValuePolicy::Reveal`] passes an
+    /// unmarked diagnostic copy through their normal `fmt` method. The response's header stays
+    /// unchanged. Header names and the URL use `ValueRenderer<str>`.
+    fn does_not_have_header(self, name: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<HeaderValue> + ValueRenderer<str>;
 
     /// Asserts that the response's first value for this header equals the expected UTF-8 value.
     ///
     /// The comparison uses raw header bytes. A non-UTF-8 subject value cannot equal the string
-    /// expectation and is rendered lossily on failure.
-    fn has_header_value(self, name: impl AsRef<str>, expected: impl AsRef<str>) -> Self;
+    /// expectation. By default, non-ASCII header bytes use hexadecimal escapes on failure.
+    ///
+    /// By default, diagnostics display header contents even when marked with
+    /// [`HeaderValue::set_sensitive(true)`](HeaderValue::set_sensitive), so test failures expose
+    /// the value being compared.
+    ///
+    /// Custom renderers default to [`SensitiveValuePolicy::Preserve`], receiving the original
+    /// header and sensitivity flag. Opting into [`SensitiveValuePolicy::Reveal`] passes an
+    /// unmarked diagnostic copy through their normal `fmt` method. The response's header stays
+    /// unchanged. The expected string, header names, and URL use `ValueRenderer<str>`.
+    fn has_header_value(self, name: impl AsRef<str>, expected: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<HeaderValue> + ValueRenderer<str>;
 }
 
-impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response, M, R> {
+impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Response, M, R> {
     #[track_caller]
     fn has_status_code(self, expected: reqwest::StatusCode) -> Self {
         self.track_assertion();
@@ -129,24 +156,33 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
     }
 
     #[track_caller]
-    fn has_header(self, name: impl AsRef<str>) -> Self {
+    fn has_header(self, name: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<str>,
+    {
         self.track_assertion();
         assert_header_present(&self, name.as_ref());
         self
     }
 
     #[track_caller]
-    fn does_not_have_header(self, name: impl AsRef<str>) -> Self {
+    fn does_not_have_header(self, name: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<HeaderValue> + ValueRenderer<str>,
+    {
         self.track_assertion();
 
         let name = name.as_ref();
         if let Some(value) = self.actual().headers().get(name) {
             self.failure(FailureKind::Membership)
-                .actual(format_args!("{:#?}", header_names(&self)))
+                .actual(
+                    self.render()
+                        .borrowed_values::<str, _>(&header_names(&self), GroupStyle::List),
+                )
                 .relation("contains the header")
-                .unexpected(format_args!("{name:?}"))
-                .fact(URL, format_args!("{}", self.actual().url()))
-                .fact("Value", format_args!("{:?}", render_value(value)))
+                .unexpected(self.render().value(name))
+                .fact(URL, self.render().value(self.actual().url().as_str()))
+                .fact("Value", render_header(self.render(), value))
                 .raise();
         }
 
@@ -154,7 +190,10 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
     }
 
     #[track_caller]
-    fn has_header_value(self, name: impl AsRef<str>, expected: impl AsRef<str>) -> Self {
+    fn has_header_value(self, name: impl AsRef<str>, expected: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<HeaderValue> + ValueRenderer<str>,
+    {
         self.track_assertion();
 
         let name = name.as_ref();
@@ -163,19 +202,22 @@ impl<M: Mode, R> ReqwestResponseAssertions for AssertThat<'_, reqwest::Response,
         match self.actual().headers().get(name) {
             None => {
                 self.failure(FailureKind::Equality)
-                    .actual(format_args!("{:#?}", header_names(&self)))
+                    .actual(
+                        self.render()
+                            .borrowed_values::<str, _>(&header_names(&self), GroupStyle::List),
+                    )
                     .relation("does not contain the header")
-                    .expected(format_args!("{name:?}"))
-                    .fact(URL, format_args!("{}", self.actual().url()))
-                    .fact("Expected value", format_args!("{expected:?}"))
+                    .expected(self.render().value(name))
+                    .fact(URL, self.render().value(self.actual().url().as_str()))
+                    .fact("Expected value", self.render().value(expected))
                     .raise();
             }
             Some(value) if value.as_bytes() != expected.as_bytes() => {
                 self.failure(FailureKind::Equality)
-                    .actual(format_args!("{:?}", render_value(value)))
-                    .expected(format_args!("{expected:?}"))
-                    .fact(URL, format_args!("{}", self.actual().url()))
-                    .fact("Header", format_args!("{name:?}"))
+                    .actual(render_header(self.render(), value))
+                    .expected(self.render().value(expected))
+                    .fact(URL, self.render().value(self.actual().url().as_str()))
+                    .fact("Header", self.render().value(name))
                     .raise();
             }
             Some(_) => {}
@@ -196,7 +238,11 @@ pub trait ReqwestResponseExtractAssertions<'t, R> {
     /// With the `http` feature enabled, the extracted `HeaderValue` is the subject of
     /// [`HttpHeaderValueAssertions`](crate::prelude::HttpHeaderValueAssertions), so
     /// `.get_header("content-type").is_ascii_satisfying(..)` works across both integrations.
-    fn get_header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>;
+    ///
+    /// Missing-header diagnostics render header names and the URL through `ValueRenderer<str>`.
+    fn get_header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>
+    where
+        R: ValueRenderer<str>;
 
     /// Reads the response body and continues the chain on it as a `String`.
     ///
@@ -232,7 +278,10 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     for AssertThat<'t, reqwest::Response, Panic, R>
 {
     #[track_caller]
-    fn get_header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R> {
+    fn get_header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>
+    where
+        R: ValueRenderer<str>,
+    {
         self.track_assertion();
         let name = name.as_ref().to_owned();
         assert_header_present(&self, &name);
@@ -338,13 +387,19 @@ const URL: &str = "URL";
 
 /// Fails with the missing-header diagnostic shared by assertions and projections.
 #[track_caller]
-fn assert_header_present<M: Mode, R>(this: &AssertThat<'_, reqwest::Response, M, R>, name: &str) {
+fn assert_header_present<M: Mode, R>(this: &AssertThat<'_, reqwest::Response, M, R>, name: &str)
+where
+    R: ValueRenderer<str>,
+{
     if this.actual().headers().get(name).is_none() {
         this.failure(FailureKind::Membership)
-            .actual(format_args!("{:#?}", header_names(this)))
+            .actual(
+                this.render()
+                    .borrowed_values::<str, _>(&header_names(this), GroupStyle::List),
+            )
             .relation("does not contain the header")
-            .expected(format_args!("{name:?}"))
-            .fact(URL, format_args!("{}", this.actual().url()))
+            .expected(this.render().value(name))
+            .fact(URL, this.render().value(this.actual().url().as_str()))
             .raise();
     }
 }
@@ -358,10 +413,19 @@ fn header_names<'a, M: Mode, R>(this: &'a AssertThat<'_, reqwest::Response, M, R
         .collect()
 }
 
-/// Header values are bytes. Rendering one lossily keeps a non-UTF-8 value diagnosable instead of
-/// replacing the whole message with a conversion error.
-fn render_value(value: &HeaderValue) -> String {
-    String::from_utf8_lossy(value.as_bytes()).into_owned()
+/// Prepare an unmarked diagnostic copy only when the active renderer requests it.
+fn render_header<R: ValueRenderer<HeaderValue>>(
+    rendering: RenderingContext<'_, R>,
+    value: &HeaderValue,
+) -> Rendered {
+    match rendering.renderer().sensitive_value_policy() {
+        SensitiveValuePolicy::Reveal if value.is_sensitive() => {
+            let mut visible = value.clone();
+            visible.set_sensitive(false);
+            rendering.value(&visible).into_rendered()
+        }
+        _ => rendering.value(value).into_rendered(),
+    }
 }
 
 #[track_caller]
@@ -390,25 +454,11 @@ mod tests {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};
 
-        /// Renders a response by its status code only. It implements no other `ValueRenderer`, so
-        /// it proves which renderer capability each assertion actually requires.
-        struct StatusOnly;
-
-        impl ValueRenderer<reqwest::Response> for StatusOnly {
-            fn fmt(
-                &self,
-                value: &reqwest::Response,
-                f: &mut core::fmt::Formatter<'_>,
-            ) -> core::fmt::Result {
-                write!(f, "<{}>", value.status().as_u16())
-            }
-        }
-
         #[test]
         fn traits_are_implemented_without_response_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, reqwest::Response, Panic, NoRenderer>
-                    => ReqwestResponseAssertions
+                    => ReqwestResponseAssertions<NoRenderer>
             );
             assert_trait_impl!(
                 AssertThat<'static, reqwest::Response, Panic, NoRenderer>
@@ -417,33 +467,53 @@ mod tests {
         }
 
         #[test]
-        fn checking_assertions_require_only_a_response_renderer() {
+        fn successful_header_checks_do_not_render_or_consult_the_sensitivity_policy() {
+            struct NeverRender;
+
+            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
+                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("a passing assertion must not render values")
+                }
+
+                fn sensitive_value_policy(&self) -> crate::renderer::SensitiveValuePolicy {
+                    panic!("a passing assertion must not query diagnostic policy")
+                }
+            }
+
+            let response = super::header_response(b"secret", true);
+            assert_that!(response)
+                .with_renderer(NeverRender)
+                .has_header("x-api-key")
+                .has_header_value("x-api-key", "secret")
+                .does_not_have_header("missing")
+                .get_header("x-api-key");
+        }
+
+        #[test]
+        fn status_checks_do_not_require_a_renderer() {
             assert_that!(response(200, &[("content-type", "text/plain")], ""))
-                .with_renderer(StatusOnly)
+                .with_renderer(NoRenderer)
                 .has_status_code(reqwest::StatusCode::OK)
-                .is_success()
-                .has_header("content-type")
-                .does_not_have_header("x-api-key")
-                .has_header_value("content-type", "text/plain");
+                .is_success();
 
             assert_that!(response(100, &[], ""))
-                .with_renderer(StatusOnly)
+                .with_renderer(NoRenderer)
                 .is_informational();
             assert_that!(response(301, &[], ""))
-                .with_renderer(StatusOnly)
+                .with_renderer(NoRenderer)
                 .is_redirection();
             assert_that!(response(404, &[], ""))
-                .with_renderer(StatusOnly)
+                .with_renderer(NoRenderer)
                 .is_client_error();
             assert_that!(response(500, &[], ""))
-                .with_renderer(StatusOnly)
+                .with_renderer(NoRenderer)
                 .is_server_error();
         }
 
         #[test]
         fn body_extractors_require_only_the_renderers_their_failure_paths_use() {
             let text = assert_that_owned!(response(200, &[], "text"))
-                .with_renderer(StatusOnly)
+                .with_renderer(NoRenderer)
                 .get_text();
             drop(text);
 
@@ -504,6 +574,77 @@ mod tests {
 
     fn ok_response() -> reqwest::Response {
         response(200, &[("content-type", "text/plain")], "world")
+    }
+
+    fn header_response(bytes: &[u8], sensitive: bool) -> reqwest::Response {
+        let mut response = response(200, &[], "");
+        let mut value =
+            reqwest::header::HeaderValue::from_bytes(bytes).expect("valid header bytes");
+        value.set_sensitive(sensitive);
+        response.headers_mut().insert("x-api-key", value);
+        response
+    }
+
+    struct RedactingRenderer;
+
+    struct RevealingRenderer<'a> {
+        original: &'a reqwest::header::HeaderValue,
+        calls: &'a core::cell::Cell<usize>,
+    }
+
+    impl crate::ValueRenderer<reqwest::header::HeaderValue> for RevealingRenderer<'_> {
+        fn fmt(
+            &self,
+            value: &reqwest::header::HeaderValue,
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
+            assert!(!value.is_sensitive());
+            assert_eq!(value.as_bytes(), self.original.as_bytes());
+            assert_eq!(
+                core::ptr::eq(value, self.original),
+                !self.original.is_sensitive()
+            );
+            self.calls.set(self.calls.get() + 1);
+            write!(f, "revealed({value:?})")
+        }
+
+        fn sensitive_value_policy(&self) -> crate::renderer::SensitiveValuePolicy {
+            crate::renderer::SensitiveValuePolicy::Reveal
+        }
+    }
+
+    impl crate::ValueRenderer<str> for RevealingRenderer<'_> {
+        fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            crate::ValueRenderer::fmt(&crate::DebugRenderer, value, f)
+        }
+    }
+
+    struct TextOnly;
+
+    impl crate::ValueRenderer<str> for TextOnly {
+        fn fmt(&self, _: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str("<redacted text>")
+        }
+    }
+
+    impl crate::ValueRenderer<reqwest::header::HeaderValue> for RedactingRenderer {
+        fn fmt(
+            &self,
+            value: &reqwest::header::HeaderValue,
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
+            if value.is_sensitive() {
+                f.write_str("<redacted header>")
+            } else {
+                write!(f, "header({value:?})")
+            }
+        }
+    }
+
+    impl crate::ValueRenderer<str> for RedactingRenderer {
+        fn fmt(&self, _: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str("<redacted text>")
+        }
     }
 
     fn failing_response() -> reqwest::Response {
@@ -937,7 +1078,7 @@ mod tests {
     }
 
     mod has_header {
-        use super::{ok_response, response};
+        use super::{TextOnly, ok_response, response};
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -955,6 +1096,65 @@ mod tests {
         #[test]
         fn matches_the_header_name_case_insensitively() {
             assert_that!(ok_response()).has_header("Content-Type");
+        }
+
+        #[test]
+        fn renders_failure_evidence_with_only_a_string_renderer() {
+            let response = ok_response();
+            let failures = assert_that!(response)
+                .with_renderer(TextOnly)
+                .with_location(false)
+                .capture(|it| it.has_header("missing").has_header("content-type"));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `response`
+
+                Actual: [
+                    <redacted text>,
+                ]
+
+                does not contain the header
+
+                Expected: <redacted text>
+
+                Details:
+                  - URL: <redacted text>
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn applies_the_rendering_budget_to_header_names_and_strings() {
+            let response = response(200, &[("x-first", "one"), ("x-second", "two")], "");
+            let failures = assert_that!(response)
+                .with_renderer(TextOnly)
+                .with_location(false)
+                .with_rendering_budget(
+                    RenderingBudget::builder()
+                        .max_items(1)
+                        .max_leaf_characters(4)
+                        .build(),
+                )
+                .capture(|it| it.has_header("missing"));
+
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `response`
+
+                Actual: [
+                    <red... 11 more characters ...,
+                ] (... 1 more element ...)
+
+                does not contain the header
+
+                Expected: <red... 11 more characters ...
+
+                Details:
+                  - URL: <red... 11 more characters ...
+                -------- assertr --------
+            "});
         }
 
         #[test]
@@ -978,7 +1178,7 @@ mod tests {
                 Expected: "content-type"
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                 -------- assertr --------
             "#});
         }
@@ -1004,7 +1204,7 @@ mod tests {
                         Expected: "content-type"
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                         -------- assertr --------
                     "#});
                 },
@@ -1013,7 +1213,7 @@ mod tests {
     }
 
     mod does_not_have_header {
-        use super::{ok_response, response};
+        use super::{RedactingRenderer, RevealingRenderer, header_response, ok_response, response};
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -1026,6 +1226,101 @@ mod tests {
         #[test]
         fn succeeds_when_the_header_is_absent() {
             assert_that!(ok_response()).does_not_have_header("x-api-key");
+        }
+
+        #[test]
+        fn shows_sensitive_header_contents_by_default() {
+            let response = header_response(b"secret-\xff", true);
+            let failures = assert_that!(response)
+                .with_location(false)
+                .capture(|it| it.does_not_have_header("x-api-key"));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `response`
+
+                Actual: [
+                    "x-api-key",
+                ]
+
+                contains the header
+
+                Unexpected: "x-api-key"
+
+                Details:
+                  - URL: "http://localhost/hello"
+                  - Value: "secret-\xff"
+                -------- assertr --------
+            "#});
+            assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
+        }
+
+        #[test]
+        fn respects_custom_redaction_and_preserves_header_metadata() {
+            let response = header_response(b"secret-\xff", true);
+            let failures = assert_that!(response)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.does_not_have_header("x-api-key"));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `response`
+
+                Actual: [
+                    <redacted text>,
+                ]
+
+                contains the header
+
+                Unexpected: <redacted text>
+
+                Details:
+                  - URL: <redacted text>
+                  - Value: <redacted header>
+                -------- assertr --------
+            "});
+            let value = &failures[0].facts[1].value;
+            assert_that!(value.type_name)
+                .is_equal_to(Some(core::any::type_name::<reqwest::header::HeaderValue>()));
+            assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
+        }
+
+        #[test]
+        fn applies_the_rendering_budget_to_the_header_value() {
+            let response = header_response(b"1234567890", true);
+            let failures = assert_that!(response)
+                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(4).build())
+                .capture(|it| it.does_not_have_header("x-api-key"));
+
+            assert_that!(failures[0].facts[1].value.body).is_equal_to(
+                crate::renderer::RenderedBody::Text {
+                    text: "\"123".into(),
+                    omitted_characters: 8,
+                },
+            );
+        }
+
+        #[test]
+        fn custom_renderers_can_request_revealed_header_values() {
+            let response = header_response(b"secret-\xff", true);
+            let calls = core::cell::Cell::new(0);
+            let failures = assert_that!(response)
+                .with_renderer(RevealingRenderer {
+                    original: &response.headers()["x-api-key"],
+                    calls: &calls,
+                })
+                .capture(|it| it.does_not_have_header("x-api-key"));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(crate::test_support::rendered_text(
+                &failures[0].facts[1].value
+            ))
+            .is_equal_to(r#"revealed("secret-\xff")"#);
+            assert_that!(calls.get()).is_equal_to(1);
+            assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
         }
 
         #[test]
@@ -1049,7 +1344,7 @@ mod tests {
                 Unexpected: "x-api-key"
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                   - Value: "1234"
                 -------- assertr --------
             "#});
@@ -1076,7 +1371,7 @@ mod tests {
                         Unexpected: "x-api-key"
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                           - Value: "1234"
                         -------- assertr --------
                     "#});
@@ -1086,7 +1381,7 @@ mod tests {
     }
 
     mod has_header_value {
-        use super::{ok_response, response};
+        use super::{RedactingRenderer, RevealingRenderer, header_response, ok_response, response};
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -1101,6 +1396,165 @@ mod tests {
         #[test]
         fn succeeds_when_the_value_matches() {
             assert_that!(ok_response()).has_header_value("content-type", "text/plain");
+        }
+
+        #[test]
+        fn sensitivity_does_not_change_the_comparison() {
+            let response = header_response(b"secret", true);
+            assert_that!(response)
+                .with_renderer(RedactingRenderer)
+                .has_header_value("x-api-key", "secret");
+        }
+
+        #[test]
+        fn compares_raw_bytes_and_escapes_sensitive_contents_by_default() {
+            let response = header_response(b"secret-\xff", true);
+            let failures = assert_that!(response)
+                .with_location(false)
+                .capture(|it| it.has_header_value("x-api-key", "secret-�"));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `response`
+
+                Expected: "secret-�"
+
+                  Actual: "secret-\xff"
+
+                Details:
+                  - URL: "http://localhost/hello"
+                  - Header: "x-api-key"
+                -------- assertr --------
+            "#});
+            assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
+        }
+
+        #[test]
+        fn respects_custom_redaction_and_preserves_header_metadata() {
+            let response = header_response(b"secret-\xff", true);
+            let failures = assert_that!(response)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.has_header_value("x-api-key", "another secret"));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `response`
+
+                Expected: <redacted text>
+
+                  Actual: <redacted header>
+
+                Details:
+                  - URL: <redacted text>
+                  - Header: <redacted text>
+                -------- assertr --------
+            "});
+            assert_that!(failures[0].actual.as_ref().expect("actual value").type_name)
+                .is_equal_to(Some(core::any::type_name::<reqwest::header::HeaderValue>()));
+            assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
+        }
+
+        #[test]
+        fn renders_expected_values_when_the_header_is_missing() {
+            let response = header_response(b"secret", true);
+            let failures = assert_that!(response)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.has_header_value("missing", "another secret"));
+
+            assert_that!(failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `response`
+
+                Actual: [
+                    <redacted text>,
+                ]
+
+                does not contain the header
+
+                Expected: <redacted text>
+
+                Details:
+                  - URL: <redacted text>
+                  - Expected value: <redacted text>
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn passes_insensitive_header_bytes_to_custom_renderers_unchanged() {
+            let response = header_response(b"visible-\xff", false);
+            let failures = assert_that!(response)
+                .with_renderer(RedactingRenderer)
+                .capture(|it| it.has_header_value("x-api-key", "other"));
+
+            let actual = failures[0].actual.as_ref().expect("actual value");
+            assert_that!(crate::test_support::rendered_text(actual))
+                .is_equal_to(r#"header("visible-\xff")"#);
+        }
+
+        #[test]
+        fn applies_the_rendering_budget_to_custom_header_output() {
+            let response = header_response(b"secret", true);
+            let failures = assert_that!(response)
+                .with_renderer(RedactingRenderer)
+                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(4).build())
+                .capture(|it| it.has_header_value("x-api-key", "other"));
+
+            assert_that!(failures[0].actual.as_ref().expect("actual value").body).is_equal_to(
+                crate::renderer::RenderedBody::Text {
+                    text: "<red".into(),
+                    omitted_characters: 13,
+                },
+            );
+        }
+
+        #[test]
+        fn custom_renderers_can_request_revealed_header_values() {
+            for sensitive in [true, false] {
+                let response = header_response(b"secret-\xff", sensitive);
+                let calls = core::cell::Cell::new(0);
+                let failures = assert_that!(response)
+                    .with_renderer(RevealingRenderer {
+                        original: &response.headers()["x-api-key"],
+                        calls: &calls,
+                    })
+                    .capture(|it| it.has_header_value("x-api-key", "other"));
+
+                assert_that!(failures).has_length(1);
+                let actual = failures[0].actual.as_ref().expect("actual value");
+                assert_that!(crate::test_support::rendered_text(actual))
+                    .is_equal_to(r#"revealed("secret-\xff")"#);
+                assert_that!(actual.type_name)
+                    .is_equal_to(Some(core::any::type_name::<reqwest::header::HeaderValue>()));
+                assert_that!(calls.get()).is_equal_to(1);
+                assert_that!(response.headers()["x-api-key"].is_sensitive()).is_equal_to(sensitive);
+            }
+        }
+
+        #[test]
+        fn applies_the_rendering_budget_after_a_custom_renderer_reveals_the_header() {
+            let response = header_response(b"secret", true);
+            let calls = core::cell::Cell::new(0);
+            let failures = assert_that!(response)
+                .with_renderer(RevealingRenderer {
+                    original: &response.headers()["x-api-key"],
+                    calls: &calls,
+                })
+                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(4).build())
+                .capture(|it| it.has_header_value("x-api-key", "other"));
+
+            assert_that!(failures[0].actual.as_ref().expect("actual value").body).is_equal_to(
+                crate::renderer::RenderedBody::Text {
+                    text: "reve".into(),
+                    omitted_characters: 14,
+                },
+            );
+            assert_that!(calls.get()).is_equal_to(1);
+            assert_that!(response.headers()["x-api-key"].is_sensitive()).is_true();
         }
 
         #[test]
@@ -1130,7 +1584,7 @@ mod tests {
                   Actual: "text/plain"
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                   - Header: "content-type"
                 -------- assertr --------
             "#});
@@ -1155,7 +1609,7 @@ mod tests {
                 Expected: "content-type"
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                   - Expected value: "application/json"
                 -------- assertr --------
             "#});
@@ -1181,7 +1635,7 @@ mod tests {
                           Actual: "text/plain"
 
                         Details:
-                          - URL: http://localhost/hello
+                          - URL: "http://localhost/hello"
                           - Header: "content-type"
                         -------- assertr --------
                     "#});
@@ -1191,7 +1645,7 @@ mod tests {
     }
 
     mod get_header {
-        use super::{ok_response, response};
+        use super::{TextOnly, ok_response, response};
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -1209,6 +1663,45 @@ mod tests {
             assert_that!(ok_response())
                 .get_header("content-type")
                 .is_equal_to(reqwest::header::HeaderValue::from_static("text/plain"));
+        }
+
+        #[test]
+        fn extraction_requires_only_a_string_renderer_and_preserves_it() {
+            let response = ok_response();
+            let assertion: AssertThat<'_, reqwest::header::HeaderValue, Panic, TextOnly> =
+                assert_that!(response)
+                    .with_renderer(TextOnly)
+                    .get_header("content-type");
+
+            assert_that!(assertion.actual().as_bytes()).is_equal_to(b"text/plain");
+        }
+
+        #[test]
+        fn renders_missing_header_evidence_with_only_a_string_renderer() {
+            let response = ok_response();
+            assert_that_panic_by(|| {
+                assert_that!(response)
+                    .with_renderer(TextOnly)
+                    .with_location(false)
+                    .get_header("missing");
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `response`
+
+                Actual: [
+                    <redacted text>,
+                ]
+
+                does not contain the header
+
+                Expected: <redacted text>
+
+                Details:
+                  - URL: <redacted text>
+                -------- assertr --------
+            "});
         }
 
         #[test]
@@ -1251,7 +1744,7 @@ mod tests {
                 Expected: "content-type"
 
                 Details:
-                  - URL: http://localhost/hello
+                  - URL: "http://localhost/hello"
                 -------- assertr --------
             "#});
         }

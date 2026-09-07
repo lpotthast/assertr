@@ -38,6 +38,19 @@
 //! [`with_panic_presentation`](crate::AssertThat::with_panic_presentation) to change panic report
 //! layout. Value renderers apply before either capture or panic handling.
 //!
+//! ## Sensitive values
+//!
+//! [`ValueRenderer::sensitive_value_policy`] controls how sensitivity-aware assertions prepare
+//! values for the renderer's `fmt` method. Currently, reqwest response `has_header_value` and
+//! `does_not_have_header` consult this policy for header values.
+//!
+//! Custom renderers default to [`SensitiveValuePolicy::Preserve`], receiving the original header
+//! and sensitivity flag so their formatter controls redaction. [`DebugRenderer`] chooses
+//! [`SensitiveValuePolicy::Reveal`], displaying header contents for test diagnostics by rendering
+//! an unmarked copy. Custom renderers can opt into the same policy. The response's header stays
+//! unchanged, and rendering budgets still apply. Generic value rendering, including direct
+//! equality on a header, passes the original value to `fmt` without consulting this policy.
+//!
 //! ## Limit diagnostic output
 //!
 //! [`RenderingBudget`] bounds retained items and leaf characters without changing whether an
@@ -67,7 +80,7 @@ pub use context::{RenderedValue, RenderedValues, RenderingContext};
 pub use presentation::{CollectionPresentation, GroupStyle, RenderingOrder};
 pub use rendered::{IntoRendered, Rendered, RenderedBody};
 pub use type_info::{TypeHint, Typed};
-pub use value::{CustomRenderer, DebugRenderer, ValueRenderer};
+pub use value::{CustomRenderer, DebugRenderer, SensitiveValuePolicy, ValueRenderer};
 
 pub(crate) use context::Compact;
 pub(crate) use context::omission;

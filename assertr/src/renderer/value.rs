@@ -1,5 +1,26 @@
 use core::fmt;
 
+/// How sensitivity-aware assertions prepare values for a renderer.
+///
+/// Reqwest response `has_header_value` and `does_not_have_header` consult this policy before
+/// rendering a header. It does not change generic value rendering, such as direct equality on
+/// a `HeaderValue`, or require assertions to inspect opaque values for sensitive contents.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum SensitiveValuePolicy {
+    /// Pass the original value and its sensitivity metadata to the renderer.
+    ///
+    /// This is the default for custom renderers. The renderer controls redaction in its
+    /// [`ValueRenderer::fmt`] implementation. This policy does not itself mask values.
+    Preserve,
+
+    /// Pass a diagnostic copy with its sensitivity flag cleared to the renderer.
+    ///
+    /// The asserted value stays unchanged. Values not marked sensitive are passed through
+    /// directly. [`DebugRenderer`] selects this policy so header contents appear in test failures.
+    Reveal,
+}
+
 /// Formats individual values in assertion diagnostics.
 ///
 /// A `ValueRenderer<T>` writes one `&T` to a [`fmt::Formatter`]. Assertr controls the surrounding
@@ -94,9 +115,28 @@ pub trait ValueRenderer<T: ?Sized> {
     ///
     /// Returns an error if writing to `f` fails.
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result;
+
+    /// Selects how sensitivity-aware assertions prepare values before calling [`Self::fmt`].
+    ///
+    /// The default, [`SensitiveValuePolicy::Preserve`], passes the original value with its
+    /// sensitivity metadata intact. [`SensitiveValuePolicy::Reveal`] requests a diagnostic copy
+    /// with its sensitivity flag cleared. The original subject is never changed.
+    ///
+    /// Currently, reqwest response `has_header_value` and `does_not_have_header` consult this
+    /// policy. Generic value rendering still calls `fmt` with the original value directly.
+    ///
+    /// Renderer adapters should forward this method when preserving another renderer's policy.
+    #[must_use]
+    fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
+        SensitiveValuePolicy::Preserve
+    }
 }
 
 /// The default renderer. Delegates to [`fmt::Debug`].
+///
+/// Selects [`SensitiveValuePolicy::Reveal`] so reqwest response header assertions display
+/// header contents even when marked sensitive, using an unmarked diagnostic copy.
+/// Generic assertions, such as equality on a `HeaderValue`, retain its own `Debug` behavior.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DebugRenderer;
 
@@ -104,6 +144,10 @@ pub struct DebugRenderer;
 impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for DebugRenderer {
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(value, f)
+    }
+
+    fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
+        SensitiveValuePolicy::Reveal
     }
 }
 

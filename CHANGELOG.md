@@ -89,6 +89,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Breaking:** Reqwest response header assertions and `get_header` diagnostics now honor custom renderers and
+  rendering budgets. Custom renderer callers need `ValueRenderer<str>`, plus `ValueRenderer<HeaderValue>` for
+  `has_header_value` and `does_not_have_header`. Generic bounds use `ReqwestResponseAssertions<R>`. The default
+  still displays marked-sensitive header contents for test diagnostics, escaping non-ASCII bytes instead of
+  decoding them lossily. Custom renderers preserve the original sensitivity flag by default and can request an
+  unmarked diagnostic copy through `ValueRenderer::sensitive_value_policy` and `SensitiveValuePolicy::Reveal`.
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 
 ### Removed
