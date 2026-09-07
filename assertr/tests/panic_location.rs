@@ -1,12 +1,15 @@
-use std::panic::{AssertUnwindSafe, Location, catch_unwind, set_hook, take_hook};
+use std::convert::Infallible;
+use std::panic::{catch_unwind, set_hook, take_hook};
 use std::sync::mpsc;
 
-use assertr::{FailureKind, prelude::*};
+use assertr::failure::adapter::{Adapter, HumanReadableText};
+use assertr::prelude::*;
 
-#[track_caller]
-fn check_panic_location(assertion: impl FnOnce()) {
-    let expected = Location::caller();
+#[test]
+fn panic_and_failure_locations_point_to_the_assertion_call() {
+    // This binary has one test because panic hooks are process-global.
     let (sender, receiver) = mpsc::channel();
+    let (failure_sender, failure_receiver) = mpsc::channel();
     let previous_hook = take_hook();
     set_hook(Box::new(move |info| {
         let location = info.location().map(|location| {
@@ -19,39 +22,49 @@ fn check_panic_location(assertion: impl FnOnce()) {
         let _ = sender.send(location);
     }));
 
-    let outcome = catch_unwind(AssertUnwindSafe(assertion));
+    let outcome = catch_unwind(|| {
+        assert_that!(1)
+            .with_panic_presentation(RecordFailure(failure_sender))
+            .is_equal_to(2);
+    });
     set_hook(previous_hook);
 
-    assert!(outcome.is_err(), "expected an assertion failure");
-    assert_eq!(
-        receiver.try_recv().expect("the panic hook should run"),
-        Some((
-            expected.file().to_owned(),
-            expected.line(),
-            expected.column()
-        )),
-        "the native panic location should point to the assertion call",
-    );
+    assert_that!(outcome)
+        .with_detail_message("expected an assertion failure")
+        .is_err();
+    let (file, line, column) = receiver
+        .try_recv()
+        .expect("the panic hook should run")
+        .expect("the panic should have a location");
+
+    // Check Rust's native `PanicHookInfo::location()`, which panic hooks and tooling receive.
+    // Assertr separately captures `AssertionFailure::location` when building the failure. That
+    // field was already correct when `FailureBuilder::raise` lacked `#[track_caller]`, but Rust's
+    // native location pointed to the `panic!` inside `raise`. Checking only the structured failure
+    // would miss this regression. Both locations must point to the assertion above.
+    assert_that!(file).is_equal_to(file!());
+    assert_that!(line).is_equal_to(28);
+    assert_that!(column).is_equal_to(14); // The start of `is_equal_to` above.
+
+    let failure = failure_receiver
+        .try_recv()
+        .expect("the presentation should receive the structured failure");
+    let location = failure
+        .location
+        .expect("the failure should have a location");
+    assert_that!(location.file()).is_equal_to(file.as_str());
+    assert_that!(location.line()).is_equal_to(line);
+    assert_that!(location.column()).is_equal_to(column);
 }
 
-// Reconstruct the call so its punctuation and the check share the macro invocation's span.
-// This checks the exact file, line, and column without fixed source coordinates.
-macro_rules! assert_panic_location {
-    ($context:expr, $method:ident($($arg:expr),* $(,)?)) => {
-        check_panic_location(|| {
-            ($context).$method($($arg),*);
-        });
-    };
-}
+struct RecordFailure(mpsc::Sender<AssertionFailure>);
 
-#[test]
-fn native_panic_location_points_to_the_assertion_call() {
-    // Keep hook changes in a single test in a separate integration-test binary so they cannot
-    // interfere with other tests. This also exercises a no_std library on the hosted harness.
-    assert_panic_location!(assert_that!(1), is_equal_to(2));
-    assert_panic_location!(assert_that!(1).with_location(false), is_equal_to(2));
-    assert_panic_location!(assert_that!(1).failure(FailureKind::Other), raise());
+impl Adapter<AssertionFailure> for RecordFailure {
+    type Output = HumanReadableText;
+    type Error = Infallible;
 
-    #[cfg(feature = "fluent")]
-    assert_panic_location!(1.must(), be_equal_to(2));
+    fn adapt(&self, failure: &AssertionFailure) -> Result<HumanReadableText, Infallible> {
+        let _ = self.0.send(failure.clone());
+        ToHumanReadableText.adapt(failure)
+    }
 }
