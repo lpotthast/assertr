@@ -127,6 +127,7 @@ impl<'c> FailureBuilder<Attached<'c>> {
     /// # Panics
     ///
     /// Panics with the formatted failure message when not in capture mode.
+    #[track_caller]
     pub fn raise(self) {
         let Attached { sink, location } = self.target;
         let location = if sink.include_location() {
