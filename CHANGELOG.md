@@ -28,9 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   individual values.
 - `failure::adapter::Adapter` and `AdapterExt` support typed failure processing with `then` and `map_err` chains,
   including human-readable text and explicit stdout logging with `std`.
-- `with_panic_presentation` selects an owned `'static` text adapter shared by derived assertions, while capture mode
-  leaves presentation to the caller. Presentation errors fall back to the built-in report, as do unwinding adapter
-  panics with `std`.
+- `with_panic_presentation` selects an owned `'static + RefUnwindSafe` text adapter shared by derived assertions,
+  while capture mode leaves presentation to the caller. Presentation errors fall back to the built-in report,
+  as do unwinding adapter panics with `std`.
 - `AssertionFailure` and the new `AssertionFailures` aggregate implement `core::error::Error`, with plain readable
   `Display` and `Debug` reports that coexist with explicit presentation adapters.
 - Box and panic-payload `is_of_type` checks preserve the subject and work in panic and capture mode.
@@ -97,6 +97,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Breaking:** `AssertThat` inherits unwind-safety requirements from its subject and renderer. Contexts containing
+  non-unwind-safe user state require explicit `AssertUnwindSafe` when passed to `catch_unwind`. Ordinary assertions,
+  projections, and panic-assertion closures retain their existing bounds.
 - **Breaking:** `NumAssertions::is_close_to` now requires `assertions::num::NumericDistance`, implemented for all
   primitive integers, `f32`, and `f64`. Add this bound to generic callers and implement `checked_distance` for custom
   numeric types. Floating-point comparisons use the rounded absolute distance, fixing incorrect results from rounded

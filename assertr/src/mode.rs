@@ -14,7 +14,9 @@ mod sealed {
 /// This trait is sealed. [`Panic`] and [`Capture`] are its only implementations and are type-state
 /// markers, not extension points. Every assertion derived from a root assertion retains the root's
 /// mode.
-pub trait Mode: sealed::Sealed + 'static {
+pub trait Mode:
+    sealed::Sealed + core::panic::UnwindSafe + core::panic::RefUnwindSafe + 'static
+{
     /// Whether failures are collected for later inspection (`true`) or raise an immediate panic
     /// (`false`).
     const CAPTURES: bool;

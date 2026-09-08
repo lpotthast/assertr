@@ -66,6 +66,9 @@
 //! adds context to the default report. The context owns the adapter, so it must be `'static`.
 //! Move or clone any local data into it, or share owned data through `Rc`. Derived assertions share
 //! the adapter without requiring `Clone`. Displayable adapter errors become strings internally.
+//! Panic presentation also requires [`RefUnwindSafe`](core::panic::RefUnwindSafe), preserving the
+//! adapter's unwind-safety guarantee after its type is erased. Explicit adapter calls have no such
+//! requirement.
 //!
 //! Capture mode stores structured failures without running this presentation. Apply adapters
 //! explicitly to captured failures as shown above. To change individual diagnostic values before

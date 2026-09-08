@@ -48,6 +48,41 @@ fn projections_run_without_std() {
     projections_compile_without_renderer_support();
 }
 
+#[allow(dead_code)]
+fn unwind_safe_projections_compile_without_std() {
+    use core::{
+        cell::Cell,
+        panic::{RefUnwindSafe, UnwindSafe},
+    };
+    fn both<T: UnwindSafe + RefUnwindSafe>(_: &T) {}
+    struct NoRenderer;
+
+    let failures = assert_that_owned!(Cell::new(1))
+        .with_renderer(Cell::new(0))
+        .capture(|root| {
+            let child = root.derive_owned(Cell::get).with_renderer(NoRenderer);
+            both(&child);
+            child.track_assertion();
+            root
+        });
+    assert!(failures.is_empty());
+}
+
+#[cfg(test)]
+#[test]
+fn unwind_safe_projections_run_without_std() {
+    unwind_safe_projections_compile_without_std();
+    let failures = assert_that!(1).capture(|root| {
+        let result = std::panic::catch_unwind(|| {
+            root.derive(|value| value).is_equal_to(2);
+            panic!("after recording a failure");
+        });
+        assert!(result.is_err());
+        root.is_equal_to(3)
+    });
+    assert_eq!(failures.len(), 2);
+}
+
 #[cfg(feature = "num")]
 #[allow(dead_code)]
 fn numeric_assertions_compile_without_std() {
@@ -275,7 +310,10 @@ mod tests {
     }
 
     use alloc::{rc::Rc, string::String};
-    use core::{cell::Cell, convert::Infallible};
+    use core::{
+        convert::Infallible,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
 
     use assertr::prelude::{
         BoolAssertions, CollectionAssertions, IdentityAssertions, IteratorAssertions,
@@ -286,7 +324,7 @@ mod tests {
         failure::adapter::{Adapter, HumanReadableText, ToHumanReadableText},
     };
 
-    struct CountsPresentations(Rc<Cell<usize>>);
+    struct CountsPresentations(Rc<AtomicUsize>);
 
     #[test]
     fn opaque_identity_assertions_capture_and_panic_without_std() {
@@ -331,19 +369,19 @@ mod tests {
         type Error = Infallible;
 
         fn adapt(&self, failure: &AssertionFailure) -> Result<Self::Output, Self::Error> {
-            self.0.set(self.0.get() + 1);
+            self.0.fetch_add(1, Ordering::Relaxed);
             ToHumanReadableText.adapt(failure)
         }
     }
 
     #[test]
     fn a_non_sync_presentation_runs_only_in_panic_mode_without_std() {
-        let count = Rc::new(Cell::new(0));
+        let count = Rc::new(AtomicUsize::new(0));
         let failures = assertr::assert_that!(1)
             .with_panic_presentation(CountsPresentations(Rc::clone(&count)))
             .capture(|it| it.is_equal_to(2));
         assert_eq!(failures.len(), 1);
-        assert_eq!(count.get(), 0);
+        assert_eq!(count.load(Ordering::Relaxed), 0);
 
         let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             assertr::assert_that!(1)
@@ -358,7 +396,7 @@ mod tests {
                 .unwrap()
                 .contains("Expected: 2\n\n  Actual: 1")
         );
-        assert_eq!(count.get(), 1);
+        assert_eq!(count.load(Ordering::Relaxed), 1);
     }
 
     #[test]

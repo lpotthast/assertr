@@ -4,7 +4,7 @@
 //! remain independent of how assertion failures are handled.
 
 use alloc::string::String;
-use core::fmt::Write;
+use core::{fmt::Write, panic::RefUnwindSafe};
 
 use super::{
     AssertionFailure,
@@ -15,8 +15,10 @@ use super::{
 ///
 /// The `'static` bound keeps the owned adapter's destructor independent of subject borrows,
 /// allowing those borrows to end at the assertion context's last use.
-pub(crate) type PanicPresentation =
-    dyn Adapter<AssertionFailure, Output = HumanReadableText, Error = String> + 'static;
+/// Preserve unwind safety when erasing the adapter type, including through the shared `Rc`.
+pub(crate) type PanicPresentation = dyn Adapter<AssertionFailure, Output = HumanReadableText, Error = String>
+    + RefUnwindSafe
+    + 'static;
 
 /// Produces panic text, preserving the assertion report if the adapter fails.
 pub(crate) fn render(
@@ -28,16 +30,13 @@ pub(crate) fn render(
     };
 
     // Catch both adapter panics and panics from its error's Display implementation.
-    // AssertUnwindSafe is limited to this call: fallback uses independent failure data and never
-    // retries the adapter or relies on its state after unwinding.
     #[cfg(feature = "std")]
-    let result =
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| adapter.adapt(failure))) {
-            Ok(result) => result,
-            Err(payload) => {
-                return fallback(failure, "panicked", panic_payload(payload.as_ref()));
-            }
-        };
+    let result = match std::panic::catch_unwind(|| adapter.adapt(failure)) {
+        Ok(result) => result,
+        Err(payload) => {
+            return fallback(failure, "panicked", panic_payload(payload.as_ref()));
+        }
+    };
 
     #[cfg(not(feature = "std"))]
     let result = adapter.adapt(failure);

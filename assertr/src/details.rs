@@ -2,7 +2,7 @@ use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::{AssertThat, mode::Mode};
+use crate::{AssertThat, ChainRecords, mode::Mode};
 
 pub(crate) trait WithDetail {
     fn collect_messages(&self, collection: &mut Vec<String>);
@@ -10,10 +10,16 @@ pub(crate) trait WithDetail {
 
 impl<T, M: Mode, R> WithDetail for AssertThat<'_, T, M, R> {
     fn collect_messages(&self, collection: &mut Vec<String>) {
-        for m in self.state.detail_messages.borrow().iter() {
+        self.state.records.collect_messages(collection);
+    }
+}
+
+impl WithDetail for ChainRecords<'_> {
+    fn collect_messages(&self, collection: &mut Vec<String>) {
+        for m in self.detail_messages.borrow().iter() {
             collection.push(m.to_owned());
         }
-        if let Some(parent) = self.state.parent {
+        if let Some(parent) = self.parent {
             parent.collect_messages(collection);
         }
     }
@@ -29,7 +35,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// [`FailureBuilder::fact`](crate::failure::FailureBuilder::fact) instead.
     #[must_use]
     pub fn with_detail_message(self, message: impl Into<String>) -> Self {
-        self.state.detail_messages.borrow_mut().push(message.into());
+        self.add_detail_message(message);
         self
     }
 
@@ -44,8 +50,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         message_provider: impl Fn(&Self) -> Message,
     ) -> Self {
         if condition(&self) {
-            let message = message_provider(&self);
-            self.state.detail_messages.borrow_mut().push(message.into());
+            self.add_detail_message(message_provider(&self));
         }
         self
     }
@@ -57,6 +62,11 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// [`FailureBuilder::fact`](crate::failure::FailureBuilder::fact), which scopes them to a
     /// single failure.
     pub fn add_detail_message(&self, message: impl Into<String>) {
-        self.state.detail_messages.borrow_mut().push(message.into());
+        let message = message.into();
+        self.state
+            .records
+            .detail_messages
+            .borrow_mut()
+            .push(message);
     }
 }

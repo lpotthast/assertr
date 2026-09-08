@@ -8,6 +8,7 @@ related_to:
   - assertion-lifecycle
   - extension-contract
 sources:
+  - assertr/src/assert_that/diagnostics.rs
   - assertr/src/failure/mod.rs
   - assertr/src/failure/builder.rs
   - assertr/src/failure/failures.rs
@@ -55,9 +56,15 @@ change presentation but cannot recover omitted original values.
 
 Capture leaves presentation to the caller. Panic mode uses the configured adapter or `ToHumanReadableText` by default.
 
+`with_panic_presentation` owns a `'static + RefUnwindSafe` text adapter with a `Display` error. Derived chains share it
+through `Rc`, without requiring `Send`, `Sync`, or `Clone`. The stored trait object retains `RefUnwindSafe`.
+Explicit adapter calls have no unwind-safety bound.
+
 If a custom panic adapter returns an error, Assertr uses the default report and appends a presentation diagnostic. With
 `std`, it also catches an adapter panic, including a panic while formatting the adapter's error. It does not retry the
-adapter after unwinding. Without `std`, returned errors still fall back, but adapter panics propagate.
+adapter during that fallback, but a later assertion may invoke it again. The catch uses the adapter's `RefUnwindSafe`
+bound without an `AssertUnwindSafe` override. Without `std`, returned errors still fall back, but adapter panics
+propagate.
 
 This fallback applies only to panic presentation. Explicit adapter calls return their declared result directly.
 
@@ -67,4 +74,5 @@ This fallback applies only to panic presentation. Explicit adapter calls return 
 The [failure model](../assertr/src/failure/mod.rs) defines structured fields and root
 storage. [AssertionFailures](../assertr/src/failure/failures.rs) provides aggregate
 access. [Adapters](../assertr/src/failure/adapter/mod.rs) process failures,
+[presentation configuration](../assertr/src/assert_that/diagnostics.rs) retains the adapter's bounds,
 and [panic presentation](../assertr/src/failure/panic_presentation.rs) handles fallback.

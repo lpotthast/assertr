@@ -104,7 +104,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     {
         AssertThat {
             actual: Actual::Owned(mapper(self.actual())),
-            state: self.state.child(self, self.state.renderer.clone()),
+            state: self.state.child(self.state.renderer.clone()),
         }
     }
 
@@ -161,7 +161,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     {
         AssertThat {
             actual: Actual::Borrowed(mapper(self.actual())),
-            state: self.state.child(self, self.state.renderer.clone()),
+            state: self.state.child(self.state.renderer.clone()),
         }
     }
 
@@ -194,7 +194,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     {
         AssertThat {
             actual: Actual::Owned(mapper(self.actual()).await),
-            state: self.state.child(self, self.state.renderer.clone()),
+            state: self.state.child(self.state.renderer.clone()),
         }
     }
 

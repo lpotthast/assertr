@@ -114,10 +114,10 @@ where
         .with_location(include_location);
     assertions(sink.derive(|value| value));
     assert!(
-        sink.state.number_of_assertions.borrow().0 != 0,
+        sink.state.records.assertion_count() != 0,
         "The closure passed to satisfying performed no assertions!"
     );
-    sink.state.failures.take()
+    sink.state.records.failures.take()
 }
 
 #[cfg(test)]

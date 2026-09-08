@@ -145,7 +145,7 @@ mod tests {
                 .with_renderer(NoRenderer)
                 .is_same_instance_as(&value)
                 .is_same_instance_as(&value);
-            assert_eq!(assertion.state.number_of_assertions.borrow().0, 2);
+            assert_eq!(assertion.state.records.assertion_count(), 2);
         }
 
         #[test]
@@ -259,7 +259,7 @@ mod tests {
             let assertion: AssertThat<'_, Opaque, Panic, NoRenderer> = assert_that!(values[0])
                 .with_renderer(NoRenderer)
                 .is_not_same_instance_as(&values[1]);
-            assert_eq!(assertion.state.number_of_assertions.borrow().0, 1);
+            assert_eq!(assertion.state.records.assertion_count(), 1);
         }
 
         #[test]

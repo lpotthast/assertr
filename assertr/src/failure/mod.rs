@@ -339,9 +339,15 @@ pub(crate) trait Fallible {
 
 impl<T, M: Mode, R> Fallible for AssertThat<'_, T, M, R> {
     fn store_failure(&self, failure: AssertionFailure) {
-        match &self.state.parent {
+        self.state.records.store_failure(failure);
+    }
+}
+
+impl Fallible for crate::ChainRecords<'_> {
+    fn store_failure(&self, failure: AssertionFailure) {
+        match self.parent {
             Some(parent) => parent.store_failure(failure),
-            None => self.state.failures.borrow_mut().push(failure),
+            None => self.failures.borrow_mut().push(failure),
         }
     }
 }

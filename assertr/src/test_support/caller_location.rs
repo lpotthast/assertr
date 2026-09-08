@@ -6,13 +6,14 @@ use crate::{
     prelude::{PartialEqAssertions, ResultAssertions, assert_that},
 };
 use alloc::{rc::Rc, vec::Vec};
-use core::{cell::RefCell, convert::Infallible, panic::Location};
+use core::{convert::Infallible, panic::Location};
+use std::sync::Mutex;
 
 type FailureLocation = Option<&'static Location<'static>>;
 
 /// Records the failure's location and forwards the failure to the next adapter.
 pub(crate) struct LocationRecorder {
-    recorded_locations: Rc<RefCell<Vec<FailureLocation>>>,
+    recorded_locations: Rc<Mutex<Vec<FailureLocation>>>,
 }
 
 impl Adapter<AssertionFailure> for LocationRecorder {
@@ -20,7 +21,10 @@ impl Adapter<AssertionFailure> for LocationRecorder {
     type Error = Infallible;
 
     fn adapt(&self, failure: &AssertionFailure) -> Result<Self::Output, Self::Error> {
-        self.recorded_locations.borrow_mut().push(failure.location);
+        self.recorded_locations
+            .lock()
+            .unwrap()
+            .push(failure.location);
         Ok(failure.clone())
     }
 }
@@ -31,7 +35,7 @@ pub(crate) fn check_caller_location(
     assertions: impl FnOnce(Then<LocationRecorder, ToHumanReadableText>),
 ) {
     let expected = Location::caller();
-    let recorded_locations = Rc::new(RefCell::new(Vec::new()));
+    let recorded_locations = Rc::new(Mutex::new(Vec::new()));
 
     // The assertion context owns its presentation. Retain a handle to the recorded locations so
     // they survive unwinding and can be checked after the assertion panics.
@@ -44,7 +48,7 @@ pub(crate) fn check_caller_location(
     assert_that!(outcome)
         .with_detail_message("expected an assertion failure")
         .is_err();
-    assert_that!(recorded_locations.borrow().as_slice())
+    assert_that!(recorded_locations.lock().unwrap().as_slice())
         .with_detail_message(
             "incorrect assertion caller location (or no structured assertion failure)",
         )

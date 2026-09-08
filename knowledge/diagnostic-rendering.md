@@ -9,6 +9,7 @@ related_to:
   - collection-semantics
   - integration-boundaries
 sources:
+  - assertr/src/lib.rs
   - assertr/src/renderer/**
   - assertr/src/assertions/core/debug.rs
   - assertr/src/assertions/core/display.rs
@@ -33,6 +34,9 @@ The [extension contract](extension-contract.md#implementing-an-assertion) explai
 with type metadata and omission information. Custom assertions use these adapters to preserve the active renderer and
 budget. [Mapping and derivation](assertion-lifecycle.md#projections-and-continuation) carry the rendering configuration
 to new subjects.
+
+Installing a renderer imposes no unwind bound. Its type determines the renderer requirements of the chain's
+[unwind-safety auto traits](assertion-lifecycle.md#panic-observation-boundaries).
 
 Stable collections retain semantic iteration order in diagnostics. Sets and maps may sort by rendered text for
 deterministic output. This presentation choice does not

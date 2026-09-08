@@ -1,6 +1,10 @@
 #![cfg(feature = "std")]
 
-use core::{cell::Cell, convert::Infallible};
+use core::{
+    cell::Cell,
+    convert::Infallible,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     rc::Rc,
@@ -88,21 +92,35 @@ fn an_adapter_chain_can_own_a_copy_of_local_context() {
     assert_eq!(message, format!("{context}\n{DEFAULT_MESSAGE}"));
 }
 
-struct CountPresentations(Rc<Cell<usize>>);
+struct CountPresentations(Rc<AtomicUsize>);
+
+#[test]
+fn an_erased_presentation_preserves_context_unwind_safety() {
+    let count = Rc::new(AtomicUsize::new(0));
+    let context = assert_that!(1).with_panic_presentation(CountPresentations(Rc::clone(&count)));
+    assert!(
+        catch_unwind(|| {
+            context.derive(|value| value).is_equal_to(2);
+        })
+        .is_err()
+    );
+    assert!(catch_unwind(move || context.is_equal_to(3)).is_err());
+    assert_eq!(count.load(Ordering::Relaxed), 2);
+}
 
 impl Adapter<AssertionFailure> for CountPresentations {
     type Output = HumanReadableText;
     type Error = Infallible;
 
     fn adapt(&self, failure: &AssertionFailure) -> Result<HumanReadableText, Infallible> {
-        self.0.set(self.0.get() + 1);
+        self.0.fetch_add(1, Ordering::Relaxed);
         ToHumanReadableText.adapt(failure)
     }
 }
 
 #[test]
 fn an_owned_presentation_does_not_extend_the_subject_borrow_until_drop() {
-    let count = Rc::new(Cell::new(0));
+    let count = Rc::new(AtomicUsize::new(0));
     let mut values = vec![1];
     let assertion =
         assert_that!(values).with_panic_presentation(CountPresentations(Rc::clone(&count)));
@@ -112,12 +130,12 @@ fn an_owned_presentation_does_not_extend_the_subject_borrow_until_drop() {
     // Both contexts remain in scope, including the owned presentation's destructor.
     values.push(2);
     assert_eq!(values, [1, 2]);
-    assert_eq!(count.get(), 0);
+    assert_eq!(count.load(Ordering::Relaxed), 0);
 }
 
 #[test]
 fn a_non_clone_presentation_is_shared_with_derived_assertions() {
-    let count = Rc::new(Cell::new(0));
+    let count = Rc::new(AtomicUsize::new(0));
     let assertion = assert_that_owned!(1)
         .with_location(false)
         .with_panic_presentation(CountPresentations(Rc::clone(&count)));
@@ -126,20 +144,20 @@ fn a_non_clone_presentation_is_shared_with_derived_assertions() {
         assertion.derive_owned(|value| *value).is_equal_to(2);
     });
     assert!(child_message.contains("Expected: 2\n\n  Actual: 1"));
-    assert_eq!(count.get(), 1);
+    assert_eq!(count.load(Ordering::Relaxed), 1);
 
     let parent_message = panic_text(|| {
         assertion.is_equal_to(2);
     });
     assert_eq!(parent_message, DEFAULT_MESSAGE);
-    assert_eq!(count.get(), 2);
+    assert_eq!(count.load(Ordering::Relaxed), 2);
     // All contexts have dropped, releasing the presentation's shared state.
     assert_eq!(Rc::strong_count(&count), 1);
 }
 
 #[test]
 fn capture_and_success_do_not_invoke_a_non_sync_presentation() {
-    let count = Rc::new(Cell::new(0));
+    let count = Rc::new(AtomicUsize::new(0));
     let adapter = CountPresentations(Rc::clone(&count));
     assert_that!(1)
         .with_panic_presentation(CountPresentations(Rc::clone(&count)))
@@ -149,7 +167,7 @@ fn capture_and_success_do_not_invoke_a_non_sync_presentation() {
         .with_panic_presentation(CountPresentations(Rc::clone(&count)))
         .capture(|it| it.is_equal_to(2));
 
-    assert_eq!(count.get(), 0);
+    assert_eq!(count.load(Ordering::Relaxed), 0);
     assert_that!(failures).contains_exactly_satisfying([
         |element: AssertThat<AssertionFailure, Capture>| {
             element
@@ -157,7 +175,7 @@ fn capture_and_success_do_not_invoke_a_non_sync_presentation() {
                 .is_equal_to(DEFAULT_MESSAGE);
         },
     ]);
-    assert_eq!(count.get(), 1);
+    assert_eq!(count.load(Ordering::Relaxed), 1);
 }
 
 #[test]
@@ -398,7 +416,7 @@ mod matcher_capture {
 
     #[test]
     fn matcher_capture_preserves_data_without_invoking_presentation() {
-        let count = Rc::new(Cell::new(0));
+        let count = Rc::new(AtomicUsize::new(0));
         let failures = assert_that!([1, 2])
             .with_panic_presentation(CountPresentations(Rc::clone(&count)))
             .capture(|it| {
@@ -407,7 +425,7 @@ mod matcher_capture {
                     assertr::matchers::predicate(|x: &i32| *x == 3)
                 ])
             });
-        assert_that!(count.get()).is_equal_to(0);
+        assert_that!(count.load(Ordering::Relaxed)).is_equal_to(0);
         let child = &failures[0].children[0];
         assert_that!(child.path).is_equal_to([assertr::failure::PathSegment::Index(1)]);
         assert_that!(child.constraint.as_ref().unwrap().relation)
@@ -415,7 +433,7 @@ mod matcher_capture {
         let output = CountPresentations(Rc::clone(&count))
             .adapt(&failures[0])
             .unwrap();
-        assert_that!(count.get()).is_equal_to(1);
+        assert_that!(count.load(Ordering::Relaxed)).is_equal_to(1);
         assert_that!(output).contains("At [1]:");
     }
 }

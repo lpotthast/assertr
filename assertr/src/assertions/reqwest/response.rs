@@ -2315,7 +2315,7 @@ mod tests {
             let response = ok_response();
             let assertion = assert_that!(response).get_header("content-type");
 
-            assert_that!(assertion.state.number_of_assertions.borrow().0).is_equal_to(1);
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
         }
 
         #[test]
@@ -2462,7 +2462,7 @@ mod tests {
         async fn counts_as_one_assertion() {
             let assertion = assert_that_owned!(ok_response()).get_text().await;
 
-            assert_that!(assertion.state.number_of_assertions.borrow().0).is_equal_to(1);
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
         }
 
         #[test]
@@ -2613,7 +2613,7 @@ mod tests {
                 .get_json::<Person>()
                 .await;
 
-            assert_that!(assertion.state.number_of_assertions.borrow().0).is_equal_to(1);
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
         }
 
         #[tokio::test]

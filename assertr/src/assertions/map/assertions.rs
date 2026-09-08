@@ -796,7 +796,7 @@ mod tests {
 
             let assertion = assert_that!(map).contains_entry("foo", 1);
 
-            assert_that!(assertion.state.number_of_assertions.borrow().0).is_equal_to(1);
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
         }
 
         #[test]

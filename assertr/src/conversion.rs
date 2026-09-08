@@ -98,7 +98,7 @@ mod tests {
                             .with_location(false)
                             .$method();
                         assert_eq!(converted.actual().is_err(), fail);
-                        assert_eq!(converted.state.number_of_assertions.borrow().0, 0);
+                        assert_eq!(converted.state.records.assertion_count(), 0);
                         assert!(matches!(converted.actual, Actual::Owned(_)));
                         let converted = assert_that_owned!(Serialized {
                             calls: &calls,
@@ -108,13 +108,13 @@ mod tests {
                         .with_location(false)
                         .$method();
                         assert_eq!(converted.actual().is_err(), fail);
-                        assert_eq!(converted.state.number_of_assertions.borrow().0, 0);
+                        assert_eq!(converted.state.records.assertion_count(), 0);
                         let converted = AssertThat::new_capturing(Actual::Borrowed(&subject))
                             .with_renderer(NoRenderer)
                             .with_location(false)
                             .$method();
                         assert_eq!(converted.actual().is_err(), fail);
-                        assert_eq!(converted.state.number_of_assertions.borrow().0, 0);
+                        assert_eq!(converted.state.records.assertion_count(), 0);
                         let converted = AssertThat::new_capturing(Actual::Owned(Serialized {
                             calls: &calls,
                             fail,
@@ -123,7 +123,7 @@ mod tests {
                         .with_location(false)
                         .$method();
                         assert_eq!(converted.actual().is_err(), fail);
-                        assert_eq!(converted.state.number_of_assertions.borrow().0, 0);
+                        assert_eq!(converted.state.records.assertion_count(), 0);
                         assert_eq!(calls.get(), 4);
                     }
                 }

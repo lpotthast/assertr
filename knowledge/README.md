@@ -33,8 +33,8 @@ Use the [glossary](glossary.md) to find existing concepts and their preferred na
 
 | Document                                                    | Covers                                                                                                   |
 |-------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| [Glossary](glossary.md) | Existing concepts, preferred terms, and their Rust names. |
-| [Assertion lifecycle](assertion-lifecycle.md)               | Chain state, ownership, mapping, derivation, capture completion, and panic observation.                  |
+| [Glossary](glossary.md)                                     | Existing concepts, preferred terms, and their Rust names.                                                |
+| [Assertion lifecycle](assertion-lifecycle.md)               | Chain state and records, ownership, projections, capture completion, and unwind safety.                  |
 | [Failure processing](failure-processing.md)                 | Structured failures, root storage, adapters, and panic presentation.                                     |
 | [Diagnostic rendering](diagnostic-rendering.md)             | Leaf renderers, structural output, ordering, budgets, and formatted-value comparisons.                   |
 | [Matcher composition](matcher-composition.md)               | Matcher truth and evidence, typed conditions, assertion callbacks, unordered assignment, and `partial!`. |

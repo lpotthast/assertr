@@ -243,7 +243,7 @@ mod tests {
             let assertion = assert_that!(actual)
                 .with_renderer(NoRenderer)
                 .contains_same_instance_as(&keys[1]);
-            assert_eq!(assertion.state.number_of_assertions.borrow().0, 1);
+            assert_eq!(assertion.state.records.assertion_count(), 1);
         }
 
         #[test]
@@ -428,7 +428,7 @@ mod tests {
             let assertion = assert_that!(repeated)
                 .with_renderer(NumericRenderer)
                 .contains_exactly_same_instances([&keys[0], &keys[0]]);
-            assert_eq!(assertion.state.number_of_assertions.borrow().0, 1);
+            assert_eq!(assertion.state.records.assertion_count(), 1);
         }
 
         #[test]
@@ -596,7 +596,7 @@ mod tests {
             let assertion = assert_that!(repeated)
                 .with_renderer(NoRenderer)
                 .contains_exactly_same_instances_in_any_order([&keys[0], &keys[0], &keys[1]]);
-            assert_eq!(assertion.state.number_of_assertions.borrow().0, 1);
+            assert_eq!(assertion.state.records.assertion_count(), 1);
             assert_that!([] as [&Opaque; 0])
                 .with_renderer(NoRenderer)
                 .contains_exactly_same_instances_in_any_order([] as [&Opaque; 0]);

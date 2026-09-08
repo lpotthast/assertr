@@ -1,8 +1,8 @@
 use alloc::{string::String, vec::Vec};
-use core::{cell::RefCell, marker::PhantomData};
+use core::{cell::RefCell, marker::PhantomData, panic::AssertUnwindSafe};
 
 use crate::{
-    AssertThat, AssertionFailures, ChainState,
+    AssertThat, AssertionFailures, ChainRecords, ChainState,
     details::WithDetail,
     mode::{Capture, Panic},
     tracking::NumberOfAssertions,
@@ -11,17 +11,18 @@ use crate::{
 impl<'t, R> ChainState<'t, Panic, R> {
     fn into_capturing(self, messages: Vec<String>) -> ChainState<'t, Capture, R> {
         ChainState {
-            parent: None,
+            records: ChainRecords {
+                parent: None,
+                detail_messages: AssertUnwindSafe(RefCell::new(messages)),
+                // Validate work performed by the capture closure, not preceding panic-mode work.
+                number_of_assertions: AssertUnwindSafe(RefCell::new(NumberOfAssertions::new())),
+                failures: self.records.failures,
+            },
             subject_name: self.subject_name,
             expression: self.expression,
-            detail_messages: RefCell::new(messages),
             include_location: self.include_location,
             rendering_budget: self.rendering_budget,
             panic_presentation: self.panic_presentation,
-            // `capture` validates the assertions performed by its closure, not work completed on
-            // the panic-mode chain before capture began.
-            number_of_assertions: RefCell::new(NumberOfAssertions::new()),
-            failures: self.failures,
             mode: PhantomData,
             renderer: self.renderer,
         }
@@ -109,10 +110,10 @@ impl<'t, T, R> AssertThat<'t, T, Capture, R> {
     {
         let completed = assertions(self);
         assert!(
-            completed.state.number_of_assertions.borrow().0 != 0,
+            completed.state.records.assertion_count() != 0,
             "The closure passed to `capture` / `verify` performed no assertions!"
         );
-        completed.state.failures.take()
+        completed.state.records.failures.take()
     }
 }
 
