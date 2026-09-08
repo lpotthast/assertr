@@ -57,8 +57,8 @@ change presentation but cannot recover omitted original values.
 Capture leaves presentation to the caller. Panic mode uses the configured adapter or `ToHumanReadableText` by default.
 
 `with_panic_presentation` owns a `'static + RefUnwindSafe` text adapter with a `Display` error. Derived chains share it
-through `Rc`, without requiring `Send`, `Sync`, or `Clone`. The stored trait object retains `RefUnwindSafe`.
-Explicit adapter calls have no unwind-safety bound.
+through `Rc`, without requiring `Send`, `Sync`, or `Clone`. The stored trait object retains `RefUnwindSafe`. Explicit
+adapter calls have no unwind-safety bound.
 
 If a custom panic adapter returns an error, Assertr uses the default report and appends a presentation diagnostic. With
 `std`, it also catches an adapter panic, including a panic while formatting the adapter's error. It does not retry the
