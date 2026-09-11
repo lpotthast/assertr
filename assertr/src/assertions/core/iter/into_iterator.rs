@@ -957,14 +957,22 @@ mod tests {
                   - Consumed: 3
                   - Preview starts at: 0
                 Nested failures:
-                  - has no distinct matching element
+                  - is missing an element matching this expectation
 
                     Constraint:
                         satisfies the predicate
 
                     Details:
-                      - expected slot: 2
+                      - at slot: 2
                     Nested failures:
+                      - does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
+                      - does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
                       - does not satisfy the constraint
 
                         Constraint:
@@ -1040,13 +1048,13 @@ mod tests {
                   - Consumed: 3
                   - Preview starts at: 0
                 Nested failures:
-                  - has no distinct matching element
+                  - is missing an element matching this expectation
 
                     Constraint:
                         satisfies the assertions
 
                     Details:
-                      - expected slot: 2
+                      - at slot: 2
                     Nested failures:
                       - Actual: -1
 

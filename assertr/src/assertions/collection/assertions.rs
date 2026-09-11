@@ -992,13 +992,18 @@ mod tests {
                 does not match
 
                 Nested failures:
-                  - has no distinct matching element
+                  - is missing an element matching this expectation
 
                     Constraint:
                         satisfies the predicate
 
                     Details:
-                      - expected slot: 1
+                      - at slot: 1
+                    Nested failures:
+                      - does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
                 -------- assertr --------
             "});
         }
@@ -1025,14 +1030,22 @@ mod tests {
                 does not match
 
                 Nested failures:
-                  - has no distinct matching element
+                  - is missing an element matching this expectation
 
                     Constraint:
                         satisfies the predicate
 
                     Details:
-                      - expected slot: 2
+                      - at slot: 2
                     Nested failures:
+                      - does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
+                      - does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
                       - does not satisfy the constraint
 
                         Constraint:
@@ -1151,17 +1164,23 @@ mod tests {
                 does not match
 
                 Nested failures:
-                  - has no distinct matching element
+                  - is missing an element matching this expectation
 
                     Constraint:
                         satisfies the assertions
 
                     Details:
-                      - expected slot: 2
+                      - at slot: 2
                     Nested failures:
                       - Expected: 4
 
                           Actual: 1
+                      - Expected: 4
+
+                          Actual: 2
+                      - Expected: 4
+
+                          Actual: 3
                   - has unexpected elements
 
                     Details:

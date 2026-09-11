@@ -26,7 +26,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// expression.
     #[must_use]
     pub fn with_expression(mut self, expression: &'static str) -> Self {
-        self.state.expression = Some(expression);
+        self.state.expression = crate::Expression::Explicit(expression);
         self
     }
 

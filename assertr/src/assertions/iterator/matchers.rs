@@ -129,7 +129,15 @@ pub(crate) fn exact_or_prefix<S, T, L, I, M: Mode, R>(
     }
     for index in 0..expected_length {
         let Some(item) = iterator.next() else {
-            failure(this, context, "is missing a matching position", index).raise();
+            context.scoped(PathSegment::Index(index), |context| {
+                context.outcome(false, |context| list.describe_at(index, context));
+            });
+            failure(this, context, "is missing a matching position", index)
+                .fact(Fact::labelled(
+                    "Expected length",
+                    this.render().value(&expected_length),
+                ))
+                .raise();
             return;
         };
         if !context
@@ -359,6 +367,93 @@ mod tests {
                 text: "cus".into(),
                 omitted_characters,
             });
+    }
+
+    #[test]
+    fn missing_positions_respect_renderer_and_budget_without_evaluating_matchers() {
+        for exact in [true, false] {
+            for maximum in 0..=2 {
+                let evaluations = Cell::new(0);
+                let descriptions = Cell::new(0);
+                let later_descriptions = Cell::new(0);
+                let matchers = (
+                    crate::matchers::predicate(|actual: &i32| {
+                        evaluations.set(evaluations.get() + 1);
+                        *actual == 1
+                    }),
+                    DescriptionOnly {
+                        expected: 987_654,
+                        descriptions: &descriptions,
+                    },
+                    DescriptionOnly {
+                        expected: 10,
+                        descriptions: &later_descriptions,
+                    },
+                );
+                let failures = assert_that_owned!([1].into_iter().filter(|_| true))
+                    .with_renderer(CustomValueRenderer)
+                    .with_rendering_budget(
+                        RenderingBudget::builder()
+                            .max_items(maximum)
+                            .max_leaf_characters(3)
+                            .build(),
+                    )
+                    .capture(|it| {
+                        if exact {
+                            it.contains_exactly_matching(matchers)
+                        } else {
+                            it.starts_with_matching(matchers)
+                        }
+                    });
+
+                let retained = maximum.min(1);
+                assert_that!(evaluations.get()).is_equal_to(1);
+                assert_that!(descriptions.get()).is_equal_to(retained);
+                assert_that!(later_descriptions.get()).is_equal_to(0);
+                assert_that!(failures).contains_exactly_satisfying([
+                    |failure: AssertThat<AssertionFailure, Capture>| {
+                        failure
+                            .derive(|failure| &failure.omitted_children)
+                            .is_equal_to(1 - retained);
+                        failure
+                            .derive_owned(AssertionFailure::children)
+                            .contains_exactly_satisfying(
+                                (0..retained)
+                                    .map(|_| {
+                                        |child: AssertThat<AssertionFailure, Capture>| {
+                                            child.derive(|child| &child.path).is_equal_to([
+                                                crate::failure::PathSegment::Index(1),
+                                            ]);
+                                            child
+                                                .derive_owned(AssertionFailure::constraint)
+                                                .is_some_satisfying(|constraint| {
+                                                    constraint
+                                                        .derive(|constraint| &constraint.relation)
+                                                        .is_equal_to("is equal to");
+                                                    constraint
+                                                        .derive(|constraint| &constraint.expected)
+                                                        .is_some_satisfying(|expected| {
+                                                            assert_truncated_value(
+                                                                &expected, "i32", 11,
+                                                            );
+                                                        });
+                                                });
+                                        }
+                                    })
+                                    .collect::<Vec<_>>(),
+                            );
+                        for label in ["Consumed", "Expected length"] {
+                            failure
+                                .derive_owned(AssertionFailure::facts)
+                                .contains_satisfying(|fact| {
+                                    fact.derive_owned(Fact::label).is_equal_to(label);
+                                    assert_truncated_value(&fact.derive(Fact::value), "usize", 6);
+                                });
+                        }
+                    },
+                ]);
+            }
+        }
     }
 
     #[test]

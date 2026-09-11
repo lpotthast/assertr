@@ -92,9 +92,25 @@ on both sides.
 Search marks from a failed assignment remain valid until the matching changes. Reusing them avoids repeated dead
 searches for surplus duplicates. An explicit stack keeps the search off the call stack.
 
-Structural matchers cache each visited actual/expectation pair, including its evidence, so rearranging assignments does
-not replay user predicates. The cache is sparse for easy matches but can approach the Cartesian product when constraints
-overlap. Diagnostic space can therefore be quadratic.
+Structural matchers evaluate each actual/expectation pair at most once and cache its truth and evidence. When positive
+mismatch diagnostics can retain evidence, they complete unvisited comparisons involving unmatched actual elements or
+unmatched expected slots before consuming the cache. Search pruning therefore cannot hide candidate evidence before
+sorting and budget retention. Passing matches, negative-polarity evaluations, probes, and zero-item budgets skip this
+completion. The assignment result is unchanged. The cache is sparse for easy matches but diagnostic completion can
+approach the Cartesian product, so comparison work and diagnostic space can be quadratic.
+
+Missing expected slots retain rejection evidence first. Plain equality rejections without paths or additional metadata
+are summarized as the missing value and a compact group of non-matching elements. The summary reuses rendered leaves,
+including type information, rendering order, and omission counts. Every candidate is checked for richer evidence before
+the group is limited, so omitted complex failures cannot be misrepresented as omitted elements. Richer rejections keep
+their detailed failure trees.
+
+Unexpected elements retain the remaining rejections. A surplus occurrence that satisfies occupied expectations is
+explained as an extra occurrence matching already satisfied expectations. A single matching expectation is described
+directly, while multiple expectations become children. The `at slot` fact identifies a zero-based expectation position.
+Separate occurrence groups preserve multiplicity without requiring an element renderer or introducing actual traversal
+indexes. An empty expectation list reports the unexpected count. This explains the chosen maximum assignment without
+selecting a canonical assignment among multiple valid alternatives.
 
 [Exact keyed map checks](collection-semantics.md#exact-comparisons-and-keyed-maps) use native lookup and stored-entry
 identity instead of this assignment algorithm.

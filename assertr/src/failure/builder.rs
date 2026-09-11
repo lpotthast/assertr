@@ -52,7 +52,7 @@ impl<T, M: Mode, R> FailureSink for AssertThat<'_, T, M, R> {
     }
 
     fn expression(&self) -> Option<&'static str> {
-        self.state.expression
+        self.state.expression.get()
     }
 
     fn panic_presentation(&self) -> Option<&super::panic_presentation::PanicPresentation> {

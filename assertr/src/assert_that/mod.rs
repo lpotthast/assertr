@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use core::{cell::RefCell, marker::PhantomData, panic::AssertUnwindSafe};
 
 use crate::{
-    AssertThat, AssertionFailures, ChainRecords, ChainState,
+    AssertThat, AssertionFailures, ChainRecords, ChainState, Expression,
     actual::Actual,
     mode::{Capture, Mode, Panic},
     renderer::{DebugRenderer, RenderingBudget},
@@ -32,7 +32,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
         Self {
             records: ChainRecords::new(None),
             subject_name: None,
-            expression: None,
+            expression: Expression::Unset,
             include_location: true,
             rendering_budget: RenderingBudget::DEFAULT,
             panic_presentation: None,
@@ -46,7 +46,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
         ChainState {
             records: ChainRecords::new(Some(&self.records)),
             subject_name: None,
-            expression: None,
+            expression: Expression::Unset,
             include_location: self.include_location,
             rendering_budget: self.rendering_budget,
             panic_presentation: self.panic_presentation.clone(),
@@ -80,6 +80,15 @@ impl<'t, T> AssertThat<'t, T, Panic> {
 }
 
 impl<'t, T> AssertThat<'t, T, Capture> {
+    /// Starts a fluent capture root whose receiver expression can be attached after completion.
+    #[cfg(feature = "fluent")]
+    #[track_caller]
+    pub(crate) fn new_fluent_capturing(actual: Actual<'t, T>) -> Self {
+        let mut assertion = Self::new_capturing(actual);
+        assertion.state.expression = Expression::PendingFluent(core::panic::Location::caller());
+        assertion
+    }
+
     #[track_caller]
     pub(crate) const fn new_capturing(actual: Actual<'t, T>) -> Self {
         AssertThat {

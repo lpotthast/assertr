@@ -77,6 +77,10 @@ item ends the scan, but a smaller rendering budget can omit it from the displaye
 evidence instead of an equality preview. [Rendering budgets](diagnostic-rendering.md#bounded-retention) limit the final
 evidence in either case.
 
+When a prefix or positional exact matcher scan exhausts the iterator, its failure reports the required length and
+describes the first missing expectation at its expected yield position. Describing that expectation does not evaluate
+its matcher or run an assertion callback. The item budget can omit the description while retaining an omission count.
+
 Direct iterator assertions may report yield positions. Borrowed traversal offsets are not stable collection
 indexes. [Reference identity](reference-identity.md) describes pointer comparisons and their ordering requirements.
 

@@ -44,6 +44,13 @@ variant, index, and rendered-key paths locate nested evidence.
 returns them as `AssertionFailures`, an ordered aggregate supporting slice access and iteration.
 See [assertion lifecycle](assertion-lifecycle.md#entry-subject-ownership-and-mode) for capture completion.
 
+With `fluent`, the aggregate privately retains indexes of failures awaiting receiver-expression attachment and their
+entry location. For callback values, the expression attribute checks the callback input type before consuming this
+bookkeeping after verification returns. Inline closures attach expressions to their inputs before assertions run.
+Derived failures and explicit expressions are excluded. Equality compares only the failure values, cloning preserves
+pending attachment, and conversion into a vector or owned iteration discards it. The public failure fields never expose
+a placeholder.
+
 `AssertionFailure`, `Fact`, and `Rendered` provide read-only accessors alongside their public fields. Getters borrow
 strings, slices, and rendered trees, or copy small metadata values. Optional trees use `Option<&Rendered>` without
 cloning or rendering again. Pass getters returning a borrowed sized value to `derive`, and getters returning slices,

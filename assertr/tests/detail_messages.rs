@@ -30,7 +30,7 @@ mod assertion_details {
             |element: AssertThat<AssertionFailure, Capture>| {
                 element
                     .derive_owned(|value| value.children[0].relation.as_deref())
-                    .is_equal_to(Some("has no distinct matching element"));
+                    .is_equal_to(Some("is missing an element matching this expectation"));
             },
             |element: AssertThat<AssertionFailure, Capture>| {
                 element

@@ -1186,6 +1186,47 @@ mod tests {
 
             assert_that!(calls.get()).is_equal_to(0);
         }
+
+        #[test]
+        fn short_iterators_report_first_missing_matcher_and_length() {
+            use crate::matchers::equal_to;
+
+            let iterators: [Box<dyn Iterator<Item = i32>>; 2] = [
+                Box::new(core::iter::from_fn(|| None)),
+                Box::new([1].into_iter().filter(|_| true)),
+            ];
+            for (consumed, iterator) in iterators.into_iter().enumerate() {
+                let expected = if consumed == 0 { 1 } else { 987_654 };
+                let failures = assert_that_owned!(iterator)
+                    .with_location(false)
+                    .capture(|it| it.starts_with_matching([equal_to(1), equal_to(987_654)]));
+
+                assert_that!(failures).contains_exactly_satisfying([
+                    |failure: AssertThat<AssertionFailure, Capture>| {
+                        failure.has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `iterator`
+
+                    is missing a matching position
+
+                    Details:
+                      - Consumed: {consumed}
+                      - Preview starts at: 0
+                      - Expected length: 2
+                    Nested failures:
+                      - At [{consumed}]:
+                        does not satisfy the constraint
+
+                        Constraint:
+                            is equal to
+
+                            Expected: {expected}
+                    -------- assertr --------
+                    "});
+                    },
+                ]);
+            }
+        }
     }
 
     mod starts_with_satisfying {
@@ -1245,6 +1286,42 @@ mod tests {
                       Actual: 2
                 -------- assertr --------
             "});
+        }
+
+        #[test]
+        fn missing_position_describes_assertions_without_running_them() {
+            let calls = core::cell::Cell::new(0);
+            let assertions = [1, 987_654].map(|expected| {
+                let calls = &calls;
+                move |it: AssertThat<i32, Capture>| {
+                    calls.set(calls.get() + 1);
+                    it.is_equal_to(expected);
+                }
+            });
+            let failures = assert_that_owned!([1].into_iter().filter(|_| true))
+                .capture(|it| it.starts_with_satisfying(assertions));
+
+            assert_that!(calls.get()).is_equal_to(1);
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure
+                        .derive_owned(AssertionFailure::children)
+                        .contains_exactly_satisfying([
+                            |child: AssertThat<AssertionFailure, Capture>| {
+                                child
+                                    .derive(|child| &child.path)
+                                    .is_equal_to([crate::failure::PathSegment::Index(1)]);
+                                child
+                                    .derive_owned(AssertionFailure::constraint)
+                                    .is_some_satisfying(|constraint| {
+                                        constraint
+                                            .derive(|constraint| &constraint.relation)
+                                            .is_equal_to("satisfies the assertions");
+                                    });
+                            },
+                        ]);
+                },
+            ]);
         }
     }
 
@@ -2009,6 +2086,47 @@ mod tests {
             assert_that!(failures).has_length(1);
             assert_that!(calls.get()).is_equal_to(3);
         }
+
+        #[test]
+        fn short_iterators_report_first_missing_matcher_and_length() {
+            use crate::matchers::equal_to;
+
+            let iterators: [Box<dyn Iterator<Item = i32>>; 2] = [
+                Box::new(core::iter::from_fn(|| None)),
+                Box::new([1].into_iter().filter(|_| true)),
+            ];
+            for (consumed, iterator) in iterators.into_iter().enumerate() {
+                let expected = if consumed == 0 { 1 } else { 987_654 };
+                let failures = assert_that_owned!(iterator)
+                    .with_location(false)
+                    .capture(|it| it.contains_exactly_matching([equal_to(1), equal_to(987_654)]));
+
+                assert_that!(failures).contains_exactly_satisfying([
+                    |failure: AssertThat<AssertionFailure, Capture>| {
+                        failure.has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `iterator`
+
+                    is missing a matching position
+
+                    Details:
+                      - Consumed: {consumed}
+                      - Preview starts at: 0
+                      - Expected length: 2
+                    Nested failures:
+                      - At [{consumed}]:
+                        does not satisfy the constraint
+
+                        Constraint:
+                            is equal to
+
+                            Expected: {expected}
+                    -------- assertr --------
+                    "});
+                    },
+                ]);
+            }
+        }
     }
 
     mod contains_exactly_satisfying {
@@ -2072,6 +2190,42 @@ mod tests {
                       Actual: 2
                 -------- assertr --------
             "});
+        }
+
+        #[test]
+        fn missing_position_describes_assertions_without_running_them() {
+            let calls = core::cell::Cell::new(0);
+            let assertions = [1, 987_654].map(|expected| {
+                let calls = &calls;
+                move |it: AssertThat<i32, Capture>| {
+                    calls.set(calls.get() + 1);
+                    it.is_equal_to(expected);
+                }
+            });
+            let failures = assert_that_owned!([1].into_iter().filter(|_| true))
+                .capture(|it| it.contains_exactly_satisfying(assertions));
+
+            assert_that!(calls.get()).is_equal_to(1);
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure
+                        .derive_owned(AssertionFailure::children)
+                        .contains_exactly_satisfying([
+                            |child: AssertThat<AssertionFailure, Capture>| {
+                                child
+                                    .derive(|child| &child.path)
+                                    .is_equal_to([crate::failure::PathSegment::Index(1)]);
+                                child
+                                    .derive_owned(AssertionFailure::constraint)
+                                    .is_some_satisfying(|constraint| {
+                                        constraint
+                                            .derive(|constraint| &constraint.relation)
+                                            .is_equal_to("satisfies the assertions");
+                                    });
+                            },
+                        ]);
+                },
+            ]);
         }
     }
 
@@ -2277,14 +2431,22 @@ mod tests {
                   - Consumed: 3
                   - Preview starts at: 0
                 Nested failures:
-                  - has no distinct matching element
+                  - is missing an element matching this expectation
 
                     Constraint:
                         satisfies the predicate
 
                     Details:
-                      - expected slot: 2
+                      - at slot: 2
                     Nested failures:
+                      - does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
+                      - does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
                       - does not satisfy the constraint
 
                         Constraint:
@@ -2359,13 +2521,13 @@ mod tests {
                   - Consumed: 3
                   - Preview starts at: 0
                 Nested failures:
-                  - has no distinct matching element
+                  - is missing an element matching this expectation
 
                     Constraint:
                         satisfies the assertions
 
                     Details:
-                      - expected slot: 2
+                      - at slot: 2
                     Nested failures:
                       - Actual: -1
 

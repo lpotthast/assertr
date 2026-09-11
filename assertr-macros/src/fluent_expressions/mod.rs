@@ -87,80 +87,156 @@ impl VisitMut for FluentExpressions {
                 };
             }
             EntryCall::Verify | EntryCall::VerifyOwned => {
-                let Expr::MethodCall(call) = expression else {
-                    unreachable!("the visitor does not replace verify calls")
+                let Expr::MethodCall(mut entry_call) = expression.clone() else {
+                    unreachable!("the visitor does not replace the entry itself")
                 };
-                let assertions = call
+                // A function call records the start of its path as its caller location. Give the
+                // resolved crate path the method span too, rather than the attribute's call site.
+                let assertr: TokenStream = self
+                    .assertr
+                    .clone()
+                    .into_iter()
+                    .map(|mut token| {
+                        token.set_span(span);
+                        token
+                    })
+                    .collect();
+                let result = Ident::new("__assertr_result", Span::mixed_site());
+                let location = Ident::new("__assertr_location", Span::mixed_site());
+                let callback = Ident::new("__assertr_callback", Span::mixed_site());
+                let callback_type = Ident::new("__assertr_callback_type", Span::mixed_site());
+                let assertions = entry_call
                     .args
-                    .first()
-                    .cloned()
+                    .first_mut()
                     .expect("verify rewrites have exactly one argument");
-                let assertr = &self.assertr;
-                call.args.clear();
-                call.args
-                    .push(adapt_verify_callback(assertions, assertr, &receiver, span));
+                if !adapt_verify_callback(assertions, &assertr, &receiver, &callback_type, span) {
+                    *expression = Expr::MethodCall(entry_call);
+                    return;
+                }
+
+                *expression = syn::parse_quote_spanned! {span=>
+                    {
+                        let mut #callback_type = ::core::option::Option::None;
+                        #assertr::__private::fluent_expressions::finish(
+                            #entry_call,
+                            |mut #result, #location| {
+                                if let ::core::option::Option::Some(#callback) = #callback_type {
+                                    #[allow(unused_imports)]
+                                    use #assertr::__private::fluent_expressions::{
+                                        CaptureCallback as _, CaptureCallbackFallback as _,
+                                        AttachExpressionFallback as _,
+                                    };
+                                    if (&#callback).accepts_capture() {
+                                        #assertr::__private::fluent_expressions::AttachExpression::new(
+                                            &mut #result,
+                                        )
+                                        .attach(::core::stringify!(#receiver), #location);
+                                    }
+                                }
+                                #result
+                            },
+                        )
+                    }
+                };
             }
         }
     }
 }
 
+/// Literal closures retain the method's expected callback signature, including coercions to
+/// function pointers. Other callback values keep their concrete type for inspection after the
+/// original call has resolved it. Returns whether a callback type needs to be retained.
 fn adapt_verify_callback(
-    assertions: Expr,
+    expression: &mut Expr,
     assertr: &TokenStream,
     receiver: &TokenStream,
+    callback_type: &Ident,
     span: Span,
-) -> Expr {
-    match assertions {
-        Expr::Closure(mut closure) if closure.inputs.len() == 1 => {
-            let input = closure
-                .inputs
-                .first()
-                .cloned()
-                .expect("the closure has exactly one input");
-            let body = closure.body;
-            let assertion = Ident::new("__assertr_assertion", Span::mixed_site());
-
-            closure.inputs.clear();
-            closure
-                .inputs
-                .push(syn::parse_quote_spanned! {span=> #assertion});
-            closure.body = Box::new(syn::parse_quote_spanned! {span=>
-                {
-                    let #input = #assertr::__private::fluent_expressions::AttachExpression::new(
-                        #assertion,
-                        ::core::stringify!(#receiver),
-                    )
-                    .attach();
+) -> bool {
+    match expression {
+        Expr::Closure(closure) => {
+            if closure.inputs.len() == 1 {
+                let input = closure
+                    .inputs
+                    .first()
+                    .cloned()
+                    .expect("the closure has exactly one input");
+                let assertion = Ident::new("__assertr_assertion", Span::mixed_site());
+                let body = &closure.body;
+                closure.inputs.clear();
+                let mut parameter = input.clone();
+                if let syn::Pat::Type(typed) = &mut parameter {
+                    *typed.pat = syn::parse_quote_spanned! {span=> #assertion};
+                } else {
+                    parameter = syn::parse_quote_spanned! {span=> #assertion};
+                }
+                closure.inputs.push(parameter);
+                *closure.body = syn::parse_quote_spanned! {span=> {
+                    #[allow(unused_imports)]
+                    use #assertr::__private::fluent_expressions::AttachExpressionFallback as _;
+                    let mut #assertion = #assertion;
+                    #assertr::__private::fluent_expressions::AttachExpression::new(&mut #assertion)
+                        .attach_to_input(::core::stringify!(#receiver));
+                    let #input = #assertion;
                     #body
-                }
-            });
-
-            Expr::Closure(closure)
-        }
-        Expr::Closure(closure) => Expr::Closure(closure),
-        assertions => {
-            let callback = Ident::new("__assertr_callback", Span::mixed_site());
-            let assertion = Ident::new("__assertr_assertion", Span::mixed_site());
-
-            syn::parse_quote_spanned! {span=>
-                {
-                    #[allow(unused_mut)]
-                    let mut #callback = #assertions;
-                    move |#assertion| {
-                        let #assertion = #assertr::__private::fluent_expressions::callback_input(
-                            &#callback,
-                            #assertion,
-                        );
-                        #callback(
-                            #assertr::__private::fluent_expressions::AttachExpression::new(
-                                #assertion,
-                                ::core::stringify!(#receiver),
-                            )
-                            .attach()
-                        )
-                    }
-                }
+                }};
             }
+            false
+        }
+        Expr::Block(block) => {
+            if let Some(syn::Stmt::Expr(tail, None)) = block.block.stmts.last_mut() {
+                adapt_verify_callback(tail, assertr, receiver, callback_type, span)
+            } else {
+                false
+            }
+        }
+        Expr::Paren(inner) => {
+            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_type, span)
+        }
+        Expr::Group(inner) => {
+            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_type, span)
+        }
+        Expr::Reference(inner) => {
+            let mut value = (*inner.expr).clone();
+            if !adapt_verify_callback(&mut value, assertr, receiver, callback_type, span) {
+                *inner.expr = value;
+                return false;
+            }
+            // Remember the reference itself. Moving its referent into the helper would consume
+            // a callback that the original call only borrowed.
+            *expression = syn::parse_quote_spanned! {span=>
+                #assertr::__private::fluent_expressions::remember_callback(#expression, &mut #callback_type)
+            };
+            true
+        }
+        Expr::Cast(inner) => {
+            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_type, span)
+        }
+        Expr::If(branch) => {
+            let then_retained =
+                if let Some(syn::Stmt::Expr(tail, None)) = branch.then_branch.stmts.last_mut() {
+                    adapt_verify_callback(tail, assertr, receiver, callback_type, span)
+                } else {
+                    false
+                };
+            let else_retained = branch.else_branch.as_mut().is_some_and(|(_, tail)| {
+                adapt_verify_callback(tail, assertr, receiver, callback_type, span)
+            });
+            then_retained || else_retained
+        }
+        Expr::Match(branch) => {
+            let mut retained = false;
+            for arm in &mut branch.arms {
+                retained |=
+                    adapt_verify_callback(&mut arm.body, assertr, receiver, callback_type, span);
+            }
+            retained
+        }
+        _ => {
+            *expression = syn::parse_quote_spanned! {span=>
+                #assertr::__private::fluent_expressions::remember_callback(#expression, &mut #callback_type)
+            };
+            true
         }
     }
 }

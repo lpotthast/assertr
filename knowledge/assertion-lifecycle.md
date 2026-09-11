@@ -15,6 +15,7 @@ sources:
   - assertr/src/entry/mod.rs
   - assertr/src/assert_that/mod.rs
   - assertr/src/assert_that/capture.rs
+  - assertr/src/entry/fluent.rs
   - assertr/src/assert_that/projection.rs
   - assertr/src/details.rs
   - assertr/src/tracking.rs
@@ -64,6 +65,13 @@ and its ancestors.
 The closure must return the supplied chain or a mapped continuation. Capture checks the returned chain's count and takes
 its failures. An empty assertion count panics as misuse. Capture does not catch user panics or invoke panic
 presentation. Completion happens when the closure returns, with no check deferred to `Drop`.
+
+Fluent verification roots start with a private pending expression and the tracked entry location. With
+`fluent_expressions`, inline closures replace it before running assertions. For callback values, failures expose it as
+`None` until completion verifies the callback input type and attaches the expression to the returned aggregate.
+Mappings and renderer changes preserve this state. Derivation resets it, and `with_expression` replaces it with an
+explicit value.
+See [fluent expression capture](fluent-entry.md#scoped-expression-capture) for completion and collision handling.
 
 ## Projections and continuation
 

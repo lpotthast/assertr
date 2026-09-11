@@ -38,9 +38,10 @@ pub fn fluent_aliases(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Captures receiver expressions for fluent assertion entry points in a test scope.
 ///
 /// Place this attribute on a test function or an inline test module. It rewrites syntactically
-/// visible `value.must()` and `value.must_owned()` calls to attach `stringify!(value)`, and wraps
-/// the callbacks passed to visible `value.verify(...)` and `value.verify_owned(...)` calls with
-/// macro-only expression-aware support. Calls outside the annotated scope remain unchanged.
+/// visible `value.must()` and `value.must_owned()` calls to attach `stringify!(value)`. For visible
+/// `value.verify(...)` and `value.verify_owned(...)` calls, it attaches the expression to the
+/// completed failures through macro-only support. Calls outside the annotated scope remain
+/// unchanged.
 ///
 /// A macro invocation can be the receiver, as in `fixture!().must()`, because the fluent call is
 /// visible to this attribute. The attribute cannot inspect later macro expansion, so a macro that
@@ -60,8 +61,13 @@ pub fn fluent_aliases(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// The rewrite keeps ordinary method resolution. A user-defined zero-argument `must` method is
 /// still called, after which the generated expression attachment fails to compile if its return
 /// type is not an assertion chain. User-defined `verify` and `verify_owned` methods likewise remain
-/// selected, and callback inputs unrelated to assertr pass through unchanged. Rewritten callbacks
-/// retain their `Fn`, `FnMut`, or `FnOnce` capabilities.
+/// selected, preserving callback `Fn`, `FnMut`, `FnOnce`, and coercions to
+/// concrete function-pointer parameters. Function items and callback variables retain automatic
+/// expression capture for assertr verification. Inline closures attach expressions to capture-mode
+/// inputs. Callback values permit attachment to completed failures only when their input is a
+/// capture-mode chain and the fluent entry location matches. Unrelated callback inputs remain
+/// unchanged even when `#[track_caller]` forwards a nested verification's location. Derived
+/// failures and explicit expression overrides keep their expressions.
 #[proc_macro_attribute]
 pub fn fluent_expressions(attr: TokenStream, item: TokenStream) -> TokenStream {
     if !attr.is_empty() {

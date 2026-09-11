@@ -339,15 +339,36 @@ pub(crate) trait Fallible {
 
 impl<T, M: Mode, R> Fallible for AssertThat<'_, T, M, R> {
     fn store_failure(&self, failure: AssertionFailure) {
-        self.state.records.store_failure(failure);
+        #[cfg(feature = "fluent")]
+        let expression = match self.state.expression {
+            crate::Expression::PendingFluent(location) => Some(location),
+            _ => None,
+        };
+        self.state.records.store_failure(
+            failure,
+            #[cfg(feature = "fluent")]
+            expression,
+        );
     }
 }
 
-impl Fallible for crate::ChainRecords<'_> {
-    fn store_failure(&self, failure: AssertionFailure) {
+impl crate::ChainRecords<'_> {
+    fn store_failure(
+        &self,
+        failure: AssertionFailure,
+        #[cfg(feature = "fluent")] expression: Option<&'static core::panic::Location<'static>>,
+    ) {
         match self.parent {
-            Some(parent) => parent.store_failure(failure),
-            None => self.failures.borrow_mut().push(failure),
+            Some(parent) => parent.store_failure(
+                failure,
+                #[cfg(feature = "fluent")]
+                expression,
+            ),
+            None => self.failures.borrow_mut().push(
+                failure,
+                #[cfg(feature = "fluent")]
+                expression,
+            ),
         }
     }
 }

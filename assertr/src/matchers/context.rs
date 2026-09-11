@@ -274,6 +274,10 @@ impl<'r, R> MatchContext<'r, R> {
         context
     }
 
+    pub(crate) fn evidence_order(&self) -> RenderingOrder {
+        self.evidence_order
+    }
+
     fn retain(&mut self, failure: AssertionFailure) {
         if self.evidence_order == RenderingOrder::SortByRenderedText && self.limit > 0 {
             let render = ToHumanReadableText::render_child;

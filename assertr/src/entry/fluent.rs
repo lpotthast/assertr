@@ -100,7 +100,7 @@ impl<'t, T: 't> IntoAssertContext<'t> for &'t T {
     where
         F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
-        AssertThat::new_capturing(Actual::Borrowed(self)).run_and_collect(assertions)
+        AssertThat::new_fluent_capturing(Actual::Borrowed(self)).run_and_collect(assertions)
     }
 }
 
@@ -117,7 +117,7 @@ impl<'t, T: 't> IntoAssertContext<'t> for &'t mut T {
     where
         F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
-        AssertThat::new_capturing(Actual::Borrowed(self)).run_and_collect(assertions)
+        AssertThat::new_fluent_capturing(Actual::Borrowed(self)).run_and_collect(assertions)
     }
 }
 
@@ -136,7 +136,7 @@ impl<'t, T: 't> IntoAssertContext<'t> for &'t mut [T] {
         F: FnOnce(AssertThat<'t, &'t [T], Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
         let shared: &'t [T] = self;
-        AssertThat::new_capturing(Actual::Owned(shared)).run_and_collect(assertions)
+        AssertThat::new_fluent_capturing(Actual::Owned(shared)).run_and_collect(assertions)
     }
 }
 
@@ -155,7 +155,7 @@ impl<'t> IntoAssertContext<'t> for &'t mut str {
         F: FnOnce(AssertThat<'t, &'t str, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
         let shared: &'t str = self;
-        AssertThat::new_capturing(Actual::Owned(shared)).run_and_collect(assertions)
+        AssertThat::new_fluent_capturing(Actual::Owned(shared)).run_and_collect(assertions)
     }
 }
 
@@ -196,7 +196,7 @@ impl<'t, T: 't> IntoOwnedAssertContext<'t> for T {
     where
         F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
-        AssertThat::new_capturing(Actual::Owned(self)).run_and_collect(assertions)
+        AssertThat::new_fluent_capturing(Actual::Owned(self)).run_and_collect(assertions)
     }
 }
 

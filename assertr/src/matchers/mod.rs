@@ -261,10 +261,13 @@
 //! restores its parent's path even after a failed child. [`MatchContext::probe`] evaluates truth
 //! in isolation and suppresses built-in leaf rendering. It cannot undo side effects or suppress
 //! arbitrary downstream rendering or assertion-closure
-//! rendering. Unordered matching caches each visited actual/expected pair, including diagnostic
-//! evidence, and never replays user code to explain failure. Candidate evidence can require
-//! quadratic space. Rendering limits bound retained output, not comparison work, and zero budgets
-//! do not change truth.
+//! rendering. Unordered matching evaluates each actual/expected pair at most once and caches its
+//! evidence. When positive mismatch diagnostics can retain evidence, it completes previously
+//! unvisited comparisons involving unmatched elements or expectations. Surplus occurrences that
+//! satisfy occupied expectations are explained through their constraint descriptions, without
+//! replaying evaluations or requiring an element renderer. Candidate evidence can require quadratic
+//! space. Rendering limits bound retained output, not comparison work. Probes and zero-item budgets
+//! skip diagnostic completion without changing truth.
 //!
 //! [Conditions](crate::condition) retain their error-typed authoring trait. Their assertions
 //! require rendering support for the condition error, but no subject renderer. Wrap them in

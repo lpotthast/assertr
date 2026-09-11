@@ -416,6 +416,27 @@ pub struct AssertThat<'t, T, M: Mode, R = DebugRenderer> {
     state: ChainState<'t, M, R>,
 }
 
+/// The source expression of one diagnostic subject. Fluent roots defer attachment until the
+/// attribute sees their completed failures when using callback values. Inline closures attach
+/// directly to their inputs. Both forms preserve callback call traits and coercions.
+#[derive(Clone, Copy)]
+enum Expression {
+    Unset,
+    #[cfg(feature = "fluent")]
+    PendingFluent(&'static core::panic::Location<'static>),
+    Explicit(&'static str),
+}
+
+impl Expression {
+    fn get(self) -> Option<&'static str> {
+        if let Self::Explicit(expression) = self {
+            Some(expression)
+        } else {
+            None
+        }
+    }
+}
+
 /// Everything a projection preserves while replacing its subject.
 ///
 /// Keeping this separate from `AssertThat` lets `map`, async mappings, and extractions move the
@@ -434,7 +455,7 @@ struct ChainState<'t, M: Mode, R> {
 
     /// Source expression shown in failure diagnostics, usually recorded by an entry macro or
     /// fluent-expression rewriting. Derived chains start without an expression.
-    expression: Option<&'static str>,
+    expression: Expression,
 
     /// Whether failures record the assertion caller's file, line, and column. Derived chains
     /// inherit this setting. Tests can disable it when comparing exact failure reports.

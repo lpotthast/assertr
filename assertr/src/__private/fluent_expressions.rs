@@ -1,75 +1,91 @@
 //! Macro-only expression-aware support for terminal fluent entry points.
 
-use core::ops::{Deref, DerefMut};
+use core::{marker::PhantomData, panic::Location};
 
-use crate::{AssertThat, mode::Capture};
+use crate::{AssertThat, AssertionFailures, mode::Capture};
 
-/// Constrains an input to the original callback's argument type before attaching an expression.
-///
-/// The macro calls the callback directly so its `Fn`, `FnMut`, or `FnOnce` capabilities remain
-/// available on the generated closure.
-pub fn callback_input<A, B, F>(_: &F, input: A) -> A
+/// Retains a type-only callback probe while preserving the callback value and its coercions.
+pub fn remember_callback<F>(callback: F, kind: &mut Option<Callback<F>>) -> F {
+    *kind = Some(Callback(PhantomData));
+    callback
+}
+
+/// A type-only probe that never invokes or changes the callback.
+pub struct Callback<F>(PhantomData<fn() -> F>);
+
+/// Recognizes a resolved callback that accepts a capture-mode assertion chain.
+pub trait CaptureCallback<'t, T: 't, R, Output> {
+    /// Permits expression attachment for an assertion callback.
+    fn accepts_capture(self) -> bool;
+}
+
+impl<'t, T: 't, R, Output, F> CaptureCallback<'t, T, R, Output> for &Callback<F>
 where
-    F: FnOnce(A) -> B,
+    F: FnOnce(AssertThat<'t, T, Capture, R>) -> Output,
 {
-    input
+    fn accepts_capture(self) -> bool {
+        true
+    }
 }
 
-/// Wrapper used to attach an expression only to capture-mode assertion callback inputs.
+/// Autoref fallback for unrelated callback inputs, other arities, and non-callable arguments.
+pub trait CaptureCallbackFallback {
+    /// Prevents unrelated arguments from granting expression attachment.
+    fn accepts_capture(self) -> bool;
+}
+
+impl<F> CaptureCallbackFallback for &&Callback<F> {
+    fn accepts_capture(self) -> bool {
+        false
+    }
+}
+
+/// Completes expression attachment without changing the original call's result type.
 ///
-/// The specialized inherent `attach` method wins for `AssertThat<_, Capture>`. Other callback
-/// inputs reach [`AttachExpressionFallback::attach`] through `DerefMut` and remain unchanged.
-pub struct AttachExpression<T> {
-    value: AttachExpressionFallback<T>,
-    expression: &'static str,
+/// Keeping `T` on both sides supplies the generated closure's expected input type before its
+/// specialized attachment is resolved. The macro places this call at the original method span,
+/// so its caller location identifies the same entry as the runtime's tracked fluent method.
+#[track_caller]
+pub fn finish<T>(result: T, attach: impl FnOnce(T, &'static Location<'static>) -> T) -> T {
+    attach(result, Location::caller())
 }
 
-impl<T> AttachExpression<T> {
-    /// Wraps a callback input and the expression to attach when the input is an assertion chain.
+/// Borrows a completed result for type-directed expression attachment.
+pub struct AttachExpression<'a, T>(&'a mut T);
+
+impl<'a, T> AttachExpression<'a, T> {
+    /// Wraps a result without changing its type or taking ownership of it.
     #[must_use]
-    pub fn new(value: T, expression: &'static str) -> Self {
-        Self {
-            value: AttachExpressionFallback(Some(value)),
-            expression,
-        }
+    pub fn new(result: &'a mut T) -> Self {
+        Self(result)
     }
 }
 
-impl<'t, T, R> AttachExpression<AssertThat<'t, T, Capture, R>> {
-    /// Attaches the expression to a capture-mode assertion callback input.
-    #[must_use]
-    pub fn attach(mut self) -> AssertThat<'t, T, Capture, R> {
-        self.value
-            .0
-            .take()
-            .expect("the fluent-expression callback input is present")
-            .with_expression(self.expression)
+impl AttachExpression<'_, AssertionFailures> {
+    /// Attaches the expression only to failures originating at this fluent entry.
+    pub fn attach(self, expression: &'static str, location: &'static Location<'static>) {
+        self.0.attach_expression(expression, location);
     }
 }
 
-impl<T> Deref for AttachExpression<T> {
-    type Target = AttachExpressionFallback<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
+impl<T, R> AttachExpression<'_, AssertThat<'_, T, Capture, R>> {
+    /// Attaches an inline closure's receiver expression before it runs assertions.
+    pub fn attach_to_input(self, expression: &'static str) {
+        self.0.state.expression = crate::Expression::Explicit(expression);
     }
 }
 
-impl<T> DerefMut for AttachExpression<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
-    }
+/// Fallback for results from unrelated methods with fluent entry names.
+pub trait AttachExpressionFallback {
+    /// Leaves an unrelated result unchanged.
+    fn attach(self, expression: &'static str, location: &'static Location<'static>);
+
+    /// Leaves an unrelated inline callback input unchanged.
+    fn attach_to_input(self, expression: &'static str);
 }
 
-/// Autoref-specialization fallback for callback inputs unrelated to assertr.
-pub struct AttachExpressionFallback<T>(Option<T>);
+impl<T> AttachExpressionFallback for AttachExpression<'_, T> {
+    fn attach(self, _: &'static str, _: &'static Location<'static>) {}
 
-impl<T> AttachExpressionFallback<T> {
-    /// Returns an unrelated callback input unchanged.
-    #[must_use]
-    pub fn attach(&mut self) -> T {
-        self.0
-            .take()
-            .expect("the fluent-expression callback input is present")
-    }
+    fn attach_to_input(self, _: &'static str) {}
 }

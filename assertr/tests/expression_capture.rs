@@ -158,6 +158,214 @@ fn fluent_attribute_captures_expressions_with_callback_values() {
 #[cfg(feature = "fluent")]
 #[assertr::fluent_expressions]
 #[test]
+fn fluent_attribute_attaches_only_pending_root_expressions() {
+    struct NoRenderer;
+
+    fn check(root: AssertThat<'_, i32, Capture>) -> AssertThat<'_, i64, Capture, NoRenderer> {
+        let root = root.is_equal_to(43);
+        root.derive_owned(|value| value + 1).is_equal_to(45);
+        root.derive_owned(|value| value + 1)
+            .with_expression("child override")
+            .is_equal_to(45);
+
+        root.with_renderer(NoRenderer)
+            .map(|actual| assertr::actual::Actual::Owned(i64::from(*actual.borrowed())))
+            .with_renderer(DebugRenderer)
+            .is_equal_to(43)
+            .with_expression("root override")
+            .is_equal_to(44)
+            .with_renderer(NoRenderer)
+    }
+
+    let actual = 42;
+    let borrowed = actual.verify(check);
+    let owned = actual.verify_owned(check);
+    for failures in [borrowed, owned] {
+        let expressions: Vec<_> = failures.iter().map(|failure| failure.expression).collect();
+        assert_eq!(
+            expressions,
+            [
+                Some("actual"),
+                None,
+                Some("child override"),
+                Some("actual"),
+                Some("root override")
+            ]
+        );
+    }
+}
+
+#[cfg(feature = "fluent")]
+#[assertr::fluent_expressions]
+#[test]
+fn fluent_attribute_preserves_nested_capture_expressions() {
+    let actual = 42;
+    let mut nested = AssertionFailures::default();
+    let failures = actual.verify(|it| {
+        let inner = 12;
+        nested = inner.verify_owned(|it| it.is_equal_to(13));
+        it.is_equal_to(43)
+    });
+    assert_eq!(failures[0].expression, Some("actual"));
+    assert_eq!(nested[0].expression, Some("inner"));
+}
+
+#[cfg(feature = "fluent")]
+#[test]
+fn fluent_attribute_does_not_attach_to_aggregates_from_other_calls() {
+    struct User(i32);
+    impl User {
+        fn verify(self, operation: fn(i32) -> i32) -> AssertionFailures {
+            operation(self.0).verify(|it| it.is_equal_to(43))
+        }
+
+        fn verify_owned(self, operation: fn(i32) -> i32) -> AssertionFailures {
+            operation(self.0).verify_owned(|it| it.is_equal_to(43))
+        }
+    }
+
+    #[assertr::fluent_expressions]
+    fn run() {
+        let failures = User(21).verify(|value| value * 2);
+        assert_eq!(failures[0].expression, None);
+        let failures = User(21).verify_owned(|value| value * 2);
+        assert_eq!(failures[0].expression, None);
+    }
+
+    run();
+}
+
+#[cfg(feature = "fluent")]
+#[test]
+fn fluent_attribute_does_not_attach_to_unrelated_tracked_verification() {
+    struct User(i32);
+    impl User {
+        #[track_caller]
+        fn verify(self, operation: fn(i32) -> i32) -> AssertionFailures {
+            operation(self.0).verify(|it| it.is_equal_to(43))
+        }
+
+        #[track_caller]
+        fn verify_owned(self, operation: impl FnOnce(i32) -> i32) -> AssertionFailures {
+            operation(self.0).verify_owned(|it| it.is_equal_to(43))
+        }
+    }
+
+    #[assertr::fluent_expressions]
+    fn run() {
+        fn double(value: i32) -> i32 {
+            value * 2
+        }
+
+        let failures = User(21).verify(|value| value * 2);
+        assert_eq!(failures[0].expression, None);
+        let callback: fn(i32) -> i32 = |value| value * 2;
+        let failures = User(21).verify(callback);
+        assert_eq!(failures[0].expression, None);
+        let failures = User(21).verify(double);
+        assert_eq!(failures[0].expression, None);
+
+        let offset = Box::new(21);
+        let failures = User(21).verify_owned(move |value| value + *offset);
+        assert_eq!(failures[0].expression, None);
+        let offset = Box::new(21);
+        let callback = move |value| value + *offset;
+        let failures = User(21).verify_owned(callback);
+        assert_eq!(failures[0].expression, None);
+    }
+
+    run();
+}
+
+#[cfg(feature = "fluent")]
+#[test]
+fn fluent_attribute_attaches_expressions_inside_tracked_functions() {
+    #[track_caller]
+    #[assertr::fluent_expressions]
+    fn check(actual: i32) -> [AssertionFailures; 2] {
+        let borrowed = actual.verify(|it| it.is_equal_to(43));
+        let owned = actual.verify_owned(|it| it.is_equal_to(43));
+        [borrowed, owned]
+    }
+
+    for failures in check(42) {
+        assert_eq!(failures[0].expression, Some("actual"));
+    }
+}
+
+#[cfg(feature = "fluent")]
+#[assertr::fluent_expressions]
+#[test]
+fn fluent_attribute_preserves_callback_blocks() {
+    let actual = 42;
+    let mut creations = 0;
+    let failures = actual.verify({
+        creations += 1;
+        |it| it.is_equal_to(43)
+    });
+    assert_eq!(creations, 1);
+    assert_eq!(failures[0].expression, Some("actual"));
+}
+
+#[cfg(feature = "fluent")]
+#[assertr::fluent_expressions]
+#[test]
+fn fluent_attribute_preserves_assertion_caller_locations() {
+    macro_rules! fail_at_caller {
+        ($it:ident, $expected:ident) => {{
+            $expected = Some(core::panic::Location::caller());
+            $it.is_equal_to(43)
+        }};
+    }
+
+    let mut expected = None;
+    let failures = 42.verify(|it| fail_at_caller!(it, expected));
+    assert_eq!(failures[0].location, expected);
+    let failures = 42.verify_owned(|it| fail_at_caller!(it, expected));
+    assert_eq!(failures[0].location, expected);
+}
+
+#[cfg(feature = "fluent")]
+#[assertr::fluent_expressions]
+#[test]
+fn fluent_attribute_preserves_receiver_and_callback_evaluation_order() {
+    use core::cell::RefCell;
+
+    struct User(i32);
+    impl User {
+        fn verify(self, operation: fn(i32) -> i32) -> i32 {
+            operation(self.0) + operation(self.0)
+        }
+
+        fn verify_owned(self, operation: fn(i32) -> i32) -> i32 {
+            operation(self.0) + operation(self.0)
+        }
+    }
+
+    fn receiver(events: &RefCell<Vec<&'static str>>) -> User {
+        events.borrow_mut().push("receiver");
+        User(21)
+    }
+
+    fn callback(events: &RefCell<Vec<&'static str>>) -> fn(i32) -> i32 {
+        events.borrow_mut().push("callback");
+        |value| value * 2
+    }
+
+    let events = RefCell::new(Vec::new());
+    let result = receiver(&events).verify(callback(&events));
+    assert_eq!(result, 84);
+    let result = receiver(&events).verify_owned(callback(&events));
+    assert_eq!(result, 84);
+    assert_eq!(
+        events.into_inner(),
+        ["receiver", "callback", "receiver", "callback"]
+    );
+}
+
+#[cfg(feature = "fluent")]
+#[assertr::fluent_expressions]
+#[test]
 fn fluent_attribute_evaluates_callback_once_before_repeated_calls() {
     struct User(i32);
 
