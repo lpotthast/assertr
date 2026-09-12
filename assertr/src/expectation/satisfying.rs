@@ -1,6 +1,9 @@
-use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult};
 use crate::{
-    AssertThat, AssertionFailures, actual::Actual, mode::Capture, renderer::RenderingContext,
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics,
+    assert_that::collect_assertions,
+    expectation::Evidence,
+    failure::{FailureBuilder, FailureKind},
+    mode::Capture,
 };
 
 /// A matcher that checks a value with existing assertion methods. Construct it with [`satisfying`].
@@ -70,54 +73,60 @@ where
     Satisfying(callback)
 }
 
-impl<A, R, F> AssertrMatcher<A, R> for Satisfying<F>
+impl<A, R, F> Expectation<A, R> for Satisfying<F>
 where
     R: Clone,
     F: for<'a> Fn(AssertThat<'a, A, Capture, R>),
 {
-    fn describe(&self, _: &MatchContext<'_, R>) -> ConstraintDescription {
-        ConstraintDescription::new("satisfies the assertions")
-    }
-
-    fn evaluate(&self, actual: &A, context: &mut MatchContext<'_, R>) -> MatchResult {
-        let failures =
-            collect_assertions(actual, context.render(), context.include_location, &self.0);
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        A: 'a;
+    type Rejection<'a>
+        = Evidence
+    where
+        Self: 'a,
+        A: 'a;
+    fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+        let mut context = settings.isolated();
+        let failures = collect_assertions(
+            actual,
+            context.render(),
+            context.include_location(),
+            &self.0,
+        );
         let matched = failures.is_empty();
-        if matched != context.is_positive() {
-            if matched {
-                context.outcome(true, |context| {
-                    <Self as AssertrMatcher<A, R>>::describe(self, context)
-                });
-            } else {
-                for failure in failures {
-                    context.record(failure);
-                }
+        if !matched {
+            for failure in failures {
+                context.record(failure);
+            }
+            if context.evidence.is_empty() {
+                context.outcome(false, |context| context.describe::<A, _>(self));
             }
         }
-        MatchResult::new(matched)
+        let evidence = context.into_evidence();
+        if matched { Ok(()) } else { Err(evidence) }
     }
 }
-
-pub(crate) fn collect_assertions<A, R, F>(
-    actual: &A,
-    rendering: RenderingContext<'_, R>,
-    include_location: bool,
-    assertions: F,
-) -> AssertionFailures
+impl<A, R, F> ExpectationDiagnostics<A, R> for Satisfying<F>
 where
     R: Clone,
-    F: for<'a> FnOnce(AssertThat<'a, A, Capture, R>),
+    F: for<'a> Fn(AssertThat<'a, A, Capture, R>),
 {
-    let sink = AssertThat::new_capturing(Actual::Borrowed(actual))
-        .with_renderer(rendering.renderer().clone())
-        .with_rendering_budget(rendering.budget())
-        .with_location(include_location);
-    assertions(sink.derive(|value| value));
-    assert!(
-        sink.state.records.assertion_count() != 0,
-        "The closure passed to satisfying performed no assertions!"
-    );
-    sink.state.records.failures.take()
+    const KIND: FailureKind = FailureKind::Matching;
+    const FLATTEN: bool = true;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&A, Evidence)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure.relation("satisfies the assertions"),
+            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+        }
+    }
 }
 
 #[cfg(test)]

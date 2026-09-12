@@ -3,10 +3,38 @@ use core::{cell::RefCell, marker::PhantomData, panic::AssertUnwindSafe};
 
 use crate::{
     AssertThat, AssertionFailures, ChainRecords, ChainState,
+    actual::Actual,
     details::WithDetail,
     mode::{Capture, Panic},
+    renderer::RenderingContext,
     tracking::NumberOfAssertions,
 };
+
+/// Runs a callback on an isolated capture chain with the supplied rendering and location settings.
+///
+/// Descendant assertions contribute to the capture root. User panics propagate, and an empty
+/// callback is rejected before its failures are returned.
+pub(crate) fn collect_assertions<A, R, F>(
+    actual: &A,
+    rendering: RenderingContext<'_, R>,
+    include_location: bool,
+    assertions: F,
+) -> AssertionFailures
+where
+    R: Clone,
+    F: for<'a> FnOnce(AssertThat<'a, A, Capture, R>),
+{
+    let sink = AssertThat::new_capturing(Actual::Borrowed(actual))
+        .with_renderer(rendering.renderer().clone())
+        .with_rendering_budget(rendering.budget())
+        .with_location(include_location);
+    assertions(sink.derive(|value| value));
+    assert!(
+        sink.state.records.assertion_count() != 0,
+        "The closure passed to satisfying performed no assertions!"
+    );
+    sink.state.records.failures.take()
+}
 
 impl<'t, R> ChainState<'t, Panic, R> {
     fn into_capturing(self, messages: Vec<String>) -> ChainState<'t, Capture, R> {
@@ -152,7 +180,7 @@ mod tests {
     #[crate::fluent_expressions]
     fn fluent_verification_collects_returned_contexts() {
         let failures = 1.verify(|it| it.be_equal_to(2));
-        assert_eq!(failures[0].expression, Some("1"));
+        assert_that!(failures[0].expression).is_equal_to(Some("1"));
         assert_that!([1, 2].into_iter().verify_owned(|it| it.contain(3))).has_length(1);
         assert_that!(1.verify(|it| it.be_equal_to(1))).is_empty();
     }

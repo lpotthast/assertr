@@ -27,7 +27,7 @@ Match only the struct fields that matter with `partial!`. Enable the `matchers` 
 example:
 
 ```rust
-use assertr::prelude::*;
+use assertr::{matchers::eq, prelude::*};
 
 struct User {
     name: &'static str,
@@ -35,11 +35,12 @@ struct User {
 }
 
 let user = User { name: "Alice", age: 30 };
-assert_that!(user).matches(partial!(User { name: "Alice", .. }));
+assert_that!(user).matches(partial!(User { name: eq("Alice"), .. }));
 ```
 
-Here `..` ignores the remaining fields. The struct needs no derives or annotations. Field
-expectations can also use constraints, existing assertion methods, and nested partial matches.
+Here `eq` is an alias for `equal_to`, and `..` ignores the remaining fields. The struct needs
+no derives or annotations. Fields require explicit matchers, which can also use existing
+assertion methods and nested partial matches.
 See the [partial matching guide](https://docs.rs/assertr/latest/assertr/matchers/index.html).
 
 Changing `"!"` to `"?"` in the greeting assertion above produces:
@@ -168,6 +169,24 @@ Blanket implementations make general assertions available to user-defined types.
 type has `is_equal_to`, a `PartialOrd` type has `is_greater_than`, and a `HasLength` type has
 `has_length`.
 
+## Reusable expectations
+
+Use the same check directly, on collection elements, or inside a structural matcher. The
+[matcher catalog](https://docs.rs/assertr/latest/assertr/matchers/index.html) exports every public
+built-in expectation, grouped by subject family:
+
+```rust
+use assertr::{matchers::{all_of, HasLengthOf, string}, prelude::*};
+
+let short_name = all_of((string::IsNotBlank, HasLengthOf::new(3)));
+assert_that!("Ada").matches(&short_name);
+assert_that!(["", "Ada", "Grace"]).contains_matching(&short_name);
+```
+
+An expectation defines a check. A matcher is an expectation used in composition. Both use the
+same implementation. Runtime matchers need no optional feature. The `matchers` feature enables
+`partial!` for selecting struct and enum fields.
+
 ## Guides
 
 These guides build on the quick start. Each lives with the API it explains and includes examples
@@ -178,7 +197,7 @@ you can adapt:
   parent, use `derive_owned` for computed values and borrowed slices, or await `derive_async`
   projections.
 - [Match selected fields and nested values](https://docs.rs/assertr/latest/assertr/matchers/index.html):
-  use `partial!` with plain values, selected matcher constraints, or existing assertions through
+  use `partial!` with explicit matchers such as `eq(value)`, or existing assertions through
   `satisfying`. Nest expectations through structs, collections, and maps. Only `partial!`
   requires the `matchers` feature.
 - [Collect failures without panicking](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture):
@@ -190,8 +209,8 @@ you can adapt:
   transform captured failures with adapters or select the presentation used by a panicking
   assertion.
 - [Write assertions for custom types](https://docs.rs/assertr/latest/assertr/#custom-assertions):
-  add chainable methods by composing existing assertions or building a structured failure
-  yourself.
+  implement reusable expectations with structured diagnostics, then expose chainable methods
+  through the shared executor.
 - [Assert properties of a type](https://docs.rs/assertr/latest/assertr/fn.assert_that_type.html):
   check size, type name, or drop requirements without constructing a value.
 

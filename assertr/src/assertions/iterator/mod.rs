@@ -1,7 +1,7 @@
 //! Shared streaming implementation for direct and borrowed iterator assertions.
 //!
-//! Every assertion consumes only as much of the iterator as it needs, keeps a bounded preview of
-//! the consumed elements, and raises its failure through the crate-internal failure builder. The
+//! Each scan consumes only as much of the iterator as it needs and retains a bounded preview
+//! or owned child evidence for explanation. The chain executor tracks and raises failures. The
 //! equality preview becomes the failure's actual value. Matcher previews retain selected leaf
 //! evidence. What the scan learned about consumption becomes its facts.
 
@@ -10,12 +10,18 @@ mod membership;
 mod positional;
 mod unordered;
 
+#[cfg(test)]
+mod tests;
+
+use crate::assertions::core::partial_eq::EqualToRef;
 use alloc::{collections::VecDeque, vec::Vec};
 use core::borrow::Borrow;
+use core::{marker::PhantomData, panic::Location};
 
 use crate::{
-    AssertThat, AssertionFailure, Mode, ValueRenderer,
-    failure::{Fact, FailureBuilder, FailureKind, FailureTarget},
+    AssertThat, AssertionContext, AssertionFailure, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
+    failure::{Fact, FailureBuilder, FailureKind},
     renderer::{GroupStyle, RenderedValues, RenderingContext},
     util::matching::match_bipartite,
 };
@@ -29,6 +35,52 @@ pub(crate) use unordered::assert_contains_exactly_in_any_order;
 
 const PREVIEW_CAPACITY: usize = 16;
 
+// Streaming definitions borrow an iterator for one scan. They are execution adapters, not
+// reusable expectations over a borrowed subject. The executor below owns the iterator's lifetime.
+trait Scan<I: Iterator, R> {
+    type Rejection;
+    const KIND: FailureKind;
+
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection>;
+
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target>;
+}
+
+#[track_caller]
+fn execute<S, I: Iterator, D, M: Mode, R>(
+    this: &AssertThat<'_, S, M, R>,
+    mut iterator: I,
+    definition: &D,
+) where
+    D: Scan<I, R>,
+{
+    this.test_once_after_tracking(
+        D::KIND,
+        Location::caller(),
+        |context| {
+            definition
+                .observe(&mut iterator, context)
+                .map_err(|rejection| (iterator, rejection))
+        },
+        |(iterator, rejection), failure, context| {
+            let failure = definition.explain(rejection, failure, context);
+            // Diagnostic values now own their contents. Release the iterator before raising,
+            // including in panic mode, where unwinding could otherwise poison an owned guard.
+            drop(iterator);
+            failure
+        },
+    );
+}
+
 struct Preview<Item> {
     items: Vec<Item>,
     consumed: usize,
@@ -40,22 +92,21 @@ impl<Item> Preview<Item> {
     }
 
     /// The retained elements, rendered as the failure's actual value.
-    fn rendered<'a, T, S, M: Mode, R>(
+    fn rendered<'a, T, R>(
         &'a self,
-        this: &'a AssertThat<'_, S, M, R>,
+        rendering: RenderingContext<'a, R>,
     ) -> RenderedValues<'a, T, Vec<Item>, R>
     where
         Item: Borrow<T>,
         R: ValueRenderer<T>,
     {
-        this.render()
-            .borrowed_values::<T, _>(&self.items, GroupStyle::List)
+        rendering.borrowed_values::<T, _>(&self.items, GroupStyle::List)
     }
 
     /// Attaches what the scan learned about consumption: how many elements were consumed, whether
     /// the preview had to drop earlier ones, and the index of the element that decided the
     /// assertion, if the caller reports positions.
-    fn facts<S: FailureTarget, R: ValueRenderer<usize>>(
+    fn facts<S, R: ValueRenderer<usize>>(
         &self,
         failure: FailureBuilder<S>,
         rendering: RenderingContext<'_, R>,
@@ -102,22 +153,6 @@ impl PositionReporting {
         }
     }
 }
-
-/// The reference value of a membership failure, and whether the assertion looked for it or asserted
-/// its absence.
-enum Reference<'a, E: ?Sized> {
-    Expected(&'a E),
-    Unexpected(&'a E),
-}
-
-// Implemented by hand: a derive would demand `E: Copy`, but only references are held.
-impl<E: ?Sized> Clone for Reference<'_, E> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<E: ?Sized> Copy for Reference<'_, E> {}
 
 /// The failures of the elements that did not satisfy a positional criterion, each with the
 /// element's index in yield order.
@@ -175,19 +210,28 @@ fn indexed_children(
     (children, omitted)
 }
 
-/// A child failure for an element that did not equal its expected counterpart.
-fn unequal_element<T, E, S, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
+/// Evaluates equality once and retains the original rejected operands as child evidence.
+fn equal_element<T, E, R>(
+    context: &AssertionContext<'_, R>,
     element: &T,
     expected: &E,
-) -> AssertionFailure
+) -> Result<(), Vec<AssertionFailure>>
 where
+    T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
-    FailureBuilder::detached::<T>(FailureKind::Equality)
-        .actual(this.render().value(element))
-        .expected(this.render().value(expected))
-        .build()
+    let definition = EqualToRef(expected);
+    definition.evaluate(element, context).map_err(|rejection| {
+        alloc::vec![
+            definition
+                .explain(
+                    Some((element, rejection)),
+                    FailureBuilder::detached::<T>(FailureKind::Equality),
+                    context,
+                )
+                .build()
+        ]
+    })
 }
 
 /// A child failure for an element that did not match its predicate.

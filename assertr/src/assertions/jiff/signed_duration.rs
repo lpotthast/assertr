@@ -1,7 +1,224 @@
 use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
 use crate::{AssertThat, ValueRenderer, renderer::Compact};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use jiff::SignedDuration;
+
+/// Checks whether a `SignedDuration` is zero.
+pub struct IsZero;
+impl<R> Expectation<SignedDuration, R> for IsZero {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        SignedDuration: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        SignedDuration: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a SignedDuration,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_zero() { Ok(()) } else { Err(()) }
+    }
+}
+impl<R> ExpectationDiagnostics<SignedDuration, R> for IsZero
+where
+    R: ValueRenderer<SignedDuration>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a SignedDuration, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("is zero")
+                .expected(Compact(render.value(&SignedDuration::ZERO))),
+            Some((actual, ())) => failure
+                .actual(Compact(render.value(actual)))
+                .expected(Compact(render.value(&SignedDuration::ZERO))),
+        }
+    }
+}
+/// Checks whether a `SignedDuration` is negative.
+pub struct IsNegative;
+impl<R> Expectation<SignedDuration, R> for IsNegative {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        SignedDuration: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        SignedDuration: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a SignedDuration,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_negative() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<SignedDuration, R> for IsNegative
+where
+    R: ValueRenderer<SignedDuration>,
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a SignedDuration, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is negative"),
+            Some((actual, ())) => failure
+                .actual(Compact(render.value(actual)))
+                .relation("is not negative"),
+        }
+    }
+}
+/// Checks whether a `SignedDuration` is positive.
+pub struct IsPositive;
+impl<R> Expectation<SignedDuration, R> for IsPositive {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        SignedDuration: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        SignedDuration: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a SignedDuration,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_positive() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<SignedDuration, R> for IsPositive
+where
+    R: ValueRenderer<SignedDuration>,
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a SignedDuration, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is positive"),
+            Some((actual, ())) => failure
+                .actual(Compact(render.value(actual)))
+                .relation("is not positive"),
+        }
+    }
+}
+/// Compares exact nanosecond distance within a non-negative inclusive deviation.
+pub struct IsCloseTo {
+    expected: SignedDuration,
+    allowed_deviation: SignedDuration,
+}
+impl<R> Expectation<SignedDuration, R> for IsCloseTo {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        SignedDuration: 'a;
+    type Rejection<'a>
+        = bool
+    where
+        Self: 'a,
+        SignedDuration: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a SignedDuration,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if self.allowed_deviation.is_negative() {
+            return Err(true);
+        }
+        // The full MIN-to-MAX distance fits in i128 nanoseconds.
+        let distance = (actual.as_nanos() - self.expected.as_nanos()).abs();
+        if distance <= self.allowed_deviation.as_nanos() {
+            Ok(())
+        } else {
+            Err(false)
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<SignedDuration, R> for IsCloseTo
+where
+    R: ValueRenderer<SignedDuration>,
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a SignedDuration, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            Some((_, true)) => failure
+                .relation("was given an invalid allowed deviation")
+                .fact(Fact::labelled(
+                    "Allowed deviation",
+                    Compact(render.value(&self.allowed_deviation)),
+                ))
+                .fact(Fact::note(
+                    "The allowed deviation must be a non-negative duration.",
+                )),
+            observation => {
+                let failure = match observation {
+                    None => failure.relation("is close to"),
+                    Some((actual, _)) => failure
+                        .actual(Compact(render.value(actual)))
+                        .relation("is not close to"),
+                };
+                failure
+                    .expected(Compact(render.value(&self.expected)))
+                    .fact(Fact::labelled(
+                        "Allowed deviation",
+                        Compact(render.value(&self.allowed_deviation)),
+                    ))
+            }
+        }
+    }
+}
+impl IsCloseTo {
+    /// Expects a duration within this inclusive deviation of `expected`.
+    #[must_use]
+    pub const fn new(expected: SignedDuration, allowed_deviation: SignedDuration) -> Self {
+        Self {
+            expected,
+            allowed_deviation,
+        }
+    }
+}
 
 /// Assertions for [`SignedDuration`].
 #[allow(clippy::return_self_not_must_use)]
@@ -39,16 +256,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     where
         R: ValueRenderer<SignedDuration>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_zero() {
-            self.failure(FailureKind::Equality)
-                .actual(Compact(self.render().value(self.actual())))
-                .expected(Compact(self.render().value(&SignedDuration::ZERO)))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsZero)
     }
 
     #[track_caller]
@@ -56,16 +264,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     where
         R: ValueRenderer<SignedDuration>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_negative() {
-            self.failure(FailureKind::Ordering)
-                .actual(Compact(self.render().value(self.actual())))
-                .relation("is not negative")
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsNegative)
     }
 
     #[track_caller]
@@ -73,16 +272,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     where
         R: ValueRenderer<SignedDuration>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_positive() {
-            self.failure(FailureKind::Ordering)
-                .actual(Compact(self.render().value(self.actual())))
-                .relation("is not positive")
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsPositive)
     }
 
     #[track_caller]
@@ -90,39 +280,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     where
         R: ValueRenderer<SignedDuration>,
     {
-        self.track_assertion();
-
-        if allowed_deviation.is_negative() {
-            self.failure(FailureKind::Ordering)
-                .relation("was given an invalid allowed deviation")
-                .fact(Fact::labelled(
-                    "Allowed deviation",
-                    Compact(self.render().value(&allowed_deviation)),
-                ))
-                .fact(Fact::note(
-                    "The allowed deviation must be a non-negative duration.",
-                ))
-                .raise();
-            return self;
-        }
-
-        let actual = *self.actual();
-        // The full MIN-to-MAX distance is less than 2^94 nanoseconds, so both subtraction and
-        // absolute value fit in i128.
-        let distance = (actual.as_nanos() - expected.as_nanos()).abs();
-        if distance > allowed_deviation.as_nanos() {
-            self.failure(FailureKind::Ordering)
-                .actual(Compact(self.render().value(&actual)))
-                .relation("is not close to")
-                .expected(Compact(self.render().value(&expected)))
-                .fact(Fact::labelled(
-                    "Allowed deviation",
-                    Compact(self.render().value(&allowed_deviation)),
-                ))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsCloseTo::new(expected, allowed_deviation))
     }
 }
 

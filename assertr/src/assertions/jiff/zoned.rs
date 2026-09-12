@@ -1,9 +1,135 @@
 use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
 use crate::{AssertThat, ValueRenderer};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use core::borrow::Borrow;
 use jiff::Zoned;
 use jiff::tz::TimeZone;
+
+/// Compares the observed time zone with the expected zone or name.
+pub struct IsInTimeZone<E>(E);
+impl<E, R> Expectation<Zoned, R> for IsInTimeZone<E>
+where
+    E: Borrow<TimeZone>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Zoned: 'a;
+    type Rejection<'a>
+        = (&'a TimeZone, &'a TimeZone)
+    where
+        Self: 'a,
+        Zoned: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Zoned,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.0.borrow();
+        let actual = actual.time_zone();
+        if actual == expected {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+}
+impl<E, R> ExpectationDiagnostics<Zoned, R> for IsInTimeZone<E>
+where
+    E: Borrow<TimeZone>,
+    R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Zoned, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("is in time zone")
+                .expected(render.value(self.0.borrow())),
+            Some((actual, (zone, expected))) => failure
+                .actual(render.value(actual))
+                .relation("is not in time zone")
+                .expected(render.value(expected))
+                .fact(Fact::labelled(ACTUAL_TIME_ZONE, render.value(zone))),
+        }
+    }
+}
+impl<E> IsInTimeZone<E> {
+    /// Expects this time zone or name.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+/// Compares the observed time zone with the expected zone or name.
+pub struct IsInTimeZoneNamed<E>(E);
+impl<E, R> Expectation<Zoned, R> for IsInTimeZoneNamed<E>
+where
+    E: AsRef<str>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Zoned: 'a;
+    type Rejection<'a>
+        = (&'a TimeZone, &'a str)
+    where
+        Self: 'a,
+        Zoned: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Zoned,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.0.as_ref();
+        let actual = actual.time_zone();
+        if actual.iana_name() == Some(expected) {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+}
+impl<E, R> ExpectationDiagnostics<Zoned, R> for IsInTimeZoneNamed<E>
+where
+    E: AsRef<str>,
+    R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Zoned, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("is in time zone")
+                .expected(render.value(self.0.as_ref())),
+            Some((actual, (zone, expected))) => failure
+                .actual(render.value(actual))
+                .relation("is not in time zone")
+                .expected(render.value(expected))
+                .fact(Fact::labelled(ACTUAL_TIME_ZONE, render.value(zone))),
+        }
+    }
+}
+impl<E> IsInTimeZoneNamed<E> {
+    /// Expects this time zone or name.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
 
 /// Assertions for [`Zoned`] date-times.
 #[allow(clippy::return_self_not_must_use)]
@@ -31,22 +157,7 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
     where
         R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>,
     {
-        self.track_assertion();
-
-        let expected = expected.borrow();
-        let actual = self.actual().time_zone();
-        if actual != expected {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(self.actual()))
-                .relation("is not in time zone")
-                .expected(self.render().value(expected))
-                .fact(Fact::labelled(
-                    ACTUAL_TIME_ZONE,
-                    self.render().value(actual),
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsInTimeZone::new(expected))
     }
 
     #[track_caller]
@@ -54,22 +165,7 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
     where
         R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>,
     {
-        self.track_assertion();
-
-        let expected = expected.as_ref();
-        let actual = self.actual().time_zone();
-        if actual.iana_name() != Some(expected) {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(self.actual()))
-                .relation("is not in time zone")
-                .expected(self.render().value(expected))
-                .fact(Fact::labelled(
-                    ACTUAL_TIME_ZONE,
-                    self.render().value(actual),
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsInTimeZoneNamed::new(expected))
     }
 }
 

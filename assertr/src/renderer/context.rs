@@ -26,6 +26,12 @@ use super::{
 /// type name and a configurable [`TypeHint`](super::TypeHint), whether or not text output shows
 /// that hint. Synthetic groups retain the canonical types and default short hints of their items
 /// rather than inventing an outer Rust type for the group.
+///
+/// Use [`collection`](Self::collection) and [`map`](Self::map) for a subject's own structure and
+/// presentation metadata. [`variant`](Self::variant) and [`struct_field`](Self::struct_field)
+/// wrap one leaf without requiring a renderer for the owner. Adapters are lazy: construction
+/// requires no renderer capability, and each formatting or [`IntoRendered`] conversion renders
+/// their leaves with this context's budget. Converting once retains an owned tree for reuse.
 pub struct RenderingContext<'r, R> {
     renderer: &'r R,
     budget: RenderingBudget,
@@ -62,7 +68,13 @@ impl<'r, R> RenderingContext<'r, R> {
         self.renderer
     }
 
-    pub(crate) const fn budget(self) -> RenderingBudget {
+    /// Returns a copy of the active diagnostic retention limits.
+    ///
+    /// Custom evidence collectors can use these limits to bound retained children and record
+    /// omissions. They must still determine the complete assertion result independently of the
+    /// budget. Changing the returned copy does not change this context or its assertion chain.
+    #[must_use]
+    pub const fn budget(self) -> RenderingBudget {
         self.budget
     }
 
@@ -106,8 +118,10 @@ impl<'r, R> RenderingContext<'r, R> {
     /// A typed `owner` rendered as a one-field tuple variant, such as `Err(value)`.
     ///
     /// The returned adapter retains the owner's type information, while the inner value retains its
-    /// own independently.
-    pub(crate) fn variant<'a, O: ?Sized, T: ?Sized>(
+    /// own independently. Type hints are hidden by default. The owner supplies only its type and
+    /// is not retained. Formatting requires `R: ValueRenderer<T>` and applies the leaf budget to
+    /// `value`. The variant name is structural text.
+    pub fn variant<'a, O: ?Sized, T: ?Sized>(
         self,
         _owner: &O,
         name: &'static str,
@@ -126,8 +140,10 @@ impl<'r, R> RenderingContext<'r, R> {
     /// A typed `owner` rendered as the named one-field struct and field.
     ///
     /// The returned adapter retains the owner's type information, while the field value retains its
-    /// own independently.
-    pub(crate) fn struct_field<'a, O: ?Sized, T: ?Sized>(
+    /// own independently. Type hints are hidden by default. The owner supplies only its type and
+    /// is not retained. Formatting requires `R: ValueRenderer<T>` and applies the leaf budget to
+    /// `value`. The struct and field names are structural text.
+    pub fn struct_field<'a, O: ?Sized, T: ?Sized>(
         self,
         _owner: &O,
         name: &'static str,
@@ -148,9 +164,11 @@ impl<'r, R> RenderingContext<'r, R> {
     /// A typed `owner` rendered with a field whose contents cannot be inspected.
     ///
     /// The returned adapter retains the owner's type information. No field type is inferred when
-    /// there is no concrete field value to inspect.
+    /// there is no concrete field value to inspect. The owner's type hint is hidden by default.
+    /// No renderer capability is required. Names and the `unavailable` marker, such as
+    /// `"<locked>"`, are structural text and do not consume the leaf budget.
     #[allow(clippy::unused_self)] // Keep every structural adapter on the rendering entry point.
-    pub(crate) fn unavailable_struct_field<O: ?Sized>(
+    pub fn unavailable_struct_field<O: ?Sized>(
         self,
         _owner: &O,
         name: &'static str,
@@ -211,10 +229,14 @@ impl<'r, R> RenderingContext<'r, R> {
     }
 
     /// The elements of a [`Collection`], rendered according to its presentation metadata.
-    pub(crate) fn collection<'a, C>(
-        self,
-        collection: &'a C,
-    ) -> Typed<RenderedValues<'a, C::Item, C, R>>
+    ///
+    /// Retains the canonical collection and item types. [`Collection::PRESENTATION`] selects the
+    /// group syntax, outer type-hint visibility, and rendering order. Formatting requires only
+    /// `R: ValueRenderer<C::Item>`. Each formatting traverses the borrowed collection lazily and
+    /// applies the item and leaf limits. Sorted rendering selects items after sorting rendered
+    /// text. Use [`stable_collection`](Self::stable_collection) when diagnostics refer to
+    /// positions.
+    pub fn collection<'a, C>(self, collection: &'a C) -> Typed<RenderedValues<'a, C::Item, C, R>>
     where
         'r: 'a,
         C: Collection + ?Sized,
@@ -223,7 +245,11 @@ impl<'r, R> RenderingContext<'r, R> {
     }
 
     /// A collection's borrowed item view, retaining its presentation and outer type information.
-    pub(crate) fn borrowed_collection<'a, T: ?Sized, C: Collection + ?Sized>(
+    ///
+    /// Follows [`collection`](Self::collection), but formats each item through `Borrow<T>` and
+    /// requires only `R: ValueRenderer<T>`. Child metadata describes `T`, including unsized views
+    /// such as `str`. Borrowing happens each time the adapter is formatted.
+    pub fn borrowed_collection<'a, T: ?Sized, C: Collection + ?Sized>(
         self,
         collection: &'a C,
     ) -> Typed<RenderedValues<'a, T, C, R>>
@@ -234,7 +260,7 @@ impl<'r, R> RenderingContext<'r, R> {
         let presentation = C::PRESENTATION;
         let body = self
             .borrowed_values::<T, C>(collection, presentation.style())
-            .sort_for_rendering(presentation.order() == RenderingOrder::SortByRenderedText);
+            .with_order(presentation.order());
         Typed::new::<C>(body).show_type_hint(presentation.shows_type_hint())
     }
 
@@ -242,7 +268,10 @@ impl<'r, R> RenderingContext<'r, R> {
     ///
     /// Positional diagnostics use this adapter instead of the collection's ordinary rendering order
     /// so a displayed index always refers to the element shown at that position.
-    pub(crate) fn stable_collection<'a, C>(
+    /// Otherwise it follows [`collection`](Self::collection), including syntax, type metadata,
+    /// leaf-renderer requirements, and budget limits. Construction requires [`StableOrder`],
+    /// independently of the collection's presentation metadata.
+    pub fn stable_collection<'a, C>(
         self,
         collection: &'a C,
     ) -> Typed<RenderedValues<'a, C::Item, C, R>>
@@ -254,7 +283,10 @@ impl<'r, R> RenderingContext<'r, R> {
     }
 
     /// A stable-order collection's borrowed item view, always in semantic order.
-    pub(crate) fn stable_borrowed_collection<'a, T: ?Sized, C: StableOrder + ?Sized>(
+    ///
+    /// Combines [`borrowed_collection`](Self::borrowed_collection)'s leaf rendering and metadata
+    /// with [`stable_collection`](Self::stable_collection)'s positional order and capability bound.
+    pub fn stable_borrowed_collection<'a, T: ?Sized, C: StableOrder + ?Sized>(
         self,
         collection: &'a C,
     ) -> Typed<RenderedValues<'a, T, C, R>>
@@ -267,10 +299,41 @@ impl<'r, R> RenderingContext<'r, R> {
         rendered
     }
 
+    /// Already observed collection targets, retaining the source collection's presentation and
+    /// type. Using the retained references avoids repeating custom `Borrow` conversions during
+    /// diagnostics.
+    pub(crate) fn observed_collection<T: ?Sized, C: Collection + ?Sized>(
+        self,
+        _collection: &C,
+        elements: &[&T],
+        total: usize,
+        order: RenderingOrder,
+    ) -> Rendered
+    where
+        R: ValueRenderer<T>,
+    {
+        let presentation = C::PRESENTATION;
+        let body = self
+            .borrowed_values::<T, _>(elements, presentation.style())
+            .with_order(order);
+        let mut rendered = Typed::new::<C>(body)
+            .show_type_hint(presentation.shows_type_hint())
+            .into_rendered();
+        if let RenderedBody::Group { items, omitted, .. } = &mut rendered.body {
+            *omitted = total.saturating_sub(items.len());
+        }
+        rendered
+    }
+
     /// The entries of a [`Map`], rendered with its type hint and iteration-order policy.
     ///
     /// The adapter retains the map by reference and obtains its entries only when formatted.
-    pub(crate) fn map<'a, M>(self, map: &'a M) -> Typed<MapEntries<'a, M, R>>
+    /// The canonical map, key, and value types are retained, with the map's short type hint shown
+    /// by default. Formatting requires only `R: ValueRenderer<M::Key> + ValueRenderer<M::Value>`.
+    /// The budget limits retained entries and each leaf independently. [`Map::RENDERING_ORDER`]
+    /// selects iteration order or sorting by rendered key text, then rendered value text, before
+    /// applying the item limit. No [`MapLookup`](crate::assertions::map::MapLookup) is required.
+    pub fn map<'a, M>(self, map: &'a M) -> Typed<MapEntries<'a, M, R>>
     where
         'r: 'a,
         M: Map + ?Sized,
@@ -289,18 +352,17 @@ impl<'r, R> RenderingContext<'r, R> {
     ///
     /// Every key and value retains its respective type information. The list itself has no invented
     /// outer Rust type. The adapter retains the collection by reference and obtains its entries
-    /// only when formatted.
-    pub(crate) fn entry_list<
-        'a,
-        K: ?Sized,
-        V: ?Sized,
-        BK,
-        BV,
-        C: Collection<Item = (BK, BV)> + ?Sized,
-    >(
+    /// only when formatted. Keys and values are rendered through their respective `Borrow` views,
+    /// requiring only `R: ValueRenderer<K> + ValueRenderer<V>`.
+    ///
+    /// `order` selects iteration order or sorting by rendered tuple text before applying the item
+    /// limit. Each key and value also receives the leaf limit. This synthetic evidence uses the
+    /// explicit order, independently of the source collection's presentation metadata.
+    #[must_use]
+    pub fn entry_list<'a, K: ?Sized, V: ?Sized, BK, BV, C: Collection<Item = (BK, BV)> + ?Sized>(
         self,
         entries: &'a C,
-        sort_for_rendering: bool,
+        order: RenderingOrder,
     ) -> EntryList<'a, K, V, C, R>
     where
         'r: 'a,
@@ -312,7 +374,7 @@ impl<'r, R> RenderingContext<'r, R> {
             key_value: PhantomData,
             key_type: TypeInfo::of::<K>(),
             value_type: TypeInfo::of::<V>(),
-            sorted_for_rendering: sort_for_rendering,
+            sorted_for_rendering: order == RenderingOrder::SortByRenderedText,
             rendering: self,
         }
     }
@@ -334,7 +396,10 @@ impl<T: ?Sized, R: ValueRenderer<T>> Debug for RenderedValue<'_, T, R> {
 }
 
 /// A rendered value inside a one-field tuple variant, such as `Some(value)`.
-pub(crate) struct Variant<'a, T: ?Sized, R> {
+///
+/// Created inside [`Typed`] by [`RenderingContext::variant`]. The outer adapter retains the
+/// owner's type, while this body renders only the field through `R: ValueRenderer<T>`.
+pub struct Variant<'a, T: ?Sized, R> {
     name: &'static str,
     value: Typed<RenderedValue<'a, T, R>>,
 }
@@ -346,7 +411,10 @@ impl<T: ?Sized, R: ValueRenderer<T>> Debug for Variant<'_, T, R> {
 }
 
 /// A rendered value inside a one-field struct, such as `RefCell { value: 1 }`.
-pub(crate) struct StructField<'a, T: ?Sized, R> {
+///
+/// Created inside [`Typed`] by [`RenderingContext::struct_field`]. The outer adapter retains the
+/// owner's type, while this body renders only the field through `R: ValueRenderer<T>`.
+pub struct StructField<'a, T: ?Sized, R> {
     name: &'static str,
     field: &'static str,
     value: Typed<RenderedValue<'a, T, R>>,
@@ -359,7 +427,10 @@ impl<T: ?Sized, R: ValueRenderer<T>> Debug for StructField<'_, T, R> {
 }
 
 /// A one-field struct whose field is temporarily inaccessible, such as `Mutex { data: <locked> }`.
-pub(crate) struct UnavailableStructField {
+///
+/// Created inside [`Typed`] by [`RenderingContext::unavailable_struct_field`]. It requires no
+/// leaf renderer and retains no inferred type for the inaccessible field.
+pub struct UnavailableStructField {
     name: &'static str,
     field: &'static str,
     unavailable: &'static str,
@@ -387,10 +458,15 @@ pub struct RenderedValues<'a, T: ?Sized, C: ?Sized, R> {
 }
 
 impl<T: ?Sized, C: ?Sized, R> RenderedValues<'_, T, C, R> {
-    /// Sorts the items by their rendered text and says so, for a group whose source order is not
-    /// deterministic.
-    pub(crate) fn sort_for_rendering(mut self, sort: bool) -> Self {
-        self.sorted_for_rendering = sort;
+    /// Selects the diagnostic order for this synthetic group.
+    ///
+    /// The default is [`RenderingOrder::PreserveIteration`]. Sorting uses rendered text, including
+    /// leaf truncation, before applying the item limit and marks the resulting group as sorted.
+    /// This setting grants no positional capability. Use a stable collection adapter for evidence
+    /// whose positions have semantic meaning.
+    #[must_use]
+    pub fn with_order(mut self, order: RenderingOrder) -> Self {
+        self.sorted_for_rendering = order == RenderingOrder::SortByRenderedText;
         self
     }
 }
@@ -405,7 +481,10 @@ where
 }
 
 /// Rendered key/value entries in map syntax, including the key and value type information.
-pub(crate) struct MapEntries<'a, M: ?Sized, R> {
+///
+/// Created inside [`Typed`] by [`RenderingContext::map`]. Formatting traverses the borrowed map
+/// with its rendering order and budget, requiring renderers only for its keys and values.
+pub struct MapEntries<'a, M: ?Sized, R> {
     map: &'a M,
     key_type: TypeInfo,
     value_type: TypeInfo,
@@ -423,7 +502,10 @@ where
 }
 
 /// Rendered key/value entries as a synthetic list of tuples, including the child type information.
-pub(crate) struct EntryList<'a, K: ?Sized, V: ?Sized, C: ?Sized, R> {
+///
+/// Created by [`RenderingContext::entry_list`]. Formatting traverses the borrowed collection with
+/// the selected rendering order and budget. The list has no invented outer Rust type.
+pub struct EntryList<'a, K: ?Sized, V: ?Sized, C: ?Sized, R> {
     entries: &'a C,
     key_value: PhantomData<(&'a K, &'a V)>,
     key_type: TypeInfo,
@@ -809,9 +891,11 @@ mod tests {
     use alloc::collections::{BTreeMap, BTreeSet, BinaryHeap};
     use core::{any::type_name, cell::RefCell, fmt};
 
-    use crate::prelude::*;
-    use crate::renderer::{GroupStyle, RenderingOrder, TypeHint};
-    use crate::test_support::{PreservedBag, UnorderedMap, UnorderedSet};
+    use crate::{
+        prelude::*,
+        renderer::{GroupStyle, IntoRendered, RenderedBody, RenderingOrder, TypeHint},
+        test_support::{PreservedBag, UnorderedMap, UnorderedSet},
+    };
 
     use super::{RenderingContext, grouped_count, omission};
 
@@ -844,10 +928,94 @@ mod tests {
     }
 
     fn with_max_items<R>(renderer: &R, maximum: usize) -> RenderingContext<'_, R> {
-        RenderingContext::new(
-            renderer,
-            RenderingBudget::builder().max_items(maximum).build(),
-        )
+        RenderingContext::new(renderer, RenderingBudget::default().with_max_items(maximum))
+    }
+
+    mod budget {
+        use super::*;
+
+        #[test]
+        fn returns_an_independent_copy_of_both_limits() {
+            const RENDERING: RenderingContext<'_, DebugRenderer> = RenderingContext::new(
+                &DebugRenderer,
+                RenderingBudget::unlimited()
+                    .with_max_items(2)
+                    .with_max_leaf_characters(3),
+            );
+            const BUDGET: RenderingBudget = RENDERING.budget();
+            let changed = BUDGET.with_max_items(9).with_max_leaf_characters(10);
+
+            assert_that!(RENDERING.budget()).is_equal_to(BUDGET);
+            assert_that!(BUDGET.max_items()).is_equal_to(2);
+            assert_that!(BUDGET.max_leaf_characters()).is_equal_to(3);
+            assert_that!(changed.max_items()).is_equal_to(9);
+            assert_that!(changed.max_leaf_characters()).is_equal_to(10);
+        }
+    }
+
+    mod with_order {
+        use super::*;
+
+        #[test]
+        fn selects_rendered_order_before_the_item_limit_and_can_restore_iteration() {
+            let rendering = with_max_items(&DebugRenderer, 2);
+            let values = [30, 2, 10];
+            let sorted = rendering
+                .values(&values, GroupStyle::Set)
+                .with_order(RenderingOrder::SortByRenderedText);
+
+            assert_that!(format!("{sorted:?}"))
+                .is_equal_to("{10, 2} (... 1 more element ...) (sorted for rendering)");
+            assert_that!(format!(
+                "{:?}",
+                sorted.with_order(RenderingOrder::PreserveIteration)
+            ))
+            .is_equal_to("{30, 2} (... 1 more element ...)");
+        }
+
+        #[test]
+        fn sorts_the_budgeted_leaf_text_including_omission_markers() {
+            let rendering = RenderingContext::new(
+                &RawRenderer,
+                RenderingBudget::unlimited()
+                    .with_max_items(1)
+                    .with_max_leaf_characters(1),
+            );
+            // Complete text would put "aaz" first. Its larger omission count sorts after "ab"
+            // once both leaves have been truncated to one character.
+            let values = ["aaz", "ab"];
+            let rendered = rendering
+                .borrowed_values::<str, _>(&values, GroupStyle::List)
+                .with_order(RenderingOrder::SortByRenderedText)
+                .into_rendered();
+
+            assert_that!(rendered.text(false)).is_equal_to(
+                "[a... 1 more character ...] (... 1 more element ...) (sorted for rendering)",
+            );
+        }
+
+        #[test]
+        fn empty_and_zero_limit_groups_do_not_render_leaves() {
+            let rendering = with_max_items(&PanickingRenderer, 0);
+            for values in [&[][..], &[1, 2][..]] {
+                let rendered = rendering
+                    .values(values, GroupStyle::List)
+                    .with_order(RenderingOrder::SortByRenderedText)
+                    .into_rendered();
+                let RenderedBody::Group {
+                    items,
+                    omitted,
+                    sorted,
+                    ..
+                } = rendered.body
+                else {
+                    panic!("expected a group");
+                };
+                assert_that!(items).is_empty();
+                assert_that!(omitted).is_equal_to(values.len());
+                assert_that!(sorted).is_true();
+            }
+        }
     }
 
     mod omissions {
@@ -930,7 +1098,7 @@ mod tests {
             let renderer = RawRenderer;
             let rendering = RenderingContext::new(
                 &renderer,
-                RenderingBudget::builder().max_leaf_characters(2).build(),
+                RenderingBudget::default().with_max_leaf_characters(2),
             );
 
             assert_that!(format!("{:?}", rendering.value("é😊x")))
@@ -942,7 +1110,7 @@ mod tests {
             let renderer = RawRenderer;
             let rendering = RenderingContext::new(
                 &renderer,
-                RenderingBudget::builder().max_leaf_characters(2).build(),
+                RenderingBudget::default().with_max_leaf_characters(2),
             );
 
             let value = rendering.value("é😊x").show_type_hint(true);
@@ -954,10 +1122,9 @@ mod tests {
             let renderer = DebugRenderer;
             let rendering = RenderingContext::new(
                 &renderer,
-                RenderingBudget::builder()
-                    .max_items(2)
-                    .max_leaf_characters(3)
-                    .build(),
+                RenderingBudget::default()
+                    .with_max_items(2)
+                    .with_max_leaf_characters(3),
             );
             let values = [123_456, 234_567, 345_678];
 
@@ -977,7 +1144,7 @@ mod tests {
             let renderer = DebugRenderer;
             let rendering = RenderingContext::new(
                 &renderer,
-                RenderingBudget::builder().max_leaf_characters(2).build(),
+                RenderingBudget::default().with_max_leaf_characters(2),
             );
             let map = BTreeMap::from([(1_234, 5_678)]);
             let list_entries = [(1_234, 5_678)];
@@ -986,7 +1153,10 @@ mod tests {
                 .is_equal_to("BTreeMap {12... 2 more characters ...: 56... 2 more characters ...}");
             assert_that!(format!(
                 "{:?}",
-                rendering.entry_list::<i32, i32, _, _, _>(&list_entries, false)
+                rendering.entry_list::<i32, i32, _, _, _>(
+                    &list_entries,
+                    RenderingOrder::PreserveIteration
+                )
             ))
             .is_equal_to("[(12... 2 more characters ..., 56... 2 more characters ...)]");
         }
@@ -994,6 +1164,29 @@ mod tests {
 
     mod wrappers {
         use super::*;
+
+        #[test]
+        fn limits_unicode_leaves_without_limiting_structural_names() {
+            let rendering = RenderingContext::new(
+                &RawRenderer,
+                RenderingBudget::unlimited()
+                    .with_max_items(0)
+                    .with_max_leaf_characters(2),
+            );
+            let owner = Some("é😊x");
+            assert_that!(format!("{:?}", rendering.variant(&owner, "Some", "é😊x")))
+                .is_equal_to("Some(é😊... 1 more character ...)");
+            assert_that!(format!(
+                "{:?}",
+                rendering.struct_field(&owner, "Wrapper", "value", "é😊x")
+            ))
+            .is_equal_to("Wrapper { value: é😊... 1 more character ... }");
+            assert_that!(format!(
+                "{:?}",
+                rendering.unavailable_struct_field(&owner, "Wrapper", "value", "<unavailable>")
+            ))
+            .is_equal_to("Wrapper { value: <unavailable> }");
+        }
 
         #[test]
         fn compose_leaf_output_into_debug_structures() {
@@ -1042,8 +1235,10 @@ mod tests {
 
     mod values {
         use super::*;
-        use crate::assertions::{HasLength, collection::Collection};
-        use crate::renderer::CollectionPresentation;
+        use crate::{
+            assertions::{HasLength, collection::Collection},
+            renderer::CollectionPresentation,
+        };
         use core::cell::Cell;
 
         struct ObservedCollection {
@@ -1261,8 +1456,10 @@ mod tests {
 
     mod entry_lists {
         use super::*;
-        use crate::assertions::{HasLength, collection::Collection};
-        use crate::renderer::CollectionPresentation;
+        use crate::{
+            assertions::{HasLength, collection::Collection},
+            renderer::CollectionPresentation,
+        };
         use core::cell::Cell;
 
         struct ObservedEntries {
@@ -1294,12 +1491,14 @@ mod tests {
 
             assert_that!(format!(
                 "{:?}",
-                rendering.entry_list::<i32, i32, _, _, _>(&entries, false)
+                rendering
+                    .entry_list::<i32, i32, _, _, _>(&entries, RenderingOrder::PreserveIteration)
             ))
             .is_equal_to("[(3, 30), (1, 10)] (... 1 more entry ...)");
             assert_that!(format!(
                 "{:?}",
-                rendering.entry_list::<i32, i32, _, _, _>(&entries, true)
+                rendering
+                    .entry_list::<i32, i32, _, _, _>(&entries, RenderingOrder::SortByRenderedText)
             ))
             .is_equal_to("[(1, 10), (2, 20)] (... 1 more entry ...) (sorted for rendering)");
         }
@@ -1310,7 +1509,8 @@ mod tests {
             let rendering = RenderingContext::new(&renderer, RenderingBudget::unlimited());
             let entries = [(1, "one")];
 
-            let adapted = rendering.entry_list::<i32, str, _, _, _>(&entries, false);
+            let adapted = rendering
+                .entry_list::<i32, str, _, _, _>(&entries, RenderingOrder::PreserveIteration);
 
             assert_that!(adapted.key_type.type_name).is_equal_to(type_name::<i32>());
             assert_that!(adapted.value_type.type_name).is_equal_to(type_name::<str>());
@@ -1325,7 +1525,8 @@ mod tests {
                 iterations: Cell::new(0),
             };
 
-            let adapted = rendering.entry_list::<i32, i32, _, _, _>(&entries, false);
+            let adapted = rendering
+                .entry_list::<i32, i32, _, _, _>(&entries, RenderingOrder::PreserveIteration);
             assert_that!(entries.iterations.get()).is_equal_to(0);
 
             let first = format!("{adapted:?}");
@@ -1360,12 +1561,14 @@ mod tests {
                 .is_equal_to("UnorderedMap {} (... 1 more entry ...) (sorted for rendering)");
             assert_that!(format!(
                 "{:?}",
-                rendering.entry_list::<i32, i32, _, _, _>(&entries, false)
+                rendering
+                    .entry_list::<i32, i32, _, _, _>(&entries, RenderingOrder::PreserveIteration)
             ))
             .is_equal_to("[] (... 1 more entry ...)");
             assert_that!(format!(
                 "{:?}",
-                rendering.entry_list::<i32, i32, _, _, _>(&entries, true)
+                rendering
+                    .entry_list::<i32, i32, _, _, _>(&entries, RenderingOrder::SortByRenderedText)
             ))
             .is_equal_to("[] (... 1 more entry ...) (sorted for rendering)");
         }

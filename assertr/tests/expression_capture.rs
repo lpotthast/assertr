@@ -182,16 +182,13 @@ fn fluent_attribute_attaches_only_pending_root_expressions() {
     let owned = actual.verify_owned(check);
     for failures in [borrowed, owned] {
         let expressions: Vec<_> = failures.iter().map(|failure| failure.expression).collect();
-        assert_eq!(
-            expressions,
-            [
-                Some("actual"),
-                None,
-                Some("child override"),
-                Some("actual"),
-                Some("root override")
-            ]
-        );
+        assert_that!(expressions).contains_exactly([
+            Some("actual"),
+            None,
+            Some("child override"),
+            Some("actual"),
+            Some("root override"),
+        ]);
     }
 }
 
@@ -206,8 +203,8 @@ fn fluent_attribute_preserves_nested_capture_expressions() {
         nested = inner.verify_owned(|it| it.is_equal_to(13));
         it.is_equal_to(43)
     });
-    assert_eq!(failures[0].expression, Some("actual"));
-    assert_eq!(nested[0].expression, Some("inner"));
+    assert_that!(failures[0].expression).is_equal_to(Some("actual"));
+    assert_that!(nested[0].expression).is_equal_to(Some("inner"));
 }
 
 #[cfg(feature = "fluent")]
@@ -227,9 +224,9 @@ fn fluent_attribute_does_not_attach_to_aggregates_from_other_calls() {
     #[assertr::fluent_expressions]
     fn run() {
         let failures = User(21).verify(|value| value * 2);
-        assert_eq!(failures[0].expression, None);
+        assert_that!(failures[0].expression).is_none();
         let failures = User(21).verify_owned(|value| value * 2);
-        assert_eq!(failures[0].expression, None);
+        assert_that!(failures[0].expression).is_none();
     }
 
     run();
@@ -258,20 +255,20 @@ fn fluent_attribute_does_not_attach_to_unrelated_tracked_verification() {
         }
 
         let failures = User(21).verify(|value| value * 2);
-        assert_eq!(failures[0].expression, None);
+        assert_that!(failures[0].expression).is_none();
         let callback: fn(i32) -> i32 = |value| value * 2;
         let failures = User(21).verify(callback);
-        assert_eq!(failures[0].expression, None);
+        assert_that!(failures[0].expression).is_none();
         let failures = User(21).verify(double);
-        assert_eq!(failures[0].expression, None);
+        assert_that!(failures[0].expression).is_none();
 
         let offset = Box::new(21);
         let failures = User(21).verify_owned(move |value| value + *offset);
-        assert_eq!(failures[0].expression, None);
+        assert_that!(failures[0].expression).is_none();
         let offset = Box::new(21);
         let callback = move |value| value + *offset;
         let failures = User(21).verify_owned(callback);
-        assert_eq!(failures[0].expression, None);
+        assert_that!(failures[0].expression).is_none();
     }
 
     run();
@@ -289,7 +286,7 @@ fn fluent_attribute_attaches_expressions_inside_tracked_functions() {
     }
 
     for failures in check(42) {
-        assert_eq!(failures[0].expression, Some("actual"));
+        assert_that!(failures[0].expression).is_equal_to(Some("actual"));
     }
 }
 
@@ -303,8 +300,8 @@ fn fluent_attribute_preserves_callback_blocks() {
         creations += 1;
         |it| it.is_equal_to(43)
     });
-    assert_eq!(creations, 1);
-    assert_eq!(failures[0].expression, Some("actual"));
+    assert_that!(creations).is_equal_to(1);
+    assert_that!(failures[0].expression).is_equal_to(Some("actual"));
 }
 
 #[cfg(feature = "fluent")]
@@ -320,9 +317,9 @@ fn fluent_attribute_preserves_assertion_caller_locations() {
 
     let mut expected = None;
     let failures = 42.verify(|it| fail_at_caller!(it, expected));
-    assert_eq!(failures[0].location, expected);
+    assert_that!(failures[0].location).is_equal_to(expected);
     let failures = 42.verify_owned(|it| fail_at_caller!(it, expected));
-    assert_eq!(failures[0].location, expected);
+    assert_that!(failures[0].location).is_equal_to(expected);
 }
 
 #[cfg(feature = "fluent")]
@@ -354,13 +351,11 @@ fn fluent_attribute_preserves_receiver_and_callback_evaluation_order() {
 
     let events = RefCell::new(Vec::new());
     let result = receiver(&events).verify(callback(&events));
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let result = receiver(&events).verify_owned(callback(&events));
-    assert_eq!(result, 84);
-    assert_eq!(
-        events.into_inner(),
-        ["receiver", "callback", "receiver", "callback"]
-    );
+    assert_that!(result).is_equal_to(84);
+    assert_that!(events.into_inner())
+        .contains_exactly(["receiver", "callback", "receiver", "callback"]);
 }
 
 #[cfg(feature = "fluent")]

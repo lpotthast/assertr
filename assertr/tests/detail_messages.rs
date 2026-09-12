@@ -57,8 +57,12 @@ mod matcher_differences {
         let failures = assert_that!(Data { age: 30 })
             .with_location(false)
             .capture(|it| {
-                it.matches(partial!(Data { age: 31 }))
-                    .matches(partial!(Data { age: 32 }))
+                it.matches(partial!(Data {
+                    age: assertr::matchers::eq(31)
+                }))
+                .matches(partial!(Data {
+                    age: assertr::matchers::eq(32)
+                }))
             });
 
         assert_that!(&failures).contains_exactly_satisfying([

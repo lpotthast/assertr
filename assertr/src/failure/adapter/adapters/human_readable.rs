@@ -33,6 +33,7 @@ use core::{
 };
 
 use super::super::Adapter;
+
 use crate::{
     AssertionFailure, Fact,
     failure::{BANNER, PathSegment},
@@ -43,7 +44,7 @@ use crate::{
 ///
 /// Keeping this distinct from an arbitrary [`String`] prevents a machine-oriented stage from
 /// accidentally accepting human-readable text. It can be borrowed through [`AsRef<str>`] or
-/// consumed with [`into_string`](Self::into_string).
+/// `AsRef<[u8]>`, or consumed with [`into_string`](Self::into_string).
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct HumanReadableText(String);
 
@@ -70,6 +71,12 @@ impl HumanReadableText {
 impl AsRef<str> for HumanReadableText {
     fn as_ref(&self) -> &str {
         self.as_str()
+    }
+}
+
+impl AsRef<[u8]> for HumanReadableText {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
     }
 }
 
@@ -264,7 +271,7 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) ->
             w.write_str("\n")?;
         }
         w.write_str("Constraint:\n")?;
-        write_constraint(constraint, &mut Indented::at_line_start(w))?;
+        write_report(constraint, &mut Indented::at_line_start(w), false)?;
     }
 
     let omission_note = (failure.omitted_children > 0).then(|| {
@@ -289,33 +296,6 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) ->
     write_entries(w, "Details", facts.iter().map(|fact| FactText(fact)))?;
 
     write_children(w, &failure.children)
-}
-
-fn write_constraint(
-    description: &crate::matchers::ConstraintDescription,
-    w: &mut dyn Write,
-) -> fmt::Result {
-    w.write_str(&body(
-        None,
-        Some(&description.relation),
-        description.expected.as_ref(),
-        None,
-    ))?;
-    if !description.children.is_empty() {
-        w.write_str("\nConstraints:\n")?;
-        for child in &description.children {
-            w.write_str("  - ")?;
-            write_constraint(child, &mut Indented::continuing(w))?;
-        }
-    }
-    if description.omitted_children > 0 {
-        writeln!(
-            w,
-            "{}",
-            crate::renderer::omission(description.omitted_children, "constraint")
-        )?;
-    }
-    Ok(())
 }
 
 /// A fact as `Display` text without a trailing newline.
@@ -464,6 +444,43 @@ mod tests {
     use crate::renderer::IntoRendered;
 
     use super::{ToHumanReadableText, body};
+
+    mod constraint_fields {
+        use super::*;
+        use crate::failure::{Fact, FailureBuilder, FailureKind};
+
+        #[test]
+        fn descriptions_render_facts_and_unexpected_values_through_the_common_grammar() {
+            let description = FailureBuilder::detached::<i32>(FailureKind::Equality)
+                .relation("is not equal to")
+                .unexpected("3")
+                .fact(Fact::labelled("Reason", "reserved value"))
+                .child(
+                    FailureBuilder::detached::<i32>(FailureKind::Other)
+                        .relation("has a valid identifier")
+                        .build(),
+                )
+                .omitted_children(1)
+                .build();
+            let failure = FailureBuilder::detached::<[i32]>(FailureKind::Matching)
+                .constraint(description)
+                .build();
+            assert_that!(ToHumanReadableText.render(&failure)).is_equal_to(indoc::indoc! {r"
+                -------- assertr --------
+                Constraint:
+                    is not equal to
+
+                    Unexpected: 3
+
+                    Details:
+                      - Reason: reserved value
+                      - ... 1 more nested failure ...
+                    Nested failures:
+                      - has a valid identifier
+                -------- assertr --------
+            "});
+        }
+    }
 
     mod body_grammar {
         use super::*;

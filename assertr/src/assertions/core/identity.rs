@@ -1,4 +1,119 @@
-use crate::{AssertThat, Mode, failure::FailureKind};
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode,
+    failure::{FailureBuilder, FailureKind},
+};
+
+/// Requires the subject and expected reference to have equal full pointers, without rendering their
+/// contents.
+pub struct IsSameInstanceAs<'e, T: ?Sized>(&'e T);
+impl<'e, T: ?Sized> IsSameInstanceAs<'e, T> {
+    /// Borrows the reference whose full pointer is compared with the subject's pointer.
+    #[must_use]
+    pub const fn new(expected: &'e T) -> Self {
+        Self(expected)
+    }
+}
+
+impl<T: ?Sized, R> Expectation<T, R> for IsSameInstanceAs<'_, T> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if core::ptr::eq(actual, self.0) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsSameInstanceAs<'_, T> {
+    const KIND: FailureKind = FailureKind::Equality;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is the same instance as"),
+            Some((actual, ())) => failure
+                .actual(render.identities().value(actual))
+                .relation("is not the same instance as"),
+        };
+        failure.expected(render.identities().value(self.0))
+    }
+}
+
+/// Checks that the subject is not the same instance as, without comparing or rendering its
+/// contents.
+pub struct IsNotSameInstanceAs<'e, T: ?Sized>(&'e T);
+impl<'e, T: ?Sized> IsNotSameInstanceAs<'e, T> {
+    /// Borrows the reference whose full pointer is compared with the subject's pointer.
+    #[must_use]
+    pub const fn new(expected: &'e T) -> Self {
+        Self(expected)
+    }
+}
+
+impl<T: ?Sized, R> Expectation<T, R> for IsNotSameInstanceAs<'_, T> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if core::ptr::eq(actual, self.0) {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsNotSameInstanceAs<'_, T> {
+    const KIND: FailureKind = FailureKind::Equality;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is not the same instance as"),
+            Some((actual, ())) => failure
+                .actual(render.identities().value(actual))
+                .relation("is the same instance as"),
+        };
+        failure.unexpected(render.identities().value(self.0))
+    }
+}
 
 /// Assertions comparing the address of the assertion subject with another reference.
 ///
@@ -43,36 +158,23 @@ pub trait IdentityAssertions<T> {
 impl<T, M: Mode, R> IdentityAssertions<T> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_same_instance_as(self, expected: &T) -> Self {
-        self.track_assertion();
-        if !core::ptr::eq(self.actual(), expected) {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().identities().value(self.actual()))
-                .relation("is not the same instance as")
-                .expected(self.render().identities().value(expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsSameInstanceAs::new(expected))
     }
 
     #[track_caller]
     fn is_not_same_instance_as(self, expected: &T) -> Self {
-        self.track_assertion();
-        if core::ptr::eq(self.actual(), expected) {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().identities().value(self.actual()))
-                .relation("is the same instance as")
-                .unexpected(self.render().identities().value(expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsNotSameInstanceAs::new(expected))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
-    use crate::test_support::{NoRenderer, assert_trait_impl};
-    use crate::{FailureKind, renderer::RenderedBody};
+    use crate::{
+        FailureKind,
+        prelude::*,
+        renderer::RenderedBody,
+        test_support::{NoRenderer, assert_trait_impl},
+    };
     use indoc::formatdoc;
 
     struct Opaque {
@@ -94,20 +196,18 @@ mod tests {
             let values = [Opaque { _byte: 1 }, Opaque { _byte: 1 }];
             let failures = assert_that!(values[0])
                 .with_renderer(NoRenderer)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(2).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(2))
                 .capture(|it| it.is_same_instance_as(&values[1]));
             for (rendered, value) in [
                 (failures[0].actual.as_ref().unwrap(), &values[0]),
                 (failures[0].expected.as_ref().unwrap(), &values[1]),
             ] {
-                assert_eq!(rendered.type_name, Some(core::any::type_name::<Opaque>()));
-                assert_eq!(
-                    rendered.body,
-                    RenderedBody::Text {
-                        text: "0x".into(),
-                        omitted_characters: format!("{value:p}").len() - 2,
-                    }
-                );
+                assert_that!(rendered.type_name)
+                    .is_equal_to(Some(core::any::type_name::<Opaque>()));
+                assert_that!(rendered.body).is_equal_to(RenderedBody::Text {
+                    text: "0x".into(),
+                    omitted_characters: format!("{value:p}").len() - 2,
+                });
             }
         }
     }
@@ -145,7 +245,7 @@ mod tests {
                 .with_renderer(NoRenderer)
                 .is_same_instance_as(&value)
                 .is_same_instance_as(&value);
-            assert_eq!(assertion.state.records.assertion_count(), 2);
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(2);
         }
 
         #[test]
@@ -259,7 +359,7 @@ mod tests {
             let assertion: AssertThat<'_, Opaque, Panic, NoRenderer> = assert_that!(values[0])
                 .with_renderer(NoRenderer)
                 .is_not_same_instance_as(&values[1]);
-            assert_eq!(assertion.state.records.assertion_count(), 1);
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
         }
 
         #[test]

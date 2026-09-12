@@ -211,26 +211,24 @@ mod tests {
             .with_location(false)
             .capture(|it| it.is_equal_to(2).is_equal_to(3));
         let single = ToHumanReadableText.render(&failures[0]);
-        assert_eq!(format!("{}", failures[0]), single.as_str());
-        assert_eq!(format!("{:?}", failures[0]), single.as_str());
+        assert_that!(format!("{}", failures[0])).is_equal_to(single.as_str());
+        assert_that!(format!("{:?}", failures[0])).is_equal_to(single.as_str());
         let expected = format!("{}\n{}", single, ToHumanReadableText.render(&failures[1]));
-        assert_eq!(format!("{failures}"), expected);
-        assert_eq!(format!("{failures:?}"), expected);
-        assert_eq!(
-            ToHumanReadableText.adapt(&failures).unwrap().as_str(),
-            expected
-        );
-        assert_eq!(
+        assert_that!(format!("{failures}")).is_equal_to(expected.as_str());
+        assert_that!(format!("{failures:?}")).is_equal_to(expected.as_str());
+        assert_that!(ToHumanReadableText.adapt(&failures).unwrap().as_str())
+            .is_equal_to(expected.as_str());
+        assert_that!(
             ToHumanReadableText
                 .map_err(|never| never)
                 .adapt(&failures)
                 .unwrap()
-                .as_str(),
-            expected
-        );
-        assert!(failures.source().is_none());
-        assert!(failures[0].source().is_none());
-        assert_eq!(format!("{:?}", AssertionFailures::default()), "");
+                .as_str()
+        )
+        .is_equal_to(expected.as_str());
+        assert_that!(failures.source()).is_none();
+        assert_that!(failures[0].source()).is_none();
+        assert_that!(format!("{:?}", AssertionFailures::default())).is_equal_to("");
     }
 
     #[test]
@@ -243,14 +241,12 @@ mod tests {
         assert_that!(failures)
             .get_at(0)
             .is_equal_to(expected.clone());
-        assert_eq!(failures.as_ref(), failures.as_slice());
-        assert_eq!((&failures).into_iter().count(), 1);
-        assert_eq!(AssertionFailures::from(expected), failures);
-        assert_eq!(
-            AssertionFailures::from(failures.clone().into_vec()),
-            failures
-        );
-        assert_eq!(failures.into_iter().count(), 1);
+        assert_that!(failures.as_ref()).is_equal_to(failures.as_slice());
+        assert_that!((&failures).into_iter().count()).is_equal_to(1);
+        assert_that_owned!(&AssertionFailures::from(expected)).is_equal_to(&failures);
+        assert_that_owned!(&AssertionFailures::from(failures.clone().into_vec()))
+            .is_equal_to(&failures);
+        assert_that!(failures.into_iter().count()).is_equal_to(1);
     }
 
     #[test]
@@ -263,34 +259,29 @@ mod tests {
             aggregate()?;
             Ok(())
         }
-        assert!(boxed().unwrap_err().is::<AssertionFailures>());
+        assert_that!(boxed().unwrap_err().is::<AssertionFailures>()).is_true();
         let failure = aggregate().unwrap_err().into_iter().next().unwrap();
         let error: Box<dyn Error + Send + Sync> = failure.into();
-        assert!(error.is::<AssertionFailure>());
+        assert_that!(error.is::<AssertionFailure>()).is_true();
     }
 
     #[test]
     #[cfg(feature = "fluent")]
     fn pending_expressions_preserve_equality_cloning_and_owned_conversion() {
         let failures = 1.verify(|it| it.with_location(false).is_equal_to(2));
-        assert_eq!(failures[0].expression, None);
-        assert_eq!(
-            AssertionFailures::from(failures.clone().into_vec()),
-            failures
-        );
-        assert_eq!(AssertionFailures::from(failures[0].clone()), failures);
-        assert_eq!(
-            failures.clone().into_iter().next().unwrap().expression,
-            None
-        );
+        assert_that!(failures[0].expression).is_none();
+        assert_that_owned!(&AssertionFailures::from(failures.clone().into_vec()))
+            .is_equal_to(&failures);
+        assert_that_owned!(&AssertionFailures::from(failures[0].clone())).is_equal_to(&failures);
+        assert_that!(failures.clone().into_iter().next().unwrap().expression).is_none();
 
         let location = failures.pending_expression.as_ref().unwrap().location;
         let mut cloned = failures.clone();
         cloned.attach_expression("receiver", location);
-        assert_eq!(cloned[0].expression, Some("receiver"));
-        assert_eq!(failures[0].expression, None);
-        assert!(cloned.pending_expression.is_none());
+        assert_that!(cloned[0].expression).is_equal_to(Some("receiver"));
+        assert_that!(failures[0].expression).is_none();
+        assert_that!(cloned.pending_expression).matches(pattern!(None));
         cloned.attach_expression("another receiver", location);
-        assert_eq!(cloned[0].expression, Some("receiver"));
+        assert_that!(cloned[0].expression).is_equal_to(Some("receiver"));
     }
 }

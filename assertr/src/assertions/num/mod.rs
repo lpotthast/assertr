@@ -1,9 +1,9 @@
 //! Assertions for numeric identities, signs, tolerances, and floating-point classifications.
 
-use crate::AssertThat;
-use crate::ValueRenderer;
-use crate::failure::{Fact, FailureKind};
-use crate::mode::Mode;
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, Mode, ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
+};
 use core::cmp::Ordering;
 #[cfg(any(feature = "std", feature = "libm"))]
 use num_traits::Float;
@@ -11,6 +11,505 @@ use num_traits::{Num, Signed};
 
 mod numeric_distance;
 pub use numeric_distance::NumericDistance;
+
+/// Checks [`Signed::is_negative`], including the sign bit of floating-point values.
+pub struct IsNegative;
+
+impl<T, R> Expectation<T, R> for IsNegative
+where
+    T: Signed,
+{
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_negative() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<T, R> for IsNegative
+where
+    R: ValueRenderer<T>,
+    T: Signed,
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is negative"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not negative"),
+        }
+    }
+}
+
+/// Checks [`Signed::is_positive`], including the sign bit of floating-point values.
+pub struct IsPositive;
+
+impl<T, R> Expectation<T, R> for IsPositive
+where
+    T: Signed,
+{
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_positive() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<T, R> for IsPositive
+where
+    R: ValueRenderer<T>,
+    T: Signed,
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is positive"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not positive"),
+        }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+/// Checks whether a numeric value is finite.
+pub struct IsFinite;
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T, R> Expectation<T, R> for IsFinite
+where
+    T: Float,
+{
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_finite() { Ok(()) } else { Err(()) }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T, R> ExpectationDiagnostics<T, R> for IsFinite
+where
+    R: ValueRenderer<T>,
+    T: Float,
+{
+    const KIND: FailureKind = FailureKind::Other;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is finite"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not finite"),
+        }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+/// Checks whether a numeric value is infinite.
+pub struct IsInfinite;
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T, R> Expectation<T, R> for IsInfinite
+where
+    T: Float,
+{
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_infinite() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T, R> ExpectationDiagnostics<T, R> for IsInfinite
+where
+    R: ValueRenderer<T>,
+    T: Float,
+{
+    const KIND: FailureKind = FailureKind::Other;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is infinite"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not infinite"),
+        }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+/// Checks whether a numeric value is normal.
+pub struct IsNormal;
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T, R> Expectation<T, R> for IsNormal
+where
+    T: Float,
+{
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_normal() { Ok(()) } else { Err(()) }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T, R> ExpectationDiagnostics<T, R> for IsNormal
+where
+    R: ValueRenderer<T>,
+    T: Float,
+{
+    const KIND: FailureKind = FailureKind::Other;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is normal"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not normal"),
+        }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+/// Checks whether a numeric value is subnormal.
+pub struct IsSubnormal;
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T, R> Expectation<T, R> for IsSubnormal
+where
+    T: Float,
+{
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_subnormal() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T, R> ExpectationDiagnostics<T, R> for IsSubnormal
+where
+    R: ValueRenderer<T>,
+    T: Float,
+{
+    const KIND: FailureKind = FailureKind::Other;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is subnormal"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not subnormal"),
+        }
+    }
+}
+
+/// Checks whether a numeric value is zero.
+pub struct IsZero;
+
+impl<T: Num, R> Expectation<T, R> for IsZero {
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_zero() { Ok(()) } else { Err(()) }
+    }
+}
+
+impl<T: Num, R: ValueRenderer<T>> ExpectationDiagnostics<T, R> for IsZero {
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is zero"),
+            Some((actual, ())) => failure.actual(render.value(actual)),
+        };
+        failure.expected(render.value(&T::zero()))
+    }
+}
+
+/// Checks whether a numeric value is one.
+pub struct IsOne;
+
+impl<T: Num, R> Expectation<T, R> for IsOne {
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_one() { Ok(()) } else { Err(()) }
+    }
+}
+
+impl<T: Num, R: ValueRenderer<T>> ExpectationDiagnostics<T, R> for IsOne {
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is one"),
+            Some((actual, ())) => failure.actual(render.value(actual)),
+        };
+        failure.expected(render.value(&T::one()))
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+/// Checks whether a numeric value is NaN.
+pub struct IsNan;
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T: Float, R> Expectation<T, R> for IsNan {
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_nan() { Ok(()) } else { Err(()) }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T: Float, R: ValueRenderer<T>> ExpectationDiagnostics<T, R> for IsNan {
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is NaN"),
+            Some((actual, ())) => failure.actual(render.value(actual)),
+        };
+        failure.expected(render.value(&T::nan()))
+    }
+}
+
+/// Checks distance from an expected value with an inclusive, non-negative deviation.
+/// Uses [`NumericDistance`] without requiring `Clone` or floating-point math features.
+pub struct IsCloseTo<T> {
+    expected: T,
+    allowed_deviation: T,
+}
+
+impl<T> IsCloseTo<T> {
+    /// Owns the expected value and allowed deviation.
+    #[must_use]
+    pub const fn new(expected: T, allowed_deviation: T) -> Self {
+        Self {
+            expected,
+            allowed_deviation,
+        }
+    }
+}
+
+/// The reason a numeric tolerance was rejected.
+#[non_exhaustive]
+pub enum CloseToRejection {
+    /// The deviation was negative or incomparable with zero.
+    InvalidDeviation,
+    /// The distance exceeded the deviation or could not be computed.
+    OutsideDeviation,
+}
+
+impl<T: NumericDistance, R> Expectation<T, R> for IsCloseTo<T> {
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = CloseToRejection
+    where
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), CloseToRejection> {
+        let zero = T::zero();
+        if !matches!(
+            self.allowed_deviation.partial_cmp(&zero),
+            Some(Ordering::Greater | Ordering::Equal)
+        ) {
+            return Err(CloseToRejection::InvalidDeviation);
+        }
+        if actual
+            .checked_distance(&self.expected)
+            .is_some_and(|distance| distance <= self.allowed_deviation)
+        {
+            Ok(())
+        } else {
+            Err(CloseToRejection::OutsideDeviation)
+        }
+    }
+}
+
+impl<T: NumericDistance, R: ValueRenderer<T>> ExpectationDiagnostics<T, R> for IsCloseTo<T> {
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, CloseToRejection)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => {
+                let description = failure
+                    .relation("is close to")
+                    .expected(render.value(&self.expected));
+                if render.max_items() == 0 {
+                    description.omitted_children(1)
+                } else {
+                    description.children([FailureBuilder::detached::<()>(FailureKind::Matching)
+                        .relation("allows a deviation of")
+                        .expected(render.value(&self.allowed_deviation))
+                        .build()])
+                }
+            }
+            Some((actual, rejection)) => {
+                let allowed_deviation = render.value(&self.allowed_deviation);
+                match rejection {
+                    CloseToRejection::InvalidDeviation => failure
+                        .relation("was given an invalid allowed deviation")
+                        .fact(Fact::labelled("Allowed deviation", allowed_deviation))
+                        .fact(Fact::note(
+                            "The allowed deviation must be a non-negative number.",
+                        )),
+                    CloseToRejection::OutsideDeviation => failure
+                        .actual(render.value(actual))
+                        .relation("is not close to")
+                        .expected(render.value(&self.expected))
+                        .fact(Fact::labelled("Allowed deviation", allowed_deviation)),
+                }
+            }
+        }
+    }
+}
 
 /// Assertions for numeric values not already handled by [`crate::prelude::PartialEqAssertions`] and
 /// [`crate::prelude::PartialOrdAssertions`].
@@ -121,16 +620,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_zero() {
-            let expected = T::zero();
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(actual))
-                .expected(self.render().value(&expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsZero)
     }
 
     #[track_caller]
@@ -146,16 +636,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_one() {
-            let expected = T::one();
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(actual))
-                .expected(self.render().value(&expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsOne)
     }
 
     #[track_caller]
@@ -172,15 +653,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         T: Signed,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_negative() {
-            self.failure(FailureKind::Ordering)
-                .actual(self.render().value(actual))
-                .relation("is not negative")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsNegative)
     }
 
     #[track_caller]
@@ -189,15 +662,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         T: Signed,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_positive() {
-            self.failure(FailureKind::Ordering)
-                .actual(self.render().value(actual))
-                .relation("is not positive")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsPositive)
     }
 
     #[track_caller]
@@ -206,41 +671,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         T: NumericDistance,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        let zero = T::zero();
-
-        // Rejects both negative deviations and a NaN deviation, which is incomparable to zero.
-        let deviation_is_valid = matches!(
-            allowed_deviation.partial_cmp(&zero),
-            Some(Ordering::Greater | Ordering::Equal)
-        );
-        if !deviation_is_valid {
-            let allowed_deviation = self.render().value(&allowed_deviation);
-            self.failure(FailureKind::Ordering)
-                .relation("was given an invalid allowed deviation")
-                .fact(Fact::labelled("Allowed deviation", allowed_deviation))
-                .fact(Fact::note(
-                    "The allowed deviation must be a non-negative number.",
-                ))
-                .raise();
-            return self;
-        }
-
-        let within_allowed_deviation = actual
-            .checked_distance(&expected)
-            .is_some_and(|distance| distance <= allowed_deviation);
-
-        if !within_allowed_deviation {
-            let allowed_deviation = self.render().value(&allowed_deviation);
-            self.failure(FailureKind::Ordering)
-                .actual(self.render().value(actual))
-                .relation("is not close to")
-                .expected(self.render().value(&expected))
-                .fact(Fact::labelled("Allowed deviation", allowed_deviation))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsCloseTo::new(expected, allowed_deviation))
     }
 
     #[track_caller]
@@ -250,16 +681,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_nan() {
-            let nan = T::nan();
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(actual))
-                .expected(self.render().value(&nan))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsNan)
     }
 
     #[track_caller]
@@ -269,15 +691,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_finite() {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(actual))
-                .relation("is not finite")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsFinite)
     }
 
     #[track_caller]
@@ -287,15 +701,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_infinite() {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(actual))
-                .relation("is not infinite")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsInfinite)
     }
 
     #[track_caller]
@@ -305,15 +711,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_normal() {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(actual))
-                .relation("is not normal")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsNormal)
     }
 
     #[track_caller]
@@ -323,23 +721,17 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_subnormal() {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(actual))
-                .relation("is not subnormal")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsSubnormal)
     }
 }
 
 #[cfg(test)]
 mod tests {
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -349,6 +741,20 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, f64, Panic, NoRenderer> => NumAssertions<f64>
             );
+
+            assert_trait_impl!(super::super::IsZero => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsOne => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsNegative => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsPositive => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsCloseTo<i32> => crate::Expectation<i32, NoRenderer>);
+            #[cfg(any(feature = "std", feature = "libm"))]
+            {
+                assert_trait_impl!(super::super::IsNan => crate::Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsFinite => crate::Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsInfinite => crate::Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsNormal => crate::Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsSubnormal => crate::Expectation<f64, NoRenderer>);
+            }
         }
     }
 
@@ -646,6 +1052,19 @@ mod tests {
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(1_i32), is_close_to(3, 1));
+        }
+
+        #[test]
+        fn missing_tolerance_description_respects_the_item_budget() {
+            use super::super::IsCloseTo;
+
+            for limit in [0, 1] {
+                let budget = RenderingBudget::default().with_max_items(limit);
+                let context = crate::AssertionContext::new(&DebugRenderer, budget);
+                let description = context.describe::<i32, _>(&IsCloseTo::new(42, 2));
+                assert_that!(description.children.len()).is_equal_to(limit);
+                assert_that!(description.omitted_children).is_equal_to(1 - limit);
+            }
         }
 
         #[test]

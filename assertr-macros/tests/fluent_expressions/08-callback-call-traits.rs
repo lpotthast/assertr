@@ -1,4 +1,5 @@
-// Intentionally no assertr prelude: preserve the inherent methods and their callback bounds.
+// Import only equality assertions to preserve the inherent methods and their callback bounds.
+use renamed_assertr::{assert_that, prelude::PartialEqAssertions};
 struct User;
 struct MutUser;
 struct OnceUser;
@@ -82,82 +83,82 @@ fn make_pointer(creations: &mut usize) -> fn(i32) -> i32 {
 
 #[renamed_assertr::fluent_expressions]
 fn main() {
-    // Keep every rewritten call outside assert_eq!, whose contents the attribute cannot visit.
+    // Keep every rewritten call outside assert_that!, whose contents the attribute cannot visit.
     let result = PointerUser.verify(double);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let result = PointerUser.verify_owned(double);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
 
     let pointer: fn(i32) -> i32 = double;
     let result = PointerUser.verify(pointer);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let result = PointerUser.verify_owned(pointer);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
 
     let result = PointerUser.verify(double as fn(i32) -> i32);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let result = PointerUser.verify_owned(double as fn(i32) -> i32);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
 
     let result = PointerUser.verify(|value| value * 2);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let result = PointerUser.verify_owned(|value| value * 2);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let operation = |value| value * 2;
     let result = PointerUser.verify(operation);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let result = PointerUser.verify_owned(operation);
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
 
     let mut block_creations = 0;
     let result = PointerUser.verify({
         block_creations += 1;
         |value| value * 2
     });
-    assert_eq!(block_creations, 1);
-    assert_eq!(result, 84);
+    assert_that!(block_creations).is_equal_to(1);
+    assert_that!(result).is_equal_to(84);
     let result = PointerUser.verify(if true { double } else { |value| value * 2 });
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let result = PointerUser.verify_owned(match false {
         true => double,
         false => |value| value * 2,
     });
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
 
     let result = NoArgumentUser.verify(|| 42);
-    assert_eq!(result, 42);
+    assert_that!(result).is_equal_to(42);
     let callback = || 42;
     let result = NoArgumentUser.verify(callback);
-    assert_eq!(result, 42);
+    assert_that!(result).is_equal_to(42);
     let result = TwoArgumentUser.verify(|left, right| left + right);
-    assert_eq!(result, 42);
+    assert_that!(result).is_equal_to(42);
     let callback = |left, right| left + right;
     let result = TwoArgumentUser.verify(callback);
-    assert_eq!(result, 42);
+    assert_that!(result).is_equal_to(42);
     let result = TokenUser.verify(42);
-    assert_eq!(result, 42);
+    assert_that!(result).is_equal_to(42);
     let result = UnconstrainedUser.verify(|value: i32| value);
-    assert_eq!(result, 42);
+    assert_that!(result).is_equal_to(42);
 
     let mut creations = 0;
     let result = PointerUser.verify(make_pointer(&mut creations));
-    assert_eq!(result, 84);
+    assert_that!(result).is_equal_to(84);
     let result = PointerUser.verify_owned(make_pointer(&mut creations));
-    assert_eq!(result, 84);
-    assert_eq!(creations, 2);
+    assert_that!(result).is_equal_to(84);
+    assert_that!(creations).is_equal_to(2);
 
     let result: i32 = GenericUser.verify(|_| Default::default());
-    assert_eq!(result, 0);
+    assert_that!(result).is_equal_to(0);
     let result: i32 = GenericUser.verify_owned(|_| Default::default());
-    assert_eq!(result, 0);
+    assert_that!(result).is_equal_to(0);
     let result = GenericUser.verify::<i32>(|_| Default::default());
-    assert_eq!(result, 0);
+    assert_that!(result).is_equal_to(0);
 
     let value = String::from("borrowed");
     let result: &str = GenericUser.verify(|_| value.as_str());
-    assert_eq!(result, "borrowed");
+    assert_that!(result).is_equal_to("borrowed");
     let result: &str = GenericUser.verify_owned(|_| value.as_str());
-    assert_eq!(result, "borrowed");
+    assert_that!(result).is_equal_to("borrowed");
 
     User.verify(double);
     User.verify_owned(double);

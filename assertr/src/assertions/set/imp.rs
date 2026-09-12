@@ -1,19 +1,16 @@
-//! Algorithms and diagnostics shared by every set assertion.
-//!
-//! The public [`SetAssertions`](super::SetAssertions) methods are thin wrappers around these
-//! functions, so every set type produces identical failure messages.
-
-use alloc::string::String;
-use alloc::vec::Vec;
+//! Reusable set relations and their rejection evidence.
 
 use super::SetLookup;
-use crate::failure::{Fact, FailureKind};
-use crate::renderer::{GroupStyle, RenderingOrder};
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{
+    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    failure::{Fact, FailureBuilder, FailureKind},
+    renderer::GroupStyle,
+};
+use alloc::{string::String, vec::Vec};
 
 fn type_difference_detail<S, O>() -> Option<String>
 where
-    S: SetLookup,
+    S: SetLookup + ?Sized,
     O: SetLookup,
 {
     if set_type_name::<S>() == set_type_name::<O>() {
@@ -33,114 +30,226 @@ fn set_type_name<S: ?Sized>() -> &'static str {
     name
 }
 
-/// Whether diagnostics over `S`'s elements are sorted by their rendered text because the set has no
-/// deterministic iteration order.
-fn sorts_for_rendering<S: SetLookup + ?Sized>() -> bool {
-    S::PRESENTATION.order() == RenderingOrder::SortByRenderedText
-}
+/// Checks that a set is a subset of another set using native lookup.
+pub struct IsSubsetOf<O>(O);
 
-#[track_caller]
-pub(crate) fn assert_is_subset_of<S, O, M, R>(this: &AssertThat<'_, S, M, R>, expected_superset: &O)
-where
-    S: SetLookup,
-    O: SetLookup<Item = S::Item>,
-    M: Mode,
-    R: ValueRenderer<S::Item>,
-{
-    this.track_assertion();
-    let actual = this.actual();
-
-    let elements_not_in_expected = actual
-        .elements()
-        .filter(|it| !expected_superset.contains_element(it))
-        .collect::<Vec<_>>();
-
-    if !elements_not_in_expected.is_empty() {
-        this.failure(FailureKind::Membership)
-            .actual(this.render().collection(actual))
-            .relation("is not a subset of")
-            .expected(this.render().collection(expected_superset))
-            .fact(Fact::labelled(
-                "Elements not in expected",
-                this.render()
-                    .borrowed_values::<S::Item, _>(
-                        elements_not_in_expected.as_slice(),
-                        GroupStyle::List,
-                    )
-                    .sort_for_rendering(sorts_for_rendering::<S>()),
-            ))
-            .facts(type_difference_detail::<S, O>().map(Fact::note))
-            .raise();
+impl<O> IsSubsetOf<O> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: O) -> Self {
+        Self(expected)
     }
 }
 
-#[track_caller]
-pub(crate) fn assert_is_superset_of<S, O, M, R>(this: &AssertThat<'_, S, M, R>, expected_subset: &O)
+impl<S: SetLookup + ?Sized, O, R> Expectation<S, R> for IsSubsetOf<O>
 where
-    S: SetLookup,
     O: SetLookup<Item = S::Item>,
-    M: Mode,
-    R: ValueRenderer<S::Item>,
 {
-    this.track_assertion();
-    let actual = this.actual();
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        S: 'a;
+    type Rejection<'a>
+        = Vec<&'a S::Item>
+    where
+        Self: 'a,
+        S: 'a;
 
-    let elements_not_in_actual = expected_subset
-        .elements()
-        .filter(|it| !actual.contains_element(it))
-        .collect::<Vec<_>>();
-
-    if !elements_not_in_actual.is_empty() {
-        this.failure(FailureKind::Membership)
-            .actual(this.render().collection(actual))
-            .relation("is not a superset of")
-            .expected(this.render().collection(expected_subset))
-            .fact(Fact::labelled(
-                "Elements not in actual",
-                this.render()
-                    .borrowed_values::<S::Item, _>(
-                        elements_not_in_actual.as_slice(),
-                        GroupStyle::List,
-                    )
-                    .sort_for_rendering(sorts_for_rendering::<O>()),
-            ))
-            .facts(type_difference_detail::<S, O>().map(Fact::note))
-            .raise();
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a S,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let elements = actual
+            .elements()
+            .filter(|it| !self.0.contains_element(it))
+            .collect::<Vec<_>>();
+        if elements.is_empty() {
+            Ok(())
+        } else {
+            Err(elements)
+        }
     }
 }
 
-#[track_caller]
-pub(crate) fn assert_is_disjoint_from<S, O, M, R>(this: &AssertThat<'_, S, M, R>, other: &O)
+impl<S: SetLookup + ?Sized, O, R> ExpectationDiagnostics<S, R> for IsSubsetOf<O>
 where
-    S: SetLookup,
     O: SetLookup<Item = S::Item>,
-    M: Mode,
     R: ValueRenderer<S::Item>,
 {
-    this.track_assertion();
-    let actual = this.actual();
+    const KIND: FailureKind = FailureKind::Membership;
 
-    let overlapping_elements = actual
-        .elements()
-        .filter(|it| other.contains_element(it))
-        .collect::<Vec<_>>();
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a S, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is a subset of"),
+            Some((actual, elements)) => failure
+                .actual(render.collection(actual))
+                .relation("is not a subset of")
+                .fact(Fact::labelled(
+                    "Elements not in expected",
+                    render
+                        .borrowed_values::<S::Item, _>(&elements, GroupStyle::List)
+                        .with_order(S::PRESENTATION.order()),
+                ))
+                .facts(type_difference_detail::<S, O>().map(Fact::note)),
+        };
+        failure.expected(render.collection(&self.0))
+    }
+}
 
-    if !overlapping_elements.is_empty() {
-        this.failure(FailureKind::Membership)
-            .actual(this.render().collection(actual))
-            .relation("is not disjoint from")
-            .expected(this.render().collection(other))
-            .fact(Fact::labelled(
-                "Overlapping elements",
-                this.render()
-                    .borrowed_values::<S::Item, _>(
-                        overlapping_elements.as_slice(),
-                        GroupStyle::List,
-                    )
-                    .sort_for_rendering(sorts_for_rendering::<S>()),
-            ))
-            .facts(type_difference_detail::<S, O>().map(Fact::note))
-            .raise();
+/// Checks that a set is a superset of another set using native lookup.
+pub struct IsSupersetOf<O>(O);
+
+impl<O> IsSupersetOf<O> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: O) -> Self {
+        Self(expected)
+    }
+}
+
+impl<S: SetLookup + ?Sized, O, R> Expectation<S, R> for IsSupersetOf<O>
+where
+    O: SetLookup<Item = S::Item>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        S: 'a;
+    type Rejection<'a>
+        = Vec<&'a S::Item>
+    where
+        Self: 'a,
+        S: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a S,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let elements = self
+            .0
+            .elements()
+            .filter(|it| !actual.contains_element(it))
+            .collect::<Vec<_>>();
+        if elements.is_empty() {
+            Ok(())
+        } else {
+            Err(elements)
+        }
+    }
+}
+
+impl<S: SetLookup + ?Sized, O, R> ExpectationDiagnostics<S, R> for IsSupersetOf<O>
+where
+    O: SetLookup<Item = S::Item>,
+    R: ValueRenderer<S::Item>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a S, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is a superset of"),
+            Some((actual, elements)) => failure
+                .actual(render.collection(actual))
+                .relation("is not a superset of")
+                .fact(Fact::labelled(
+                    "Elements not in actual",
+                    render
+                        .borrowed_values::<S::Item, _>(&elements, GroupStyle::List)
+                        .with_order(O::PRESENTATION.order()),
+                ))
+                .facts(type_difference_detail::<S, O>().map(Fact::note)),
+        };
+        failure.expected(render.collection(&self.0))
+    }
+}
+
+/// Checks that a set is disjoint from another set using native lookup.
+pub struct IsDisjointFrom<O>(O);
+
+impl<O> IsDisjointFrom<O> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: O) -> Self {
+        Self(expected)
+    }
+}
+
+impl<S: SetLookup + ?Sized, O, R> Expectation<S, R> for IsDisjointFrom<O>
+where
+    O: SetLookup<Item = S::Item>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        S: 'a;
+    type Rejection<'a>
+        = Vec<&'a S::Item>
+    where
+        Self: 'a,
+        S: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a S,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let elements = actual
+            .elements()
+            .filter(|it| self.0.contains_element(it))
+            .collect::<Vec<_>>();
+        if elements.is_empty() {
+            Ok(())
+        } else {
+            Err(elements)
+        }
+    }
+}
+
+impl<S: SetLookup + ?Sized, O, R> ExpectationDiagnostics<S, R> for IsDisjointFrom<O>
+where
+    O: SetLookup<Item = S::Item>,
+    R: ValueRenderer<S::Item>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a S, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is disjoint from"),
+            Some((actual, elements)) => failure
+                .actual(render.collection(actual))
+                .relation("is not disjoint from")
+                .fact(Fact::labelled(
+                    "Overlapping elements",
+                    render
+                        .borrowed_values::<S::Item, _>(&elements, GroupStyle::List)
+                        .with_order(S::PRESENTATION.order()),
+                ))
+                .facts(type_difference_detail::<S, O>().map(Fact::note)),
+        };
+        failure.expected(render.collection(&self.0))
     }
 }
 

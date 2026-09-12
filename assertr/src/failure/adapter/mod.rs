@@ -51,13 +51,18 @@
 //!     .capture(|it| it.is_equal_to(2));
 //! let chain = ToHumanReadableText.then(TextLength);
 //! let length = chain.adapt(&failures[0]).unwrap();
-//! assert!(length > 0);
+//! assert_that!(length).is_greater_than(0);
 //! ```
 //!
 //! Each stage keeps its output and error types. [`ThenError`] identifies which stage failed, and
 //! [`AdapterExt::map_err`] changes an error type without changing successful output. Adapters run
 //! on the calling thread and may perform side effects. Use `()` as the output for a stage that
 //! only logs or records its input. Adapters used explicitly may borrow local data.
+//!
+//! With `std`, `Writer::new(target)` writes text or bytes to any `std::io::Write` target and
+//! flushes it. `Writer::stdout()` and `Writer::stderr()` select standard streams. With `tokio`,
+//! `Writer::tokio_stdout()` and `Writer::tokio_stderr()` provide asynchronous targets. Call
+//! `adapt_async(&mut self, input).await` explicitly after any synchronous transformations.
 //!
 //! ## Select panic presentation
 //!
@@ -79,7 +84,7 @@
 mod adapters;
 
 #[cfg(feature = "std")]
-pub use adapters::StdOutLogger;
+pub use adapters::Writer;
 pub use adapters::{HumanReadableText, MapErr, Then, ThenError, ToHumanReadableText};
 
 /// Transforms a borrowed input into an owned output.
@@ -137,6 +142,7 @@ pub trait AdapterExt: Sized {
     /// ```
     /// use core::num::ParseIntError;
     /// use assertr::failure::adapter::{Adapter, AdapterExt};
+    /// use assertr::prelude::*;
     ///
     /// struct ParseNumber;
     ///
@@ -151,8 +157,8 @@ pub trait AdapterExt: Sized {
     ///
     /// let adapter = ParseNumber.map_err(|error| error.to_string());
     /// let adapter: &dyn Adapter<str, Output = usize, Error = String> = &adapter;
-    /// assert_eq!(adapter.adapt("42"), Ok(42));
-    /// assert!(adapter.adapt("not a number").is_err());
+    /// assert_that!(adapter.adapt("42")).get_ok().is_equal_to(42);
+    /// assert_that!(adapter.adapt("not a number")).is_err();
     /// ```
     fn map_err<Input: ?Sized, F, Error>(self, mapper: F) -> MapErr<Self, F, Input>
     where

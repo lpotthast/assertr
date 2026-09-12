@@ -1,7 +1,9 @@
+use super::result::{IsErr, IsOk};
 use crate::actual::Actual;
-use crate::failure::{Fact, FailureKind};
+use crate::failure::{Fact, FailureBuilder, FailureKind};
 use crate::mode::Panic;
 use crate::{AssertThat, PanicValue, ValueRenderer};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics};
 use alloc::{boxed::Box, string::String};
 use core::any::Any;
 use core::panic::Location;
@@ -17,25 +19,84 @@ fn panic_message(payload: &(dyn Any + Send)) -> Option<&str> {
         .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
 }
 
-/// Raises the failure of a `does_not_panic` assertion at `location`, with the panic message as
-/// evidence when the payload carries one.
-fn raise_unexpected_panic<T, R>(
-    this: &AssertThat<'_, T, Panic, R>,
-    payload: &(dyn Any + Send),
-    location: &'static Location<'static>,
-) where
-    R: ValueRenderer<str>,
-{
-    let mut failure = this
-        .failure_at(FailureKind::Panic, location)
-        .relation("unexpectedly panicked");
-    if let Some(message) = panic_message(payload) {
-        failure = failure.fact(Fact::labelled(
-            "Panic message",
-            this.render().value(message),
-        ));
+// Invocation and polling belong to the consuming adapters. These definitions inspect only the
+// resulting observation, so explaining a rejection can never invoke or poll user code again.
+type Invocation<O> = Result<O, Box<dyn Any + Send>>;
+
+struct Panicked;
+
+impl<R> Expectation<Invocation<()>, R> for Panicked {
+    type Success<'a> = &'a Box<dyn Any + Send>;
+    type Rejection<'a> = &'a ();
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Invocation<()>,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        IsErr.evaluate(actual, context)
     }
-    failure.raise();
+}
+
+impl<R> ExpectationDiagnostics<Invocation<()>, R> for Panicked {
+    const KIND: FailureKind = FailureKind::Panic;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Invocation<()>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        _: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        failure.relation(if rejected.is_some() {
+            "did not panic"
+        } else {
+            "panics"
+        })
+    }
+}
+
+struct DidNotPanic;
+
+impl<O, R> Expectation<Invocation<O>, R> for DidNotPanic {
+    type Success<'a>
+        = &'a O
+    where
+        O: 'a;
+    type Rejection<'a>
+        = &'a Box<dyn Any + Send>
+    where
+        O: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Invocation<O>,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        IsOk.evaluate(actual, context)
+    }
+}
+
+impl<O, R: ValueRenderer<str>> ExpectationDiagnostics<Invocation<O>, R> for DidNotPanic {
+    const KIND: FailureKind = FailureKind::Panic;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Invocation<O>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let Some((_, payload)) = rejected else {
+            return failure.relation("does not panic");
+        };
+        let failure = failure.relation("unexpectedly panicked");
+        match panic_message(payload.as_ref()) {
+            Some(message) => failure.fact(Fact::labelled(
+                "Panic message",
+                context.render().value(message),
+            )),
+            None => failure,
+        }
+    }
 }
 
 /// Awaits `future`, catching a panic raised while it is polled.
@@ -104,17 +165,12 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
                 }
             });
 
-        if this.actual().is_ok() {
-            this.failure(FailureKind::Panic)
-                .relation("did not panic")
-                .raise();
-        }
-
-        this.map(|it| match it {
-            Actual::Owned(Err(boxed_any)) => Actual::Owned(PanicValue(boxed_any)),
-            Actual::Owned(Ok(())) => unreachable!("already checked"),
-            Actual::Borrowed(_) => unreachable!("mapped assertion owns its subject"),
-        })
+        this.apply_assertion_after_tracking(Panicked)
+            .map(|it| match it {
+                Actual::Owned(Err(boxed_any)) => Actual::Owned(PanicValue(boxed_any)),
+                Actual::Owned(Ok(())) => unreachable!("already checked"),
+                Actual::Borrowed(_) => unreachable!("mapped assertion owns its subject"),
+            })
     }
 
     #[track_caller]
@@ -139,15 +195,12 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
                 }
             });
 
-        if let Err(payload) = this.actual() {
-            raise_unexpected_panic(&this, payload.as_ref(), Location::caller());
-        }
-
-        this.map(|it| match it {
-            Actual::Owned(Ok(output)) => Actual::Owned(output),
-            Actual::Owned(Err(_)) => unreachable!("already checked"),
-            Actual::Borrowed(_) => unreachable!("mapped assertion owns its subject"),
-        })
+        this.apply_assertion_after_tracking(DidNotPanic)
+            .map(|it| match it {
+                Actual::Owned(Ok(output)) => Actual::Owned(output),
+                Actual::Owned(Err(_)) => unreachable!("already checked"),
+                Actual::Borrowed(_) => unreachable!("mapped assertion owns its subject"),
+            })
     }
 }
 
@@ -238,17 +291,12 @@ where
         })
         .await;
 
-    if this.actual().is_ok() {
-        this.failure_at(FailureKind::Panic, location)
-            .relation("did not panic")
-            .raise();
-    }
-
-    this.map(|it| match it {
-        Actual::Owned(Err(boxed_any)) => Actual::Owned(PanicValue(boxed_any)),
-        Actual::Owned(Ok(())) => unreachable!("already checked"),
-        Actual::Borrowed(_) => unreachable!("mapped assertion owns its subject"),
-    })
+    this.apply_assertion_after_tracking_at(Panicked, location)
+        .map(|it| match it {
+            Actual::Owned(Err(boxed_any)) => Actual::Owned(PanicValue(boxed_any)),
+            Actual::Owned(Ok(())) => unreachable!("already checked"),
+            Actual::Borrowed(_) => unreachable!("mapped assertion owns its subject"),
+        })
 }
 
 #[cfg(feature = "std")]
@@ -286,15 +334,12 @@ where
         })
         .await;
 
-    if let Err(payload) = this.actual() {
-        raise_unexpected_panic(&this, payload.as_ref(), location);
-    }
-
-    this.map(|it| match it {
-        Actual::Owned(Ok(output)) => Actual::Owned(output),
-        Actual::Owned(Err(_)) => unreachable!("already checked"),
-        Actual::Borrowed(_) => unreachable!("mapped assertion owns its subject"),
-    })
+    this.apply_assertion_after_tracking_at(DidNotPanic, location)
+        .map(|it| match it {
+            Actual::Owned(Ok(output)) => Actual::Owned(output),
+            Actual::Owned(Err(_)) => unreachable!("already checked"),
+            Actual::Borrowed(_) => unreachable!("mapped assertion owns its subject"),
+        })
 }
 
 #[cfg(test)]
@@ -313,6 +358,21 @@ mod tests {
                 AssertThat<'static, fn() -> core::future::Ready<()>, Panic, NoRenderer>
                     => AsyncFnOnceAssertions<'static, (), NoRenderer>
             );
+        }
+
+        #[tokio::test]
+        async fn successful_panic_observations_need_no_renderer() {
+            let synchronous = assert_that_owned!(|| panic!("sync"))
+                .with_renderer(NoRenderer)
+                .panics();
+            assert_that!(synchronous.actual().0.is::<&str>()).is_true();
+            assert_that!(synchronous.state.records.assertion_count()).is_equal_to(1);
+            let asynchronous = assert_that_owned!(|| async { panic!("async") })
+                .with_renderer(NoRenderer)
+                .panics_async()
+                .await;
+            assert_that!(asynchronous.actual().0.is::<&str>()).is_true();
+            assert_that!(asynchronous.state.records.assertion_count()).is_equal_to(1);
         }
     }
 
@@ -468,6 +528,36 @@ mod tests {
             }
 
             #[test]
+            fn invokes_once_after_tracking_and_retains_the_output() {
+                use core::cell::Cell;
+
+                struct Output<'a>(&'a Cell<usize>);
+                impl Drop for Output<'_> {
+                    fn drop(&mut self) {
+                        self.0.set(self.0.get() + 1);
+                    }
+                }
+
+                let root = assert_that!(());
+                let drops = Cell::new(0);
+                let mut invocations = 0;
+                let assertion = root
+                    .derive_owned(|()| {
+                        || {
+                            invocations += 1;
+                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                            Output(&drops)
+                        }
+                    })
+                    .does_not_panic();
+                assert_that!(drops.get()).is_equal_to(0);
+                assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
+                drop(assertion);
+                assert_that!(invocations).is_equal_to(1);
+                assert_that!(drops.get()).is_equal_to(1);
+            }
+
+            #[test]
             fn later_failure_does_not_report_that_the_function_panicked() {
                 assert_that_panic_by(|| {
                     assert_that_owned!(|| "actual")
@@ -530,6 +620,81 @@ mod tests {
     }
 
     mod async_fn_once {
+        mod observations {
+            use crate::prelude::*;
+            use core::{
+                cell::Cell,
+                pin::Pin,
+                task::{Context, Poll},
+            };
+
+            struct PanickingFuture<'a> {
+                polls: &'a Cell<usize>,
+                drops: &'a Cell<usize>,
+            }
+
+            impl Future for PanickingFuture<'_> {
+                type Output = ();
+                fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+                    self.polls.set(self.polls.get() + 1);
+                    if self.polls.get() == 1 {
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    } else {
+                        panic!("poll panic");
+                    }
+                }
+            }
+
+            impl Drop for PanickingFuture<'_> {
+                fn drop(&mut self) {
+                    self.drops.set(self.drops.get() + 1);
+                }
+            }
+
+            #[tokio::test]
+            async fn invocation_is_lazy_and_panicked_futures_are_never_repolled() {
+                for expects_panic in [true, false] {
+                    let root = assert_that!(());
+                    let invocations = Cell::new(0);
+                    let polls = Cell::new(0);
+                    let drops = Cell::new(0);
+                    let child = root.derive_owned(|()| {
+                        || {
+                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                            invocations.set(invocations.get() + 1);
+                            PanickingFuture {
+                                polls: &polls,
+                                drops: &drops,
+                            }
+                        }
+                    });
+                    if expects_panic {
+                        let pending = child.panics_async();
+                        assert_that!(root.state.records.assertion_count()).is_equal_to(0);
+                        assert_that!(invocations.get()).is_equal_to(0);
+                        let result = pending.await;
+                        assert_that!(result.state.records.assertion_count()).is_equal_to(1);
+                        result.has_type::<&str>().is_equal_to("poll panic");
+                    } else {
+                        let pending = child.does_not_panic_async();
+                        assert_that!(root.state.records.assertion_count()).is_equal_to(0);
+                        assert_that!(invocations.get()).is_equal_to(0);
+                        crate::assert_that_panic_by_async(async || {
+                            pending.await;
+                        })
+                        .await
+                        .has_type::<String>()
+                        .contains("unexpectedly panicked");
+                        assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                    }
+                    assert_that!(invocations.get()).is_equal_to(1);
+                    assert_that!(polls.get()).is_equal_to(2);
+                    assert_that!(drops.get()).is_equal_to(1);
+                }
+            }
+        }
+
         mod panics {
             use crate::assert_that_panic_by_async;
             use crate::prelude::*;

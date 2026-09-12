@@ -37,7 +37,7 @@ use crate::{
 };
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
-pub use builder::{Attached, Detached, FailureBuilder, FailureTarget};
+pub use builder::{Attached, Detached, FailureBuilder};
 
 /// Delimiter opening and closing every rendered failure message.
 pub(crate) const BANNER: &str = "-------- assertr --------\n";
@@ -200,8 +200,8 @@ impl Fact {
 #[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AssertionFailure {
-    /// A structured matcher constraint, including its rendered operands and branches.
-    pub constraint: Option<crate::matchers::ConstraintDescription>,
+    /// An unmet expectation with no subject, using the same diagnostic fields as a rejection.
+    pub constraint: Option<alloc::boxed::Box<AssertionFailure>>,
     /// Relative path from the parent subject.
     pub path: Vec<PathSegment>,
 
@@ -269,10 +269,10 @@ pub struct AssertionFailure {
 }
 
 impl AssertionFailure {
-    /// Borrows the structured matcher constraint, when present.
+    /// Borrows the diagnostic describing an unmet expectation, when present.
     #[must_use]
-    pub const fn constraint(&self) -> Option<&crate::matchers::ConstraintDescription> {
-        self.constraint.as_ref()
+    pub fn constraint(&self) -> Option<&AssertionFailure> {
+        self.constraint.as_deref()
     }
 
     /// Borrows the rendered subject, when present.

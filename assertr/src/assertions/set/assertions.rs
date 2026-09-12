@@ -41,8 +41,7 @@ where
         O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
-        imp::assert_is_subset_of(&self, &expected_superset);
-        self
+        self.apply_assertion(imp::IsSubsetOf::new(expected_superset))
     }
 
     #[track_caller]
@@ -51,8 +50,7 @@ where
         O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
-        imp::assert_is_superset_of(&self, &expected_subset);
-        self
+        self.apply_assertion(imp::IsSupersetOf::new(expected_subset))
     }
 
     #[track_caller]
@@ -61,8 +59,7 @@ where
         O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
-        imp::assert_is_disjoint_from(&self, &other);
-        self
+        self.apply_assertion(imp::IsDisjointFrom::new(other))
     }
 }
 

@@ -268,20 +268,6 @@ mod matcher_adapter {
             .matches(&matcher);
         let failures = assert_that!(bob)
             .with_renderer(ErrorRenderer)
-            .capture(|it| it.does_not_match(&matcher));
-        assert_that!(failures).contains_exactly_satisfying([
-            |element: AssertThat<AssertionFailure, Capture>| {
-                element
-                    .derive(|value| &value.children)
-                    .contains_exactly_satisfying(
-                        [|child: AssertThat<AssertionFailure, Capture>| {
-                            child.derive(|child| &child.constraint).is_some();
-                        }; 2],
-                    );
-            },
-        ]);
-        let failures = assert_that!(bob)
-            .with_renderer(ErrorRenderer)
             .capture(|it| it.matches(condition(HasName { expected: "Alice" })));
         assert_that!(ToHumanReadableText.render(&failures[0]))
             .contains("Person has unexpected name");

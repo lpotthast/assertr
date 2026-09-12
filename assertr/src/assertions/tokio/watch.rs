@@ -1,7 +1,157 @@
 use crate::failure::FailureKind;
 use crate::mode::Panic;
 use crate::prelude::*;
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use core::borrow::Borrow;
+
+/// Compares the current watch value without marking it seen.
+pub struct HasCurrentValue<E>(E);
+impl<T, E, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasCurrentValue<E>
+where
+    T: PartialEq,
+    E: Borrow<T>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        tokio::sync::watch::Receiver<T>: 'a;
+    type Rejection<'a>
+        = (tokio::sync::watch::Ref<'a, T>, &'a T)
+    where
+        Self: 'a,
+        tokio::sync::watch::Receiver<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a tokio::sync::watch::Receiver<T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let actual = tokio::sync::watch::Receiver::borrow(actual);
+        let expected = self.0.borrow();
+        if *actual == *expected {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+}
+impl<T, E, R> ExpectationDiagnostics<tokio::sync::watch::Receiver<T>, R> for HasCurrentValue<E>
+where
+    T: PartialEq,
+    E: Borrow<T>,
+    R: ValueRenderer<T>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a tokio::sync::watch::Receiver<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has the current value")
+                .expected(render.value(self.0.borrow())),
+            Some((_, (actual, expected))) => failure
+                .actual(render.value(&*actual))
+                .expected(render.value(expected)),
+        }
+    }
+}
+impl<E> HasCurrentValue<E> {
+    /// Expects this current value using its borrowed comparison view.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+/// Checks whether the receiver has changed, rejecting closed channels.
+pub struct HasChanged;
+impl<T, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasChanged {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        tokio::sync::watch::Receiver<T>: 'a;
+    type Rejection<'a>
+        = bool
+    where
+        Self: 'a,
+        tokio::sync::watch::Receiver<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a tokio::sync::watch::Receiver<T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        match actual.has_changed() {
+            Ok(true) => Ok(()),
+            Ok(_) => Err(false),
+            Err(_) => Err(true),
+        }
+    }
+}
+impl<T, R> ExpectationDiagnostics<tokio::sync::watch::Receiver<T>, R> for HasChanged {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a tokio::sync::watch::Receiver<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure.relation("has changed"),
+            Some((_, closed)) => failure.relation(if closed {
+                "is closed"
+            } else {
+                "has not changed"
+            }),
+        }
+    }
+}
+/// Checks whether the receiver has not changed, rejecting closed channels.
+pub struct HasNotChanged;
+impl<T, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasNotChanged {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        tokio::sync::watch::Receiver<T>: 'a;
+    type Rejection<'a>
+        = bool
+    where
+        Self: 'a,
+        tokio::sync::watch::Receiver<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a tokio::sync::watch::Receiver<T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        match actual.has_changed() {
+            Ok(false) => Ok(()),
+            Ok(_) => Err(false),
+            Err(_) => Err(true),
+        }
+    }
+}
+impl<T, R> ExpectationDiagnostics<tokio::sync::watch::Receiver<T>, R> for HasNotChanged {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a tokio::sync::watch::Receiver<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure.relation("has not changed"),
+            Some((_, closed)) => failure.relation(if closed {
+                "is closed"
+            } else {
+                "has unexpectedly changed"
+            }),
+        }
+    }
+}
 
 /// Non-extracting assertions for [`tokio::sync::watch::Receiver`].
 #[allow(clippy::return_self_not_must_use)]
@@ -23,17 +173,7 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R>
         T: PartialEq,
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = tokio::sync::watch::Receiver::borrow(self.actual());
-        let expected = expected.borrow();
-        if *actual != *expected {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(&*actual))
-                .expected(self.render().value(expected))
-                .raise();
-        }
-        drop(actual);
-        self
+        self.apply_assertion(HasCurrentValue::new(expected))
     }
 }
 
@@ -57,41 +197,42 @@ impl<T, R> TokioWatchReceiverExtractAssertions<T, R>
 {
     #[track_caller]
     fn has_changed(self) -> Self {
-        self.track_assertion();
-        match self.actual().has_changed() {
-            Ok(true) => {}
-            Ok(false) => self
-                .failure(FailureKind::Other)
-                .relation("has not changed")
-                .raise(),
-            Err(_closed) => self
-                .failure(FailureKind::Other)
-                .relation("is closed")
-                .raise(),
-        }
-        self
+        self.apply_assertion(HasChanged)
     }
 
     #[track_caller]
     fn has_not_changed(self) -> Self {
-        self.track_assertion();
-        match self.actual().has_changed() {
-            Ok(false) => {}
-            Ok(true) => self
-                .failure(FailureKind::Other)
-                .relation("has unexpectedly changed")
-                .raise(),
-            Err(_closed) => self
-                .failure(FailureKind::Other)
-                .relation("is closed")
-                .raise(),
-        }
-        self
+        self.apply_assertion(HasNotChanged)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    mod observations {
+        use crate::prelude::*;
+        use core::{borrow::Borrow, cell::Cell};
+
+        struct Expected<'a>(&'a Cell<usize>);
+        impl Borrow<i32> for Expected<'_> {
+            fn borrow(&self) -> &i32 {
+                self.0.set(self.0.get() + 1);
+                &9
+            }
+        }
+
+        #[test]
+        fn value_rejection_retains_the_expected_borrow_without_marking_the_value_seen() {
+            let calls = Cell::new(0);
+            let (_sender, mut receiver) = tokio::sync::watch::channel(7);
+            receiver.mark_changed();
+            let failures =
+                assert_that!(receiver).capture(|it| it.has_current_value(Expected(&calls)));
+            assert_that!(failures).has_length(1);
+            assert_that!(calls.get()).is_equal_to(1);
+            assert_that!(receiver.has_changed().unwrap()).is_true();
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};

@@ -1,6 +1,141 @@
-use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
-use alloc::format;
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
+};
+use alloc::{format, string::String};
 use core::fmt::Debug;
+
+/// Compares the complete `Debug` representation with verbatim expected text.
+/// Formatting determines truth even when diagnostic rendering is disabled or budgeted.
+/// Rejections retain the formatted operands so explanation never formats them again.
+pub struct HasDebugString<E>(E);
+
+impl<E> HasDebugString<E> {
+    /// Owns the expected operand, which may itself be borrowed.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
+impl<T: Debug + ?Sized, E: AsRef<str>, R> Expectation<T, R> for HasDebugString<E> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = (String, &'a str)
+    where
+        Self: 'a,
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        let actual = format!("{actual:?}");
+        let expected = self.0.as_ref();
+        if actual == expected {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+}
+
+impl<T: Debug + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
+    for HasDebugString<E>
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let (failure, expected) = match rejected {
+            None => {
+                let expected = self.0.as_ref();
+                (
+                    failure.relation("has the expected Debug representation"),
+                    expected,
+                )
+            }
+            Some((_, (actual, expected))) => {
+                (failure.actual(render.value(actual.as_str())), expected)
+            }
+        };
+        failure.expected(render.value(expected))
+    }
+}
+
+/// Compares the complete `Debug` representation with the expected value's representation.
+/// Formatting determines truth even when diagnostic rendering is disabled or budgeted.
+/// Rejections retain the formatted operands so explanation never formats them again.
+pub struct HasDebugValue<E>(E);
+
+impl<E> HasDebugValue<E> {
+    /// Owns the expected operand, which may itself be borrowed.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
+impl<T: Debug + ?Sized, E: Debug, R> Expectation<T, R> for HasDebugValue<E> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = (String, String)
+    where
+        Self: 'a,
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        let actual = format!("{actual:?}");
+        let expected = format!("{:?}", self.0);
+        if actual == expected {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+}
+
+impl<T: Debug + ?Sized, E: Debug, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
+    for HasDebugValue<E>
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let (failure, expected) = match rejected {
+            None => {
+                let expected = format!("{:?}", self.0);
+                (
+                    failure.relation("has the expected Debug representation"),
+                    expected,
+                )
+            }
+            Some((_, (actual, expected))) => {
+                (failure.actual(render.value(actual.as_str())), expected)
+            }
+        };
+        failure.expected(render.value(expected.as_str()))
+    }
+}
 
 /// Assertions for values implementing [`Debug`].
 #[allow(clippy::return_self_not_must_use)]
@@ -35,26 +170,7 @@ impl<T: Debug, M: Mode, R> DebugAssertions<R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.track_assertion();
-
-        let actual_string = format!("{:?}", self.actual());
-
-        // Prevent debug formatting the expected value, as it is already in usable string form!
-        // Debug formatting it would lead to double-escaping of already escaped characters. But if
-        // the user has given a string, we must not mess with that input, as it should already
-        // represent the exact debug output of actual.
-        let expected_string = expected.as_ref();
-
-        let actual_str = actual_string.as_str();
-        let expected_str = expected_string;
-
-        if actual_str != expected_str {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(actual_str))
-                .expected(self.render().value(expected_str))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasDebugString::new(expected))
     }
 
     #[track_caller]
@@ -62,35 +178,26 @@ impl<T: Debug, M: Mode, R> DebugAssertions<R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.track_assertion();
-
-        let actual_string = format!("{:?}", self.actual());
-        let expected_string = format!("{expected:?}");
-
-        let actual_str = actual_string.as_str();
-        let expected_str = expected_string.as_str();
-
-        if actual_str != expected_str {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(actual_str))
-                .expected(self.render().value(expected_str))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasDebugValue::new(expected))
     }
 }
 
 #[cfg(test)]
 mod tests {
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, i32, Panic, NoRenderer> => DebugAssertions<NoRenderer>
             );
+
+            assert_trait_impl!(super::super::HasDebugString<&'static str> => crate::Expectation<str, NoRenderer>);
+            assert_trait_impl!(super::super::HasDebugValue<i32> => crate::Expectation<i32, NoRenderer>);
         }
     }
 
@@ -144,7 +251,7 @@ mod tests {
             }
             let failures = assert_that!(123)
                 .with_renderer(TextRenderer)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(5).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(5))
                 .capture(|it| it.has_debug_string("123").has_debug_string("456"));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
@@ -211,6 +318,44 @@ mod tests {
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(42), has_debug_value(43));
+        }
+
+        #[test]
+        fn formats_each_operand_once_in_ordinary_matching_and_probe_execution() {
+            use super::super::HasDebugValue;
+            use crate::{AssertionContext, Expectation, test_support::NoRenderer};
+            use core::{cell::Cell, fmt};
+
+            struct Value<'a>(&'a Cell<usize>, &'a str);
+            impl fmt::Debug for Value<'_> {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    self.0.set(self.0.get() + 1);
+                    f.write_str(self.1)
+                }
+            }
+            for expected_text in ["actual", "expected"] {
+                let actual_calls = Cell::new(0);
+                let expected_calls = Cell::new(0);
+                let actual = Value(&actual_calls, "actual");
+                let expected = Value(&expected_calls, expected_text);
+                let failures = assert_that!(actual).capture(|it| it.has_debug_value(&expected));
+                assert_that!((actual_calls.get(), expected_calls.get())).is_equal_to((1, 1));
+                assert_that!(failures.len()).is_equal_to(usize::from(expected_text != "actual"));
+                let failures =
+                    assert_that!(actual).capture(|it| it.matches(HasDebugValue::new(&expected)));
+                assert_that!((actual_calls.get(), expected_calls.get())).is_equal_to((2, 2));
+                assert_that!(failures.len()).is_equal_to(usize::from(expected_text != "actual"));
+                let context = AssertionContext::new(
+                    &NoRenderer,
+                    RenderingBudget::default().with_max_leaf_characters(0),
+                )
+                .with_diagnostics(false);
+                let observation = HasDebugValue::new(&expected)
+                    .evaluate(&actual, &context)
+                    .is_ok();
+                assert_that!(observation).is_equal_to(expected_text == "actual");
+                assert_that!((actual_calls.get(), expected_calls.get())).is_equal_to((3, 3));
+            }
         }
 
         mod with_number {

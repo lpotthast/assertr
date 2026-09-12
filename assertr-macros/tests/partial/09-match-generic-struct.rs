@@ -1,3 +1,4 @@
+use renamed_assertr::matchers::eq;
 use renamed_assertr::{matchers::equal_to, prelude::*};
 
 struct Record<'a, T, const N: usize> {
@@ -7,10 +8,10 @@ struct Record<'a, T, const N: usize> {
 }
 
 fn check_record<T: PartialEq<T> + std::fmt::Debug>(record: &Record<'_, T, 1>, expected: T) {
-    // `T` could also implement the matcher trait. Explicit equality removes that ambiguity.
+    // `equal_to` compares the generic expected value through its `PartialEq` implementation.
     assert_that!(record).matches(partial!(Record::<T, 1> {
         value: equal_to(expected),
-        label: "example",
+        label: eq("example"),
         ..
     }));
 }

@@ -1,6 +1,186 @@
 use crate::failure::FailureKind;
 use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use tokio::sync::Mutex;
+
+/// Observes a locked Tokio mutex, retaining any acquired guard on rejection.
+pub struct IsLocked;
+impl<T, R> Expectation<Mutex<T>, R> for IsLocked {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Mutex<T>: 'a;
+    type Rejection<'a>
+        = tokio::sync::MutexGuard<'a, T>
+    where
+        Self: 'a,
+        Mutex<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Mutex<T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        actual.try_lock().map_or_else(|_| Ok(()), Err)
+    }
+}
+impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsLocked
+where
+    R: ValueRenderer<T>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is locked"),
+            Some((actual, guard)) => failure
+                .actual(render.struct_field(actual, "Mutex", "data", &*guard))
+                .relation("is not locked"),
+        }
+    }
+}
+/// Acquires an available Tokio mutex and returns its guard.
+pub struct IsNotLocked;
+impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
+    type Success<'a>
+        = tokio::sync::MutexGuard<'a, T>
+    where
+        Self: 'a,
+        Mutex<T>: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        Mutex<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Mutex<T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        actual.try_lock().map_err(|_| ())
+    }
+}
+impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotLocked {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is not locked"),
+            Some((actual, ())) => failure
+                .actual(render.unavailable_struct_field(actual, "Mutex", "data", "<locked>"))
+                .relation("is unexpectedly locked"),
+        }
+    }
+}
+
+/// Acquires a mutex and checks its value with a reusable assertion callback.
+/// The callback runs in capture mode only after successful acquisition.
+pub struct HasValueSatisfying<F>(F);
+
+impl<F> HasValueSatisfying<F> {
+    /// Owns a reusable callback whose failures become children of one mutex failure.
+    #[must_use]
+    pub const fn new(assertions: F) -> Self {
+        Self(assertions)
+    }
+}
+
+/// Evidence from a rejected mutex value check.
+pub enum ValueRejection<'a, T> {
+    /// The mutex could not be acquired.
+    Locked,
+    /// The original guard and the callback's captured failures.
+    Rejected(tokio::sync::MutexGuard<'a, T>, crate::expectation::Evidence),
+}
+
+fn evaluate_value<'a, T, R: Clone>(
+    actual: &'a Mutex<T>,
+    assertions: impl for<'v> FnOnce(AssertThat<'v, T, crate::mode::Capture, R>),
+    context: &AssertionContext<'_, R>,
+) -> Result<(), ValueRejection<'a, T>> {
+    let guard = actual.try_lock().map_err(|_| ValueRejection::Locked)?;
+    let failures = crate::assert_that::collect_assertions(
+        &*guard,
+        context.render(),
+        context.include_location(),
+        assertions,
+    );
+    if failures.is_empty() {
+        return Ok(());
+    }
+    let mut evidence = context.isolated();
+    for failure in failures {
+        evidence.record(failure);
+    }
+    Err(ValueRejection::Rejected(guard, evidence.into_evidence()))
+}
+
+fn explain_value<T, R: ValueRenderer<T>, Target>(
+    rejected: Option<(&Mutex<T>, ValueRejection<'_, T>)>,
+    failure: FailureBuilder<Target>,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder<Target> {
+    let render = context.render();
+    match rejected {
+        None => failure.relation("contains a value that satisfies the assertions"),
+        Some((actual, ValueRejection::Locked)) => failure
+            .actual(render.unavailable_struct_field(actual, "Mutex", "data", "<locked>"))
+            .relation("is unexpectedly locked"),
+        Some((actual, ValueRejection::Rejected(guard, evidence))) => evidence.explain(
+            failure
+                .actual(render.struct_field(actual, "Mutex", "data", &*guard))
+                .relation("contains a value that does not satisfy the assertions"),
+        ),
+    }
+}
+
+impl<T, R: Clone, F> Expectation<Mutex<T>, R> for HasValueSatisfying<F>
+where
+    F: for<'a> Fn(AssertThat<'a, T, crate::mode::Capture, R>),
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = ValueRejection<'a, T>
+    where
+        Self: 'a,
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Mutex<T>,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        evaluate_value(actual, &self.0, context)
+    }
+}
+impl<T, R: Clone + ValueRenderer<T>, F> ExpectationDiagnostics<Mutex<T>, R>
+    for HasValueSatisfying<F>
+where
+    F: for<'a> Fn(AssertThat<'a, T, crate::mode::Capture, R>),
+{
+    const KIND: FailureKind = FailureKind::Predicate;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        explain_value(rejected, failure, context)
+    }
+}
 
 /// Non-blocking assertions for Tokio's [`Mutex`] type.
 #[allow(clippy::return_self_not_must_use)]
@@ -39,31 +219,12 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if let Ok(guard) = actual.try_lock() {
-            self.failure(FailureKind::Other)
-                .actual(self.render().struct_field(actual, "Mutex", "data", &*guard))
-                .relation("is not locked")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsLocked)
     }
 
     #[track_caller]
     fn is_not_locked(self) -> Self {
-        self.track_assertion();
-        let actual = self.actual();
-        if actual.try_lock().is_err() {
-            self.failure(FailureKind::Other)
-                .actual(
-                    self.render()
-                        .unavailable_struct_field(actual, "Mutex", "data", "<locked>"),
-                )
-                .relation("is unexpectedly locked")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsNotLocked)
     }
 
     #[track_caller]
@@ -72,35 +233,76 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
         A: for<'a> FnOnce(AssertThat<'a, T, crate::mode::Capture, R>),
         R: ValueRenderer<T> + Clone,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        match actual.try_lock() {
-            Ok(guard) => {
-                let failures = self.collect_element_failures(&*guard, assertions);
-                if !failures.is_empty() {
-                    self.failure(FailureKind::Predicate)
-                        .actual(self.render().struct_field(actual, "Mutex", "data", &*guard))
-                        .relation("contains a value that does not satisfy the assertions")
-                        .children(failures)
-                        .raise();
-                }
-            }
-            Err(_error) => {
-                self.failure(FailureKind::Predicate)
-                    .actual(
-                        self.render()
-                            .unavailable_struct_field(actual, "Mutex", "data", "<locked>"),
-                    )
-                    .relation("is unexpectedly locked")
-                    .raise();
-            }
-        }
-        self
+        let assertions = core::cell::Cell::new(Some(assertions));
+        self.apply_assertion(HasValueSatisfying::new(
+            |it: AssertThat<'_, T, crate::mode::Capture, R>| {
+                let callback = assertions.take().expect("callback runs once");
+                callback(it);
+            },
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    mod observations {
+        use super::super::{HasValueSatisfying, IsNotLocked};
+        use crate::{RenderingBudget, matchers::all_of, prelude::*, test_support::NoRenderer};
+        use core::cell::Cell;
+        use tokio::sync::Mutex;
+
+        #[test]
+        fn successful_acquisitions_are_released_between_siblings_without_a_renderer() {
+            assert_that!(Mutex::new(7))
+                .with_renderer(NoRenderer)
+                .matches(all_of((IsNotLocked, IsNotLocked)));
+        }
+
+        #[test]
+        fn callback_rejections_retain_truth_and_omissions_with_zero_child_budget() {
+            let lock = Mutex::new(7);
+            let budget = RenderingBudget::default().with_max_items(0);
+            let failures = assert_that!(lock)
+                .with_rendering_budget(budget)
+                .capture(|it| {
+                    it.has_value_satisfying(|value| {
+                        value.is_equal_to(8).is_equal_to(9);
+                    })
+                });
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).is_empty();
+            assert_that!(failures[0].omitted_children).is_equal_to(2);
+            let definition = HasValueSatisfying::new(|value: AssertThat<'_, i32, Capture>| {
+                value.is_equal_to(8).is_equal_to(9);
+            });
+            let composed = assert_that!(lock)
+                .with_rendering_budget(budget)
+                .capture(|it| it.matches(definition));
+            assert_that!(composed[0].omitted_children).is_equal_to(2);
+            assert_that!(lock.try_lock().is_ok()).is_true();
+        }
+
+        #[test]
+        fn reusable_value_callback_skips_contention_and_releases_guarded_rejections() {
+            let calls = Cell::new(0);
+            let lock = Mutex::new(7);
+            let definition = HasValueSatisfying::new(|value: AssertThat<'_, i32, Capture>| {
+                calls.set(calls.get() + 1);
+                value.is_equal_to(8);
+            });
+            let guard = lock.try_lock().unwrap();
+            let failures = assert_that!(lock).capture(|it| it.matches(&definition));
+            assert_that!(failures).has_length(1);
+            assert_that!(calls.get()).is_equal_to(0);
+            drop(guard);
+            let failures =
+                assert_that!(lock).capture(|it| it.matches(all_of((&definition, &definition))));
+            assert_that!(failures[0].children).has_length(2);
+            assert_that!(calls.get()).is_equal_to(2);
+            assert_that!(lock.try_lock().is_ok()).is_true();
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};

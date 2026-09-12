@@ -10,14 +10,516 @@
 //! [`HttpHeaderValueAssertions`](crate::prelude::HttpHeaderValueAssertions): `reqwest` re-exports
 //! `http`'s header types, so the two integrations meet on the same `HeaderValue`.
 
-use crate::failure::{Fact, FailureKind};
-use crate::mode::{Mode, Panic};
-use crate::renderer::{GroupStyle, IntoRendered, Rendered, RenderingContext, SensitiveValuePolicy};
-use crate::{AssertThat, ValueRenderer};
-use alloc::borrow::ToOwned;
-use alloc::string::String;
-use alloc::vec::Vec;
+use crate::{
+    AssertThat, ValueRenderer,
+    failure::{Fact, FailureKind},
+    mode::{Mode, Panic},
+    renderer::{GroupStyle, IntoRendered, Rendered, RenderingContext, SensitiveValuePolicy},
+};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use reqwest::header::HeaderValue;
+
+/// Compares the observed response status code.
+pub struct HasStatusCode(reqwest::StatusCode);
+impl<R> Expectation<reqwest::Response, R> for HasStatusCode {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = reqwest::StatusCode
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let status = actual.status();
+        if status == self.0 {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<reqwest::Response, R> for HasStatusCode
+where
+    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has status code")
+                .expected(render.value(&self.0)),
+            Some((actual, status)) => failure
+                .actual(render.value(&status))
+                .expected(render.value(&self.0))
+                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+        }
+    }
+}
+impl HasStatusCode {
+    /// Expects this status code.
+    #[must_use]
+    pub const fn new(expected: reqwest::StatusCode) -> Self {
+        Self(expected)
+    }
+}
+/// Checks whether the observed response status is informational.
+pub struct IsInformational;
+impl<R> Expectation<reqwest::Response, R> for IsInformational {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = reqwest::StatusCode
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let status = actual.status();
+        if status.is_informational() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsInformational
+where
+    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is informational").expected("1xx"),
+            Some((actual, status)) => failure
+                .actual(render.value(&status))
+                .relation("is not informational")
+                .expected("1xx")
+                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+        }
+    }
+}
+/// Checks whether the observed response status is a success.
+pub struct IsSuccess;
+impl<R> Expectation<reqwest::Response, R> for IsSuccess {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = reqwest::StatusCode
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let status = actual.status();
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsSuccess
+where
+    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is a success").expected("2xx"),
+            Some((actual, status)) => failure
+                .actual(render.value(&status))
+                .relation("is not a success")
+                .expected("2xx")
+                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+        }
+    }
+}
+/// Checks whether the observed response status is a redirection.
+pub struct IsRedirection;
+impl<R> Expectation<reqwest::Response, R> for IsRedirection {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = reqwest::StatusCode
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let status = actual.status();
+        if status.is_redirection() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsRedirection
+where
+    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is a redirection").expected("3xx"),
+            Some((actual, status)) => failure
+                .actual(render.value(&status))
+                .relation("is not a redirection")
+                .expected("3xx")
+                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+        }
+    }
+}
+/// Checks whether the observed response status is a client error.
+pub struct IsClientError;
+impl<R> Expectation<reqwest::Response, R> for IsClientError {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = reqwest::StatusCode
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let status = actual.status();
+        if status.is_client_error() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsClientError
+where
+    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is a client error").expected("4xx"),
+            Some((actual, status)) => failure
+                .actual(render.value(&status))
+                .relation("is not a client error")
+                .expected("4xx")
+                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+        }
+    }
+}
+/// Checks whether the observed response status is a server error.
+pub struct IsServerError;
+impl<R> Expectation<reqwest::Response, R> for IsServerError {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = reqwest::StatusCode
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let status = actual.status();
+        if status.is_server_error() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsServerError
+where
+    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is a server error").expected("5xx"),
+            Some((actual, status)) => failure
+                .actual(render.value(&status))
+                .relation("is not a server error")
+                .expected("5xx")
+                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+        }
+    }
+}
+/// Observes the first header lookup and retains its result.
+pub struct HasHeader<E>(E);
+impl<E, R> Expectation<reqwest::Response, R> for HasHeader<E>
+where
+    E: AsRef<str>,
+{
+    type Success<'a>
+        = &'a HeaderValue
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = &'a str
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let name = self.0.as_ref();
+        match actual.headers().get(name) {
+            Some(value) => Ok(value),
+            None => Err(name),
+        }
+    }
+}
+impl<E, R> ExpectationDiagnostics<reqwest::Response, R> for HasHeader<E>
+where
+    E: AsRef<str>,
+    R: ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("contains the header")
+                .expected(render.value(self.0.as_ref())),
+            Some((actual, name)) => failure
+                .actual(render.borrowed_values::<str, _>(&header_names(actual), GroupStyle::List))
+                .relation("does not contain the header")
+                .expected(render.value(name))
+                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+        }
+    }
+}
+impl<E> HasHeader<E> {
+    /// Expects presence or absence of this header name.
+    #[must_use]
+    pub const fn new(name: E) -> Self {
+        Self(name)
+    }
+}
+/// Observes the first header lookup and retains its result.
+pub struct DoesNotHaveHeader<E>(E);
+impl<E, R> Expectation<reqwest::Response, R> for DoesNotHaveHeader<E>
+where
+    E: AsRef<str>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = (&'a str, &'a HeaderValue)
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let name = self.0.as_ref();
+        match actual.headers().get(name) {
+            Some(value) => Err((name, value)),
+            None => Ok(()),
+        }
+    }
+}
+impl<E, R> ExpectationDiagnostics<reqwest::Response, R> for DoesNotHaveHeader<E>
+where
+    E: AsRef<str>,
+    R: ValueRenderer<str> + ValueRenderer<HeaderValue>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("does not contain the header")
+                .unexpected(render.value(self.0.as_ref())),
+            Some((actual, (name, value))) => failure
+                .actual(render.borrowed_values::<str, _>(&header_names(actual), GroupStyle::List))
+                .relation("contains the header")
+                .unexpected(render.value(name))
+                .fact(Fact::labelled(URL, render.value(actual.url().as_str())))
+                .fact(Fact::labelled("Value", render_header(render, value))),
+        }
+    }
+}
+impl<E> DoesNotHaveHeader<E> {
+    /// Expects presence or absence of this header name.
+    #[must_use]
+    pub const fn new(name: E) -> Self {
+        Self(name)
+    }
+}
+/// Compares the first header value with the expected raw UTF-8 bytes.
+pub struct HasHeaderValue<N, E> {
+    name: N,
+    expected: E,
+}
+impl<N, E, R> Expectation<reqwest::Response, R> for HasHeaderValue<N, E>
+where
+    N: AsRef<str>,
+    E: AsRef<str>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    type Rejection<'a>
+        = (&'a str, &'a str, Option<&'a HeaderValue>)
+    where
+        Self: 'a,
+        reqwest::Response: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let name = self.name.as_ref();
+        let expected = self.expected.as_ref();
+        match actual.headers().get(name) {
+            Some(value) if value.as_bytes() == expected.as_bytes() => Ok(()),
+            value => Err((name, expected, value)),
+        }
+    }
+}
+impl<N, E, R> ExpectationDiagnostics<reqwest::Response, R> for HasHeaderValue<N, E>
+where
+    N: AsRef<str>,
+    E: AsRef<str>,
+    R: ValueRenderer<str> + ValueRenderer<HeaderValue>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("contains the header")
+                .expected(render.value(self.name.as_ref()))
+                .fact(Fact::labelled(
+                    "Expected value",
+                    render.value(self.expected.as_ref()),
+                )),
+            Some((actual, (name, expected, value))) => {
+                let failure =
+                    failure.fact(Fact::labelled(URL, render.value(actual.url().as_str())));
+                match value {
+                    None => failure
+                        .actual(
+                            render
+                                .borrowed_values::<str, _>(&header_names(actual), GroupStyle::List),
+                        )
+                        .relation("does not contain the header")
+                        .expected(render.value(name))
+                        .fact(Fact::labelled("Expected value", render.value(expected))),
+                    Some(value) => failure
+                        .actual(render_header(render, value))
+                        .expected(render.value(expected))
+                        .fact(Fact::labelled("Header", render.value(name))),
+                }
+            }
+        }
+    }
+}
+impl<N, E> HasHeaderValue<N, E> {
+    /// Expects this header and value.
+    #[must_use]
+    pub const fn new(name: N, expected: E) -> Self {
+        Self { name, expected }
+    }
+}
 
 /// Non-extracting assertions for [`reqwest::Response`].
 #[allow(clippy::return_self_not_must_use)]
@@ -100,21 +602,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        self.track_assertion();
-
-        let actual = self.actual().status();
-        if actual != expected {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(&actual))
-                .expected(self.render().value(&expected))
-                .fact(Fact::labelled(
-                    URL,
-                    self.render().value(self.actual().url().as_str()),
-                ))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(HasStatusCode::new(expected))
     }
 
     #[track_caller]
@@ -122,14 +610,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        let actual = self.actual().status();
-        assert_status_class(
-            &self,
-            actual.is_informational(),
-            "is not informational",
-            "1xx",
-        );
-        self
+        self.apply_assertion(IsInformational)
     }
 
     #[track_caller]
@@ -137,9 +618,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        let actual = self.actual().status();
-        assert_status_class(&self, actual.is_success(), "is not a success", "2xx");
-        self
+        self.apply_assertion(IsSuccess)
     }
 
     #[track_caller]
@@ -147,14 +626,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        let actual = self.actual().status();
-        assert_status_class(
-            &self,
-            actual.is_redirection(),
-            "is not a redirection",
-            "3xx",
-        );
-        self
+        self.apply_assertion(IsRedirection)
     }
 
     #[track_caller]
@@ -162,14 +634,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        let actual = self.actual().status();
-        assert_status_class(
-            &self,
-            actual.is_client_error(),
-            "is not a client error",
-            "4xx",
-        );
-        self
+        self.apply_assertion(IsClientError)
     }
 
     #[track_caller]
@@ -177,14 +642,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        let actual = self.actual().status();
-        assert_status_class(
-            &self,
-            actual.is_server_error(),
-            "is not a server error",
-            "5xx",
-        );
-        self
+        self.apply_assertion(IsServerError)
     }
 
     #[track_caller]
@@ -192,9 +650,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<str>,
     {
-        self.track_assertion();
-        assert_header_present(&self, name.as_ref());
-        self
+        self.apply_assertion(HasHeader::new(name))
     }
 
     #[track_caller]
@@ -202,26 +658,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<HeaderValue> + ValueRenderer<str>,
     {
-        self.track_assertion();
-
-        let name = name.as_ref();
-        if let Some(value) = self.actual().headers().get(name) {
-            self.failure(FailureKind::Membership)
-                .actual(
-                    self.render()
-                        .borrowed_values::<str, _>(&header_names(&self), GroupStyle::List),
-                )
-                .relation("contains the header")
-                .unexpected(self.render().value(name))
-                .fact(Fact::labelled(
-                    URL,
-                    self.render().value(self.actual().url().as_str()),
-                ))
-                .fact(Fact::labelled("Value", render_header(self.render(), value)))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(DoesNotHaveHeader::new(name))
     }
 
     #[track_caller]
@@ -229,45 +666,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<HeaderValue> + ValueRenderer<str>,
     {
-        self.track_assertion();
-
-        let name = name.as_ref();
-        let expected = expected.as_ref();
-
-        match self.actual().headers().get(name) {
-            None => {
-                self.failure(FailureKind::Equality)
-                    .actual(
-                        self.render()
-                            .borrowed_values::<str, _>(&header_names(&self), GroupStyle::List),
-                    )
-                    .relation("does not contain the header")
-                    .expected(self.render().value(name))
-                    .fact(Fact::labelled(
-                        URL,
-                        self.render().value(self.actual().url().as_str()),
-                    ))
-                    .fact(Fact::labelled(
-                        "Expected value",
-                        self.render().value(expected),
-                    ))
-                    .raise();
-            }
-            Some(value) if value.as_bytes() != expected.as_bytes() => {
-                self.failure(FailureKind::Equality)
-                    .actual(render_header(self.render(), value))
-                    .expected(self.render().value(expected))
-                    .fact(Fact::labelled(
-                        URL,
-                        self.render().value(self.actual().url().as_str()),
-                    ))
-                    .fact(Fact::labelled("Header", self.render().value(name)))
-                    .raise();
-            }
-            Some(_) => {}
-        }
-
-        self
+        self.apply_assertion(HasHeaderValue::new(name, expected))
     }
 }
 
@@ -331,18 +730,12 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     where
         R: ValueRenderer<str>,
     {
-        self.track_assertion();
-        let name = name.as_ref().to_owned();
-        assert_header_present(&self, &name);
-
-        self.map(move |it| {
-            it.borrowed()
-                .headers()
-                .get(&name)
-                .cloned()
-                .expect("already checked")
-                .into()
-        })
+        let definition = HasHeader::new(name);
+        let value = self
+            .test_assertion(&definition)
+            .expect("Panic mode raises missing headers")
+            .clone();
+        self.map(|_| value.into())
     }
 
     #[track_caller]
@@ -386,21 +779,116 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
 
             let this = get_text_at(self, location, url.clone()).await;
 
-            let parsed = serde_json::from_str::<T>(this.actual().as_str());
+            let definition = JsonBody::<T> {
+                url: &url,
+                output: core::marker::PhantomData,
+            };
+            let parsed = this
+                .test_observation_after_tracking(this.actual(), &definition, location)
+                .expect("Panic mode raises invalid JSON");
+            this.map(|_| Actual::Owned(parsed))
+        }
+    }
+}
 
-            if let Err(error) = &parsed {
-                this.failure_at(FailureKind::Other, location)
-                    .actual(this.render().value(this.actual()))
-                    .relation("is not valid JSON for the expected type")
-                    .fact(Fact::labelled(URL, this.render().value(url.as_str())))
-                    .fact(Fact::labelled("Expected type", core::any::type_name::<T>()))
-                    .fact(Fact::labelled("Error", this.render().value(error)))
-                    .raise();
-            }
+// A body read is awaited once by the adapter. Its original result and URL remain available
+// until explanation finishes, without requiring a response or body renderer.
+struct ReadableBody<'u> {
+    url: &'u str,
+}
 
-            // Unreachable when the body did not deserialize: this trait is panic-mode only, so the
-            // failure above never returns. Mirrors `OptionExtractAssertions::get_some`.
-            this.map(|_| Actual::Owned(parsed.expect("already checked")))
+impl<R> Expectation<Result<String, reqwest::Error>, R> for ReadableBody<'_> {
+    type Success<'a>
+        = &'a String
+    where
+        Self: 'a;
+    type Rejection<'a>
+        = &'a reqwest::Error
+    where
+        Self: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Result<String, reqwest::Error>,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        crate::assertions::core::result::IsOk.evaluate(actual, context)
+    }
+}
+
+impl<R> ExpectationDiagnostics<Result<String, reqwest::Error>, R> for ReadableBody<'_>
+where
+    R: ValueRenderer<str> + ValueRenderer<reqwest::Error>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Result<String, reqwest::Error>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = failure.fact(Fact::labelled(URL, render.value(self.url)));
+        match rejected {
+            None => failure.relation("has a readable body"),
+            Some((_, error)) => failure
+                .relation("has a body that could not be read")
+                .fact(Fact::labelled("Error", render.value(error))),
+        }
+    }
+}
+
+#[cfg(feature = "serde-json")]
+struct JsonBody<'u, T> {
+    url: &'u str,
+    output: core::marker::PhantomData<fn() -> T>,
+}
+
+#[cfg(feature = "serde-json")]
+impl<T: serde::de::DeserializeOwned, R> Expectation<String, R> for JsonBody<'_, T> {
+    type Success<'a>
+        = T
+    where
+        Self: 'a;
+    type Rejection<'a>
+        = serde_json::Error
+    where
+        Self: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a String,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        serde_json::from_str(actual.as_str())
+    }
+}
+
+#[cfg(feature = "serde-json")]
+impl<T, R> ExpectationDiagnostics<String, R> for JsonBody<'_, T>
+where
+    T: serde::de::DeserializeOwned,
+    R: ValueRenderer<String> + ValueRenderer<str> + ValueRenderer<serde_json::Error>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a String, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = failure
+            .fact(Fact::labelled(URL, render.value(self.url)))
+            .fact(Fact::labelled("Expected type", core::any::type_name::<T>()));
+        match rejected {
+            None => failure.relation("is valid JSON for the expected type"),
+            Some((actual, error)) => failure
+                .actual(render.value(actual))
+                .relation("is not valid JSON for the expected type")
+                .fact(Fact::labelled("Error", render.value(&error))),
         }
     }
 }
@@ -425,49 +913,17 @@ where
         })
         .await;
 
-    // The read failure gets its own message and its own facts rather than a staged detail message:
-    // a staged one would also be attached to every later failure of the chain, and claim the body
-    // could not be read long after it was read successfully.
-    if let Err(error) = this.actual() {
-        this.failure_at(FailureKind::Other, location)
-            .relation("has a body that could not be read")
-            .fact(Fact::labelled(URL, this.render().value(url.as_str())))
-            .fact(Fact::labelled("Error", this.render().value(error)))
-            .raise();
-    }
-
-    this.map(|it| Actual::Owned(it.unwrap_owned().expect("already checked")))
+    this.apply_assertion_after_tracking_at(ReadableBody { url: &url }, location)
+        .map(|it| Actual::Owned(it.unwrap_owned().expect("already checked")))
 }
 
 /// The label of the fact carrying the request URL, the one piece of evidence that tells two
 /// responses apart.
 const URL: &str = "URL";
 
-/// Fails with the missing-header diagnostic shared by assertions and projections.
-#[track_caller]
-fn assert_header_present<M: Mode, R>(this: &AssertThat<'_, reqwest::Response, M, R>, name: &str)
-where
-    R: ValueRenderer<str>,
-{
-    if this.actual().headers().get(name).is_none() {
-        this.failure(FailureKind::Membership)
-            .actual(
-                this.render()
-                    .borrowed_values::<str, _>(&header_names(this), GroupStyle::List),
-            )
-            .relation("does not contain the header")
-            .expected(this.render().value(name))
-            .fact(Fact::labelled(
-                URL,
-                this.render().value(this.actual().url().as_str()),
-            ))
-            .raise();
-    }
-}
-
-/// The names of all present headers, in wire order, as the evidence a missing-header failure needs.
-fn header_names<'a, M: Mode, R>(this: &'a AssertThat<'_, reqwest::Response, M, R>) -> Vec<&'a str> {
-    this.actual()
+/// The names of all present headers in their iteration order.
+fn header_names(actual: &reqwest::Response) -> Vec<&str> {
+    actual
         .headers()
         .keys()
         .map(reqwest::header::HeaderName::as_str)
@@ -489,36 +945,15 @@ fn render_header<R: ValueRenderer<HeaderValue>>(
     }
 }
 
-#[track_caller]
-fn assert_status_class<M: Mode, R>(
-    this: &AssertThat<'_, reqwest::Response, M, R>,
-    holds: bool,
-    relation: &'static str,
-    class: &'static str,
-) where
-    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
-{
-    this.track_assertion();
-
-    if !holds {
-        this.failure(FailureKind::Other)
-            .actual(this.render().value(&this.actual().status()))
-            .relation(relation)
-            .expected(class)
-            .fact(Fact::labelled(
-                URL,
-                this.render().value(this.actual().url().as_str()),
-            ))
-            .raise();
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::prelude::*;
     mod renderer_contract {
         use super::response;
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         struct EvidenceRenderer;
         impl ValueRenderer<str> for EvidenceRenderer {
@@ -661,8 +1096,10 @@ mod tests {
         }
     }
 
-    use core::pin::Pin;
-    use core::task::{Context, Poll};
+    use core::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
 
     use reqwest::ResponseBuilderExt;
 
@@ -720,12 +1157,10 @@ mod tests {
             value: &reqwest::header::HeaderValue,
             f: &mut core::fmt::Formatter<'_>,
         ) -> core::fmt::Result {
-            assert!(!value.is_sensitive());
-            assert_eq!(value.as_bytes(), self.original.as_bytes());
-            assert_eq!(
-                core::ptr::eq(value, self.original),
-                !self.original.is_sensitive()
-            );
+            assert_that!(value.is_sensitive()).is_false();
+            assert_that!(value.as_bytes()).is_equal_to(self.original.as_bytes());
+            assert_that!(core::ptr::eq(value, self.original))
+                .is_equal_to(!self.original.is_sensitive());
             self.calls.set(self.calls.get() + 1);
             write!(f, "revealed({value:?})")
         }
@@ -1675,10 +2110,9 @@ mod tests {
                 .with_renderer(TextOnly)
                 .with_location(false)
                 .with_rendering_budget(
-                    RenderingBudget::builder()
-                        .max_items(1)
-                        .max_leaf_characters(4)
-                        .build(),
+                    RenderingBudget::default()
+                        .with_max_items(1)
+                        .with_max_leaf_characters(4),
                 )
                 .capture(|it| it.has_header("missing"));
 
@@ -1851,7 +2285,7 @@ mod tests {
         fn applies_the_rendering_budget_to_the_header_value() {
             let response = header_response(b"1234567890", true);
             let failures = assert_that!(response)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(4).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(4))
                 .capture(|it| it.does_not_have_header("x-api-key"));
 
             assert_that!(failures[0].facts[1].value.body).is_equal_to(
@@ -2083,7 +2517,7 @@ mod tests {
             let response = header_response(b"secret", true);
             let failures = assert_that!(response)
                 .with_renderer(RedactingRenderer)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(4).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(4))
                 .capture(|it| it.has_header_value("x-api-key", "other"));
 
             assert_that!(failures[0].actual.as_ref().expect("actual value").body).is_equal_to(
@@ -2134,7 +2568,7 @@ mod tests {
                     original: &response.headers()["x-api-key"],
                     calls: &calls,
                 })
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(4).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(4))
                 .capture(|it| it.has_header_value("x-api-key", "other"));
 
             assert_that!(failures[0].actual.as_ref().expect("actual value").body).is_equal_to(
@@ -2537,6 +2971,41 @@ mod tests {
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(async assert_that_owned!(json_response("not json")), get_json::<Person>());
+        }
+
+        #[test]
+        fn deserialization_runs_once_for_success_and_rejection() {
+            use core::sync::atomic::{AtomicUsize, Ordering};
+            use serde::de::Error;
+
+            static CALLS: AtomicUsize = AtomicUsize::new(0);
+            struct Decoded(u32);
+
+            impl<'de> serde::Deserialize<'de> for Decoded {
+                fn deserialize<D: serde::Deserializer<'de>>(
+                    deserializer: D,
+                ) -> Result<Self, D::Error> {
+                    CALLS.fetch_add(1, Ordering::Relaxed);
+                    let value = u32::deserialize(deserializer)?;
+                    if value == 0 {
+                        Err(D::Error::custom("rejected zero"))
+                    } else {
+                        Ok(Self(value))
+                    }
+                }
+            }
+
+            let assertion = block_on(assert_that_owned!(json_response("7")).get_json::<Decoded>());
+            assert_that!(assertion.actual().0).is_equal_to(7);
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
+            assert_that!(CALLS.load(Ordering::Relaxed)).is_equal_to(1);
+
+            assert_that_panic_by(|| {
+                block_on(assert_that_owned!(json_response("0")).get_json::<Decoded>());
+            })
+            .has_type::<String>()
+            .contains("rejected zero");
+            assert_that!(CALLS.load(Ordering::Relaxed)).is_equal_to(2);
         }
 
         #[test]

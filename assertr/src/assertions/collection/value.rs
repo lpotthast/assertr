@@ -1,466 +1,860 @@
-//! Ordinary value comparisons for finite collections.
-//!
-//! Membership and positional equality share `PartialEq` evaluation with `equal_to`. Expected-side
-//! matching and captured assertions use the policies in `crate::matchers`.
-
-use alloc::vec::Vec;
+//! Reusable value expectations for finite collections.
 
 use super::{Collection, StableOrder};
-use crate::failure::{Fact, FailureBuilder, FailureKind};
-use crate::renderer::{GroupStyle, RenderingOrder};
-use crate::{AssertThat, Mode, ValueRenderer, util::matching::match_bipartite};
+use crate::{
+    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    failure::{Fact, FailureBuilder, FailureKind},
+    renderer::GroupStyle,
+    util::matching::match_bipartite,
+};
+use alloc::vec::Vec;
+use core::marker::PhantomData;
 
-pub(crate) struct ExactCompareResult<'t, T, E> {
-    pub(crate) strictly_equal: bool,
-    pub(crate) same_length: bool,
-    /// Actual elements that have no equal in `expected`.
-    pub(crate) not_in_expected: Vec<&'t T>,
-    /// Expected elements that have no equal in the actual collection.
-    pub(crate) not_in_actual: Vec<&'t E>,
+/// Retained expected elements and missing values from a membership rejection.
+pub struct MissingElementsRejection<'a, E> {
+    expected: &'a [E],
+    missing: Vec<&'a E>,
 }
 
-impl<T, E> ExactCompareResult<'_, T, E> {
-    pub(crate) fn only_differing_in_order(&self) -> bool {
-        !self.strictly_equal
-            && self.same_length
-            && self.not_in_expected.is_empty()
-            && self.not_in_actual.is_empty()
+/// Retained length and first mismatch from a prefix or suffix rejection.
+pub struct PositionalRejection<'a, A: ?Sized, E> {
+    expected: &'a [E],
+    length: usize,
+    mismatch: Option<ElementMismatch<'a, A, E>>,
+}
+
+struct ElementMismatch<'a, A: ?Sized, E: ?Sized> {
+    index: usize,
+    actual: &'a A,
+    expected: &'a E,
+}
+
+/// Retained operands and unmatched occurrences from an exact collection rejection.
+/// Diagnostic assignment is omitted during probes.
+pub struct ExactElementsRejection<'a, A: ?Sized, E> {
+    expected: &'a [E],
+    unexpected: Vec<&'a A>,
+    missing: Vec<&'a E>,
+    only_order_differs: bool,
+}
+
+/// Checks collection membership with the actual element’s heterogeneous `PartialEq` implementation.
+pub struct Contains<E>(E);
+
+impl<E> Contains<E> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
     }
 }
 
-/// `PartialEq` like, order-respecting comparison of a collection against expected elements,
-/// collecting the elements missing on either side when the inputs are not strictly equal.
-pub(crate) fn compare<'t, C, T, E>(actual: &'t C, expected: &'t [E]) -> ExactCompareResult<'t, T, E>
+impl<C: Collection + ?Sized, E, R> Expectation<C, R> for Contains<E>
 where
-    C: Collection<Item = T> + ?Sized,
-    T: PartialEq<E>,
+    C::Item: PartialEq<E>,
 {
-    let same_length = actual.length() == expected.len();
-    let strictly_equal = same_length
-        && actual
-            .elements()
-            .zip(expected)
-            .all(|(actual, expected)| crate::matchers::equals(actual, expected));
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
 
-    if strictly_equal {
-        return ExactCompareResult {
-            strictly_equal: true,
-            same_length: true,
-            not_in_expected: Vec::new(),
-            not_in_actual: Vec::new(),
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.elements().any(|it| it.eq(&self.0)) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<C: Collection + ?Sized, E, R> ExpectationDiagnostics<C, R> for Contains<E>
+where
+    C::Item: PartialEq<E>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("contains"),
+            Some((actual, ())) => failure
+                .actual(render.collection(actual))
+                .relation("does not contain"),
         };
-    }
-
-    let elements = actual.elements().collect::<Vec<_>>();
-    let matched = match_bipartite(
-        elements.len(),
-        expected.len(),
-        |actual_index, expected_index| {
-            crate::matchers::equals(elements[actual_index], &expected[expected_index])
-        },
-    );
-    let not_in_expected = matched
-        .unmatched_actual
-        .iter()
-        .map(|index| elements[*index])
-        .collect();
-    let not_in_actual = matched
-        .unmatched_expected
-        .iter()
-        .map(|index| &expected[*index])
-        .collect();
-
-    ExactCompareResult {
-        strictly_equal: false,
-        same_length,
-        not_in_expected,
-        not_in_actual,
+        failure.expected(render.value(&self.0))
     }
 }
 
-/// Whether diagnostics over `C`'s elements are sorted by their rendered text because the collection
-/// has no deterministic iteration order.
-fn sorts_for_rendering<C: Collection + ?Sized>() -> bool {
-    C::PRESENTATION.order() == RenderingOrder::SortByRenderedText
+/// Checks collection membership with the actual element’s heterogeneous `PartialEq` implementation.
+pub struct DoesNotContain<E>(E);
+
+impl<E> DoesNotContain<E> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
 }
 
-#[track_caller]
-pub(crate) fn assert_contains<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &E)
+impl<C: Collection + ?Sized, E, R> Expectation<C, R> for DoesNotContain<E>
 where
-    C: Collection<Item = T>,
-    T: PartialEq<E>,
-    M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    C::Item: PartialEq<E>,
 {
-    this.track_assertion();
-    let actual = this.actual();
-    if !actual
-        .elements()
-        .any(|it| crate::matchers::equals(it, expected))
-    {
-        this.failure(FailureKind::Membership)
-            .actual(this.render().collection(actual))
-            .relation("does not contain")
-            .expected(this.render().value(expected))
-            .raise();
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.elements().any(|it| it.eq(&self.0)) {
+            Err(())
+        } else {
+            Ok(())
+        }
     }
 }
 
-#[track_caller]
-pub(crate) fn assert_contains_all<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &[E])
+impl<C: Collection + ?Sized, E, R> ExpectationDiagnostics<C, R> for DoesNotContain<E>
 where
-    C: Collection<Item = T>,
-    T: PartialEq<E>,
-    M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    C::Item: PartialEq<E>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E>,
 {
-    this.track_assertion();
-    let actual = this.actual();
+    const KIND: FailureKind = FailureKind::Membership;
 
-    let not_found = expected
-        .iter()
-        .filter(|expected| {
-            !actual
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("does not contain"),
+            Some((actual, ())) => failure
+                .actual(render.collection(actual))
+                .relation("contains"),
+        };
+        failure.unexpected(render.value(&self.0))
+    }
+}
+
+/// Requires a match for each expected value. Duplicate expectations may share a matching element.
+pub struct ContainsAll<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+impl<E, B: AsRef<[E]>> ContainsAll<E, B> {
+    /// Stores an array, slice, or vector of expected elements without converting it yet.
+    #[must_use]
+    pub const fn new(expected: B) -> Self {
+        Self {
+            expected,
+            operand: PhantomData,
+        }
+    }
+}
+
+impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for ContainsAll<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = MissingElementsRejection<'a, E>
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.expected.as_ref();
+        let missing = expected
+            .iter()
+            .filter(|expected| !actual.elements().any(|it| it.eq(expected)))
+            .collect::<Vec<_>>();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(MissingElementsRejection { expected, missing })
+        }
+    }
+}
+
+impl<C: Collection + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for ContainsAll<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let expected = rejected.as_ref().map_or_else(
+            || self.expected.as_ref(),
+            |(_, rejection)| rejection.expected,
+        );
+        let failure = match rejected {
+            None => failure.relation("contains all of"),
+            Some((actual, rejection)) => {
+                let MissingElementsRejection { missing, .. } = rejection;
+                failure
+                    .actual(render.collection(actual))
+                    .relation("does not contain all of")
+                    .fact(Fact::labelled(
+                        "Elements not found",
+                        render.borrowed_values::<E, _>(&missing, GroupStyle::List),
+                    ))
+            }
+        };
+        failure.expected(render.borrowed_values::<E, _>(expected, GroupStyle::List))
+    }
+}
+
+/// Requires an equal collection prefix, retaining the first mismatch and observed length.
+pub struct StartsWith<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+impl<E, B: AsRef<[E]>> StartsWith<E, B> {
+    /// Stores an array, slice, or vector of expected elements without converting it yet.
+    #[must_use]
+    pub const fn new(expected: B) -> Self {
+        Self {
+            expected,
+            operand: PhantomData,
+        }
+    }
+}
+
+impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for StartsWith<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = PositionalRejection<'a, C::Item, E>
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.expected.as_ref();
+        let length = actual.length();
+        let offset = 0;
+        let mismatch = actual
+            .elements()
+            .skip(offset)
+            .zip(expected)
+            .enumerate()
+            .find(|(_, (actual, expected))| !(*actual).eq(*expected))
+            .map(|(index, (actual, expected))| ElementMismatch {
+                index: offset + index,
+                actual,
+                expected,
+            });
+        if length < expected.len() || mismatch.is_some() {
+            Err(PositionalRejection {
+                expected,
+                length,
+                mismatch,
+            })
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<C: StableOrder + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for StartsWith<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E> + ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let expected = rejected.as_ref().map_or_else(
+            || self.expected.as_ref(),
+            |(_, rejection)| rejection.expected,
+        );
+        let failure = match rejected {
+            None => failure.relation("starts with"),
+            Some((actual, rejection)) => {
+                let PositionalRejection {
+                    expected,
+                    length,
+                    mismatch,
+                } = rejection;
+                let mut failure = failure
+                    .actual(render.stable_collection(actual))
+                    .relation("does not start with");
+                if length < expected.len() {
+                    failure = failure.fact(Fact::labelled("Actual length", render.value(&length)));
+                }
+                if let Some(ElementMismatch {
+                    index,
+                    actual: element,
+                    expected,
+                }) = mismatch
+                {
+                    failure = failure.child(
+                        FailureBuilder::detached::<C::Item>(FailureKind::Equality)
+                            .actual(render.value(element))
+                            .expected(render.value(expected))
+                            .build()
+                            .located_at(Fact::index(index)),
+                    );
+                }
+                failure
+            }
+        };
+        failure.expected(render.borrowed_values::<E, _>(expected, GroupStyle::List))
+    }
+}
+
+/// Requires an equal collection suffix, retaining the first mismatch and observed length.
+pub struct EndsWith<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+impl<E, B: AsRef<[E]>> EndsWith<E, B> {
+    /// Stores an array, slice, or vector of expected elements without converting it yet.
+    #[must_use]
+    pub const fn new(expected: B) -> Self {
+        Self {
+            expected,
+            operand: PhantomData,
+        }
+    }
+}
+
+impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for EndsWith<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = PositionalRejection<'a, C::Item, E>
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.expected.as_ref();
+        let length = actual.length();
+        let offset = length.saturating_sub(expected.len());
+        let mismatch = actual
+            .elements()
+            .skip(offset)
+            .zip(expected)
+            .enumerate()
+            .find(|(_, (actual, expected))| !(*actual).eq(*expected))
+            .map(|(index, (actual, expected))| ElementMismatch {
+                index: offset + index,
+                actual,
+                expected,
+            });
+        if length < expected.len() || mismatch.is_some() {
+            Err(PositionalRejection {
+                expected,
+                length,
+                mismatch,
+            })
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<C: StableOrder + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for EndsWith<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E> + ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let expected = rejected.as_ref().map_or_else(
+            || self.expected.as_ref(),
+            |(_, rejection)| rejection.expected,
+        );
+        let failure = match rejected {
+            None => failure.relation("ends with"),
+            Some((actual, rejection)) => {
+                let PositionalRejection {
+                    expected,
+                    length,
+                    mismatch,
+                } = rejection;
+                let mut failure = failure
+                    .actual(render.stable_collection(actual))
+                    .relation("does not end with");
+                if length < expected.len() {
+                    failure = failure.fact(Fact::labelled("Actual length", render.value(&length)));
+                }
+                if let Some(ElementMismatch {
+                    index,
+                    actual: element,
+                    expected,
+                }) = mismatch
+                {
+                    failure = failure.child(
+                        FailureBuilder::detached::<C::Item>(FailureKind::Equality)
+                            .actual(render.value(element))
+                            .expected(render.value(expected))
+                            .build()
+                            .located_at(Fact::index(index)),
+                    );
+                }
+                failure
+            }
+        };
+        failure.expected(render.borrowed_values::<E, _>(expected, GroupStyle::List))
+    }
+}
+
+/// Requires an equal contiguous subsequence in a collection with stable order.
+pub struct ContainsContiguous<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+impl<E, B: AsRef<[E]>> ContainsContiguous<E, B> {
+    /// Stores an array, slice, or vector of expected elements without converting it yet.
+    #[must_use]
+    pub const fn new(expected: B) -> Self {
+        Self {
+            expected,
+            operand: PhantomData,
+        }
+    }
+}
+
+impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for ContainsContiguous<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = &'a [E]
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.expected.as_ref();
+        let elements = actual.elements().collect::<Vec<_>>();
+        let found = expected.is_empty()
+            || elements.windows(expected.len()).any(|window| {
+                window
+                    .iter()
+                    .zip(expected)
+                    .all(|(actual, expected)| (*actual).eq(expected))
+            });
+        if found { Ok(()) } else { Err(expected) }
+    }
+}
+
+impl<C: StableOrder + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for ContainsContiguous<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let expected = rejected
+            .as_ref()
+            .map_or_else(|| self.expected.as_ref(), |(_, expected)| *expected);
+        let failure = match rejected {
+            None => failure.relation("contains the contiguous subsequence"),
+            Some((actual, _)) => failure
+                .actual(render.stable_collection(actual))
+                .relation("does not contain the contiguous subsequence"),
+        };
+        failure.expected(render.borrowed_values::<E, _>(expected, GroupStyle::List))
+    }
+}
+
+/// Requires exact positional equality, retaining unmatched occurrences from maximum assignment.
+pub struct ContainsExactly<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+impl<E, B: AsRef<[E]>> ContainsExactly<E, B> {
+    /// Stores an array, slice, or vector of expected elements without converting it yet.
+    #[must_use]
+    pub const fn new(expected: B) -> Self {
+        Self {
+            expected,
+            operand: PhantomData,
+        }
+    }
+}
+
+impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for ContainsExactly<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = ExactElementsRejection<'a, C::Item, E>
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.expected.as_ref();
+        let same_length = actual.length() == expected.len();
+        if same_length
+            && actual
                 .elements()
-                .any(|it| crate::matchers::equals(it, expected))
-        })
-        .collect::<Vec<_>>();
-
-    if !not_found.is_empty() {
-        this.failure(FailureKind::Membership)
-            .actual(this.render().collection(actual))
-            .relation("does not contain all of")
-            .expected(
-                this.render()
-                    .borrowed_values::<E, _>(expected, GroupStyle::List),
-            )
-            .fact(Fact::labelled(
-                "Elements not found",
-                this.render()
-                    .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List),
-            ))
-            .raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_does_not_contain<C, T, E, M, R>(
-    this: &AssertThat<'_, C, M, R>,
-    not_expected: &E,
-) where
-    C: Collection<Item = T>,
-    T: PartialEq<E>,
-    M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E>,
-{
-    this.track_assertion();
-    let actual = this.actual();
-    if actual
-        .elements()
-        .any(|it| crate::matchers::equals(it, not_expected))
-    {
-        this.failure(FailureKind::Membership)
-            .actual(this.render().collection(actual))
-            .relation("contains")
-            .unexpected(this.render().value(not_expected))
-            .raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_starts_with<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &[E])
-where
-    C: StableOrder<Item = T>,
-    T: PartialEq<E>,
-    M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
-{
-    this.track_assertion();
-    let actual = this.actual();
-    let mismatch = actual
-        .elements()
-        .zip(expected)
-        .enumerate()
-        .find(|(_, (actual, expected))| !crate::matchers::equals(*actual, *expected));
-
-    if actual.length() < expected.len() || mismatch.is_some() {
-        let mut failure = this
-            .failure(FailureKind::Membership)
-            .actual(this.render().stable_collection(actual))
-            .relation("does not start with")
-            .expected(
-                this.render()
-                    .borrowed_values::<E, _>(expected, GroupStyle::List),
-            );
-        if actual.length() < expected.len() {
-            failure = failure.fact(Fact::labelled(
-                "Actual length",
-                this.render().value(&actual.length()),
-            ));
-        }
-        if let Some((index, (element, expected))) = mismatch {
-            failure = failure.child(
-                FailureBuilder::detached::<T>(FailureKind::Equality)
-                    .actual(this.render().value(element))
-                    .expected(this.render().value(expected))
-                    .build()
-                    .located_at(Fact::index(index)),
-            );
-        }
-        failure.raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_ends_with<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &[E])
-where
-    C: StableOrder<Item = T>,
-    T: PartialEq<E>,
-    M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
-{
-    this.track_assertion();
-    let actual = this.actual();
-    let offset = actual.length().saturating_sub(expected.len());
-    let mismatch = actual
-        .elements()
-        .skip(offset)
-        .zip(expected)
-        .enumerate()
-        .find(|(_, (actual, expected))| !crate::matchers::equals(*actual, *expected));
-
-    if actual.length() < expected.len() || mismatch.is_some() {
-        let mut failure = this
-            .failure(FailureKind::Membership)
-            .actual(this.render().stable_collection(actual))
-            .relation("does not end with")
-            .expected(
-                this.render()
-                    .borrowed_values::<E, _>(expected, GroupStyle::List),
-            );
-        if actual.length() < expected.len() {
-            failure = failure.fact(Fact::labelled(
-                "Actual length",
-                this.render().value(&actual.length()),
-            ));
-        }
-        if let Some((index, (element, expected))) = mismatch {
-            failure = failure.child(
-                FailureBuilder::detached::<T>(FailureKind::Equality)
-                    .actual(this.render().value(element))
-                    .expected(this.render().value(expected))
-                    .build()
-                    .located_at(Fact::index(offset + index)),
-            );
-        }
-        failure.raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_contiguous<C, T, E, M, R>(
-    this: &AssertThat<'_, C, M, R>,
-    expected: &[E],
-) where
-    C: StableOrder<Item = T>,
-    T: PartialEq<E>,
-    M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E>,
-{
-    this.track_assertion();
-    let actual = this.actual();
-    let elements = actual.elements().collect::<Vec<_>>();
-    let found = expected.is_empty()
-        || elements.windows(expected.len()).any(|window| {
-            window
-                .iter()
                 .zip(expected)
-                .all(|(actual, expected)| crate::matchers::equals(*actual, expected))
+                .all(|(actual, expected)| actual.eq(expected))
+        {
+            return Ok(());
+        }
+
+        if context.is_probe() {
+            return Err(ExactElementsRejection {
+                expected,
+                unexpected: Vec::new(),
+                missing: Vec::new(),
+                only_order_differs: false,
+            });
+        }
+
+        let elements = actual.elements().collect::<Vec<_>>();
+        let matched = match_bipartite(elements.len(), expected.len(), |a, e| {
+            elements[a].eq(&expected[e])
         });
 
-    if !found {
-        this.failure(FailureKind::Membership)
-            .actual(this.render().stable_collection(actual))
-            .relation("does not contain the contiguous subsequence")
-            .expected(
-                this.render()
-                    .borrowed_values::<E, _>(expected, GroupStyle::List),
-            )
-            .raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_exactly<C, T, E, M, R>(this: &AssertThat<'_, C, M, R>, expected: &[E])
-where
-    C: StableOrder<Item = T>,
-    T: PartialEq<E>,
-    M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E>,
-{
-    this.track_assertion();
-    let actual = this.actual();
-
-    let result = compare(actual, expected);
-
-    if !result.strictly_equal {
-        let only_differing_in_order = result.only_differing_in_order();
-        let mut failure = this
-            .failure(FailureKind::Equality)
-            .actual(this.render().stable_collection(actual))
-            .relation("does not contain exactly")
-            .expected(
-                this.render()
-                    .borrowed_values::<E, _>(expected, GroupStyle::List),
-            );
-
-        if !result.not_in_expected.is_empty() {
-            failure = failure.fact(Fact::labelled(
-                "Elements not expected",
-                this.render()
-                    .borrowed_values::<T, _>(result.not_in_expected.as_slice(), GroupStyle::List),
-            ));
-        }
-        if !result.not_in_actual.is_empty() {
-            failure = failure.fact(Fact::labelled(
-                "Elements not found",
-                this.render()
-                    .borrowed_values::<E, _>(result.not_in_actual.as_slice(), GroupStyle::List),
-            ));
-        }
-        if only_differing_in_order {
-            failure = failure.fact(Fact::note("Only the order of the elements differs."));
-        }
-        failure.raise();
-    }
-}
-
-#[track_caller]
-pub(crate) fn assert_contains_exactly_in_any_order<C, T, E, M, R>(
-    this: &AssertThat<'_, C, M, R>,
-    expected: &[E],
-) where
-    C: Collection<Item = T>,
-    T: PartialEq<E>,
-    M: Mode,
-    R: ValueRenderer<T> + ValueRenderer<E>,
-{
-    this.track_assertion();
-    let actual = this.actual();
-    let elements = actual.elements().collect::<Vec<_>>();
-
-    let result = match_bipartite(
-        elements.len(),
-        expected.len(),
-        |actual_index, expected_index| {
-            crate::matchers::equals(elements[actual_index], &expected[expected_index])
-        },
-    );
-
-    if !result.is_exact() {
-        let elements_not_found = result
-            .unmatched_expected
-            .iter()
-            .map(|index| &expected[*index])
-            .collect::<Vec<_>>();
-        let elements_not_expected = result
+        let unexpected = matched
             .unmatched_actual
             .iter()
             .map(|index| elements[*index])
-            .collect::<Vec<_>>();
-        let mut failure = this
-            .failure(FailureKind::Equality)
-            .actual(this.render().collection(actual))
-            .relation("does not contain exactly in any order")
-            .expected(
-                this.render()
-                    .borrowed_values::<E, _>(expected, GroupStyle::List),
-            );
-        if !elements_not_found.is_empty() {
-            failure = failure.fact(Fact::labelled(
-                "Elements not found",
-                this.render()
-                    .borrowed_values::<E, _>(elements_not_found.as_slice(), GroupStyle::List),
-            ));
+            .collect();
+        let missing = matched
+            .unmatched_expected
+            .iter()
+            .map(|index| &expected[*index])
+            .collect();
+        let only_order_differs = same_length && matched.is_exact();
+        Err(ExactElementsRejection {
+            expected,
+            unexpected,
+            missing,
+            only_order_differs,
+        })
+    }
+}
+
+impl<C: StableOrder + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for ContainsExactly<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let expected = rejected.as_ref().map_or_else(
+            || self.expected.as_ref(),
+            |(_, rejection)| rejection.expected,
+        );
+        let failure = match rejected {
+            None => failure.relation("contains exactly"),
+            Some((actual, rejection)) => {
+                let ExactElementsRejection {
+                    unexpected,
+                    missing,
+                    only_order_differs,
+                    ..
+                } = rejection;
+                let mut failure = failure
+                    .actual(render.stable_collection(actual))
+                    .relation("does not contain exactly");
+                if !unexpected.is_empty() {
+                    failure = failure.fact(Fact::labelled(
+                        "Elements not expected",
+                        render.borrowed_values::<C::Item, _>(&unexpected, GroupStyle::List),
+                    ));
+                }
+                if !missing.is_empty() {
+                    failure = failure.fact(Fact::labelled(
+                        "Elements not found",
+                        render.borrowed_values::<E, _>(&missing, GroupStyle::List),
+                    ));
+                }
+                if only_order_differs {
+                    failure = failure.fact(Fact::note("Only the order of the elements differs."));
+                }
+                failure
+            }
+        };
+        failure.expected(render.borrowed_values::<E, _>(expected, GroupStyle::List))
+    }
+}
+
+/// Requires exact unordered multiplicity, retaining unmatched occurrences from maximum assignment.
+pub struct ContainsExactlyInAnyOrder<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+impl<E, B: AsRef<[E]>> ContainsExactlyInAnyOrder<E, B> {
+    /// Stores an array, slice, or vector of expected elements without converting it yet.
+    #[must_use]
+    pub const fn new(expected: B) -> Self {
+        Self {
+            expected,
+            operand: PhantomData,
         }
-        if !elements_not_expected.is_empty() {
-            failure = failure.fact(Fact::labelled(
-                "Elements not expected",
-                this.render()
-                    .borrowed_values::<T, _>(elements_not_expected.as_slice(), GroupStyle::List)
-                    .sort_for_rendering(sorts_for_rendering::<C>()),
-            ));
+    }
+}
+
+impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for ContainsExactlyInAnyOrder<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = ExactElementsRejection<'a, C::Item, E>
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.expected.as_ref();
+
+        let elements = actual.elements().collect::<Vec<_>>();
+        let matched = match_bipartite(elements.len(), expected.len(), |a, e| {
+            elements[a].eq(&expected[e])
+        });
+        if matched.is_exact() {
+            return Ok(());
         }
-        failure.raise();
+
+        let unexpected = matched
+            .unmatched_actual
+            .iter()
+            .map(|index| elements[*index])
+            .collect();
+        let missing = matched
+            .unmatched_expected
+            .iter()
+            .map(|index| &expected[*index])
+            .collect();
+        Err(ExactElementsRejection {
+            expected,
+            unexpected,
+            missing,
+            only_order_differs: false,
+        })
+    }
+}
+
+impl<C: Collection + ?Sized, E, B, R> ExpectationDiagnostics<C, R>
+    for ContainsExactlyInAnyOrder<E, B>
+where
+    C::Item: PartialEq<E>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let expected = rejected.as_ref().map_or_else(
+            || self.expected.as_ref(),
+            |(_, rejection)| rejection.expected,
+        );
+        let failure = match rejected {
+            None => failure.relation("contains exactly in any order"),
+            Some((actual, rejection)) => {
+                let ExactElementsRejection {
+                    unexpected,
+                    missing,
+                    ..
+                } = rejection;
+                let mut failure = failure
+                    .actual(render.collection(actual))
+                    .relation("does not contain exactly in any order");
+                if !missing.is_empty() {
+                    failure = failure.fact(Fact::labelled(
+                        "Elements not found",
+                        render.borrowed_values::<E, _>(&missing, GroupStyle::List),
+                    ));
+                }
+                if !unexpected.is_empty() {
+                    failure = failure.fact(Fact::labelled(
+                        "Elements not expected",
+                        render
+                            .borrowed_values::<C::Item, _>(&unexpected, GroupStyle::List)
+                            .with_order(C::PRESENTATION.order()),
+                    ));
+                }
+                failure
+            }
+        };
+        failure.expected(render.borrowed_values::<E, _>(expected, GroupStyle::List))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    mod compare {
-        use crate::assertions::collection::value::{ExactCompareResult, compare};
-        use crate::prelude::*;
+    mod contains_exactly {
+        use super::super::ContainsExactly;
+        use crate::{AssertionContext, prelude::*, test_support::NoRenderer};
+        use core::cell::Cell;
 
-        fn compare_slices<'t, A, B>(aa: &'t [A], bb: &'t [B]) -> ExactCompareResult<'t, A, B>
-        where
-            A: PartialEq<B>,
-        {
-            compare::<_, A, B>(aa, bb)
+        struct Counted<'a> {
+            value: i32,
+            comparisons: &'a Cell<usize>,
+        }
+        impl PartialEq<i32> for Counted<'_> {
+            fn eq(&self, other: &i32) -> bool {
+                self.comparisons.set(self.comparisons.get() + 1);
+                self.value == *other
+            }
         }
 
         #[test]
-        fn returns_equal_on_equal_input_using_refs() {
-            let result = compare_slices(&[&1, &2, &3], &[&1, &2, &3]);
-
-            assert_that!(result.only_differing_in_order()).is_false();
-            assert_that!(result.strictly_equal).is_true();
-            assert_that!(result.same_length).is_true();
-            assert_that!(result.not_in_actual).is_empty();
-            assert_that!(result.not_in_expected).is_empty();
-        }
-
-        #[test]
-        fn returns_equal_on_equal_input() {
-            let result = compare_slices(&[1, 2, 3], &[1, 2, 3]);
-
-            assert_that!(result.only_differing_in_order()).is_false();
-            assert_that!(result.strictly_equal).is_true();
-            assert_that!(result.same_length).is_true();
-            assert_that!(result.not_in_actual).is_empty();
-            assert_that!(result.not_in_expected).is_empty();
-        }
-
-        #[test]
-        fn returns_not_equal_on_equal_but_rearranged_input() {
-            let result = compare_slices(&[1, 2, 3], &[3, 2, 1]);
-
-            assert_that!(result.only_differing_in_order()).is_true();
-            assert_that!(result.strictly_equal).is_false();
-            assert_that!(result.same_length).is_true();
-            assert_that!(result.not_in_actual).is_empty();
-            assert_that!(result.not_in_expected).is_empty();
-        }
-
-        #[test]
-        fn returns_not_equal_and_lists_differences_on_differing_input() {
-            let result = compare_slices(&[1, 5, 7], &[5, 3, 4, 42]);
-
-            assert_that!(result.only_differing_in_order()).is_false();
-            assert_that!(result.strictly_equal).is_false();
-            assert_that!(result.same_length).is_false();
-            assert_that!(result.not_in_actual.as_slice()).is_equal_to([&3, &4, &42].as_slice());
-            assert_that!(result.not_in_expected.as_slice()).is_equal_to([&1, &7].as_slice());
-        }
-
-        #[test]
-        fn returns_not_equal_and_lists_differences_when_multiplicities_differ() {
-            let result = compare_slices(&[1, 1, 2], &[1, 2, 2]);
-
-            assert_that!(result.only_differing_in_order()).is_false();
-            assert_that!(result.strictly_equal).is_false();
-            assert_that!(result.same_length).is_true();
-            assert_that!(result.not_in_actual).contains_exactly([&2]);
-            assert_that!(result.not_in_expected).contains_exactly([&1]);
+        fn probes_skip_diagnostic_assignment_after_a_positional_rejection() {
+            let comparisons = Cell::new(0);
+            let actual = [1, 2, 3].map(|value| Counted {
+                value,
+                comparisons: &comparisons,
+            });
+            for limit in [0, 1, usize::MAX] {
+                let context = AssertionContext::new(
+                    &NoRenderer,
+                    RenderingBudget::default().with_max_items(limit),
+                );
+                comparisons.set(0);
+                assert_that!(context.probe(&actual, &ContainsExactly::new([3, 2, 1]))).is_false();
+                assert_that!(comparisons.get()).is_equal_to(1);
+                comparisons.set(0);
+                assert_that!(context.probe(&actual, &ContainsExactly::new([1, 2]))).is_false();
+                assert_that!(comparisons.get()).is_equal_to(0);
+                comparisons.set(0);
+                assert_that!(context.probe(&actual, &ContainsExactly::new([1, 2, 3]))).is_true();
+                assert_that!(comparisons.get()).is_equal_to(3);
+            }
         }
     }
 }

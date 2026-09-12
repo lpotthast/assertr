@@ -1,3 +1,4 @@
+use renamed_assertr::matchers::eq;
 use renamed_assertr::{matchers::dereferenced, prelude::*};
 
 struct User {
@@ -6,7 +7,7 @@ struct User {
 
 fn main() {
     let user = User { age: 30 };
-    let matcher = partial!(User { age: 30 });
+    let matcher = partial!(User { age: eq(30) });
 
     assert_that!(user).matches(&matcher);
     assert_that!(user).matches(&matcher);

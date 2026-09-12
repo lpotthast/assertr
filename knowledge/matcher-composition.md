@@ -1,144 +1,113 @@
 ---
 id: matcher-composition
-refines:
-  - assertr
-depends_on:
-  - diagnostic-rendering
-  - failure-processing
-related_to:
-  - collection-semantics
-  - extension-contract
+depends_on: [ expectation-execution, collection-semantics ]
 sources:
-  - assertr/src/matchers/mod.rs
-  - assertr/src/matchers/context.rs
-  - assertr/src/matchers/not.rs
-  - assertr/src/matchers/satisfying.rs
+  - assertr/src/matchers.rs
+  - assertr/src/expectation/mod.rs
+  - assertr/src/expectation/all_of.rs
+  - assertr/src/expectation/any_of.rs
+  - assertr/src/expectation/satisfying.rs
+  - assertr/src/expectation/predicate.rs
+  - assertr/src/expectation/lists.rs
   - assertr/src/condition.rs
   - assertr/src/assertions/condition.rs
-  - assertr/src/matchers/condition.rs
-  - assertr/src/matchers/elements_are_in_any_order.rs
+  - assertr/src/assertions/collection/elements_are_in_any_order.rs
+  - assertr/src/__private/field.rs
+  - assertr/src/__private/partial_match.rs
   - assertr/src/util/matching.rs
   - assertr-macros/src/partial/mod.rs
-  - assertr-macros/tests/partial/*.stderr
+  - assertr-macros/tests/progress.rs
 ---
 
-# Matcher composition and structural expectations
+# Matcher composition
 
 [Architecture overview](README.md)
 
-Matchers describe reusable expectations and evaluate them against actual values. They compose through collections, maps,
-fields, predicates, typed conditions, and assertion callbacks.
+A matcher is a reusable expectation used in composition. It implements the
+[same evaluation and explanation contracts](expectation-execution.md) as ordinary reusable checks. Import constructors
+from `assertr::matchers` individually or with `matchers::*`. Every public expectation is available there, with subject
+namespaces such as `string`, `collection`, and `map` for family-specific definitions and colliding names. The prelude
+exposes the module, not its constructor names. Use unit values such as `IsSome` directly, and `new` constructors to
+supply operands or select a type parameter. References reuse the same definition without cloning.
+The [matcher rustdoc](../assertr/src/matchers.rs) owns syntax and usage examples.
 
-## Truth, polarity, and evidence
+## Truth and evidence
 
-An `AssertrMatcher` describes a constraint and evaluates it with a `MatchContext`. It returns truth and records local
-evidence. The enclosing assertion raises the root failure.
+`matches` executes a definition directly through the chain. A leaf equality matcher produces an `Equality` failure
+without a matcher wrapper. Composites define their enclosing relation and child evidence.
 
-The context carries polarity, renderer, budget, relative path, and evidence. Positive polarity explains why a value did
-not match. Negative polarity explains why an unwanted match succeeded. `not` reverses truth and diagnostic polarity
-without replaying the inner matcher:
+`all_of` evaluates every branch and accepts an empty list. `any_of` stops at the first success and rejects an empty
+list. Rejected alternatives use isolated scopes and survive only if every branch fails. `predicate` wraps
+`Fn(&T) -> bool`, needs no subject renderer, and has no typed rejection error. `described_as` supplies its relation.
 
-```rust
-use assertr::{
-    matchers::{ge, not},
-    prelude::*,
-};
-
-let too_small = assert_that!(2).capture(|it| it.matches(ge(3)));
-let unwanted_match = assert_that!(4).capture(|it| it.matches(not(ge(3))));
-
-assert_eq!(too_small.len(), 1);
-assert_eq!(unwanted_match.len(), 1);
-```
-
-The first failure explains that `2` is not greater than or equal to `3`. The second explains that `4` is greater than or
-equal to `3`, which violates the negated expectation. Descriptions exist independently of failures so successful
-constraints can supply this evidence.
-
-`all_of` evaluates every branch. An empty conjunction is true. `any_of` stops at its first successful branch. An empty
-disjunction is false. Matchers own or borrow expectations according to their concrete type. Predicates run once per
-evaluation requested by the enclosing operation.
-
-A probe suppresses built-in evidence retention. It cannot undo side effects or work already performed by user callbacks.
+Collection and map composition respects their [capabilities](collection-semantics.md#capability-model). Diagnostic order
+cannot grant positional semantics. [Evidence budgets and probes](expectation-execution.md#child-scopes-and-evidence)
+change retention, never pass/fail results. A composite can still require renderers for its own evidence, such as
+`ValueRenderer<usize>` for `any_of` branch numbers.
 
 ## Assertion callbacks
 
-`satisfying` adapts ordinary assertions into a matcher using a capture-mode child with the current renderer, budget, and
-location setting. It matches when every captured assertion passes. The callback must implement `Fn`, the renderer must
-be cloneable, and the callback must perform at least one assertion. Empty callbacks panic as misuse. User panics
-propagate.
+[`satisfying`](../assertr/src/expectation/satisfying.rs) adapts a reusable `Fn` callback to an expectation. It receives
+a borrowed capture-mode chain and returns `()`. Every performed assertion must pass. Its failures become owned child
+evidence with the enclosing path. An empty callback panics as misuse, and user panics propagate.
 
-Captured failures become matcher evidence when needed. The callback still runs during a probe and may construct failures
-before the probe discards them.
+Callback capture inherits the renderer, budget, and location policy and requires `R: Clone`. It still executes inside a
+probe, so callback effects and rendering cannot be suppressed by the outer matcher. Ordinary assertion callbacks may
+accept `FnOnce` and retain their method's failure mode. `AssertThat::satisfies` projects and continues a chain, whereas
+`satisfying` constructs an expectation for later evaluation.
 
 ## Typed reusable conditions
 
-`AssertrCondition<T>` is a domain predicate whose `test` returns `Result<(), Error>`. It carries a typed error and can
-be reused by reference. Direct `is` and `has` assertions render that error as one unlabeled note. Iterable `are` and
-`have` assertions retain one failure per offending element in capture mode. Panic mode stops at the first failure.
-Traversal offsets are not reported as stable indexes.
+[`AssertrCondition<T>`](../assertr/src/condition.rs) tests a domain property with `Result<(), Error>`.
+`Condition` retains the original error and renders it as an unlabeled note without testing again. Direct `is` and `has`
+and the `condition` matcher constructor share this definition. They require `ValueRenderer<Error>`, not a subject
+renderer.
 
-These assertions require `ValueRenderer<Error>` without requiring a renderer for the subject. The matcher `condition`
-adapter retains the typed error as nested evidence. A probe tests the condition without rendering its error. A zero-item
-budget can omit the child without invoking the error renderer.
+Iterable `are` and `have` track one assertion for the call. Capture raises one failure per offending element. Panic mode
+stops at the first failure. Traversal offsets are not reported as stable indexes. See the
+[condition family](../assertr/src/assertions/condition.rs) for these execution adapters.
 
 ## Exact unordered assignment
 
-Exact unordered element comparisons pair each actual item with a distinct expectation, preserving multiplicity. Greedy
-matching can reject a valid input when an early item fits several constraints and a later item fits only one. The shared
-utility finds a maximum bipartite matching with iterative augmenting paths and reports matched pairs and unmatched items
-on both sides.
+Exact unordered comparisons pair actual occurrences with distinct expected slots. Greedy assignment is insufficient when
+expectations overlap. The shared [maximum bipartite matching utility](../assertr/src/util/matching.rs) revisits
+assignments through iterative augmenting paths. Exactness requires no unmatched occurrence on either side. One actual
+occurrence cannot satisfy two duplicate expectations.
 
-Search marks from a failed assignment remain valid until the matching changes. Reusing them avoids repeated dead
-searches for surplus duplicates. An explicit stack keeps the search off the call stack.
+[Unordered structural matching](../assertr/src/assertions/collection/elements_are_in_any_order.rs) evaluates each
+actual/expectation pair at most once. The same definition can still run for many pairs. Rejections preserve missing
+expectations, unexpected occurrences, and multiplicity. An extra occurrence matching an occupied expectation must be
+explained as surplus, not as a value that failed that expectation. `at slot` identifies a zero-based expectation
+position, never an actual collection index. Missing expectations retain their complete constraint and bounded candidate
+failures as nested evidence, including equality candidates. No canonical assignment is promised when several maximum
+assignments exist.
 
-Structural matchers evaluate each actual/expectation pair at most once and cache its truth and evidence. When positive
-mismatch diagnostics can retain evidence, they complete unvisited comparisons involving unmatched actual elements or
-unmatched expected slots before consuming the cache. Search pruning therefore cannot hide candidate evidence before
-sorting and budget retention. Passing matches, negative-polarity evaluations, probes, and zero-item budgets skip this
-completion. The assignment result is unchanged. The cache is sparse for easy matches but diagnostic completion can
-approach the Cartesian product, so comparison work and diagnostic space can be quadratic.
+Rendering budgets do not bound comparison work or total memory. Current candidate evaluation and retained evidence can
+approach the Cartesian product. The implementation's cache completion and evidence retention rules are documented beside
+the [matching code](../assertr/src/assertions/collection/elements_are_in_any_order.rs).
+[`supports_overlapping_constraints`](../assertr/src/assertions/collection/elements_are_in_any_order.rs)
+regresses the case a greedy assignment would
+reject. [Exact keyed map checks](collection-semantics.md#exact-comparisons-and-keyed-maps)
+use native lookup instead.
 
-Missing expected slots retain rejection evidence first. Plain equality rejections without paths or additional metadata
-are summarized as the missing value and a compact group of non-matching elements. The summary reuses rendered leaves,
-including type information, rendering order, and omission counts. Every candidate is checked for richer evidence before
-the group is limited, so omitted complex failures cannot be misrepresented as omitted elements. Richer rejections keep
-their detailed failure trees.
+## Structural macros
 
-Unexpected elements retain the remaining rejections. A surplus occurrence that satisfies occupied expectations is
-explained as an extra occurrence matching already satisfied expectations. A single matching expectation is described
-directly, while multiple expectations become children. The `at slot` fact identifies a zero-based expectation position.
-Separate occurrence groups preserve multiplicity without requiring an element renderer or introducing actual traversal
-indexes. An empty expectation list reports the unexpected count. This explains the chosen maximum assignment without
-selecting a canonical assignment among multiple valid alternatives.
+Runtime constructors and declarative matcher macros require no feature. `matchers!` creates heterogeneous list nodes.
+The `matchers` feature enables procedural `partial!` for named, tuple, unit, and explicitly annotated variant shapes.
+Only selected fields need comparison or rendering capabilities.
 
-[Exact keyed map checks](collection-semantics.md#exact-comparisons-and-keyed-maps) use native lookup and stored-entry
-identity instead of this assignment algorithm.
+`partial!` emits Rust patterns and borrowed projections, preserving constructor resolution, visibility, field types, and
+exhaustiveness checks. Named `..` omits remaining fields. Tuple `_` skips one position and tuple `..` must be final.
+Projections attach `Field`, `TupleIndex`, and optional `Variant` paths, including in descriptions with no actual
+subject.
 
-## `partial!`
+Expected expressions construct explicit matchers once in source order within one enclosing expression, preserving
+temporary borrows through the caller's statement. Use `eq`, an alias for `equal_to`, for heterogeneous equality. Every
+selected `partial!` field, matcher-list element, and `entries_are!` value uses the shared expectation protocol. Map keys
+remain native lookup operands. Expressions that also support equality are still used as matchers unless wrapped in `eq`
+or `equal_to`. Macro-only projection/list plumbing lives in unsupported `__private`. Runtime crate resolution supports
+renamed dependencies.
 
-The `matchers` feature enables `partial!`. Runtime matchers and declarative matcher macros are available without it.
-
-`partial!` selects named, tuple, unit, or explicitly annotated variant shapes. Named fields may end with `..`. Tuple `_`
-positions are wildcards, and tuple `..` must be final to preserve selected indices. Generated Rust patterns retain
-constructor resolution, visibility, field types, and exhaustiveness checks. Cargo metadata resolves the runtime crate,
-including renamed dependencies.
-
-Expected expressions are normalized once in source order within one enclosing expression. Borrowed temporaries therefore
-live through the caller's statement. Runtime projections borrow selected fields and attach `Field`, `TupleIndex`, and
-optional `Variant` paths. Plain values use heterogeneous equality. Matcher expressions use the matcher protocol.
-Ambiguous expressions require `equal_to` or `as_matcher`.
-
-The macro rejects duplicate fields, misplaced or repeated tuple rest, and trailing tokens. Unknown or private fields,
-incompatible types, non-exhaustive patterns, and outlived borrows are ordinary Rust compile errors.
-
-## Sources
-
-The [matcher guide](../assertr/src/matchers/mod.rs) documents selection and
-composition. [MatchContext](../assertr/src/matchers/context.rs), [not](../assertr/src/matchers/not.rs),
-and [satisfying](../assertr/src/matchers/satisfying.rs) implement evaluation. [Conditions](../assertr/src/condition.rs),
-their [assertions](../assertr/src/assertions/condition.rs), and
-their [matcher adapter](../assertr/src/matchers/condition.rs) handle typed
-errors. [Unordered matchers](../assertr/src/matchers/elements_are_in_any_order.rs) use
-the [assignment utility](../assertr/src/util/matching.rs). The [partial macro](../assertr-macros/src/partial/mod.rs)
-has [compile-fail fixtures](../assertr-macros/tests/partial/).
+The [partial implementation](../assertr-macros/src/partial/mod.rs) and
+[compile-fail fixtures](../assertr-macros/tests/partial/) distinguish macro syntax errors from ordinary Rust type,
+visibility, exhaustiveness, and borrow errors.

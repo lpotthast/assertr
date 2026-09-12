@@ -16,42 +16,33 @@ impl NumberOfAssertions {
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Records that one assertion was performed on this chain.
     ///
-    /// Every assertion method must call this as its first statement, whether it ends up passing or
-    /// failing. [`AssertThat::capture`] and the fluent `verify` use the count to reject a closure
+    /// Every leaf must track before checking or invoking user code, whether it passes or fails.
+    /// [`AssertThat::apply_assertion`] and [`AssertThat::test_assertion`] do this automatically.
+    /// Methods delegating to them or to other tracked assertions must not track again.
+    /// [`AssertThat::capture`] and the fluent `verify` use the count to reject a closure
     /// that performed no assertions at all, so an assertion that forgets to track makes a passing
     /// capture closure panic as if it had been empty.
     ///
-    /// A handwritten leaf assertion calls this before raising a failure through
-    /// [`AssertThat::failure`]. Assertions built by composing existing ones (through
-    /// [`AssertThat::satisfies`] and friends) are tracked by the assertions they delegate to and
-    /// must not call this in addition. See [custom assertions](crate#custom-assertions) for how to
-    /// shape the trait around either kind of method.
+    /// Prefer implementing [`Expectation`](crate::Expectation) and
+    /// [`ExpectationDiagnostics`](crate::ExpectationDiagnostics) for custom leaves, keeping
+    /// tracking in the executor. This method remains available for manual execution adapters,
+    /// which must also build and raise their failures through [`AssertThat::failure`]. See
+    /// [custom assertions](crate#custom-assertions) for a complete reusable definition.
     ///
     /// ```
     /// use assertr::prelude::*;
     ///
-    /// use assertr::failure::FailureKind;
+    /// use assertr::matchers::predicate;
     ///
-    /// trait EvenAssertions<R = DebugRenderer> {
-    ///     fn is_even(self) -> Self
-    ///     where
-    ///         R: ValueRenderer<u32>;
+    /// trait EvenAssertions {
+    ///     fn is_even(self) -> Self;
     /// }
     ///
-    /// impl<M: Mode, R> EvenAssertions<R> for AssertThat<'_, u32, M, R> {
+    /// impl<M: Mode, R> EvenAssertions for AssertThat<'_, u32, M, R> {
     ///     #[track_caller]
-    ///     fn is_even(self) -> Self
-    ///     where
-    ///         R: ValueRenderer<u32>,
-    ///     {
-    ///         self.track_assertion();
-    ///         if self.actual() % 2 != 0 {
-    ///             self.failure(FailureKind::Predicate)
-    ///                 .actual(self.render().value(self.actual()))
-    ///                 .relation("is not even")
-    ///                 .raise();
-    ///         }
-    ///         self
+    ///     fn is_even(self) -> Self {
+    ///         self.apply_assertion(predicate(|value: &u32| value % 2 == 0)
+    ///             .described_as("is even"))
     ///     }
     /// }
     ///
@@ -115,17 +106,17 @@ mod tests {
     #[test]
     fn capture_counts_each_assertion_once_across_projections_and_renderer_changes() {
         let failures = assert_that!(42).is_equal_to(42).capture(|root| {
-            assert_eq!(root.state.records.assertion_count(), 0);
+            assert_that!(root.state.records.assertion_count()).is_equal_to(0);
 
             let root = root.is_equal_to(42);
             let child = root.derive_owned(|it| it * 2).is_equal_to(84);
-            assert_eq!(root.state.records.assertion_count(), 2);
-            assert_eq!(child.state.records.assertion_count(), 1);
+            assert_that!(root.state.records.assertion_count()).is_equal_to(2);
+            assert_that!(child.state.records.assertion_count()).is_equal_to(1);
 
             let root = root.with_renderer(DebugRenderer).is_equal_to(43);
-            assert_eq!(root.state.records.assertion_count(), 3);
+            assert_that!(root.state.records.assertion_count()).is_equal_to(3);
             root
         });
-        assert_eq!(failures.len(), 1);
+        assert_that!(failures).has_length(1);
     }
 }

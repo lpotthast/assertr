@@ -43,7 +43,7 @@ fn a_context_presentation_produces_the_panic_payload() {
             .with_panic_presentation(KindAdapter)
             .is_equal_to(2);
     });
-    assert_eq!(message, "custom adapter: Equality");
+    assert_that!(message).is_equal_to("custom adapter: Equality");
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn an_adapter_with_string_errors_can_be_used_directly_for_presentation() {
             .with_panic_presentation(Presentation)
             .is_equal_to(2);
     });
-    assert_eq!(message, DEFAULT_MESSAGE);
+    assert_that!(message).is_equal_to(DEFAULT_MESSAGE);
 }
 
 struct AddContext(String);
@@ -89,7 +89,7 @@ fn an_adapter_chain_can_own_a_copy_of_local_context() {
             .with_panic_presentation(adapter)
             .is_equal_to(2);
     });
-    assert_eq!(message, format!("{context}\n{DEFAULT_MESSAGE}"));
+    assert_that!(message).is_equal_to(format!("{context}\n{DEFAULT_MESSAGE}"));
 }
 
 struct CountPresentations(Rc<AtomicUsize>);
@@ -98,14 +98,15 @@ struct CountPresentations(Rc<AtomicUsize>);
 fn an_erased_presentation_preserves_context_unwind_safety() {
     let count = Rc::new(AtomicUsize::new(0));
     let context = assert_that!(1).with_panic_presentation(CountPresentations(Rc::clone(&count)));
-    assert!(
+    assert_that!(
         catch_unwind(|| {
             context.derive(|value| value).is_equal_to(2);
         })
         .is_err()
-    );
-    assert!(catch_unwind(move || context.is_equal_to(3)).is_err());
-    assert_eq!(count.load(Ordering::Relaxed), 2);
+    )
+    .is_true();
+    assert_that!(catch_unwind(move || context.is_equal_to(3)).is_err()).is_true();
+    assert_that!(count.load(Ordering::Relaxed)).is_equal_to(2);
 }
 
 impl Adapter<AssertionFailure> for CountPresentations {
@@ -125,12 +126,12 @@ fn an_owned_presentation_does_not_extend_the_subject_borrow_until_drop() {
     let assertion =
         assert_that!(values).with_panic_presentation(CountPresentations(Rc::clone(&count)));
     let first = assertion.get_first();
-    assert_eq!(first.actual(), &1);
+    assert_that!(first.actual()).is_equal_to(1);
 
     // Both contexts remain in scope, including the owned presentation's destructor.
     values.push(2);
-    assert_eq!(values, [1, 2]);
-    assert_eq!(count.load(Ordering::Relaxed), 0);
+    assert_that!(values).contains_exactly([1, 2]);
+    assert_that!(count.load(Ordering::Relaxed)).is_equal_to(0);
 }
 
 #[test]
@@ -143,16 +144,16 @@ fn a_non_clone_presentation_is_shared_with_derived_assertions() {
     let child_message = panic_text(|| {
         assertion.derive_owned(|value| *value).is_equal_to(2);
     });
-    assert!(child_message.contains("Expected: 2\n\n  Actual: 1"));
-    assert_eq!(count.load(Ordering::Relaxed), 1);
+    assert_that!(child_message).contains("Expected: 2\n\n  Actual: 1");
+    assert_that!(count.load(Ordering::Relaxed)).is_equal_to(1);
 
     let parent_message = panic_text(|| {
         assertion.is_equal_to(2);
     });
-    assert_eq!(parent_message, DEFAULT_MESSAGE);
-    assert_eq!(count.load(Ordering::Relaxed), 2);
+    assert_that!(parent_message).is_equal_to(DEFAULT_MESSAGE);
+    assert_that!(count.load(Ordering::Relaxed)).is_equal_to(2);
     // All contexts have dropped, releasing the presentation's shared state.
-    assert_eq!(Rc::strong_count(&count), 1);
+    assert_that!(Rc::strong_count(&count)).is_equal_to(1);
 }
 
 #[test]
@@ -167,7 +168,7 @@ fn capture_and_success_do_not_invoke_a_non_sync_presentation() {
         .with_panic_presentation(CountPresentations(Rc::clone(&count)))
         .capture(|it| it.is_equal_to(2));
 
-    assert_eq!(count.load(Ordering::Relaxed), 0);
+    assert_that!(count.load(Ordering::Relaxed)).is_equal_to(0);
     assert_that!(failures).contains_exactly_satisfying([
         |element: AssertThat<AssertionFailure, Capture>| {
             element
@@ -175,7 +176,7 @@ fn capture_and_success_do_not_invoke_a_non_sync_presentation() {
                 .is_equal_to(DEFAULT_MESSAGE);
         },
     ]);
-    assert_eq!(count.load(Ordering::Relaxed), 1);
+    assert_that!(count.load(Ordering::Relaxed)).is_equal_to(1);
 }
 
 #[test]
@@ -187,7 +188,7 @@ fn presentation_is_inherited_by_projections_and_renderer_changes() {
             .map_owned(|_| 2)
             .is_equal_to(3);
     });
-    assert_eq!(message, "custom adapter: Equality");
+    assert_that!(message).is_equal_to("custom adapter: Equality");
 }
 
 #[test]
@@ -202,7 +203,7 @@ fn presentation_is_inherited_by_derived_assertions() {
                 },
             );
     });
-    assert_eq!(message, "custom adapter: Equality");
+    assert_that!(message).is_equal_to("custom adapter: Equality");
 }
 
 #[test]
@@ -215,11 +216,11 @@ fn a_child_can_override_presentation_without_changing_its_parent() {
             .with_panic_presentation(ToHumanReadableText)
             .is_equal_to(2);
     });
-    assert!(child_message.contains("Expected: 2\n\n  Actual: 1"));
+    assert_that!(child_message).contains("Expected: 2\n\n  Actual: 1");
     let parent_message = panic_text(|| {
         assertion.is_equal_to(2);
     });
-    assert_eq!(parent_message, "custom adapter: Equality");
+    assert_that!(parent_message).is_equal_to("custom adapter: Equality");
 }
 
 #[test]
@@ -249,12 +250,9 @@ fn a_presentation_error_preserves_the_failure_and_adds_a_diagnostic() {
             .with_panic_presentation(ReturnsError)
             .is_equal_to(2);
     });
-    assert_eq!(
-        message,
-        format!(
+    assert_that!(message).is_equal_to(format!(
             "{DEFAULT_MESSAGE}\n-------- assertr presentation diagnostic --------\nThe failure presentation returned an error: presentation unavailable\n------ end assertr presentation diagnostic ------\n"
-        )
-    );
+        ));
 }
 
 #[test]
@@ -284,12 +282,9 @@ fn a_panicking_error_formatter_preserves_the_original_failure() {
             .with_panic_presentation(ReturnsUnformattableError)
             .is_equal_to(2);
     });
-    assert_eq!(
-        message,
-        format!(
+    assert_that!(message).is_equal_to(format!(
             "{DEFAULT_MESSAGE}\n-------- assertr presentation diagnostic --------\nThe failure presentation panicked: error formatting exploded\n------ end assertr presentation diagnostic ------\n"
-        )
-    );
+        ));
 }
 
 struct Panics(bool);
@@ -318,12 +313,9 @@ fn a_presentation_panic_preserves_the_failure_and_adds_a_diagnostic() {
                 .with_panic_presentation(Panics(opaque))
                 .is_equal_to(2);
         });
-        assert_eq!(
-            message,
-            format!(
+        assert_that!(message).is_equal_to(format!(
                 "{DEFAULT_MESSAGE}\n-------- assertr presentation diagnostic --------\nThe failure presentation panicked: {detail}\n------ end assertr presentation diagnostic ------\n"
-            )
-        );
+            ));
     }
 }
 
@@ -336,7 +328,7 @@ fn default_presentation_neither_logs_nor_blocks_on_stdout() {
             assert_that!(1).with_location(false).is_equal_to(2);
         });
         drop(stdout);
-        assert_eq!(message, DEFAULT_MESSAGE);
+        assert_that!(message).is_equal_to(DEFAULT_MESSAGE);
         return;
     }
 
@@ -365,12 +357,10 @@ fn default_presentation_neither_logs_nor_blocks_on_stdout() {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(!String::from_utf8_lossy(&output.stdout).contains("-------- assertr"));
+    assert_that!(output.status.success())
+        .with_detail_message(String::from_utf8_lossy(&output.stderr))
+        .is_true();
+    assert_that!(String::from_utf8_lossy(&output.stdout)).does_not_contain("-------- assertr");
 }
 
 struct TextLength;
@@ -404,11 +394,11 @@ fn captured_failures_support_explicit_chains_with_arbitrary_outputs() {
     let failure = &failures[0];
     let chain = ToHumanReadableText.then(TextLength);
 
-    assert_eq!(chain.adapt(failure).unwrap(), DEFAULT_MESSAGE.len());
+    assert_that!(chain.adapt(failure).unwrap()).is_equal_to(DEFAULT_MESSAGE.len());
 
     let recorded = Cell::new(None);
     chain.then(RecordLength(&recorded)).adapt(failure).unwrap();
-    assert_eq!(recorded.get(), Some(DEFAULT_MESSAGE.len()));
+    assert_that!(recorded.get()).is_equal_to(Some(DEFAULT_MESSAGE.len()));
 }
 
 mod matcher_capture {
@@ -421,15 +411,15 @@ mod matcher_capture {
             .with_panic_presentation(CountPresentations(Rc::clone(&count)))
             .capture(|it| {
                 it.matches(elements_are![
-                    1,
+                    assertr::matchers::eq(1),
                     assertr::matchers::predicate(|x: &i32| *x == 3)
                 ])
             });
         assert_that!(count.load(Ordering::Relaxed)).is_equal_to(0);
         let child = &failures[0].children[0];
         assert_that!(child.path).is_equal_to([assertr::failure::PathSegment::Index(1)]);
-        assert_that!(child.constraint.as_ref().unwrap().relation)
-            .is_equal_to("satisfies the predicate");
+        assert_that!(child.constraint.as_ref().unwrap().relation.as_deref())
+            .is_equal_to(Some("satisfies the predicate"));
         let output = CountPresentations(Rc::clone(&count))
             .adapt(&failures[0])
             .unwrap();

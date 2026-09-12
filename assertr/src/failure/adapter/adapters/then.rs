@@ -74,7 +74,8 @@ impl<FirstError: Error + 'static, NextError: Error + 'static> Error
 
 #[cfg(test)]
 mod tests {
-    use alloc::{rc::Rc, vec, vec::Vec};
+    use crate::prelude::*;
+    use alloc::{rc::Rc, vec::Vec};
     use core::{cell::RefCell, error::Error, fmt};
 
     use super::*;
@@ -97,13 +98,7 @@ mod tests {
             ThenError::First(ExampleError),
             ThenError::Next(ExampleError),
         ] {
-            assert!(
-                error
-                    .source()
-                    .unwrap()
-                    .downcast_ref::<ExampleError>()
-                    .is_some()
-            );
+            assert_that!(error.source().unwrap().downcast_ref::<ExampleError>()).is_some();
         }
     }
 
@@ -144,8 +139,8 @@ mod tests {
             error: None,
         };
 
-        assert_eq!(first.clone().then(second).adapt(&3), Ok(6));
-        assert_eq!(*events.borrow(), vec!["first", "second"]);
+        assert_that!(first.clone().then(second).adapt(&3)).is_equal_to(Ok(6));
+        assert_that!(*events.borrow()).contains_exactly(["first", "second"]);
 
         events.borrow_mut().clear();
         let failing = NumberStep {
@@ -161,8 +156,8 @@ mod tests {
             })
             .adapt(&3);
 
-        assert_eq!(result, Err(ThenError::First("no value")));
-        assert_eq!(*events.borrow(), vec!["first"]);
+        assert_that!(result).is_equal_to(Err(ThenError::First("no value")));
+        assert_that!(*events.borrow()).contains_exactly(["first"]);
     }
 
     #[test]
@@ -181,10 +176,8 @@ mod tests {
             error: Some("second failed"),
         };
 
-        assert_eq!(
-            first.then(second).adapt(&3),
-            Err(ThenError::Next("second failed"))
-        );
-        assert_eq!(*events.borrow(), vec!["first", "second"]);
+        assert_that!(first.then(second).adapt(&3))
+            .is_equal_to(Err(ThenError::Next("second failed")));
+        assert_that!(*events.borrow()).contains_exactly(["first", "second"]);
     }
 }

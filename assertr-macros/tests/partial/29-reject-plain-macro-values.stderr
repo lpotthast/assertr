@@ -1,0 +1,105 @@
+error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is not satisfied
+ --> tests/partial/29-reject-plain-macro-values.rs:6:31
+  |
+6 |     assert_that!([1]).matches(elements_are![1]);
+  |                       ------- ^^^^^^^^^^^^^^^^ the trait `ExpectationDiagnostics<{integer}>` is not implemented for `{integer}`
+  |                       |
+  |                       required by a bound introduced by this call
+  |
+  = help: the following other types implement trait `ExpectationDiagnostics<T, R>`:
+            `&D` implements `ExpectationDiagnostics<T, R>`
+            `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `Anything` implements `ExpectationDiagnostics<A, R>`
+            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
+            `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+          and $N others
+  = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}, DebugRenderer>`
+  = note: required for `ElementsAre<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<[{integer}; 1]>`
+note: required by a bound in `matches`
+ --> $WORKSPACE/assertr/src/assertions/matcher.rs
+  |
+  |     fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self;
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+
+error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is not satisfied
+ --> tests/partial/29-reject-plain-macro-values.rs:7:31
+  |
+7 |     assert_that!([1]).matches(elements_are_in_any_order![1]);
+  |                       ------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `ExpectationDiagnostics<{integer}>` is not implemented for `{integer}`
+  |                       |
+  |                       required by a bound introduced by this call
+  |
+  = help: the following other types implement trait `ExpectationDiagnostics<T, R>`:
+            `&D` implements `ExpectationDiagnostics<T, R>`
+            `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `Anything` implements `ExpectationDiagnostics<A, R>`
+            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
+            `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+          and $N others
+  = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}, DebugRenderer>`
+  = note: required for `ElementsAreInAnyOrder<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<[{integer}; 1]>`
+note: required by a bound in `matches`
+ --> $WORKSPACE/assertr/src/assertions/matcher.rs
+  |
+  |     fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self;
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+
+error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is not satisfied
+ --> tests/partial/29-reject-plain-macro-values.rs:8:59
+  |
+8 |     assert_that!([1]).contains_exactly_matching(matchers![1]);
+  |                       -------------------------           ^ the trait `ExpectationDiagnostics<{integer}>` is not implemented for `{integer}`
+  |                       |
+  |                       required by a bound introduced by this call
+  |
+  = help: the following other types implement trait `ExpectationDiagnostics<T, R>`:
+            `&D` implements `ExpectationDiagnostics<T, R>`
+            `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `Anything` implements `ExpectationDiagnostics<A, R>`
+            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
+            `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+          and $N others
+  = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}, DebugRenderer>`
+note: required by a bound in `assertr::prelude::StableOrderAssertions::contains_exactly_matching`
+ --> $WORKSPACE/assertr/src/assertions/collection/stable_order.rs
+  |
+  |     fn contains_exactly_matching<P>(self, expected: P) -> Self
+  |        ------------------------- required by a bound in this associated function
+  |     where
+  |         P: crate::expectation::MatcherList<T, R>,
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `StableOrderAssertions::contains_exactly_matching`
+
+error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is not satisfied
+ --> tests/partial/29-reject-plain-macro-values.rs:9:58
+  |
+9 |     assert_that!(BTreeMap::from([("value", 1)])).matches(entries_are![("value", 1)]);
+  |                                                  ------- ^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `ExpectationDiagnostics<{integer}>` is not implemented for `{integer}`
+  |                                                  |
+  |                                                  required by a bound introduced by this call
+  |
+  = help: the following other types implement trait `ExpectationDiagnostics<T, R>`:
+            `&D` implements `ExpectationDiagnostics<T, R>`
+            `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `Anything` implements `ExpectationDiagnostics<A, R>`
+            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
+            `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+          and $N others
+  = note: required for `assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>` to implement `EntryMatcherList<BTreeMap<&str, {integer}>, DebugRenderer>`
+  = note: required for `EntriesAre<assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<BTreeMap<&str, {integer}>>`
+note: required by a bound in `matches`
+ --> $WORKSPACE/assertr/src/assertions/matcher.rs
+  |
+  |     fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self;
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`

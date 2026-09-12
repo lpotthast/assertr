@@ -1,24 +1,23 @@
-error[E0277]: this expectation is not a matcher for the actual subject
+error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is not satisfied
  --> tests/partial/27-reject-plain-value-as-matcher.rs:5:29
   |
 5 |     assert_that!(1).matches(1);
-  |                     ------- ^ the trait `AssertrMatcher<{integer}>` is not implemented for `{integer}`
+  |                     ------- ^ the trait `ExpectationDiagnostics<{integer}>` is not implemented for `{integer}`
   |                     |
   |                     required by a bound introduced by this call
   |
-  = note: use `equal_to(value)`, `predicate(closure)`, or `satisfying(assertions)` on the expected side
-  = help: the following other types implement trait `AssertrMatcher<Actual, R>`:
-            `&M` implements `AssertrMatcher<A, R>`
-            `AllOf<L>` implements `AssertrMatcher<A, R>`
-            `AnyOf<L>` implements `AssertrMatcher<A, R>`
-            `Anything` implements `AssertrMatcher<A, R>`
-            `AsMatcher<M>` implements `AssertrMatcher<A, R>`
-            `Condition<C>` implements `AssertrMatcher<A, R>`
-            `ContainsMatching<M>` implements `AssertrMatcher<C, R>`
-            `Dereferenced<M>` implements `AssertrMatcher<&A, R>`
+  = help: the following other types implement trait `ExpectationDiagnostics<T, R>`:
+            `&D` implements `ExpectationDiagnostics<T, R>`
+            `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
+            `Anything` implements `ExpectationDiagnostics<A, R>`
+            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
+            `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
+            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
           and $N others
 note: required by a bound in `matches`
  --> $WORKSPACE/assertr/src/assertions/matcher.rs
   |
-  |     fn matches<E: AssertrMatcher<T, R>>(self, expected: E) -> Self;
-  |                   ^^^^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+  |     fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self;
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`

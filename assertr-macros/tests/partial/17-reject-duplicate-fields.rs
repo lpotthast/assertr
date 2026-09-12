@@ -5,5 +5,8 @@ struct Point {
 }
 
 fn main() {
-    let _ = partial!(Point { x: 1, x: 2 });
+    let _ = partial!(Point {
+        x: renamed_assertr::matchers::eq(1),
+        x: renamed_assertr::matchers::eq(2)
+    });
 }

@@ -9,33 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Composable expected-side matchers through `matches` and `does_not_match`, supporting predicates, assertion callbacks,
-  conditions, `pattern!`, and nested positional, unordered, or keyed expectations without optional features or `std`.
+- Reusable expected-side definitions implement `Expectation::evaluate` with typed `Success` and `Rejection`
+  observations and one `ExpectationDiagnostics::explain` hook for rejected observations and unmet expectations.
+  Both populate the same structured failure tree. The executor supplies `AssertionContext` for rendering and child
+  evidence. `apply_assertion` and `matches` share one chain executor, while `test_assertion` returns the successful
+  observation. Nested composition consumes the same definitions. Value comparisons, string and numeric properties,
+  formatting, ranges, variant checks and extraction, type inspection, conditions, collection and map comparisons and
+  matching, identity, lengths, set relations, element projections, cell and lock state, watch receivers, paths, executable
+  lookup, HTTP responses and headers, Jiff values, and rootcause reports share these definitions with ordinary methods.
+  Consuming and async adapters share executor support for iterator scans and cardinality observations, function
+  invocation results, body reads, and JSON decoding, preserving their caller locations and invocation boundaries.
+  Guarded observations are released before raising or continuing to another check. Tokio mutex callback failures
+  retain bounded child evidence and omission counts.
+  Compose strict and inclusive ordering with `lt`, `gt`, `le`, and `ge`, which all reject incomparable values.
+- Composable expectations support predicates, assertion callbacks, conditions, `pattern!`, and nested positional,
+  unordered, or keyed checks without optional features or `std`. Custom definitions compose directly through
+  `ExpectationDiagnostics`. The `matchers` catalog re-exports every public expectation, with common checks at its root
+  and subject namespaces for family-specific names. `DoesNotMatchPattern` supports explicit negative pattern matching.
+  Keyed matcher lists accept arrays, slices, and vectors of entries, as well as heterogeneous `entries_are!` lists.
+  Matcher-list elements and keyed value expectations require explicit matchers. Use `eq`, an alias for `equal_to`,
+  for equality. Map keys remain lookup operands.
 - `partial!` matches selected struct or enum fields without derives or attributes on domain types and renders only
-  selected leaves, including under negation. Enable the new `matchers` feature, which supports `no_std` with `alloc`.
+  selected leaves. Each selected field requires an explicit matcher, such as `eq(value)` or a nested `partial!`.
+  Enable the new `matchers` feature, which supports `no_std` with `alloc`.
 - Map assertions `contains_entry_matching` and `contains_value_matching` accept composed value matchers.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
   exact comparisons of borrowed targets that preserve duplicate counts, without equality or target renderer bounds.
+  Membership and ordered checks bound diagnostic target retention by the rendering budget.
 - Borrowed panic-mode element projections through `get_first`, `get_last`, and `get_single` for `StableOrder`
   collections, and `get_at` for `RandomAccess` collections.
 - `BinaryHeap` supports length and order-free collection assertions, with diagnostics sorted by rendered text.
 - Box and panic-payload `is_of_type` checks preserve the subject and work in panic and capture mode.
 - `RenderingBudget` defaults to 256 items per diagnostic group and 4,096 characters per rendered leaf.
-  Configure it with `with_rendering_budget`, or use `RenderingBudget::unlimited()` to disable these limits.
+  Set limits with `with_max_items` and `with_max_leaf_characters`, then apply it with `with_rendering_budget`.
+  Use `RenderingBudget::unlimited()` to disable both limits. Custom evidence collectors can read the active limits
+  through `RenderingContext::budget()` without changing the chain.
 - `failure::adapter::Adapter` and `AdapterExt` provide typed failure processing with `then` and `map_err`, including
-  human-readable reports and opt-in stdout logging with `std`.
+  human-readable reports and an opt-in `Writer` sink for text or bytes with `std`. Configure any `std::io::Write`
+  target or use stdout/stderr constructors. With `tokio`, write to asynchronous targets through `adapt_async`,
+  including Tokio stdout/stderr constructors. Successful writes flush the target.
 - `with_panic_presentation` selects an owned `'static + RefUnwindSafe` text adapter shared by derived assertions.
   Presentation errors fall back to the built-in report, as do unwinding adapter panics with `std`.
 - `AssertionFailure` and `AssertionFailures` implement `core::error::Error` with readable `Display` and `Debug` reports.
 - `Fact`, `renderer::Rendered`, and `AssertionFailure` expose read-only diagnostic accessors for use with `derive`
   and `derive_owned`.
-- `renderer::Typed` adapters retain Rust type metadata with configurable type hints, hidden by default for single values.
+- `RenderingContext` provides public adapters for collection presentation, stable-order and borrowed collection views,
+  maps, synthetic key/value lists, and one-field variants and structs, including inaccessible fields.
+  Adapters apply the active leaf renderer and budget. `Typed` adapters retain Rust type metadata with configurable
+  hints, hidden by default for single values. Synthetic evidence selects ordering through `RenderingOrder`.
 
 ### Changed
 
 - **Breaking:** Equality and collection, iterator, and map value comparisons now require `PartialEq`, removing
   `AssertrPartialEq` and the public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`.
-  Move custom comparison policies to expected-side `AssertrMatcher` implementations and matcher assertions.
+  Move custom comparison policies to expected-side `Expectation` and `ExpectationDiagnostics` definitions and matcher assertions.
 - **Breaking:** Removed `AssertrEq`, its generated companion types and helper attributes, and the `derive` feature.
   Use `matches(partial!(...))` with `features = ["matchers"]`.
 - **Breaking:** `assertr-macros` 0.5.0 replaces `assertr-derive` as the procedural macro crate.
@@ -81,9 +108,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Unordered matching evaluates each actual/expected pair at most once and retains evidence for missing expectations
   and unexpected elements. Surplus occurrences are explained through the occupied expectations they satisfy.
 - Tokio watch `has_changed` and `has_not_changed` no longer require renderer or `Clone` bounds.
+- Positive collection, stable-order, and iterator `*_satisfying` assertions no longer require element renderers.
+  Map callback assertions require key renderers only. Callbacks can inspect opaque subjects using just the renderers
+  needed by their inner assertions and any count or key evidence.
 
 ### Fixed
 
+- **Breaking:** Path `does_not_exist` and its fluent alias `not_exist` pass only when filesystem inspection confirms
+  absence. Unlike 0.7.1, inspection errors fail with the original I/O error as a rendered fact. These methods now require
+  `ValueRenderer<std::io::Error>` in addition to the path renderer. Add that capability to custom renderers and generic
+  caller bounds. The default `DebugRenderer` already supports it.
 - **Breaking:** `AssertThat` now inherits unwind-safety requirements from its subject and renderer.
   Callers using `catch_unwind` with non-unwind-safe state must review that state before explicitly using `AssertUnwindSafe`.
 - **Breaking:** `NumAssertions::is_close_to` uses rounded absolute floating-point distance through
@@ -97,6 +131,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   in condition, formatting, exact-size iterator, reqwest response, and rootcause report-reference assertion trait bounds.
 - **Breaking:** Condition failures render `AssertrCondition::Error` through `ValueRenderer` instead of `Display`.
   Provide `Debug` for errors used with the default renderer, or provide a custom error renderer.
+- `Actual::map` accepts `FnOnce` callbacks, allowing captured values to move into the mapped subject.
+- Streaming iterator assertions retain the owning iterator through diagnostic rendering and release it before failure
+  handling, preserving resources needed to interpret yielded items without repeating observations or consuming extra elements.
 - Reqwest header diagnostics preserve sensitivity metadata for custom renderers and escape non-ASCII bytes by default.
   The default renderer reveals sensitive contents, and custom renderers can opt in through `SensitiveValuePolicy::Reveal`.
 - Jiff signed-duration tolerance assertions handle extreme values without arithmetic panics, including in capture mode.

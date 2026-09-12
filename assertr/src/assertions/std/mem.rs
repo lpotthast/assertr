@@ -1,4 +1,47 @@
-use crate::{AssertThat, Fact, Mode, Type, failure::FailureKind};
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, Mode, Type,
+    failure::{FailureBuilder, FailureKind},
+};
+
+/// Checks the conservative [`core::mem::needs_drop`] property of a represented type.
+pub struct NeedsDrop;
+
+impl<T, R> Expectation<Type<T>, R> for NeedsDrop {
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+    fn evaluate<'a>(&'a self, actual: &'a Type<T>, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.needs_drop() { Ok(()) } else { Err(()) }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<Type<T>, R> for NeedsDrop {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&Type<T>, ())>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure.relation("needs drop"),
+            Some((actual, ())) => failure
+                .actual(actual.get_type_name())
+                .relation("does not need drop")
+                .fact(Fact::note(
+                    "Dropping a value of this type is guaranteed to have no side effect.",
+                ))
+                .fact(Fact::note(
+                    "You may have forgotten to `impl Drop` for this type.",
+                )),
+        }
+    }
+}
 
 /// Static memory assertions for any type.
 #[allow(clippy::return_self_not_must_use)]
@@ -13,21 +56,7 @@ pub trait MemAssertions {
 impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
     #[track_caller]
     fn needs_drop(self) -> Self {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.needs_drop() {
-            self.failure(FailureKind::Other)
-                .actual(format_args!("{}", actual.get_type_name()))
-                .relation("does not need drop")
-                .fact(Fact::note(
-                    "Dropping a value of this type is guaranteed to have no side effect.",
-                ))
-                .fact(Fact::note(
-                    "You may have forgotten to `impl Drop` for this type.",
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(NeedsDrop)
     }
 }
 
@@ -43,6 +72,8 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, Type<i32>, Panic, NoRenderer> => MemAssertions
             );
+
+            assert_trait_impl!(super::super::NeedsDrop => crate::ExpectationDiagnostics<crate::Type<i32>, NoRenderer>);
         }
     }
 

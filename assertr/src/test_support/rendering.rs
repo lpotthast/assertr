@@ -1,5 +1,6 @@
 //! Renderers and structured evidence checks shared by diagnostic tests.
 
+use crate::prelude::*;
 use crate::{
     AssertionFailure, ValueRenderer, failure::adapter::ToHumanReadableText, renderer::Rendered,
 };
@@ -63,8 +64,8 @@ impl<T: ?Sized> ValueRenderer<T> for RedactingRenderer {
 }
 
 pub(crate) fn assert_custom_value<T: fmt::Debug + ?Sized>(rendered: &Rendered, value: &T) {
-    assert_eq!(rendered.type_name, Some(core::any::type_name::<T>()));
-    assert_eq!(rendered_text(rendered), alloc::format!("custom({value:?})"));
+    assert_that!(rendered.type_name).is_equal_to(Some(core::any::type_name::<T>()));
+    assert_that!(rendered_text(rendered)).is_equal_to(alloc::format!("custom({value:?})"));
 }
 
 pub(crate) fn assert_redacted(failure: &AssertionFailure, secrets: &[&str]) {
@@ -81,7 +82,9 @@ pub(crate) fn assert_redacted(failure: &AssertionFailure, secrets: &[&str]) {
             failure.path,
         );
         for secret in secrets {
-            assert!(!tree.contains(secret), "tree contains {secret}: {tree}");
+            assert_that!(tree)
+                .with_detail_message(format!("tree contains {secret}: {tree}"))
+                .does_not_contain(secret);
         }
         for child in &failure.children {
             check_tree(child, secrets);
@@ -89,12 +92,11 @@ pub(crate) fn assert_redacted(failure: &AssertionFailure, secrets: &[&str]) {
     }
     check_tree(failure, secrets);
     let report = ToHumanReadableText.render(failure);
-    assert!(report.contains("<redacted>"));
+    assert_that!(report).contains("<redacted>");
     for secret in secrets {
-        assert!(
-            !report.contains(secret),
-            "report contains {secret}: {report}"
-        );
+        assert_that!(report)
+            .with_detail_message(format!("report contains {secret}: {report}"))
+            .does_not_contain(secret);
     }
 }
 

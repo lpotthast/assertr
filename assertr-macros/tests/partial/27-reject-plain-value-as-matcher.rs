@@ -1,6 +1,6 @@
 use renamed_assertr::prelude::*;
 
 fn main() {
-    // Bare values become equality matchers inside `partial!`, but `.matches` requires a matcher.
+    // Like macro expectations, `.matches` requires an explicit matcher such as `eq(1)`.
     assert_that!(1).matches(1);
 }

@@ -1,5 +1,5 @@
 error: `..` must be the final field
  --> tests/partial/18-reject-misplaced-rest.rs:8:34
   |
-8 |     let _ = partial!(Point { .., x: 1 });
+8 |     let _ = partial!(Point { .., x: renamed_assertr::matchers::eq(1) });
   |                                  ^

@@ -5,7 +5,7 @@
 //! [`ToHumanReadableText`](super::adapter::ToHumanReadableText), so assertion code never formats a
 //! failure body by hand and the grammar of every failure comes from one place.
 
-use alloc::{borrow::Cow, string::String, vec::Vec};
+use alloc::{borrow::Cow, boxed::Box, string::String, vec::Vec};
 use core::panic::Location;
 
 use super::{AssertionFailure, Fact, FailureKind, Fallible, PathSegment};
@@ -60,14 +60,6 @@ impl<T, M: Mode, R> FailureSink for AssertThat<'_, T, M, R> {
     }
 }
 
-mod sealed {
-    pub trait Sealed {}
-}
-
-/// Where a [`FailureBuilder`] delivers its failure: [`Attached`] to an assertion chain or
-/// [`Detached`] as a value. This trait is sealed.
-pub trait FailureTarget: sealed::Sealed {}
-
 /// The target of a builder started by [`AssertThat::failure`]: the failure is raised on that chain
 /// by [`FailureBuilder::raise`].
 pub struct Attached<'c> {
@@ -75,15 +67,9 @@ pub struct Attached<'c> {
     location: &'static Location<'static>,
 }
 
-impl sealed::Sealed for Attached<'_> {}
-impl FailureTarget for Attached<'_> {}
-
 /// The target of a builder started by [`FailureBuilder::detached`]: the failure is returned by
 /// [`FailureBuilder::build`], to become a child of another failure.
 pub struct Detached;
-
-impl sealed::Sealed for Detached {}
-impl FailureTarget for Detached {}
 
 /// Builds one [`AssertionFailure`].
 ///
@@ -97,19 +83,9 @@ impl FailureTarget for Detached {}
 /// [`build`](Self::build), for the nested failures a parent attaches through [`child`](Self::child)
 /// and [`children`](Self::children).
 #[must_use = "a failure is only recorded by `raise` or `build`"]
-pub struct FailureBuilder<T: FailureTarget> {
-    path: Vec<PathSegment>,
-    omitted_children: usize,
-    constraint: Option<crate::matchers::ConstraintDescription>,
+pub struct FailureBuilder<T> {
     target: T,
-    subject_type_name: &'static str,
-    kind: FailureKind,
-    actual: Option<Rendered>,
-    relation: Option<Cow<'static, str>>,
-    expected: Option<Rendered>,
-    unexpected: Option<Rendered>,
-    facts: Vec<Fact>,
-    children: Vec<AssertionFailure>,
+    failure: AssertionFailure,
 }
 
 impl<'c> FailureBuilder<Attached<'c>> {
@@ -165,46 +141,71 @@ impl FailureBuilder<Detached> {
     }
 }
 
-impl<T: FailureTarget> FailureBuilder<T> {
+impl<T> FailureBuilder<T> {
     fn new(target: T, subject_type_name: &'static str, kind: FailureKind) -> Self {
         Self {
-            path: Vec::new(),
-            omitted_children: 0,
-            constraint: None,
             target,
-            subject_type_name,
-            kind,
-            actual: None,
-            relation: None,
-            expected: None,
-            unexpected: None,
-            facts: Vec::new(),
-            children: Vec::new(),
+            failure: AssertionFailure {
+                constraint: None,
+                path: Vec::new(),
+                omitted_children: 0,
+                location: None,
+                subject_name: None,
+                expression: None,
+                subject_type_name,
+                kind,
+                actual: None,
+                relation: None,
+                expected: None,
+                unexpected: None,
+                facts: Vec::new(),
+                messages: Vec::new(),
+                children: Vec::new(),
+            },
         }
     }
 
-    /// Attaches an independently described matcher constraint.
-    pub fn constraint(mut self, description: crate::matchers::ConstraintDescription) -> Self {
-        self.constraint = Some(description);
+    /// Attaches the diagnostic for an unmet expectation with no subject.
+    pub fn constraint(mut self, description: AssertionFailure) -> Self {
+        self.failure.constraint = Some(Box::new(description));
         self
     }
 
     /// Sets the relative typed path of this failure.
     pub fn path(mut self, path: impl IntoIterator<Item = PathSegment>) -> Self {
-        self.path.extend(path);
+        self.failure.path.extend(path);
         self
     }
 
     /// Records the number of omitted children without losing the truth result.
     pub fn omitted_children(mut self, count: usize) -> Self {
-        self.omitted_children = count;
+        self.failure.omitted_children = count;
+        self
+    }
+
+    /// Preserves an execution adapter's subject type when it validates before mapping.
+    pub(crate) fn subject_type<U: ?Sized>(mut self) -> Self {
+        self.failure.subject_type_name = core::any::type_name::<U>();
+        self
+    }
+
+    pub(crate) fn kind(mut self, kind: FailureKind) -> Self {
+        self.failure.kind = kind;
         self
     }
 
     /// Sets the rendered subject. Pass an adapter obtained from [`AssertThat::render`]. It is
     /// consumed into an owned value tree here, with every leaf rendered exactly once.
     pub fn actual(mut self, actual: impl IntoRendered) -> Self {
-        self.actual = Some(actual.into_rendered());
+        self.failure.actual = Some(actual.into_rendered());
+        self
+    }
+
+    /// Supplies a default subject only when an execution adapter has not already rendered it.
+    pub(crate) fn actual_or_else(mut self, actual: impl FnOnce() -> Rendered) -> Self {
+        if self.failure.actual.is_none() {
+            self.failure.actual = Some(actual());
+        }
         self
     }
 
@@ -214,19 +215,19 @@ impl<T: FailureTarget> FailureBuilder<T> {
     /// `Actual:` pair. A relation never embeds a value: values belong to
     /// [`expected`](Self::expected), [`unexpected`](Self::unexpected), or a [`fact`](Self::fact).
     pub fn relation(mut self, relation: impl Into<Cow<'static, str>>) -> Self {
-        self.relation = Some(relation.into());
+        self.failure.relation = Some(relation.into());
         self
     }
 
     /// Sets the rendered value the subject was compared with.
     pub fn expected(mut self, expected: impl IntoRendered) -> Self {
-        self.expected = Some(expected.into_rendered());
+        self.failure.expected = Some(expected.into_rendered());
         self
     }
 
     /// Sets the rendered value a negated assertion found although it was not expected.
     pub fn unexpected(mut self, unexpected: impl IntoRendered) -> Self {
-        self.unexpected = Some(unexpected.into_rendered());
+        self.failure.unexpected = Some(unexpected.into_rendered());
         self
     }
 
@@ -235,7 +236,7 @@ impl<T: FailureTarget> FailureBuilder<T> {
     /// Construct it with [`Fact::labelled`] or [`Fact::note`], passing diagnostic values through
     /// [`AssertThat::render`]. Facts are already rendered and are not rendered again here.
     pub fn fact(mut self, fact: Fact) -> Self {
-        self.facts.push(fact);
+        self.failure.facts.push(fact);
         self
     }
 
@@ -243,7 +244,7 @@ impl<T: FailureTarget> FailureBuilder<T> {
     ///
     /// Labeled facts and notes may be mixed. Their rendered evidence is preserved unchanged.
     pub fn facts(mut self, facts: impl IntoIterator<Item = Fact>) -> Self {
-        self.facts.extend(facts);
+        self.failure.facts.extend(facts);
         self
     }
 
@@ -259,40 +260,28 @@ impl<T: FailureTarget> FailureBuilder<T> {
 
     /// Attaches one nested failure.
     pub fn child(mut self, child: AssertionFailure) -> Self {
-        self.children.push(child);
+        self.failure.children.push(child);
         self
     }
 
     /// Attaches nested failures in the given order.
     pub fn children(mut self, children: impl IntoIterator<Item = AssertionFailure>) -> Self {
-        self.children.extend(children);
+        self.failure.children.extend(children);
         self
     }
 
     fn into_failure(
-        self,
+        mut self,
         location: Option<&'static Location<'static>>,
         subject_name: Option<String>,
         expression: Option<&'static str>,
         messages: Vec<String>,
     ) -> AssertionFailure {
-        AssertionFailure {
-            constraint: self.constraint,
-            path: self.path,
-            omitted_children: self.omitted_children,
-            location,
-            subject_name,
-            expression,
-            subject_type_name: self.subject_type_name,
-            actual: self.actual,
-            relation: self.relation,
-            expected: self.expected,
-            unexpected: self.unexpected,
-            facts: self.facts,
-            messages,
-            children: self.children,
-            kind: self.kind,
-        }
+        self.failure.location = location;
+        self.failure.subject_name = subject_name;
+        self.failure.expression = expression;
+        self.failure.messages = messages;
+        self.failure
     }
 }
 
@@ -328,7 +317,7 @@ mod tests {
             let renderer = EvidenceRenderer(&renders);
             let rendering = RenderingContext::new(
                 &renderer,
-                RenderingBudget::builder().max_leaf_characters(3).build(),
+                RenderingBudget::default().with_max_leaf_characters(3),
             );
             let fact = Fact::labelled("Reason", rendering.value(&Evidence));
             assert_that!(renders.get()).is_equal_to(1);
@@ -361,7 +350,7 @@ mod tests {
             let renderer = EvidenceRenderer(&renders);
             let rendering = RenderingContext::new(
                 &renderer,
-                RenderingBudget::builder().max_leaf_characters(3).build(),
+                RenderingBudget::default().with_max_leaf_characters(3),
             );
             let fact = Fact::note(rendering.value(&Evidence));
             assert_that!(renders.get()).is_equal_to(1);

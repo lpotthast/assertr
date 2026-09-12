@@ -17,12 +17,18 @@
 //! enabled. Each assertion trait page is the authoritative list of its methods, signatures, and
 //! required bounds. Rustdoc search can also find a method directly by name.
 //!
+//! Ordinary methods execute [`Expectation`](crate::Expectation) and
+//! [`ExpectationDiagnostics`](crate::ExpectationDiagnostics) definitions owned by these families.
+//! To use a check with `.matches(...)`, element matching, or structural composition, browse the
+//! complete public [`matchers`](mod@crate::matchers) catalog. It re-exports these definitions and
+//! groups colliding names into subject namespaces.
+//!
 //! # Assertion traits
 //!
 //! The `*Assertions` traits are public so their methods participate in Rust's method resolution,
 //! not as downstream implementation interfaces. Adding a method to one of them is a compatible
 //! change. For a custom type, define a separate assertion trait instead (see
-//! [`AssertThat::track_assertion`](crate::AssertThat::track_assertion)).
+//! [custom assertion guide](crate#custom-assertions)).
 //!
 //! # Renderer capabilities
 //!

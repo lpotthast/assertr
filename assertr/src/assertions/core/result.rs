@@ -1,9 +1,101 @@
 use crate::{
-    AssertThat, ValueRenderer,
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
     actual::Actual,
-    failure::FailureKind,
+    failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
 };
+
+/// Checks for `Ok` and returns a borrowed value on success.
+/// Checks, extraction, and ordinary callbacks execute this same definition.
+pub struct IsOk;
+
+impl<T, E, R> Expectation<Result<T, E>, R> for IsOk {
+    type Success<'a>
+        = &'a T
+    where
+        T: 'a,
+        E: 'a;
+    type Rejection<'a>
+        = &'a E
+    where
+        T: 'a,
+        E: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Result<T, E>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<&'a T, &'a E> {
+        match actual {
+            Ok(value) => Ok(value),
+            Err(value) => Err(value),
+        }
+    }
+}
+
+impl<T, E, R: ValueRenderer<E>> ExpectationDiagnostics<Result<T, E>, R> for IsOk {
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Result<T, E>, &'a E)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is the expected variant"),
+            Some((actual, value)) => failure
+                .actual(render.variant(actual, "Err", value))
+                .relation("is not the expected variant"),
+        };
+        failure.expected("Result::Ok")
+    }
+}
+
+/// Checks for `Err` and returns a borrowed error on success.
+/// Checks, extraction, and ordinary callbacks execute this same definition.
+pub struct IsErr;
+
+impl<T, E, R> Expectation<Result<T, E>, R> for IsErr {
+    type Success<'a>
+        = &'a E
+    where
+        T: 'a,
+        E: 'a;
+    type Rejection<'a>
+        = &'a T
+    where
+        T: 'a,
+        E: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Result<T, E>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<&'a E, &'a T> {
+        match actual {
+            Err(value) => Ok(value),
+            Ok(value) => Err(value),
+        }
+    }
+}
+
+impl<T, E, R: ValueRenderer<T>> ExpectationDiagnostics<Result<T, E>, R> for IsErr {
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Result<T, E>, &'a T)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is the expected variant"),
+            Some((actual, value)) => failure
+                .actual(render.variant(actual, "Ok", value))
+                .relation("is not the expected variant"),
+        };
+        failure.expected("Result::Err")
+    }
+}
 
 /// Panic-mode extraction from `Result` subjects.
 ///
@@ -34,23 +126,7 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     where
         R: ValueRenderer<E>,
     {
-        self.track_assertion();
-
-        if self.actual().is_err() {
-            let actual = match self.actual() {
-                Err(error) => self.render().variant(self.actual(), "Err", error),
-                Ok(_) => unreachable!("already checked"),
-            };
-            self.failure(FailureKind::Variant)
-                .actual(actual)
-                .relation("is not the expected variant")
-                .expected(format_args!("Result::Ok"))
-                .raise();
-        }
-
-        // Calling `unwrap` is safe here, as we would have seen a panic when the error is not
-        // present!
-        self.map(|it| match it {
+        self.apply_assertion(IsOk).map(|it| match it {
             Actual::Owned(o) => Actual::Owned(match o {
                 Ok(ok) => ok,
                 Err(_) => unreachable!("already checked"),
@@ -67,23 +143,7 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-
-        if self.actual().is_ok() {
-            let actual = match self.actual() {
-                Ok(value) => self.render().variant(self.actual(), "Ok", value),
-                Err(_) => unreachable!("already checked"),
-            };
-            self.failure(FailureKind::Variant)
-                .actual(actual)
-                .relation("is not the expected variant")
-                .expected(format_args!("Result::Err"))
-                .raise();
-        }
-
-        // Calling `unwrap_err` is safe here, as we would have seen a panic when the error is not
-        // present!
-        self.map(|it| match it {
+        self.apply_assertion(IsErr).map(|it| match it {
             Actual::Owned(o) => Actual::Owned(match o {
                 Ok(_) => unreachable!("already checked"),
                 Err(err) => err,
@@ -141,21 +201,7 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
     where
         R: ValueRenderer<E>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_ok() {
-            let actual = match self.actual() {
-                Err(error) => self.render().variant(self.actual(), "Err", error),
-                Ok(_) => unreachable!("already checked"),
-            };
-            self.failure(FailureKind::Variant)
-                .actual(actual)
-                .relation("is not the expected variant")
-                .expected(format_args!("Result::Ok"))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsOk)
     }
 
     #[track_caller]
@@ -163,21 +209,7 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_err() {
-            let actual = match self.actual() {
-                Ok(value) => self.render().variant(self.actual(), "Ok", value),
-                Err(_) => unreachable!("already checked"),
-            };
-            self.failure(FailureKind::Variant)
-                .actual(actual)
-                .relation("is not the expected variant")
-                .expected(format_args!("Result::Err"))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsErr)
     }
 
     #[track_caller]
@@ -186,28 +218,10 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
         R: ValueRenderer<E> + Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        self.track_assertion();
-
-        if self.actual().is_ok() {
-            self.satisfies(
-                |it| match it.as_ref() {
-                    Ok(ok) => ok,
-                    Err(_) => unreachable!("already checked"),
-                },
-                assertions,
-            )
-        } else {
-            let actual = match self.actual() {
-                Err(error) => self.render().variant(self.actual(), "Err", error),
-                Ok(_) => unreachable!("already checked"),
-            };
-            self.failure(FailureKind::Variant)
-                .actual(actual)
-                .relation("is not the expected variant")
-                .expected(format_args!("Result::Ok"))
-                .raise();
-            self
+        if let Some(value) = self.test_assertion(&IsOk) {
+            assertions(self.derive(|_| value));
         }
+        self
     }
 
     #[track_caller]
@@ -216,28 +230,10 @@ impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, R
         R: ValueRenderer<T> + Clone,
         A: for<'a> FnOnce(AssertThat<'a, E, M, R>),
     {
-        self.track_assertion();
-
-        if self.actual().is_err() {
-            self.satisfies(
-                |it| match it.as_ref() {
-                    Ok(_) => unreachable!("already checked"),
-                    Err(err) => err,
-                },
-                assertions,
-            )
-        } else {
-            let actual = match self.actual() {
-                Ok(value) => self.render().variant(self.actual(), "Ok", value),
-                Err(_) => unreachable!("already checked"),
-            };
-            self.failure(FailureKind::Variant)
-                .actual(actual)
-                .relation("is not the expected variant")
-                .expected(format_args!("Result::Err"))
-                .raise();
-            self
+        if let Some(value) = self.test_assertion(&IsErr) {
+            assertions(self.derive(|_| value));
         }
+        self
     }
 }
 
@@ -259,6 +255,9 @@ mod tests {
                 AssertThat<'static, Result<i32, i32>, Panic, NoRenderer>
                     => ResultExtractAssertions<'static, i32, i32, NoRenderer>
             );
+
+            assert_trait_impl!(super::super::IsOk => crate::Expectation<Result<(), ()>, NoRenderer>);
+            assert_trait_impl!(super::super::IsErr => crate::Expectation<Result<(), ()>, NoRenderer>);
         }
 
         #[test]
@@ -537,6 +536,17 @@ mod tests {
         }
 
         #[test]
+        fn retains_fn_once_callbacks_and_tracks_the_variant_once() {
+            let owned = String::from("consumed by callback");
+            let assertion =
+                assert_that!(Ok::<_, ()>(3)).is_ok_satisfying(|it: AssertThat<'_, i32, Panic>| {
+                    drop(owned);
+                    it.is_equal_to(3);
+                });
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(2);
+        }
+
+        #[test]
         fn succeeds_when_ok_and_assertions_pass() {
             assert_that!(Result::<i32, ()>::Ok(42)).is_ok_satisfying(|ok_value| {
                 ok_value.is_equal_to(42);
@@ -621,6 +631,18 @@ mod tests {
                 assert_that!(Result::<i32, i32>::Ok(1)),
                 is_err_satisfying(|_| {})
             );
+        }
+
+        #[test]
+        fn retains_fn_once_callbacks_and_tracks_the_variant_once() {
+            let owned = String::from("consumed by callback");
+            let assertion = assert_that!(Err::<(), _>(3)).is_err_satisfying(
+                |it: AssertThat<'_, i32, Panic>| {
+                    drop(owned);
+                    it.is_equal_to(3);
+                },
+            );
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(2);
         }
 
         #[test]

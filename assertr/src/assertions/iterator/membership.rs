@@ -1,32 +1,180 @@
 use super::{
-    AssertThat, Borrow, FailureKind, GroupStyle, Mode, PositionReporting, Preview, Reference, Tail,
-    ValueRenderer, Vec,
+    AssertThat, AssertionContext, Borrow, EqualToRef, Expectation, FailureBuilder, FailureKind,
+    GroupStyle, Mode, PhantomData, PositionReporting, Preview, Scan, Tail, ValueRenderer, Vec,
+    execute,
 };
 use crate::Fact;
 
-#[track_caller]
-fn fail_membership<S, T, Item, E: ?Sized, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    preview: &Preview<Item>,
-    kind: FailureKind,
-    relation: &'static str,
-    reference: Reference<'_, E>,
-    decisive_index: Option<usize>,
-) where
-    Item: Borrow<T>,
+struct Contains<'e, T, E> {
+    expected: &'e E,
+    item: PhantomData<fn() -> T>,
+}
+
+impl<T, E, I, R> Scan<I, R> for Contains<'_, T, E>
+where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
-    let failure = this
-        .failure(kind)
-        .actual(preview.rendered::<T, _, _, _>(this))
-        .relation(relation);
-    let failure = match reference {
-        Reference::Expected(expected) => failure.expected(this.render().value(expected)),
-        Reference::Unexpected(unexpected) => failure.unexpected(this.render().value(unexpected)),
-    };
-    preview
-        .facts(failure, this.render(), decisive_index)
-        .raise();
+    type Rejection = Preview<I::Item>;
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        let mut tail = Tail::new();
+        for item in iterator {
+            let matched = EqualToRef(self.expected)
+                .evaluate(item.borrow(), context)
+                .is_ok();
+            tail.push(item);
+            if matched {
+                return Ok(());
+            }
+        }
+        Err(tail.finish())
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let expected = context.render().value(self.expected);
+        let preview = rejection;
+        let failure = failure
+            .actual(preview.rendered::<T, _>(context.render()))
+            .relation("does not contain")
+            .expected(expected);
+        preview.facts(failure, context.render(), None)
+    }
+}
+
+struct ContainsAll<'e, T, E> {
+    expected: &'e [E],
+    item: PhantomData<fn() -> T>,
+}
+
+impl<T, E, I, R> Scan<I, R> for ContainsAll<'_, T, E>
+where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    T: PartialEq<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+{
+    type Rejection = (Preview<I::Item>, Vec<usize>);
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        if self.expected.is_empty() {
+            return Ok(());
+        }
+        let mut found = alloc::vec![false; self.expected.len()];
+        let mut remaining = self.expected.len();
+        let mut tail = Tail::new();
+        for item in iterator {
+            for (index, expected) in self.expected.iter().enumerate() {
+                if !found[index]
+                    && EqualToRef(expected)
+                        .evaluate(item.borrow(), context)
+                        .is_ok()
+                {
+                    found[index] = true;
+                    remaining -= 1;
+                }
+            }
+            tail.push(item);
+            if remaining == 0 {
+                return Ok(());
+            }
+        }
+        let missing = found
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, found)| (!found).then_some(index))
+            .collect();
+        Err((tail.finish(), missing))
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let expected = render.borrowed_values::<E, _>(self.expected, GroupStyle::List);
+        let (preview, missing) = rejection;
+        let missing = missing
+            .into_iter()
+            .map(|index| &self.expected[index])
+            .collect::<Vec<_>>();
+        let failure = failure
+            .actual(preview.rendered::<T, _>(render))
+            .relation("does not contain all of")
+            .expected(expected)
+            .fact(Fact::labelled(
+                "Elements not found",
+                render.borrowed_values::<E, _>(missing.as_slice(), GroupStyle::List),
+            ));
+        preview.facts(failure, render, None)
+    }
+}
+
+struct DoesNotContain<'e, T, E> {
+    expected: &'e E,
+    item: PhantomData<fn() -> T>,
+    positions: PositionReporting,
+}
+
+impl<T, E, I, R> Scan<I, R> for DoesNotContain<'_, T, E>
+where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    T: PartialEq<E>,
+    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+{
+    type Rejection = (Preview<I::Item>, usize);
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        let mut tail = Tail::new();
+        for (index, item) in iterator.enumerate() {
+            let matched = EqualToRef(self.expected)
+                .evaluate(item.borrow(), context)
+                .is_ok();
+            tail.push(item);
+            if matched {
+                return Err((tail.finish(), index));
+            }
+        }
+        Ok(())
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let unexpected = render.value(self.expected);
+        let (preview, index) = rejection;
+        let failure = failure
+            .actual(preview.rendered::<T, _>(render))
+            .relation("contains")
+            .unexpected(unexpected);
+        preview.facts(failure, render, self.positions.index(index))
+    }
 }
 
 #[track_caller]
@@ -40,22 +188,13 @@ pub(crate) fn assert_contains<S, T, E, I, M: Mode, R>(
     T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
-    let mut tail = Tail::new();
-    for item in iterator {
-        let matches = crate::matchers::equals(item.borrow(), expected);
-        tail.push(item);
-        if matches {
-            return;
-        }
-    }
-    let preview = tail.finish();
-    fail_membership(
+    execute(
         this,
-        &preview,
-        FailureKind::Membership,
-        "does not contain",
-        Reference::Expected(expected),
-        None,
+        iterator,
+        &Contains::<T, E> {
+            expected,
+            item: PhantomData,
+        },
     );
 }
 
@@ -70,54 +209,21 @@ pub(crate) fn assert_contains_all<S, T, E, I, M: Mode, R>(
     T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
-    if expected.is_empty() {
-        return;
-    }
-
-    let mut found = alloc::vec![false; expected.len()];
-    let mut remaining = expected.len();
-    let mut tail = Tail::new();
-
-    for item in iterator {
-        for (index, expected) in expected.iter().enumerate() {
-            if !found[index] && crate::matchers::equals(item.borrow(), expected) {
-                found[index] = true;
-                remaining -= 1;
-            }
-        }
-        tail.push(item);
-        if remaining == 0 {
-            return;
-        }
-    }
-
-    let not_found = expected
-        .iter()
-        .zip(found)
-        .filter_map(|(expected, found)| (!found).then_some(expected))
-        .collect::<Vec<_>>();
-    let preview = tail.finish();
-    let failure = this
-        .failure(FailureKind::Membership)
-        .actual(preview.rendered::<T, _, _, _>(this))
-        .relation("does not contain all of")
-        .expected(
-            this.render()
-                .borrowed_values::<E, _>(expected, GroupStyle::List),
-        )
-        .fact(Fact::labelled(
-            "Elements not found",
-            this.render()
-                .borrowed_values::<E, _>(not_found.as_slice(), GroupStyle::List),
-        ));
-    preview.facts(failure, this.render(), None).raise();
+    execute(
+        this,
+        iterator,
+        &ContainsAll::<T, E> {
+            expected,
+            item: PhantomData,
+        },
+    );
 }
 
 #[track_caller]
 pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     iterator: I,
-    not_expected: &E,
+    expected: &E,
     positions: PositionReporting,
 ) where
     I: Iterator,
@@ -125,21 +231,13 @@ pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
     T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
 {
-    let mut tail = Tail::new();
-    for (index, item) in iterator.enumerate() {
-        let matches = crate::matchers::equals(item.borrow(), not_expected);
-        tail.push(item);
-        if matches {
-            let preview = tail.finish();
-            fail_membership(
-                this,
-                &preview,
-                FailureKind::Membership,
-                "contains",
-                Reference::Unexpected(not_expected),
-                positions.index(index),
-            );
-            return;
-        }
-    }
+    execute(
+        this,
+        iterator,
+        &DoesNotContain::<T, E> {
+            expected,
+            item: PhantomData,
+            positions,
+        },
+    );
 }

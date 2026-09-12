@@ -14,10 +14,13 @@
 //! [`RandomAccess`] only when arbitrary positions can be accessed in constant time.
 
 mod assertions;
+mod each;
+mod elements_are;
+mod elements_are_in_any_order;
 mod identity;
 mod random_access;
 mod stable_order;
-pub(crate) mod value;
+mod value;
 
 use alloc::collections::{BinaryHeap, LinkedList, VecDeque};
 use alloc::vec::Vec;
@@ -27,9 +30,33 @@ use crate::{
     renderer::{CollectionPresentation, RenderingOrder},
 };
 
-pub use assertions::CollectionAssertions;
-pub use random_access::RandomAccessExtractAssertions;
-pub use stable_order::{StableOrderAssertions, StableOrderExtractAssertions};
+pub use each::{Each, each};
+pub use elements_are::{
+    ElementsAre, contains_contiguous_elements, elements_are, ends_with_elements,
+    starts_with_elements,
+};
+pub use elements_are_in_any_order::{ElementsAreInAnyOrder, elements_are_in_any_order};
+
+pub use assertions::{
+    CollectionAssertions, ContainsMatching, ContainsNoMatching, contains_matching,
+    contains_no_matching,
+};
+pub use value::{
+    Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
+    DoesNotContain, EndsWith, ExactElementsRejection, MissingElementsRejection,
+    PositionalRejection, StartsWith,
+};
+
+pub use identity::{
+    ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs,
+    DoesNotContainSameInstanceAs, ExactIdentityRejection, IdentityMembershipRejection,
+    UnorderedIdentityRejection,
+};
+
+pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
+pub use stable_order::{
+    HasFirst, HasLast, HasSingle, StableOrderAssertions, StableOrderExtractAssertions,
+};
 
 /// A collection whose elements can be inspected repeatedly by reference.
 ///

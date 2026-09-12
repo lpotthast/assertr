@@ -1,3 +1,4 @@
+use renamed_assertr::matchers::eq;
 use renamed_assertr::{matchers::ge, prelude::*};
 
 struct User {
@@ -13,7 +14,7 @@ fn main() {
 
     // Values and matchers can be mixed in the same expectation.
     assert_that!(user).matches(partial!(User {
-        name: "Alice",
+        name: eq("Alice"),
         age: ge(18),
     }));
 }

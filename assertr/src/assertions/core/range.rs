@@ -1,8 +1,227 @@
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
+    renderer::RenderingContext,
+};
 use alloc::{format, string::String};
-use core::ops::Bound::{Excluded, Included, Unbounded};
-use core::ops::RangeBounds;
+use core::ops::{
+    Bound::{Excluded, Included, Unbounded},
+    RangeBounds,
+};
 
-use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
+/// Checks whether a range contains an element.
+/// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
+pub struct ContainsElement<B>(B);
+
+impl<B> ContainsElement<B> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: B) -> Self {
+        Self(expected)
+    }
+}
+
+impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
+    for ContainsElement<B>
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Range: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        Range: 'a;
+    fn evaluate<'a>(&'a self, actual: &'a Range, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.contains(&self.0) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R: ValueRenderer<B>>
+    ExpectationDiagnostics<Range, R> for ContainsElement<B>
+{
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&Range, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("contains"),
+            Some((actual, ())) => failure
+                .actual(render_range(render, actual))
+                .relation("does not contain"),
+        };
+        failure.expected(render.value(&self.0))
+    }
+}
+
+/// Checks whether a range does not contain an element.
+/// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
+pub struct DoesNotContainElement<B>(B);
+
+impl<B> DoesNotContainElement<B> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: B) -> Self {
+        Self(expected)
+    }
+}
+
+impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
+    for DoesNotContainElement<B>
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Range: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        Range: 'a;
+    fn evaluate<'a>(&'a self, actual: &'a Range, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.contains(&self.0) {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R: ValueRenderer<B>>
+    ExpectationDiagnostics<Range, R> for DoesNotContainElement<B>
+{
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&Range, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("does not contain"),
+            Some((actual, ())) => failure
+                .actual(render_range(render, actual))
+                .relation("contains"),
+        };
+        failure.unexpected(render.value(&self.0))
+    }
+}
+
+/// Checks whether a value is in range.
+/// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
+pub struct IsInRange<Range>(Range);
+
+impl<Range> IsInRange<Range> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: Range) -> Self {
+        Self(expected)
+    }
+}
+
+impl<B: PartialOrd, Range: RangeBounds<B>, R> Expectation<B, R> for IsInRange<Range> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        B: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        B: 'a;
+    fn evaluate<'a>(&'a self, actual: &'a B, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if self.0.contains(actual) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagnostics<B, R>
+    for IsInRange<Range>
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&B, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is in range"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not in range"),
+        };
+        failure.expected(render_range(render, &self.0))
+    }
+}
+
+/// Checks whether a value is not in range.
+/// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
+pub struct IsNotInRange<Range>(Range);
+
+impl<Range> IsNotInRange<Range> {
+    /// Owns the expected operand.
+    #[must_use]
+    pub const fn new(expected: Range) -> Self {
+        Self(expected)
+    }
+}
+
+impl<B: PartialOrd, Range: RangeBounds<B>, R> Expectation<B, R> for IsNotInRange<Range> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        B: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        B: 'a;
+    fn evaluate<'a>(&'a self, actual: &'a B, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if self.0.contains(actual) {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagnostics<B, R>
+    for IsNotInRange<Range>
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&B, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is not in range"),
+            Some((actual, ())) => failure.actual(render.value(actual)).relation("is in range"),
+        };
+        failure.unexpected(render_range(render, &self.0))
+    }
+}
 
 /// Assertions over a range subject's membership.
 ///
@@ -63,16 +282,7 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
-        self.track_assertion();
-        if !self.actual().contains(&expected) {
-            let range = render_range(&self, self.actual());
-            self.failure(FailureKind::Membership)
-                .actual(format_args!("{range}"))
-                .relation("does not contain")
-                .expected(self.render().value(&expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(ContainsElement::new(expected))
     }
 
     #[track_caller]
@@ -81,16 +291,7 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
-        self.track_assertion();
-        if self.actual().contains(&expected) {
-            let range = render_range(&self, self.actual());
-            self.failure(FailureKind::Membership)
-                .actual(format_args!("{range}"))
-                .relation("contains")
-                .unexpected(self.render().value(&expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(DoesNotContainElement::new(expected))
     }
 }
 
@@ -101,20 +302,7 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
-        self.track_assertion();
-
-        let actual = self.actual();
-
-        if !expected.contains(actual) {
-            let range = render_range(&self, &expected);
-            self.failure(FailureKind::Ordering)
-                .actual(self.render().value(actual))
-                .relation("is not in range")
-                .expected(format_args!("{range}"))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsInRange::new(expected))
     }
 
     #[track_caller]
@@ -123,31 +311,17 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
-        self.track_assertion();
-
-        let actual = self.actual();
-
-        if expected.contains(actual) {
-            let range = render_range(&self, &expected);
-            self.failure(FailureKind::Ordering)
-                .actual(self.render().value(actual))
-                .relation("is in range")
-                .unexpected(format_args!("{range}"))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsNotInRange::new(expected))
     }
 }
 
-fn render_range<B, S, Range: RangeBounds<B> + ?Sized, M: Mode, R>(
-    assert_that: &AssertThat<'_, S, M, R>,
+fn render_range<B, Range: RangeBounds<B> + ?Sized, R>(
+    rendering: RenderingContext<'_, R>,
     range: &Range,
 ) -> String
 where
     R: ValueRenderer<B>,
 {
-    let rendering = assert_that.render();
     let start = range.start_bound().map(|value| rendering.value(value));
     let end = range.end_bound().map(|value| rendering.value(value));
 
@@ -184,9 +358,11 @@ mod tests {
     mod renderer_contract {
         use core::ops::{Bound, RangeBounds};
 
-        use crate::prelude::*;
-        use crate::test_support::{
-            NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl, rendered_text,
+        use crate::{
+            prelude::*,
+            test_support::{
+                NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl, rendered_text,
+            },
         };
 
         #[test]
@@ -199,6 +375,11 @@ mod tests {
                 AssertThat<'static, i32, Panic, NoRenderer>
                     => RangeAssertions<i32, NoRenderer>
             );
+
+            assert_trait_impl!(super::super::ContainsElement<i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::DoesNotContainElement<i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::IsInRange<core::ops::Range<i32>> => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsNotInRange<core::ops::Range<i32>> => crate::Expectation<i32, NoRenderer>);
         }
 
         #[test]
@@ -250,9 +431,7 @@ mod tests {
                 let range = OpenStartRange { start: 1, end };
                 let failures = assert_that!(range)
                     .with_renderer(SentinelRenderer)
-                    .with_rendering_budget(
-                        RenderingBudget::builder().max_leaf_characters(4).build(),
-                    )
+                    .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(4))
                     .capture(|it| it.contains_element(1));
                 assert_that!(failures).contains_exactly_satisfying([
                     |element: AssertThat<AssertionFailure, Capture>| {

@@ -1,7 +1,142 @@
 use crate::failure::FailureKind;
 use crate::mode::Mode;
 use crate::{AssertThat, ValueRenderer};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use jiff::Span;
+
+/// Checks whether a `Span` is zero.
+pub struct IsZero;
+impl<R> Expectation<Span, R> for IsZero {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Span: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        Span: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Span,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_zero() { Ok(()) } else { Err(()) }
+    }
+}
+impl<R> ExpectationDiagnostics<Span, R> for IsZero
+where
+    R: ValueRenderer<Span>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Span, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("is zero")
+                .expected(render.value(&Span::new())),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .expected(render.value(&Span::new())),
+        }
+    }
+}
+/// Checks whether a `Span` is negative.
+pub struct IsNegative;
+impl<R> Expectation<Span, R> for IsNegative {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Span: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        Span: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Span,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_negative() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<Span, R> for IsNegative
+where
+    R: ValueRenderer<Span>,
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Span, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is negative"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not negative"),
+        }
+    }
+}
+/// Checks whether a `Span` is positive.
+pub struct IsPositive;
+impl<R> Expectation<Span, R> for IsPositive {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Span: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        Span: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Span,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_positive() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+impl<R> ExpectationDiagnostics<Span, R> for IsPositive
+where
+    R: ValueRenderer<Span>,
+{
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Span, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is positive"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not positive"),
+        }
+    }
+}
 
 /// Assertions for [`Span`].
 #[allow(clippy::return_self_not_must_use)]
@@ -29,16 +164,7 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
     where
         R: ValueRenderer<Span>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_zero() {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(self.actual()))
-                .expected(self.render().value(&Span::new()))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsZero)
     }
 
     #[track_caller]
@@ -46,16 +172,7 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
     where
         R: ValueRenderer<Span>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_negative() {
-            self.failure(FailureKind::Ordering)
-                .actual(self.render().value(self.actual()))
-                .relation("is not negative")
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsNegative)
     }
 
     #[track_caller]
@@ -63,16 +180,7 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
     where
         R: ValueRenderer<Span>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_positive() {
-            self.failure(FailureKind::Ordering)
-                .actual(self.render().value(self.actual()))
-                .relation("is not positive")
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsPositive)
     }
 }
 

@@ -1,4 +1,4 @@
-use renamed_assertr::prelude::*;
+use renamed_assertr::{matchers::eq, prelude::*};
 
 struct Address {
     city: String,
@@ -18,6 +18,9 @@ fn main() {
     };
 
     assert_that!(user).matches(partial!(User {
-        address: partial!(Address { city: "Berlin", .. }),
+        address: partial!(Address {
+            city: eq("Berlin"),
+            ..
+        }),
     }));
 }

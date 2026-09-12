@@ -24,6 +24,60 @@ fn text_opt(value: Option<&assertr::renderer::Rendered>) -> Option<&str> {
     })
 }
 
+#[cfg(feature = "std")]
+mod path_renderer_bounds {
+    use super::text_opt;
+    use assertr::{matchers::path::DoesNotExist, prelude::*};
+    use std::{fmt, io, path::PathBuf};
+
+    // Deliberately neither Clone nor a renderer for any unrelated diagnostic type.
+    struct PathAndErrorRenderer;
+
+    impl ValueRenderer<PathBuf> for PathAndErrorRenderer {
+        fn fmt(&self, _: &PathBuf, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("<path>")
+        }
+    }
+
+    impl ValueRenderer<io::Error> for PathAndErrorRenderer {
+        fn fmt(&self, _: &io::Error, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("<inspection error>")
+        }
+    }
+
+    fn check_absence<A: PathAssertions>(assertion: A) -> A
+    where
+        A::Renderer: ValueRenderer<A::Subject> + ValueRenderer<io::Error>,
+    {
+        assertion.does_not_exist()
+    }
+
+    #[test]
+    fn absence_methods_and_expectations_require_only_path_and_error_rendering() {
+        let path = PathBuf::from("invalid\0path");
+        let failures = assert_that!(path)
+            .with_renderer(PathAndErrorRenderer)
+            .capture(|it| check_absence(it).matches(DoesNotExist));
+        assert_that!(failures).has_length(2);
+        for failure in &failures {
+            assert_that!(failure.relation.as_deref())
+                .is_equal_to(Some("could not determine whether the path exists"));
+            assert_that!(text_opt(failure.actual.as_ref())).is_equal_to(Some("<path>"));
+            assert_that!(failure.facts).has_length(1);
+            assert_that!(text_opt(Some(&failure.facts[0].value)))
+                .is_equal_to(Some("<inspection error>"));
+        }
+
+        #[cfg(feature = "fluent")]
+        {
+            let failures = assert_that!(path)
+                .with_renderer(PathAndErrorRenderer)
+                .capture(|it| it.not_exist());
+            assert_that!(failures).has_length(1);
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Person {
     age: u32,
@@ -540,27 +594,56 @@ mod generated_fluent_aliases {
 }
 
 mod matcher_authoring {
-    use assertr::{
-        matchers::{ConstraintDescription, MatchContext, MatchResult},
-        prelude::*,
-    };
+    use assertr::prelude::*;
 
     struct AgeAtLeast(u32);
-    impl<R: ValueRenderer<u32>> AssertrMatcher<super::Person, R> for AgeAtLeast {
-        fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
-            ConstraintDescription::new("has at least the required age")
-                .expected(context.render().value(&self.0))
-        }
+    impl<R> assertr::Expectation<super::Person, R> for AgeAtLeast {
+        type Success<'a> = ();
+        type Rejection<'a> = u32;
         fn evaluate(
             &self,
             actual: &super::Person,
-            context: &mut MatchContext<'_, R>,
-        ) -> MatchResult {
-            context.scoped(assertr::failure::PathSegment::Field("age"), |context| {
-                assertr::matchers::ge(self.0).evaluate(&actual.age, context)
-            })
+            _: &assertr::AssertionContext<'_, R>,
+        ) -> Result<(), u32> {
+            if actual.age >= self.0 {
+                Ok(())
+            } else {
+                Err(actual.age)
+            }
         }
     }
+    impl<R: ValueRenderer<u32>> ExpectationDiagnostics<super::Person, R> for AgeAtLeast {
+        const KIND: assertr::FailureKind = assertr::FailureKind::Ordering;
+        fn explain<Target>(
+            &self,
+            rejected: Option<(&super::Person, u32)>,
+            failure: assertr::failure::FailureBuilder<Target>,
+            context: &assertr::AssertionContext<'_, R>,
+        ) -> assertr::failure::FailureBuilder<Target> {
+            let render = context.render();
+            let failure = failure.expected(render.value(&self.0));
+            match rejected {
+                None => failure.relation("has at least the required age"),
+                Some((_, age)) => failure
+                    .path([assertr::failure::PathSegment::Field("age")])
+                    .actual(render.value(&age))
+                    .relation("is not greater or equal to"),
+            }
+        }
+    }
+    #[test]
+    fn a_downstream_definition_executes_directly_through_the_chain() {
+        let person = super::Person {
+            age: 12,
+            meta: super::Metadata { alive: true },
+        };
+        let failures = assert_that!(person)
+            .with_renderer(AgeRenderer)
+            .capture(|it| it.apply_assertion(AgeAtLeast(18)));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].kind).is_equal_to(assertr::FailureKind::Ordering);
+    }
+
     struct AgeRenderer;
     impl ValueRenderer<u32> for AgeRenderer {
         fn fmt(&self, value: &u32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -590,9 +673,10 @@ mod matcher_authoring {
                     );
             },
         ]);
-        assert_that!(person)
+        let failures = assert_that!(person)
             .with_renderer(AgeRenderer)
-            .does_not_match(&matcher);
+            .capture(|it| it.matches(&matcher));
+        assert_that!(failures).has_length(1);
     }
 }
 
@@ -768,5 +852,786 @@ mod generic_num_traits_bounds {
         assert_identities(Money(0), Money(1));
         assert_close_to(Money(42), Money(40), Money(2));
         assert_sign(Money(-7), Money(7));
+    }
+}
+
+mod callback_renderer_bounds {
+    use assertr::{
+        assertions::{HasLength, collection::Collection},
+        prelude::*,
+        renderer::CollectionPresentation,
+    };
+    use std::collections::{BTreeMap, LinkedList};
+
+    struct Secret;
+
+    #[derive(Clone)]
+    struct NoRenderer;
+
+    #[derive(Clone)]
+    struct CountRenderer;
+
+    impl ValueRenderer<usize> for CountRenderer {
+        fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "count({value})")
+        }
+    }
+
+    #[derive(Clone)]
+    struct QueryRenderer;
+
+    impl ValueRenderer<str> for QueryRenderer {
+        fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "key({value})")
+        }
+    }
+
+    fn is_some<R>(it: AssertThat<'_, Option<Secret>, Capture, R>) {
+        it.is_some();
+    }
+
+    // This subject grants order-free traversal only, without StableOrder or IntoIterator.
+    struct Bag([Option<Secret>; 1]);
+
+    impl HasLength for Bag {
+        fn length(&self) -> usize {
+            self.0.len()
+        }
+    }
+
+    impl Collection for Bag {
+        type Item = Option<Secret>;
+        const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+
+        fn elements(&self) -> impl Iterator<Item = &Self::Item> {
+            self.0.iter()
+        }
+    }
+
+    // Borrowed traversal does not require any collection capability.
+    struct BorrowedItems([Option<Secret>; 1]);
+
+    impl<'a> IntoIterator for &'a BorrowedItems {
+        type Item = &'a Option<Secret>;
+        type IntoIter = core::slice::Iter<'a, Option<Secret>>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.0.iter()
+        }
+    }
+
+    #[test]
+    fn collection_callbacks_need_only_the_renderers_their_failures_use() {
+        let values = Bag([Some(Secret)]);
+        assert_that!(values)
+            .with_renderer(NoRenderer)
+            .contains_satisfying(is_some);
+        assert_that!(values)
+            .with_renderer(CountRenderer)
+            .contains_exactly_in_any_order_satisfying([is_some]);
+    }
+
+    #[test]
+    fn stable_order_callbacks_need_only_a_count_renderer() {
+        let values = LinkedList::from([Some(Secret)]);
+        assert_that!(values)
+            .with_renderer(CountRenderer)
+            .starts_with_satisfying([is_some])
+            .ends_with_satisfying([is_some])
+            .contains_contiguous_satisfying([is_some])
+            .contains_exactly_satisfying([is_some]);
+    }
+
+    #[test]
+    fn direct_iterator_callbacks_need_only_a_count_renderer() {
+        assert_that_owned!([Some(Secret)].into_iter())
+            .with_renderer(CountRenderer)
+            .contains_satisfying(is_some);
+        assert_that_owned!([Some(Secret)].into_iter())
+            .with_renderer(CountRenderer)
+            .starts_with_satisfying([is_some]);
+        assert_that_owned!([Some(Secret)].into_iter())
+            .with_renderer(CountRenderer)
+            .ends_with_satisfying([is_some]);
+        assert_that_owned!([Some(Secret)].into_iter())
+            .with_renderer(CountRenderer)
+            .contains_contiguous_satisfying([is_some]);
+        assert_that_owned!([Some(Secret)].into_iter())
+            .with_renderer(CountRenderer)
+            .contains_exactly_satisfying([is_some]);
+        assert_that_owned!([Some(Secret)].into_iter())
+            .with_renderer(CountRenderer)
+            .contains_exactly_in_any_order_satisfying([is_some]);
+    }
+
+    #[test]
+    fn borrowed_iterator_callbacks_need_only_a_count_renderer() {
+        assert_that!(BorrowedItems([Some(Secret)]))
+            .with_renderer(CountRenderer)
+            .into_iter_contains_satisfying(is_some)
+            .into_iter_contains_exactly_in_any_order_satisfying([is_some]);
+    }
+
+    #[test]
+    fn map_entry_callback_needs_only_a_query_renderer() {
+        // QueryRenderer cannot render the stored String keys or Option<Secret> values.
+        assert_that!(BTreeMap::from([(String::from("secret"), Some(Secret))]))
+            .with_renderer(QueryRenderer)
+            .contains_entry_satisfying("secret", is_some);
+    }
+
+    #[test]
+    fn exact_map_callbacks_need_only_key_renderers() {
+        assert_that!(BTreeMap::from([(1_usize, Some(Secret))]))
+            .with_renderer(CountRenderer)
+            .contains_exactly_entries_satisfying([(1_usize, is_some)]);
+    }
+
+    #[cfg(feature = "fluent")]
+    #[test]
+    fn fluent_callbacks_keep_the_relaxed_bounds() {
+        Bag([Some(Secret)])
+            .must()
+            .with_renderer(NoRenderer)
+            .contain_satisfying(is_some);
+        LinkedList::from([Some(Secret)])
+            .must()
+            .with_renderer(CountRenderer)
+            .contain_exactly_satisfying([is_some]);
+        [Some(Secret)]
+            .into_iter()
+            .must_owned()
+            .with_renderer(CountRenderer)
+            .contain_satisfying(is_some);
+        BorrowedItems([Some(Secret)])
+            .must()
+            .with_renderer(CountRenderer)
+            .into_iter_contain_satisfying(is_some);
+        BTreeMap::from([(String::from("secret"), Some(Secret))])
+            .must()
+            .with_renderer(QueryRenderer)
+            .contain_entry_satisfying("secret", is_some);
+    }
+}
+
+mod definitions {
+    use core::cell::{Ref, RefCell};
+
+    use assertr::assertions::core::partial_eq::{EqualTo, NotEqualTo};
+    use assertr::failure::{FailureBuilder, FailureKind};
+    use assertr::prelude::*;
+    use assertr::{AssertionContext, Expectation, ExpectationDiagnostics};
+
+    struct NoRenderer;
+
+    // Retain a guarded observation, as assertions over cells, locks, and receivers need to do.
+    struct HasText<'e>(&'e str);
+
+    impl<R> Expectation<RefCell<String>, R> for HasText<'_> {
+        type Success<'a>
+            = ()
+        where
+            Self: 'a;
+        type Rejection<'a>
+            = Ref<'a, String>
+        where
+            Self: 'a;
+
+        fn evaluate<'a>(
+            &'a self,
+            actual: &'a RefCell<String>,
+            _: &AssertionContext<'_, R>,
+        ) -> Result<(), Self::Rejection<'a>> {
+            let observed = actual.borrow();
+            if observed.as_str() == self.0 {
+                Ok(())
+            } else {
+                Err(observed)
+            }
+        }
+    }
+
+    impl<R: ValueRenderer<str>> ExpectationDiagnostics<RefCell<String>, R> for HasText<'_> {
+        const KIND: FailureKind = FailureKind::Equality;
+
+        fn explain<'a, Target>(
+            &'a self,
+            rejected: Option<(&'a RefCell<String>, Ref<'a, String>)>,
+            failure: FailureBuilder<Target>,
+            context: &AssertionContext<'_, R>,
+        ) -> FailureBuilder<Target> {
+            let render = context.render();
+            let failure = match rejected {
+                None => failure.relation("has text"),
+                Some((_, observed)) => failure.actual(render.value(observed.as_str())),
+            };
+            failure.expected(render.value(self.0))
+        }
+    }
+
+    struct RendererIndependent;
+
+    impl Expectation<String, NoRenderer> for RendererIndependent {
+        type Success<'a> = ();
+        type Rejection<'a> = core::convert::Infallible;
+
+        fn evaluate<'a>(
+            &'a self,
+            actual: &'a String,
+            context: &AssertionContext<'_, NoRenderer>,
+        ) -> Result<(), core::convert::Infallible> {
+            assert_that!(EqualTo::new("expected").evaluate(actual, context).is_err()).is_true();
+            assert_that!(
+                NotEqualTo::new("expected")
+                    .evaluate(actual, context)
+                    .is_ok()
+            )
+            .is_true();
+            Ok(())
+        }
+    }
+
+    impl ExpectationDiagnostics<String, NoRenderer> for RendererIndependent {
+        const KIND: FailureKind = FailureKind::Other;
+
+        fn explain<Target>(
+            &self,
+            rejected: Option<(&String, core::convert::Infallible)>,
+            failure: FailureBuilder<Target>,
+            _: &AssertionContext<'_, NoRenderer>,
+        ) -> FailureBuilder<Target> {
+            match rejected {
+                None => failure.relation("evaluates without a renderer"),
+                Some((_, never)) => match never {},
+            }
+        }
+    }
+
+    #[test]
+    fn public_definitions_evaluate_inside_the_executor_without_rendering() {
+        assert_that!(String::from("actual"))
+            .with_renderer(NoRenderer)
+            .apply_assertion(RendererIndependent);
+    }
+
+    #[test]
+    fn diagnostics_use_the_retained_observation_and_release_its_guard() {
+        let expected = String::from("expected");
+        let definition = HasText(&expected);
+        let actual = RefCell::new(String::from("observed"));
+        let failures = assert_that!(actual).capture(|it| it.apply_assertion(&definition));
+        assert_that!(failures).has_length(1);
+        *actual.borrow_mut() = String::from("changed");
+        assert_that!(super::text_opt(failures[0].actual.as_ref()))
+            .is_equal_to(Some("\"observed\""));
+        assert_that!(super::text_opt(failures[0].expected.as_ref()))
+            .is_equal_to(Some("\"expected\""));
+    }
+    struct Twice<D>(D);
+
+    impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R>> Expectation<T, R> for Twice<D> {
+        type Success<'a>
+            = ()
+        where
+            Self: 'a,
+            T: 'a;
+        type Rejection<'a>
+            = assertr::expectation::Evidence
+        where
+            Self: 'a,
+            T: 'a;
+
+        fn evaluate(
+            &self,
+            actual: &T,
+            context: &AssertionContext<'_, R>,
+        ) -> Result<(), assertr::expectation::Evidence> {
+            let mut children = context.isolated();
+            let first = children.evaluate(actual, &self.0);
+            let second = children.evaluate(actual, &self.0);
+            if first && second {
+                Ok(())
+            } else {
+                Err(children.into_evidence())
+            }
+        }
+    }
+
+    impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R>> ExpectationDiagnostics<T, R> for Twice<D> {
+        const KIND: FailureKind = D::KIND;
+
+        fn explain<'a, Target>(
+            &'a self,
+            rejected: Option<(&'a T, assertr::expectation::Evidence)>,
+            failure: FailureBuilder<Target>,
+            context: &AssertionContext<'_, R>,
+        ) -> FailureBuilder<Target> {
+            match rejected {
+                None => self.0.explain(None, failure, context),
+                Some((_, children)) => children.explain(failure),
+            }
+        }
+    }
+
+    #[test]
+    fn downstream_compositions_retain_children_with_the_supplied_context() {
+        let actual = RefCell::new(String::from("observed"));
+        let failures =
+            assert_that!(actual).capture(|it| it.apply_assertion(Twice(HasText("expected"))));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).has_length(2);
+        *actual.borrow_mut() = String::from("released");
+    }
+}
+
+mod structural_rendering {
+    use assertr::{
+        AssertionContext, Fact, FailureKind,
+        assertions::{
+            collection::{Collection, StableOrder},
+            map::Map,
+        },
+        failure::FailureBuilder,
+        prelude::*,
+        renderer::{
+            CollectionPresentation, EntryList, GroupStyle, IntoRendered, MapEntries, Rendered,
+            RenderedBody, RenderedValues, RenderingContext, RenderingOrder, StructField, TypeHint,
+            Typed, UnavailableStructField, Variant,
+        },
+    };
+    use core::{any::type_name, cell::RefCell, fmt};
+
+    // Neither subjects nor leaves implement Debug. The renderer is deliberately not Clone.
+    struct Token(&'static str);
+    struct LeafRenderer;
+    struct NoRenderer;
+
+    impl ValueRenderer<Token> for LeafRenderer {
+        fn fmt(&self, value: &Token, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "token({})", value.0)
+        }
+    }
+
+    impl ValueRenderer<str> for LeafRenderer {
+        fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "text({value})")
+        }
+    }
+
+    struct SortedSequence<T>(Vec<T>);
+
+    impl<T> HasLength for SortedSequence<T> {
+        fn length(&self) -> usize {
+            self.0.len()
+        }
+    }
+
+    impl<T> Collection for SortedSequence<T> {
+        type Item = T;
+        const PRESENTATION: CollectionPresentation = CollectionPresentation::list()
+            .with_type_hint()
+            .with_order(RenderingOrder::SortByRenderedText);
+        fn elements(&self) -> impl Iterator<Item = &T> {
+            self.0.iter()
+        }
+    }
+
+    impl<T> StableOrder for SortedSequence<T> {}
+
+    struct Table(Vec<(Token, Token)>);
+
+    impl HasLength for Table {
+        fn length(&self) -> usize {
+            self.0.len()
+        }
+    }
+
+    // No lookup, equality, or ordering capabilities are needed to render a map.
+    impl Map for Table {
+        type Key = Token;
+        type Value = Token;
+        const RENDERING_ORDER: RenderingOrder = RenderingOrder::SortByRenderedText;
+        fn entries(&self) -> impl Iterator<Item = (&Token, &Token)> {
+            self.0.iter().map(|(key, value)| (key, value))
+        }
+    }
+
+    #[track_caller]
+    fn assert_empty_collection<C: Collection, M: Mode, R: ValueRenderer<C::Item>>(
+        it: AssertThat<'_, C, M, R>,
+    ) -> AssertThat<'_, C, M, R> {
+        it.track_assertion();
+        if it.actual().length() != 0 {
+            it.failure(FailureKind::Length)
+                .actual(it.render().collection(it.actual()))
+                .relation("is not empty")
+                .raise();
+        }
+        it
+    }
+
+    #[track_caller]
+    fn assert_empty_map<M: Mode, R: ValueRenderer<Token>>(
+        it: AssertThat<'_, Table, M, R>,
+    ) -> AssertThat<'_, Table, M, R> {
+        it.track_assertion();
+        if it.actual().length() != 0 {
+            let render = it.render();
+            it.failure(FailureKind::Length)
+                .actual(render.map(it.actual()))
+                .relation("is not empty")
+                .fact(Fact::labelled(
+                    "Entries",
+                    render.entry_list::<Token, Token, _, _, _>(
+                        &it.actual().0,
+                        Table::RENDERING_ORDER,
+                    ),
+                ))
+                .raise();
+        }
+        it
+    }
+
+    #[track_caller]
+    fn assert_none<M: Mode, R: ValueRenderer<Token>>(
+        it: AssertThat<'_, Option<Token>, M, R>,
+    ) -> AssertThat<'_, Option<Token>, M, R> {
+        it.track_assertion();
+        if let Some(value) = it.actual() {
+            it.failure(FailureKind::Variant)
+                .actual(it.render().variant(it.actual(), "Some", value))
+                .relation("is not none")
+                .raise();
+        }
+        it
+    }
+
+    #[track_caller]
+    fn assert_empty_cell<M: Mode, R: ValueRenderer<Token>>(
+        it: AssertThat<'_, RefCell<Token>, M, R>,
+    ) -> AssertThat<'_, RefCell<Token>, M, R> {
+        it.track_assertion();
+        let failure = match it.actual().try_borrow() {
+            Ok(value) if value.0.is_empty() => None,
+            Ok(value) => Some(
+                it.failure(FailureKind::Predicate)
+                    .actual(
+                        it.render()
+                            .struct_field(it.actual(), "RefCell", "value", &*value),
+                    )
+                    .relation("does not contain an empty token"),
+            ),
+            Err(_) => Some(
+                it.failure(FailureKind::Predicate)
+                    .actual(it.render().unavailable_struct_field(
+                        it.actual(),
+                        "RefCell",
+                        "value",
+                        "<borrowed>",
+                    ))
+                    .relation("could not inspect the token"),
+            ),
+        };
+        if let Some(failure) = failure {
+            failure.raise();
+        }
+        it
+    }
+
+    fn text(value: &Rendered) -> String {
+        let mut output = String::new();
+        value.write(&mut output, false).unwrap();
+        output
+    }
+
+    fn check_type<T: ?Sized>(value: &Rendered, shown: bool) {
+        assert_that!(value.type_name()).is_equal_to(Some(type_name::<T>()));
+        assert_that!(value.hint).is_equal_to(TypeHint::Short);
+        assert_that!(value.shows_type_hint).is_equal_to(shown);
+    }
+
+    #[test]
+    fn collection_assertion_preserves_structure_types_and_bounded_custom_leaves() {
+        let values = SortedSequence(vec![Token("z"), Token("a"), Token("m")]);
+        let failures = assert_that!(values)
+            .with_renderer(LeafRenderer)
+            .with_subject_name("tokens")
+            .with_location(false)
+            .with_rendering_budget(RenderingBudget::unlimited().with_max_items(2))
+            .capture(assert_empty_collection);
+        assert_that!(failures).has_length(1);
+        let actual = failures[0].actual.as_ref().unwrap();
+        check_type::<SortedSequence<Token>>(actual, true);
+        let RenderedBody::Group {
+            style,
+            items,
+            omitted,
+            sorted,
+        } = &actual.body
+        else {
+            panic!("expected a collection");
+        };
+        assert_that!(*style).is_equal_to(GroupStyle::List);
+        assert_that!(*omitted).is_equal_to(1);
+        assert_that!(*sorted).is_true();
+        assert_that!(items).has_length(2);
+        for item in items {
+            check_type::<Token>(item, false);
+        }
+        assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(indoc::indoc! {"
+            -------- assertr --------
+            Subject: tokens
+            Expression: `values`
+
+            Actual: SortedSequence [
+                token(a),
+                token(m),
+            ] (... 1 more element ...) (sorted for rendering)
+
+            is not empty
+            -------- assertr --------
+        "});
+    }
+
+    #[test]
+    fn positional_and_borrowed_collection_views_keep_their_distinct_contracts() {
+        let values = SortedSequence(vec![
+            String::from("z"),
+            String::from("a"),
+            String::from("m"),
+        ]);
+        let root = assert_that!(values)
+            .with_renderer(LeafRenderer)
+            .with_rendering_budget(RenderingBudget::unlimited().with_max_items(2));
+        let render = root.render();
+        let sorted = render
+            .borrowed_collection::<str, _>(&values)
+            .into_rendered();
+        let stable = render
+            .stable_borrowed_collection::<str, _>(&values)
+            .into_rendered();
+        assert_that!(text(&sorted)).is_equal_to(
+            "SortedSequence [text(a), text(m)] (... 1 more element ...) (sorted for rendering)",
+        );
+        assert_that!(text(&stable))
+            .is_equal_to("SortedSequence [text(z), text(a)] (... 1 more element ...)");
+        for value in [&sorted, &stable] {
+            check_type::<SortedSequence<String>>(value, true);
+            let RenderedBody::Group { items, .. } = &value.body else {
+                panic!("expected a group")
+            };
+            for item in items {
+                check_type::<str>(item, false);
+            }
+        }
+        let tokens = SortedSequence(vec![Token("z"), Token("a")]);
+        let stable = render
+            .stable_collection(&tokens)
+            .show_type_hint(false)
+            .into_rendered();
+        check_type::<SortedSequence<Token>>(&stable, false);
+        assert_that!(text(&stable)).is_equal_to("[token(z), token(a)]");
+        // This chain only supplied a rendering context, so record the inspection.
+        root.track_assertion();
+    }
+
+    #[test]
+    fn map_assertion_renders_keys_values_and_synthetic_entries_without_parent_support() {
+        let map = Table(vec![(Token("z"), Token("one")), (Token("a"), Token("two"))]);
+        let failures = assert_that!(map)
+            .with_renderer(LeafRenderer)
+            .with_location(false)
+            .with_rendering_budget(RenderingBudget::unlimited().with_max_items(1))
+            .capture(assert_empty_map);
+        let actual = failures[0].actual.as_ref().unwrap();
+        check_type::<Table>(actual, true);
+        let RenderedBody::Map {
+            entries,
+            omitted,
+            sorted,
+        } = &actual.body
+        else {
+            panic!("expected a map");
+        };
+        assert_that!(*omitted).is_equal_to(1);
+        assert_that!(*sorted).is_true();
+        assert_that!(entries).has_length(1);
+        check_type::<Token>(&entries[0].0, false);
+        check_type::<Token>(&entries[0].1, false);
+        assert_that!(text(actual)).is_equal_to(
+            "Table {token(a): token(two)} (... 1 more entry ...) (sorted for rendering)",
+        );
+        let evidence = &failures[0].facts[0].value;
+        assert_that!(evidence.type_name()).is_none();
+        let RenderedBody::EntryList {
+            entries,
+            omitted,
+            sorted,
+        } = &evidence.body
+        else {
+            panic!("expected an entry list");
+        };
+        assert_that!(*omitted).is_equal_to(1);
+        assert_that!(*sorted).is_true();
+        check_type::<Token>(&entries[0].0, false);
+        check_type::<Token>(&entries[0].1, false);
+        assert_that!(text(evidence))
+            .is_equal_to("[(token(a), token(two))] (... 1 more entry ...) (sorted for rendering)");
+    }
+
+    #[test]
+    fn wrapper_assertions_retain_owner_and_leaf_types_and_untyped_placeholders() {
+        let failures = assert_that!(Some(Token("a")))
+            .with_renderer(LeafRenderer)
+            .capture(assert_none);
+        let actual = failures[0].actual.as_ref().unwrap();
+        check_type::<Option<Token>>(actual, false);
+        let RenderedBody::Variant { name, value } = &actual.body else {
+            panic!("expected a variant")
+        };
+        assert_that!(*name).is_equal_to("Some");
+        check_type::<Token>(value, false);
+        assert_that!(text(actual)).is_equal_to("Some(token(a))");
+
+        let cell = RefCell::new(Token("a"));
+        let failures = assert_that!(cell)
+            .with_renderer(LeafRenderer)
+            .capture(assert_empty_cell);
+        let actual = failures[0].actual.as_ref().unwrap();
+        check_type::<RefCell<Token>>(actual, false);
+        let RenderedBody::Struct { name, fields } = &actual.body else {
+            panic!("expected a struct")
+        };
+        assert_that!(*name).is_equal_to("RefCell");
+        assert_that!(fields[0].0).is_equal_to("value");
+        check_type::<Token>(&fields[0].1, false);
+        assert_that!(text(actual)).is_equal_to("RefCell { value: token(a) }");
+
+        let _guard = cell.borrow_mut();
+        let failures = assert_that!(cell)
+            .with_renderer(LeafRenderer)
+            .capture(assert_empty_cell);
+        let actual = failures[0].actual.as_ref().unwrap();
+        check_type::<RefCell<Token>>(actual, false);
+        let RenderedBody::Struct { fields, .. } = &actual.body else {
+            panic!("expected a struct")
+        };
+        assert_that!(fields[0].1.type_name()).is_none();
+        assert_that!(&fields[0].1.body).is_equal_to(RenderedBody::Placeholder("<borrowed>"));
+        assert_that!(text(actual)).is_equal_to("RefCell { value: <borrowed> }");
+    }
+
+    #[test]
+    fn all_adapter_types_are_nameable_and_construction_needs_no_renderer() {
+        let render = RenderingContext::new(&NoRenderer, RenderingBudget::default());
+        let values = SortedSequence(vec![Token("a")]);
+        let map = Table(vec![(Token("k"), Token("v"))]);
+        let _: Typed<RenderedValues<'_, Token, SortedSequence<Token>, NoRenderer>> =
+            render.collection(&values);
+        let _: Typed<RenderedValues<'_, Token, SortedSequence<Token>, NoRenderer>> =
+            render.stable_collection(&values);
+        let _: RenderedValues<'_, Token, SortedSequence<Token>, NoRenderer> = render
+            .values(&values, GroupStyle::Set)
+            .with_order(RenderingOrder::SortByRenderedText);
+        let _: Typed<MapEntries<'_, Table, NoRenderer>> = render.map(&map);
+        let _: EntryList<'_, Token, Token, Vec<(Token, Token)>, NoRenderer> =
+            render.entry_list::<Token, Token, _, _, _>(&map.0, RenderingOrder::PreserveIteration);
+        let _: Typed<Variant<'_, Token, NoRenderer>> =
+            render.variant(&values, "Item", &values.0[0]);
+        let _: Typed<StructField<'_, Token, NoRenderer>> =
+            render.struct_field(&values, "Owner", "item", &values.0[0]);
+        let placeholder: Typed<UnavailableStructField> =
+            render.unavailable_struct_field(&values, "Owner", "item", "<hidden>");
+        assert_that!(text(&placeholder.into_rendered())).is_equal_to("Owner { item: <hidden> }");
+        assert_that!(render.budget()).is_equal_to(RenderingBudget::default());
+    }
+
+    struct NoBadTokens;
+    struct BadTokens<'a> {
+        retained: Vec<&'a Token>,
+        omitted: usize,
+    }
+
+    impl<R> Expectation<SortedSequence<Token>, R> for NoBadTokens {
+        type Success<'a> = ();
+        type Rejection<'a> = BadTokens<'a>;
+        fn evaluate<'a>(
+            &'a self,
+            actual: &'a SortedSequence<Token>,
+            context: &AssertionContext<'_, R>,
+        ) -> Result<(), BadTokens<'a>> {
+            let maximum = if context.is_diagnostic() {
+                context.render().budget().max_items()
+            } else {
+                0
+            };
+            let mut rejected = BadTokens {
+                retained: Vec::new(),
+                omitted: 0,
+            };
+            for token in actual.elements().filter(|token| token.0 == "bad") {
+                if rejected.retained.len() < maximum {
+                    rejected.retained.push(token);
+                } else {
+                    rejected.omitted += 1;
+                }
+            }
+            if rejected.retained.is_empty() && rejected.omitted == 0 {
+                Ok(())
+            } else {
+                Err(rejected)
+            }
+        }
+    }
+
+    impl<R: ValueRenderer<Token>> ExpectationDiagnostics<SortedSequence<Token>, R> for NoBadTokens {
+        const KIND: FailureKind = FailureKind::Predicate;
+        fn explain<'a, Target>(
+            &'a self,
+            rejected: Option<(&'a SortedSequence<Token>, BadTokens<'a>)>,
+            failure: FailureBuilder<Target>,
+            context: &AssertionContext<'_, R>,
+        ) -> FailureBuilder<Target> {
+            let Some((actual, rejected)) = rejected else {
+                return failure.relation("contains no bad tokens");
+            };
+            let render = context.render();
+            failure
+                .actual(render.collection(actual))
+                .relation("contains bad tokens")
+                .omitted_children(rejected.omitted)
+                .children(rejected.retained.into_iter().map(|token| {
+                    FailureBuilder::detached::<Token>(FailureKind::Predicate)
+                        .actual(render.value(token))
+                        .relation("is a bad token")
+                        .build()
+                }))
+        }
+    }
+
+    #[test]
+    fn custom_evidence_retention_uses_the_budget_without_changing_truth() {
+        for maximum in [0, 1, usize::MAX] {
+            let budget = RenderingBudget::unlimited().with_max_items(maximum);
+            let failures = assert_that!(SortedSequence(vec![
+                Token("bad"),
+                Token("bad"),
+                Token("bad")
+            ]))
+            .with_renderer(LeafRenderer)
+            .with_rendering_budget(budget)
+            .capture(|it| it.apply_assertion(NoBadTokens));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(maximum.min(3));
+            assert_that!(failures[0].omitted_children).is_equal_to(3 - maximum.min(3));
+            for child in &failures[0].children {
+                assert_that!(text(child.actual.as_ref().unwrap())).is_equal_to("token(bad)");
+            }
+            let failures = assert_that!(SortedSequence(vec![Token("good")]))
+                .with_renderer(LeafRenderer)
+                .with_rendering_budget(budget)
+                .capture(|it| it.apply_assertion(NoBadTokens));
+            assert_that!(failures).is_empty();
+        }
     }
 }

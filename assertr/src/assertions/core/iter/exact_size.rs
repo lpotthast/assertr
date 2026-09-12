@@ -1,4 +1,161 @@
-use crate::{AssertThat, DebugRenderer, Fact, Mode, ValueRenderer, failure::FailureKind};
+use crate::DebugRenderer;
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    failure::{Fact, FailureBuilder, FailureKind},
+};
+
+/// Checks the remaining iterator length without advancing it.
+pub struct HasRemainingCount(usize);
+impl HasRemainingCount {
+    /// Requires exactly this many remaining items.
+    #[must_use]
+    pub const fn new(expected: usize) -> Self {
+        Self(expected)
+    }
+}
+
+impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingCount {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        I: 'a;
+    type Rejection<'a>
+        = usize
+    where
+        Self: 'a,
+        I: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a I,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let length = actual.len();
+        if length == self.0 {
+            Ok(())
+        } else {
+            Err(length)
+        }
+    }
+}
+
+impl<I: ExactSizeIterator, R> ExpectationDiagnostics<I, R> for HasRemainingCount
+where
+    R: ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a I, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("has remaining count"),
+            Some((actual, rejection)) => {
+                let _ = actual;
+                failure
+                    .relation("does not have the expected remaining count")
+                    .fact(Fact::labelled(
+                        "Actual remaining count",
+                        render.value(&rejection),
+                    ))
+            }
+        };
+        failure.expected(render.value(&self.0))
+    }
+}
+
+/// Checks the remaining iterator length without advancing it.
+pub struct HasNoRemainingElements;
+
+impl<I: ExactSizeIterator, R> Expectation<I, R> for HasNoRemainingElements {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        I: 'a;
+    type Rejection<'a>
+        = usize
+    where
+        Self: 'a,
+        I: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a I,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let length = actual.len();
+        if length == 0 { Ok(()) } else { Err(length) }
+    }
+}
+
+impl<I: ExactSizeIterator, R> ExpectationDiagnostics<I, R> for HasNoRemainingElements
+where
+    R: ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a I, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("has no remaining elements"),
+            Some((_, rejection)) => failure
+                .relation("unexpectedly has remaining elements")
+                .fact(Fact::labelled("Remaining count", render.value(&rejection))),
+        }
+    }
+}
+
+/// Checks the remaining iterator length without advancing it.
+pub struct HasRemainingElements;
+
+impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingElements {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        I: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        I: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a I,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let length = actual.len();
+        if length != 0 { Ok(()) } else { Err(()) }
+    }
+}
+
+impl<I: ExactSizeIterator, R> ExpectationDiagnostics<I, R> for HasRemainingElements {
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a I, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure.relation("has remaining elements"),
+            Some((_, ())) => failure.relation("has no remaining elements"),
+        }
+    }
+}
 
 /// Non-consuming assertions for the exact number of elements remaining in an iterator.
 #[allow(clippy::return_self_not_must_use)]
@@ -22,19 +179,7 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions<R> for Assert
     where
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        let actual = self.actual().len();
-        if actual != expected {
-            self.failure(FailureKind::Length)
-                .relation("does not have the expected remaining count")
-                .expected(self.render().value(&expected))
-                .fact(Fact::labelled(
-                    "Actual remaining count",
-                    self.render().value(&actual),
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasRemainingCount::new(expected))
     }
 
     #[track_caller]
@@ -42,29 +187,12 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions<R> for Assert
     where
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        let actual = self.actual().len();
-        if actual != 0 {
-            self.failure(FailureKind::Length)
-                .relation("unexpectedly has remaining elements")
-                .fact(Fact::labelled(
-                    "Remaining count",
-                    self.render().value(&actual),
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasNoRemainingElements)
     }
 
     #[track_caller]
     fn has_remaining_elements(self) -> Self {
-        self.track_assertion();
-        if self.actual().len() == 0 {
-            self.failure(FailureKind::Length)
-                .relation("has no remaining elements")
-                .raise();
-        }
-        self
+        self.apply_assertion(HasRemainingElements)
     }
 }
 

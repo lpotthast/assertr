@@ -1,18 +1,95 @@
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    actual::Actual,
+    failure::{FailureBuilder, FailureKind},
+    mode::{Mode, Panic},
+};
 use core::task::Poll;
 
-use crate::actual::Actual;
-use crate::failure::FailureKind;
-use crate::mode::{Mode, Panic};
-use crate::{AssertThat, ValueRenderer};
+/// Checks for `Ready` and returns the borrowed value on success.
+/// Checks, extraction, and ordinary callbacks execute this same definition.
+pub struct IsReady;
 
-/// Raises the failure of an assertion that found `Pending` where it expected `Ready`.
-#[track_caller]
-fn fail_pending<T, M: Mode, R>(this: &AssertThat<'_, Poll<T>, M, R>) {
-    this.failure(FailureKind::Variant)
-        .actual(format_args!("Pending"))
-        .relation("is not the expected variant")
-        .expected(format_args!("Poll::Ready"))
-        .raise();
+impl<T, R> Expectation<Poll<T>, R> for IsReady {
+    type Success<'a>
+        = &'a T
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Poll<T>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<&'a T, ()> {
+        match actual {
+            Poll::Ready(value) => Ok(value),
+            Poll::Pending => Err(()),
+        }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<Poll<T>, R> for IsReady {
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&Poll<T>, ())>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let failure = match rejected {
+            None => failure.relation("is the expected variant"),
+            Some((_, ())) => failure
+                .actual("Pending")
+                .relation("is not the expected variant"),
+        };
+        failure.expected("Poll::Ready")
+    }
+}
+
+/// Checks for `Pending`, retaining the unexpected ready value on rejection.
+pub struct IsPending;
+
+impl<T, R> Expectation<Poll<T>, R> for IsPending {
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = &'a T
+    where
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Poll<T>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), &'a T> {
+        match actual {
+            Poll::Pending => Ok(()),
+            Poll::Ready(value) => Err(value),
+        }
+    }
+}
+
+impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Poll<T>, R> for IsPending {
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Poll<T>, &'a T)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is the expected variant"),
+            Some((actual, value)) => failure
+                .actual(render.variant(actual, "Ready", value))
+                .relation("is not the expected variant"),
+        };
+        failure.expected("Poll::Pending")
+    }
 }
 
 /// Non-extracting assertions for `Poll` subjects.
@@ -43,11 +120,7 @@ pub trait PollAssertions<'t, T, M: Mode, R> {
 impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, M, R> {
     #[track_caller]
     fn is_ready(self) -> Self {
-        self.track_assertion();
-        if !self.actual().is_ready() {
-            fail_pending(&self);
-        }
-        self
+        self.apply_assertion(IsReady)
     }
 
     #[track_caller]
@@ -55,20 +128,7 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_pending() {
-            let actual = match actual {
-                Poll::Ready(value) => self.render().variant(actual, "Ready", value),
-                Poll::Pending => unreachable!("already checked"),
-            };
-            self.failure(FailureKind::Variant)
-                .actual(actual)
-                .relation("is not the expected variant")
-                .expected(format_args!("Poll::Pending"))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsPending)
     }
 
     #[track_caller]
@@ -77,19 +137,10 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
         R: Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        self.track_assertion();
-        if self.actual().is_ready() {
-            self.satisfies(
-                |it| match it {
-                    Poll::Ready(t) => t,
-                    Poll::Pending => unreachable!("already checked"),
-                },
-                assertions,
-            )
-        } else {
-            fail_pending(&self);
-            self
+        if let Some(value) = self.test_assertion(&IsReady) {
+            assertions(self.derive(|_| value));
         }
+        self
     }
 }
 
@@ -109,11 +160,7 @@ pub trait PollExtractAssertions<'t, T, R> {
 impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic, R> {
     #[track_caller]
     fn get_ready(self) -> AssertThat<'t, T, Panic, R> {
-        self.track_assertion();
-        if !self.actual().is_ready() {
-            fail_pending(&self);
-        }
-        self.map(|it| match it {
+        self.apply_assertion(IsReady).map(|it| match it {
             Actual::Owned(p) => Actual::Owned(match p {
                 Poll::Ready(t) => t,
                 Poll::Pending => unreachable!("already checked"),
@@ -145,6 +192,9 @@ mod tests {
                 AssertThat<'static, Poll<()>, Panic, NoRenderer>
                     => PollExtractAssertions<'static, (), NoRenderer>
             );
+
+            assert_trait_impl!(super::super::IsReady => crate::Expectation<core::task::Poll<()>, NoRenderer>);
+            assert_trait_impl!(super::super::IsPending => crate::Expectation<core::task::Poll<()>, NoRenderer>);
         }
 
         #[test]
@@ -309,6 +359,18 @@ mod tests {
                 assert_that!(Poll::<i32>::Pending),
                 is_ready_satisfying(|_| {})
             );
+        }
+
+        #[test]
+        fn retains_fn_once_callbacks_and_tracks_the_variant_once() {
+            let owned = String::from("consumed by callback");
+            let assertion = assert_that!(Poll::Ready(3)).is_ready_satisfying(
+                |it: AssertThat<'_, i32, Panic>| {
+                    drop(owned);
+                    it.is_equal_to(3);
+                },
+            );
+            assert_that!(assertion.state.records.assertion_count()).is_equal_to(2);
         }
 
         #[test]

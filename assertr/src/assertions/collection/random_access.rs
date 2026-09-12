@@ -1,7 +1,66 @@
 //! Indexed extraction for collections supporting constant-time random access.
 
 use super::RandomAccess;
-use crate::{AssertThat, Fact, ValueRenderer, failure::FailureKind, mode::Panic};
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
+    mode::Panic,
+};
+
+/// Checks constant-time indexed access and returns the borrowed element when present.
+pub struct HasElementAt(usize);
+impl HasElementAt {
+    /// Requires an element at this zero-based index.
+    #[must_use]
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+}
+
+impl<C: RandomAccess + ?Sized, R> Expectation<C, R> for HasElementAt {
+    type Success<'a>
+        = &'a C::Item
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = usize
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        actual.element_at(self.0).ok_or_else(|| actual.length())
+    }
+}
+
+impl<C: RandomAccess + ?Sized, R> ExpectationDiagnostics<C, R> for HasElementAt
+where
+    R: ValueRenderer<C::Item> + ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("has an element at the index"),
+            Some((actual, length)) => failure
+                .actual(render.stable_collection(actual))
+                .relation("has no element at the index")
+                .fact(Fact::labelled("Actual length", render.value(&length))),
+        };
+        failure.expected(render.value(&self.0))
+    }
+}
 
 /// Panic-mode indexed extraction from collections with [`RandomAccess`].
 ///
@@ -32,18 +91,7 @@ where
     where
         R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        if self.actual().element_at(index).is_none() {
-            self.failure(FailureKind::Length)
-                .actual(self.render().stable_collection(self.actual()))
-                .relation("has no element at the index")
-                .expected(self.render().value(&index))
-                .fact(Fact::labelled(
-                    "Actual length",
-                    self.render().value(&self.actual().length()),
-                ))
-                .raise();
-        }
+        self.test_assertion(&HasElementAt::new(index));
 
         self.derive(|collection| {
             collection
@@ -56,8 +104,10 @@ where
 #[cfg(test)]
 mod tests {
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -150,7 +200,7 @@ mod tests {
             let chain = assert_that!(subject)
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build());
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3));
             let failures = chain.get_at(0).capture(|it| it.is_equal_to(8));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {

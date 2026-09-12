@@ -8,8 +8,7 @@
 //! - Values become owned rendered trees when failures are built. Adapters decide how to use those
 //!   trees at the panic boundary or after capture.
 
-use assertr::prelude::*;
-use assertr::{Fact, FailureKind, renderer::Rendered};
+use assertr::{Fact, FailureKind, prelude::*, renderer::Rendered};
 use indoc::formatdoc;
 
 fn rendered_text(value: &Rendered) -> String {
@@ -276,8 +275,7 @@ fn dropping_an_unused_panic_mode_assertion_no_longer_panics() {
 
 #[test]
 fn a_side_effect_only_adapter_can_consume_a_captured_failure() {
-    use core::cell::Cell;
-    use core::convert::Infallible;
+    use core::{cell::Cell, convert::Infallible};
 
     use assertr::failure::adapter::Adapter;
 
@@ -344,9 +342,11 @@ fn fluent_verify_and_verify_owned_return_structured_failures() {
 /// One field-level test per assertion family: the fields carry everything the text carries.
 mod fields {
     use super::{rendered_text, text, text_opt};
-    use assertr::prelude::*;
-    use assertr::renderer::{Rendered, RenderedBody, TypeHint};
-    use assertr::{Fact, FailureKind};
+    use assertr::{
+        Fact, FailureKind,
+        prelude::*,
+        renderer::{Rendered, RenderedBody, TypeHint},
+    };
     use core::{cell::RefCell, fmt};
 
     #[test]
@@ -440,7 +440,7 @@ mod fields {
         use std::collections::HashSet;
 
         let failures = assert_that!(HashSet::from([3, 1, 2]))
-            .with_rendering_budget(RenderingBudget::builder().max_items(2).build())
+            .with_rendering_budget(RenderingBudget::default().with_max_items(2))
             .with_location(false)
             .capture(|it| it.contains(9));
         let actual = failures[0].actual.as_ref().unwrap();
@@ -477,7 +477,7 @@ mod fields {
         use std::collections::BTreeMap;
 
         let failures = assert_that!(BTreeMap::from([(1, 10), (2, 20)]))
-            .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
+            .with_rendering_budget(RenderingBudget::default().with_max_items(1))
             .with_location(false)
             .capture(|it| it.contains_key(&9));
         let actual = failures[0].actual.as_ref().unwrap();
@@ -731,8 +731,8 @@ mod fields {
 
         assert_that!(child.kind).is_equal_to(FailureKind::Matching);
         assert_that!(child.actual).is_none();
-        assert_that!(child.constraint.as_ref().unwrap().relation)
-            .is_equal_to("satisfies the predicate");
+        assert_that!(child.constraint.as_ref().unwrap().relation.as_deref())
+            .is_equal_to(Some("satisfies the predicate"));
         assert_that!(child.relation.as_deref())
             .is_equal_to(Some("does not satisfy the constraint"));
         assert_that!(child.path).is_equal_to([assertr::failure::PathSegment::Index(1)]);
@@ -884,8 +884,8 @@ mod matcher_metadata {
                                 child.derive(|child| &child.constraint).is_some_satisfying(
                                     |constraint| {
                                         constraint
-                                            .derive(|constraint| &constraint.relation)
-                                            .is_equal_to("satisfies the predicate");
+                                            .derive_owned(|constraint| constraint.relation())
+                                            .is_equal_to(Some("satisfies the predicate"));
                                     },
                                 );
                             }

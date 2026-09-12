@@ -10,10 +10,10 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// Returns this chain's diagnostic rendering context.
     ///
     /// Custom assertion implementations use [`RenderingContext::value`],
-    /// [`RenderingContext::values`], and [`RenderingContext::borrowed_values`] instead of
-    /// formatting diagnostic values directly. This honors both the active
-    /// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. A rendered value always
-    /// retains type metadata. Customize its hint through
+    /// [`RenderingContext::collection`], [`RenderingContext::map`], and the context's other
+    /// structural adapters instead of formatting diagnostic values directly. This honors both the
+    /// active [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. A rendered value
+    /// always retains type metadata. Customize its hint through
     /// [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) and its text visibility
     /// through [`Typed::show_type_hint`](crate::renderer::Typed::show_type_hint).
     ///
@@ -62,10 +62,9 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// let failures = assert_that!([1, 2, 3, 4])
     ///     .with_rendering_budget(
-    ///         RenderingBudget::builder()
-    ///             .max_items(2)
-    ///             .max_leaf_characters(1_000)
-    ///             .build(),
+    ///         RenderingBudget::default()
+    ///             .with_max_items(2)
+    ///             .with_max_leaf_characters(1_000),
     ///     )
     ///     .with_location(false)
     ///     .capture(|it| it.contains(5));
@@ -172,7 +171,7 @@ mod tests {
     #[test]
     fn budget_is_inherited_by_derived_assertions() {
         let failures = assert_that!((123_456,))
-            .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
+            .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
             .with_location(false)
             .capture(|it| {
                 it.satisfies(

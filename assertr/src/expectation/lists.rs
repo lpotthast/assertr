@@ -1,9 +1,11 @@
-use super::{
-    AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, Predicate, predicate,
+use super::{ExpectationDiagnostics, Predicate, predicate};
+use crate::{
+    __private::{Cons, Nil},
+    AssertionContext,
 };
 use alloc::vec::Vec;
 
-pub(super) mod sealed {
+pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
@@ -21,54 +23,15 @@ pub trait MatcherList<A: ?Sized, R>: sealed::Sealed {
     }
 
     /// Describes one expectation slot. The slot must be less than `len()`.
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription;
+    fn describe_at(
+        &self,
+        index: usize,
+        context: &AssertionContext<'_, R>,
+    ) -> crate::AssertionFailure;
 
     /// Evaluates one expectation slot. The slot must be less than `len()`.
-    fn evaluate_at(
-        &self,
-        index: usize,
-        actual: &A,
-        context: &mut MatchContext<'_, R>,
-    ) -> MatchResult;
+    fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool;
 }
-
-/// Wrapper constructed by `matchers!`. The internal list representation is unsupported.
-pub struct MatcherSequence<L>(L);
-
-#[doc(hidden)]
-pub fn matcher_sequence<L>(list: L) -> MatcherSequence<L> {
-    MatcherSequence(list)
-}
-
-impl<L> sealed::Sealed for MatcherSequence<L> {}
-
-impl<A: ?Sized, R, L> MatcherList<A, R> for MatcherSequence<L>
-where
-    L: MatcherList<A, R>,
-{
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
-        self.0.describe_at(index, context)
-    }
-
-    fn evaluate_at(
-        &self,
-        index: usize,
-        actual: &A,
-        context: &mut MatchContext<'_, R>,
-    ) -> MatchResult {
-        self.0.evaluate_at(index, actual, context)
-    }
-}
-
-#[doc(hidden)]
-pub struct Nil;
-
-#[doc(hidden)]
-pub struct Cons<H, T>(pub H, pub T);
 
 impl sealed::Sealed for Nil {}
 
@@ -79,67 +42,42 @@ impl<A: ?Sized, R> MatcherList<A, R> for Nil {
         0
     }
 
-    fn describe_at(&self, _: usize, _: &MatchContext<'_, R>) -> ConstraintDescription {
+    fn describe_at(&self, _: usize, _: &AssertionContext<'_, R>) -> crate::AssertionFailure {
         panic!("empty matcher list")
     }
 
-    fn evaluate_at(&self, _: usize, _: &A, _: &mut MatchContext<'_, R>) -> MatchResult {
+    fn evaluate_at(&self, _: usize, _: &A, _: &mut AssertionContext<'_, R>) -> bool {
         panic!("empty matcher list")
     }
 }
 
 impl<A: ?Sized, R, H, T> MatcherList<A, R> for Cons<H, T>
 where
-    H: AssertrMatcher<A, R>,
+    H: ExpectationDiagnostics<A, R>,
     T: MatcherList<A, R>,
 {
     fn len(&self) -> usize {
         1 + self.1.len()
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
+    fn describe_at(
+        &self,
+        index: usize,
+        context: &AssertionContext<'_, R>,
+    ) -> crate::AssertionFailure {
         if index == 0 {
-            self.0.describe(context)
+            context.describe(&self.0)
         } else {
             self.1.describe_at(index - 1, context)
         }
     }
 
-    fn evaluate_at(
-        &self,
-        index: usize,
-        actual: &A,
-        context: &mut MatchContext<'_, R>,
-    ) -> MatchResult {
+    fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool {
         if index == 0 {
-            self.0.evaluate(actual, context)
+            context.evaluate(actual, &self.0)
         } else {
             self.1.evaluate_at(index - 1, actual, context)
         }
-    }
-}
-
-impl<M> sealed::Sealed for [M] {}
-
-impl<A: ?Sized, R, M> MatcherList<A, R> for [M]
-where
-    M: AssertrMatcher<A, R>,
-{
-    fn len(&self) -> usize {
-        <[M]>::len(self)
-    }
-
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
-        self[index].describe(context)
-    }
-
-    fn evaluate_at(
-        &self,
-        index: usize,
-        actual: &A,
-        context: &mut MatchContext<'_, R>,
-    ) -> MatchResult {
-        self[index].evaluate(actual, context)
     }
 }
 
@@ -149,28 +87,29 @@ macro_rules! homogeneous {
 
         impl<A: ?Sized, R, M $(, const $size: usize)?> MatcherList<A, R> for $type
         where
-            M: AssertrMatcher<A, R>,
+            M: ExpectationDiagnostics<A, R>,
         {
             fn len(&self) -> usize {
-                self.as_slice().len()
+                <[M]>::len(self)
             }
 
-            fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
-                self[index].describe(context)
+            fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> crate::AssertionFailure {
+                context.describe(&self[index])
             }
 
             fn evaluate_at(
                 &self,
                 index: usize,
                 actual: &A,
-                context: &mut MatchContext<'_, R>,
-            ) -> MatchResult {
-                self[index].evaluate(actual, context)
+                context: &mut AssertionContext<'_, R>,
+            ) -> bool {
+                context.evaluate(actual, &self[index])
             }
         }
     };
 }
 
+homogeneous!([M]);
 homogeneous!(Vec<M>);
 homogeneous!([M; N], N);
 
@@ -184,16 +123,15 @@ where
         (**self).len()
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
+    fn describe_at(
+        &self,
+        index: usize,
+        context: &AssertionContext<'_, R>,
+    ) -> crate::AssertionFailure {
         (**self).describe_at(index, context)
     }
 
-    fn evaluate_at(
-        &self,
-        index: usize,
-        actual: &A,
-        context: &mut MatchContext<'_, R>,
-    ) -> MatchResult {
+    fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool {
         (**self).evaluate_at(index, actual, context)
     }
 }
@@ -205,17 +143,16 @@ impl<A: ?Sized, R> MatcherList<A, R> for () {
         0
     }
 
-    fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
+    fn describe_at(
+        &self,
+        index: usize,
+        context: &AssertionContext<'_, R>,
+    ) -> crate::AssertionFailure {
         <Nil as MatcherList<A, R>>::describe_at(&Nil, index, context)
     }
 
-    fn evaluate_at(
-        &self,
-        index: usize,
-        actual: &A,
-        context: &mut MatchContext<'_, R>,
-    ) -> MatchResult {
-        Nil.evaluate_at(index, actual, context)
+    fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool {
+        <Nil as MatcherList<A, R>>::evaluate_at(&Nil, index, actual, context)
     }
 }
 
@@ -225,15 +162,15 @@ macro_rules! tuple {
 
         impl<A: ?Sized, R, $($matcher),+> MatcherList<A, R> for ($($matcher,)+)
         where
-            $($matcher: AssertrMatcher<A, R>),+
+            $($matcher: ExpectationDiagnostics<A, R>),+
         {
             fn len(&self) -> usize {
                 $length
             }
 
-            fn describe_at(&self, index: usize, context: &MatchContext<'_, R>) -> ConstraintDescription {
+            fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> crate::AssertionFailure {
                 match index {
-                    $($slot => self.$slot.describe(context),)+
+                    $($slot => context.describe(&self.$slot),)+
                     _ => panic!("matcher slot out of bounds"),
                 }
             }
@@ -242,10 +179,10 @@ macro_rules! tuple {
                 &self,
                 index: usize,
                 actual: &A,
-                context: &mut MatchContext<'_, R>,
-            ) -> MatchResult {
+                context: &mut AssertionContext<'_, R>,
+            ) -> bool {
                 match index {
-                    $($slot => self.$slot.evaluate(actual, context),)+
+                    $($slot => context.evaluate(actual, &self.$slot),)+
                     _ => panic!("matcher slot out of bounds"),
                 }
             }
@@ -276,7 +213,9 @@ where
     predicates.into_iter().map(predicate).collect()
 }
 
-/// Constructs a reusable heterogeneous matcher list. Bare expressions mean equality.
+/// Constructs a reusable heterogeneous matcher list from explicit expectations.
+///
+/// Use [`eq`](crate::matchers::eq) or [`equal_to`](crate::matchers::equal_to) for equality.
 #[macro_export]
 macro_rules! matchers {
     (@list) => {
@@ -284,11 +223,11 @@ macro_rules! matchers {
     };
     (@list $head:expr $(, $tail:expr)* $(,)?) => {
         $crate::__private::Cons(
-            $crate::__private::normalize($head),
+            $head,
             $crate::matchers!(@list $($tail),*)
         )
     };
     ($($value:expr),* $(,)?) => {
-        $crate::__private::matcher_sequence($crate::matchers!(@list $($value),*))
+        $crate::matchers!(@list $($value),*)
     };
 }

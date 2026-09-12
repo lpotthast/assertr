@@ -7,20 +7,36 @@
 //! expected-key adapters used by bulk key assertions.
 
 mod assertions;
+mod entries_are;
+mod entry;
+mod entry_matcher_list;
 mod imp;
+mod matching;
 
-use alloc::borrow::{Cow, ToOwned};
-use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
-use alloc::rc::Rc;
-use alloc::string::String;
-use alloc::sync::Arc;
+use alloc::{
+    borrow::{Cow, ToOwned},
+    boxed::Box,
+    collections::BTreeMap,
+    rc::Rc,
+    string::String,
+    sync::Arc,
+};
 use core::borrow::Borrow;
 
 use crate::{assertions::HasLength, renderer::RenderingOrder};
 
+pub use entries_are::{EntriesAre, entries_are};
+pub use entry::{Entry, EntryRejection, entry};
+pub use entry_matcher_list::{EntryMatcherList, entry_matchers};
+
 pub use assertions::MapAssertions;
 pub(crate) use imp::FoundEntries;
+pub use imp::{
+    ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
+    DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue, ExactEntriesRejection,
+    MissingKeysRejection,
+};
+pub use matching::{ContainsEntryMatching, ContainsValueMatching};
 
 /// A keyed collection supporting iteration over its entries.
 ///
@@ -328,16 +344,14 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloc::borrow::Cow;
-    use alloc::boxed::Box;
-    use alloc::collections::BTreeMap;
-    use alloc::rc::Rc;
-    use alloc::string::String;
-    use alloc::sync::Arc;
-    use alloc::vec::Vec;
-    use core::cell::Cell;
-    use core::cmp::Ordering;
-    use core::hash::{Hash, Hasher};
+    use alloc::{
+        borrow::Cow, boxed::Box, collections::BTreeMap, rc::Rc, string::String, sync::Arc, vec::Vec,
+    };
+    use core::{
+        cell::Cell,
+        cmp::Ordering,
+        hash::{Hash, Hasher},
+    };
 
     use crate::prelude::*;
 
@@ -536,10 +550,10 @@ mod tests {
             .does_not_contain_entry(&OrdOnlyKey(1), 2)
             .contains_keys([OrdOnlyKey(1), OrdOnlyKey(2)])
             .contains_exactly_entries([(OrdOnlyKey(1), 1), (OrdOnlyKey(2), 2)])
-            .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+            .contains_exactly_entries_matching(crate::assertions::map::entry_matchers(
                 ([(OrdOnlyKey(1), is_positive), (OrdOnlyKey(2), is_positive)])
                     .into_iter()
-                    .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                    .map(|(key, p)| (key, crate::expectation::predicate(p))),
             ))
             .contains_exactly_entries_satisfying([
                 (OrdOnlyKey(1), satisfies_positive),
@@ -577,11 +591,13 @@ mod tests {
             .map(|key| (key.clone(), matches as fn(&i32) -> bool))
             .collect::<Vec<_>>();
         counts.reset();
-        assert_that!(map).contains_exactly_entries_matching(crate::matchers::entry_matchers(
-            (predicates)
-                .into_iter()
-                .map(|(key, p)| (key, crate::matchers::predicate(p))),
-        ));
+        assert_that!(map).contains_exactly_entries_matching(
+            crate::assertions::map::entry_matchers(
+                (predicates)
+                    .into_iter()
+                    .map(|(key, p)| (key, crate::expectation::predicate(p))),
+            ),
+        );
         assert_that!(counts.equality.get()).is_less_than(linear_comparison_bound);
 
         let assertions = map
@@ -596,8 +612,10 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn hash_map_adapter_supports_custom_hashers_and_references() {
-        use std::collections::HashMap;
-        use std::hash::{BuildHasherDefault, DefaultHasher};
+        use std::{
+            collections::HashMap,
+            hash::{BuildHasherDefault, DefaultHasher},
+        };
 
         let mut map: HashMap<String, i32, BuildHasherDefault<DefaultHasher>> =
             HashMap::with_hasher(BuildHasherDefault::default());
@@ -617,8 +635,10 @@ mod tests {
     #[test]
     #[allow(clippy::mutable_key_type)]
     fn hash_map_adapter_uses_hashed_lookup_instead_of_scanning_entries() {
-        use std::collections::HashMap;
-        use std::hash::{BuildHasherDefault, DefaultHasher};
+        use std::{
+            collections::HashMap,
+            hash::{BuildHasherDefault, DefaultHasher},
+        };
 
         let counts = Rc::new(LookupCounts::default());
         let map = (0..8)
@@ -665,10 +685,10 @@ mod tests {
             .does_not_contain_entry(&HashOnlyKey(1), 2)
             .contains_keys([HashOnlyKey(1), HashOnlyKey(2)])
             .contains_exactly_entries([(HashOnlyKey(1), 1), (HashOnlyKey(2), 2)])
-            .contains_exactly_entries_matching(crate::matchers::entry_matchers(
+            .contains_exactly_entries_matching(crate::assertions::map::entry_matchers(
                 ([(HashOnlyKey(1), is_positive), (HashOnlyKey(2), is_positive)])
                     .into_iter()
-                    .map(|(key, p)| (key, crate::matchers::predicate(p))),
+                    .map(|(key, p)| (key, crate::expectation::predicate(p))),
             ))
             .contains_exactly_entries_satisfying([
                 (HashOnlyKey(1), satisfies_positive),

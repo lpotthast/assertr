@@ -1,4 +1,4 @@
-use renamed_assertr::prelude::*;
+use renamed_assertr::{matchers::eq, prelude::*};
 
 struct User {
     name: String,
@@ -11,6 +11,9 @@ fn main() {
         age: 30,
     };
 
-    // A bare value checks equality. `..` leaves the other fields unchecked.
-    assert_that!(user).matches(partial!(User { name: "Alice", .. }));
+    // `eq` checks equality. `..` leaves the other fields unchecked.
+    assert_that!(user).matches(partial!(User {
+        name: eq("Alice"),
+        ..
+    }));
 }

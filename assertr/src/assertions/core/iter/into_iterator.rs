@@ -1,6 +1,8 @@
-use crate::{AssertThat, Mode, ValueRenderer, assertions::iterator, mode::Capture};
+use crate::{
+    AssertThat, ExpectationDiagnostics, Mode, ValueRenderer, assertions::iterator,
+    expectation::MatcherList, mode::Capture,
+};
 use alloc::vec::Vec;
-use assertr::matchers::{AssertrMatcher, MatcherList};
 
 /// Chainable assertions over a fresh borrowed iteration of a collection-like value.
 ///
@@ -8,6 +10,9 @@ use assertr::matchers::{AssertrMatcher, MatcherList};
 /// assertion. Chaining therefore performs one fresh borrowed traversal per assertion. Streaming,
 /// bounded-preview and potential-nontermination behavior matches [`super::IteratorAssertions`].
 /// Method names are prefixed to avoid collisions with more specific collection assertion traits.
+/// The temporary iterator stays alive until rejection diagnostics own their rendered values, then
+/// drops before failure handling or continuation. No iterator observation is repeated for
+/// diagnostics.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait IntoIteratorAssertions<T, R> {
@@ -32,13 +37,13 @@ pub trait IntoIteratorAssertions<T, R> {
     /// Asserts that a borrowed traversal contains an element matching `expected`.
     fn into_iter_contains_matching<P>(self, expected: P) -> Self
     where
-        P: AssertrMatcher<T, R>,
+        P: ExpectationDiagnostics<T, R>,
         R: ValueRenderer<usize>;
     /// Asserts that a borrowed traversal contains an element satisfying `assertions`.
     fn into_iter_contains_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that no element in a borrowed traversal equals `not_expected`.
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
@@ -49,8 +54,8 @@ pub trait IntoIteratorAssertions<T, R> {
     /// Asserts that no element in a borrowed traversal matches `expected`.
     fn into_iter_does_not_contain_matching<P>(self, expected: P) -> Self
     where
-        P: AssertrMatcher<T, R>,
-        R: ValueRenderer<usize>;
+        P: ExpectationDiagnostics<T, R>,
+        R: ValueRenderer<usize> + ValueRenderer<T>;
     /// Asserts that no element in a borrowed traversal satisfies `assertions`.
     fn into_iter_does_not_contain_satisfying<A>(self, assertions: A) -> Self
     where
@@ -76,7 +81,7 @@ pub trait IntoIteratorAssertions<T, R> {
     ) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that a borrowed traversal yields no elements.
     fn into_iter_is_empty(self) -> Self
@@ -126,7 +131,7 @@ where
     #[track_caller]
     fn into_iter_contains_matching<P>(self, expected: P) -> Self
     where
-        P: AssertrMatcher<T, R>,
+        P: ExpectationDiagnostics<T, R>,
         R: ValueRenderer<usize>,
     {
         self.track_assertion();
@@ -134,7 +139,6 @@ where
             &self,
             self.actual().into_iter(),
             &expected,
-            true,
             iterator::PositionReporting::Unavailable,
         );
         self
@@ -143,9 +147,9 @@ where
     fn into_iter_contains_satisfying<A>(self, assertions: A) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
+        R: Clone + ValueRenderer<usize>,
     {
-        self.into_iter_contains_matching(crate::matchers::satisfying(assertions))
+        self.into_iter_contains_matching(crate::expectation::satisfying(assertions))
     }
     #[track_caller]
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
@@ -165,15 +169,14 @@ where
     #[track_caller]
     fn into_iter_does_not_contain_matching<P>(self, expected: P) -> Self
     where
-        P: AssertrMatcher<T, R>,
-        R: ValueRenderer<usize>,
+        P: ExpectationDiagnostics<T, R>,
+        R: ValueRenderer<usize> + ValueRenderer<T>,
     {
         self.track_assertion();
-        iterator::matchers::membership::<_, T, _, _, _, _>(
+        iterator::matchers::no_membership::<_, T, _, _, _, _>(
             &self,
             self.actual().into_iter(),
             &expected,
-            false,
             iterator::PositionReporting::Unavailable,
         );
         self
@@ -184,7 +187,7 @@ where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
     {
-        self.into_iter_does_not_contain_matching(crate::matchers::satisfying(assertions))
+        self.into_iter_does_not_contain_matching(crate::expectation::satisfying(assertions))
     }
     #[track_caller]
     fn into_iter_contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
@@ -222,15 +225,20 @@ where
     ) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
+        R: Clone + ValueRenderer<usize>,
     {
-        self.into_iter_contains_exactly_in_any_order_matching(
-            assertions
-                .as_ref()
-                .iter()
-                .map(crate::matchers::satisfying)
-                .collect::<Vec<_>>(),
-        )
+        self.track_assertion();
+        let expected = assertions
+            .as_ref()
+            .iter()
+            .map(crate::expectation::satisfying)
+            .collect::<Vec<_>>();
+        iterator::matchers::unordered::<_, T, _, _, _, _>(
+            &self,
+            self.actual().into_iter(),
+            &expected,
+        );
+        self
     }
     #[track_caller]
     fn into_iter_is_empty(self) -> Self
@@ -269,9 +277,11 @@ where
 #[allow(clippy::trivially_copy_pass_by_ref)]
 mod tests {
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{
-            NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+        use crate::{
+            prelude::*,
+            test_support::{
+                NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+            },
         };
 
         #[test]
@@ -492,33 +502,34 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             vec![1, 2, 3]
                 .must()
-                .into_iter_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0));
+                .into_iter_contain_matching(crate::expectation::predicate(|it: &i32| *it % 2 == 0));
         }
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
-                into_iter_contains_matching(matchers::predicate(|it: &i32| *it > 7))
+                into_iter_contains_matching(crate::expectation::predicate(|it: &i32| *it > 7))
             );
         }
 
         #[test]
         fn succeeds_when_an_element_matches() {
-            assert_that!(vec![1, 2, 3])
-                .into_iter_contains_matching(matchers::predicate(|it: &i32| *it % 2 == 0));
+            assert_that!(vec![1, 2, 3]).into_iter_contains_matching(crate::expectation::predicate(
+                |it: &i32| *it % 2 == 0,
+            ));
         }
 
         #[test]
-        fn requires_no_element_renderer_for_opaque_elements() {
-            use crate::test_support::NumericRenderer;
+        fn custom_element_rendering_does_not_require_debug() {
+            use crate::test_support::SentinelRenderer;
 
             struct Opaque;
 
             assert_that!([Opaque])
-                .with_renderer(NumericRenderer)
+                .with_renderer(SentinelRenderer)
                 .with_location(false)
-                .into_iter_contains_matching(matchers::anything());
+                .into_iter_contains_matching(crate::expectation::anything());
         }
 
         #[test]
@@ -526,7 +537,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
-                    .into_iter_contains_matching(matchers::predicate(|it: &i32| *it > 7));
+                    .into_iter_contains_matching(crate::expectation::predicate(|it: &i32| *it > 7));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -613,6 +624,38 @@ mod tests {
                 -------- assertr --------
             "});
         }
+
+        #[test]
+        fn opaque_callback_failures_preserve_custom_rendering_and_budgets() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_value};
+
+            struct Opaque(usize);
+
+            fn check(it: AssertThat<'_, Opaque, Capture, CustomValueRenderer>) {
+                it.satisfies(
+                    |value| &value.0,
+                    |value| {
+                        value.is_equal_to(9);
+                    },
+                );
+            }
+
+            let values = [Opaque(1), Opaque(2)];
+            let failures = assert_that!(values)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+                .capture(|it| it.into_iter_contains_satisfying(check));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(1);
+            assert_that!(failures[0].omitted_children).is_equal_to(1);
+            let child = &failures[0].children[0];
+            assert_custom_value(child.actual.as_ref().unwrap(), &1_usize);
+            assert_custom_value(child.expected.as_ref().unwrap(), &9_usize);
+            assert_that!(child.path).is_empty();
+            crate::test_support::assert_custom_fact(&failures[0], "Consumed", 2);
+        }
     }
 
     mod into_iter_does_not_contain {
@@ -677,14 +720,14 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             vec![1, 2, 3]
                 .must()
-                .into_iter_not_contain_matching(matchers::predicate(|it: &i32| *it > 7));
+                .into_iter_not_contain_matching(crate::expectation::predicate(|it: &i32| *it > 7));
         }
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
-                into_iter_does_not_contain_matching(matchers::predicate(|it: &i32| {
+                into_iter_does_not_contain_matching(crate::expectation::predicate(|it: &i32| {
                     *it % 2 == 0
                 }))
             );
@@ -692,20 +735,23 @@ mod tests {
 
         #[test]
         fn succeeds_when_no_element_matches() {
-            assert_that!(vec![1, 2, 3])
-                .into_iter_does_not_contain_matching(matchers::predicate(|it: &i32| *it > 7));
+            assert_that!(vec![1, 2, 3]).into_iter_does_not_contain_matching(
+                crate::expectation::predicate(|it: &i32| *it > 7),
+            );
         }
 
         #[test]
-        fn requires_no_element_renderer_for_opaque_elements() {
-            use crate::test_support::NumericRenderer;
+        fn custom_element_rendering_does_not_require_debug() {
+            use crate::test_support::SentinelRenderer;
 
             struct Opaque;
 
             assert_that!([Opaque])
-                .with_renderer(NumericRenderer)
+                .with_renderer(SentinelRenderer)
                 .with_location(false)
-                .into_iter_does_not_contain_matching(matchers::predicate(|_: &Opaque| false));
+                .into_iter_does_not_contain_matching(crate::expectation::predicate(
+                    |_: &Opaque| false,
+                ));
         }
 
         #[test]
@@ -713,9 +759,9 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
-                    .into_iter_does_not_contain_matching(matchers::predicate(|it: &i32| {
-                        *it % 2 == 0
-                    }));
+                    .into_iter_does_not_contain_matching(crate::expectation::predicate(
+                        |it: &i32| *it % 2 == 0,
+                    ));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -728,7 +774,9 @@ mod tests {
                   - Consumed: 2
                   - Preview starts at: 0
                 Nested failures:
-                  - satisfies the constraint unexpectedly
+                  - Actual: 2
+
+                    matches the unwanted constraint
 
                     Constraint:
                         satisfies the predicate
@@ -788,7 +836,9 @@ mod tests {
                   - Consumed: 2
                   - Preview starts at: 0
                 Nested failures:
-                  - satisfies the constraint unexpectedly
+                  - Actual: 2
+
+                    matches the unwanted constraint
 
                     Constraint:
                         satisfies the assertions
@@ -883,19 +933,18 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             vec![1, 2]
                 .must()
-                .into_iter_contain_exactly_in_any_order_matching(matchers::predicate_list([
-                    is_at_most_two,
-                    is_one,
-                ]));
+                .into_iter_contain_exactly_in_any_order_matching(
+                    crate::expectation::predicate_list([is_at_most_two, is_one]),
+                );
         }
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
-                into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
-                    is_one, is_two, is_nine,
-                ]))
+                into_iter_contains_exactly_in_any_order_matching(
+                    crate::expectation::predicate_list([is_one, is_two, is_nine,])
+                )
             );
         }
 
@@ -918,12 +967,12 @@ mod tests {
         #[test]
         fn succeeds_when_a_maximum_matching_exists_for_overlapping_predicates() {
             assert_that!(vec![1, 2]).into_iter_contains_exactly_in_any_order_matching(
-                matchers::predicate_list([is_at_most_two, is_one]),
+                crate::expectation::predicate_list([is_at_most_two, is_one]),
             );
         }
 
         #[test]
-        fn requires_no_element_renderer_for_opaque_elements() {
+        fn custom_element_rendering_does_not_require_debug() {
             use crate::test_support::NumericRenderer;
 
             struct Opaque;
@@ -932,8 +981,8 @@ mod tests {
                 .with_renderer(NumericRenderer)
                 .with_location(false)
                 .into_iter_contains_exactly_in_any_order_matching(matchers![
-                    matchers::anything(),
-                    matchers::anything(),
+                    crate::expectation::anything(),
+                    crate::expectation::anything(),
                 ]);
         }
 
@@ -942,9 +991,9 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
-                    .into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
-                        is_one, is_two, is_nine,
-                    ]));
+                    .into_iter_contains_exactly_in_any_order_matching(
+                        crate::expectation::predicate_list([is_one, is_two, is_nine]),
+                    );
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"

@@ -5,8 +5,10 @@
 //! reach it through `$crate`, so no import is ever needed at a call site.
 
 pub mod assert_that_macro;
+pub(crate) mod field;
 #[cfg(feature = "fluent")]
 pub mod fluent_expressions;
+pub(crate) mod partial_match;
 
 use crate::assertions::core::pattern::Pattern;
 
@@ -19,11 +21,13 @@ pub fn new_pattern<P>(description: &'static str, predicate: P) -> Pattern<P> {
     Pattern::new(description, predicate)
 }
 
-pub use crate::matchers::lists::{Cons, Nil, matcher_sequence};
-pub use crate::matchers::normalize::{EqualityKind, MatcherKind, Normalize, normalize};
+/// Empty tail of a macro-generated heterogeneous list.
+pub struct Nil;
+/// One element of a macro-generated heterogeneous list.
+pub struct Cons<H, T>(pub H, pub T);
 
-pub use crate::matchers::field::field;
-pub use crate::matchers::partial_match::partial_match;
+pub use field::field;
+pub use partial_match::partial_match;
 
 #[doc(hidden)]
-pub use crate::matchers::partial_match::PartialMatch;
+pub use partial_match::PartialMatch;

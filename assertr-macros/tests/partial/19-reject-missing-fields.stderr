@@ -1,11 +1,11 @@
 error: pattern requires `..` due to inaccessible fields
   --> tests/partial/19-reject-missing-fields.rs:10:48
    |
-10 |     assert_that!(Point { x: 1, y: 2 }).matches(partial!(Point { x: 1 }));
-   |                                                ^^^^^^^^^^^^^^^^^^^^^^^^
+10 |     assert_that!(Point { x: 1, y: 2 }).matches(partial!(Point { x: eq(1) }));
+   |                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: this error originates in the macro `partial` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: ignore the inaccessible and unused fields
    |
-10 |     assert_that!(Point { x: 1, y: 2 }).matches(partial!(Point { x: 1 }), ..);
-   |                                                                        ++++
+10 |     assert_that!(Point { x: 1, y: 2 }).matches(partial!(Point { x: eq(1) }), ..);
+   |                                                                            ++++

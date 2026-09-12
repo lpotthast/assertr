@@ -15,8 +15,7 @@
 //!     .capture(|it| it.is_equal_to(UserId(9)));
 //!
 //! let report = ToHumanReadableText.render(&failures[0]);
-//! assert!(report.contains("user #7"));
-//! assert!(report.contains("user #9"));
+//! assert_that!(report).contains("user #7").contains("user #9");
 //! ```
 //!
 //! The closure renders the subject's type only. If assertions also display collection elements,
@@ -75,10 +74,36 @@
 //! ## Render values in custom assertions
 //!
 //! Custom assertion implementations use [`AssertThat::render`](crate::AssertThat::render) to apply
-//! the chain's renderer and budget. Its [`RenderingContext`] supplies adapters for single values,
-//! collections, and maps. Pass those adapters to the failure builder instead of formatting values
-//! directly. The [custom assertions guide](crate#custom-assertions) shows a complete
-//! implementation.
+//! the chain's renderer and budget. Expectation definitions obtain the same [`RenderingContext`]
+//! through [`AssertionContext::render`](crate::AssertionContext::render). Pass adapters to the
+//! failure builder or [`Fact`](crate::Fact) constructors:
+//!
+//! | Evidence | Adapter |
+//! | --- | --- |
+//! | One leaf | [`value`](RenderingContext::value) |
+//! | Collection with its presentation and type | [`collection`](RenderingContext::collection), [`borrowed_collection`](RenderingContext::borrowed_collection) |
+//! | Collection with meaningful positions | [`stable_collection`](RenderingContext::stable_collection), [`stable_borrowed_collection`](RenderingContext::stable_borrowed_collection) |
+//! | Map with its ordering policy and type | [`map`](RenderingContext::map) |
+//! | Synthetic list or set | [`values`](RenderingContext::values), [`borrowed_values`](RenderingContext::borrowed_values) |
+//! | Synthetic key/value tuples | [`entry_list`](RenderingContext::entry_list) |
+//! | One-field tuple variant or named struct | [`variant`](RenderingContext::variant), [`struct_field`](RenderingContext::struct_field) |
+//! | Inaccessible struct field | [`unavailable_struct_field`](RenderingContext::unavailable_struct_field) |
+//!
+//! Synthetic groups have no outer Rust type. Select their diagnostic order with [`RenderingOrder`],
+//! using [`RenderedValues::with_order`] or the `entry_list` argument. Collection adapters follow
+//! [`CollectionPresentation`]. Positional adapters require
+//! [`StableOrder`](crate::assertions::collection::StableOrder) and always preserve iteration order.
+//!
+//! Construction is lazy and needs no renderer capability. Formatting or converting with
+//! [`IntoRendered`] requires only the displayed leaf renderers, traverses the borrowed source,
+//! and applies the budget. Sorted groups order rendered text before retaining the requested
+//! number of items. The budget limits retained output, not traversal work or peak memory.
+//! Reuse the resulting [`Rendered`] tree to avoid rendering again.
+//!
+//! [`RenderingContext::budget`] returns a copy of the active limits for custom evidence collectors.
+//! Keep assertion truth independent of retention and record omitted evidence in the failure
+//! builder. The [custom assertions guide](crate#structural-evidence) demonstrates collection,
+//! map, and wrapper diagnostics without constructing metadata or rendering syntax by hand.
 
 mod budget;
 mod context;
@@ -87,12 +112,14 @@ mod rendered;
 mod type_info;
 mod value;
 
-pub use budget::{RenderingBudget, RenderingBudgetBuilder};
-pub use context::{RenderedValue, RenderedValues, RenderingContext};
+pub use budget::RenderingBudget;
+pub use context::{
+    EntryList, MapEntries, RenderedValue, RenderedValues, RenderingContext, StructField,
+    UnavailableStructField, Variant,
+};
 pub use presentation::{CollectionPresentation, GroupStyle, RenderingOrder};
 pub use rendered::{IntoRendered, Rendered, RenderedBody};
 pub use type_info::{TypeHint, Typed};
 pub use value::{CustomRenderer, DebugRenderer, SensitiveValuePolicy, ValueRenderer};
 
-pub(crate) use context::Compact;
-pub(crate) use context::omission;
+pub(crate) use context::{Compact, omission};

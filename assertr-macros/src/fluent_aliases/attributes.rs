@@ -109,6 +109,7 @@ fn is_helper_meta(meta: &Meta) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use renamed_assertr::prelude::*;
     use syn::{Attribute, parse_quote};
 
     use super::remove_helper_attributes;
@@ -129,7 +130,7 @@ mod tests {
         let expected: Vec<Attribute> = vec![parse_quote! {
             #[cfg_attr(feature = "fluent", allow(non_snake_case), must_use)]
         }];
-        assert_eq!(attributes, expected);
+        assert_that!(attributes).is_equal_to(expected);
     }
 
     #[test]
@@ -143,6 +144,6 @@ mod tests {
         remove_helper_attributes(&mut attributes);
 
         let expected: Vec<Attribute> = vec![parse_quote! { #[track_caller] }];
-        assert_eq!(attributes, expected);
+        assert_that!(attributes).is_equal_to(expected);
     }
 }

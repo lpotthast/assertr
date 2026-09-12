@@ -2,8 +2,51 @@ use crate::failure::FailureKind;
 use crate::mode::{Mode, Panic};
 use crate::prelude::{BoolAssertions, PartialEqAssertions, PartialOrdAssertions};
 use crate::{AssertThat, ValueRenderer};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use alloc::borrow::ToOwned;
 use alloc::string::String;
+
+/// Checks printable ASCII and horizontal tabs, returning the accepted header string.
+pub struct IsAscii;
+impl<R> Expectation<http::HeaderValue, R> for IsAscii {
+    type Success<'a>
+        = &'a str
+    where
+        Self: 'a,
+        http::HeaderValue: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        http::HeaderValue: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a http::HeaderValue,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        actual.to_str().map_err(|_| ())
+    }
+}
+impl<R> ExpectationDiagnostics<http::HeaderValue, R> for IsAscii
+where
+    R: ValueRenderer<http::HeaderValue>,
+{
+    const KIND: FailureKind = FailureKind::Predicate;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a http::HeaderValue, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is ASCII"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not ASCII"),
+        }
+    }
+}
 
 /// Non-extracting assertions for [`http::HeaderValue`].
 #[allow(clippy::return_self_not_must_use)]
@@ -102,16 +145,7 @@ impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
     where
         R: ValueRenderer<http::header::HeaderValue>,
     {
-        self.track_assertion();
-
-        if self.actual().to_str().is_err() {
-            self.failure(FailureKind::Predicate)
-                .actual(self.render().value(self.actual()))
-                .relation("is not ASCII")
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsAscii)
     }
 
     #[track_caller]
@@ -120,17 +154,10 @@ impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
         A: for<'a> FnOnce(AssertThat<'a, &'a str, M, R>),
         R: ValueRenderer<http::header::HeaderValue> + Clone,
     {
-        self.track_assertion();
-
-        if self.actual().to_str().is_ok() {
-            self.satisfies_ref(|hv| hv.to_str().expect("already checked"), assertions)
-        } else {
-            self.failure(FailureKind::Predicate)
-                .actual(self.render().value(self.actual()))
-                .relation("is not ASCII")
-                .raise();
-            self
+        if let Some(value) = self.test_assertion(&IsAscii) {
+            assertions(self.derive_owned(|_| value));
         }
+        self
     }
 }
 
@@ -157,13 +184,11 @@ impl<'t, R> HttpHeaderValueExtractAssertions<'t, R>
     where
         R: ValueRenderer<http::header::HeaderValue>,
     {
-        self.is_ascii().map(|it| {
-            it.borrowed()
-                .to_str()
-                .expect("already checked")
-                .to_owned()
-                .into()
-        })
+        let value = self
+            .test_assertion(&IsAscii)
+            .expect("Panic mode raises invalid ASCII")
+            .to_owned();
+        self.map(|_| value.into())
     }
 }
 

@@ -1,7 +1,90 @@
 use crate::{
-    AssertThat, DebugRenderer, Fact, Mode, ValueRenderer, condition::AssertrCondition,
-    failure::FailureKind,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Fact, Mode,
+    ValueRenderer,
+    condition::AssertrCondition,
+    failure::{FailureBuilder, FailureKind},
 };
+use core::any::type_name;
+
+/// A reusable assertion adapting an [`AssertrCondition`] and retaining its original typed error.
+///
+/// Use [`new`](Self::new) for structural expectations or [`Expectation::evaluate`] for evaluation
+/// alone. [`ConditionAssertions`] and [`IterableConditionAssertions`] execute this same assertion.
+/// Diagnostics render only the condition's error, without requiring a subject renderer.
+///
+/// ```
+/// use assertr::prelude::*;
+/// use assertr::assertions::condition::Condition;
+///
+/// struct IsEven;
+/// impl AssertrCondition<i32> for IsEven {
+///     type Error = &'static str;
+///     fn test(&self, value: &i32) -> Result<(), Self::Error> {
+///         if value % 2 == 0 { Ok(()) } else { Err("value is odd") }
+///     }
+/// }
+///
+/// let even = Condition::new(IsEven);
+/// assert_that!(2).matches(&even);
+/// ```
+pub struct Condition<C>(C);
+
+/// Adapts a domain condition without requiring a subject renderer.
+///
+/// This is a convenience constructor for [`Condition::new`]. Diagnostic evaluation renders the
+/// original error through `ValueRenderer<C::Error>`. The default renderer requires `Debug`.
+/// Probes never render condition errors.
+pub fn condition<C>(condition: C) -> Condition<C> {
+    Condition::new(condition)
+}
+
+impl<C> Condition<C> {
+    /// Owns a condition. Pass a reference to keep the condition usable elsewhere.
+    #[must_use]
+    pub const fn new(condition: C) -> Self {
+        Self(condition)
+    }
+}
+
+impl<T, C: AssertrCondition<T>, R> Expectation<T, R> for Condition<C> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = C::Error
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn evaluate(&self, actual: &T, _: &AssertionContext<'_, R>) -> Result<(), C::Error> {
+        self.0.test(actual)
+    }
+}
+
+impl<T, C: AssertrCondition<T>, R: ValueRenderer<C::Error>> ExpectationDiagnostics<T, R>
+    for Condition<C>
+{
+    const KIND: FailureKind = FailureKind::Predicate;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, C::Error)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("satisfies the condition")
+                .expected(type_name::<C>()),
+            Some((_, error)) => failure
+                .relation("does not match the condition")
+                .fact(Fact::note(render.value(&error))),
+        }
+    }
+}
 
 /// Assertions that apply a reusable [`AssertrCondition`] to the subject.
 ///
@@ -38,14 +121,7 @@ impl<T, M: Mode, R> ConditionAssertions<T, R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<C::Error>,
     {
-        self.track_assertion();
-        if let Err(err) = crate::matchers::condition(&condition).test(self.actual()) {
-            self.failure(FailureKind::Predicate)
-                .relation("does not match the condition")
-                .fact(Fact::note(self.render().value(&err)))
-                .raise();
-        }
-        self
+        self.apply_assertion(Condition::new(condition))
     }
 
     #[track_caller]
@@ -95,13 +171,10 @@ where
         R: ValueRenderer<C::Error>,
     {
         self.track_assertion();
+        let condition = Condition::new(condition);
+        let location = core::panic::Location::caller();
         for actual in self.actual() {
-            if let Err(err) = crate::matchers::condition(&condition).test(actual) {
-                self.failure(FailureKind::Predicate)
-                    .relation("does not match the condition")
-                    .fact(Fact::note(self.render().value(&err)))
-                    .raise();
-            }
+            self.test_observation_after_tracking(actual, &condition, location);
         }
         self
     }
@@ -117,8 +190,10 @@ where
 
 #[cfg(test)]
 mod renderer_contract {
-    use crate::prelude::*;
-    use crate::test_support::{NoRenderer, assert_trait_impl};
+    use crate::{
+        prelude::*,
+        test_support::{NoRenderer, assert_trait_impl},
+    };
 
     #[test]
     fn traits_are_implemented_without_renderer_support() {
@@ -157,18 +232,13 @@ mod tests {
         }
     }
     fn assert_condition_error(failure: &AssertionFailure) {
-        assert_eq!(failure.facts[0].label, "");
-        assert_eq!(
-            failure.facts[0].value.type_name,
-            Some(core::any::type_name::<Error>())
-        );
-        assert_eq!(
-            failure.facts[0].value.body,
-            RenderedBody::Text {
-                text: "err".into(),
-                omitted_characters: 6,
-            }
-        );
+        assert_that!(failure.facts[0].label).is_equal_to("");
+        assert_that!(failure.facts[0].value.type_name)
+            .is_equal_to(Some(core::any::type_name::<Error>()));
+        assert_that!(failure.facts[0].value.body).is_equal_to(RenderedBody::Text {
+            text: "err".into(),
+            omitted_characters: 6,
+        });
     }
     mod is {
         use super::*;
@@ -198,13 +268,20 @@ mod tests {
         }
         #[test]
         fn typed_errors_need_no_formatting_traits_or_subject_renderer() {
+            use crate::{
+                Expectation,
+                assertions::condition::Condition,
+                test_support::{NoRenderer, assert_trait_impl},
+            };
             use indoc::formatdoc;
+
+            assert_trait_impl!(Condition<Reject> => Expectation<u32, NoRenderer>);
 
             let subject = 42_u32;
             let failures = assert_that!(subject)
                 .with_renderer(ErrorRenderer)
                 .with_location(false)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
                 .capture(|it| it.is(Reject));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
@@ -274,8 +351,12 @@ mod tests {
             let failures = assert_that!([42_u32, 43])
                 .with_renderer(ErrorRenderer)
                 .with_location(false)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
-                .capture(|it| it.are(Reject));
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
+                .capture(|it| {
+                    let it = it.are(Reject);
+                    assert_that!(it.state.records.assertion_count()).is_equal_to(1);
+                    it
+                });
             assert_that!(failures).contains_exactly_satisfying(
                 [|element: AssertThat<AssertionFailure, Capture>| {
                     element.derive(|value| value).has_text_report(formatdoc! {r"
@@ -292,6 +373,29 @@ mod tests {
                     assert_condition_error(element.actual());
                 }; 2],
             );
+        }
+
+        #[test]
+        fn panic_mode_stops_at_the_first_rejection() {
+            use core::sync::atomic::{AtomicUsize, Ordering};
+
+            struct Counted<'a>(&'a AtomicUsize);
+            impl AssertrCondition<u32> for Counted<'_> {
+                type Error = Error;
+                fn test(&self, value: &u32) -> Result<(), Error> {
+                    self.0.fetch_add(1, Ordering::Relaxed);
+                    Err(Error(*value))
+                }
+            }
+
+            let calls = AtomicUsize::new(0);
+            assert_that_panic_by(|| {
+                assert_that!([42_u32, 43])
+                    .with_renderer(ErrorRenderer)
+                    .are(Counted(&calls));
+            })
+            .has_type::<String>();
+            assert_that!(calls.load(Ordering::Relaxed)).is_equal_to(1);
         }
     }
     mod have {
@@ -321,7 +425,7 @@ mod tests {
     }
     mod matches {
         use super::*;
-        use crate::matchers::{MatchContext, all_of, condition};
+        use crate::{assertions::condition::condition, expectation::all_of};
         use indoc::formatdoc;
 
         struct NeverRender;
@@ -337,7 +441,7 @@ mod tests {
             let failures = assert_that!(42_u32)
                 .with_renderer(ErrorRenderer)
                 .with_location(false)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
                 .capture(|it| it.matches(matcher));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
@@ -362,9 +466,9 @@ mod tests {
 
         #[test]
         fn probes_do_not_render_condition_errors() {
-            let context = MatchContext::new(&NeverRender, RenderingBudget::default());
+            let context = AssertionContext::new(&NeverRender, RenderingBudget::default());
             assert_that!(context.probe(&42_u32, &condition(Reject))).is_false();
-            assert_that!(context.into_failures()).is_empty();
+            assert_that!(context.into_evidence().children).is_empty();
         }
 
         #[test]
@@ -372,8 +476,8 @@ mod tests {
             let failures = assert_that!(42_u32)
                 .with_renderer(NeverRender)
                 .with_location(false)
-                .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
-                .capture(|it| it.matches(condition(Reject)));
+                .with_rendering_budget(RenderingBudget::default().with_max_items(0))
+                .capture(|it| it.matches(all_of((condition(Reject),))));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element.derive(|value| value).has_text_report(formatdoc! {r"

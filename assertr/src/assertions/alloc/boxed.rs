@@ -1,12 +1,58 @@
 use crate::{
-    AssertThat, Fact,
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact,
     actual::Actual,
-    failure::FailureKind,
+    failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
 };
-use alloc::boxed::Box;
-use alloc::string::String;
+use alloc::{boxed::Box, string::String};
 use core::any::{Any, type_name, type_name_of_val};
+
+/// Checks a boxed or captured panic payload's concrete type, returning a borrowed value.
+/// Both ordinary checks and downcasting assertions execute this definition without a renderer.
+pub struct IsOfType<E>(core::marker::PhantomData<fn() -> E>);
+
+impl<E> IsOfType<E> {
+    /// Selects the expected concrete type.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(core::marker::PhantomData)
+    }
+}
+
+impl<E> Default for IsOfType<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<E: 'static, R> Expectation<Box<dyn Any>, R> for IsOfType<E> {
+    type Success<'a> = &'a E;
+    type Rejection<'a> = &'a dyn Any;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Box<dyn Any>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<&'a E, &'a dyn Any> {
+        actual.downcast_ref::<E>().ok_or(&**actual)
+    }
+}
+
+impl<E: 'static, R> ExpectationDiagnostics<Box<dyn Any>, R> for IsOfType<E> {
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Box<dyn Any>, &'a dyn Any)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure
+                .relation("is of the expected type")
+                .expected(type_name::<E>()),
+            Some((_, any)) => explain_type_mismatch::<E, _>(any, failure, ERASED_TYPE_NOTE),
+        }
+    }
+}
 
 /// Explains the erased type name reported for a box whose payload is neither a `&str` nor a
 /// `String`.
@@ -24,16 +70,7 @@ pub trait BoxAssertions<'t, R> {
 impl<'t, M: Mode, R> BoxAssertions<'t, R> for AssertThat<'t, Box<dyn Any>, M, R> {
     #[track_caller]
     fn is_of_type<E: 'static>(self) -> Self {
-        self.track_assertion();
-        if !self.actual().is::<E>() {
-            type_mismatch::<_, _, _, E>(
-                &self,
-                FailureKind::Variant,
-                &**self.actual(),
-                ERASED_TYPE_NOTE,
-            );
-        }
-        self
+        self.apply_assertion(IsOfType::<E>::new())
     }
 }
 
@@ -58,7 +95,7 @@ pub trait BoxExtractAssertions<'t, R> {
 impl<'t, R> BoxExtractAssertions<'t, R> for AssertThat<'t, Box<dyn Any>, Panic, R> {
     #[track_caller]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
-        downcast(self, FailureKind::Variant, ERASED_TYPE_NOTE)
+        downcast(self.apply_assertion(IsOfType::<E>::new()))
     }
 
     #[track_caller]
@@ -66,100 +103,51 @@ impl<'t, R> BoxExtractAssertions<'t, R> for AssertThat<'t, Box<dyn Any>, Panic, 
     where
         R: Clone,
     {
-        self.track_assertion();
-
-        match self.actual().downcast_ref::<E>() {
-            Some(casted) => self.derive_owned(|_actual| casted),
-            None => raise_type_mismatch::<_, _, E>(
-                self,
-                FailureKind::Variant,
-                &**self.actual(),
-                ERASED_TYPE_NOTE,
-            ),
-        }
+        let value = self
+            .test_assertion(&const { IsOfType::<E>::new() })
+            .expect("Panic mode raises rejected type checks");
+        self.derive_owned(|_| value)
     }
 }
 
-/// Downcasts a boxed `Any` subject to `E`.
-///
-/// This is the body of every `has_type` over a `Box<dyn Any>`, shared with the panic-payload
-/// assertions. A box holding another type raises a failure of `kind`, with `erased_note` attached
-/// when that type cannot be named.
-#[track_caller]
-pub(super) fn downcast<'t, E: 'static, R>(
-    this: AssertThat<'t, Box<dyn Any>, Panic, R>,
-    kind: FailureKind,
-    erased_note: &'static str,
-) -> AssertThat<'t, E, Panic, R> {
-    this.track_assertion();
-    let AssertThat { actual, state } = this;
-
-    let actual = match actual {
-        Actual::Borrowed(boxed) => match boxed.downcast_ref::<E>() {
-            Some(casted) => {
-                return AssertThat {
-                    actual: Actual::Borrowed(casted),
-                    state,
-                };
-            }
-            None => Actual::Borrowed(boxed),
-        },
-        Actual::Owned(boxed) => match boxed.downcast::<E>() {
-            Ok(casted) => {
-                return AssertThat {
-                    actual: Actual::Owned(*casted),
-                    state,
-                };
-            }
-            Err(boxed) => Actual::Owned(boxed),
-        },
-    };
-
-    let this = AssertThat { actual, state };
-    raise_type_mismatch::<_, _, E>(&this, kind, &**this.actual(), erased_note)
+/// Transfers ownership after a successful type expectation. No assertion is tracked here.
+pub(super) fn downcast<E: 'static, R>(
+    this: AssertThat<'_, Box<dyn Any>, Panic, R>,
+) -> AssertThat<'_, E, Panic, R> {
+    this.map(|actual| match actual {
+        Actual::Borrowed(boxed) => {
+            Actual::Borrowed(boxed.downcast_ref::<E>().expect("already checked"))
+        }
+        Actual::Owned(boxed) => Actual::Owned(
+            *boxed
+                .downcast::<E>()
+                .unwrap_or_else(|_| unreachable!("already checked")),
+        ),
+    })
 }
 
-/// Raises the failure of a downcast of `any` to `E` on a panic-mode chain and therefore never
-/// returns.
-///
-/// The payload types `panic!` produces, `&str` and `String`, are named. Any other type is reported
-/// as the erased `dyn Any`, explained by `erased_note`.
-#[track_caller]
-pub(super) fn raise_type_mismatch<T, R, E: 'static>(
-    this: &AssertThat<'_, T, Panic, R>,
-    kind: FailureKind,
+/// Names common string payloads and explains other erased payload types.
+pub(super) fn explain_type_mismatch<E: 'static, Target>(
     any: &dyn Any,
+    failure: FailureBuilder<Target>,
     erased_note: &'static str,
-) -> ! {
-    type_mismatch::<_, _, _, E>(this, kind, any, erased_note);
-    unreachable!("Panic mode always panics on fail")
-}
-
-#[track_caller]
-pub(super) fn type_mismatch<T, M: Mode, R, E: 'static>(
-    this: &AssertThat<'_, T, M, R>,
-    kind: FailureKind,
-    any: &dyn Any,
-    erased_note: &'static str,
-) {
+) -> FailureBuilder<Target> {
     let (actual_type_name, erased) = if any.is::<&str>() {
         ("&str", false)
     } else if any.is::<String>() {
         ("String", false)
     } else {
-        // `type_name_of_val` cannot see through the trait object and yields "dyn core::any::Any".
         (type_name_of_val(any), true)
     };
-
-    let mut failure = this
-        .failure(kind)
-        .actual(format_args!("{actual_type_name}"))
+    let failure = failure
+        .actual(actual_type_name)
         .relation("is not of the expected type")
-        .expected(format_args!("{}", type_name::<E>()));
+        .expected(type_name::<E>());
     if erased {
-        failure = failure.fact(Fact::note(erased_note));
+        failure.fact(Fact::note(erased_note))
+    } else {
+        failure
     }
-    failure.raise();
 }
 
 #[cfg(test)]
@@ -204,9 +192,7 @@ mod tests {
             let failures = assert_that!(value)
                 .with_location(false)
                 .capture(BoxAssertions::is_of_type::<u32>);
-            assert_eq!(
-                failures[0].to_string(),
-                indoc::indoc! {"
+            assert_that!(failures[0].to_string()).is_equal_to(indoc::indoc! {"
                 -------- assertr --------
                 Expression: `value`
 
@@ -216,8 +202,7 @@ mod tests {
 
                 Expected: u32
                 -------- assertr --------
-            "}
-            );
+            "});
         }
     }
 
@@ -236,6 +221,8 @@ mod tests {
                 AssertThat<'static, Box<dyn core::any::Any>, Panic, NoRenderer>
                     => BoxExtractAssertions<'static, NoRenderer>
             );
+
+            assert_trait_impl!(super::super::IsOfType<i32> => crate::ExpectationDiagnostics<Box<dyn core::any::Any>, NoRenderer>);
         }
     }
 

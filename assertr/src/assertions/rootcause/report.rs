@@ -1,9 +1,410 @@
 use crate::failure::FailureKind;
 use crate::{AssertThat, Mode, ValueRenderer, mode::Panic};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use alloc::format;
 use core::any::{TypeId, type_name};
 use core::fmt::Display;
 use rootcause::markers::Dynamic;
+
+/// Compares the observed direct child count.
+pub struct HasChildCount(usize);
+impl<'r, C: ?Sized, O, T, R> Expectation<rootcause::ReportRef<'r, C, O, T>, R> for HasChildCount {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    type Rejection<'a>
+        = usize
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a rootcause::ReportRef<'r, C, O, T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let count = actual.children().len();
+        if count == self.0 { Ok(()) } else { Err(count) }
+    }
+}
+impl<'r, C: ?Sized, O, T, R> ExpectationDiagnostics<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasChildCount
+where
+    R: ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a rootcause::ReportRef<'r, C, O, T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has the expected child count")
+                .expected(render.value(&self.0)),
+            Some((_, count)) => failure
+                .actual(render.value(&count))
+                .relation("is not the expected child count")
+                .expected(render.value(&self.0)),
+        }
+    }
+}
+impl HasChildCount {
+    /// Expects this count.
+    #[must_use]
+    pub const fn new(expected: usize) -> Self {
+        Self(expected)
+    }
+}
+/// Compares the observed direct attachment count.
+pub struct HasAttachmentCount(usize);
+impl<'r, C: ?Sized, O, T, R> Expectation<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasAttachmentCount
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    type Rejection<'a>
+        = usize
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a rootcause::ReportRef<'r, C, O, T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let count = actual.attachments().len();
+        if count == self.0 { Ok(()) } else { Err(count) }
+    }
+}
+impl<'r, C: ?Sized, O, T, R> ExpectationDiagnostics<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasAttachmentCount
+where
+    R: ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a rootcause::ReportRef<'r, C, O, T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has the expected attachment count")
+                .expected(render.value(&self.0)),
+            Some((_, count)) => failure
+                .actual(render.value(&count))
+                .relation("is not the expected attachment count")
+                .expected(render.value(&self.0)),
+        }
+    }
+}
+impl HasAttachmentCount {
+    /// Expects this count.
+    #[must_use]
+    pub const fn new(expected: usize) -> Self {
+        Self(expected)
+    }
+}
+/// Compares the rootcause-formatted current context display value once.
+pub struct HasCurrentContextDisplayValue<E>(E);
+impl<'r, C: ?Sized, O, T, R, E> Expectation<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasCurrentContextDisplayValue<E>
+where
+    E: Display,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    type Rejection<'a>
+        = (alloc::string::String, alloc::string::String)
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a rootcause::ReportRef<'r, C, O, T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let actual = format!("{}", actual.format_current_context());
+        let expected = format!("{}", self.0);
+        if actual == expected {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+}
+impl<'r, C: ?Sized, O, T, R, E> ExpectationDiagnostics<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasCurrentContextDisplayValue<E>
+where
+    E: Display,
+    R: ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a rootcause::ReportRef<'r, C, O, T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has the expected current context display value")
+                .expected(render.value((format!("{}", self.0)).as_str())),
+            Some((_, (actual, expected))) => failure
+                .actual(render.value(actual.as_str()))
+                .relation("is not the expected current context display value")
+                .expected(render.value(expected.as_str())),
+        }
+    }
+}
+impl<E> HasCurrentContextDisplayValue<E> {
+    /// Expects this formatted current context.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+/// Compares the rootcause-formatted current context debug string once.
+pub struct HasCurrentContextDebugString<E>(E);
+impl<'r, C: ?Sized, O, T, R, E> Expectation<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasCurrentContextDebugString<E>
+where
+    E: AsRef<str>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    type Rejection<'a>
+        = (alloc::string::String, &'a str)
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a rootcause::ReportRef<'r, C, O, T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let actual = format!("{:?}", actual.format_current_context());
+        let expected = self.0.as_ref();
+        if actual == expected {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+}
+impl<'r, C: ?Sized, O, T, R, E> ExpectationDiagnostics<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasCurrentContextDebugString<E>
+where
+    E: AsRef<str>,
+    R: ValueRenderer<str>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a rootcause::ReportRef<'r, C, O, T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has the expected current context debug string")
+                .expected(render.value(self.0.as_ref())),
+            Some((_, (actual, expected))) => failure
+                .actual(render.value(actual.as_str()))
+                .relation("is not the expected current context debug string")
+                .expected(render.value(expected)),
+        }
+    }
+}
+impl<E> HasCurrentContextDebugString<E> {
+    /// Expects this formatted current context.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+/// Checks the concrete type of a report reference's current context.
+pub struct HasCurrentContextType<E>(core::marker::PhantomData<fn() -> E>);
+impl<'r, C: ?Sized, O, T, R, E> Expectation<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasCurrentContextType<E>
+where
+    E: 'static,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    type Rejection<'a>
+        = &'static str
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, C, O, T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a rootcause::ReportRef<'r, C, O, T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.current_context_type_id() == TypeId::of::<E>() {
+            Ok(())
+        } else {
+            Err(actual.current_context_type_name())
+        }
+    }
+}
+impl<'r, C: ?Sized, O, T, R, E> ExpectationDiagnostics<rootcause::ReportRef<'r, C, O, T>, R>
+    for HasCurrentContextType<E>
+where
+    E: 'static,
+{
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a rootcause::ReportRef<'r, C, O, T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        explain_context_type::<E, _>(rejected.map(|(_, name)| name), failure)
+    }
+}
+impl<E> HasCurrentContextType<E> {
+    /// Expects the current context to have type `E`.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(core::marker::PhantomData)
+    }
+}
+impl<E> Default for HasCurrentContextType<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+/// Downcasts the current context once and returns its borrowed value.
+pub struct HasCurrentContext<E>(core::marker::PhantomData<fn() -> E>);
+impl<'r, O, T, E, R> Expectation<rootcause::ReportRef<'r, Dynamic, O, T>, R>
+    for HasCurrentContext<E>
+where
+    E: 'static,
+{
+    type Success<'a>
+        = &'a E
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, Dynamic, O, T>: 'a;
+    type Rejection<'a>
+        = &'static str
+    where
+        Self: 'a,
+        rootcause::ReportRef<'r, Dynamic, O, T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a rootcause::ReportRef<'r, Dynamic, O, T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        actual
+            .downcast_current_context::<E>()
+            .ok_or_else(|| actual.current_context_type_name())
+    }
+}
+impl<'r, O, T, E, R> ExpectationDiagnostics<rootcause::ReportRef<'r, Dynamic, O, T>, R>
+    for HasCurrentContext<E>
+where
+    E: 'static,
+{
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(
+            &'a rootcause::ReportRef<'r, Dynamic, O, T>,
+            Self::Rejection<'a>,
+        )>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        explain_context_type::<E, _>(rejected.map(|(_, name)| name), failure)
+    }
+}
+impl<O, T, E, R> Expectation<rootcause::Report<Dynamic, O, T>, R> for HasCurrentContext<E>
+where
+    E: 'static,
+{
+    type Success<'a>
+        = &'a E
+    where
+        Self: 'a,
+        rootcause::Report<Dynamic, O, T>: 'a;
+    type Rejection<'a>
+        = &'static str
+    where
+        Self: 'a,
+        rootcause::Report<Dynamic, O, T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a rootcause::Report<Dynamic, O, T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        actual
+            .downcast_current_context::<E>()
+            .ok_or_else(|| actual.current_context_type_name())
+    }
+}
+impl<O, T, E, R> ExpectationDiagnostics<rootcause::Report<Dynamic, O, T>, R>
+    for HasCurrentContext<E>
+where
+    E: 'static,
+{
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a rootcause::Report<Dynamic, O, T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        explain_context_type::<E, _>(rejected.map(|(_, name)| name), failure)
+    }
+}
+impl<E> HasCurrentContext<E> {
+    /// Expects and borrows a current context of type `E`.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(core::marker::PhantomData)
+    }
+}
+impl<E> Default for HasCurrentContext<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn explain_context_type<E, Target>(
+    actual: Option<&'static str>,
+    failure: FailureBuilder<Target>,
+) -> FailureBuilder<Target> {
+    let failure = match actual {
+        None => failure.relation("has the expected current context type"),
+        Some(name) => failure
+            .actual(format_args!("{name}"))
+            .relation("is not the expected current context type"),
+    };
+    failure.expected(format_args!("{}", type_name::<E>()))
+}
 
 /// Assertions for owned rootcause reports.
 #[allow(clippy::return_self_not_must_use)]
@@ -145,17 +546,7 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions<R>
     where
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        let actual = self.actual().children().len();
-
-        if actual != expected {
-            self.failure(FailureKind::Length)
-                .actual(self.render().value(&actual))
-                .relation("is not the expected child count")
-                .expected(self.render().value(&expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasChildCount::new(expected))
     }
 
     #[track_caller]
@@ -163,28 +554,12 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions<R>
     where
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        let actual = self.actual().attachments().len();
-
-        if actual != expected {
-            self.failure(FailureKind::Length)
-                .actual(self.render().value(&actual))
-                .relation("is not the expected attachment count")
-                .expected(self.render().value(&expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasAttachmentCount::new(expected))
     }
 
     #[track_caller]
     fn has_current_context_type<E: 'static>(self) -> Self {
-        self.track_assertion();
-        assert_current_context_type::<E, _, _, _>(
-            &self,
-            self.actual().current_context_type_id(),
-            self.actual().current_context_type_name(),
-        );
-        self
+        self.apply_assertion(HasCurrentContextType::<E>::new())
     }
 
     #[track_caller]
@@ -192,18 +567,7 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions<R>
     where
         R: ValueRenderer<str>,
     {
-        self.track_assertion();
-        let actual = format!("{}", self.actual().format_current_context());
-        let expected = format!("{expected}");
-
-        if actual != expected {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(actual.as_ref()))
-                .relation("is not the expected current context display value")
-                .expected(self.render().value(expected.as_ref()))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasCurrentContextDisplayValue::new(expected))
     }
 
     #[track_caller]
@@ -211,19 +575,7 @@ impl<C: ?Sized, O, T, M: Mode, R> RootcauseReportRefAssertions<R>
     where
         R: ValueRenderer<str>,
     {
-        self.track_assertion();
-        let actual = format!("{:?}", self.actual().format_current_context());
-        let actual = actual.as_str();
-        let expected = expected.as_ref();
-
-        if actual != expected {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(actual.as_ref()))
-                .relation("is not the expected current context debug string")
-                .expected(self.render().value(expected.as_ref()))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasCurrentContextDebugString::new(expected))
     }
 }
 
@@ -254,25 +606,10 @@ where
         A: for<'a> FnOnce(AssertThat<'a, E, M, R>),
         R: Clone,
     {
-        self.track_assertion();
-
-        if self.actual().downcast_current_context::<E>().is_some() {
-            self.satisfies(
-                |report| {
-                    report
-                        .downcast_current_context::<E>()
-                        .expect("context type was checked")
-                },
-                assertions,
-            )
-        } else {
-            assert_current_context_type::<E, _, _, _>(
-                &self,
-                self.actual().current_context_type_id(),
-                self.actual().current_context_type_name(),
-            );
-            self
+        if let Some(value) = self.test_assertion(&const { HasCurrentContext::<E>::new() }) {
+            assertions(self.derive(|_| value));
         }
+        self
     }
 }
 
@@ -303,25 +640,10 @@ where
         A: for<'a> FnOnce(AssertThat<'a, E, M, R>),
         R: Clone,
     {
-        self.track_assertion();
-
-        if self.actual().downcast_current_context::<E>().is_some() {
-            self.satisfies(
-                |report| {
-                    report
-                        .downcast_current_context::<E>()
-                        .expect("context type was checked")
-                },
-                assertions,
-            )
-        } else {
-            assert_current_context_type::<E, _, _, _>(
-                &self,
-                self.actual().current_context_type_id(),
-                self.actual().current_context_type_name(),
-            );
-            self
+        if let Some(value) = self.test_assertion(&const { HasCurrentContext::<E>::new() }) {
+            assertions(self.derive(|_| value));
         }
+        self
     }
 }
 
@@ -347,22 +669,10 @@ where
     where
         R: Clone,
     {
-        self.track_assertion();
-
-        if self.actual().downcast_current_context::<E>().is_some() {
-            self.derive(|report| {
-                report
-                    .downcast_current_context::<E>()
-                    .expect("context type was checked")
-            })
-        } else {
-            assert_current_context_type::<E, _, _, _>(
-                self,
-                self.actual().current_context_type_id(),
-                self.actual().current_context_type_name(),
-            );
-            unreachable!("Panic mode always panics on fail")
-        }
+        let value = self
+            .test_assertion(&const { HasCurrentContext::<E>::new() })
+            .expect("Panic mode raises a context mismatch");
+        self.derive(|_| value)
     }
 }
 
@@ -386,38 +696,10 @@ impl<'t, O, T, R> RootcauseDynamicReportExtractAssertions<'t, R>
     where
         R: Clone,
     {
-        self.track_assertion();
-
-        if self.actual().downcast_current_context::<E>().is_some() {
-            self.derive(|report| {
-                report
-                    .downcast_current_context::<E>()
-                    .expect("context type was checked")
-            })
-        } else {
-            assert_current_context_type::<E, _, _, _>(
-                self,
-                self.actual().current_context_type_id(),
-                self.actual().current_context_type_name(),
-            );
-            unreachable!("Panic mode always panics on fail")
-        }
-    }
-}
-
-#[track_caller]
-fn assert_current_context_type<E: 'static, T, M: Mode, R>(
-    assertion: &AssertThat<'_, T, M, R>,
-    actual_type_id: TypeId,
-    actual_type_name: &'static str,
-) {
-    if actual_type_id != TypeId::of::<E>() {
-        assertion
-            .failure(FailureKind::Variant)
-            .actual(format_args!("{actual_type_name}"))
-            .relation("is not the expected current context type")
-            .expected(format_args!("{}", type_name::<E>()))
-            .raise();
+        let value = self
+            .test_assertion(&const { HasCurrentContext::<E>::new() })
+            .expect("Panic mode raises a context mismatch");
+        self.derive(|_| value)
     }
 }
 

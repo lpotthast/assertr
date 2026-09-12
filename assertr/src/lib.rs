@@ -31,7 +31,7 @@
 //! ```rust
 //! # #[cfg(feature = "matchers")]
 //! # {
-//! use assertr::prelude::*;
+//! use assertr::{matchers::eq, prelude::*};
 //!
 //! struct User {
 //!     name: &'static str,
@@ -39,12 +39,13 @@
 //! }
 //!
 //! let user = User { name: "Alice", age: 30 };
-//! assert_that!(user).matches(partial!(User { name: "Alice", .. }));
+//! assert_that!(user).matches(partial!(User { name: eq("Alice"), .. }));
 //! # }
 //! ```
 //!
-//! Here `..` ignores the remaining fields. The struct needs no derives or annotations. Field
-//! expectations can also use constraints, existing assertion methods, and nested partial matches.
+//! Here `eq` is an alias for `equal_to`, and `..` ignores the remaining fields. The struct needs
+//! no derives or annotations. Fields require explicit matchers, which can also use existing
+//! assertion methods and nested partial matches.
 //! See the [partial matching guide](https://docs.rs/assertr/latest/assertr/matchers/index.html).
 //!
 //! Changing `"!"` to `"?"` in the greeting assertion above produces:
@@ -176,6 +177,24 @@
 //! type has `is_equal_to`, a `PartialOrd` type has `is_greater_than`, and a `HasLength` type has
 //! `has_length`.
 //!
+//! ## Reusable expectations
+//!
+//! Use the same check directly, on collection elements, or inside a structural matcher. The
+//! [matcher catalog](https://docs.rs/assertr/latest/assertr/matchers/index.html) exports every public
+//! built-in expectation, grouped by subject family:
+//!
+//! ```rust
+//! use assertr::{matchers::{all_of, HasLengthOf, string}, prelude::*};
+//!
+//! let short_name = all_of((string::IsNotBlank, HasLengthOf::new(3)));
+//! assert_that!("Ada").matches(&short_name);
+//! assert_that!(["", "Ada", "Grace"]).contains_matching(&short_name);
+//! ```
+//!
+//! An expectation defines a check. A matcher is an expectation used in composition. Both use the
+//! same implementation. Runtime matchers need no optional feature. The `matchers` feature enables
+//! `partial!` for selecting struct and enum fields.
+//!
 //! ## Guides
 //!
 //! These guides build on the quick start. Each lives with the API it explains and includes examples
@@ -186,7 +205,7 @@
 //!   parent, use `derive_owned` for computed values and borrowed slices, or await `derive_async`
 //!   projections.
 //! - [Match selected fields and nested values](https://docs.rs/assertr/latest/assertr/matchers/index.html):
-//!   use `partial!` with plain values, selected matcher constraints, or existing assertions through
+//!   use `partial!` with explicit matchers such as `eq(value)`, or existing assertions through
 //!   `satisfying`. Nest expectations through structs, collections, and maps. Only `partial!`
 //!   requires the `matchers` feature.
 //! - [Collect failures without panicking](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture):
@@ -198,8 +217,8 @@
 //!   transform captured failures with adapters or select the presentation used by a panicking
 //!   assertion.
 //! - [Write assertions for custom types](https://docs.rs/assertr/latest/assertr/#custom-assertions):
-//!   add chainable methods by composing existing assertions or building a structured failure
-//!   yourself.
+//!   implement reusable expectations with structured diagnostics, then expose chainable methods
+//!   through the shared executor.
 //! - [Assert properties of a type](https://docs.rs/assertr/latest/assertr/fn.assert_that_type.html):
 //!   check size, type name, or drop requirements without constructing a value.
 //!
@@ -251,6 +270,7 @@ pub mod condition;
 mod conversion;
 mod details;
 mod entry;
+pub mod expectation;
 pub mod failure;
 pub mod matchers;
 pub mod mode;
@@ -281,6 +301,7 @@ pub use entry::{IntoAssertContext, IntoOwnedAssertContext};
 pub use entry::{PanicValue, Type, assert_that_type};
 #[cfg(feature = "std")]
 pub use entry::{assert_that_panic_by, assert_that_panic_by_async};
+pub use expectation::{AssertionContext, Expectation, ExpectationDiagnostics};
 pub use failure::{AssertionFailure, AssertionFailures, Fact, FailureKind};
 pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
 
@@ -400,7 +421,7 @@ pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer
 ///
 /// ```
 /// use std::{cell::Cell, panic::{AssertUnwindSafe, catch_unwind}};
-/// use assertr::assert_that;
+/// use assertr::prelude::*;
 ///
 /// let value = Cell::new(0);
 /// let context = assert_that!(value);
@@ -408,8 +429,8 @@ pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer
 ///     context.actual().set(1);
 ///     panic!("after the update");
 /// }));
-/// assert!(result.is_err());
-/// assert_eq!(value.get(), 1);
+/// assert_that!(result).is_err();
+/// assert_that!(value.get()).is_equal_to(1);
 /// ```
 pub struct AssertThat<'t, T, M: Mode, R = DebugRenderer> {
     actual: Actual<'t, T>,

@@ -1,3 +1,4 @@
+use renamed_assertr::matchers::eq;
 use renamed_assertr::{matchers::starts_with, prelude::*};
 
 struct Named<'a> {
@@ -20,12 +21,12 @@ fn main() {
     })
     .matches(partial!(Named {
         text: starts_with(String::from("he").as_str()),
-        owned: String::from("world").as_str(),
+        owned: eq(String::from("world").as_str()),
     }));
 
     assert_that!(Tuple("hello", String::from("world"))).matches(partial!(Tuple(
         starts_with(String::from("he").as_str()),
-        String::from("world").as_str(),
+        eq(String::from("world").as_str()),
     )));
 
     assert_that!(Nested {
@@ -37,7 +38,7 @@ fn main() {
     .matches(partial!(Nested {
         inner: partial!(Named {
             text: starts_with(String::from("he").as_str()),
-            owned: String::from("world").as_str(),
+            owned: eq(String::from("world").as_str()),
         }),
     }));
 }

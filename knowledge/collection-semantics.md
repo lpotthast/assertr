@@ -1,95 +1,82 @@
 ---
 id: collection-semantics
-refines:
-  - assertr
-depends_on:
-  - diagnostic-rendering
-related_to:
-  - matcher-composition
-  - assertion-lifecycle
-  - reference-identity
+depends_on: [ ]
 sources:
-  - assertr/src/assertions/collection/**
-  - assertr/src/assertions/set/**
-  - assertr/src/assertions/map/**
-  - assertr/src/assertions/core/iter/**
-  - assertr/src/assertions/iterator/**
-  - assertr/src/matchers/entries_are.rs
-  - assertr/src/util/matching.rs
+  - assertr/src/assertions/has_length.rs
+  - assertr/src/assertions/collection/mod.rs
+  - assertr/src/assertions/set/mod.rs
+  - assertr/src/assertions/map/mod.rs
+  - assertr/src/assertions/map/imp.rs
+  - assertr/src/assertions/map/entries_are.rs
+  - assertr/src/assertions/core/iter/exact_size.rs
+  - assertr/src/assertions/core/iter/iterator.rs
+  - assertr/src/assertions/core/iter/into_iterator.rs
+  - assertr/src/assertions/iterator/mod.rs
 ---
 
-# Collections, maps, and streaming iterators
+# Collections, maps, and iterators
 
 [Architecture overview](README.md)
 
-Collection assertions are selected by behavioral capabilities. A custom type implements the capabilities its semantics
-support.
+Rust uses subject capability bounds to select operations. Repeatable traversal, semantic positions, indexed access, and
+native lookup are separate contracts. Diagnostic presentation supplies none of them.
 
 ## Capability model
 
-| Capability     | Contract                                                                                                                       |
-|----------------|--------------------------------------------------------------------------------------------------------------------------------|
-| `HasLength`    | Supplies length.                                                                                                               |
-| `Collection`   | Extends `HasLength` with repeatable inspection by reference. Every `elements` call yields the same elements in the same order. |
-| `StableOrder`  | Makes iteration positions part of the value's semantics. Enables ordered assertions and index-bearing evidence.                |
-| `RandomAccess` | Adds constant-time indexed access to stable order.                                                                             |
-| `SetLookup`    | Supplies native membership for set relations.                                                                                  |
-| `Map`          | Supplies repeatable traversal of stored key/value entries.                                                                     |
-| `MapLookup<Q>` | Adds native lookup through a borrowed query type.                                                                              |
+Bounds enforce trait availability. Repeatability, meaningful positions, lookup consistency, and complexity are
+implementor obligations that Rust cannot verify. The following table states those obligations.
 
-Sets and heaps support order-free collection operations. A sorted set still has no semantic positions. A linked list has
-stable order but lacks random access.
+| Capability                  | Required contract                                                                                             | Enables                                      |
+|-----------------------------|---------------------------------------------------------------------------------------------------------------|----------------------------------------------|
+| `HasLength`                 | Finite native length through `length()`. Strings count bytes. Integer range counts must fit `usize` or panic. | Length and emptiness checks.                 |
+| `Collection: HasLength`     | `elements()` repeatedly yields references to the same elements in the same order.                             | Order-free element checks.                   |
+| `StableOrder: Collection`   | Iteration positions are part of the value's semantics.                                                        | Positional checks and stable index evidence. |
+| `RandomAccess: StableOrder` | `element_at` takes constant time and returns `None` out of bounds.                                            | Indexed extraction.                          |
+| `SetLookup: Collection`     | Elements are unique. Native membership uses the equivalence relation enforcing that uniqueness.               | Subset, superset, and disjointness checks.   |
+| `Map: HasLength`            | Repeatable `entries()` traversal of stored key/value references.                                              | Iteration-based map checks.                  |
+| `MapLookup<Q>: Map`         | Native borrowed-key lookup returning the stored key and value.                                                | Key and keyed-entry queries.                 |
 
-`CollectionPresentation` and `RenderingOrder` determine diagnostic syntax and ordering. They grant no behavioral
-capabilities. Tree maps and sets are available with `alloc`. Hash collections require `std`.
+The [collection](../assertr/src/assertions/collection/mod.rs), [set](../assertr/src/assertions/set/mod.rs), and
+[map](../assertr/src/assertions/map/mod.rs) rustdoc defines implementor contracts. A linked list has stable positions
+without random access. A sorted set has deterministic traversal without semantic positions. Heaps also support
+order-free collection checks. Strings use `StrAssertions`, not element-collection semantics.
+
+Tree sets and maps work with `alloc`. Hash collections require `std`. Their
+[presentation settings](diagnostic-rendering.md#capabilities-and-structure) affect syntax and evidence ordering only.
 
 ## Exact comparisons and keyed maps
 
-Exact unordered comparisons of collection elements and iterator items preserve duplicates
-through [maximum one-to-one assignment](matcher-composition.md#exact-unordered-assignment). This works for values,
-matchers, and assertion callbacks, including overlapping expectations.
+Exact element comparisons preserve occurrence counts. In any-order comparisons, each actual occurrence must match a
+distinct expected slot. The [shared assignment algorithm](matcher-composition.md#exact-unordered-assignment) handles
+values, identity, matchers, and assertion callbacks, including overlapping expectations.
 
-Exact keyed map checks use native lookup, length checks, and stored-key identity. `Map::entries` and
-`MapLookup::get_key_value` must return references to the same stored keys and values. The checks remember which entries
-expected keys reached, then report any unvisited entries as unexpected. Repeating a query cannot hide a missing distinct
-entry.
+Exact keyed map checks instead use native lookup, length, and stored-key identity. `Map::entries` and
+`MapLookup::get_key_value` must return references to the same stored keys and values. Checks remember visited entries,
+so repeating a query cannot hide a missing distinct entry. A present key whose value is rejected remains visited and is
+not also reported as unexpected. Each keyed expectation converts and looks up its query once, retaining the result for
+explanation.
 
-`MapLookup<Q>` accepts borrowed views such as `str` for a `String` key. `MapKeyQuery` resolves bulk-query inference
-without imposing universal `Hash` or `Ord` bounds. Each map implementation carries the bounds its native lookup needs.
+`MapLookup<Q>` supports borrowed views such as `str` for stored `String` keys. `MapKeyQuery<K>` selects `Query` and
+`as_query()` for bulk expected keys, resolving inference without universal `Hash` or `Ord` bounds. Each implementation
+carries its native lookup bounds.
 
 ## Borrowed traversal versus terminal streams
 
-Borrowed `IntoIterator` assertions create one fresh iterator per assertion and return the original chain. Their names
-use the `into_iter_` prefix. Direct `Iterator` assertions take ownership, consume the stream, drop any remainder, and
-return an assertion over `()`.
+[`into_iter_*` assertions](../assertr/src/assertions/core/iter/into_iterator.rs) create one fresh borrowed iterator per
+call and return the original chain. Terminal [`IteratorAssertions`](../assertr/src/assertions/core/iter/iterator.rs)
+require ownership, consume the needed prefix, drop the remainder, and return a chain over `()`. Non-consuming
+`ExactSizeIterator` length checks use `len()` separately.
 
-Membership stops at the first match. Negative membership stops at the first forbidden item. Contiguous search stops when
-a window succeeds. Empty prefix, suffix, and contiguous criteria consume nothing. A non-empty suffix check must exhaust
-the iterator to know its ending.
+Membership stops at the first match or forbidden item. Empty prefixes, suffixes, and contiguous criteria consume
+nothing. Non-empty suffix checks must exhaust the iterator. Positional exact checks read at most the expected length
+plus one, and may stop at the first mismatch. Unordered exact checks buffer at most that many elements. Exact
+`size_hint` metadata can decide some failures without consumption. Infinite streams work only when a decision is
+reachable without exhaustion.
 
-Ordered exact comparison can stop at its first mismatch. An unordered exact check buffers at most the expected length
-plus one to detect a surplus item. Exact length metadata from `size_hint` can let equality and cardinality checks fail
-without consuming anything. An infinite iterator is usable only when the assertion can reach a decision without
-exhaustion.
+[Equality previews](../assertr/src/assertions/iterator/mod.rs) retain the last 16 consumed items. Matcher scans retain
+selected owned `Evidence`. Rendering budgets can further truncate either. A missing positional matcher is described
+without evaluating it or running its callback. Direct iterator diagnostics may report yield positions. Borrowed
+traversals do not report offsets as stable collection indexes.
 
-Equality diagnostics retain a tail of at most 16 consumed items. This tail includes the decisive item when a consumed
-item ends the scan, but a smaller rendering budget can omit it from the displayed preview. Matcher scans retain selected
-evidence instead of an equality preview. [Rendering budgets](diagnostic-rendering.md#bounded-retention) limit the final
-evidence in either case.
-
-When a prefix or positional exact matcher scan exhausts the iterator, its failure reports the required length and
-describes the first missing expectation at its expected yield position. Describing that expectation does not evaluate
-its matcher or run an assertion callback. The item budget can omit the description while retaining an omission count.
-
-Direct iterator assertions may report yield positions. Borrowed traversal offsets are not stable collection
-indexes. [Reference identity](reference-identity.md) describes pointer comparisons and their ordering requirements.
-
-## Sources
-
-The [collection](../assertr/src/assertions/collection/mod.rs), [set](../assertr/src/assertions/set/mod.rs),
-and [map](../assertr/src/assertions/map/mod.rs) module docs define implementor
-contracts. [Map checks](../assertr/src/assertions/map/imp.rs)
-and [keyed matchers](../assertr/src/matchers/entries_are.rs) track stored
-entries. [Iterator](../assertr/src/assertions/core/iter/iterator.rs)
-and [borrowed traversal](../assertr/src/assertions/core/iter/into_iterator.rs) traits use the
-shared [streaming implementation](../assertr/src/assertions/iterator/mod.rs).
+The [streaming execution adapter](observation-boundaries.md#traversal) owns the scan and retained observations. Those
+mechanics are independent of the capabilities that select collection operations.

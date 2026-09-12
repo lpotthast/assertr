@@ -1,5 +1,5 @@
 error[E0451]: field `x` of struct `Point` is private
   --> tests/partial/22-reject-private-field.rs:15:68
    |
-15 |     assert_that!(domain::point()).matches(partial!(domain::Point { x: 1, .. }));
+15 |     assert_that!(domain::point()).matches(partial!(domain::Point { x: eq(1), .. }));
    |                                                                    ^ private field

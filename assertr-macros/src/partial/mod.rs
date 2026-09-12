@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use syn::{
     Expr, Ident, Path, Token,
     parse::{Parse, ParseStream},
-    spanned::Spanned,
 };
 
 mod keyword {
@@ -146,9 +145,7 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
             pattern = quote!(#path {#(#names: _,)* #rest});
             for (name, expression) in &fields {
                 let field_name = name.to_string().trim_start_matches("r#").to_owned();
-                expectations.push(
-                    quote_spanned!(expression.span()=> #runtime::__private::normalize(#expression)),
-                );
+                expectations.push(quote!(#expression));
                 projections.push((
                     quote_spanned!(name.span()=> |#actual| {
                         #[allow(unreachable_patterns)]
@@ -182,9 +179,7 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
                 }
                 let mut projection = slots.clone();
                 projection[index] = quote!(#value);
-                expectations.push(
-                    quote_spanned!(expression.span()=> #runtime::__private::normalize(#expression)),
-                );
+                expectations.push(quote!(#expression));
                 projections.push((
                     quote!(|#actual| {
                         #[allow(unreachable_patterns)]

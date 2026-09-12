@@ -4,7 +4,9 @@ mod exact_size;
 mod into_iterator;
 mod iterator;
 
-pub use exact_size::ExactSizeIteratorAssertions;
+pub use exact_size::{
+    ExactSizeIteratorAssertions, HasNoRemainingElements, HasRemainingCount, HasRemainingElements,
+};
 pub use into_iterator::IntoIteratorAssertions;
 pub use iterator::IteratorAssertions;
 
@@ -15,10 +17,9 @@ mod tests {
     use core::cell::Cell;
     use std::sync::{Arc, Mutex};
 
-    use crate::Fact;
-    use crate::assertions::collection::Collection;
-    use crate::prelude::*;
-    use crate::renderer::CollectionPresentation;
+    use crate::{
+        Fact, assertions::collection::Collection, prelude::*, renderer::CollectionPresentation,
+    };
 
     struct Counted<'a> {
         values: &'a [i32],
@@ -62,6 +63,105 @@ mod tests {
             .into_iter_does_not_contain(4)
             .into_iter_has_length(3);
         assert_that!(values.calls.get()).is_equal_to(4);
+    }
+
+    struct ObservedView<T, F> {
+        values: [T; 1],
+        observe: F,
+    }
+
+    impl<T, F: Fn()> AsRef<[T]> for ObservedView<T, F> {
+        fn as_ref(&self) -> &[T] {
+            (self.observe)();
+            &self.values
+        }
+    }
+
+    #[test]
+    fn sequence_views_are_converted_once_after_tracking() {
+        for method in 0..5 {
+            let conversions = Cell::new(0);
+            let failures = assert_that!(()).capture(|root| {
+                let expected = ObservedView {
+                    values: [9],
+                    observe: || {
+                        assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                        conversions.set(conversions.get() + 1);
+                    },
+                };
+                let child = root.derive_owned(|()| [1].into_iter());
+                match method {
+                    0 => child.starts_with(expected),
+                    1 => child.ends_with(expected),
+                    2 => child.contains_contiguous(expected),
+                    3 => child.contains_exactly(expected),
+                    _ => child.contains_exactly_in_any_order(expected),
+                };
+                assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                root
+            });
+            assert_that!(conversions.get()).is_equal_to(1);
+            assert_that!(failures).has_length(1);
+        }
+    }
+
+    #[test]
+    fn callback_views_are_converted_once_after_tracking() {
+        for method in 0..6 {
+            let conversions = Cell::new(0);
+            let root = assert_that!(());
+            let assertions = ObservedView {
+                values: [|it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(1);
+                }],
+                observe: || {
+                    assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                    conversions.set(conversions.get() + 1);
+                },
+            };
+            if method == 5 {
+                root.derive_owned(|()| [1])
+                    .into_iter_contains_exactly_in_any_order_satisfying(assertions);
+            } else {
+                let child = root.derive_owned(|()| [1].into_iter());
+                match method {
+                    0 => child.starts_with_satisfying(assertions),
+                    1 => child.ends_with_satisfying(assertions),
+                    2 => child.contains_contiguous_satisfying(assertions),
+                    3 => child.contains_exactly_satisfying(assertions),
+                    _ => child.contains_exactly_in_any_order_satisfying(assertions),
+                };
+            }
+            assert_that!(conversions.get()).is_equal_to(1);
+            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+        }
+    }
+
+    #[test]
+    fn equality_rejections_do_not_repeat_heterogeneous_comparisons() {
+        #[derive(Debug)]
+        struct Actual<'a>(&'a Cell<usize>);
+
+        impl PartialEq<i32> for Actual<'_> {
+            fn eq(&self, _: &i32) -> bool {
+                self.0.set(self.0.get() + 1);
+                false
+            }
+        }
+
+        for method in 0..3 {
+            let calls = Cell::new(0);
+            let failures =
+                assert_that_owned!([Actual(&calls)].into_iter()).capture(|it| match method {
+                    0 => it.starts_with([1]),
+                    1 => it.ends_with([1]),
+                    _ => it.contains_exactly([1]),
+                });
+            assert_that!(calls.get()).is_equal_to(1);
+            assert_that!(failures[0].children).has_length(1);
+            assert_that!(failures[0].children[0].kind)
+                .is_equal_to(crate::failure::FailureKind::Equality);
+        }
     }
 
     #[test]
@@ -214,7 +314,7 @@ mod tests {
                     .contains_exactly(["user context"]);
                 element
                     .derive_owned(|value| value.facts.as_slice())
-                    .does_not_contain_matching(crate::matchers::predicate(|it: &Fact| {
+                    .does_not_contain_matching(crate::expectation::predicate(|it: &Fact| {
                         it.label == "Decisive index"
                     }));
             },
@@ -232,7 +332,7 @@ mod tests {
                         )
                         .value(&3_usize),
                     ))
-                    .does_not_contain_matching(crate::matchers::predicate(|it: &Fact| {
+                    .does_not_contain_matching(crate::expectation::predicate(|it: &Fact| {
                         it.label == "Decisive index"
                     }));
             },

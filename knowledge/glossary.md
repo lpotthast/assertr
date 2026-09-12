@@ -1,110 +1,103 @@
 ---
 id: glossary
-refines:
-  - assertr
 depends_on: [ ]
-related_to:
-  - assertion-lifecycle
-  - collection-semantics
-  - diagnostic-rendering
-  - extension-contract
-  - failure-processing
-  - fluent-entry
-  - integration-boundaries
-  - matcher-composition
-  - reference-identity
 sources:
-  - assertr/src/lib.rs
-  - assertr/src/actual.rs
-  - assertr/src/mode.rs
-  - assertr/src/assert_that/projection.rs
-  - assertr/src/entry/**
-  - assertr/src/assertions/mod.rs
-  - assertr/src/assertions/has_length.rs
-  - assertr/src/assertions/collection/mod.rs
-  - assertr/src/assertions/map/mod.rs
-  - assertr/src/assertions/set/mod.rs
-  - assertr/src/condition.rs
-  - assertr/src/matchers/**
-  - assertr/src/failure/**
-  - assertr/src/renderer/**
-  - assertr/src/tracking.rs
-  - assertr/src/util/matching.rs
+  - knowledge/assertion-lifecycle.md
+  - knowledge/expectation-execution.md
+  - knowledge/failure-processing.md
+  - knowledge/diagnostic-rendering.md
+  - knowledge/collection-semantics.md
+  - knowledge/matcher-composition.md
+  - knowledge/observation-boundaries.md
+  - knowledge/fluent-entry.md
+  - knowledge/reference-identity.md
+  - knowledge/extension-contract.md
 ---
 
 # Glossary
 
 [Architecture overview](README.md)
 
-Use these names when describing or extending Assertr. Reuse a term when its definition fits. Add a new term only for a
-distinct concept, and explain how it differs.
+Use **assertion chain** for `AssertThat` in prose. Distinguish `AssertionContext` from `RenderingContext`. Use exact
+Rust names for types and traits, and lowercase terms for concepts. In particular, evidence means diagnostic information,
+while `Evidence` names the owned child-failure container. Private implementation types are marked below.
 
-Prefer **assertion chain** for `AssertThat` in prose. Keep existing API spellings such as `IntoAssertContext`. Use
-**match context** or **rendering context** when either is meant. Private implementation types are marked.
+Qualify adapter roles in prose. A **failure adapter** implements `Adapter<Input>` to process completed failures or later
+conversion stages. A **rendering adapter** builds a `Rendered` value using the active renderer and budget. An
+**execution adapter** owns invocation, polling, or consumption around an expectation. These are distinct
+responsibilities.
 
-Each term links to its architectural explanation. Definitions use existing Rust names.
+Definitions are brief. Follow each term to its owning contract for guarantees and exceptions. Reuse an existing name
+when it fits, and introduce a new term only for a distinct concept.
 
-| Preferred term                                                                     | Meaning and existing names                                                                                                                                            |
-|------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [Adapter](failure-processing.md#presentation-and-fallback)                         | `Adapter<Input>` transforms borrowed input into an owned output or error, including report conversion and side effects.                                               |
-| [Assertion callback](matcher-composition.md#assertion-callbacks)                   | A closure that runs assertions on a supplied chain, adapted into a reusable matcher by `satisfying` and `Satisfying<F>`.                                              |
-| [Assertion chain](assertion-lifecycle.md#chain-representation)                     | `AssertThat<'t, T, M, R>` combines a subject with its mode and diagnostic state, also called an assertion context in existing APIs.                                   |
-| [Assertion failure](failure-processing.md#structured-construction-and-ownership)   | `AssertionFailure` records one failed assertion and its structured diagnostic fields before presentation.                                                             |
-| [Assertion family](extension-contract.md#choosing-an-extension)                    | A group of assertion methods for a shared capability or value type, exposed through public `*Assertions` traits.                                                      |
-| [Attached builder](failure-processing.md#structured-construction-and-ownership)    | `FailureBuilder<Attached<'_>>` targets an assertion chain and delivers its failure through `raise()`.                                                                 |
-| [Borrowed entry](assertion-lifecycle.md#entry-subject-ownership-and-mode)          | Starting a chain by borrowing its subject, using `assert_that!`, `must`, or `verify`.                                                                                 |
-| [Capability](collection-semantics.md#capability-model)                             | A trait contract required by an operation, such as semantic ordering or rendering a particular leaf type.                                                             |
-| [Capture mode](assertion-lifecycle.md#entry-subject-ownership-and-mode)            | `Capture` collects assertion failures for the completed chain to return as `AssertionFailures`.                                                                       |
-| [Chain records](assertion-lifecycle.md#chain-representation)                       | The private `ChainRecords` stores one node's messages, assertion count, captured failures, and a link to ancestor records.                                            |
-| [Chain state](assertion-lifecycle.md#chain-representation)                         | The private `ChainState` groups `ChainRecords`, metadata, rendering settings, mode, and renderer so subject-changing projections can move them together.              |
-| [Child chain](assertion-lifecycle.md#chain-representation)                         | A derived `AssertThat` that borrows a parent and propagates assertion counts and captured failures toward the root.                                                   |
-| [Collection](collection-semantics.md#capability-model)                             | `Collection` extends `HasLength` with repeatable inspection of the same elements in the same iteration order.                                                         |
-| [Collection presentation](diagnostic-rendering.md#capabilities-and-structure)      | `CollectionPresentation` selects diagnostic group syntax, type-hint visibility, and rendering order without granting behavioral capabilities.                         |
-| [Condition](matcher-composition.md#typed-reusable-conditions)                      | An `AssertrCondition<T>` tests a reusable domain property and returns `Result<(), Error>`, carrying a typed reason for rejection.                                     |
-| [Constraint description](matcher-composition.md#truth-polarity-and-evidence)       | `ConstraintDescription` stores a matcher's relation, rendered expectation, and nested constraints independently of whether a value matches.                           |
-| [Derivation](assertion-lifecycle.md#projections-and-continuation)                  | Creating a child chain with `derive`, `derive_owned`, or `derive_async`.                                                                                              |
-| [Detached builder](failure-processing.md#structured-construction-and-ownership)    | `FailureBuilder<Detached>` returns a failure through `build()` for nesting or inspection without raising it on a chain.                                               |
-| [Diagnostic leaf](diagnostic-rendering.md#capabilities-and-structure)              | One value formatted by `ValueRenderer<T>` within the structure assembled by Assertr.                                                                                  |
-| [Evidence](failure-processing.md#structured-construction-and-ownership)            | Values, facts, paths, and nested failures retained to explain an assertion or matcher outcome.                                                                        |
-| [Exact unordered assignment](matcher-composition.md#exact-unordered-assignment)    | Maximum bipartite matching pairs each actual element with a distinct expectation, preserving multiplicity when constraints overlap.                                   |
-| [Expression capture](fluent-entry.md#scoped-expression-capture)                    | Recording the subject's source spelling in failure metadata through entry macros or the `fluent_expressions` attribute.                                               |
-| [Extraction](integration-boundaries.md#retaining-checks-versus-extraction)         | A checked continuation on an inner or resolved subject, restricted to panic mode when failure cannot produce that subject.                                            |
-| [Fact](failure-processing.md#structured-construction-and-ownership)                | `Fact` attaches a label and rendered evidence value to one failure, with an empty label representing a note.                                                          |
-| [Failure aggregate](failure-processing.md#structured-construction-and-ownership)   | `AssertionFailures` stores an ordered collection of failures and provides slice access and iteration.                                                                 |
-| [Failure builder](failure-processing.md#structured-construction-and-ownership)     | `FailureBuilder` assembles the fields of one failure, with attached and detached targets determining how it is completed.                                             |
-| [Failure kind](failure-processing.md#structured-construction-and-ownership)        | `FailureKind` classifies the assertion family for adapters, while the relation and evidence explain the specific failure.                                             |
-| [Fluent alias](fluent-entry.md#borrowing-and-ownership)                            | An alternate assertion-method spelling generated under the `fluent` feature, such as `be_equal_to` for `is_equal_to`.                                                 |
-| [HasLength](collection-semantics.md#capability-model)                              | `HasLength` supplies a finite native length for length and emptiness assertions, such as byte length for strings.                                                     |
-| [Leaf assertion](extension-contract.md#implementing-an-assertion)                  | An assertion that tracks its own check and raises any failure through `self.failure(...).raise()`.                                                                    |
-| [Map](collection-semantics.md#capability-model)                                    | `Map` extends `HasLength` with repeatable traversal of stored key/value entries, with key queries requiring `MapLookup`.                                              |
-| [Map key query](collection-semantics.md#exact-comparisons-and-keyed-maps)          | `MapKeyQuery<K>` adapts an expected bulk key to the query type accepted by the map's native lookup.                                                                   |
-| [Map lookup](collection-semantics.md#exact-comparisons-and-keyed-maps)             | `MapLookup<Q>` queries a map by a borrowed key view and returns references to its stored key and value.                                                               |
-| [Mapping](assertion-lifecycle.md#projections-and-continuation)                     | Replacing a chain's subject through `map`, `map_owned`, or `map_async` while moving its existing state into the continuation.                                         |
-| [Match context](matcher-composition.md#truth-polarity-and-evidence)                | `MatchContext` carries the renderer, budget, polarity, relative path, and isolated evidence for matcher evaluation.                                                   |
-| [Match result](matcher-composition.md#truth-polarity-and-evidence)                 | `MatchResult` reports whether the evaluated matcher matched, independently of retained evidence and rendering limits.                                                 |
-| [Matcher](matcher-composition.md#truth-polarity-and-evidence)                      | An `AssertrMatcher` describes an expectation and evaluates it into a `MatchResult`, recording evidence through a `MatchContext`.                                      |
-| [Mode](assertion-lifecycle.md#chain-representation)                                | The sealed `Mode` trait selects failure behavior at compile time through its only implementations, `Panic` and `Capture`.                                             |
-| [Multiplicity](matcher-composition.md#exact-unordered-assignment)                  | The number of occurrences of each element, preserved by exact unordered element comparisons.                                                                          |
-| [Note](failure-processing.md#structured-construction-and-ownership)                | A `Fact` with an empty label, constructed with `Fact::note` and displayed without a label.                                                                            |
-| [Owned entry](assertion-lifecycle.md#entry-subject-ownership-and-mode)             | Starting a chain by taking its receiver value through `assert_that_owned!`, `must_owned`, or `verify_owned`, including when that value is a reference.                |
-| [Panic mode](assertion-lifecycle.md#entry-subject-ownership-and-mode)              | `Panic` presents and raises the first assertion failure immediately.                                                                                                  |
-| [Panic presentation](failure-processing.md#presentation-and-fallback)              | The owned `'static + RefUnwindSafe` adapter selected by `with_panic_presentation` and shared through `Rc` to produce panic text, defaulting to `ToHumanReadableText`. |
-| [Path](failure-processing.md#structured-construction-and-ownership)                | A relative location within a subject represented by `PathSegment` values for fields, tuple positions, variants, indexes, or rendered keys.                            |
-| [Polarity](matcher-composition.md#truth-polarity-and-evidence)                     | The requested matcher outcome, with positive evaluation explaining rejection and negative evaluation explaining an unwanted success.                                  |
-| [Predicate](matcher-composition.md#truth-polarity-and-evidence)                    | A boolean test, adapted into a matcher by `predicate` and `Predicate<F>` without a condition's typed error.                                                           |
-| [Probe](matcher-composition.md#truth-polarity-and-evidence)                        | Matcher evaluation with built-in diagnostic retention suppressed, while user callbacks may still perform side effects or rendering.                                   |
-| [Projection](assertion-lifecycle.md#projections-and-continuation)                  | A borrowed part or computed view of the current subject, used by the `derive` and `satisfies` families.                                                               |
-| [Random access](collection-semantics.md#capability-model)                          | `RandomAccess` extends `StableOrder` with constant-time indexed access.                                                                                               |
-| [Reference identity](reference-identity.md#which-address-is-compared)              | Same-instance comparison using `core::ptr::eq`, including pointer metadata rather than inferring identity from value equality.                                        |
-| [Reference normalization](assertion-lifecycle.md#entry-subject-ownership-and-mode) | Borrowing entry treats a sized value and one reference layer as the same subject type, while unsized targets remain reference-typed.                                  |
-| [Relation](failure-processing.md#structured-construction-and-ownership)            | The lowercase sentence describing a comparison or constraint, stored separately from diagnostic values and written without a trailing period.                         |
-| [Rendered value](diagnostic-rendering.md#capabilities-and-structure)               | `Rendered` stores a diagnostic tree with a `RenderedBody` and type metadata after leaf formatting and structural assembly.                                            |
-| [Rendering budget](diagnostic-rendering.md#bounded-retention)                      | `RenderingBudget` limits retained items per diagnostic group and characters per leaf independently of assertion truth.                                                |
-| [Rendering context](diagnostic-rendering.md#capabilities-and-structure)            | `RenderingContext` combines a renderer and budget and supplies structural rendering adapters through `AssertThat::render()`.                                          |
-| [Rendering order](diagnostic-rendering.md#capabilities-and-structure)              | `RenderingOrder` chooses preserved iteration order or sorting by rendered text for diagnostics, independently of `StableOrder`.                                       |
-| [Root chain](assertion-lifecycle.md#chain-representation)                          | An assertion chain without a parent that receives descendant counts and captured failures.                                                                            |
-| [Set lookup](collection-semantics.md#capability-model)                             | `SetLookup` extends `Collection` with native membership for set relations.                                                                                            |
-| [Stable order](collection-semantics.md#capability-model)                           | `StableOrder` makes iteration positions part of collection semantics, enabling positional assertions and indexed evidence.                                            |
-| [Subject](assertion-lifecycle.md#chain-representation)                             | The value being asserted on, stored as `Actual::Borrowed` or `Actual::Owned` and inspected through `AssertThat::actual()`.                                            |
-| [Unwind safety](assertion-lifecycle.md#panic-observation-boundaries)               | The `UnwindSafe` and `RefUnwindSafe` auto traits governing whether a chain can be moved or shared across a catch boundary.                                            |
-| [Value renderer](diagnostic-rendering.md#capabilities-and-structure)               | `ValueRenderer<T>` formats diagnostic leaves, with `DebugRenderer` as the default and Assertr assembling the surrounding structure.                                   |
+| Term                                                                               | Meaning                                                                                                                                                   |
+|------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [Actual](assertion-lifecycle.md#chain-representation)                              | Subject storage: `Borrowed(&T)` or `Owned(T)`.                                                                                                            |
+| [Adapter](failure-processing.md#presentation-and-fallback)                         | Trait used by failure adapters and subsequent conversion stages, with borrowed input and a declared output or error.                                      |
+| [Assertion callback](matcher-composition.md#assertion-callbacks)                   | A closure receiving an assertion chain and performing checks. `satisfying` adapts a reusable callback to an expectation.                                  |
+| [Assertion family](extension-contract.md#choosing-an-extension)                    | Methods grouped by subject capability or domain, with reusable definitions beside their owning implementation.                                            |
+| [AssertionContext](expectation-execution.md#child-scopes-and-evidence)             | Executor-supplied rendering settings, location policy, paths, and bounded child evidence for expectation evaluation.                                      |
+| [AssertionFailure](failure-processing.md#structured-construction-and-ownership)    | Owned diagnostic node containing rendered evidence, relation, nested failures, paths, and metadata.                                                       |
+| [AssertionFailures](failure-processing.md#structured-construction-and-ownership)   | Ordered aggregate returned when capture or fluent verification completes.                                                                                 |
+| [AssertrCondition](matcher-composition.md#typed-reusable-conditions)               | A reusable domain property whose test returns `Result<(), Error>`.                                                                                        |
+| [AssertThat](assertion-lifecycle.md#chain-representation)                          | The typed assertion chain, combining subject storage, mode, renderer, and chain state.                                                                    |
+| [Attached](failure-processing.md#structured-construction-and-ownership)            | Builder target whose `raise()` adds chain metadata and delivers the failure through the mode.                                                             |
+| [Borrowed entry](assertion-lifecycle.md#entry-subject-ownership-and-mode)          | Starting a chain without taking ownership of the asserted value.                                                                                          |
+| [Capability](collection-semantics.md#capability-model)                             | A trait contract enabling behavior, such as traversal or lookup. Renderer capabilities separately permit diagnostic leaf formatting.                      |
+| [Capture](assertion-lifecycle.md#entry-subject-ownership-and-mode)                 | Mode that stores assertion failures and permits continuation. It does not catch user panics.                                                              |
+| [ChainRecords](assertion-lifecycle.md#chain-representation)                        | Private per-node messages, assertion count, captured failures, and parent-record link.                                                                    |
+| [ChainState](assertion-lifecycle.md#chain-representation)                          | Private state transferred intact when a chain's subject type changes.                                                                                     |
+| [Child chain](assertion-lifecycle.md#chain-representation)                         | Derived chain with its own subject and records, forwarding counts and captured failures to ancestors.                                                     |
+| [Collection](collection-semantics.md#capability-model)                             | Finite, repeatable element traversal by reference. Positional meaning requires `StableOrder`.                                                             |
+| [CollectionPresentation](diagnostic-rendering.md#capabilities-and-structure)       | Diagnostic collection syntax, type-hint visibility, and ordering settings. Grants no behavior.                                                            |
+| [Derivation](assertion-lifecycle.md#projections-and-continuation)                  | Creating a child chain while retaining its parent, inheriting settings and cloning the renderer.                                                          |
+| [Detached](failure-processing.md#structured-construction-and-ownership)            | Builder target whose `build()` returns failure data without raising or collecting chain metadata.                                                         |
+| [Diagnostic leaf](diagnostic-rendering.md#capabilities-and-structure)              | A value formatted as one unit. An opaque assertion may treat its whole subject as a leaf.                                                                 |
+| [Evidence](expectation-execution.md#child-scopes-and-evidence)                     | Diagnostic information explaining a result. The type `Evidence` holds owned child failures and omission counts without borrowed observations.             |
+| [Exact unordered assignment](matcher-composition.md#exact-unordered-assignment)    | Maximum one-to-one pairing of actual occurrences and expected slots, preserving duplicates.                                                               |
+| [Expectation](expectation-execution.md#evaluation-and-explanation)                 | A reusable expected-side definition that evaluates a borrowed subject without tracking or raising.                                                        |
+| [Expectation::Rejection](expectation-execution.md#evaluation-and-explanation)      | Original failed observation retained for explanation without repeating the check.                                                                         |
+| [Expectation::Success](expectation-execution.md#evaluation-and-explanation)        | Successful observation, such as a borrowed payload or acquired guard, available for continuation.                                                         |
+| [ExpectationDiagnostics](expectation-execution.md#evaluation-and-explanation)      | Failure kind and explanation hook for a rejection or an unmet expectation with no subject.                                                                |
+| [Execution adapter](observation-boundaries.md)                                     | Code owning invocation, polling, traversal, or consumption around expectation execution. Distinct from `Adapter<Input>`.                                  |
+| [Expression capture](fluent-entry.md#scoped-expression-capture)                    | Attaching source spelling to failure metadata, explicitly through macros or by rewriting fluent calls.                                                    |
+| [Extraction](observation-boundaries.md#retaining-checks-versus-extraction)         | Checking for a value and continuing on it. Requires panic mode when rejection leaves no continuation.                                                     |
+| [Fact](failure-processing.md#structured-construction-and-ownership)                | Additional failure evidence stored as a label and a `Rendered` value.                                                                                     |
+| [Failure adapter](failure-processing.md#presentation-and-fallback)                 | An `Adapter<Input>` implementation processing completed failures or a later report representation.                                                        |
+| [FailureBuilder](failure-processing.md#structured-construction-and-ownership)      | Structured construction API for one failure. Its target selects raising or returning data.                                                                |
+| [FailureKind](failure-processing.md#structured-construction-and-ownership)         | Non-exhaustive failure-family classification. The relation and evidence describe the specific failure.                                                    |
+| [Fluent alias](fluent-entry.md#borrowing-and-ownership)                            | Generated method spelling that preserves the original assertion's behavior and bounds.                                                                    |
+| [HasLength](collection-semantics.md#capability-model)                              | Native finite length, measured in elements or bytes according to the subject type.                                                                        |
+| [HumanReadableText](failure-processing.md#presentation-and-fallback)               | Owned text-report wrapper produced by text adapters.                                                                                                      |
+| [Leaf assertion](extension-contract.md#implementing-an-assertion)                  | Check responsible for tracking and raising its failure, directly or through the shared executor.                                                          |
+| [Map](collection-semantics.md#capability-model)                                    | Finite, repeatable traversal of stored key/value entries.                                                                                                 |
+| [MapKeyQuery](collection-semantics.md#exact-comparisons-and-keyed-maps)            | Expected-key adapter selecting and borrowing the native query type for bulk map assertions.                                                               |
+| [MapLookup](collection-semantics.md#exact-comparisons-and-keyed-maps)              | Native borrowed-key lookup returning references to the same stored entries yielded by `Map`.                                                              |
+| [Mapping](assertion-lifecycle.md#projections-and-continuation)                     | Replacing the subject while moving existing chain state, including the renderer, into the continuation.                                                   |
+| [Matcher](matcher-composition.md)                                                  | A reusable expectation used in composition through `Expectation` and `ExpectationDiagnostics`. `matchers` is the public catalog, not a separate protocol. |
+| [Mode](assertion-lifecycle.md#chain-representation)                                | Sealed compile-time failure-handling choice: `Panic` or `Capture`.                                                                                        |
+| [Multiplicity](matcher-composition.md#exact-unordered-assignment)                  | Occurrence count. Exact comparisons distinguish `[1, 1, 2]` from `[1, 2, 2]` even without order.                                                          |
+| [Note](failure-processing.md#structured-construction-and-ownership)                | A `Fact` with an empty label, displayed as an unlabeled detail.                                                                                           |
+| [Owned entry](assertion-lifecycle.md#entry-subject-ownership-and-mode)             | Starting a chain that owns its input. For `&T`, it owns the reference.                                                                                    |
+| [Panic](assertion-lifecycle.md#entry-subject-ownership-and-mode)                   | Default mode that presents and panics on the first raised failure.                                                                                        |
+| [PanicPresentation](failure-processing.md#presentation-and-fallback)               | Private, shared text-adapter trait object used only when raising assertion panics.                                                                        |
+| [Path](failure-processing.md#structured-construction-and-ownership)                | Relative `PathSegment` sequence locating nested evidence within a subject.                                                                                |
+| [Predicate](matcher-composition.md#truth-and-evidence)                             | Matcher wrapper around `Fn(&T) -> bool`, with an optional description and no typed error.                                                                 |
+| [Probe](expectation-execution.md#budgets-and-probes)                               | Evaluation with diagnostic retention disabled. User effects still occur.                                                                                  |
+| [Projection](assertion-lifecycle.md#projections-and-continuation)                  | Selecting a borrowed part or computed view of a subject for a child chain.                                                                                |
+| [RandomAccess](collection-semantics.md#capability-model)                           | Stable positions plus constant-time indexed element access.                                                                                               |
+| [Reference identity](reference-identity.md#which-address-is-compared)              | Pointer equality of the selected subject or `Borrow` target, including fat-pointer metadata.                                                              |
+| [Reference normalization](assertion-lifecycle.md#entry-subject-ownership-and-mode) | Borrowing entry removes one reference layer for sized pointees. Unsized targets remain reference-typed subjects.                                          |
+| [Relation](failure-processing.md#structured-construction-and-ownership)            | Lowercase diagnostic sentence, stored separately from operands, without a trailing period.                                                                |
+| [Rendered](diagnostic-rendering.md#capabilities-and-structure)                     | Owned diagnostic value tree with leaf text, structure, type metadata, layout, and omissions.                                                              |
+| [Rendering adapter](diagnostic-rendering.md#capabilities-and-structure)            | A value wrapper that constructs a diagnostic tree through the active renderer and budget.                                                                 |
+| [RenderingBudget](diagnostic-rendering.md#bounded-retention)                       | Independent retention limits per repeated group and per leaf. Implementors must keep truth independent of these limits.                                   |
+| [RenderingContext](diagnostic-rendering.md#capabilities-and-structure)             | Active renderer and budget with adapters for building diagnostic value trees.                                                                             |
+| [RenderingOrder](diagnostic-rendering.md#capabilities-and-structure)               | Diagnostic choice to preserve iteration or sort rendered text.                                                                                            |
+| [Root chain](assertion-lifecycle.md#chain-representation)                          | Chain without a parent-record link, receiving descendant counts and owning captured failures.                                                             |
+| [SetLookup](collection-semantics.md#capability-model)                              | Unique elements plus native membership using the equivalence relation enforcing uniqueness.                                                               |
+| [StableOrder](collection-semantics.md#capability-model)                            | Collection capability making iteration positions semantically meaningful.                                                                                 |
+| [Subject](assertion-lifecycle.md#chain-representation)                             | Current value under assertion, accessed by reference through `actual()`.                                                                                  |
+| [ToHumanReadableText](failure-processing.md#presentation-and-fallback)             | Built-in adapter rendering one failure or an aggregate with Assertr's report grammar.                                                                     |
+| [Unwind safety](assertion-lifecycle.md#unwind-safety)                              | Auto-trait requirements for moving or sharing chain state across an unwind-catching boundary.                                                             |
+| [ValueRenderer](diagnostic-rendering.md#capabilities-and-structure)                | Trait formatting one diagnostic leaf type. Assertr owns surrounding structure.                                                                            |

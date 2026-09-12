@@ -2,8 +2,11 @@
 
 mod capture;
 mod diagnostics;
+mod execution;
 mod projection;
 mod rendering;
+
+pub(crate) use capture::collect_assertions;
 
 use alloc::vec::Vec;
 use core::{cell::RefCell, marker::PhantomData, panic::AssertUnwindSafe};
@@ -172,44 +175,55 @@ mod tests {
         #[test]
         fn scalar_contexts_can_be_shared_and_moved_across_catch_boundaries() {
             let root = assert_that_owned!(1).with_renderer(NoRenderer);
-            catch_unwind(|| assert_eq!(root.actual(), &1)).unwrap();
-            catch_unwind(move || assert_eq!(root.unwrap_inner(), 1)).unwrap();
+            catch_unwind(|| {
+                assert_that!(root.actual()).is_equal_to(1);
+            })
+            .unwrap();
+            catch_unwind(move || {
+                assert_that!(root.unwrap_inner()).is_equal_to(1);
+            })
+            .unwrap();
 
             let failures = assert_that!(1).capture(|root| {
                 catch_unwind(|| root.track_assertion()).unwrap();
                 catch_unwind(move || root).unwrap()
             });
-            assert!(failures.is_empty());
+            assert_that!(failures).is_empty();
         }
 
         #[test]
         fn an_owned_cell_renderer_can_be_moved_across_a_catch_boundary() {
             let context = assert_that_owned!(1).with_renderer(Cell::new(0));
-            catch_unwind(move || assert_eq!(context.unwrap_inner(), 1)).unwrap();
+            catch_unwind(move || {
+                assert_that!(context.unwrap_inner()).is_equal_to(1);
+            })
+            .unwrap();
         }
 
         #[test]
         fn explicitly_overridden_subject_state_remains_accessible_after_a_panic() {
             let value = Cell::new((0, 0));
             let context = assert_that!(value);
-            assert!(
+            assert_that!(
                 catch_unwind(AssertUnwindSafe(|| {
                     context.actual().set((1, 0));
                     panic!("interrupted update");
                 }))
                 .is_err()
-            );
-            assert_eq!(context.actual().get(), (1, 0));
+            )
+            .is_true();
+            assert_that!(context.actual().get()).is_equal_to((1, 0));
 
             let context = assert_that_owned!(RefCell::new((0, 0)));
-            assert!(
+            assert_that!(
                 catch_unwind(AssertUnwindSafe(|| {
                     context.actual().borrow_mut().0 = 1;
                     panic!("interrupted update");
                 }))
                 .is_err()
-            );
-            assert_eq!(*context.actual().borrow(), (1, 0));
+            )
+            .is_true();
+            assert_that!(*context.actual().borrow()).is_equal_to((1, 0));
         }
 
         #[test]
@@ -225,20 +239,21 @@ mod tests {
                     root.derive(|value| value).is_equal_to(RefCell::new(2));
                     root
                 });
-            assert_eq!(failures.len(), 1);
-            assert_eq!(calls.get(), 2);
+            assert_that!(failures).has_length(1);
+            assert_that!(calls.get()).is_equal_to(2);
 
             let context = assert_that!(1).with_debug_format(|_, _| {
                 calls.set(calls.get() + 1);
                 panic!("renderer panic");
             });
-            assert!(
+            assert_that!(
                 catch_unwind(AssertUnwindSafe(|| {
                     context.derive_owned(|value| *value).is_equal_to(2);
                 }))
                 .is_err()
-            );
-            assert_eq!(calls.get(), 3);
+            )
+            .is_true();
+            assert_that!(calls.get()).is_equal_to(3);
         }
 
         #[test]
@@ -251,7 +266,7 @@ mod tests {
                         .derive_owned(|value| value.borrow().0)
                         .with_renderer(NoRenderer);
                     catch_unwind(|| {
-                        assert_eq!(child.actual(), &1);
+                        assert_that!(child.actual()).is_equal_to(1);
                         child.track_assertion();
                     })
                     .unwrap();
@@ -259,32 +274,33 @@ mod tests {
                         child.with_renderer(DebugRenderer).is_equal_to(3);
                     })
                     .unwrap();
-                    assert_eq!(root.state.records.assertion_count(), 2);
+                    assert_that!(root.state.records.assertion_count()).is_equal_to(2);
                     root
                 });
-            assert_eq!(failures.len(), 1);
-            assert_eq!(failures[0].messages, ["parent detail"]);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].messages).contains_exactly(["parent detail"]);
         }
 
         #[test]
         fn capture_bookkeeping_remains_usable_after_a_caught_panic() {
             let failures = assert_that!(1).with_detail_message("root").capture(|root| {
                 let child = root.derive(|value| value).with_detail_message("child");
-                assert!(
+                assert_that!(
                     catch_unwind(|| {
                         child.derive(|value| value).is_equal_to(2);
                         panic!("after recording a failure");
                     })
                     .is_err()
-                );
+                )
+                .is_true();
                 child.is_equal_to(3);
-                assert_eq!(root.state.records.assertion_count(), 2);
+                assert_that!(root.state.records.assertion_count()).is_equal_to(2);
                 root.is_equal_to(4)
             });
-            assert_eq!(failures.len(), 3);
-            assert_eq!(failures[0].messages, ["child", "root"]);
-            assert_eq!(failures[1].messages, ["child", "root"]);
-            assert_eq!(failures[2].messages, ["root"]);
+            assert_that!(failures).has_length(3);
+            assert_that!(failures[0].messages).contains_exactly(["child", "root"]);
+            assert_that!(failures[1].messages).contains_exactly(["child", "root"]);
+            assert_that!(failures[2].messages).contains_exactly(["root"]);
         }
 
         #[test]
@@ -298,16 +314,17 @@ mod tests {
             }
 
             let failures = assert_that!(1).capture(|root| {
-                assert!(
+                assert_that!(
                     catch_unwind(|| {
                         root.add_detail_message(Message(&|| root.add_detail_message("nested")));
                     })
                     .is_err()
-                );
+                )
+                .is_true();
                 root.add_detail_message("after panic");
                 root.is_equal_to(2)
             });
-            assert_eq!(failures[0].messages, ["nested", "after panic"]);
+            assert_that!(failures[0].messages).contains_exactly(["nested", "after panic"]);
         }
 
         #[test]
@@ -321,7 +338,7 @@ mod tests {
             .panics()
             .has_type::<&str>()
             .is_equal_to("closure panic");
-            assert_eq!(value, 1);
+            assert_that!(value).is_equal_to(1);
 
             assert_that_owned!(|| {
                 value = 2;
@@ -329,7 +346,7 @@ mod tests {
             })
             .does_not_panic()
             .is_equal_to(2);
-            assert_eq!(value, 2);
+            assert_that!(value).is_equal_to(2);
         }
 
         #[tokio::test]
@@ -343,7 +360,7 @@ mod tests {
             .await
             .has_type::<&str>()
             .is_equal_to("async closure panic");
-            assert_eq!(value, 1);
+            assert_that!(value).is_equal_to(1);
         }
     }
 

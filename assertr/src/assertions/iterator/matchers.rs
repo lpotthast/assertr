@@ -1,257 +1,395 @@
-//! Matcher adapters over bounded, single-pass iterator scans.
+//! Matcher execution over bounded, single-pass iterator scans.
 
 use super::{
-    AssertThat, Borrow, Mode, PREVIEW_CAPACITY, PositionReporting, Vec, VecDeque, exact_size_hint,
+    AssertThat, AssertionContext, Borrow, ExpectationDiagnostics, Mode, PREVIEW_CAPACITY,
+    PhantomData, PositionReporting, Scan, Vec, VecDeque, exact_size_hint, execute,
 };
 use crate::{
-    Fact,
-    failure::{Attached, FailureBuilder, FailureKind, PathSegment},
-    matchers::{AssertrMatcher, ConstraintDescription, MatchContext, MatcherList},
+    Fact, ValueRenderer,
+    expectation::{Evidence, MatcherList},
+    failure::{FailureBuilder, FailureKind, PathSegment},
 };
 
-#[track_caller]
-fn failure<'a, S, M: Mode, R>(
-    this: &'a AssertThat<'_, S, M, R>,
-    context: MatchContext<'_, R>,
+fn explain_scan<Target, R: ValueRenderer<usize>>(
+    failure: FailureBuilder<Target>,
+    context: &AssertionContext<'_, R>,
+    evidence: Evidence,
     relation: &'static str,
     consumed: usize,
-) -> FailureBuilder<Attached<'a>>
-where
-    R: crate::ValueRenderer<usize>,
-{
-    this.failure(FailureKind::Matching)
-        .relation(relation)
-        .fact(Fact::labelled("Consumed", this.render().value(&consumed)))
-        .fact(Fact::labelled(
-            "Preview starts at",
-            consumed.saturating_sub(PREVIEW_CAPACITY),
-        ))
-        .omitted_children(context.omitted_children())
-        .children(context.into_failures())
+) -> FailureBuilder<Target> {
+    evidence.explain(
+        failure
+            .relation(relation)
+            .fact(Fact::labelled(
+                "Consumed",
+                context.render().value(&consumed),
+            ))
+            .fact(Fact::labelled(
+                "Preview starts at",
+                context
+                    .render()
+                    .value(&consumed.saturating_sub(PREVIEW_CAPACITY)),
+            )),
+    )
 }
 
-#[track_caller]
-pub(crate) fn membership<S, T, P, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    matcher: &P,
-    positive: bool,
+struct ContainsMatching<'e, T, P> {
+    expected: &'e P,
+    item: PhantomData<fn() -> T>,
     positions: PositionReporting,
-) where
+}
+
+impl<T, P, I, R> Scan<I, R> for ContainsMatching<'_, T, P>
+where
     I: Iterator,
     I::Item: Borrow<T>,
-    P: AssertrMatcher<T, R>,
-    R: crate::ValueRenderer<usize>,
+    P: ExpectationDiagnostics<T, R>,
+    R: ValueRenderer<usize>,
 {
-    let mut retained: VecDeque<MatchContext<'_, R>> = VecDeque::new();
-    let mut consumed = 0;
-    let mut discarded = 0;
-    for item in iterator {
-        let mut context = MatchContext::for_assertion(this);
-        context.set_positive(positive);
-        let accepted = if let Some(index) = positions.index(consumed) {
-            context
-                .scoped(PathSegment::Index(index), |context| {
-                    matcher.evaluate(item.borrow(), context)
+    type Rejection = (Evidence, usize);
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        let mut retained: VecDeque<Evidence> = VecDeque::new();
+        let mut consumed = 0;
+        let mut discarded = 0;
+        for item in iterator {
+            let mut child = context.isolated();
+            let accepted = if let Some(index) = self.positions.index(consumed) {
+                child.scoped(PathSegment::Index(index), |child| {
+                    child.evaluate(item.borrow(), self.expected)
                 })
-                .matched
-        } else {
-            matcher.evaluate(item.borrow(), &mut context).matched
-        };
-        consumed += 1;
-        if accepted {
-            if !positive {
-                failure(
-                    this,
-                    context,
-                    "contains an unexpected matching element",
-                    consumed,
-                )
-                .raise();
+            } else {
+                child.evaluate(item.borrow(), self.expected)
+            };
+            consumed += 1;
+            if accepted {
+                return Ok(());
             }
-            return;
+            if retained.len() == PREVIEW_CAPACITY
+                && let Some(old) = retained.pop_front()
+            {
+                discarded += old.children.len() + old.omitted;
+            }
+            retained.push_back(child.into_evidence());
         }
-        if retained.len() == PREVIEW_CAPACITY
-            && let Some(old) = retained.pop_front()
-        {
-            discarded += old.evidence.len() + old.omitted;
+        let mut child = context.isolated();
+        child.evidence.omitted = discarded;
+        for evidence in retained {
+            child.append(evidence);
         }
-        retained.push_back(context);
+        if child.evidence.children.is_empty() {
+            child.outcome(false, |child| child.describe(self.expected));
+        }
+        Err((child.into_evidence(), consumed))
     }
-    if positive {
-        let mut context = MatchContext::for_assertion(this);
-        context.omitted = discarded;
-        for child in retained {
-            context.append(child);
-        }
-        if context.evidence.is_empty() {
-            context.outcome(false, |context| matcher.describe(context));
-        }
-        failure(
-            this,
+
+    const KIND: FailureKind = FailureKind::Matching;
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let (evidence, consumed) = rejection;
+        explain_scan(
+            failure,
             context,
+            evidence,
             "does not contain a matching element",
             consumed,
         )
-        .raise();
     }
 }
 
-#[track_caller]
-pub(crate) fn exact_or_prefix<S, T, L, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    mut iterator: I,
-    list: &L,
+struct ContainsNoMatching<'e, T, P> {
+    expected: &'e P,
+    item: PhantomData<fn() -> T>,
+    positions: PositionReporting,
+}
+
+impl<T, P, I, R> Scan<I, R> for ContainsNoMatching<'_, T, P>
+where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    P: ExpectationDiagnostics<T, R>,
+    R: ValueRenderer<usize>,
+    R: ValueRenderer<T>,
+{
+    type Rejection = (Evidence, usize);
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        for (index, item) in iterator.enumerate() {
+            let mut child = context.isolated();
+            if child.probe(item.borrow(), self.expected) {
+                if child.is_diagnostic() {
+                    child.record(
+                        FailureBuilder::detached::<T>(FailureKind::Membership)
+                            .actual(child.render().value(item.borrow()))
+                            .relation("matches the unwanted constraint")
+                            .constraint(child.describe(self.expected))
+                            .path(self.positions.index(index).map(PathSegment::Index))
+                            .build(),
+                    );
+                } else {
+                    child.outcome(false, |child| child.describe(self.expected));
+                }
+                return Err((child.into_evidence(), index + 1));
+            }
+        }
+        Ok(())
+    }
+
+    const KIND: FailureKind = FailureKind::Matching;
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let (evidence, consumed) = rejection;
+        explain_scan(
+            failure,
+            context,
+            evidence,
+            "contains an unexpected matching element",
+            consumed,
+        )
+    }
+}
+
+enum SequenceRejection {
+    KnownLength {
+        actual: usize,
+        expected: usize,
+    },
+    Missing {
+        evidence: Evidence,
+        consumed: usize,
+        expected: usize,
+    },
+    Mismatch {
+        evidence: Evidence,
+        consumed: usize,
+    },
+    Extra {
+        evidence: Evidence,
+        consumed: usize,
+    },
+}
+
+struct ElementsAre<'e, T, L> {
+    expected: &'e L,
+    item: PhantomData<fn() -> T>,
     exact: bool,
-) where
+}
+
+impl<T, L, I, R> Scan<I, R> for ElementsAre<'_, T, L>
+where
     I: Iterator,
     I::Item: Borrow<T>,
     L: MatcherList<T, R>,
-    R: crate::ValueRenderer<usize>,
+    R: ValueRenderer<usize>,
 {
-    let expected_length = list.len();
-    let mut context = MatchContext::for_assertion(this);
-    if let Some(actual) = exact_size_hint(&iterator)
-        && ((exact && actual != expected_length) || (!exact && actual < expected_length))
-    {
-        this.failure(FailureKind::Matching)
-            .relation("does not have the required sequence length")
-            .fact(Fact::labelled(
-                "Reported length",
-                this.render().value(&actual),
-            ))
-            .fact(Fact::labelled(
-                "Expected length",
-                this.render().value(&expected_length),
-            ))
-            .raise();
-        return;
-    }
-    for index in 0..expected_length {
-        let Some(item) = iterator.next() else {
-            context.scoped(PathSegment::Index(index), |context| {
-                context.outcome(false, |context| list.describe_at(index, context));
-            });
-            failure(this, context, "is missing a matching position", index)
-                .fact(Fact::labelled(
-                    "Expected length",
-                    this.render().value(&expected_length),
-                ))
-                .raise();
-            return;
-        };
-        if !context
-            .scoped(PathSegment::Index(index), |context| {
-                list.evaluate_at(index, item.borrow(), context)
-            })
-            .matched
+    type Rejection = SequenceRejection;
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        let expected_length = self.expected.len();
+        let mut child = context.isolated();
+        if let Some(actual) = exact_size_hint(&iterator)
+            && ((self.exact && actual != expected_length)
+                || (!self.exact && actual < expected_length))
         {
-            failure(
-                this,
-                context,
-                "does not match the required position",
-                index + 1,
-            )
-            .raise();
-            return;
+            return Err(SequenceRejection::KnownLength {
+                actual,
+                expected: expected_length,
+            });
         }
+        for index in 0..expected_length {
+            let Some(item) = iterator.next() else {
+                child.scoped(PathSegment::Index(index), |child| {
+                    child.outcome(false, |child| self.expected.describe_at(index, child));
+                });
+                return Err(SequenceRejection::Missing {
+                    evidence: child.into_evidence(),
+                    consumed: index,
+                    expected: expected_length,
+                });
+            };
+            if !child.scoped(PathSegment::Index(index), |child| {
+                self.expected.evaluate_at(index, item.borrow(), child)
+            }) {
+                return Err(SequenceRejection::Mismatch {
+                    evidence: child.into_evidence(),
+                    consumed: index + 1,
+                });
+            }
+        }
+        if self.exact && iterator.next().is_some() {
+            return Err(SequenceRejection::Extra {
+                evidence: child.into_evidence(),
+                consumed: expected_length + 1,
+            });
+        }
+        Ok(())
     }
-    if exact && iterator.next().is_some() {
-        failure(this, context, "has an extra element", expected_length + 1).raise();
+
+    const KIND: FailureKind = FailureKind::Matching;
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejection {
+            SequenceRejection::KnownLength { actual, expected } => failure
+                .relation("does not have the required sequence length")
+                .fact(Fact::labelled("Reported length", render.value(&actual)))
+                .fact(Fact::labelled("Expected length", render.value(&expected))),
+            SequenceRejection::Missing {
+                evidence,
+                consumed,
+                expected,
+            } => explain_scan(
+                failure,
+                context,
+                evidence,
+                "is missing a matching position",
+                consumed,
+            )
+            .fact(Fact::labelled("Expected length", render.value(&expected))),
+            SequenceRejection::Mismatch { evidence, consumed } => explain_scan(
+                failure,
+                context,
+                evidence,
+                "does not match the required position",
+                consumed,
+            ),
+            SequenceRejection::Extra { evidence, consumed } => {
+                explain_scan(failure, context, evidence, "has an extra element", consumed)
+            }
+        }
     }
 }
 
-#[track_caller]
-pub(crate) fn suffix_or_contiguous<S, T, L, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    list: &L,
+struct MatchingWindow<'e, T, L> {
+    expected: &'e L,
+    item: PhantomData<fn() -> T>,
     suffix: bool,
-) where
+}
+
+impl<T, L, I, R> Scan<I, R> for MatchingWindow<'_, T, L>
+where
     I: Iterator,
     I::Item: Borrow<T>,
     L: MatcherList<T, R>,
-    R: crate::ValueRenderer<usize>,
+    R: ValueRenderer<usize>,
 {
-    let expected_length = list.len();
-    if expected_length == 0 {
-        return;
-    }
-    let mut window = VecDeque::new();
-    let mut consumed = 0;
-    let mut final_window = MatchContext::for_assertion(this);
-    for item in iterator {
-        if window.len() == expected_length {
-            window.pop_front();
+    type Rejection = (Evidence, usize, usize);
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        let expected_length = self.expected.len();
+        if expected_length == 0 {
+            return Ok(());
         }
-        window.push_back(item);
-        consumed += 1;
-        if !suffix && window.len() == expected_length {
-            let mut context = MatchContext::for_assertion(this);
+        let mut window = VecDeque::new();
+        let mut consumed = 0;
+        let mut final_window = Evidence::default();
+        let evaluate_window = |window: &VecDeque<I::Item>, consumed: usize| {
+            let mut child = context.isolated();
             let mut matched = true;
             for (slot, item) in window.iter().enumerate() {
-                matched &= context
-                    .scoped(
-                        PathSegment::Index(consumed - expected_length + slot),
-                        |context| list.evaluate_at(slot, item.borrow(), context),
-                    )
-                    .matched;
+                matched &= child.scoped(
+                    PathSegment::Index(consumed - expected_length + slot),
+                    |child| self.expected.evaluate_at(slot, item.borrow(), child),
+                );
             }
             if matched {
-                return;
+                Ok(())
+            } else {
+                Err(child.into_evidence())
             }
-            final_window = context;
+        };
+        for item in iterator {
+            if window.len() == expected_length {
+                window.pop_front();
+            }
+            window.push_back(item);
+            consumed += 1;
+            if !self.suffix && window.len() == expected_length {
+                match evaluate_window(&window, consumed) {
+                    Ok(()) => return Ok(()),
+                    Err(evidence) => final_window = evidence,
+                }
+            }
         }
+        if self.suffix && window.len() == expected_length {
+            match evaluate_window(&window, consumed) {
+                Ok(()) => return Ok(()),
+                Err(evidence) => final_window = evidence,
+            }
+        }
+        Err((final_window, consumed, expected_length))
     }
-    if suffix && window.len() == expected_length {
-        let mut matched = true;
-        for (slot, item) in window.iter().enumerate() {
-            matched &= final_window
-                .scoped(
-                    PathSegment::Index(consumed - expected_length + slot),
-                    |context| list.evaluate_at(slot, item.borrow(), context),
-                )
-                .matched;
-        }
-        if matched {
-            return;
-        }
-    }
-    let mut failure = failure(
-        this,
-        final_window,
-        if suffix {
-            "does not end with matching positions"
+
+    const KIND: FailureKind = FailureKind::Matching;
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let relation = if self.suffix {
+            "ends with these positions"
         } else {
-            "does not contain matching contiguous positions"
-        },
-        consumed,
-    );
-    if consumed < expected_length {
-        // No complete candidate was available. Describe the expectations without evaluating
-        // matchers against an incomplete window or inventing actual iterator positions.
-        let context = MatchContext::for_assertion(this);
-        let maximum = context.render().max_items();
-        failure = failure
-            .fact(Fact::labelled(
-                "Expected length",
-                this.render().value(&expected_length),
-            ))
-            .constraint(
-                ConstraintDescription::new(if suffix {
-                    "ends with these positions"
-                } else {
-                    "contains these contiguous positions"
-                })
-                .omitted_children(expected_length.saturating_sub(maximum))
-                .children(
-                    (0..expected_length.min(maximum))
-                        .map(|index| list.describe_at(index, &context)),
-                ),
-            );
+            "contains these contiguous positions"
+        };
+        let (evidence, consumed, expected) = rejection;
+        let failure = explain_scan(
+            failure,
+            context,
+            evidence,
+            if self.suffix {
+                "does not end with matching positions"
+            } else {
+                "does not contain matching contiguous positions"
+            },
+            consumed,
+        );
+        if consumed < expected {
+            // Describe incomplete windows without evaluating their matchers or inventing positions.
+            failure
+                .fact(Fact::labelled(
+                    "Expected length",
+                    context.render().value(&expected),
+                ))
+                .constraint(
+                    context
+                        .describe_list::<T, _, _>(
+                            self.expected,
+                            FailureBuilder::detached::<()>(FailureKind::Matching)
+                                .relation(relation),
+                        )
+                        .build(),
+                )
+        } else {
+            failure
+        }
     }
-    failure.raise();
 }
+
 struct Items<'a, T, I> {
     items: &'a [I],
     view: core::marker::PhantomData<T>,
@@ -273,81 +411,252 @@ impl<T, I: Borrow<T>> crate::assertions::collection::Collection for Items<'_, T,
     }
 }
 
+enum UnorderedRejection {
+    KnownLength { actual: usize, expected: usize },
+    Mismatch { evidence: Evidence, consumed: usize },
+}
+
+struct ElementsAreInAnyOrder<'e, T, L> {
+    expected: &'e L,
+    item: PhantomData<fn() -> T>,
+}
+
+impl<T, L, I, R> Scan<I, R> for ElementsAreInAnyOrder<'_, T, L>
+where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    L: MatcherList<T, R>,
+    R: ValueRenderer<usize>,
+{
+    type Rejection = UnorderedRejection;
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        let expected_length = self.expected.len();
+        if let Some(actual) = exact_size_hint(&iterator)
+            && actual != expected_length
+        {
+            return Err(UnorderedRejection::KnownLength {
+                actual,
+                expected: expected_length,
+            });
+        }
+        let items = iterator
+            .take(expected_length.saturating_add(1))
+            .collect::<Vec<_>>();
+        let actual = Items {
+            items: &items,
+            view: PhantomData::<T>,
+        };
+        let mut child = context.isolated();
+        if child.evaluate(
+            &actual,
+            &crate::assertions::collection::elements_are_in_any_order(self.expected),
+        ) {
+            Ok(())
+        } else {
+            Err(UnorderedRejection::Mismatch {
+                evidence: child.into_evidence(),
+                consumed: items.len(),
+            })
+        }
+    }
+
+    const KIND: FailureKind = FailureKind::Matching;
+    fn explain<Target>(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejection {
+            UnorderedRejection::KnownLength { actual, expected } => failure
+                .relation("does not have the required number of elements")
+                .fact(Fact::labelled(
+                    "Reported length",
+                    context.render().value(&actual),
+                ))
+                .fact(Fact::labelled(
+                    "Expected length",
+                    context.render().value(&expected),
+                )),
+            UnorderedRejection::Mismatch { evidence, consumed } => explain_scan(
+                failure,
+                context,
+                evidence,
+                "does not match exactly in any order",
+                consumed,
+            ),
+        }
+    }
+}
+
 #[track_caller]
-pub(crate) fn unordered<S, T, L, I, M: Mode, R>(
+pub(crate) fn membership<S, T, P, I, M: Mode, R>(
     this: &AssertThat<'_, S, M, R>,
     iterator: I,
-    list: &L,
+    expected: &P,
+    positions: PositionReporting,
+) where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    P: ExpectationDiagnostics<T, R>,
+    R: ValueRenderer<usize>,
+{
+    execute(
+        this,
+        iterator,
+        &ContainsMatching::<T, P> {
+            expected,
+            item: PhantomData,
+            positions,
+        },
+    );
+}
+
+#[track_caller]
+pub(crate) fn no_membership<S, T, P, I, M: Mode, R>(
+    this: &AssertThat<'_, S, M, R>,
+    iterator: I,
+    expected: &P,
+    positions: PositionReporting,
+) where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    P: ExpectationDiagnostics<T, R>,
+    R: ValueRenderer<usize> + ValueRenderer<T>,
+{
+    execute(
+        this,
+        iterator,
+        &ContainsNoMatching::<T, P> {
+            expected,
+            item: PhantomData,
+            positions,
+        },
+    );
+}
+
+#[track_caller]
+pub(crate) fn exact_or_prefix<S, T, L, I, M: Mode, R>(
+    this: &AssertThat<'_, S, M, R>,
+    iterator: I,
+    expected: &L,
+    exact: bool,
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
     L: MatcherList<T, R>,
-    R: crate::ValueRenderer<usize>,
+    R: ValueRenderer<usize>,
 {
-    let expected_length = list.len();
-    if let Some(actual) = exact_size_hint(&iterator)
-        && actual != expected_length
-    {
-        this.failure(FailureKind::Matching)
-            .relation("does not have the required number of elements")
-            .fact(Fact::labelled(
-                "Reported length",
-                this.render().value(&actual),
-            ))
-            .fact(Fact::labelled(
-                "Expected length",
-                this.render().value(&expected_length),
-            ))
-            .raise();
-        return;
-    }
-    let items = iterator
-        .take(expected_length.saturating_add(1))
-        .collect::<Vec<_>>();
-    let actual = Items {
-        items: &items,
-        view: core::marker::PhantomData::<T>,
-    };
-    let mut context = MatchContext::for_assertion(this);
-    if !crate::matchers::elements_are_in_any_order(list)
-        .evaluate(&actual, &mut context)
-        .matched
-    {
-        failure(
-            this,
-            context,
-            "does not match exactly in any order",
-            items.len(),
-        )
-        .raise();
-    }
+    execute(
+        this,
+        iterator,
+        &ElementsAre::<T, L> {
+            expected,
+            item: PhantomData,
+            exact,
+        },
+    );
+}
+
+#[track_caller]
+pub(crate) fn suffix_or_contiguous<S, T, L, I, M: Mode, R>(
+    this: &AssertThat<'_, S, M, R>,
+    iterator: I,
+    expected: &L,
+    suffix: bool,
+) where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    L: MatcherList<T, R>,
+    R: ValueRenderer<usize>,
+{
+    execute(
+        this,
+        iterator,
+        &MatchingWindow::<T, L> {
+            expected,
+            item: PhantomData,
+            suffix,
+        },
+    );
+}
+
+#[track_caller]
+pub(crate) fn unordered<S, T, L, I, M: Mode, R>(
+    this: &AssertThat<'_, S, M, R>,
+    iterator: I,
+    expected: &L,
+) where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    L: MatcherList<T, R>,
+    R: ValueRenderer<usize>,
+{
+    execute(
+        this,
+        iterator,
+        &ElementsAreInAnyOrder::<T, L> {
+            expected,
+            item: PhantomData,
+        },
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
         Fact,
-        matchers::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult},
+        expectation::ExpectationDiagnostics,
         prelude::*,
         renderer::{Rendered, RenderedBody},
         test_support::CustomValueRenderer,
     };
     use core::cell::Cell;
 
+    use crate::failure::{FailureBuilder, FailureKind};
+
     struct DescriptionOnly<'a> {
         expected: i32,
         descriptions: &'a Cell<usize>,
     }
 
-    impl<R: ValueRenderer<i32>> AssertrMatcher<i32, R> for DescriptionOnly<'_> {
-        fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
-            self.descriptions.set(self.descriptions.get() + 1);
-            ConstraintDescription::new("is equal to")
-                .expected(context.render().value(&self.expected))
-        }
-
-        fn evaluate(&self, _: &i32, _: &mut MatchContext<'_, R>) -> MatchResult {
+    impl<R> crate::Expectation<i32, R> for DescriptionOnly<'_> {
+        type Success<'a>
+            = ()
+        where
+            Self: 'a;
+        type Rejection<'a>
+            = ()
+        where
+            Self: 'a;
+        fn evaluate(&self, _: &i32, _: &AssertionContext<'_, R>) -> Result<(), ()> {
             panic!("an incomplete window must not evaluate matchers")
+        }
+    }
+    impl<R: ValueRenderer<i32>> ExpectationDiagnostics<i32, R> for DescriptionOnly<'_> {
+        const KIND: FailureKind = FailureKind::Matching;
+        fn explain<Target>(
+            &self,
+            rejected: Option<(&i32, ())>,
+            failure: FailureBuilder<Target>,
+            context: &AssertionContext<'_, R>,
+        ) -> FailureBuilder<Target> {
+            let render = context.render();
+            match rejected {
+                None => {
+                    self.descriptions.set(self.descriptions.get() + 1);
+                    failure
+                        .relation("is equal to")
+                        .expected(render.value(&self.expected))
+                }
+                Some((_, ())) => {
+                    unreachable!("the test cannot return a rejection")
+                }
+            }
         }
     }
 
@@ -377,7 +686,7 @@ mod tests {
                 let descriptions = Cell::new(0);
                 let later_descriptions = Cell::new(0);
                 let matchers = (
-                    crate::matchers::predicate(|actual: &i32| {
+                    crate::expectation::predicate(|actual: &i32| {
                         evaluations.set(evaluations.get() + 1);
                         *actual == 1
                     }),
@@ -393,10 +702,9 @@ mod tests {
                 let failures = assert_that_owned!([1].into_iter().filter(|_| true))
                     .with_renderer(CustomValueRenderer)
                     .with_rendering_budget(
-                        RenderingBudget::builder()
-                            .max_items(maximum)
-                            .max_leaf_characters(3)
-                            .build(),
+                        RenderingBudget::default()
+                            .with_max_items(maximum)
+                            .with_max_leaf_characters(3),
                     )
                     .capture(|it| {
                         if exact {
@@ -428,8 +736,10 @@ mod tests {
                                                 .derive_owned(AssertionFailure::constraint)
                                                 .is_some_satisfying(|constraint| {
                                                     constraint
-                                                        .derive(|constraint| &constraint.relation)
-                                                        .is_equal_to("is equal to");
+                                                        .derive_owned(|constraint| {
+                                                            constraint.relation()
+                                                        })
+                                                        .is_equal_to(Some("is equal to"));
                                                     constraint
                                                         .derive(|constraint| &constraint.expected)
                                                         .is_some_satisfying(|expected| {
@@ -468,10 +778,9 @@ mod tests {
                 let failures = assert_that_owned!([1].into_iter().filter(|_| true))
                     .with_renderer(CustomValueRenderer)
                     .with_rendering_budget(
-                        RenderingBudget::builder()
-                            .max_items(maximum)
-                            .max_leaf_characters(3)
-                            .build(),
+                        RenderingBudget::default()
+                            .with_max_items(maximum)
+                            .with_max_leaf_characters(3),
                     )
                     .capture(|it| {
                         if suffix {
@@ -496,7 +805,7 @@ mod tests {
                                         (0..maximum)
                                             .map(|index| {
                                                 move |child: AssertThat<
-                                                    ConstraintDescription,
+                                                    crate::AssertionFailure,
                                                     Capture,
                                                 >| {
                                                     child

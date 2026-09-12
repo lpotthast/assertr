@@ -1,12 +1,73 @@
-use std::ffi::OsStr;
-use std::process::Command;
-
-use alloc::vec::Vec;
-
 use crate::failure::FailureKind;
 use crate::mode::Mode;
 use crate::renderer::GroupStyle;
 use crate::{AssertThat, ValueRenderer};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use alloc::vec::Vec;
+use std::ffi::OsStr;
+use std::process::Command;
+
+/// Checks command arguments and retains their observed views on rejection.
+pub struct HasArg<E>(E);
+impl<E, R> Expectation<Command, R> for HasArg<E>
+where
+    E: AsRef<OsStr>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Command: 'a;
+    type Rejection<'a>
+        = (Vec<&'a OsStr>, &'a OsStr)
+    where
+        Self: 'a,
+        Command: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Command,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let args: Vec<&OsStr> = actual.get_args().collect();
+        let expected = self.0.as_ref();
+        if args.contains(&expected) {
+            Ok(())
+        } else {
+            Err((args, expected))
+        }
+    }
+}
+impl<E, R> ExpectationDiagnostics<Command, R> for HasArg<E>
+where
+    E: AsRef<OsStr>,
+    R: ValueRenderer<OsStr>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Command, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("contains")
+                .expected(render.value(self.0.as_ref())),
+            Some((_, (args, expected))) => failure
+                .actual(render.borrowed_values::<OsStr, _>(&args, GroupStyle::List))
+                .relation("does not contain")
+                .expected(render.value(expected)),
+        }
+    }
+}
+impl<E> HasArg<E> {
+    /// Expects this argument.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
 
 /// Assertions for process commands.
 #[allow(clippy::return_self_not_must_use)]
@@ -24,20 +85,7 @@ impl<M: Mode, R> CommandAssertions<R> for AssertThat<'_, Command, M, R> {
     where
         R: ValueRenderer<OsStr>,
     {
-        self.track_assertion();
-        let actual: Vec<&OsStr> = self.actual().get_args().collect();
-        let expected = expected.as_ref();
-        if !actual.contains(&expected) {
-            self.failure(FailureKind::Membership)
-                .actual(
-                    self.render()
-                        .borrowed_values::<OsStr, _>(&actual, GroupStyle::List),
-                )
-                .relation("does not contain")
-                .expected(self.render().value(expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasArg::new(expected))
     }
 }
 

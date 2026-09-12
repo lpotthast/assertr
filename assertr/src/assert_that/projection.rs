@@ -330,35 +330,14 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     {
         self.satisfies_ref(mapper, assertions)
     }
-
-    /// Runs `assertions` against `element` on a capture-mode assertion, returning every failure
-    /// raised. An empty result means that the element satisfies the assertions.
-    ///
-    /// Captures assertions on a locked value using the shared matcher capture helper. Leaf values
-    /// are rendered when failures are built. Presentation remains deferred.
-    #[cfg(feature = "tokio")]
-    pub(crate) fn collect_element_failures<'e, U, A>(
-        &self,
-        element: &'e U,
-        assertions: A,
-    ) -> crate::AssertionFailures
-    where
-        A: for<'a> FnOnce(AssertThat<'a, U, crate::mode::Capture, R>),
-        R: Clone,
-    {
-        crate::matchers::collect_assertions(
-            element,
-            self.render(),
-            self.state.include_location,
-            assertions,
-        )
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
-    use crate::test_support::{SENTINEL, SentinelRenderer};
+    use crate::{
+        prelude::*,
+        test_support::{SENTINEL, SentinelRenderer},
+    };
 
     #[derive(PartialEq)]
     struct Secret(u32);
@@ -416,7 +395,7 @@ mod tests {
         });
 
         assert_that!(failures.as_slice())
-            .contains_exactly_matching(crate::matchers::predicate_list([
+            .contains_exactly_matching(crate::expectation::predicate_list([
                 |it: &AssertionFailure| ToHumanReadableText.render(it).contains("Expected: 4"),
             ]))
             .contains_exactly_satisfying([|it: AssertThat<AssertionFailure, Capture>| {
@@ -460,7 +439,7 @@ mod tests {
             });
 
         assert_that!(failures.as_slice()).contains_exactly_matching(
-            crate::matchers::predicate_list([|it: &AssertionFailure| {
+            crate::expectation::predicate_list([|it: &AssertionFailure| {
                 ToHumanReadableText.render(it).contains("xyz")
             }]),
         );

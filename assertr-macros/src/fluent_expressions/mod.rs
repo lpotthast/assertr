@@ -279,6 +279,7 @@ fn receiver_tokens(receiver: &Expr) -> TokenStream {
 mod tests {
     use super::*;
     use quote::quote;
+    use renamed_assertr::prelude::*;
 
     #[test]
     fn rejects_out_of_line_modules() {
@@ -287,10 +288,7 @@ mod tests {
         ))
         .expect("valid module");
         let error = fluent_expressions_impl(item).expect_err("module must be inline");
-        assert_eq!(
-            error.to_string(),
-            "fluent_expressions requires an inline module"
-        );
+        assert_that!(error.to_string()).is_equal_to("fluent_expressions requires an inline module");
     }
 
     #[test]
@@ -300,9 +298,7 @@ mod tests {
         ))
         .expect("valid struct");
         let error = fluent_expressions_impl(item).expect_err("struct is not supported");
-        assert_eq!(
-            error.to_string(),
-            "fluent_expressions can only be applied to a function or inline module"
-        );
+        assert_that!(error.to_string())
+            .is_equal_to("fluent_expressions can only be applied to a function or inline module");
     }
 }

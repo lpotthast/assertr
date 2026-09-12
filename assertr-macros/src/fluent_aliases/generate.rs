@@ -144,6 +144,7 @@ fn fresh_argument_ident(
 #[cfg(test)]
 mod tests {
     use quote::quote;
+    use renamed_assertr::prelude::*;
     use std::fmt::Debug;
     use syn::{Attribute, TraitItemFn, parse_quote};
 
@@ -157,7 +158,7 @@ mod tests {
     where
         T: Debug + PartialEq,
     {
-        assert_eq!(actual, expected);
+        assert_that_owned!(actual).is_equal_to(expected);
     }
 
     #[test]
@@ -166,14 +167,14 @@ mod tests {
             fn is_ready(self) -> Self;
         };
         let alias = generate_alias(&original, "be_ready");
-        assert_eq!(
+        assert_that!(
             alias
                 .attrs
                 .iter()
                 .filter(|attribute| attribute.path().is_ident("track_caller"))
-                .count(),
-            1
-        );
+                .count()
+        )
+        .is_equal_to(1);
     }
 
     #[test]
@@ -202,18 +203,16 @@ mod tests {
             },
         );
         assert_equal(&alias.attrs[2], &parse_quote! { #[doc = ""] });
-        assert_eq!(
-            attributes_tokens(&alias.attrs[3..]),
-            attributes_tokens(&original.attrs)
-        );
-        assert_eq!(
+        assert_that!(attributes_tokens(&alias.attrs[3..]))
+            .is_equal_to(attributes_tokens(&original.attrs));
+        assert_that!(
             alias
                 .attrs
                 .iter()
                 .filter(|attribute| attribute.path().is_ident("track_caller"))
-                .count(),
-            1
-        );
+                .count()
+        )
+        .is_equal_to(1);
     }
 
     #[test]
@@ -295,7 +294,7 @@ mod tests {
     fn generates_a_raw_match_alias() {
         let original: TraitItemFn = parse_quote! {fn matches<E>(self,expected:E)->Self;};
         let alias = generate_alias(&original, "match");
-        assert_eq!(alias.sig.ident.to_string(), "r#match");
+        assert_that!(alias.sig.ident.to_string()).is_equal_to("r#match");
         let _: TraitItemFn = syn::parse2(quote!(#alias)).expect("raw alias is valid Rust");
     }
 }

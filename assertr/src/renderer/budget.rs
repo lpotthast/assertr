@@ -13,15 +13,14 @@
 ///
 /// let failures = assert_that!([123_456, 234_567, 345_678])
 ///     .with_rendering_budget(
-///         RenderingBudget::builder()
-///             .max_items(2)
-///             .max_leaf_characters(3)
-///             .build(),
+///         RenderingBudget::default()
+///             .with_max_items(2)
+///             .with_max_leaf_characters(3),
 ///     )
 ///     .with_location(false)
 ///     .capture(|it| it.contains(0));
 ///
-/// assert!(ToHumanReadableText.render(&failures[0]).contains(concat!(
+/// assert_that!(ToHumanReadableText.render(&failures[0])).contains(concat!(
 ///         "Actual: [\n",
 ///         "    123... 3 more characters ...,\n",
 ///         "    234... 3 more characters ...,\n",
@@ -30,7 +29,7 @@
 ///         "does not contain\n",
 ///         "\n",
 ///         "Expected: 0\n",
-///     )));
+///     ));
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RenderingBudget {
@@ -47,14 +46,6 @@ impl RenderingBudget {
         max_items: 256,
         max_leaf_characters: 4_096,
     };
-
-    /// Creates a builder initialized with the default limits.
-    #[must_use]
-    pub const fn builder() -> RenderingBudgetBuilder {
-        RenderingBudgetBuilder {
-            budget: Self::DEFAULT,
-        }
-    }
 
     /// Creates a budget that never truncates rendering output.
     #[must_use]
@@ -76,6 +67,20 @@ impl RenderingBudget {
     pub const fn max_leaf_characters(self) -> usize {
         self.max_leaf_characters
     }
+
+    /// Sets the maximum items retained in each repeated diagnostic group.
+    #[must_use]
+    pub const fn with_max_items(mut self, maximum: usize) -> Self {
+        self.max_items = maximum;
+        self
+    }
+
+    /// Sets the maximum characters retained from each diagnostic leaf.
+    #[must_use]
+    pub const fn with_max_leaf_characters(mut self, maximum: usize) -> Self {
+        self.max_leaf_characters = maximum;
+        self
+    }
 }
 
 impl Default for RenderingBudget {
@@ -84,53 +89,34 @@ impl Default for RenderingBudget {
     }
 }
 
-/// Builds a [`RenderingBudget`] with named setters for either limit.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RenderingBudgetBuilder {
-    budget: RenderingBudget,
-}
-
-impl RenderingBudgetBuilder {
-    /// Sets the maximum items rendered from one repeated diagnostic group.
-    #[must_use]
-    pub const fn max_items(mut self, maximum: usize) -> Self {
-        self.budget.max_items = maximum;
-        self
-    }
-
-    /// Sets the maximum characters retained from each rendered leaf value.
-    #[must_use]
-    pub const fn max_leaf_characters(mut self, maximum: usize) -> Self {
-        self.budget.max_leaf_characters = maximum;
-        self
-    }
-
-    /// Returns the configured rendering budget.
-    #[must_use]
-    pub const fn build(self) -> RenderingBudget {
-        self.budget
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
 
-    mod builder {
+    mod configuration {
         use super::*;
 
         #[test]
         fn uses_defaults_for_unchanged_limits() {
-            assert_that!(RenderingBudget::builder().build())
-                .is_equal_to(RenderingBudget::default());
+            assert_that!(
+                RenderingBudget::default()
+                    .with_max_items(17)
+                    .max_leaf_characters()
+            )
+            .is_equal_to(RenderingBudget::DEFAULT.max_leaf_characters());
+            assert_that!(
+                RenderingBudget::default()
+                    .with_max_leaf_characters(29)
+                    .max_items()
+            )
+            .is_equal_to(RenderingBudget::DEFAULT.max_items());
         }
 
         #[test]
         fn sets_each_named_limit() {
-            let budget = RenderingBudget::builder()
-                .max_items(17)
-                .max_leaf_characters(29)
-                .build();
+            let budget = RenderingBudget::default()
+                .with_max_items(17)
+                .with_max_leaf_characters(29);
 
             assert_that!(budget.max_items()).is_equal_to(17);
             assert_that!(budget.max_leaf_characters()).is_equal_to(29);

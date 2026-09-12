@@ -1,5 +1,139 @@
 use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use core::cell::RefCell;
+
+/// Observes whether a cell is borrowed, retaining an acquired borrow on rejection.
+pub struct IsBorrowed;
+
+impl<T, R> Expectation<RefCell<T>, R> for IsBorrowed {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        RefCell<T>: 'a;
+    type Rejection<'a>
+        = core::cell::RefMut<'a, T>
+    where
+        Self: 'a,
+        RefCell<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a RefCell<T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        match actual.try_borrow_mut() {
+            Ok(guard) => Err(guard),
+            Err(_) => Ok(()),
+        }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<RefCell<T>, R> for IsBorrowed
+where
+    R: ValueRenderer<T>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a RefCell<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is borrowed"),
+            Some((actual, guard)) => failure
+                .actual(render.struct_field(actual, "RefCell", "value", &*guard))
+                .relation("is not borrowed"),
+        }
+    }
+}
+
+/// Observes whether a cell is mutably borrowed, retaining an acquired borrow on rejection.
+pub struct IsMutablyBorrowed;
+
+impl<T, R> Expectation<RefCell<T>, R> for IsMutablyBorrowed {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        RefCell<T>: 'a;
+    type Rejection<'a>
+        = core::cell::Ref<'a, T>
+    where
+        Self: 'a,
+        RefCell<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a RefCell<T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        match actual.try_borrow() {
+            Ok(guard) => Err(guard),
+            Err(_) => Ok(()),
+        }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<RefCell<T>, R> for IsMutablyBorrowed
+where
+    R: ValueRenderer<T>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a RefCell<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is mutably borrowed"),
+            Some((actual, guard)) => failure
+                .actual(render.struct_field(actual, "RefCell", "value", &*guard))
+                .relation("is not mutably borrowed"),
+        }
+    }
+}
+
+/// Acquires a shared borrow if the cell has no active mutable borrow.
+pub struct IsNotMutablyBorrowed;
+impl<T, R> Expectation<RefCell<T>, R> for IsNotMutablyBorrowed {
+    type Success<'a>
+        = core::cell::Ref<'a, T>
+    where
+        Self: 'a,
+        RefCell<T>: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        RefCell<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a RefCell<T>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        actual.try_borrow().map_err(|_| ())
+    }
+}
+impl<T, R> ExpectationDiagnostics<RefCell<T>, R> for IsNotMutablyBorrowed {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a RefCell<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is not mutably borrowed"),
+            Some((actual, ())) => failure
+                .actual(render.unavailable_struct_field(actual, "RefCell", "value", "<borrowed>"))
+                .relation("is unexpectedly mutably borrowed"),
+        }
+    }
+}
 
 /// Assertions for the dynamic borrow state of a [`RefCell`].
 #[allow(clippy::return_self_not_must_use)]
@@ -27,21 +161,7 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        if self.actual().try_borrow_mut().is_ok() {
-            let value = self
-                .actual()
-                .try_borrow()
-                .expect("the borrow check already succeeded");
-            self.failure(FailureKind::Other)
-                .actual(
-                    self.render()
-                        .struct_field(self.actual(), "RefCell", "value", &*value),
-                )
-                .relation("is not borrowed")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsBorrowed)
     }
 
     #[track_caller]
@@ -49,43 +169,41 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        if self.actual().try_borrow().is_ok() {
-            let value = self
-                .actual()
-                .try_borrow()
-                .expect("the borrow check already succeeded");
-            self.failure(FailureKind::Other)
-                .actual(
-                    self.render()
-                        .struct_field(self.actual(), "RefCell", "value", &*value),
-                )
-                .relation("is not mutably borrowed")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsMutablyBorrowed)
     }
 
     #[track_caller]
     fn is_not_mutably_borrowed(self) -> Self {
-        self.track_assertion();
-        if self.actual().try_borrow().is_err() {
-            self.failure(FailureKind::Other)
-                .actual(self.render().unavailable_struct_field(
-                    self.actual(),
-                    "RefCell",
-                    "value",
-                    "<borrowed>",
-                ))
-                .relation("is unexpectedly mutably borrowed")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsNotMutablyBorrowed)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    mod observations {
+        use super::super::{IsBorrowed, IsMutablyBorrowed, IsNotMutablyBorrowed};
+        use crate::{
+            matchers::{all_of, predicate},
+            prelude::*,
+            test_support::NoRenderer,
+        };
+        use core::cell::RefCell;
+
+        #[test]
+        fn composed_checks_release_rejected_and_successful_borrows_between_siblings() {
+            let cell = RefCell::new(7);
+            let failures = assert_that!(cell)
+                .capture(|it| it.matches(all_of((IsBorrowed, IsMutablyBorrowed))));
+            assert_that!(failures[0].children).has_length(2);
+            assert_that!(cell)
+                .with_renderer(NoRenderer)
+                .matches(all_of((
+                    IsNotMutablyBorrowed,
+                    predicate(|cell: &RefCell<i32>| cell.try_borrow_mut().is_ok()),
+                )));
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};

@@ -1,17 +1,17 @@
 error[E0026]: struct `Point` does not have a field named `y`
  --> tests/partial/20-reject-unknown-field.rs:8:59
   |
-8 |     assert_that!(Point { x: 1 }).matches(partial!(Point { y: 1, .. }));
+8 |     assert_that!(Point { x: 1 }).matches(partial!(Point { y: eq(1), .. }));
   |                                                           ^ struct `Point` does not have this field
   |
 help: a field with a similar name exists
   |
-8 -     assert_that!(Point { x: 1 }).matches(partial!(Point { y: 1, .. }));
-8 +     assert_that!(Point { x: 1 }).matches(partial!(Point { x: 1, .. }));
+8 -     assert_that!(Point { x: 1 }).matches(partial!(Point { y: eq(1), .. }));
+8 +     assert_that!(Point { x: 1 }).matches(partial!(Point { x: eq(1), .. }));
   |
 
 error[E0026]: struct `Point` does not have a field named `y`
  --> tests/partial/20-reject-unknown-field.rs:8:59
   |
-8 |     assert_that!(Point { x: 1 }).matches(partial!(Point { y: 1, .. }));
+8 |     assert_that!(Point { x: 1 }).matches(partial!(Point { y: eq(1), .. }));
   |                                                           ^ struct `Point` does not have this field

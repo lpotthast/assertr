@@ -1,13 +1,42 @@
 use crate::{
-    AssertThat, PanicValue,
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, PanicValue,
     actual::Actual,
-    failure::FailureKind,
+    failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
 };
 use alloc::boxed::Box;
 use core::any::Any;
 
-use super::boxed::{downcast, raise_type_mismatch, type_mismatch};
+use super::boxed::{IsOfType, downcast, explain_type_mismatch};
+
+impl<E: 'static, R> Expectation<PanicValue, R> for IsOfType<E> {
+    type Success<'a> = &'a E;
+    type Rejection<'a> = &'a dyn Any;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a PanicValue,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<&'a E, &'a dyn Any> {
+        actual.0.downcast_ref::<E>().ok_or(&*actual.0)
+    }
+}
+
+impl<E: 'static, R> ExpectationDiagnostics<PanicValue, R> for IsOfType<E> {
+    const KIND: FailureKind = FailureKind::Panic;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a PanicValue, &'a dyn Any)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure
+                .relation("is of the expected type")
+                .expected(core::any::type_name::<E>()),
+            Some((_, any)) => explain_type_mismatch::<E, _>(any, failure, ERASED_TYPE_NOTE),
+        }
+    }
+}
 
 /// Explains the erased type name reported for a panic payload that is neither a `&str` nor a
 /// `String`.
@@ -25,16 +54,7 @@ pub trait PanicValueAssertions<'t, R = crate::DebugRenderer> {
 impl<'t, M: Mode, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, M, R> {
     #[track_caller]
     fn is_of_type<E: 'static>(self) -> Self {
-        self.track_assertion();
-        if !self.actual().0.is::<E>() {
-            type_mismatch::<_, _, _, E>(
-                &self,
-                FailureKind::Panic,
-                &*self.actual().0,
-                ERASED_TYPE_NOTE,
-            );
-        }
-        self
+        self.apply_assertion(IsOfType::<E>::new())
     }
 }
 
@@ -59,11 +79,16 @@ pub trait PanicValueExtractAssertions<'t, R = crate::DebugRenderer> {
 impl<'t, R> PanicValueExtractAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R> {
     #[track_caller]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
-        let boxed = self.map::<Box<dyn Any>>(|it| match it {
-            Actual::Borrowed(b) => Actual::Borrowed(&b.0),
-            Actual::Owned(o) => Actual::Owned(o.0),
-        });
-        downcast(boxed, FailureKind::Panic, ERASED_TYPE_NOTE)
+        let boxed = self
+            .apply_assertion_with_failure(IsOfType::<E>::new(), |_, failure| {
+                // Extraction has historically reported the boxed payload as its subject type.
+                failure.subject_type::<Box<dyn Any>>()
+            })
+            .map::<Box<dyn Any>>(|actual| match actual {
+                Actual::Borrowed(value) => Actual::Borrowed(&value.0),
+                Actual::Owned(value) => Actual::Owned(value.0),
+            });
+        downcast(boxed)
     }
 
     #[track_caller]
@@ -71,17 +96,10 @@ impl<'t, R> PanicValueExtractAssertions<'t, R> for AssertThat<'t, PanicValue, Pa
     where
         R: Clone,
     {
-        self.track_assertion();
-
-        match self.actual().0.downcast_ref::<E>() {
-            Some(casted) => self.derive_owned(|_actual| casted),
-            None => raise_type_mismatch::<_, _, E>(
-                self,
-                FailureKind::Panic,
-                &*self.actual().0,
-                ERASED_TYPE_NOTE,
-            ),
-        }
+        let value = self
+            .test_assertion(&const { IsOfType::<E>::new() })
+            .expect("Panic mode raises rejected type checks");
+        self.derive_owned(|_| value)
     }
 }
 
@@ -127,9 +145,7 @@ mod tests {
             let failures = assert_that!(value)
                 .with_location(false)
                 .capture(PanicValueAssertions::is_of_type::<u32>);
-            assert_eq!(
-                failures[0].to_string(),
-                indoc::indoc! {"
+            assert_that!(failures[0].to_string()).is_equal_to(indoc::indoc! {"
                 -------- assertr --------
                 Expression: `value`
 
@@ -139,8 +155,7 @@ mod tests {
 
                 Expected: u32
                 -------- assertr --------
-            "}
-            );
+            "});
         }
     }
 
@@ -157,6 +172,8 @@ mod tests {
                 AssertThat<'static, crate::PanicValue, Panic, NoRenderer>
                     => PanicValueExtractAssertions<'static, NoRenderer>
             );
+
+            assert_trait_impl!(crate::assertions::alloc::boxed::IsOfType<i32> => crate::ExpectationDiagnostics<crate::PanicValue, NoRenderer>);
         }
     }
 
@@ -176,6 +193,36 @@ mod tests {
         fn caller_location_is_as_expected() {
             let value = crate::PanicValue(alloc::boxed::Box::new(1_i32));
             assert_caller_location!(assert_that!(value), has_type::<u8>());
+        }
+
+        #[test]
+        fn preserves_the_boxed_subject_metadata_for_panic_presentation() {
+            use crate::failure::adapter::{Adapter, HumanReadableText};
+            use core::{
+                any::{Any, type_name},
+                convert::Infallible,
+            };
+
+            struct SubjectType;
+            impl Adapter<AssertionFailure> for SubjectType {
+                type Output = HumanReadableText;
+                type Error = Infallible;
+                fn adapt(
+                    &self,
+                    failure: &AssertionFailure,
+                ) -> Result<HumanReadableText, Infallible> {
+                    assert_that!(failure.kind).is_equal_to(crate::FailureKind::Panic);
+                    Ok(HumanReadableText::new(failure.subject_type_name))
+                }
+            }
+            let actual = PanicValue(Box::new("text"));
+            assert_that_panic_by(|| {
+                assert_that!(actual)
+                    .with_panic_presentation(SubjectType)
+                    .has_type::<u32>();
+            })
+            .has_type::<String>()
+            .is_equal_to(type_name::<Box<dyn Any>>());
         }
 
         #[test]

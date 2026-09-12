@@ -1,4 +1,4 @@
-use renamed_assertr::prelude::*;
+use renamed_assertr::{matchers::eq, prelude::*};
 
 enum Message {
     Named { value: i32 },
@@ -7,10 +7,10 @@ enum Message {
 }
 
 fn main() {
-    assert_that!(Message::Named { value: 1 }).matches(partial!(Message::Named { value: 1 }));
-    assert_that!(Message::Tuple(2)).matches(partial!(Message::Tuple(2)));
+    assert_that!(Message::Named { value: 1 }).matches(partial!(Message::Named { value: eq(1) }));
+    assert_that!(Message::Tuple(2)).matches(partial!(Message::Tuple(eq(2))));
     assert_that!(Message::Unit).matches(partial!(Message::Unit));
 
     // The optional `variant` prefix also includes the variant in diagnostic paths.
-    assert_that!(Some(3)).matches(partial!(variant Some(3)));
+    assert_that!(Some(3)).matches(partial!(variant Some(eq(3))));
 }

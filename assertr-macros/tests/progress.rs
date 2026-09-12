@@ -44,7 +44,7 @@ mod partial {
         t.pass("tests/partial/09-match-generic-struct.rs");
         t.pass("tests/partial/10-ignore-non-debug-field.rs");
         t.pass("tests/partial/11-handle-field-names.rs");
-        t.pass("tests/partial/12-disambiguate-value-and-matcher.rs");
+        t.pass("tests/partial/12-explicit-equality-and-matcher.rs");
         t.pass("tests/partial/13-borrow-temporary-expectations.rs");
         t.pass("tests/partial/14-match-without-renderer.rs");
         t.pass("tests/partial/15-generated-items-are-documented.rs");
@@ -60,8 +60,9 @@ mod partial {
         t.compile_fail("tests/partial/23-reject-unknown-unit-constructors.rs");
         t.compile_fail("tests/partial/24-reject-non-exhaustive-without-rest.rs");
         t.compile_fail("tests/partial/25-reject-outlived-borrow.rs");
-        t.compile_fail("tests/partial/26-reject-ambiguous-expectation.rs");
+        t.compile_fail("tests/partial/26-reject-plain-field-values.rs");
         t.compile_fail("tests/partial/27-reject-plain-value-as-matcher.rs");
         t.compile_fail("tests/partial/28-reject-missing-stable-order.rs");
+        t.compile_fail("tests/partial/29-reject-plain-macro-values.rs");
     }
 }

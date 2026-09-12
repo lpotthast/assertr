@@ -1,0 +1,55 @@
+error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<i32>` is not satisfied
+  --> tests/partial/26-reject-plain-field-values.rs:11:46
+   |
+11 |     assert_that!(Named { value: 1 }).matches(partial!(Named { value: 1 }));
+   |                                      ------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `ExpectationDiagnostics<i32>` is not implemented for `{integer}`
+   |                                      |
+   |                                      required by a bound introduced by this call
+   |
+   = help: the following other types implement trait `ExpectationDiagnostics<T, R>`:
+             `&D` implements `ExpectationDiagnostics<T, R>`
+             `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
+             `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
+             `Anything` implements `ExpectationDiagnostics<A, R>`
+             `Condition<C>` implements `ExpectationDiagnostics<T, R>`
+             `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
+             `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
+             `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+           and $N others
+   = note: required for `assertr::__private::field::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>` to implement `ExpectationDiagnostics<Named>`
+   = note: required for `assertr::__private::Cons<assertr::__private::field::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Named, DebugRenderer>`
+   = note: 1 redundant requirement hidden
+   = note: required for `assertr::__private::PartialMatch<Named, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:46: 11:74}, assertr::__private::Cons<assertr::__private::field::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<Named>`
+note: required by a bound in `matches`
+  --> $WORKSPACE/assertr/src/assertions/matcher.rs
+   |
+   |     fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+
+error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<i32>` is not satisfied
+  --> tests/partial/26-reject-plain-field-values.rs:12:36
+   |
+12 |     assert_that!(Tuple(1)).matches(partial!(Tuple(1)));
+   |                            ------- ^^^^^^^^^^^^^^^^^^ the trait `ExpectationDiagnostics<i32>` is not implemented for `{integer}`
+   |                            |
+   |                            required by a bound introduced by this call
+   |
+   = help: the following other types implement trait `ExpectationDiagnostics<T, R>`:
+             `&D` implements `ExpectationDiagnostics<T, R>`
+             `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
+             `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
+             `Anything` implements `ExpectationDiagnostics<A, R>`
+             `Condition<C>` implements `ExpectationDiagnostics<T, R>`
+             `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
+             `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
+             `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+           and $N others
+   = note: required for `assertr::__private::field::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:36: 12:54}, {integer}>` to implement `ExpectationDiagnostics<Tuple>`
+   = note: required for `assertr::__private::Cons<assertr::__private::field::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:36: 12:54}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Tuple, DebugRenderer>`
+   = note: 1 redundant requirement hidden
+   = note: required for `assertr::__private::PartialMatch<Tuple, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:36: 12:54}, assertr::__private::Cons<assertr::__private::field::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:36: 12:54}, {integer}>, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<Tuple>`
+note: required by a bound in `matches`
+  --> $WORKSPACE/assertr/src/assertions/matcher.rs
+   |
+   |     fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`

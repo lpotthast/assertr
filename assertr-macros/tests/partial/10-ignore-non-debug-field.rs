@@ -1,4 +1,4 @@
-use renamed_assertr::prelude::*;
+use renamed_assertr::{matchers::eq, prelude::*};
 
 // Neither this field nor the containing struct implements `Debug` or `PartialEq`.
 struct Secret;
@@ -15,5 +15,5 @@ fn main() {
     };
 
     // Only selected fields need comparison and rendering support.
-    assert_that!(user).matches(partial!(User { age: 30, .. }));
+    assert_that!(user).matches(partial!(User { age: eq(30), .. }));
 }

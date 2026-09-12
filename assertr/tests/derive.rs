@@ -8,7 +8,7 @@ fn extracting_does_not_retain_the_subject_borrow_until_the_context_is_dropped() 
 
     // Keep `assertion` in scope. Its last use, rather than its drop, must end the borrow.
     values.push(2);
-    assert_eq!(values, [1, 2]);
+    assert_that!(values).contains_exactly([1, 2]);
 }
 
 #[test]
@@ -18,7 +18,7 @@ fn deriving_does_not_retain_the_subject_borrow_until_the_context_is_dropped() {
     assertion.derive_owned(Vec::len).is_equal_to(1);
 
     values.push(2);
-    assert_eq!(values, [1, 2]);
+    assert_that!(values).contains_exactly([1, 2]);
 }
 
 #[derive(Debug, PartialEq)]

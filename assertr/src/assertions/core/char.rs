@@ -1,6 +1,201 @@
-use crate::failure::FailureKind;
-use crate::mode::Mode;
-use crate::{AssertThat, ValueRenderer};
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
+};
+
+/// Compares characters under ASCII case folding.
+pub struct EqualToIgnoringAsciiCase(char);
+
+impl EqualToIgnoringAsciiCase {
+    /// Owns the expected character.
+    #[must_use]
+    pub const fn new(expected: char) -> Self {
+        Self(expected)
+    }
+}
+
+impl<R> Expectation<char, R> for EqualToIgnoringAsciiCase {
+    type Success<'a> = ();
+    type Rejection<'a> = ();
+    fn evaluate<'a>(&'a self, actual: &'a char, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.eq_ignore_ascii_case(&self.0) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<R: ValueRenderer<char>> ExpectationDiagnostics<char, R> for EqualToIgnoringAsciiCase {
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&char, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is equal to ignoring ASCII case"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not equal to ignoring ASCII case"),
+        };
+        failure.expected(render.value(&self.0))
+    }
+}
+
+/// Checks the Unicode `Lowercase` property.
+pub struct IsLowercase;
+
+impl<R> Expectation<char, R> for IsLowercase {
+    type Success<'a> = ();
+    type Rejection<'a> = ();
+
+    fn evaluate<'a>(&'a self, actual: &'a char, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_lowercase() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<R> ExpectationDiagnostics<char, R> for IsLowercase
+where
+    R: ValueRenderer<char>,
+{
+    const KIND: FailureKind = FailureKind::Predicate;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&char, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is lowercase"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not lowercase"),
+        }
+    }
+}
+
+/// Checks the Unicode `Uppercase` property.
+pub struct IsUppercase;
+
+impl<R> Expectation<char, R> for IsUppercase {
+    type Success<'a> = ();
+    type Rejection<'a> = ();
+
+    fn evaluate<'a>(&'a self, actual: &'a char, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_uppercase() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<R> ExpectationDiagnostics<char, R> for IsUppercase
+where
+    R: ValueRenderer<char>,
+{
+    const KIND: FailureKind = FailureKind::Predicate;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&char, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is uppercase"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not uppercase"),
+        }
+    }
+}
+
+/// Checks for an ASCII lowercase letter.
+pub struct IsAsciiLowercase;
+
+impl<R> Expectation<char, R> for IsAsciiLowercase {
+    type Success<'a> = ();
+    type Rejection<'a> = ();
+
+    fn evaluate<'a>(&'a self, actual: &'a char, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_ascii_lowercase() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<R> ExpectationDiagnostics<char, R> for IsAsciiLowercase
+where
+    R: ValueRenderer<char>,
+{
+    const KIND: FailureKind = FailureKind::Predicate;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&char, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is an ASCII lowercase letter"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not an ASCII lowercase letter"),
+        }
+    }
+}
+
+/// Checks for an ASCII uppercase letter.
+pub struct IsAsciiUppercase;
+
+impl<R> Expectation<char, R> for IsAsciiUppercase {
+    type Success<'a> = ();
+    type Rejection<'a> = ();
+
+    fn evaluate<'a>(&'a self, actual: &'a char, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.is_ascii_uppercase() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<R> ExpectationDiagnostics<char, R> for IsAsciiUppercase
+where
+    R: ValueRenderer<char>,
+{
+    const KIND: FailureKind = FailureKind::Predicate;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&char, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is an ASCII uppercase letter"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not an ASCII uppercase letter"),
+        }
+    }
+}
 
 /// Assertions for character values.
 #[allow(clippy::return_self_not_must_use)]
@@ -41,16 +236,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.eq_ignore_ascii_case(&expected) {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(actual))
-                .relation("is not equal to ignoring ASCII case")
-                .expected(self.render().value(&expected))
-                .raise();
-        }
-        self
+        self.apply_assertion(EqualToIgnoringAsciiCase::new(expected))
     }
 
     #[track_caller]
@@ -58,15 +244,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_lowercase() {
-            self.failure(FailureKind::Predicate)
-                .actual(self.render().value(actual))
-                .relation("is not lowercase")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsLowercase)
     }
 
     #[track_caller]
@@ -74,15 +252,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_uppercase() {
-            self.failure(FailureKind::Predicate)
-                .actual(self.render().value(actual))
-                .relation("is not uppercase")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsUppercase)
     }
 
     #[track_caller]
@@ -90,15 +260,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_ascii_lowercase() {
-            self.failure(FailureKind::Predicate)
-                .actual(self.render().value(actual))
-                .relation("is not an ASCII lowercase letter")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsAsciiLowercase)
     }
 
     #[track_caller]
@@ -106,15 +268,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        if !actual.is_ascii_uppercase() {
-            self.failure(FailureKind::Predicate)
-                .actual(self.render().value(actual))
-                .relation("is not an ASCII uppercase letter")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsAsciiUppercase)
     }
 }
 
@@ -129,6 +283,12 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, char, Panic, NoRenderer> => CharAssertions<NoRenderer>
             );
+
+            assert_trait_impl!(super::super::EqualToIgnoringAsciiCase => crate::Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::IsLowercase => crate::Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::IsUppercase => crate::Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::IsAsciiLowercase => crate::Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::IsAsciiUppercase => crate::Expectation<char, NoRenderer>);
         }
 
         #[test]

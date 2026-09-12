@@ -2,9 +2,53 @@
 
 use crate::mode::{Mode, Panic};
 use crate::{Actual, AssertThat, Fact, ValueRenderer, failure::FailureKind};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use alloc::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
+
+/// Resolves an executable program once, returning its path or lookup error.
+pub struct Exists;
+impl<'p, R> Expectation<Program<'p>, R> for Exists {
+    type Success<'a>
+        = PathBuf
+    where
+        Self: 'a,
+        Program<'p>: 'a;
+    type Rejection<'a>
+        = which::Error
+    where
+        Self: 'a,
+        Program<'p>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Program<'p>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        which::which(actual.as_ref())
+    }
+}
+impl<'p, R> ExpectationDiagnostics<Program<'p>, R> for Exists
+where
+    R: ValueRenderer<Program<'p>> + ValueRenderer<which::Error>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Program<'p>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("can be resolved"),
+            Some((actual, error)) => failure
+                .actual(render.value(actual))
+                .relation("was not found")
+                .fact(Fact::labelled("Reason", render.value(&error))),
+        }
+    }
+}
 
 /// A program name or path to resolve with [`which::which`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,19 +130,7 @@ impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Prog
     where
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
-        self.track_assertion();
-        let program = self.actual().as_ref();
-        let found = which::which(program);
-
-        if let Err(err) = &found {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(self.actual()))
-                .relation("was not found")
-                .fact(Fact::labelled("Reason", self.render().value(err)))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(Exists)
     }
 }
 
@@ -110,19 +142,10 @@ impl<'a, 't, R> ProgramExtractAssertions<'t, R> for AssertThat<'t, Program<'a>, 
     where
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
-        self.track_assertion();
-        let program = self.actual().as_ref();
-        let found = which::which(program);
-
-        if let Err(err) = &found {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(self.actual()))
-                .relation("was not found")
-                .fact(Fact::labelled("Reason", self.render().value(err)))
-                .raise();
-        }
-
-        self.map(|_| Actual::Owned(found.expect("present")))
+        let path = self
+            .test_assertion(&Exists)
+            .expect("Panic mode raises lookup failures");
+        self.map(|_| Actual::Owned(path))
     }
 }
 

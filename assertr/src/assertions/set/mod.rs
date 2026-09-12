@@ -17,6 +17,7 @@ use crate::{assertions::collection::Collection, renderer::CollectionPresentation
 use alloc::collections::BTreeSet;
 
 pub use assertions::SetAssertions;
+pub use imp::{IsDisjointFrom, IsSubsetOf, IsSupersetOf};
 
 /// Native membership lookup capability for a set collection.
 ///
@@ -83,8 +84,7 @@ where
 // Collection predicates receive elements by reference, including for small `Copy` element types.
 #[allow(clippy::trivially_copy_pass_by_ref)]
 mod tests {
-    use alloc::collections::BTreeSet;
-    use alloc::vec::Vec;
+    use alloc::{collections::BTreeSet, vec::Vec};
 
     use crate::prelude::*;
 
@@ -147,16 +147,16 @@ mod tests {
 
         assert_that!(BTreeSet::from([1, 2, 3]))
             .contains(2)
-            .contains_matching(crate::matchers::predicate(is_two))
+            .contains_matching(crate::expectation::predicate(is_two))
             .contains_satisfying(satisfies_two)
             .contains_all([1, 3])
             .does_not_contain(4)
-            .does_not_contain_matching(crate::matchers::predicate(|it: &i32| *it > 7))
+            .does_not_contain_matching(crate::expectation::predicate(|it: &i32| *it > 7))
             .does_not_contain_satisfying(|it| {
                 it.is_equal_to(7);
             })
             .contains_exactly_in_any_order([3, 1, 2])
-            .contains_exactly_in_any_order_matching(crate::matchers::predicate_list(predicates))
+            .contains_exactly_in_any_order_matching(crate::expectation::predicate_list(predicates))
             .contains_exactly_in_any_order_satisfying(assertions)
             .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
             .is_superset_of(BTreeSet::from([1]))
@@ -173,9 +173,9 @@ mod tests {
             |element: AssertThat<AssertionFailure, Capture>| {
                 element
                     .derive_owned(|value| value.facts.as_slice())
-                    .does_not_contain_matching(crate::matchers::predicate(|fact: &crate::Fact| {
-                        fact.label == crate::Fact::INDEX
-                    }));
+                    .does_not_contain_matching(crate::expectation::predicate(
+                        |fact: &crate::Fact| fact.label == crate::Fact::INDEX,
+                    ));
             },
         ]);
     }
@@ -198,8 +198,10 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn hash_set_adapter_supports_custom_hashers_and_references() {
-        use std::collections::HashSet;
-        use std::hash::{BuildHasherDefault, DefaultHasher};
+        use std::{
+            collections::HashSet,
+            hash::{BuildHasherDefault, DefaultHasher},
+        };
 
         let mut set: HashSet<i32, BuildHasherDefault<DefaultHasher>> =
             HashSet::with_hasher(BuildHasherDefault::default());

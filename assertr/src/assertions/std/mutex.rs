@@ -1,6 +1,203 @@
+use crate::{AssertThat, Fact, Mode, ValueRenderer, failure::FailureKind};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use std::sync::MutexGuard;
 use std::sync::{Mutex, TryLockError};
 
-use crate::{AssertThat, Fact, Mode, ValueRenderer, failure::FailureKind};
+/// Checks whether a mutex is poisoned.
+pub struct IsPoisoned;
+impl<T, R> Expectation<Mutex<T>, R> for IsPoisoned {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Mutex<T>: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        Mutex<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Mutex<T>,
+        __context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_poisoned() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsPoisoned {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure.relation("is poisoned"),
+            Some(_) => failure.relation("is not poisoned"),
+        }
+    }
+}
+
+/// Checks whether a mutex is not poisoned.
+pub struct IsNotPoisoned;
+impl<T, R> Expectation<Mutex<T>, R> for IsNotPoisoned {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Mutex<T>: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        Mutex<T>: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Mutex<T>,
+        __context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_poisoned() {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotPoisoned {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => failure.relation("is not poisoned"),
+            Some(_) => failure.relation("is unexpectedly poisoned"),
+        }
+    }
+}
+
+/// Observes whether a mutex is locked, retaining an acquired guard when the check rejects.
+pub struct IsLocked;
+
+/// An acquired guard and the observed poison state from a rejected lock expectation.
+/// Explanation releases the guard before the executor raises or evaluates another child.
+pub struct UnlockedRejection<'a, T> {
+    guard: MutexGuard<'a, T>,
+    poisoned: bool,
+}
+
+impl<T, R> Expectation<Mutex<T>, R> for IsLocked {
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = UnlockedRejection<'a, T>
+    where
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Mutex<T>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        match actual.try_lock() {
+            Ok(guard) => Err(UnlockedRejection {
+                guard,
+                poisoned: false,
+            }),
+            Err(TryLockError::Poisoned(error)) => Err(UnlockedRejection {
+                guard: error.into_inner(),
+                poisoned: true,
+            }),
+            Err(TryLockError::WouldBlock) => Ok(()),
+        }
+    }
+}
+
+impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Mutex<T>, R> for IsLocked {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is locked"),
+            Some((actual, UnlockedRejection { guard, poisoned })) => {
+                let mut failure = failure
+                    .actual(render.struct_field(actual, "Mutex", "data", &*guard))
+                    .relation("is not locked");
+                if poisoned {
+                    failure = failure.fact(Fact::note("The mutex is poisoned."));
+                }
+                // Release before raising or observing the next composed assertion.
+                drop(guard);
+                failure
+            }
+        }
+    }
+}
+
+/// Observes whether a mutex can be acquired, returning the acquired guard on success.
+/// Poisoned acquisition also counts as unlocked, matching [`MutexAssertions::is_not_locked`].
+pub struct IsNotLocked;
+
+impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
+    type Success<'a>
+        = MutexGuard<'a, T>
+    where
+        T: 'a;
+    type Rejection<'a>
+        = bool
+    where
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Mutex<T>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, bool> {
+        match actual.try_lock() {
+            Ok(guard) => Ok(guard),
+            Err(TryLockError::Poisoned(error)) => Ok(error.into_inner()),
+            Err(TryLockError::WouldBlock) => Err(actual.is_poisoned()),
+        }
+    }
+}
+
+impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotLocked {
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&Mutex<T>, bool)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is not locked"),
+            Some((actual, poisoned)) => {
+                let mut failure = failure
+                    .actual(render.unavailable_struct_field(actual, "Mutex", "data", "<locked>"))
+                    .relation("is unexpectedly locked");
+                if poisoned {
+                    failure = failure.fact(Fact::note("The mutex is poisoned."));
+                }
+                failure
+            }
+        }
+    }
+}
 
 /// Assertions for the lock and poison state of [`Mutex`].
 ///
@@ -39,70 +236,22 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        let actual = self.actual();
-        {
-            let acquired = match actual.try_lock() {
-                Ok(guard) => Some(guard),
-                Err(TryLockError::Poisoned(error)) => Some(error.into_inner()),
-                Err(TryLockError::WouldBlock) => None,
-            };
-            if let Some(guard) = acquired {
-                let mut failure = self
-                    .failure(FailureKind::Other)
-                    .actual(self.render().struct_field(actual, "Mutex", "data", &*guard))
-                    .relation("is not locked");
-                if actual.is_poisoned() {
-                    failure = failure.fact(Fact::note("The mutex is poisoned."));
-                }
-                // Release the lock before raising, so a panic does not poison the mutex.
-                drop(guard);
-                failure.raise();
-            }
-        }
-        self
+        self.apply_assertion(IsLocked)
     }
 
     #[track_caller]
     fn is_not_locked(self) -> Self {
-        self.track_assertion();
-        let actual = self.actual();
-        if matches!(actual.try_lock(), Err(TryLockError::WouldBlock)) {
-            let mut failure = self
-                .failure(FailureKind::Other)
-                .actual(
-                    self.render()
-                        .unavailable_struct_field(actual, "Mutex", "data", "<locked>"),
-                )
-                .relation("is unexpectedly locked");
-            if actual.is_poisoned() {
-                failure = failure.fact(Fact::note("The mutex is poisoned."));
-            }
-            failure.raise();
-        }
-        self
+        self.apply_assertion(IsNotLocked)
     }
 
     #[track_caller]
     fn is_poisoned(self) -> Self {
-        self.track_assertion();
-        if !self.actual().is_poisoned() {
-            self.failure(FailureKind::Other)
-                .relation("is not poisoned")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsPoisoned)
     }
 
     #[track_caller]
     fn is_not_poisoned(self) -> Self {
-        self.track_assertion();
-        if self.actual().is_poisoned() {
-            self.failure(FailureKind::Other)
-                .relation("is unexpectedly poisoned")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsNotPoisoned)
     }
 }
 
@@ -112,8 +261,10 @@ mod tests {
     use std::sync::Mutex;
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
         use std::sync::Mutex;
 
         struct Secret;
@@ -135,6 +286,31 @@ mod tests {
 
             assert_that!(ToHumanReadableText.render(&failures[0]))
                 .contains(format!("data: {SENTINEL},"));
+        }
+    }
+
+    mod shared_observations {
+        use super::*;
+        use crate::{
+            assertions::std::mutex::{IsLocked, IsNotLocked},
+            expectation::{all_of, any_of},
+            test_support::NoRenderer,
+        };
+
+        #[test]
+        fn compositions_release_guards_before_the_next_child_and_before_raising() {
+            let mutex = Mutex::new(7);
+            for limit in [0, 2] {
+                let failures = assert_that!(mutex)
+                    .with_rendering_budget(RenderingBudget::default().with_max_items(limit))
+                    .capture(|it| it.matches(any_of((IsLocked, IsLocked))));
+                assert_that!(failures).has_length(1);
+                assert_that!(mutex.is_poisoned()).is_false();
+            }
+            assert_that!(mutex)
+                .with_renderer(NoRenderer)
+                .matches(all_of((IsNotLocked, IsNotLocked)));
+            assert_that!(mutex.try_lock().is_ok()).is_true();
         }
     }
 

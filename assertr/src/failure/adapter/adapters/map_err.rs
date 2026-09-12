@@ -49,6 +49,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::prelude::*;
     use alloc::string::String;
     use core::cell::Cell;
 
@@ -81,17 +82,17 @@ mod tests {
     fn the_mapper_runs_only_on_errors_and_preserves_successful_output() {
         let calls = Cell::new(0);
         let adapter = Length.map_err(|error| {
-            assert_eq!(error, Empty);
+            assert_that!(error).is_equal_to(Empty);
             calls.set(calls.get() + 1);
             Rejected
         });
 
-        assert_eq!(calls.get(), 0);
-        assert_eq!(adapter.adapt("hello"), Ok(5));
-        assert_eq!(calls.get(), 0);
-        assert_eq!(adapter.adapt(""), Err(Rejected));
-        assert_eq!(adapter.adapt(""), Err(Rejected));
-        assert_eq!(calls.get(), 2);
+        assert_that!(calls.get()).is_equal_to(0);
+        assert_that!(adapter.adapt("hello")).is_equal_to(Ok(5));
+        assert_that!(calls.get()).is_equal_to(0);
+        assert_that!(adapter.adapt("")).is_equal_to(Err(Rejected));
+        assert_that!(adapter.adapt("")).is_equal_to(Err(Rejected));
+        assert_that!(calls.get()).is_equal_to(2);
     }
 
     #[test]
@@ -101,9 +102,9 @@ mod tests {
         let mapped = original.map_err(|_| message.as_str());
         let adapter: &dyn Adapter<str, Output = usize, Error = &str> = &mapped;
 
-        assert_eq!(adapter.adapt("hello"), Ok(5));
-        assert_eq!(adapter.adapt(""), Err(message.as_str()));
-        assert_eq!(original.adapt(""), Err(Empty));
+        assert_that!(adapter.adapt("hello")).is_equal_to(Ok(5));
+        assert_that!(adapter.adapt("")).is_equal_to(Err(message.as_str()));
+        assert_that!(original.adapt("")).is_equal_to(Err(Empty));
     }
 
     #[test]
@@ -120,14 +121,14 @@ mod tests {
         }
 
         let mapped_first = Length.map_err(|_| Rejected).then(RejectLength);
-        assert_eq!(mapped_first.adapt(""), Err(ThenError::First(Rejected)));
-        assert_eq!(mapped_first.adapt("hello"), Err(ThenError::Next(Rejected)));
+        assert_that!(mapped_first.adapt("")).is_equal_to(Err(ThenError::First(Rejected)));
+        assert_that!(mapped_first.adapt("hello")).is_equal_to(Err(ThenError::Next(Rejected)));
 
         let mapped_chain = Length.then(RejectLength).map_err(|error| match error {
             ThenError::First(Empty) => "empty input",
             ThenError::Next(Rejected) => "length rejected",
         });
-        assert_eq!(mapped_chain.adapt(""), Err("empty input"));
-        assert_eq!(mapped_chain.adapt("hello"), Err("length rejected"));
+        assert_that!(mapped_chain.adapt("")).is_equal_to(Err("empty input"));
+        assert_that!(mapped_chain.adapt("hello")).is_equal_to(Err("length rejected"));
     }
 }

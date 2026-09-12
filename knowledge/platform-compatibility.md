@@ -1,19 +1,14 @@
 ---
 id: platform-compatibility
-refines:
-  - assertr
-depends_on:
-  - failure-processing
-related_to:
-  - fluent-entry
-  - integration-boundaries
+depends_on: [ ]
 sources:
-  - assertr/src/lib.rs
   - assertr/Cargo.toml
   - assertr-macros/Cargo.toml
+  - assertr/src/lib.rs
   - .github/workflows/ci.yml
-  - assertr-no-std-tests/**
-  - justfile
+  - assertr-no-std-tests/Cargo.toml
+  - assertr-no-std-tests/src/lib.rs
+  - Justfile
   - AGENTS.md
 ---
 
@@ -21,51 +16,43 @@ sources:
 
 [Architecture overview](README.md)
 
-The runtime supports `no_std` with `alloc`. Feature dependencies determine which assertion families and external
-integrations are available.
+The runtime requires `alloc` and supports `no_std`. The [runtime manifest](../assertr/Cargo.toml) owns feature
+dependencies. The [CI workflow](../.github/workflows/ci.yml) and [Justfile](../Justfile) own the validation matrix.
 
 ## Feature topology
 
-Defaults enable `std` and `num`. Runtime matchers and declarative matcher macros need no feature. The `matchers` feature
-enables the procedural `partial!` macro. The independent `fluent` feature enables fluent entry, aliases, and expression
-capture. Both use `assertr-macros`. `full` enables every integration and optional API.
+| Feature                                                           | Boundary                                                                                                                                          |
+|-------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| Defaults                                                          | `std` and `num`.                                                                                                                                  |
+| `matchers`                                                        | Enables procedural `partial!`. Runtime matchers and declarative matcher macros need no feature.                                                   |
+| `fluent`                                                          | Independently enables fluent entry, aliases, and expression capture. Uses `assertr-macros`, as does `matchers`.                                   |
+| `std`                                                             | Enables hash collections and unwind-catching APIs. Also enables optional `num-traits` std support.                                                |
+| `num`, `libm`                                                     | `num` enables numeric assertions. Add `libm` for floating-point classifications without `std`. Neither `std` nor `libm` implicitly enables `num`. |
+| `jiff`, `tokio`, `program`, `reqwest`, `serde-json`, `serde-toml` | Enable `std` because their wrapped dependencies require it. `serde` combines JSON and TOML.                                                       |
+| `rootcause`                                                       | Supports `no_std` without enabling the runtime's `std` feature.                                                                                   |
+| `http`                                                            | Leaves the runtime in `no_std` mode, but the current `http` dependency requires `std` and a hosted target.                                        |
+| `full`                                                            | Enables every optional API and integration.                                                                                                       |
 
-Without `std`, the runtime retains core assertions, capture, structured failures, rendering, tree collections, and
-streaming iterators. Hash collections and unwind-catching APIs require
-`std`. [Panic presentation](failure-processing.md#presentation-and-fallback) also catches adapter panics only with
-`std`.
-
-The chain's [unwind-safety traits](assertion-lifecycle.md#panic-observation-boundaries) and presentation's
-`RefUnwindSafe` bound use `core` and apply independently of the runtime's `std` feature.
-
-`matchers`, `fluent`, `num`, `libm`, and `rootcause` support embedded `no_std` targets. `http` leaves the runtime in
-`no_std` mode but its dependencies currently need a hosted target. Integrations for jiff, Tokio, serde JSON/TOML,
-program lookup, and reqwest enable `std` themselves. `serde` combines the JSON and TOML features.
-
-The `std` and `libm` dependencies on optional `num-traits` features are weak. Enabling either does not silently enable
-`num`. Select `num` with `libm` for floating-point classifications without `std`.
+Without `std`, core assertions, capture, structured failures, rendering, tree collections, and streaming remain
+available. Panic presentation falls back on returned adapter errors in both configurations. Catching adapter panics
+requires `std`, as described in [panic presentation](failure-processing.md#presentation-and-fallback). Unwind-safety
+traits and presentation's `RefUnwindSafe` bound come from `core` and apply independently.
 
 ## Runtime and macro compatibility
 
-The runtime pins `assertr-macros` exactly because generated code calls its unsupported `__private` protocol. Update and
-release the pair together when that protocol changes. Downstream code must not depend on the private protocol.
+The runtime pins [assertr-macros](../assertr-macros/Cargo.toml) exactly because generated code calls unsupported
+`assertr::__private` plumbing. Keep the released pair synchronized when that protocol changes. Both crates currently
+declare Rust 1.89.0 as their MSRV. [AGENTS.md](../AGENTS.md) defines release and MSRV update requirements.
 
-Both crates declare Rust 1.89.0 as their minimum supported version. CI installs that toolchain and checks the runtime
-with all features, the macro crate, and the hosted no-std fixture.
+## Validation coverage
 
-## Validation
+CI exercises no-default, isolated `std`, isolated `num`, default, all-feature, macro-crate, and hosted no-std
+configurations. Each optional feature is also checked alone to expose dependencies hidden by Cargo feature unification.
 
-CI checks no-default, isolated `std`, isolated `num`, default, all-feature, macro-crate, and hosted no-std
-configurations. Every optional feature is also checked alone to catch undeclared dependencies hidden by Cargo feature
-unification.
+The [no-std fixture](../assertr-no-std-tests/) checks downstream use without the runtime's `std` feature. Hosted tests
+can catch panics through their test harness. Embedded checks on `thumbv8m.main-none-eabihf` cover the base runtime,
+`num,libm`, and the fixture with `matchers`. A hosted feature check is not evidence of embedded compatibility.
 
-Embedded-target checks verify compilation beyond a hosted test harness. Hosted no-std tests exercise allocation and
-panic observation without enabling the runtime's `std` feature. Documentation builds enable all features and deny
-warnings. README freshness is checked against the literal crate-level rustdoc.
-
-## Sources
-
-The [runtime manifest](../assertr/Cargo.toml) defines feature dependencies and the
-exact [macro crate](../assertr-macros/Cargo.toml) requirement. [CI](../.github/workflows/ci.yml),
-the [no-std fixture](../assertr-no-std-tests/), and the [justfile](../justfile) define
-validation. [AGENTS.md](../AGENTS.md) records release and MSRV update rules.
+Rustdoc builds enable all features and deny warnings.
+README freshness is checked against literal crate-level rustdoc. MSRV CI checks the all-feature runtime, macro crate,
+and hosted no-std fixture.

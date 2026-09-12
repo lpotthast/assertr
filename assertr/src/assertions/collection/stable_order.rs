@@ -9,8 +9,8 @@ use core::borrow::Borrow;
 
 use super::{StableOrder, identity, value};
 use crate::{
-    AssertThat, Fact, Mode, ValueRenderer,
-    failure::FailureKind,
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, Mode, ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
     mode::{Capture, Panic},
 };
 
@@ -79,14 +79,14 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection's prefix matches the expected matcher list in order.
     fn starts_with_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<T, R>,
+        P: crate::expectation::MatcherList<T, R>,
         R: ValueRenderer<usize>;
 
     /// Asserts that the collection's prefix satisfies `assertions` in order.
     fn starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that the collection ends with elements equal to `expected`, in order.
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
@@ -97,14 +97,14 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection's suffix matches the expected matcher list in order.
     fn ends_with_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<T, R>,
+        P: crate::expectation::MatcherList<T, R>,
         R: ValueRenderer<usize>;
 
     /// Asserts that the collection's suffix satisfies `assertions` in order.
     fn ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that the collection contains `expected` as a contiguous subsequence.
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
@@ -115,14 +115,14 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
     fn contains_contiguous_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<T, R>,
+        P: crate::expectation::MatcherList<T, R>,
         R: ValueRenderer<usize>;
 
     /// Asserts that a contiguous subsequence satisfies `assertions` in order.
     fn contains_contiguous_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts positional equality with `expected`, including length.
     ///
@@ -137,7 +137,7 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that each element matches the constraint at the same position, including length.
     fn contains_exactly_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<T, R>,
+        P: crate::expectation::MatcherList<T, R>,
         R: ValueRenderer<usize>;
 
     /// Asserts that each element satisfies the assertions at the same position, including length.
@@ -145,7 +145,7 @@ pub trait StableOrderAssertions<T, R> {
     /// On failure, each unsatisfied element's captured failures are reported.
     fn contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
+        R: Clone + ValueRenderer<usize>,
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>);
 }
 
@@ -163,8 +163,7 @@ where
         C::Item: Borrow<U>,
         R: ValueRenderer<usize>,
     {
-        identity::assert_contains_exactly_same_instances(&self, expected.as_ref());
-        self
+        self.apply_assertion(identity::ContainsExactlySameInstances::new(expected))
     }
 
     #[track_caller]
@@ -173,39 +172,35 @@ where
         C::Item: PartialEq<E>,
         R: ValueRenderer<C::Item> + ValueRenderer<E> + ValueRenderer<usize>,
     {
-        value::assert_starts_with(&self, expected.as_ref());
-        self
+        self.apply_assertion(value::StartsWith::new(expected))
     }
 
     #[track_caller]
     fn starts_with_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<C::Item, R>,
+        P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
         self.track_assertion();
-        self.assert_matcher(&crate::matchers::starts_with_elements(expected), true);
-        self
+        self.apply_assertion_after_tracking(crate::assertions::collection::starts_with_elements(
+            expected,
+        ))
     }
 
     #[track_caller]
     fn starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
-        R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
+        R: Clone + ValueRenderer<usize>,
     {
         self.track_assertion();
-        self.assert_matcher(
-            &crate::matchers::starts_with_elements(
-                assertions
-                    .as_ref()
-                    .iter()
-                    .map(crate::matchers::satisfying)
-                    .collect::<Vec<_>>(),
-            ),
-            true,
-        );
-        self
+        self.apply_assertion_after_tracking(crate::assertions::collection::starts_with_elements(
+            assertions
+                .as_ref()
+                .iter()
+                .map(crate::expectation::satisfying)
+                .collect::<Vec<_>>(),
+        ))
     }
 
     #[track_caller]
@@ -214,39 +209,35 @@ where
         C::Item: PartialEq<E>,
         R: ValueRenderer<C::Item> + ValueRenderer<E> + ValueRenderer<usize>,
     {
-        value::assert_ends_with(&self, expected.as_ref());
-        self
+        self.apply_assertion(value::EndsWith::new(expected))
     }
 
     #[track_caller]
     fn ends_with_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<C::Item, R>,
+        P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
         self.track_assertion();
-        self.assert_matcher(&crate::matchers::ends_with_elements(expected), true);
-        self
+        self.apply_assertion_after_tracking(crate::assertions::collection::ends_with_elements(
+            expected,
+        ))
     }
 
     #[track_caller]
     fn ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
-        R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
+        R: Clone + ValueRenderer<usize>,
     {
         self.track_assertion();
-        self.assert_matcher(
-            &crate::matchers::ends_with_elements(
-                assertions
-                    .as_ref()
-                    .iter()
-                    .map(crate::matchers::satisfying)
-                    .collect::<Vec<_>>(),
-            ),
-            true,
-        );
-        self
+        self.apply_assertion_after_tracking(crate::assertions::collection::ends_with_elements(
+            assertions
+                .as_ref()
+                .iter()
+                .map(crate::expectation::satisfying)
+                .collect::<Vec<_>>(),
+        ))
     }
 
     #[track_caller]
@@ -255,42 +246,37 @@ where
         C::Item: PartialEq<E>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        value::assert_contains_contiguous(&self, expected.as_ref());
-        self
+        self.apply_assertion(value::ContainsContiguous::new(expected))
     }
 
     #[track_caller]
     fn contains_contiguous_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<C::Item, R>,
+        P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
         self.track_assertion();
-        self.assert_matcher(
-            &crate::matchers::contains_contiguous_elements(expected),
-            true,
-        );
-        self
+        self.apply_assertion_after_tracking(
+            crate::assertions::collection::contains_contiguous_elements(expected),
+        )
     }
 
     #[track_caller]
     fn contains_contiguous_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
-        R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
+        R: Clone + ValueRenderer<usize>,
     {
         self.track_assertion();
-        self.assert_matcher(
-            &crate::matchers::contains_contiguous_elements(
+        self.apply_assertion_after_tracking(
+            crate::assertions::collection::contains_contiguous_elements(
                 assertions
                     .as_ref()
                     .iter()
-                    .map(crate::matchers::satisfying)
+                    .map(crate::expectation::satisfying)
                     .collect::<Vec<_>>(),
             ),
-            true,
-        );
-        self
+        )
     }
 
     #[track_caller]
@@ -299,39 +285,194 @@ where
         C::Item: PartialEq<E>,
         R: ValueRenderer<C::Item> + ValueRenderer<E>,
     {
-        value::assert_contains_exactly(&self, expected.as_ref());
-        self
+        self.apply_assertion(value::ContainsExactly::new(expected))
     }
 
     #[track_caller]
     fn contains_exactly_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<C::Item, R>,
+        P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
         self.track_assertion();
-        self.assert_matcher(&crate::matchers::elements_are(expected), true);
-        self
+        self.apply_assertion_after_tracking(crate::assertions::collection::elements_are(expected))
     }
 
     #[track_caller]
     fn contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
-        R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
+        R: Clone + ValueRenderer<usize>,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
         self.track_assertion();
-        self.assert_matcher(
-            &crate::matchers::elements_are(
-                assertions
-                    .as_ref()
-                    .iter()
-                    .map(crate::matchers::satisfying)
-                    .collect::<Vec<_>>(),
-            ),
-            true,
-        );
-        self
+        self.apply_assertion_after_tracking(crate::assertions::collection::elements_are(
+            assertions
+                .as_ref()
+                .iter()
+                .map(crate::expectation::satisfying)
+                .collect::<Vec<_>>(),
+        ))
+    }
+}
+
+/// Requires that a stable-order collection has a first element, returning its borrowed element.
+pub struct HasFirst;
+
+impl<C: StableOrder + ?Sized, R> Expectation<C, R> for HasFirst {
+    type Success<'a>
+        = &'a C::Item
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let length = actual.length();
+        if length == 0 {
+            return Err(());
+        }
+        Ok(actual
+            .elements()
+            .next()
+            .unwrap_or_else(|| unreachable!("validated collection had no element")))
+    }
+}
+
+impl<C: StableOrder + ?Sized, R> ExpectationDiagnostics<C, R> for HasFirst
+where
+    R: ValueRenderer<C::Item>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("has a first element"),
+            Some((actual, ())) => failure
+                .actual(render.stable_collection(actual))
+                .relation("has no first element"),
+        }
+    }
+}
+
+/// Requires that a stable-order collection has a last element, returning its borrowed element.
+pub struct HasLast;
+
+impl<C: StableOrder + ?Sized, R> Expectation<C, R> for HasLast {
+    type Success<'a>
+        = &'a C::Item
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let length = actual.length();
+        if length == 0 {
+            return Err(());
+        }
+        Ok(actual
+            .elements()
+            .last()
+            .unwrap_or_else(|| unreachable!("validated collection had no element")))
+    }
+}
+
+impl<C: StableOrder + ?Sized, R> ExpectationDiagnostics<C, R> for HasLast
+where
+    R: ValueRenderer<C::Item>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("has a last element"),
+            Some((actual, ())) => failure
+                .actual(render.stable_collection(actual))
+                .relation("has no last element"),
+        }
+    }
+}
+
+/// Requires that a stable-order collection contains exactly one element, returning its borrowed
+/// element.
+pub struct HasSingle;
+
+impl<C: StableOrder + ?Sized, R> Expectation<C, R> for HasSingle {
+    type Success<'a>
+        = &'a C::Item
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = usize
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let length = actual.length();
+        if length != 1 {
+            return Err(length);
+        }
+        Ok(actual
+            .elements()
+            .next()
+            .unwrap_or_else(|| unreachable!("validated collection had no element")))
+    }
+}
+
+impl<C: StableOrder + ?Sized, R> ExpectationDiagnostics<C, R> for HasSingle
+where
+    R: ValueRenderer<C::Item> + ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("contains exactly one element"),
+            Some((actual, rejection)) => failure
+                .actual(render.stable_collection(actual))
+                .relation("does not contain exactly one element")
+                .fact(Fact::labelled("Actual length", render.value(&rejection))),
+        }
     }
 }
 
@@ -376,20 +517,10 @@ where
     where
         R: ValueRenderer<C::Item> + Clone,
     {
-        self.track_assertion();
-        if self.actual().length() == 0 {
-            self.failure(FailureKind::Length)
-                .actual(self.render().stable_collection(self.actual()))
-                .relation("has no first element")
-                .raise();
-        }
-
-        self.derive(|collection| {
-            collection
-                .elements()
-                .next()
-                .unwrap_or_else(|| unreachable!("non-empty collection had no first element"))
-        })
+        let element = self
+            .test_assertion(&HasFirst)
+            .unwrap_or_else(|| unreachable!("rejected extraction already panicked"));
+        self.derive(|_| element)
     }
 
     #[track_caller]
@@ -397,20 +528,10 @@ where
     where
         R: ValueRenderer<C::Item> + Clone,
     {
-        self.track_assertion();
-        if self.actual().length() == 0 {
-            self.failure(FailureKind::Length)
-                .actual(self.render().stable_collection(self.actual()))
-                .relation("has no last element")
-                .raise();
-        }
-
-        self.derive(|collection| {
-            collection
-                .elements()
-                .last()
-                .unwrap_or_else(|| unreachable!("non-empty collection had no last element"))
-        })
+        let element = self
+            .test_assertion(&HasLast)
+            .unwrap_or_else(|| unreachable!("rejected extraction already panicked"));
+        self.derive(|_| element)
     }
 
     #[track_caller]
@@ -418,24 +539,10 @@ where
     where
         R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        if self.actual().length() != 1 {
-            self.failure(FailureKind::Length)
-                .actual(self.render().stable_collection(self.actual()))
-                .relation("does not contain exactly one element")
-                .fact(Fact::labelled(
-                    "Actual length",
-                    self.render().value(&self.actual().length()),
-                ))
-                .raise();
-        }
-
-        self.derive(|collection| {
-            collection
-                .elements()
-                .next()
-                .unwrap_or_else(|| unreachable!("single-element collection had no element"))
-        })
+        let element = self
+            .test_assertion(&HasSingle)
+            .unwrap_or_else(|| unreachable!("rejected extraction already panicked"));
+        self.derive(|_| element)
     }
 }
 
@@ -479,14 +586,16 @@ mod tests {
     impl crate::assertions::collection::StableOrder for CountingCollection {}
 
     mod renderer_contract {
-        use crate::assertions::{
-            HasLength,
-            collection::{Collection, StableOrder},
-        };
-        use crate::prelude::*;
-        use crate::renderer::{CollectionPresentation, RenderingOrder};
-        use crate::test_support::{
-            NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+        use crate::{
+            assertions::{
+                HasLength,
+                collection::{Collection, StableOrder},
+            },
+            prelude::*,
+            renderer::{CollectionPresentation, RenderingOrder},
+            test_support::{
+                NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+            },
         };
 
         struct SortedPresentation(Vec<i32>);
@@ -786,21 +895,21 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             [1, 2]
                 .must()
-                .start_with_matching(crate::matchers::predicate_list([is_one, is_two]));
+                .start_with_matching(crate::expectation::predicate_list([is_one, is_two]));
         }
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 3]),
-                starts_with_matching(crate::matchers::predicate_list([is_one, is_two]))
+                starts_with_matching(crate::expectation::predicate_list([is_one, is_two]))
             );
         }
 
         #[test]
         fn succeeds_for_matching_prefix_predicates() {
             assert_that!([1, 2, 3])
-                .starts_with_matching(crate::matchers::predicate_list([is_one, is_two]));
+                .starts_with_matching(crate::expectation::predicate_list([is_one, is_two]));
         }
 
         #[test]
@@ -809,19 +918,23 @@ mod tests {
             assert_that!(actual).starts_with_matching(matchers![]);
             assert_that!(actual.visits.get()).is_equal_to(0);
 
-            assert_that!(actual).starts_with_matching(matchers![1, 2]);
+            assert_that!(actual)
+                .starts_with_matching(matchers![crate::matchers::eq(1), crate::matchers::eq(2)]);
             assert_that!(actual.visits.get()).is_equal_to(2);
 
             actual.visits.set(0);
-            let failures =
-                assert_that!(actual).capture(|it| it.starts_with_matching(matchers![1, 9]));
+            let failures = assert_that!(actual).capture(|it| {
+                it.starts_with_matching(matchers![crate::matchers::eq(1), crate::matchers::eq(9)])
+            });
             assert_that!(failures).has_length(1);
             assert_that!(actual.visits.get()).is_equal_to(2);
         }
 
         #[test]
         fn reports_missing_prefix_positions_and_actual_length() {
-            let failures = assert_that!([1]).capture(|it| it.starts_with_matching(matchers![1, 2]));
+            let failures = assert_that!([1]).capture(|it| {
+                it.starts_with_matching(matchers![crate::matchers::eq(1), crate::matchers::eq(2)])
+            });
             assert_that!(failures[0].children).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
@@ -843,7 +956,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 3])
                     .with_location(false)
-                    .starts_with_matching(crate::matchers::predicate_list([is_one, is_two]));
+                    .starts_with_matching(crate::expectation::predicate_list([is_one, is_two]));
             })
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r"
@@ -1018,21 +1131,21 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             [1, 2, 3]
                 .must()
-                .end_with_matching(crate::matchers::predicate_list([is_two, is_three]));
+                .end_with_matching(crate::expectation::predicate_list([is_two, is_three]));
         }
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 2, 4]),
-                ends_with_matching(crate::matchers::predicate_list([is_two, is_three]))
+                ends_with_matching(crate::expectation::predicate_list([is_two, is_three]))
             );
         }
 
         #[test]
         fn succeeds_for_matching_suffix_predicates() {
             assert_that!([1, 2, 3])
-                .ends_with_matching(crate::matchers::predicate_list([is_two, is_three]));
+                .ends_with_matching(crate::expectation::predicate_list([is_two, is_three]));
         }
 
         #[test]
@@ -1040,7 +1153,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 4])
                     .with_location(false)
-                    .ends_with_matching(crate::matchers::predicate_list([is_two, is_three]));
+                    .ends_with_matching(crate::expectation::predicate_list([is_two, is_three]));
             })
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r"
@@ -1164,21 +1277,26 @@ mod tests {
         fn fluent_alias_is_as_expected() {
             [1, 3]
                 .must()
-                .contain_contiguous_matching(crate::matchers::predicate_list([is_one, is_three]));
+                .contain_contiguous_matching(crate::expectation::predicate_list([
+                    is_one, is_three,
+                ]));
         }
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 2, 3]),
-                contains_contiguous_matching(crate::matchers::predicate_list([is_one, is_three,]))
+                contains_contiguous_matching(crate::expectation::predicate_list([
+                    is_one, is_three,
+                ]))
             );
         }
 
         #[test]
         fn succeeds_for_contiguous_matching_elements() {
-            assert_that!([0, 1, 3])
-                .contains_contiguous_matching(crate::matchers::predicate_list([is_one, is_three]));
+            assert_that!([0, 1, 3]).contains_contiguous_matching(
+                crate::expectation::predicate_list([is_one, is_three]),
+            );
         }
 
         #[test]
@@ -1186,7 +1304,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3])
                     .with_location(false)
-                    .contains_contiguous_matching(crate::matchers::predicate_list([
+                    .contains_contiguous_matching(crate::expectation::predicate_list([
                         is_one, is_three,
                     ]));
             })
@@ -1351,8 +1469,11 @@ mod tests {
             struct Record {
                 id: u32,
             }
-            let failures = assert_that!([Record { id: 1 }])
-                .capture(|it| it.contains_exactly_matching(matchers![partial!(Record { id: 2 })]));
+            let failures = assert_that!([Record { id: 1 }]).capture(|it| {
+                it.contains_exactly_matching(matchers![partial!(Record {
+                    id: crate::matchers::eq(2)
+                })])
+            });
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
@@ -1412,13 +1533,21 @@ mod tests {
             }
             let records = [Record { id: 1 }, Record { id: 2 }];
             assert_that!(records).contains_exactly_in_any_order_matching(matchers![
-                partial!(Record { id: 2 }),
-                partial!(Record { id: 1 })
+                partial!(Record {
+                    id: crate::matchers::eq(2)
+                }),
+                partial!(Record {
+                    id: crate::matchers::eq(1)
+                })
             ]);
             let failures = assert_that!(records).capture(|it| {
                 it.contains_exactly_matching(matchers![
-                    partial!(Record { id: 2 }),
-                    partial!(Record { id: 1 })
+                    partial!(Record {
+                        id: crate::matchers::eq(2)
+                    }),
+                    partial!(Record {
+                        id: crate::matchers::eq(1)
+                    })
                 ])
             });
             assert_that!(failures[0].children).has_length(2);
@@ -1469,27 +1598,26 @@ mod tests {
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .as_slice()
-                .must()
-                .contain_exactly_matching(crate::matchers::predicate_list([
+            [1, 2, 3].as_slice().must().contain_exactly_matching(
+                crate::expectation::predicate_list([
                     |it: &i32| *it == 1,
                     |it: &i32| *it == 2,
                     |it: &i32| *it == 3,
-                ]));
+                ]),
+            );
         }
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1]),
-                contains_exactly_matching([crate::matchers::equal_to(2)])
+                contains_exactly_matching([crate::assertions::core::partial_eq::equal_to(2)])
             );
         }
 
         #[test]
         fn wildcard_constraints_distinguish_positions_from_unordered_assignments() {
-            use crate::matchers::{anything, equal_to};
+            use crate::{assertions::core::partial_eq::equal_to, expectation::anything};
             let failures = assert_that!([2, 1])
                 .capture(|it| it.contains_exactly_matching(matchers![anything(), equal_to(2)]));
             assert_that!(failures[0].children).contains_exactly_satisfying([
@@ -1506,7 +1634,7 @@ mod tests {
         #[test]
         fn succeeds_when_each_element_matches_its_predicate() {
             assert_that!([1, 2, 3].as_slice()).contains_exactly_matching(
-                crate::matchers::predicate_list([
+                crate::expectation::predicate_list([
                     move |it: &i32| *it == 1,
                     move |it: &i32| *it < 3,
                     move |it: &i32| *it > 2,
@@ -1519,7 +1647,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly_matching(crate::matchers::predicate_list([
+                    .contains_exactly_matching(crate::expectation::predicate_list([
                         move |it: &i32| *it == 1,
                         move |it: &i32| *it == 3,
                         move |it: &i32| *it == 2,
@@ -1553,7 +1681,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly_matching(crate::matchers::predicate_list(predicates));
+                    .contains_exactly_matching(crate::expectation::predicate_list(predicates));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -1677,12 +1805,104 @@ mod tests {
         #[test]
         fn limits_repeated_element_evidence_to_the_rendering_budget() {
             let failures = assert_that!([1, 2, 3])
-                .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
                 .with_location(false)
                 .capture(|it| it.contains_exactly_satisfying([is_zero; 3]));
 
             assert_that!(failures[0].children.as_slice()).has_length(1);
             assert_that!(failures[0].omitted_children).is_equal_to(2);
+        }
+
+        #[test]
+        fn opaque_callback_failures_preserve_custom_rendering_and_budgets() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_value};
+
+            struct Opaque(usize);
+
+            fn check(it: AssertThat<'_, Opaque, Capture, CustomValueRenderer>) {
+                it.satisfies(
+                    |value| &value.0,
+                    |value| {
+                        value.is_equal_to(9);
+                    },
+                );
+            }
+
+            let values = [Opaque(1), Opaque(2)];
+            let failures = assert_that!(values)
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+                .capture(|it| it.contains_exactly_satisfying([check, check]));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(1);
+            assert_that!(failures[0].omitted_children).is_equal_to(1);
+            let child = &failures[0].children[0];
+            assert_custom_value(child.actual.as_ref().unwrap(), &1_usize);
+            assert_custom_value(child.expected.as_ref().unwrap(), &9_usize);
+            assert_that!(child.path).contains_exactly([crate::failure::PathSegment::Index(0)]);
+        }
+    }
+
+    mod evaluation {
+        use crate::prelude::*;
+        use core::cell::Cell;
+
+        struct Expected<'a> {
+            values: [i32; 3],
+            views: &'a Cell<usize>,
+        }
+
+        impl AsRef<[i32]> for Expected<'_> {
+            fn as_ref(&self) -> &[i32] {
+                self.views.set(self.views.get() + 1);
+                &self.values
+            }
+        }
+
+        #[test]
+        fn rejection_diagnostics_reuse_the_expected_slice_view() {
+            let views = Cell::new(0);
+            let expected = || Expected {
+                values: [7, 8, 9],
+                views: &views,
+            };
+            let failures = assert_that!([1, 2]).capture(|it| {
+                let it = it.starts_with(expected());
+                assert_that!(views.get()).is_equal_to(1);
+                let it = it.ends_with(expected());
+                assert_that!(views.get()).is_equal_to(2);
+                let it = it.contains_contiguous(expected());
+                assert_that!(views.get()).is_equal_to(3);
+                let it = it.contains_exactly(expected());
+                assert_that!(views.get()).is_equal_to(4);
+                let it = it.contains_exactly_in_any_order(expected());
+                assert_that!(views.get()).is_equal_to(5);
+                it
+            });
+            assert_that!(failures).has_length(5);
+        }
+
+        #[test]
+        #[cfg(feature = "std")]
+        fn tracks_before_expected_slice_conversion_can_panic() {
+            struct PanickingView;
+            impl AsRef<[i32]> for PanickingView {
+                fn as_ref(&self) -> &[i32] {
+                    panic!("expected slice conversion");
+                }
+            }
+            let failures = assert_that!([1, 2]).capture(|root| {
+                let child = root.derive(|values| values);
+                let panic = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
+                    child.contains_exactly(PanickingView);
+                }));
+                assert_that!(panic).is_err();
+                root
+            });
+            // Capture would reject an empty assertion count if tracking happened after AsRef.
+            assert_that!(failures).is_empty();
         }
     }
 }

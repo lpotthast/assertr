@@ -1,8 +1,9 @@
-use super::{AssertrMatcher, ConstraintDescription, MatchContext, MatchResult, MatcherList};
 use crate::{
-    Fact,
+    AssertionContext, Expectation, ExpectationDiagnostics, Fact,
     assertions::collection::StableOrder,
+    expectation::{Evidence, MatcherList},
     failure::{FailureBuilder, FailureKind, PathSegment},
+    renderer::IntoRendered,
 };
 use alloc::vec::Vec;
 
@@ -53,27 +54,23 @@ pub fn contains_contiguous_elements<L>(list: L) -> ElementsAre<L> {
     }
 }
 
-impl<C, R, L> AssertrMatcher<C, R> for ElementsAre<L>
+impl<C: StableOrder + ?Sized, R, L> Expectation<C, R> for ElementsAre<L>
 where
     R: crate::ValueRenderer<usize>,
-    C: StableOrder + ?Sized,
     L: MatcherList<C::Item, R>,
 {
-    fn describe(&self, context: &MatchContext<'_, R>) -> ConstraintDescription {
-        ConstraintDescription::new(match self.position {
-            Position::Exact => "has exactly these positions",
-            Position::Prefix => "starts with these positions",
-            Position::Suffix => "ends with these positions",
-            Position::Contiguous => "contains these contiguous positions",
-        })
-        .omitted_children(self.list.len().saturating_sub(context.render().max_items()))
-        .children(
-            (0..self.list.len().min(context.render().max_items()))
-                .map(|index| self.list.describe_at(index, context)),
-        )
-    }
-
-    fn evaluate(&self, actual: &C, context: &mut MatchContext<'_, R>) -> MatchResult {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = Evidence
+    where
+        Self: 'a,
+        C: 'a;
+    fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+        let context = settings.isolated();
         let actual_length = actual.length();
         let expected_length = self.list.len();
         let mut elements = actual.elements();
@@ -106,12 +103,10 @@ where
                     window_elements.next()
                 };
                 if let Some(item) = item {
-                    matched &= window
-                        .scoped(PathSegment::Index(start + index), |context| {
-                            self.list.evaluate_at(index, item, context)
-                        })
-                        .matched;
-                } else if context.is_positive() {
+                    matched &= window.scoped(PathSegment::Index(start + index), |context| {
+                        self.list.evaluate_at(index, item, context)
+                    });
+                } else {
                     window.scoped(PathSegment::Index(start + index), |context| {
                         context.outcome(false, |context| self.list.describe_at(index, context));
                     });
@@ -126,51 +121,67 @@ where
                             .relation("does not have the required sequence")
                             .fact(Fact::labelled(
                                 "actual length",
-                                window.render().value(&actual_length),
+                                window.render().value(&actual_length).into_rendered(),
                             ))
                             .fact(Fact::labelled(
                                 "expected length",
-                                window.render().value(&expected_length),
+                                window.render().value(&expected_length).into_rendered(),
                             ))
                             .build(),
                     );
-                } else if context.is_positive() {
-                    window.outcome(false, |context| {
-                        <Self as AssertrMatcher<C, R>>::describe(self, context)
-                    });
+                } else {
+                    window.outcome(false, |context| context.describe::<C, _>(self));
                 }
             }
             if matched {
-                if !context.is_positive() {
-                    if window.evidence.is_empty() && window.omitted == 0 {
-                        window.outcome(true, |context| {
-                            <Self as AssertrMatcher<C, R>>::describe(self, context)
-                        });
-                    }
-                    context.append(window);
-                }
-                return MatchResult::new(true);
+                return Ok(());
             }
-            alternatives.append(window);
+            alternatives.append(window.into_evidence());
         }
-        if context.is_positive() {
-            context.append(alternatives);
+        Err(alternatives.into_evidence())
+    }
+}
+impl<C: StableOrder + ?Sized, R, L> ExpectationDiagnostics<C, R> for ElementsAre<L>
+where
+    R: crate::ValueRenderer<usize>,
+    L: MatcherList<C::Item, R>,
+{
+    const KIND: FailureKind = FailureKind::Matching;
+    const FLATTEN: bool = true;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&C, Evidence)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            None => context.describe_list::<C::Item, _, _>(
+                &self.list,
+                failure.relation(match self.position {
+                    Position::Exact => "has exactly these positions",
+                    Position::Prefix => "starts with these positions",
+                    Position::Suffix => "ends with these positions",
+                    Position::Contiguous => "contains these contiguous positions",
+                }),
+            ),
+            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
         }
-        MatchResult::new(false)
     }
 }
 
-/// Exact positional matcher list with equality shorthand.
+/// Exact positional matcher list with explicit expectations.
+///
+/// Use [`eq`](crate::matchers::eq) or [`equal_to`](crate::matchers::equal_to) for equality.
 #[macro_export]
 macro_rules! elements_are {
     ($($value:expr),* $(,)?) => {
-        $crate::matchers::elements_are($crate::matchers![$($value),*])
+        $crate::assertions::collection::elements_are($crate::matchers![$($value),*])
     };
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
+    use crate::{matchers::eq, prelude::*};
     use core::{cell::Cell, fmt};
 
     struct CountingRenderer<'a>(&'a Cell<usize>);
@@ -190,8 +201,18 @@ mod tests {
     }
 
     #[test]
-    fn supports_equality_shorthand() {
-        assert_that!([1, 2]).matches(elements_are![1, 2]);
+    fn supports_explicit_equality() {
+        assert_that!([1, 2]).matches(elements_are![eq(1), eq(2)]);
+    }
+
+    #[test]
+    fn supports_heterogeneous_equality() {
+        assert_that!([String::from("hello")]).matches(elements_are![eq("hello")]);
+        let failures = assert_that!([String::from("hello")])
+            .capture(|it| it.matches(elements_are![eq("world")]));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children[0].kind)
+            .is_equal_to(crate::failure::FailureKind::Equality);
     }
 
     #[test]
@@ -204,8 +225,8 @@ mod tests {
         let renders = Cell::new(0);
         let failures = assert_that!([1, 2, 3])
             .with_renderer(CountingRenderer(&renders))
-            .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
-            .capture(|it| it.matches(elements_are![9, 9, 9]));
+            .with_rendering_budget(RenderingBudget::default().with_max_items(0))
+            .capture(|it| it.matches(elements_are![eq(9), eq(9), eq(9)]));
 
         assert_that!(failures).contains_exactly_satisfying([
             |element: AssertThat<AssertionFailure, Capture>| {
@@ -223,8 +244,8 @@ mod tests {
         let renders = Cell::new(0);
         let failures = assert_that!([1, 2, 3])
             .with_renderer(CountingRenderer(&renders))
-            .with_rendering_budget(RenderingBudget::builder().max_items(1).build())
-            .capture(|it| it.matches(elements_are![9, 9, 9]));
+            .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+            .capture(|it| it.matches(elements_are![eq(9), eq(9), eq(9)]));
 
         assert_that!(failures).contains_exactly_satisfying([
             |element: AssertThat<AssertionFailure, Capture>| {
@@ -236,7 +257,9 @@ mod tests {
 
     mod evaluate {
         use super::*;
-        use crate::{matchers::all_of, renderer::RenderedBody, test_support::CustomValueRenderer};
+        use crate::{
+            expectation::all_of, renderer::RenderedBody, test_support::CustomValueRenderer,
+        };
         #[test]
         fn preserves_sequence_length_metadata_and_budget_in_nested_failures() {
             use indoc::formatdoc;
@@ -244,8 +267,8 @@ mod tests {
             let failures = assert_that!([1, 2])
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
-                .with_rendering_budget(RenderingBudget::builder().max_leaf_characters(3).build())
-                .capture(|it| it.matches(all_of((elements_are![1],))));
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
+                .capture(|it| it.matches(all_of((elements_are![eq(1)],))));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element.derive(|value| value).has_text_report(formatdoc! {r"
@@ -293,7 +316,7 @@ mod tests {
             let failures = assert_that!([1, 2])
                 .with_renderer(NeverRender)
                 .with_location(false)
-                .with_rendering_budget(RenderingBudget::builder().max_items(0).build())
+                .with_rendering_budget(RenderingBudget::default().with_max_items(0))
                 .capture(|it| it.matches(elements_are![]));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
@@ -317,7 +340,7 @@ mod tests {
 
     mod probe {
         use super::*;
-        use crate::matchers::MatchContext;
+        use crate::AssertionContext;
         #[test]
         fn length_mismatches_do_not_render_numeric_evidence() {
             struct NeverRender;
@@ -326,9 +349,9 @@ mod tests {
                     panic!("probe rendered evidence")
                 }
             }
-            let context = MatchContext::new(&NeverRender, RenderingBudget::default());
+            let context = AssertionContext::new(&NeverRender, RenderingBudget::default());
             assert_that!(context.probe(&[1, 2], &elements_are![])).is_false();
-            assert_that!(context.into_failures()).is_empty();
+            assert_that!(context.into_evidence().children).is_empty();
         }
     }
 }

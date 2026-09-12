@@ -1,13 +1,6 @@
 ---
 id: assertion-lifecycle
-refines:
-  - assertr
-depends_on:
-  - failure-processing
-  - diagnostic-rendering
-related_to:
-  - fluent-entry
-  - integration-boundaries
+depends_on: [ ]
 sources:
   - assertr/src/lib.rs
   - assertr/src/actual.rs
@@ -15,141 +8,122 @@ sources:
   - assertr/src/entry/mod.rs
   - assertr/src/assert_that/mod.rs
   - assertr/src/assert_that/capture.rs
-  - assertr/src/entry/fluent.rs
   - assertr/src/assert_that/projection.rs
   - assertr/src/details.rs
   - assertr/src/tracking.rs
-  - assertr/src/assertions/core/fn.rs
-  - assertr/src/entry/panic.rs
 ---
 
 # Assertion lifecycle
 
 [Architecture overview](README.md)
 
-An assertion chain combines the subject, a failure mode, and diagnostic state. Mapping carries that state into a new
-subject. Derivation creates a child that reports back to its parent.
+An assertion chain combines a subject, a failure mode, and diagnostic state. Mapping transfers that state to a new
+subject. Derivation creates a child that reports to its parent.
 
 ## Chain representation
 
-`AssertThat<'t, T, M, R>` contains an `Actual<'t, T>` and a private `ChainState<'t, M, R>`.
+[`AssertThat<'t, T, M, R>`](../assertr/src/lib.rs) separates subject storage from transferable state:
 
-| Part           | Purpose                                                                                                   |
-|----------------|-----------------------------------------------------------------------------------------------------------|
-| `T`            | Selects the available assertion methods.                                                                  |
-| `Actual`       | Stores either `Borrowed(&T)` or `Owned(T)`. Ownership is checked at runtime by consuming methods.         |
-| `M: Mode`      | Selects panic or capture behavior at compile time. `Mode` is sealed to `Panic` and `Capture`.             |
-| `R`            | Stores the renderer. Each assertion method requires only the rendering capabilities it uses.              |
-| `ChainState`   | Groups metadata, rendering settings, mode, renderer, and `ChainRecords` for transfer during projections.  |
-| `ChainRecords` | Holds this node's messages, assertion count, captured failures, and an optional link to ancestor records. |
+| Part                     | Contract                                                                                                   |
+|--------------------------|------------------------------------------------------------------------------------------------------------|
+| `Actual<'t, T>`          | Holds `Borrowed(&T)` or `Owned(T)`. `T` selects subject capabilities.                                      |
+| `M: Mode`                | Sealed to `Panic` and `Capture`. Rust selects failure handling at compile time.                            |
+| `R`                      | Active renderer. Each method requires only the rendering capabilities it uses.                             |
+| `ChainState` (private)   | Mode, renderer, diagnostic settings, subject name, expression, and records. Has no subject type parameter. |
+| `ChainRecords` (private) | Local detail messages, assertion count, captured failures, and an optional parent-record link.             |
 
-`ChainState` has no subject type parameter. Mappings and extractions replace `Actual<T>` and move the remaining fields
-together, including across async mappers.
+A root has no parent-record link. A child has its own records, whose parent link exposes only ancestor records. Its
+subject may separately borrow a projection of the parent's subject. The link does not expose the ancestor's subject,
+renderer, or presentation adapter. Counts propagate through every ancestor, captured failures go to the root, and
+diagnostics collect local messages before ancestor messages.
 
-Each child has its own `ChainRecords`. Its parent link is `Option<&ChainRecords>`, so it exposes no ancestor subject,
-renderer, or presentation adapter. Counts propagate through every ancestor, captured failures are forwarded to the root,
-and diagnostics collect local messages before ancestor messages. The three record stores use `RefCell` so assertions on
-borrowed children can update their root.
+For `root.derive` selecting a field, the two borrows are distinct:
+
+```mermaid
+flowchart LR
+    child["Child AssertThat"] --> actual["Child Actual::Borrowed"]
+    actual -->|subject borrow| field["Field in parent subject"]
+    child --> records["Child ChainRecords"]
+    records -->|parent - record link| parent["Parent ChainRecords"]
+    child --> renderer["Child renderer clone"]
+```
+
+The [projection implementation](../assertr/src/assert_that/projection.rs) creates both links. The subject borrow still
+contributes its own lifetime and unwind-safety requirements.
 
 ## Entry, subject ownership, and mode
 
-`assert_that!(expression)` borrows its input and records the expression text. For sized pointees, a value and one
-reference layer produce the same subject type. Unsized strings and slices use reference-typed subjects.
-`assert_that_owned!` takes ownership. A consuming assertion called on a borrowed subject panics as misuse when it tries
-to take the value. Ownership is not a separate type parameter that could reject the call at compile time.
+[`assert_that!`](../assertr/src/entry/mod.rs) borrows its input and records its expression text. For sized pointees, a
+value and one reference layer select the same subject type. Unsized strings and slices remain reference-typed subjects.
+`assert_that_owned!` owns its input, including the reference itself when given `&T`.
 
-Entry normally creates a panic-mode root. `capture` starts a capture-mode root for its closure, resets the assertion
-count, and severs any panic-mode parent link. It retains existing detail messages by collecting them from the old chain
-and its ancestors.
+Ownership is a runtime property of `Actual`, independent of the mode. A consuming assertion on a borrowed subject panics
+as misuse when it takes the value. A failed assertion follows the mode. `Panic` presents the first failure and panics.
+`Capture` stores failures so checks can continue. An extraction that has no continuation on failure requires
+`Panic`.
 
-The closure must return the supplied chain or a mapped continuation. Capture checks the returned chain's count and takes
-its failures. An empty assertion count panics as misuse. Capture does not catch user panics or invoke panic
-presentation. Completion happens when the closure returns, with no check deferred to `Drop`.
-
-Fluent verification roots start with a private pending expression and the tracked entry location. With
-`fluent_expressions`, inline closures replace it before running assertions. For callback values, failures expose it as
-`None` until completion verifies the callback input type and attaches the expression to the returned aggregate.
-Mappings and renderer changes preserve this state. Derivation resets it, and `with_expression` replaces it with an
-explicit value.
-See [fluent expression capture](fluent-entry.md#scoped-expression-capture) for completion and collision handling.
+[`capture`](../assertr/src/assert_that/capture.rs) converts a panic-mode chain into a capture root. It resets the count,
+detaches any parent link, and retains inherited detail messages. Its callback must return the supplied chain or a mapped
+continuation. Completion checks that returned chain's count and takes its failures. No assertions means a misuse panic.
+Capture neither catches user panics nor invokes panic presentation, and no completion check runs in `Drop`.
 
 ## Projections and continuation
 
-| Operation                                       | Chain state                                                          | Subject name and expression                    | Renderer                      |
-|-------------------------------------------------|----------------------------------------------------------------------|------------------------------------------------|-------------------------------|
-| `map`, `map_owned`, `map_async`                 | Moves the existing state into the continuation.                      | Preserved.                                     | Moved, with no `Clone` bound. |
-| `derive`, `derive_owned`, `derive_async`        | Creates a child borrowing the parent.                                | Start empty.                                   | Cloned.                       |
-| `satisfies`, `satisfies_owned`, `satisfies_ref` | Gives a derived child to a closure, then returns the original chain. | Empty on the child. Unchanged on the original. | Cloned for the child.         |
+The [projection methods](../assertr/src/assert_that/projection.rs) differ in state ownership:
 
-`map` receives `Actual<T>` and returns `Actual<U>`. `map_owned` first makes a `ToOwned` copy of the subject. `map_async`
-awaits a new owned subject. `derive` borrows its projection. Use it to project a field and then assert on the child,
-while keeping the parent available for other field checks. `derive_owned` and `derive_async` store the mapper's result
-as the child subject. They borrow the parent without cloning it. Derived children inherit the mode, rendering budget,
-location setting, and panic presentation. Projection itself does not count as an assertion. See the
-[`derive` rustdoc](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.derive) for field-check
-examples.
+| Operation                                       | State and metadata                                                                                   | Renderer                 |
+|-------------------------------------------------|------------------------------------------------------------------------------------------------------|--------------------------|
+| `map`, `map_owned`, `map_async`                 | Move the existing state, preserving records, name, and expression.                                   | Moved. No `Clone` bound. |
+| `derive`, `derive_owned`, `derive_async`        | Create a child. Inherit diagnostic settings, mode, and ancestor messages. Clear name and expression. | Cloned.                  |
+| `satisfies`, `satisfies_owned`, `satisfies_ref` | Give a derived child to a callback, then return the original chain.                                  | Cloned for the child.    |
 
-This capture collects a child failure, then returns a mapped continuation with the original metadata:
+`map` transforms `Actual<T>` into `Actual<U>`. `map_owned` first copies through `ToOwned`, even for an owned subject.
+`map_async` awaits a new owned subject. `derive` borrows a sized projection. `derive_owned` and `derive_async` store the
+mapper's result, which may itself be a reference to an unsized target. Derivation does not require cloning the subject.
+Mapping and projection do not count as assertions. Checks performed on their continuations do.
 
-```rust
-use assertr::{actual::Actual, prelude::*};
+The storage-level `Actual::map` consumes its receiver and invokes an `FnOnce` mapper exactly once. It returns the
+mapper's owned or borrowed subject unchanged, allowing captured values to move into the result.
 
-let values = [1, 2];
-let failures = assert_that!(values)
-.with_subject_name("values")
-.capture( | root| {
-root.derive( | values | & values[0]).is_equal_to(9);
-root.map( | actual | Actual::Owned(actual.borrowed().len()))
-.is_equal_to(3)
-});
+Within capture, return the root or its mapped continuation after checking children. A child borrows the root and cannot
+replace that local root as the callback's returned chain. Expression attachment for fluent verification is owned by
+[fluent entry](fluent-entry.md#scoped-expression-capture).
 
-assert_eq!(failures.len(), 2);
-assert_eq!(failures[0].subject_name, None);
-assert_eq!(failures[0].expression, None);
-assert_eq!(failures[1].subject_name.as_deref(), Some("values"));
-assert_eq!(failures[1].expression, Some("values"));
-```
+## Capture and continuation trace
 
-The root receives the child's failure through its parent link. Returning the mapped root lets capture extract both
-failures. A derived child borrows its parent and cannot replace that local parent as the closure's returned chain.
+Consider a named capture root over `[1, 2]`, with expression `values`. The callback checks its first element, then maps
+the root to the length and checks that length. Both checks fail:
 
-## Panic observation boundaries
+| Step                       | Root count and failures                                      | Subject metadata                            |
+|----------------------------|--------------------------------------------------------------|---------------------------------------------|
+| Enter capture              | Count 0, no failures.                                        | Root name and `values` expression retained. |
+| Derive the first element   | Unchanged. The child borrows the element and parent records. | Child name and expression start empty.      |
+| Check the child against 9  | Count 1. Child failure stored at the root.                   | Failure has the child's metadata.           |
+| Map the root to length 2   | Count and stored failure move into the continuation.         | Root name and expression retained.          |
+| Check the length against 3 | Count 2. Second failure appended.                            | Failure has the mapped root's metadata.     |
+| Return the mapped root     | Capture returns both failures in raise order.                | Each failure keeps its own metadata.        |
 
-Assertion chains derive their unwind-safety auto traits from their fields:
+The callback must return the supplied root or its continuation. Completion reads the returned chain's records, so a new
+unrelated chain would not collect the original root's work. The executable examples live in the
+[projection rustdoc](../assertr/src/assert_that/projection.rs). The regression
+[`returned_context_collects_projections_and_renderer_changes_once`](../assertr/src/assert_that/capture.rs)
+pins propagation through child checks and renderer changes.
 
-| Context trait   | Subject bound                   | Renderer bound     |
-|-----------------|---------------------------------|--------------------|
-| `UnwindSafe`    | `T: UnwindSafe + RefUnwindSafe` | `R: UnwindSafe`    |
-| `RefUnwindSafe` | `T: RefUnwindSafe`              | `R: RefUnwindSafe` |
+## Unwind safety
 
-The same bounds apply in both modes. `UnwindSafe` requires both subject bounds because `Actual<T>` can contain either
-`T` or `&T`, regardless of its active variant. Construction, projections, and ordinary assertion callbacks add no unwind
-bounds. Ancestor links impose no unwind bounds on ancestor subjects or renderers.
+The chain's fields determine its unwind-safety auto traits in both modes:
 
-Each of the three `RefCell` fields in `ChainRecords` is wrapped in `AssertUnwindSafe`. Message conversions and rendering
-precede mutable record borrows. Unwinding releases guards without rolling back completed records. Subjects, renderers,
-and [panic presentation](failure-processing.md#presentation-and-fallback) remain outside these exemptions.
+| Trait           | Subject requirement             | Renderer requirement |
+|-----------------|---------------------------------|----------------------|
+| `UnwindSafe`    | `T: UnwindSafe + RefUnwindSafe` | `R: UnwindSafe`      |
+| `RefUnwindSafe` | `T: RefUnwindSafe`              | `R: RefUnwindSafe`   |
 
-Callers can explicitly override a rejected `catch_unwind` capture with `AssertUnwindSafe` after reviewing the captured
-state. The [chain rustdoc](../assertr/src/lib.rs) gives examples of the required bounds and explicit overrides.
+`Actual<T>` may hold either `T` or `&T`, so the active ownership variant cannot relax these bounds. Ordinary
+construction, projections, and callbacks add no unwind bounds. The three record cells have local `AssertUnwindSafe`
+exemptions. Conversions and rendering finish before mutable record borrows. Unwinding releases guards but does not undo
+completed records or user effects. Subjects, renderers, and panic adapters stay outside those exemptions.
 
-Synchronous and asynchronous `FnOnce` assertions require ownership and panic mode. `panics` observes invocation and
-drops a produced output inside the unwind boundary. A panic from either phase becomes the next `PanicValue` subject.
-`does_not_panic` returns the output, so its later `Drop` is outside that boundary.
-
-Panic assertions use localized `AssertUnwindSafe` around the operations they catch. They accept mutable captures and do
-not restore captured state. The returned `PanicValue` stores `Box<dyn Any>` and implements neither unwind-safety trait.
-
-The async variants also observe each poll. After a poll panics, the future is not polled again. `panics_async` observes
-dropping the output as well. External cancellation of a pending projection or panic-checking future has no recovery
-guarantee.
-
-## Sources
-
-[Chain representation](../assertr/src/lib.rs), [Actual](../assertr/src/actual.rs), and [Mode](../assertr/src/mode.rs)
-define the state model. [State construction](../assertr/src/assert_that/mod.rs), [entry](../assertr/src/entry/mod.rs),
-[capture](../assertr/src/assert_that/capture.rs), [projections](../assertr/src/assert_that/projection.rs),
-[detail messages](../assertr/src/details.rs), and [tracking](../assertr/src/tracking.rs) implement its
-lifecycle. [Function assertions](../assertr/src/assertions/core/fn.rs) define panic observation.
-See [failure processing](failure-processing.md) for raising failures and [diagnostic rendering](diagnostic-rendering.md)
-for renderer behavior.
+Panic-catching invocation and polling are
+separate [observation boundaries](observation-boundaries.md#invocation-and-polling). Those execution adapters accept
+mutable captures with localized exemptions. This does not grant unwind safety to an arbitrary assertion chain or roll
+back user state.

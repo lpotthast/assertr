@@ -1,8 +1,32 @@
 //! Structural macro behavior at a downstream call site.
 #![cfg(feature = "matchers")]
 
+mod catalog {
+    use assertr::{matchers::*, prelude::*};
+
+    #[test]
+    fn family_namespaces_compose_as_structural_fields() {
+        struct User {
+            name: &'static str,
+            roles: [&'static str; 2],
+            id: Option<u32>,
+        }
+        let expected = partial!(User {
+            name: string::Contains::new("da"),
+            roles: all_of((collection::Contains::new("reader"), HasLengthOf::new(2))),
+            id: IsSome,
+        });
+        assert_that!(User {
+            name: "Ada",
+            roles: ["reader", "editor"],
+            id: Some(1),
+        })
+        .matches(&expected);
+    }
+}
+
 mod named_fields {
-    use assertr::prelude::*;
+    use assertr::{matchers::eq, prelude::*};
 
     struct Secret;
 
@@ -47,7 +71,10 @@ mod named_fields {
             secret: Secret,
         };
         let matcher = partial!(Parent {
-            children: elements_are![partial!(Child { id: 1, .. }), partial!(Child { id: 2, .. })],
+            children: elements_are![
+                partial!(Child { id: eq(1), .. }),
+                partial!(Child { id: eq(2), .. })
+            ],
             ..
         });
         assert_that!(parent).matches(&matcher);
@@ -55,8 +82,8 @@ mod named_fields {
         let failures = assert_that!(parent).with_renderer(Scalar).capture(|it| {
             it.matches(partial!(Parent {
                 children: elements_are![
-                    partial!(Child { id: 3, .. }),
-                    partial!(Child { id: 4, .. })
+                    partial!(Child { id: eq(3), .. }),
+                    partial!(Child { id: eq(4), .. })
                 ],
                 ..
             }))
@@ -72,12 +99,13 @@ mod named_fields {
                     ]);
             },
         ]);
-        assert_that!(parent)
-            .with_renderer(Scalar)
-            .does_not_match(partial!(Parent {
-                children: elements_are_in_any_order![partial!(Child { id: 5, .. })],
+        let failures = assert_that!(parent).with_renderer(Scalar).capture(|it| {
+            it.matches(partial!(Parent {
+                children: elements_are_in_any_order![partial!(Child { id: eq(5), .. })],
                 ..
-            }));
+            }))
+        });
+        assert_that!(failures).has_length(1);
     }
 
     #[test]
@@ -90,11 +118,11 @@ mod named_fields {
         let matcher = partial!(Pair {
             y: {
                 calls.borrow_mut().push("y");
-                2
+                eq(2)
             },
             x: {
                 calls.borrow_mut().push("x");
-                1
+                eq(1)
             },
         });
         assert_that!(*calls.borrow()).is_equal_to(["y", "x"]);
@@ -105,7 +133,7 @@ mod named_fields {
 }
 
 mod maps {
-    use assertr::prelude::*;
+    use assertr::{matchers::eq, prelude::*};
 
     #[test]
     fn nested_maps_and_borrowed_values() {
@@ -116,7 +144,7 @@ mod maps {
         }
         let name = String::from("Alice");
         let map = BTreeMap::from([(String::from("a"), Row { name: &name })]);
-        assert_that!(map).matches(entries_are![("a", partial!(Row { name: "Alice" }))]);
+        assert_that!(map).matches(entries_are![("a", partial!(Row { name: eq("Alice") }))]);
     }
 
     #[test]
@@ -135,7 +163,7 @@ mod maps {
         };
         let failures = assert_that!(root).capture(|it| {
             it.matches(partial!(Root {
-                items: entries_are![("x", partial!(Item { id: 2 }))]
+                items: entries_are![("x", partial!(Item { id: eq(2) }))]
             }))
         });
         assert_that!(failures[0].children[0].path).contains_exactly_satisfying([
@@ -153,19 +181,19 @@ mod maps {
 }
 
 mod tuple_structs {
-    use assertr::prelude::*;
+    use assertr::{matchers::eq, prelude::*};
 
     #[allow(dead_code)]
     struct Pair(i32, i32);
 
     #[test]
     fn accepts_wildcard_fields() {
-        assert_that!(Pair(1, 2)).matches(partial!(Pair(1, _)));
+        assert_that!(Pair(1, 2)).matches(partial!(Pair(eq(1), _)));
     }
 
     #[test]
     fn accepts_final_rest() {
-        assert_that!(Pair(1, 2)).matches(partial!(Pair(1, ..)));
+        assert_that!(Pair(1, 2)).matches(partial!(Pair(eq(1), ..)));
     }
 }
 
@@ -185,7 +213,11 @@ mod unit_structs {
 }
 
 mod enum_variants {
-    use assertr::{failure::PathSegment, matchers::anything, prelude::*};
+    use assertr::{
+        failure::PathSegment,
+        matchers::{anything, eq},
+        prelude::*,
+    };
 
     enum Example {
         Named { value: i32 },
@@ -196,7 +228,7 @@ mod enum_variants {
     #[test]
     fn explicit_variant_marker_records_a_typed_path() {
         let failures = assert_that!(Example::Tuple(2))
-            .capture(|it| it.matches(partial!(variant Example::Tuple(3))));
+            .capture(|it| it.matches(partial!(variant Example::Tuple(eq(3)))));
 
         assert_that!(failures[0].children[0].path).is_equal_to([
             PathSegment::Variant("Example::Tuple"),
@@ -208,19 +240,21 @@ mod enum_variants {
     fn mismatched_variants_require_no_renderer() {
         struct NoRenderer;
 
-        assert_that!(Example::Unit)
+        let failures = assert_that!(Example::Unit)
             .with_renderer(NoRenderer)
-            .does_not_match(partial!(Example::Tuple(anything())));
+            .capture(|it| it.matches(partial!(Example::Tuple(anything()))));
+        assert_that!(failures).has_length(1);
     }
 
     #[test]
     fn accepts_named_variants() {
-        assert_that!(Example::Named { value: 1 }).matches(partial!(Example::Named { value: 1 }));
+        assert_that!(Example::Named { value: 1 })
+            .matches(partial!(Example::Named { value: eq(1) }));
     }
 
     #[test]
     fn accepts_tuple_variants() {
-        assert_that!(Example::Tuple(2)).matches(partial!(Example::Tuple(2)));
+        assert_that!(Example::Tuple(2)).matches(partial!(Example::Tuple(eq(2))));
     }
 
     #[test]
@@ -234,13 +268,14 @@ mod enum_variants {
 
         assert_that!(Unit).matches(partial!(Unit));
         assert_that!(Unit).matches(partial!(variant Unit));
-        assert_that!(Example::Tuple(1)).does_not_match(partial!(Unit));
+        let failures = assert_that!(Example::Tuple(1)).capture(|it| it.matches(partial!(Unit)));
+        assert_that!(failures).has_length(1);
     }
 
     #[test]
     fn accepts_unqualified_standard_constructors() {
-        assert_that!(Some(1)).matches(partial!(Some(1)));
-        assert_that!(Ok::<_, ()>(1)).matches(partial!(Ok(1)));
+        assert_that!(Some(1)).matches(partial!(Some(eq(1))));
+        assert_that!(Ok::<_, ()>(1)).matches(partial!(Ok(eq(1))));
         assert_that!(None::<i32>).matches(partial!(None));
     }
 }

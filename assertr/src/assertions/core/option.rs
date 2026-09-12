@@ -1,6 +1,89 @@
 use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, failure::FailureKind, mode::Panic};
 use core::option::Option;
 
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+
+/// Checks for `Some` and returns a borrowed value on success.
+/// The same definition supports checks, extraction, and callbacks on an assertion chain.
+pub struct IsSome;
+
+impl<T, R> Expectation<Option<T>, R> for IsSome {
+    type Success<'a>
+        = &'a T
+    where
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Option<T>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<&'a T, ()> {
+        actual.as_ref().ok_or(())
+    }
+}
+impl<T, R> ExpectationDiagnostics<Option<T>, R> for IsSome {
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&Option<T>, ())>,
+        failure: FailureBuilder<Target>,
+        _context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let failure = match rejected {
+            None => failure.relation("is the expected variant"),
+            Some((_, ())) => failure
+                .actual("None")
+                .relation("is not the expected variant"),
+        };
+        failure.expected("Option::Some")
+    }
+}
+
+/// Checks for `None`, retaining the unexpected contained value on rejection.
+pub struct IsNone;
+
+impl<T, R> Expectation<Option<T>, R> for IsNone {
+    type Success<'a>
+        = ()
+    where
+        T: 'a;
+    type Rejection<'a>
+        = &'a T
+    where
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Option<T>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), &'a T> {
+        match actual {
+            None => Ok(()),
+            Some(value) => Err(value),
+        }
+    }
+}
+impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Option<T>, R> for IsNone {
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Option<T>, &'a T)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("is the expected variant"),
+            Some((actual, value)) => failure
+                .actual(render.variant(actual, "Some", value))
+                .relation("is not the expected variant"),
+        };
+        failure.expected("Option::None")
+    }
+}
+
 /// Panic-mode extraction from `Option` subjects.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait OptionExtractAssertions<'t, T, R> {
@@ -17,17 +100,7 @@ pub trait OptionExtractAssertions<'t, T, R> {
 impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, Panic, R> {
     #[track_caller]
     fn get_some(self) -> AssertThat<'t, T, Panic, R> {
-        self.track_assertion();
-
-        if !self.actual().is_some() {
-            self.failure(FailureKind::Variant)
-                .actual(format_args!("None"))
-                .relation("is not the expected variant")
-                .expected(format_args!("Option::Some"))
-                .raise();
-        }
-
-        self.map(|actual| match actual {
+        self.apply_assertion(IsSome).map(|actual| match actual {
             Actual::Owned(o) => Actual::Owned(o.unwrap()),
             Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap()),
         })
@@ -65,17 +138,7 @@ pub trait OptionAssertions<'t, T, M: Mode, R> {
 impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<T>, M, R> {
     #[track_caller]
     fn is_some(self) -> Self {
-        self.track_assertion();
-
-        if !self.actual().is_some() {
-            self.failure(FailureKind::Variant)
-                .actual(format_args!("None"))
-                .relation("is not the expected variant")
-                .expected(format_args!("Option::Some"))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsSome)
     }
 
     #[track_caller]
@@ -83,21 +146,7 @@ impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-
-        if !self.actual().is_none() {
-            let actual = match self.actual() {
-                Some(value) => self.render().variant(self.actual(), "Some", value),
-                None => unreachable!("already checked"),
-            };
-            self.failure(FailureKind::Variant)
-                .actual(actual)
-                .relation("is not the expected variant")
-                .expected(format_args!("Option::None"))
-                .raise();
-        }
-
-        self
+        self.apply_assertion(IsNone)
     }
 
     #[track_caller]
@@ -106,26 +155,20 @@ impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<
         R: Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        self.track_assertion();
-
-        if self.actual().is_some() {
-            self.satisfies(|it| it.as_ref().unwrap(), assertions)
-        } else {
-            self.failure(FailureKind::Variant)
-                .actual(format_args!("None"))
-                .relation("is not the expected variant")
-                .expected(format_args!("Option::Some"))
-                .raise();
-            self
+        if let Some(value) = self.test_assertion(&IsSome) {
+            assertions(self.derive(|_| value));
         }
+        self
     }
 }
 
 #[cfg(test)]
 mod tests {
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
 
         struct Secret;
 

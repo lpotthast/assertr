@@ -1,4 +1,4 @@
-use renamed_assertr::prelude::*;
+use renamed_assertr::{matchers::eq, prelude::*};
 
 struct User {
     name: String,
@@ -12,7 +12,7 @@ fn main() {
     };
 
     assert_that!(user).matches(partial!(User {
-        name: "Alice",
-        age: 30,
+        name: eq("Alice"),
+        age: eq(30),
     }));
 }

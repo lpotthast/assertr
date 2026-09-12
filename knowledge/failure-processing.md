@@ -1,85 +1,81 @@
 ---
 id: failure-processing
-refines:
-  - assertr
-depends_on:
-  - diagnostic-rendering
-related_to:
-  - assertion-lifecycle
-  - extension-contract
+depends_on: [ assertion-lifecycle, diagnostic-rendering ]
 sources:
-  - assertr/src/assert_that/diagnostics.rs
   - assertr/src/failure/mod.rs
   - assertr/src/failure/builder.rs
   - assertr/src/failure/failures.rs
-  - assertr/src/renderer/rendered.rs
-  - assertr/src/failure/adapter/**
+  - assertr/src/failure/adapter/mod.rs
+  - assertr/src/failure/adapter/adapters/human_readable.rs
+  - assertr/src/failure/adapter/adapters/writer.rs
   - assertr/src/failure/panic_presentation.rs
+  - assertr/src/assert_that/diagnostics.rs
+  - assertr/tests/failure_adapters.rs
+  - assertr-no-std-tests/src/lib.rs
 ---
 
 # Failure processing
 
 [Architecture overview](README.md)
 
-Assertion failures become structured data before capture storage or panic presentation. Adapters can inspect that data
-without parsing the default report.
+A failed assertion becomes an owned `AssertionFailure` before capture storage or panic presentation. Failure adapters
+inspect that structure without parsing the default report or retaining the original Rust values.
 
 ## Structured construction and ownership
 
-After tracking a failed leaf, the assertion creates a `FailureBuilder` with `AssertThat::failure(FailureKind)`. Its
-fields hold:
+The [failure model](../assertr/src/failure/mod.rs) separates meaning, evidence, and location:
 
-- Rendered actual, expected, and unexpected values, plus the relation between them.
-- Facts, notes, nested failures, matcher constraints, and omission counts.
-- A path, subject type, subject name, source expression, caller location, and detail messages.
+| Fields                                         | Meaning                                                                                                                                    |
+|------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| `kind`                                         | Non-exhaustive family classification for grouping and filtering. It does not identify a specific assertion.                                |
+| `actual`, `relation`, `expected`, `unexpected` | Rendered operands and the sentence connecting them. Relations are lowercase, contain no values, and have no trailing period.               |
+| `facts`                                        | Additional evidence. `Fact::labelled` names it. `Fact::note` uses an empty label.                                                          |
+| `children`, `constraint`, omission counts      | Nested rejections and descriptions of unmet expectations. A constraint is another `AssertionFailure`, not a separate schema.               |
+| `path` and subject/caller metadata             | Relative field, tuple, variant, stable index, or rendered-key location, plus type, name, expression, caller location, and detail messages. |
 
-`FailureKind` is non-exhaustive and classifies the assertion family for adapters. The relation and evidence explain the
-specific failure.
+[`FailureBuilder`](../assertr/src/failure/builder.rs) has two completion targets. `AssertThat::failure` creates an
+`Attached` builder. `.raise()` adds chain metadata and delivers the failure through the active mode.
+`FailureBuilder::detached::<T>` creates a `Detached` builder. `.build()` returns data without raising or collecting
+chain metadata. [Expectation explanation](expectation-execution.md#evaluation-and-explanation) uses either target.
 
-An attached builder targets a chain. Calling `.raise()` collects its metadata and either stores the failure at the
-capture root or presents it and panics. A detached builder creates a child failure with `.build()`. Typed field, tuple,
-variant, index, and rendered-key paths locate nested evidence.
+Diagnostic values pass through the active rendering context before entering the builder. Failure adapters receive
+[budgeted `Rendered` trees](diagnostic-rendering.md#bounded-retention) and cannot recover omitted values.
+`AssertionFailure`, `Fact`, and `Rendered` expose fields and read-only accessors for inspection without rerendering.
 
-`AssertionFailure` is the public data model. Descendant failures reach the root in the order they are raised. Capture
-returns them as `AssertionFailures`, an ordered aggregate supporting slice access and iteration.
-See [assertion lifecycle](assertion-lifecycle.md#entry-subject-ownership-and-mode) for capture completion.
-
-With `fluent`, the aggregate privately retains indexes of failures awaiting receiver-expression attachment and their
-entry location. For callback values, the expression attribute checks the callback input type before consuming this
-bookkeeping after verification returns. Inline closures attach expressions to their inputs before assertions run.
-Derived failures and explicit expressions are excluded. Equality compares only the failure values, cloning preserves
-pending attachment, and conversion into a vector or owned iteration discards it. The public failure fields never expose
-a placeholder.
-
-`AssertionFailure`, `Fact`, and `Rendered` provide read-only accessors alongside their public fields. Getters borrow
-strings, slices, and rendered trees, or copy small metadata values. Optional trees use `Option<&Rendered>` without
-cloning or rendering again. Pass getters returning a borrowed sized value to `derive`, and getters returning slices,
-string slices, optional views, or copied values to `derive_owned`.
-
-Adapters receive rendered values with [budgets already applied](diagnostic-rendering.md#bounded-retention). They can
-change presentation but cannot recover omitted original values.
+Capture forwards descendant failures to the root in raise order. [
+`AssertionFailures`](../assertr/src/failure/failures.rs)
+is the ordered aggregate returned on [capture completion](assertion-lifecycle.md#entry-subject-ownership-and-mode). It
+supports slice access, iteration, and conversion to a vector. Fluent expression bookkeeping stays private and never
+appears as a placeholder in public fields. Its attachment rules live
+in [fluent entry](fluent-entry.md#scoped-expression-capture).
 
 ## Presentation and fallback
 
-Capture leaves presentation to the caller. Panic mode uses the configured adapter or `ToHumanReadableText` by default.
+[`Adapter<Input>`](../assertr/src/failure/adapter/mod.rs) converts borrowed input to a declared output or error.
+`AdapterExt::then` composes conversions. `ToHumanReadableText` renders a failure or aggregate using the default report
+grammar and returns `HumanReadableText`, an owned text wrapper.
 
-`with_panic_presentation` owns a `'static + RefUnwindSafe` text adapter with a `Display` error. Derived chains share it
-through `Rc`, without requiring `Send`, `Sync`, or `Clone`. The stored trait object retains `RefUnwindSafe`. Explicit
-adapter calls have no unwind-safety bound.
+With `std`, `Writer<W>` is an explicit sink accepting `AsRef<[u8]>`, including `HumanReadableText`, strings, and
+byte buffers. Its `Adapter` implementation writes the complete input to a configured `std::io::Write` target and
+flushes it, returning `()` or the I/O error. It adds no separators and preserves the input bytes. The target may be
+owned or borrowed. Constructors select standard output or standard error without performing I/O. The writer uses
+interior mutability for the shared `Adapter::adapt` receiver. Reentrant use returns an I/O error.
 
-If a custom panic adapter returns an error, Assertr uses the default report and appends a presentation diagnostic. With
-`std`, it also catches an adapter panic, including a panic while formatting the adapter's error. It does not retry the
-adapter during that fallback, but a later assertion may invoke it again. The catch uses the adapter's `RefUnwindSafe`
-bound without an `AssertUnwindSafe` override. Without `std`, returned errors still fall back, but adapter panics
-propagate.
+With `tokio`, the same `Writer` accepts `AsyncWrite + Unpin` targets through `adapt_async(&mut self, input)`.
+Tokio stdout/stderr constructors are available. Callers await writing and flushing explicitly after any synchronous
+adapter stages. This method never creates or blocks on a runtime and holds no interior borrow guard across an await.
+Errors and cancellation can leave partial output. Neither capture nor panic presentation automatically writes to a
+stream, and a sink's `()` output cannot be installed as panic presentation.
 
-This fallback applies only to panic presentation. Explicit adapter calls return their declared result directly.
+Capture leaves adaptation to the caller. Panic mode uses `ToHumanReadableText` unless `with_panic_presentation` installs
+an owned `'static + RefUnwindSafe` text adapter with a `Display` error. Derived chains share it through `Rc`. It needs
+neither `Send`, `Sync`, nor `Clone`. The private `PanicPresentation` trait object retains the unwind-safety bound.
 
-## Sources
+[Panic presentation](../assertr/src/failure/panic_presentation.rs) falls back to the default report and appends a
+presentation diagnostic when the adapter returns an error. With `std`, it also catches adapter panics, including error
+formatting panics. Without `std`, those panics propagate. Fallback does not retry the adapter, though a later assertion
+may use it again. Explicit adapter calls have neither this fallback nor the presentation-specific unwind bound.
 
-[FailureBuilder](../assertr/src/failure/builder.rs) implements attached and detached construction.
-The [failure model](../assertr/src/failure/mod.rs) defines structured fields and root
-storage. [AssertionFailures](../assertr/src/failure/failures.rs) provides aggregate
-access. [Adapters](../assertr/src/failure/adapter/mod.rs) process failures,
-[presentation configuration](../assertr/src/assert_that/diagnostics.rs) retains the adapter's bounds,
-and [panic presentation](../assertr/src/failure/panic_presentation.rs) handles fallback.
+The regressions [`a_presentation_error_falls_back_without_std`](../assertr-no-std-tests/src/lib.rs) and
+[`a_panicking_error_formatter_preserves_the_original_failure`](../assertr/tests/failure_adapters.rs) pin these two
+boundaries.

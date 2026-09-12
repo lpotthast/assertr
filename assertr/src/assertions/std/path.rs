@@ -1,7 +1,730 @@
 use crate::renderer::{IntoRendered, Rendered};
 use crate::{AssertThat, Fact, Mode, ValueRenderer, failure::FailureKind};
+use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use std::ops::Deref;
 use std::{ffi::OsStr, path::Path};
+
+/// Checks path existence, retaining an I/O error on rejection.
+pub struct Exists;
+impl<P: Deref<Target = Path>, R> Expectation<P, R> for Exists {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = Option<std::io::Error>
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        match actual.deref().try_exists() {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(None),
+            Err(error) => Err(Some(error)),
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for Exists
+where
+    R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("exists"),
+            Some((actual, error)) => {
+                let failure = failure
+                    .actual(render.value(actual))
+                    .relation("does not exist");
+                match error {
+                    None => failure,
+                    Some(error) => failure.fact(Fact::labelled("I/O error", render.value(&error))),
+                }
+            }
+        }
+    }
+}
+
+/// Checks whether a path is absent, rejecting I/O errors that prevent determining existence.
+pub struct DoesNotExist;
+
+/// Retained evidence that [`DoesNotExist`] could not establish absence.
+///
+/// The evidence distinguishes an existing path from an inspection error. Its representation is
+/// private and is consumed by [`DoesNotExist`]'s diagnostic implementation without inspecting
+/// again.
+pub struct DoesNotExistRejection {
+    reason: DoesNotExistRejectionReason,
+}
+
+enum DoesNotExistRejectionReason {
+    Exists,
+    InspectionFailed(std::io::Error),
+}
+
+fn observe_absence(result: std::io::Result<bool>) -> Result<(), DoesNotExistRejection> {
+    match result {
+        Ok(false) => Ok(()),
+        Ok(true) => Err(DoesNotExistRejection {
+            reason: DoesNotExistRejectionReason::Exists,
+        }),
+        Err(error) => Err(DoesNotExistRejection {
+            reason: DoesNotExistRejectionReason::InspectionFailed(error),
+        }),
+    }
+}
+
+impl<P: Deref<Target = Path>, R> Expectation<P, R> for DoesNotExist {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = DoesNotExistRejection
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        observe_absence(actual.deref().try_exists())
+    }
+}
+
+impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for DoesNotExist
+where
+    R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("does not exist"),
+            Some((actual, rejection)) => {
+                let failure = failure.actual(render.value(actual));
+                match rejection.reason {
+                    DoesNotExistRejectionReason::Exists => failure.relation("unexpectedly exists"),
+                    DoesNotExistRejectionReason::InspectionFailed(error) => failure
+                        .relation("could not determine whether the path exists")
+                        .fact(Fact::labelled("I/O error", render.value(&error))),
+                }
+            }
+        }
+    }
+}
+
+/// Checks whether a path has a root component.
+pub struct HasARoot;
+impl<P: Deref<Target = Path>, R> Expectation<P, R> for HasARoot {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.deref().has_root() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for HasARoot
+where
+    R: ValueRenderer<P>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("has a root"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("does not have a root"),
+        }
+    }
+}
+
+/// Checks whether a path is relative.
+pub struct IsRelative;
+impl<P: Deref<Target = Path>, R> Expectation<P, R> for IsRelative {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.deref().is_relative() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for IsRelative
+where
+    R: ValueRenderer<P>,
+{
+    const KIND: FailureKind = FailureKind::Other;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is relative"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual))
+                .relation("is not relative"),
+        }
+    }
+}
+
+/// Checks whether the path is a file, retaining the observed entry kind.
+pub struct IsAFile;
+impl<P: Deref<Target = Path>, R> Expectation<P, R> for IsAFile {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = &'static str
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let metadata = actual.deref().metadata();
+        if metadata
+            .as_ref()
+            .is_ok_and(|metadata| metadata.file_type().is_file())
+        {
+            Ok(())
+        } else {
+            Err(entry_kind(metadata.as_ref().ok()))
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for IsAFile
+where
+    R: ValueRenderer<P>,
+{
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is a file"),
+            Some((actual, kind)) => failure
+                .actual(render.value(actual))
+                .relation("is not a file")
+                .fact(Fact::note(kind)),
+        }
+    }
+}
+
+/// Checks whether the path is a directory, retaining the observed entry kind.
+pub struct IsADirectory;
+impl<P: Deref<Target = Path>, R> Expectation<P, R> for IsADirectory {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = &'static str
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let metadata = actual.deref().metadata();
+        if metadata
+            .as_ref()
+            .is_ok_and(|metadata| metadata.file_type().is_dir())
+        {
+            Ok(())
+        } else {
+            Err(entry_kind(metadata.as_ref().ok()))
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for IsADirectory
+where
+    R: ValueRenderer<P>,
+{
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is a directory"),
+            Some((actual, kind)) => failure
+                .actual(render.value(actual))
+                .relation("is not a directory")
+                .fact(Fact::note(kind)),
+        }
+    }
+}
+
+/// Checks whether the path is a symlink, retaining the observed entry kind.
+pub struct IsASymlink;
+impl<P: Deref<Target = Path>, R> Expectation<P, R> for IsASymlink {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = &'static str
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let metadata = actual.deref().symlink_metadata();
+        if metadata
+            .as_ref()
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+        {
+            Ok(())
+        } else {
+            Err(entry_kind(metadata.as_ref().ok()))
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for IsASymlink
+where
+    R: ValueRenderer<P>,
+{
+    const KIND: FailureKind = FailureKind::Variant;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is a symlink"),
+            Some((actual, kind)) => failure
+                .actual(render.value(actual))
+                .relation("is not a symlink")
+                .fact(Fact::note(kind)),
+        }
+    }
+}
+
+/// Compares the observed path file name with an expected component.
+pub struct HasFileName<E>(E);
+impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for HasFileName<E>
+where
+    E: AsRef<OsStr>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = (Option<&'a OsStr>, &'a OsStr)
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let component = actual.deref().file_name();
+        let expected = self.0.as_ref();
+        if component == Some(expected) {
+            Ok(())
+        } else {
+            Err((component, expected))
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for HasFileName<E>
+where
+    E: AsRef<OsStr>,
+    R: ValueRenderer<P> + ValueRenderer<OsStr>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has the file name")
+                .expected(render.value(self.0.as_ref())),
+            Some((actual, (component, expected))) => failure
+                .actual(render.value(actual))
+                .relation("does not have the file name")
+                .expected(render.value(expected))
+                .fact(Fact::labelled(
+                    "Actual file name",
+                    component.map_or_else(
+                        || Rendered::verbatim("<none>".into()),
+                        |value| render.value(value).into_rendered(),
+                    ),
+                )),
+        }
+    }
+}
+
+impl<E> HasFileName<E> {
+    /// Expects this path component.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
+/// Compares the observed path file stem with an expected component.
+pub struct HasFileStem<E>(E);
+impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for HasFileStem<E>
+where
+    E: AsRef<OsStr>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = (Option<&'a OsStr>, &'a OsStr)
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let component = actual.deref().file_stem();
+        let expected = self.0.as_ref();
+        if component == Some(expected) {
+            Ok(())
+        } else {
+            Err((component, expected))
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for HasFileStem<E>
+where
+    E: AsRef<OsStr>,
+    R: ValueRenderer<P> + ValueRenderer<OsStr>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has the file stem")
+                .expected(render.value(self.0.as_ref())),
+            Some((actual, (component, expected))) => failure
+                .actual(render.value(actual))
+                .relation("does not have the file stem")
+                .expected(render.value(expected))
+                .fact(Fact::labelled(
+                    "Actual file stem",
+                    component.map_or_else(
+                        || Rendered::verbatim("<none>".into()),
+                        |value| render.value(value).into_rendered(),
+                    ),
+                )),
+        }
+    }
+}
+
+impl<E> HasFileStem<E> {
+    /// Expects this path component.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
+/// Compares the observed path extension with an expected component.
+pub struct HasExtension<E>(E);
+impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for HasExtension<E>
+where
+    E: AsRef<OsStr>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = (Option<&'a OsStr>, &'a OsStr)
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let component = actual.deref().extension();
+        let expected = self.0.as_ref();
+        if component == Some(expected) {
+            Ok(())
+        } else {
+            Err((component, expected))
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for HasExtension<E>
+where
+    E: AsRef<OsStr>,
+    R: ValueRenderer<P> + ValueRenderer<OsStr>,
+{
+    const KIND: FailureKind = FailureKind::Equality;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("has the extension")
+                .expected(render.value(self.0.as_ref())),
+            Some((actual, (component, expected))) => failure
+                .actual(render.value(actual))
+                .relation("does not have the extension")
+                .expected(render.value(expected))
+                .fact(Fact::labelled(
+                    "Actual extension",
+                    component.map_or_else(
+                        || Rendered::verbatim("<none>".into()),
+                        |value| render.value(value).into_rendered(),
+                    ),
+                )),
+        }
+    }
+}
+
+impl<E> HasExtension<E> {
+    /// Expects this path component.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
+/// Checks whether a path starts with the expected whole components.
+pub struct StartsWith<E>(E);
+impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for StartsWith<E>
+where
+    E: AsRef<Path>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = &'a Path
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.0.as_ref();
+        if actual.deref().starts_with(expected) {
+            Ok(())
+        } else {
+            Err(expected)
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for StartsWith<E>
+where
+    E: AsRef<Path>,
+    R: ValueRenderer<P> + ValueRenderer<Path>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("starts with")
+                .expected(render.value(self.0.as_ref()))
+                .fact(Fact::note("Only whole path components are matched.")),
+            Some((actual, expected)) => failure
+                .actual(render.value(actual))
+                .relation("does not start with")
+                .expected(render.value(expected))
+                .fact(Fact::note("Only whole path components are matched.")),
+        }
+    }
+}
+
+impl<E> StartsWith<E> {
+    /// Expects these whole path components.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
+/// Checks whether a path ends with the expected whole components.
+pub struct EndsWith<E>(E);
+impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for EndsWith<E>
+where
+    E: AsRef<Path>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = &'a Path
+    where
+        Self: 'a,
+        P: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.0.as_ref();
+        if actual.deref().ends_with(expected) {
+            Ok(())
+        } else {
+            Err(expected)
+        }
+    }
+}
+
+impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for EndsWith<E>
+where
+    E: AsRef<Path>,
+    R: ValueRenderer<P> + ValueRenderer<Path>,
+{
+    const KIND: FailureKind = FailureKind::Membership;
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a P, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure
+                .relation("ends with")
+                .expected(render.value(self.0.as_ref()))
+                .fact(Fact::note("Only whole path components are matched.")),
+            Some((actual, expected)) => failure
+                .actual(render.value(actual))
+                .relation("does not end with")
+                .expected(render.value(expected))
+                .fact(Fact::note("Only whole path components are matched.")),
+        }
+    }
+}
+
+impl<E> EndsWith<E> {
+    /// Expects these whole path components.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
 
 /// Assertions for path values.
 ///
@@ -25,10 +748,11 @@ pub trait PathAssertions {
 
     /// Asserts that the path does not exist.
     ///
-    /// An I/O error while checking existence is treated as absence.
+    /// Passes only when [`Path::try_exists`] returns `Ok(false)`. An existing path or an I/O error
+    /// while checking existence is reported as an assertion failure, retaining the error as a fact.
     fn does_not_exist(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<std::io::Error>;
 
     /// Asserts that the path exists and refers to a regular file.
     fn is_a_file(self) -> Self
@@ -90,41 +814,15 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        match actual.try_exists() {
-            Ok(true) => {}
-            Ok(false) => {
-                self.failure(FailureKind::Other)
-                    .actual(self.render().value(self.actual()))
-                    .relation("does not exist")
-                    .raise();
-            }
-            Err(err) => {
-                self.failure(FailureKind::Other)
-                    .actual(self.render().value(self.actual()))
-                    .relation("does not exist")
-                    .fact(Fact::labelled("I/O error", self.render().value(&err)))
-                    .raise();
-            }
-        }
-        self
+        self.apply_assertion(Exists)
     }
 
     #[track_caller]
     fn does_not_exist(self) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        if matches!(actual.try_exists(), Ok(true)) {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(self.actual()))
-                .relation("unexpectedly exists")
-                .raise();
-        }
-        self
+        self.apply_assertion(DoesNotExist)
     }
 
     #[track_caller]
@@ -132,16 +830,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        if !actual.is_file() {
-            self.failure(FailureKind::Variant)
-                .actual(self.render().value(self.actual()))
-                .relation("is not a file")
-                .fact(Fact::note(entry_kind(actual)))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsAFile)
     }
 
     #[track_caller]
@@ -149,16 +838,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        if !actual.is_dir() {
-            self.failure(FailureKind::Variant)
-                .actual(self.render().value(self.actual()))
-                .relation("is not a directory")
-                .fact(Fact::note(entry_kind(actual)))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsADirectory)
     }
 
     #[track_caller]
@@ -166,16 +846,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        if !actual.is_symlink() {
-            self.failure(FailureKind::Variant)
-                .actual(self.render().value(self.actual()))
-                .relation("is not a symlink")
-                .fact(Fact::note(entry_kind(actual)))
-                .raise();
-        }
-        self
+        self.apply_assertion(IsASymlink)
     }
 
     #[track_caller]
@@ -183,15 +854,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        if !actual.has_root() {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(self.actual()))
-                .relation("does not have a root")
-                .raise();
-        }
-        self
+        self.apply_assertion(HasARoot)
     }
 
     #[track_caller]
@@ -199,15 +862,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        if !actual.is_relative() {
-            self.failure(FailureKind::Other)
-                .actual(self.render().value(self.actual()))
-                .relation("is not relative")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsRelative)
     }
 
     #[track_caller]
@@ -215,24 +870,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        let expected = expected.as_ref();
-        if actual.file_name() != Some(expected) {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(self.actual()))
-                .relation("does not have the file name")
-                .expected(self.render().value(expected))
-                .fact(Fact::labelled(
-                    "Actual file name",
-                    actual.file_name().map_or_else(
-                        || Rendered::verbatim("<none>".into()),
-                        |component| self.render().value(component).into_rendered(),
-                    ),
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasFileName::new(expected))
     }
 
     #[track_caller]
@@ -240,24 +878,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        let expected = expected.as_ref();
-        if actual.file_stem() != Some(expected) {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(self.actual()))
-                .relation("does not have the file stem")
-                .expected(self.render().value(expected))
-                .fact(Fact::labelled(
-                    "Actual file stem",
-                    actual.file_stem().map_or_else(
-                        || Rendered::verbatim("<none>".into()),
-                        |component| self.render().value(component).into_rendered(),
-                    ),
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasFileStem::new(expected))
     }
 
     #[track_caller]
@@ -265,24 +886,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        let expected = expected.as_ref();
-        if actual.extension() != Some(expected) {
-            self.failure(FailureKind::Equality)
-                .actual(self.render().value(self.actual()))
-                .relation("does not have the extension")
-                .expected(self.render().value(expected))
-                .fact(Fact::labelled(
-                    "Actual extension",
-                    actual.extension().map_or_else(
-                        || Rendered::verbatim("<none>".into()),
-                        |component| self.render().value(component).into_rendered(),
-                    ),
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasExtension::new(expected))
     }
 
     #[track_caller]
@@ -290,18 +894,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P> + ValueRenderer<Path>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        let expected = expected.as_ref();
-        if !actual.starts_with(expected) {
-            self.failure(FailureKind::Membership)
-                .actual(self.render().value(self.actual()))
-                .relation("does not start with")
-                .expected(self.render().value(expected))
-                .fact(Fact::note("Only whole path components are matched."))
-                .raise();
-        }
-        self
+        self.apply_assertion(StartsWith::new(expected))
     }
 
     #[track_caller]
@@ -309,36 +902,51 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     where
         R: ValueRenderer<P> + ValueRenderer<Path>,
     {
-        self.track_assertion();
-        let actual = P::deref(self.actual());
-        let expected = expected.as_ref();
-        if !actual.ends_with(expected) {
-            self.failure(FailureKind::Membership)
-                .actual(self.render().value(self.actual()))
-                .relation("does not end with")
-                .expected(self.render().value(expected))
-                .fact(Fact::note("Only whole path components are matched."))
-                .raise();
-        }
-        self
+        self.apply_assertion(EndsWith::new(expected))
     }
 }
 
-/// What the file system holds at `path`, as the note of a failed kind check.
-fn entry_kind(path: &Path) -> &'static str {
-    if path.is_dir() {
-        "The path is a directory."
-    } else if path.is_file() {
-        "The path is a file."
-    } else if path.exists() {
-        "The path exists."
-    } else {
-        "The path does not exist."
+/// Describes the same metadata used by the rejected kind check.
+fn entry_kind(metadata: Option<&std::fs::Metadata>) -> &'static str {
+    match metadata {
+        Some(metadata) if metadata.is_dir() => "The path is a directory.",
+        Some(metadata) if metadata.is_file() => "The path is a file.",
+        Some(_) => "The path exists.",
+        None => "The path does not exist.",
     }
 }
 
 #[cfg(test)]
 mod tests {
+    mod observations {
+        use crate::prelude::*;
+        use core::cell::Cell;
+        use std::{ffi::OsStr, path::PathBuf};
+
+        struct Expected<F>(F);
+        impl<F: Fn()> AsRef<OsStr> for Expected<F> {
+            fn as_ref(&self) -> &OsStr {
+                (self.0)();
+                OsStr::new("expected.txt")
+            }
+        }
+
+        #[test]
+        fn expected_component_is_converted_once_after_tracking() {
+            let calls = Cell::new(0);
+            let failures = assert_that!(PathBuf::from("actual.txt")).capture(|root| {
+                let expected = Expected(|| {
+                    assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                    calls.set(calls.get() + 1);
+                });
+                root.derive(|path| path).has_file_name(expected);
+                root
+            });
+            assert_that!(failures).has_length(1);
+            assert_that!(calls.get()).is_equal_to(1);
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
@@ -349,6 +957,9 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, PathBuf, Panic, NoRenderer>
                     => PathAssertions<Subject = PathBuf, Renderer = NoRenderer>
+            );
+            assert_trait_impl!(
+                crate::assertions::std::path::DoesNotExist => Expectation<PathBuf, NoRenderer>
             );
         }
 
@@ -488,6 +1099,7 @@ mod tests {
 
         mod does_not_exist {
             use crate::prelude::*;
+            use indoc::formatdoc;
             use std::path::Path;
 
             #[test]
@@ -511,16 +1123,173 @@ mod tests {
             #[test]
             fn panics_when_present() {
                 let path = source_path!();
+                let path = path.as_path();
                 assert_that_panic_by(|| {
-                    assert_that!(path.as_path())
-                        .with_location(false)
-                        .does_not_exist();
+                    assert_that!(path).with_location(false).does_not_exist();
                 })
                 .has_type::<String>()
-                .contains("-------- assertr --------")
-                .contains("Actual: \"")
-                .contains("src/assertions/std/path.rs\"")
-                .contains("unexpectedly exists");
+                .is_equal_to(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `path`
+
+                    Actual: {path:?}
+
+                    unexpectedly exists
+                    -------- assertr --------
+                "});
+            }
+
+            #[test]
+            fn panics_when_existence_cannot_be_determined() {
+                // A NUL makes inspection fail on every supported platform, even as root.
+                let path = Path::new("invalid\0path");
+                let error = path.try_exists().unwrap_err();
+                let error = format!("{error:#?}").replace('\n', "\n    ");
+                assert_that_panic_by(|| {
+                    assert_that!(path).with_location(false).does_not_exist();
+                })
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `path`
+
+                    Actual: "invalid\0path"
+
+                    could not determine whether the path exists
+
+                    Details:
+                      - I/O error: {error}
+                    -------- assertr --------
+                "#});
+            }
+
+            #[test]
+            fn captures_inspection_errors_through_the_active_renderer() {
+                use crate::test_support::{CustomValueRenderer, assert_custom_value};
+
+                let path = Path::new("invalid\0private-path");
+                let error = path.try_exists().unwrap_err();
+                let failures = assert_that!(path)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| it.does_not_exist().has_extension("txt"));
+                // Capture continues after the inspection error and records the next assertion too.
+                assert_that!(failures).has_length(2);
+                assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                    -------- assertr --------
+                    Expression: `path`
+
+                    Actual: custom("invalid\0private-path")
+
+                    could not determine whether the path exists
+
+                    Details:
+                      - I/O error: custom({error:?})
+                    -------- assertr --------
+                "#});
+                assert_that!(failures[0].facts).has_length(1);
+                assert_custom_value(&failures[0].facts[0].value, &error);
+            }
+
+            #[test]
+            fn inspection_error_rendering_respects_the_budget() {
+                use crate::test_support::{SENTINEL, SentinelRenderer, rendered_text};
+
+                let path = Path::new("invalid\0path");
+                let failures = assert_that!(path)
+                    .with_renderer(SentinelRenderer)
+                    .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
+                    .capture(PathAssertions::does_not_exist);
+                assert_that!(failures).has_length(1);
+                assert_that!(rendered_text(&failures[0].facts[0].value))
+                    .is_equal_to(format!("<re... {} more characters ...", SENTINEL.len() - 3));
+            }
+
+            mod observations {
+                use crate::assertions::std::path::{
+                    DoesNotExist, DoesNotExistRejectionReason, observe_absence,
+                };
+                use crate::failure::{FailureBuilder, FailureKind};
+                use crate::prelude::*;
+                use crate::test_support::{CustomValueRenderer, NoRenderer, assert_custom_value};
+                use std::{io, path::PathBuf};
+
+                #[test]
+                fn confirmed_absence_succeeds() {
+                    assert_that!(observe_absence(Ok(false)).is_ok()).is_true();
+                }
+
+                #[test]
+                fn confirmed_existence_retains_existing_path_evidence() {
+                    let rejection = observe_absence(Ok(true)).err().unwrap();
+                    assert_that!(matches!(
+                        rejection.reason,
+                        DoesNotExistRejectionReason::Exists
+                    ))
+                    .is_true();
+                }
+
+                #[test]
+                fn inspection_failure_retains_the_original_error() {
+                    let error =
+                        io::Error::new(io::ErrorKind::PermissionDenied, "inspection denied");
+                    let payload = core::ptr::from_ref(error.get_ref().unwrap());
+                    let rejection = observe_absence(Err(error)).err().unwrap();
+                    let DoesNotExistRejectionReason::InspectionFailed(error) = rejection.reason
+                    else {
+                        panic!("inspection error must not establish existence or absence");
+                    };
+                    assert_that!(error.kind()).is_equal_to(io::ErrorKind::PermissionDenied);
+                    assert_that!(core::ptr::eq(error.get_ref().unwrap(), payload)).is_true();
+                }
+
+                #[test]
+                fn explanation_uses_the_retained_error_without_inspecting_again() {
+                    // This path exists, but explanation must use the supplied failed observation.
+                    let path = source_path!();
+                    let error =
+                        io::Error::new(io::ErrorKind::PermissionDenied, "inspection denied");
+                    let rejection = observe_absence(Err(error)).err().unwrap();
+                    let context =
+                        AssertionContext::new(&CustomValueRenderer, RenderingBudget::default());
+                    let failure = DoesNotExist
+                        .explain(
+                            Some((&path, rejection)),
+                            FailureBuilder::detached::<PathBuf>(FailureKind::Other),
+                            &context,
+                        )
+                        .build();
+                    assert_that!(failure.relation.as_deref())
+                        .is_equal_to(Some("could not determine whether the path exists"));
+                    assert_that!(failure.facts).has_length(1);
+                    assert_that!(failure.facts[0].label).is_equal_to("I/O error");
+                    assert_custom_value(
+                        &failure.facts[0].value,
+                        &io::Error::new(io::ErrorKind::PermissionDenied, "inspection denied"),
+                    );
+                }
+
+                #[test]
+                fn evaluation_needs_no_renderer() {
+                    let path = PathBuf::from("invalid\0path");
+                    let context = AssertionContext::new(&NoRenderer, RenderingBudget::default());
+                    assert_that!(DoesNotExist.evaluate(&path, &context).is_err()).is_true();
+                }
+
+                #[test]
+                fn missing_subject_describes_absence_without_an_inspection_error() {
+                    let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
+                    let failure = <DoesNotExist as ExpectationDiagnostics<PathBuf>>::explain(
+                        &DoesNotExist,
+                        None,
+                        FailureBuilder::detached::<PathBuf>(FailureKind::Other),
+                        &context,
+                    )
+                    .build();
+                    assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not exist"));
+                    assert_that!(failure.actual).is_none();
+                    assert_that!(failure.facts).is_empty();
+                }
             }
         }
 

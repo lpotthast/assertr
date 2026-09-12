@@ -1,4 +1,4 @@
-use renamed_assertr::prelude::*;
+use renamed_assertr::{matchers::eq, prelude::*};
 
 struct User {
     name: String,
@@ -8,7 +8,7 @@ fn main() {
     let matcher = {
         let name = String::from("Alice");
         partial!(User {
-            name: name.as_str()
+            name: eq(name.as_str())
         })
     }; // `name` is dropped here, but the matcher still borrows it.
 

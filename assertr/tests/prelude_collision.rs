@@ -61,7 +61,7 @@ fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
     let failures = assert_that!(candidates)
         .with_renderer(NoRenderer)
         .capture(|it| it.contains_same_instance_as(&other));
-    assert_eq!(failures.len(), 1);
+    assert_that!(failures).has_length(1);
 }
 
 /// Stand-in for a downstream prelude (e.g. `bevy::prelude`) exporting its own `Condition` and

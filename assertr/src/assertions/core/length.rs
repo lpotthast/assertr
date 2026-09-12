@@ -1,8 +1,160 @@
-use crate::AssertThat;
-use crate::ValueRenderer;
 use crate::assertions::HasLength;
-use crate::failure::{Fact, FailureKind};
-use crate::mode::Mode;
+use crate::{
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    failure::{Fact, FailureBuilder, FailureKind},
+};
+
+/// Checks whether a subject implementing [`HasLength`] is empty.
+pub struct IsEmpty;
+
+impl<T: HasLength + ?Sized, R> Expectation<T, R> for IsEmpty {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_empty() { Ok(()) } else { Err(()) }
+    }
+}
+
+impl<T: HasLength + ?Sized, R> ExpectationDiagnostics<T, R> for IsEmpty
+where
+    R: ValueRenderer<T>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is empty"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual).show_type_hint(true))
+                .relation("is not empty"),
+        }
+    }
+}
+
+/// Checks whether a subject implementing [`HasLength`] is not empty.
+pub struct IsNotEmpty;
+
+impl<T: HasLength + ?Sized, R> Expectation<T, R> for IsNotEmpty {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        if actual.is_empty() { Err(()) } else { Ok(()) }
+    }
+}
+
+impl<T: HasLength + ?Sized, R> ExpectationDiagnostics<T, R> for IsNotEmpty
+where
+    R: ValueRenderer<T>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("is not empty"),
+            Some((actual, ())) => failure
+                .actual(render.value(actual).show_type_hint(true))
+                .relation("is unexpectedly empty"),
+        }
+    }
+}
+
+/// Checks a finite length and retains the observed count on rejection.
+pub struct HasLengthOf(usize);
+impl HasLengthOf {
+    /// Requires exactly this many elements or bytes according to the subject's native length.
+    #[must_use]
+    pub const fn new(expected: usize) -> Self {
+        Self(expected)
+    }
+}
+
+impl<T: HasLength + ?Sized, R> Expectation<T, R> for HasLengthOf {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = usize
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let length = actual.length();
+        if length == self.0 {
+            Ok(())
+        } else {
+            Err(length)
+        }
+    }
+}
+
+impl<T: HasLength + ?Sized, R> ExpectationDiagnostics<T, R> for HasLengthOf
+where
+    R: ValueRenderer<T> + ValueRenderer<usize>,
+{
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        let render = context.render();
+        let failure = match rejected {
+            None => failure.relation("has length"),
+            Some((actual, rejection)) => failure
+                .actual(render.value(actual).show_type_hint(true))
+                .relation("does not have the expected length")
+                .fact(Fact::labelled("Actual length", render.value(&rejection))),
+        };
+        failure.expected(render.value(&self.0))
+    }
+}
 
 /// Assertions for subjects implementing [`HasLength`].
 ///
@@ -41,14 +193,7 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        if !self.actual().is_empty() {
-            self.failure(FailureKind::Length)
-                .actual(self.render().value(self.actual()).show_type_hint(true))
-                .relation("is not empty")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsEmpty)
     }
 
     #[track_caller]
@@ -56,14 +201,7 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        if self.actual().is_empty() {
-            self.failure(FailureKind::Length)
-                .actual(self.render().value(self.actual()).show_type_hint(true))
-                .relation("is unexpectedly empty")
-                .raise();
-        }
-        self
+        self.apply_assertion(IsNotEmpty)
     }
 
     #[track_caller]
@@ -71,20 +209,7 @@ impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T> + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        let actual_len = self.actual().length();
-        if actual_len != expected {
-            self.failure(FailureKind::Length)
-                .actual(self.render().value(self.actual()).show_type_hint(true))
-                .relation("does not have the expected length")
-                .expected(self.render().value(&expected))
-                .fact(Fact::labelled(
-                    "Actual length",
-                    self.render().value(&actual_len),
-                ))
-                .raise();
-        }
-        self
+        self.apply_assertion(HasLengthOf::new(expected))
     }
 }
 
@@ -825,6 +950,43 @@ mod tests {
                   - Actual length: 1
                 -------- assertr --------
             "#});
+        }
+    }
+
+    mod evaluation {
+        use crate::{assertions::HasLength, prelude::*};
+        use core::cell::Cell;
+
+        #[derive(Debug)]
+        struct Length {
+            reads: Cell<usize>,
+            empty_checks: Cell<usize>,
+        }
+        impl HasLength for Length {
+            fn length(&self) -> usize {
+                self.reads.set(self.reads.get() + 1);
+                7
+            }
+            fn is_empty(&self) -> bool {
+                self.empty_checks.set(self.empty_checks.get() + 1);
+                false
+            }
+        }
+
+        #[test]
+        fn uses_the_native_empty_override_and_retains_the_observed_length() {
+            let actual = Length {
+                reads: Cell::new(0),
+                empty_checks: Cell::new(0),
+            };
+            let failures =
+                assert_that!(actual).capture(|it| it.is_empty().is_not_empty().has_length(8));
+            assert_that!((actual.reads.get(), actual.empty_checks.get())).is_equal_to((1, 2));
+            assert_that!(failures).has_length(2);
+            assert_that!(crate::test_support::rendered_text(
+                &failures[1].facts[0].value
+            ))
+            .is_equal_to("7");
         }
     }
 }

@@ -91,11 +91,10 @@ mod partial;
 /// Use through `assertr::partial!` with the `matchers` feature enabled. Pass the result to
 /// `.matches(...)` or a collection assertion such as `.contains_matching(...)`.
 ///
-/// List the fields that matter to the test and use `..` to ignore the rest. A plain expected
-/// value uses ordinary `PartialEq`. A field can instead use a matcher, another `partial!`, or
-/// `assertr::matchers::satisfying` to check it with existing assertion methods. The built-in
-/// matchers provide selected constraints rather than a counterpart for every assertion.
-///
+/// List the fields that matter to the test and use `..` to ignore the rest. Every selected field
+/// requires a matcher. Use `assertr::matchers::eq(value)` or `equal_to(value)` for `PartialEq`
+/// equality, another `partial!` for nested fields, or `assertr::matchers::satisfying` to check
+/// a field with existing assertion methods.
 ///
 /// Without `..`, every field must be listed. Omitted fields need no comparison or rendering
 /// support. Neither the whole type nor ignored fields need `PartialEq` or `Debug`, and private

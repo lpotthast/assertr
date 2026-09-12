@@ -1,72 +1,90 @@
 ---
 id: assertr
-refines: [ ]
 depends_on: [ ]
-related_to: [ ]
 sources:
-  - README.md
   - Cargo.toml
-  - assertr/Cargo.toml
-  - assertr-macros/Cargo.toml
   - assertr/src/lib.rs
+  - assertr/src/assert_that/execution.rs
   - assertr/src/assertions/mod.rs
   - assertr/src/prelude.rs
-  - assertr-no-std-tests/**
-  - justfile
   - AGENTS.md
+  - Justfile
 ---
 
 # Assertr architecture
 
-Assertr is a Rust assertion library built around `AssertThat`, a typed chain over a borrowed or owned subject.
-Assertions either panic on failure or collect structured failures for inspection. The core uses `alloc` and supports
-`no_std`. Runtime matchers are always available. Optional features add `partial!`, fluent entry and aliases, and
-ecosystem integrations.
+Assertr is a Rust assertion library built around `AssertThat`, a typed chain over a borrowed or owned subject. Subject
+capabilities select checks, the mode selects failure handling, and the renderer formats diagnostic leaves. The runtime
+supports `no_std` with `alloc`.
 
-These documents explain the design for contributors. Start with assertion lifecycle, then failure processing and
-diagnostic rendering. The [assertion-family rustdoc](../assertr/src/assertions/mod.rs) remains the authority for
-methods, signatures, and bounds.
+These pages explain contributor-facing contracts and their design constraints. Public rustdoc owns API signatures and
+usage examples. Source and regression tests establish current behavior. [AGENTS.md](../AGENTS.md) owns contribution
+rules. The [glossary](glossary.md) defines preferred terminology.
 
-Use the [glossary](glossary.md) to find existing concepts and their preferred names before introducing terminology.
+## From entry to result
 
-## Architecture map
+An ordinary reusable assertion follows this execution path. Composition uses child contexts inside evaluation and
+contributes evidence to the enclosing failure. It does not raise each candidate rejection on the outer chain.
 
-| Document                                                    | Covers                                                                                                   |
-|-------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| [Glossary](glossary.md)                                     | Existing concepts, preferred terms, and their Rust names.                                                |
-| [Assertion lifecycle](assertion-lifecycle.md)               | Chain state and records, ownership, projections, capture completion, and unwind safety.                  |
-| [Failure processing](failure-processing.md)                 | Structured failures, root storage, adapters, and panic presentation.                                     |
-| [Diagnostic rendering](diagnostic-rendering.md)             | Leaf renderers, structural output, ordering, budgets, and formatted-value comparisons.                   |
-| [Matcher composition](matcher-composition.md)               | Matcher truth and evidence, typed conditions, assertion callbacks, unordered assignment, and `partial!`. |
-| [Collections, maps, and iterators](collection-semantics.md) | Behavioral capabilities, keyed lookup, and stream consumption.                                           |
-| [Reference identity](reference-identity.md)                 | Pointer comparisons, reference normalization, multiplicity, and pointer metadata.                        |
-| [Fluent entry](fluent-entry.md)                             | Borrowing and owning entry methods, aliases, and expression capture.                                     |
-| [Assertion extensions](extension-contract.md)               | Choosing a family and implementing a tracked, mode-generic assertion.                                    |
-| [Integration boundaries](integration-boundaries.md)         | State observations, extraction, response consumption, and serialization.                                 |
-| [Platform compatibility](platform-compatibility.md)         | Feature dependencies, `std` and `no_std`, macro compatibility, and validation.                           |
+```mermaid
+flowchart TD
+    entry["Entry: subject, mode, renderer"] --> track["Executor tracks the assertion"]
+    track --> evaluate["Evaluate expectation"]
+    evaluate -->|success| continuation["Continue, project, or extract"]
+    evaluate -->|rejection| explain["Explain retained observation and render values"]
+    explain --> failure["Owned AssertionFailure"]
+    failure --> mode{"Failure mode"}
+    mode -->|Capture| records["Store at capture root and continue"]
+    mode -->|Panic| presentation["Failure adapter produces text, then panic"]
+```
 
-## Repository structure
+[Lifecycle](assertion-lifecycle.md) explains state and ownership. [Expectation execution](expectation-execution.md)
+explains evaluation and continuation. [Rendering](diagnostic-rendering.md) constructs diagnostic values before
+[failure processing](failure-processing.md) stores or presents them. Assertion attempts, candidate evaluations, and
+failure nodes have [different counts](expectation-execution.md#counts-and-evaluation-scope).
 
-[assertr](../assertr/Cargo.toml) contains the runtime and public API. [assertr-macros](../assertr-macros/Cargo.toml)
-generates structural matchers, fluent aliases, and expression capture. [assertr-no-std-tests](../assertr-no-std-tests/)
-checks the runtime from a downstream crate without its `std` feature. Runtime integration tests live
-under [assertr/tests](../assertr/tests/).
+## Start from the change
 
-The runtime separates assertion families, matching, failure processing, and rendering. Behavioral capabilities determine
-which assertions a subject supports. Renderers format diagnostic leaves. An assertion failure carries the resulting
-evidence to capture storage or panic presentation.
+| Contributor task                              | Reading path                                                                                                                                         |
+|-----------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Add an assertion or support a domain type     | [Extension choice](extension-contract.md#choosing-an-extension), then [evaluation obligations](expectation-execution.md#evaluation-and-explanation). |
+| Support a custom collection, map, or set      | [Capability contracts](collection-semantics.md#capability-model). Consult [reference identity](reference-identity.md) for pointer comparisons.       |
+| Change composition or structural matching     | [Matcher semantics](matcher-composition.md), then [child scopes](expectation-execution.md#child-scopes-and-evidence).                                |
+| Change diagnostic values or reports           | [Rendering](diagnostic-rendering.md), then [failure fields and adapters](failure-processing.md).                                                     |
+| Add a consuming, async, or stateful assertion | [Observation boundaries](observation-boundaries.md), then [continuation rules](assertion-lifecycle.md#projections-and-continuation).                 |
+| Change fluent entry or procedural macros      | [Fluent expression capture](fluent-entry.md), or [structural macro boundaries](matcher-composition.md#structural-macros).                            |
+| Change dependencies or feature gates          | [Platform compatibility](platform-compatibility.md).                                                                                                 |
 
-## Document metadata
+## Code ownership
 
-Each page begins with YAML metadata:
+[entry](../assertr/src/entry/) and [assert_that](../assertr/src/assert_that/) own chain entry, state transitions,
+execution, and callback capture. [assertions](../assertr/src/assertions/) owns assertion families and their reusable
+definitions. [expectation](../assertr/src/expectation/) owns shared contracts and generic composition.
+[matchers.rs](../assertr/src/matchers.rs) catalogs public expectations with common imports and subject namespaces.
 
-- `id` is its unique identifier. The overview uses `assertr`.
-- `refines` names broader documents that this page expands.
-- `depends_on` names concepts to read first. It describes reading prerequisites, not Rust module dependencies.
-- `related_to` names useful companion documents. These references need not be reciprocal.
-- `sources` lists supporting paths relative to the repository root. Globs are allowed. Markdown links in the body are
-  relative to the page itself.
+[failure](../assertr/src/failure/) and [renderer](../assertr/src/renderer/) own completed failures and diagnostic
+values.
+[assertr-macros](../assertr-macros/) generates code against unsupported [__private](../assertr/src/__private/) plumbing.
+Unit tests live beside implementations. [Runtime integration tests](../assertr/tests/) and the
+[no-std fixture](../assertr-no-std-tests/) exercise downstream contracts.
 
-Update the relevant page and its source references when behavior changes. Keep detailed API examples in the owning
-rustdoc and link to them here. [AGENTS.md](../AGENTS.md) records contribution rules. The [justfile](../justfile) defines
-maintenance and validation commands.
+## Maintaining these pages
+
+Give each contract one owning page. Link to it elsewhere. Keep implementation details here only when they explain an
+observable guarantee or design constraint. Algorithm mechanics belong beside their implementation. Keep worked examples
+in rustdoc and use small state or evidence traces here to explain architectural boundaries.
+
+Make the scope of each claim explicit:
+
+- **Type-system guarantees** follow from bounds, lifetimes, or visibility.
+- **Implementor obligations** are semantic requirements of a trait, such as repeatable traversal or budget-independent
+  results. Rust cannot enforce them all.
+- **Executor behavior** describes library-controlled tracking, observation lifetimes, and failure routing. Identify
+  current implementation choices separately when they may change without changing the contract.
+
+Front matter has three fields. `id` is a unique lowercase identifier with hyphens. `depends_on` is an inline list of
+reading prerequisites, using IDs. Keep only direct prerequisites and no cycles. Optional companions use body links.
+`sources` is an indented list of repository-relative paths or globs. Prefer specific implementation files and named
+regression tests for important claims. Body links are relative to their page.
+
+Review the relevant implementation and run the named regressions when behavior changes.

@@ -19,7 +19,7 @@ impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
     ///         json.is_equal_to("[1,2]");
     ///     })
     /// });
-    /// assert!(failures.is_empty());
+    /// assert_that!(failures).is_empty();
     /// ```
     #[cfg(feature = "serde-json")]
     #[must_use]
@@ -45,7 +45,7 @@ impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
     ///         toml.is_equal_to("value = 42\n");
     ///     })
     /// });
-    /// assert!(failures.is_empty());
+    /// assert_that!(failures).is_empty();
     /// ```
     #[cfg(feature = "serde-toml")]
     #[must_use]
@@ -97,9 +97,9 @@ mod tests {
                             .with_renderer(NoRenderer)
                             .with_location(false)
                             .$method();
-                        assert_eq!(converted.actual().is_err(), fail);
-                        assert_eq!(converted.state.records.assertion_count(), 0);
-                        assert!(matches!(converted.actual, Actual::Owned(_)));
+                        assert_that!(converted.actual().is_err()).is_equal_to(fail);
+                        assert_that!(converted.state.records.assertion_count()).is_equal_to(0);
+                        assert_that!(converted.actual).matches(pattern!(Actual::Owned(_)));
                         let converted = assert_that_owned!(Serialized {
                             calls: &calls,
                             fail
@@ -107,14 +107,14 @@ mod tests {
                         .with_renderer(NoRenderer)
                         .with_location(false)
                         .$method();
-                        assert_eq!(converted.actual().is_err(), fail);
-                        assert_eq!(converted.state.records.assertion_count(), 0);
+                        assert_that!(converted.actual().is_err()).is_equal_to(fail);
+                        assert_that!(converted.state.records.assertion_count()).is_equal_to(0);
                         let converted = AssertThat::new_capturing(Actual::Borrowed(&subject))
                             .with_renderer(NoRenderer)
                             .with_location(false)
                             .$method();
-                        assert_eq!(converted.actual().is_err(), fail);
-                        assert_eq!(converted.state.records.assertion_count(), 0);
+                        assert_that!(converted.actual().is_err()).is_equal_to(fail);
+                        assert_that!(converted.state.records.assertion_count()).is_equal_to(0);
                         let converted = AssertThat::new_capturing(Actual::Owned(Serialized {
                             calls: &calls,
                             fail,
@@ -122,9 +122,9 @@ mod tests {
                         .with_renderer(NoRenderer)
                         .with_location(false)
                         .$method();
-                        assert_eq!(converted.actual().is_err(), fail);
-                        assert_eq!(converted.state.records.assertion_count(), 0);
-                        assert_eq!(calls.get(), 4);
+                        assert_that!(converted.actual().is_err()).is_equal_to(fail);
+                        assert_that!(converted.state.records.assertion_count()).is_equal_to(0);
+                        assert_that!(calls.get()).is_equal_to(4);
                     }
                 }
                 #[test]
@@ -136,7 +136,7 @@ mod tests {
                         calls: &calls,
                         fail: false,
                     };
-                    let budget = RenderingBudget::builder().max_leaf_characters(3).build();
+                    let budget = RenderingBudget::default().with_max_leaf_characters(3);
                     let converted = assert_that!(subject)
                         .with_renderer(RedactingRenderer)
                         .with_location(false)
@@ -174,14 +174,8 @@ mod tests {
                         fail: true,
                     };
                     let converted = assert_that!(subject).$method();
-                    assert!(
-                        converted
-                            .actual()
-                            .as_ref()
-                            .unwrap_err()
-                            .to_string()
-                            .contains("private-serialization-value")
-                    );
+                    assert_that!(converted.actual().as_ref().unwrap_err().to_string())
+                        .contains("private-serialization-value");
                     let failures = assert_that!(subject)
                         .with_renderer(RedactingRenderer)
                         .with_location(false)
