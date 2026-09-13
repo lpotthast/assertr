@@ -1,9 +1,11 @@
+use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
     renderer::RenderingContext,
 };
 use alloc::{format, string::String};
+use core::marker::PhantomData;
 use core::ops::{
     Bound::{Excluded, Included, Unbounded},
     RangeBounds,
@@ -11,18 +13,51 @@ use core::ops::{
 
 /// Checks whether a range contains an element.
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
-pub struct ContainsElement<B>(B);
+pub struct ContainsElement<B, E = B>(E, PhantomData<fn() -> B>);
 
 impl<B> ContainsElement<B> {
-    /// Owns the expected operand.
+    /// Owns the expected operand, using its type as the range bound type.
+    ///
+    /// The operand determines the type even before this definition is used with a range.
+    /// Use [`Self::borrowing`] to select a different bound type for a borrowed operand.
+    ///
+    /// ```
+    /// use assertr::{matchers::range::ContainsElement, prelude::*};
+    ///
+    /// let expected = ContainsElement::new(&2);
+    /// assert_that!(&1..&3).matches(&expected);
+    /// assert_that!(..).matches(ContainsElement::new(String::from("a")));
+    /// ```
     #[must_use]
     pub const fn new(expected: B) -> Self {
-        Self(expected)
+        Self(expected, PhantomData)
+    }
+
+    /// Owns an operand whose borrowed view is selected for bound type `B`.
+    ///
+    /// Pass a reference to reuse an expected value. Construction does not borrow or clone the
+    /// operand. Evaluation borrows it through [`BorrowFor`]. Diagnostics require renderers for
+    /// `B` and `E::View`, without requiring one for the operand wrapper.
+    /// For borrowed bounds, selecting the pointee type also avoids needing a reference renderer.
+    ///
+    /// ```
+    /// use assertr::{matchers::range::ContainsElement, prelude::*};
+    ///
+    /// let value = String::from("b");
+    /// let expected = ContainsElement::<String>::borrowing(&value);
+    /// assert_that!(String::from("a")..String::from("c")).matches(&expected);
+    /// ```
+    #[must_use]
+    pub const fn borrowing<E: BorrowFor<B>>(expected: E) -> ContainsElement<B, E> {
+        ContainsElement(expected, PhantomData)
     }
 }
 
-impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
-    for ContainsElement<B>
+impl<B, E: BorrowFor<B>, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
+    for ContainsElement<B, E>
+where
+    B: PartialOrd<E::View>,
+    E::View: PartialOrd<B>,
 {
     type Success<'a>
         = ()
@@ -30,54 +65,98 @@ impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
         Self: 'a,
         Range: 'a;
     type Rejection<'a>
-        = ()
+        = &'a E::View
     where
         Self: 'a,
         Range: 'a;
-    fn evaluate<'a>(&'a self, actual: &'a Range, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if actual.contains(&self.0) {
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Range,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        let expected = borrow_for::<B, _>(&self.0);
+        if actual.contains(expected) {
             Ok(())
         } else {
-            Err(())
+            Err(expected)
         }
     }
 }
 
-impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R: ValueRenderer<B>>
-    ExpectationDiagnostics<Range, R> for ContainsElement<B>
+impl<
+    B,
+    E: BorrowFor<B>,
+    Range: RangeBounds<B> + ?Sized,
+    R: ValueRenderer<B> + ValueRenderer<E::View>,
+> ExpectationDiagnostics<Range, R> for ContainsElement<B, E>
+where
+    B: PartialOrd<E::View>,
+    E::View: PartialOrd<B>,
 {
     const KIND: FailureKind = FailureKind::Membership;
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&Range, ())>,
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Range, Self::Rejection<'a>)>,
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("contains"),
-            Some((actual, ())) => failure
-                .actual(render_range(render, actual))
-                .relation("does not contain"),
+        let (failure, expected) = match rejected {
+            None => (failure.relation("contains"), borrow_for::<B, _>(&self.0)),
+            Some((actual, expected)) => (
+                failure
+                    .actual(render_range(render, actual))
+                    .relation("does not contain"),
+                expected,
+            ),
         };
-        failure.expected(render.value(&self.0))
+        failure.expected(render.value(expected))
     }
 }
 
 /// Checks whether a range does not contain an element.
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
-pub struct DoesNotContainElement<B>(B);
+pub struct DoesNotContainElement<B, E = B>(E, PhantomData<fn() -> B>);
 
 impl<B> DoesNotContainElement<B> {
-    /// Owns the expected operand.
+    /// Owns the unexpected operand, using its type as the range bound type.
+    ///
+    /// The operand determines the type even before this definition is used with a range.
+    /// Use [`Self::borrowing`] to select a different bound type for a borrowed operand.
+    ///
+    /// ```
+    /// use assertr::{matchers::range::DoesNotContainElement, prelude::*};
+    ///
+    /// let unexpected = DoesNotContainElement::new(&3);
+    /// assert_that!(&1..&3).matches(&unexpected);
+    /// ```
     #[must_use]
     pub const fn new(expected: B) -> Self {
-        Self(expected)
+        Self(expected, PhantomData)
+    }
+
+    /// Owns an operand whose borrowed view is selected for bound type `B`.
+    ///
+    /// Construction, borrowing, and rendering follow [`ContainsElement::borrowing`].
+    ///
+    /// ```
+    /// use assertr::{matchers::range::DoesNotContainElement, prelude::*};
+    ///
+    /// let value = String::from("z");
+    /// let unexpected = DoesNotContainElement::<String>::borrowing(&value);
+    /// assert_that!(String::from("a")..String::from("c")).matches(&unexpected);
+    /// ```
+    #[must_use]
+    pub const fn borrowing<E: BorrowFor<B>>(expected: E) -> DoesNotContainElement<B, E> {
+        DoesNotContainElement(expected, PhantomData)
     }
 }
 
-impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
-    for DoesNotContainElement<B>
+impl<B, E: BorrowFor<B>, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
+    for DoesNotContainElement<B, E>
+where
+    B: PartialOrd<E::View>,
+    E::View: PartialOrd<B>,
 {
     type Success<'a>
         = ()
@@ -85,37 +164,55 @@ impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
         Self: 'a,
         Range: 'a;
     type Rejection<'a>
-        = ()
+        = &'a E::View
     where
         Self: 'a,
         Range: 'a;
-    fn evaluate<'a>(&'a self, actual: &'a Range, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if actual.contains(&self.0) {
-            Err(())
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Range,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        let expected = borrow_for::<B, _>(&self.0);
+        if actual.contains(expected) {
+            Err(expected)
         } else {
             Ok(())
         }
     }
 }
 
-impl<B: PartialOrd, Range: RangeBounds<B> + ?Sized, R: ValueRenderer<B>>
-    ExpectationDiagnostics<Range, R> for DoesNotContainElement<B>
+impl<
+    B,
+    E: BorrowFor<B>,
+    Range: RangeBounds<B> + ?Sized,
+    R: ValueRenderer<B> + ValueRenderer<E::View>,
+> ExpectationDiagnostics<Range, R> for DoesNotContainElement<B, E>
+where
+    B: PartialOrd<E::View>,
+    E::View: PartialOrd<B>,
 {
     const KIND: FailureKind = FailureKind::Membership;
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&Range, ())>,
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Range, Self::Rejection<'a>)>,
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("does not contain"),
-            Some((actual, ())) => failure
-                .actual(render_range(render, actual))
-                .relation("contains"),
+        let (failure, expected) = match rejected {
+            None => (
+                failure.relation("does not contain"),
+                borrow_for::<B, _>(&self.0),
+            ),
+            Some((actual, expected)) => (
+                failure
+                    .actual(render_range(render, actual))
+                    .relation("contains"),
+                expected,
+            ),
         };
-        failure.unexpected(render.value(&self.0))
+        failure.unexpected(render.value(expected))
     }
 }
 
@@ -227,20 +324,40 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagn
 ///
 /// Diagnostics use Rust range notation when possible. Ranges with excluded lower bounds use
 /// explicit bound tuples, such as `(Excluded(1), Included(3))`.
+///
+/// Standard ranges with borrowed, sized bounds have inherent methods that select the bounds'
+/// pointee type. This keeps owned and borrowed elements inferable even though those ranges
+/// implement both `RangeBounds<B>` and `RangeBounds<&B>`. An unbounded `..` range selects the
+/// operand's own type. Custom ranges use this trait, and fully qualified calls can select `B`
+/// explicitly when a range supports more than one bound type.
+/// These methods execute [`ContainsElement::borrowing`] and [`DoesNotContainElement::borrowing`]
+/// with the selected bound type. Reusable matchers' `new` constructors instead infer the bound
+/// type from the operand, including its reference type when a reference is passed.
+///
+/// ```
+/// use assertr::prelude::*;
+/// let lower = String::from("a");
+/// let upper = String::from("z");
+/// let element = String::from("m");
+/// assert_that!(&lower..&upper).contains_element(&element);
+/// assert_that!(..).contains_element(&element);
+/// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 #[allow(clippy::return_self_not_must_use)]
 pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = crate::DebugRenderer> {
     /// Asserts that the range contains `expected`.
-    fn contains_element(self, expected: B) -> Self
+    fn contains_element<E: BorrowFor<B>>(self, expected: E) -> Self
     where
-        B: PartialOrd,
-        R: ValueRenderer<B>;
+        B: PartialOrd<E::View>,
+        E::View: PartialOrd<B>,
+        R: ValueRenderer<B> + ValueRenderer<E::View>;
 
     /// Asserts that the range does not contain `expected`.
-    fn does_not_contain_element(self, expected: B) -> Self
+    fn does_not_contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
     where
-        B: PartialOrd,
-        R: ValueRenderer<B>;
+        B: PartialOrd<E::View>,
+        E::View: PartialOrd<B>,
+        R: ValueRenderer<B> + ValueRenderer<E::View>;
 }
 
 /// Assertions over a value subject's membership in a range.
@@ -277,21 +394,137 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
     for AssertThat<'_, Range, M, R>
 {
     #[track_caller]
-    fn contains_element(self, expected: B) -> Self
+    fn contains_element<E: BorrowFor<B>>(self, expected: E) -> Self
     where
-        B: PartialOrd,
-        R: ValueRenderer<B>,
+        B: PartialOrd<E::View>,
+        E::View: PartialOrd<B>,
+        R: ValueRenderer<B> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(ContainsElement::new(expected))
+        self.apply_assertion(ContainsElement::<B>::borrowing(expected))
     }
 
     #[track_caller]
-    fn does_not_contain_element(self, expected: B) -> Self
+    fn does_not_contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
     where
-        B: PartialOrd,
-        R: ValueRenderer<B>,
+        B: PartialOrd<E::View>,
+        E::View: PartialOrd<B>,
+        R: ValueRenderer<B> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(DoesNotContainElement::new(expected))
+        self.apply_assertion(DoesNotContainElement::<B>::borrowing(expected))
+    }
+}
+
+// Standard ranges with borrowed bounds implement both RangeBounds<B> and RangeBounds<&B>.
+// Inherent methods select the pointee view before borrowing the operand, avoiding ambiguity
+// in the blanket assertion trait. Custom ranges keep using that trait unchanged.
+macro_rules! borrowed_range_assertions {
+    ($($range:ty),+ $(,)?) => {$(
+        #[allow(clippy::return_self_not_must_use)]
+        impl<'b, B, M: Mode, R> AssertThat<'_, $range, M, R> {
+            /// Asserts that this range contains `expected`, using its bounds' pointee type.
+            ///
+            /// This is [`RangeBoundAssertions::contains_element`] with the native
+            /// `RangeBounds<B>` view selected explicitly for borrowed bounds.
+            #[track_caller]
+            pub fn contains_element<E: BorrowFor<B>>(self, expected: E) -> Self
+            where
+                B: PartialOrd<E::View>,
+                E::View: PartialOrd<B>,
+                R: ValueRenderer<B> + ValueRenderer<E::View>,
+            {
+                RangeBoundAssertions::<B, $range, R>::contains_element(self, expected)
+            }
+
+            /// Asserts that this range excludes `expected`, using its bounds' pointee type.
+            ///
+            /// This is [`RangeBoundAssertions::does_not_contain_element`] with the native
+            /// `RangeBounds<B>` view selected explicitly for borrowed bounds.
+            #[track_caller]
+            pub fn does_not_contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
+            where
+                B: PartialOrd<E::View>,
+                E::View: PartialOrd<B>,
+                R: ValueRenderer<B> + ValueRenderer<E::View>,
+            {
+                RangeBoundAssertions::<B, $range, R>::does_not_contain_element(self, expected)
+            }
+
+            /// Fluent alias of [`Self::contains_element`].
+            #[cfg(feature = "fluent")]
+            #[track_caller]
+            pub fn contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
+            where
+                B: PartialOrd<E::View>,
+                E::View: PartialOrd<B>,
+                R: ValueRenderer<B> + ValueRenderer<E::View>,
+            {
+                self.contains_element(expected)
+            }
+
+            /// Fluent alias of [`Self::does_not_contain_element`].
+            #[cfg(feature = "fluent")]
+            #[track_caller]
+            pub fn not_contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
+            where
+                B: PartialOrd<E::View>,
+                E::View: PartialOrd<B>,
+                R: ValueRenderer<B> + ValueRenderer<E::View>,
+            {
+                self.does_not_contain_element(expected)
+            }
+        }
+    )+};
+}
+
+borrowed_range_assertions!(
+    core::ops::Range<&'b B>,
+    core::ops::RangeInclusive<&'b B>,
+    core::ops::RangeFrom<&'b B>,
+    core::ops::RangeTo<&'b B>,
+    core::ops::RangeToInclusive<&'b B>,
+    (core::ops::Bound<&'b B>, core::ops::Bound<&'b B>),
+);
+
+#[allow(clippy::return_self_not_must_use)]
+impl<M: Mode, R> AssertThat<'_, core::ops::RangeFull, M, R> {
+    /// Asserts that this unbounded range contains `expected`.
+    ///
+    /// With no bound to select a comparison type, the operand's own type is used.
+    #[track_caller]
+    pub fn contains_element<E: PartialOrd>(self, expected: E) -> Self
+    where
+        R: ValueRenderer<E>,
+    {
+        RangeBoundAssertions::<E, core::ops::RangeFull, R>::contains_element(self, expected)
+    }
+
+    /// Asserts that this unbounded range excludes `expected`, which always fails.
+    #[track_caller]
+    pub fn does_not_contain_element<E: PartialOrd>(self, expected: E) -> Self
+    where
+        R: ValueRenderer<E>,
+    {
+        RangeBoundAssertions::<E, core::ops::RangeFull, R>::does_not_contain_element(self, expected)
+    }
+
+    /// Fluent alias of [`Self::contains_element`].
+    #[cfg(feature = "fluent")]
+    #[track_caller]
+    pub fn contain_element<E: PartialOrd>(self, expected: E) -> Self
+    where
+        R: ValueRenderer<E>,
+    {
+        self.contains_element(expected)
+    }
+
+    /// Fluent alias of [`Self::does_not_contain_element`].
+    #[cfg(feature = "fluent")]
+    #[track_caller]
+    pub fn not_contain_element<E: PartialOrd>(self, expected: E) -> Self
+    where
+        R: ValueRenderer<E>,
+    {
+        self.does_not_contain_element(expected)
     }
 }
 
@@ -378,6 +611,10 @@ mod tests {
 
             assert_trait_impl!(super::super::ContainsElement<i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
             assert_trait_impl!(super::super::DoesNotContainElement<i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::ContainsElement<&'static i32> => crate::Expectation<core::ops::Range<&'static i32>, NoRenderer>);
+            assert_trait_impl!(super::super::DoesNotContainElement<&'static i32> => crate::Expectation<core::ops::Range<&'static i32>, NoRenderer>);
+            assert_trait_impl!(super::super::ContainsElement<i32, &'static i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::DoesNotContainElement<i32, &'static i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
             assert_trait_impl!(super::super::IsInRange<core::ops::Range<i32>> => crate::Expectation<i32, NoRenderer>);
             assert_trait_impl!(super::super::IsNotInRange<core::ops::Range<i32>> => crate::Expectation<i32, NoRenderer>);
         }
@@ -398,6 +635,40 @@ mod tests {
             assert_that!(ToHumanReadableText.render(&value_failures[0]))
                 .contains(SENTINEL)
                 .contains(format!("{SENTINEL}..={SENTINEL}"));
+        }
+
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn borrowed_bounds_render_pointees_without_reference_or_clone_support() {
+            struct BoundRenderer;
+            impl ValueRenderer<i32> for BoundRenderer {
+                fn fmt(&self, value: &i32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    write!(f, "bound({value})")
+                }
+            }
+
+            let failures = assert_that!(&1..&3)
+                .with_renderer(BoundRenderer)
+                .with_expression("range")
+                .with_location(false)
+                .capture(|it| {
+                    it.contains_element(&4)
+                        .matches(super::super::ContainsElement::<i32>::borrowing(&4))
+                });
+            assert_that!(failures).has_length(2);
+            for failure in &failures {
+                assert_that!(failure).has_text_report(indoc::indoc! {"
+                -------- assertr --------
+                Expression: `range`
+
+                Actual: bound(1)..bound(3)
+
+                does not contain
+
+                Expected: bound(4)
+                -------- assertr --------
+                "});
+            }
         }
 
         #[test]
@@ -432,16 +703,18 @@ mod tests {
                 let failures = assert_that!(range)
                     .with_renderer(SentinelRenderer)
                     .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(4))
-                    .capture(|it| it.contains_element(1));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element
-                            .derive_owned(|value| rendered_text(value.actual.as_ref().unwrap()))
-                            .is_equal_to(format!(
-                                "(Excluded(<ren... 6 more characters ...), {rendered_end})"
-                            ));
-                    },
-                ]);
+                    .capture(|it| {
+                        it.contains_element(1)
+                            .matches(super::super::ContainsElement::<i32>::borrowing(&1))
+                    });
+                assert_that!(failures).has_length(2);
+                for failure in &failures {
+                    assert_that!(rendered_text(failure.actual.as_ref().unwrap())).is_equal_to(
+                        format!("(Excluded(<ren... 6 more characters ...), {rendered_end})"),
+                    );
+                    assert_that!(rendered_text(failure.expected.as_ref().unwrap()))
+                        .is_equal_to("<ren... 6 more characters ...");
+                }
             }
         }
     }
@@ -461,6 +734,33 @@ mod tests {
         }
 
         #[test]
+        #[cfg(feature = "fluent")]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn fluent_aliases_infer_borrowed_bounds_and_unbounded_ranges() {
+            (&1..&4).must().contain_element(&2);
+            (&1..=&4).must().contain_element(&2);
+            (&1..).must().contain_element(&2);
+            (..&4).must().contain_element(&2);
+            (..=&4).must().contain_element(&2);
+            (Included(&1), Excluded(&4)).must().contain_element(&2);
+            (..).must().contain_element(&2);
+        }
+
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn borrowed_bounds_preserve_caller_locations() {
+            assert_caller_location!(assert_that!(&1..&4), contains_element(&4));
+            assert_caller_location!(assert_that!(&1..=&4), contains_element(&5));
+            assert_caller_location!(assert_that!(&1..), contains_element(&0));
+            assert_caller_location!(assert_that!(..&4), contains_element(&4));
+            assert_caller_location!(assert_that!(..=&4), contains_element(&5));
+            assert_caller_location!(
+                assert_that!((Included(&1), Excluded(&4))),
+                contains_element(&4)
+            );
+        }
+
+        #[test]
         fn succeeds_when_element_is_contained() {
             assert_that!("aa"..="zz").contains_element("aa");
             assert_that!("aa"..="zz").contains_element("ab");
@@ -468,6 +768,42 @@ mod tests {
             assert_that!("aa"..="zz").contains_element("zx");
             assert_that!("aa"..="zz").contains_element("zy");
             assert_that!("aa"..="zz").contains_element("zz");
+        }
+
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn borrowed_bounds_and_elements_infer_without_annotations() {
+            let lower = 1;
+            let upper = 4;
+            let element = 2;
+            assert_that!(&lower..&upper)
+                .contains_element(element)
+                .contains_element(&element);
+            assert_that!(&lower..=&upper)
+                .contains_element(element)
+                .contains_element(&element);
+            assert_that!(&lower..)
+                .contains_element(element)
+                .contains_element(&element);
+            assert_that!(..&upper)
+                .contains_element(element)
+                .contains_element(&element);
+            assert_that!(..=&upper)
+                .contains_element(element)
+                .contains_element(&element);
+            assert_that!((Included(&lower), Excluded(&upper)))
+                .contains_element(element)
+                .contains_element(&element);
+        }
+
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn unbounded_ranges_infer_owned_and_borrowed_elements() {
+            let element = String::from("element");
+            assert_that!(..).contains_element(2).contains_element(&2);
+            assert_that!(..)
+                .contains_element(String::from("element"))
+                .contains_element(&element);
         }
 
         #[test]
@@ -511,9 +847,76 @@ mod tests {
         }
 
         #[test]
+        #[cfg(feature = "fluent")]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn fluent_aliases_infer_borrowed_bounds_and_unbounded_ranges() {
+            (&1..&4).must().not_contain_element(&4);
+            (&1..=&4).must().not_contain_element(&5);
+            (&1..).must().not_contain_element(&0);
+            (..&4).must().not_contain_element(&4);
+            (..=&4).must().not_contain_element(&5);
+            (Included(&1), Excluded(&4)).must().not_contain_element(&4);
+            let failures = (..).must().capture(|it| it.not_contain_element(&2));
+            assert_that!(failures).has_length(1);
+        }
+
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn borrowed_bounds_and_unbounded_ranges_preserve_caller_locations() {
+            assert_caller_location!(assert_that!(&1..&4), does_not_contain_element(&2));
+            assert_caller_location!(assert_that!(&1..=&4), does_not_contain_element(&2));
+            assert_caller_location!(assert_that!(&1..), does_not_contain_element(&2));
+            assert_caller_location!(assert_that!(..&4), does_not_contain_element(&2));
+            assert_caller_location!(assert_that!(..=&4), does_not_contain_element(&2));
+            assert_caller_location!(
+                assert_that!((Included(&1), Excluded(&4))),
+                does_not_contain_element(&2)
+            );
+            assert_caller_location!(assert_that!(..), does_not_contain_element(&2));
+        }
+
+        #[test]
         fn succeeds_when_element_is_not_contained() {
             assert_that!("aa"..="zz").does_not_contain_element("a");
             assert_that!("aa"..="zz").does_not_contain_element("AA");
+        }
+
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn borrowed_bounds_and_elements_infer_without_annotations() {
+            let lower = 1;
+            let upper = 4;
+            assert_that!(&lower..&upper)
+                .does_not_contain_element(upper)
+                .does_not_contain_element(&upper);
+            assert_that!(&lower..=&upper)
+                .does_not_contain_element(0)
+                .does_not_contain_element(&0);
+            assert_that!(&lower..)
+                .does_not_contain_element(0)
+                .does_not_contain_element(&0);
+            assert_that!(..&upper)
+                .does_not_contain_element(upper)
+                .does_not_contain_element(&upper);
+            assert_that!(..=&upper)
+                .does_not_contain_element(5)
+                .does_not_contain_element(&5);
+            assert_that!((Included(&lower), Excluded(&upper)))
+                .does_not_contain_element(upper)
+                .does_not_contain_element(&upper);
+        }
+
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn unbounded_ranges_infer_owned_and_borrowed_elements() {
+            let element = String::from("element");
+            let failures = assert_that!(..).capture(|it| {
+                it.does_not_contain_element(2)
+                    .does_not_contain_element(&2)
+                    .does_not_contain_element(String::from("element"))
+                    .does_not_contain_element(&element)
+            });
+            assert_that!(failures).has_length(4);
         }
 
         #[test]
@@ -650,6 +1053,253 @@ mod tests {
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(5), is_outside_of_range(0..=10));
+        }
+    }
+
+    mod reusable_definitions {
+        use super::super::{ContainsElement, DoesNotContainElement};
+        use super::*;
+        use crate::{
+            matchers::{all_of, each},
+            test_support::BorrowSpy,
+        };
+        use core::cell::Cell;
+
+        #[test]
+        fn constructors_infer_without_a_subject_or_comparison_capabilities() {
+            struct Opaque;
+            let _ = ContainsElement::new(Opaque);
+            let _ = DoesNotContainElement::new(Opaque);
+            let _ = ContainsElement::new(&2);
+            let _ = DoesNotContainElement::new(&2);
+            let _ = ContainsElement::new(String::from("a"));
+            let _ = DoesNotContainElement::new(String::from("a"));
+        }
+
+        #[test]
+        fn borrowed_endpoints_infer_for_each_range_shape() {
+            assert_that!(&1..&3)
+                .matches(ContainsElement::new(&2))
+                .matches(DoesNotContainElement::new(&3));
+            assert_that!(&1..=&3)
+                .matches(ContainsElement::new(&3))
+                .matches(DoesNotContainElement::new(&4));
+            assert_that!(&1..)
+                .matches(ContainsElement::new(&2))
+                .matches(DoesNotContainElement::new(&0));
+            assert_that!(..&3)
+                .matches(ContainsElement::new(&2))
+                .matches(DoesNotContainElement::new(&3));
+            assert_that!(..=&3)
+                .matches(ContainsElement::new(&3))
+                .matches(DoesNotContainElement::new(&4));
+            assert_that!((Included(&1), Excluded(&3)))
+                .matches(ContainsElement::new(&2))
+                .matches(DoesNotContainElement::new(&3));
+        }
+
+        #[test]
+        fn unbounded_ranges_infer_owned_and_borrowed_operands() {
+            let value = String::from("a");
+            assert_that!(..)
+                .matches(ContainsElement::new(String::from("a")))
+                .matches(ContainsElement::new(&value))
+                .matches(ContainsElement::new(2))
+                .matches(ContainsElement::new(&2));
+            let failures = assert_that!(..).capture(|it| {
+                it.matches(DoesNotContainElement::new(String::from("a")))
+                    .matches(DoesNotContainElement::new(&value))
+                    .matches(DoesNotContainElement::new(2))
+                    .matches(DoesNotContainElement::new(&2))
+            });
+            assert_that!(failures).has_length(4);
+        }
+
+        #[test]
+        fn definitions_are_reusable_in_nested_composition() {
+            let expected = ContainsElement::new(&2);
+            let unexpected = DoesNotContainElement::new(&4);
+            let matcher = all_of((&expected, &unexpected));
+            assert_that!(&1..&3).matches(&expected).matches(&unexpected);
+            assert_that!(&1..&4).matches(&matcher);
+            assert_that!([&1..&3, &0..&4]).matches(each(&matcher));
+        }
+
+        #[test]
+        fn borrowing_definitions_are_reusable_across_owned_and_borrowed_bounds() {
+            let lower = String::from("a");
+            let upper = String::from("c");
+            let value = String::from("b");
+            let absent = String::from("z");
+            let matcher = all_of((
+                ContainsElement::<String>::borrowing(&value),
+                DoesNotContainElement::<String>::borrowing(&absent),
+            ));
+            assert_that!(String::from("a")..String::from("c")).matches(&matcher);
+            assert_that!(&lower..&upper).matches(&matcher);
+            assert_that!([&lower..&upper]).matches(each(&matcher));
+            assert_that!(value).is_equal_to("b");
+            assert_that!(absent).is_equal_to("z");
+        }
+
+        #[test]
+        fn borrowed_matchers_preserve_caller_locations() {
+            assert_caller_location!(assert_that!(&1..&3), matches(ContainsElement::new(&4)));
+            assert_caller_location!(
+                assert_that!(&1..&3),
+                matches(DoesNotContainElement::new(&2))
+            );
+        }
+
+        #[test]
+        fn matchers_preserve_membership_diagnostics() {
+            let failures = assert_that!(&1..&3)
+                .with_expression("range")
+                .with_location(false)
+                .capture(|it| {
+                    it.matches(ContainsElement::new(&4))
+                        .matches(DoesNotContainElement::new(&2))
+                });
+            assert_that!(failures).has_length(2);
+            for (failure, relation, operand) in [
+                (&failures[0], "does not contain", "Expected: 4"),
+                (&failures[1], "contains", "Unexpected: 2"),
+            ] {
+                assert_that!(failure).has_text_report(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `range`
+
+                    Actual: 1..3
+
+                    {relation}
+
+                    {operand}
+                    -------- assertr --------
+                "});
+            }
+        }
+
+        #[test]
+        fn borrowing_happens_once_after_tracking_and_rejections_retain_the_view() {
+            for (negative, value) in [(false, 2), (false, 9), (true, 9), (true, 2)] {
+                let calls = Cell::new(0);
+                let failures = assert_that!(()).capture(|root| {
+                    let expected = BorrowSpy {
+                        value,
+                        observe: || {
+                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                            calls.set(calls.get() + 1);
+                        },
+                    };
+                    let it = root.derive_owned(|()| 1..3);
+                    if negative {
+                        let matcher = DoesNotContainElement::<i32>::borrowing(expected);
+                        assert_that!(calls.get()).is_equal_to(0);
+                        it.matches(&matcher);
+                    } else {
+                        let matcher = ContainsElement::<i32>::borrowing(expected);
+                        assert_that!(calls.get()).is_equal_to(0);
+                        it.matches(&matcher);
+                    }
+                    root
+                });
+                assert_that!(calls.get()).is_equal_to(1);
+                assert_that!(failures).has_length(usize::from(negative == (value == 2)));
+            }
+        }
+    }
+
+    mod borrowed_elements {
+        use super::super::{ContainsElement, DoesNotContainElement};
+        use crate::{prelude::*, test_support::BorrowSpy};
+        use core::cell::Cell;
+        #[test]
+        fn non_copy_bounds_accept_borrowed_elements_and_definitions() {
+            let element = String::from("b");
+            let absent = String::from("z");
+            assert_that!(String::from("a")..String::from("c"))
+                .contains_element(&element)
+                .does_not_contain_element(&absent)
+                .matches(ContainsElement::<String>::borrowing(&element))
+                .matches(DoesNotContainElement::<String>::borrowing(&absent));
+        }
+
+        #[test]
+        fn borrowed_non_copy_bounds_accept_owned_and_borrowed_elements() {
+            let lower = String::from("a");
+            let upper = String::from("c");
+            let element = String::from("b");
+            let absent = String::from("z");
+            assert_that!(&lower..&upper)
+                .contains_element(String::from("b"))
+                .contains_element(&element)
+                .does_not_contain_element(String::from("z"))
+                .does_not_contain_element(&absent);
+            assert_that!(element).is_equal_to("b");
+            assert_that!(absent).is_equal_to("z");
+        }
+
+        #[test]
+        fn borrowed_bounds_borrow_operands_once_after_tracking() {
+            let lower = 1;
+            let upper = 3;
+            for (negative, value) in [(false, 2), (false, 9), (true, 9), (true, 2)] {
+                let calls = Cell::new(0);
+                let failures = assert_that!(()).capture(|root| {
+                    let expected = BorrowSpy {
+                        value,
+                        observe: || {
+                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                            calls.set(calls.get() + 1);
+                        },
+                    };
+                    let it = root.derive_owned(|()| &lower..&upper);
+                    if negative {
+                        it.does_not_contain_element(expected);
+                    } else {
+                        it.contains_element(expected);
+                    }
+                    root
+                });
+                assert_that!(calls.get()).is_equal_to(1);
+                assert_that!(failures).has_length(usize::from(negative == (value == 2)));
+            }
+        }
+
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn unbounded_ranges_track_each_assertion_once() {
+            let failures = assert_that!(..).capture(|it| {
+                let it = it.contains_element(&2).does_not_contain_element(&2);
+                assert_that!(it.state.records.assertion_count()).is_equal_to(2);
+                it
+            });
+            assert_that!(failures).has_length(1);
+        }
+
+        #[test]
+        fn borrows_once_after_tracking_and_reuses_rejections() {
+            for negative in [false, true] {
+                let calls = Cell::new(0);
+                let failures = assert_that!(()).capture(|root| {
+                    let expected = BorrowSpy {
+                        value: if negative { 2 } else { 9 },
+                        observe: || {
+                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                            calls.set(calls.get() + 1);
+                        },
+                    };
+                    let it = root.derive_owned(|()| 1..3);
+                    if negative {
+                        it.does_not_contain_element(expected);
+                    } else {
+                        it.contains_element(expected);
+                    }
+                    root
+                });
+                assert_that!(calls.get()).is_equal_to(1);
+                assert_that!(failures).has_length(1);
+            }
         }
     }
 }

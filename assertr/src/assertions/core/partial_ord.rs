@@ -1,17 +1,13 @@
-use core::{borrow::Borrow, cmp::Ordering, marker::PhantomData};
+use crate::borrow_for::{BorrowFor, borrow_for};
+use core::cmp::Ordering;
 
 use crate::{
     AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 
-/// A reusable partial-order strict upper bound using the subject's heterogeneous [`PartialOrd`]
-/// implementation. Incomparable values, including comparisons involving `NaN`, are rejected.
-///
-/// Construct with [`new`](Self::new) and execute through an assertion chain or a supplied
-/// [`AssertionContext`]. [`PartialOrdAssertions::is_less_than`] executes this same definition on an
-/// assertion chain. Operand storage `B` defaults to `E` for owned expectations and also lets the
-/// ordinary method borrow its expected operand without cloning it.
+/// Reusable strict upper bound with the borrowing and ordering rules of
+/// [`PartialOrdAssertions::is_less_than`]. Incomparable values do not match.
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -20,9 +16,8 @@ use crate::{
 /// let maximum = LessThan::new(65);
 /// assert_that!(42).matches(&maximum);
 /// ```
-pub struct LessThan<E, B = E> {
-    expected: B,
-    operand: PhantomData<fn() -> E>,
+pub struct LessThan<E> {
+    expected: E,
 }
 
 /// Matches values less than `expected`. Incomparable values do not match.
@@ -33,27 +28,17 @@ pub fn lt<E>(expected: E) -> LessThan<E> {
 }
 
 impl<E> LessThan<E> {
-    /// Owns an expected operand. Pass a reference when the subject implements ordering with it.
+    /// Owns an expected operand. Pass a reference to reuse an expected value.
     #[must_use]
     pub const fn new(expected: E) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-
-    fn with_storage<B: Borrow<E>>(expected: B) -> LessThan<E, B> {
-        LessThan {
-            expected,
-            operand: PhantomData,
-        }
+        Self { expected }
     }
 }
 
-impl<T: ?Sized, E, B, R> Expectation<T, R> for LessThan<E, B>
+impl<T: ?Sized, E, R> Expectation<T, R> for LessThan<E>
 where
-    T: PartialOrd<E>,
-    B: Borrow<E>,
+    T: PartialOrd<E::View>,
+    E: BorrowFor<T>,
 {
     type Success<'a>
         = ()
@@ -61,7 +46,7 @@ where
         Self: 'a,
         T: 'a;
     type Rejection<'a>
-        = &'a E
+        = &'a E::View
     where
         Self: 'a,
         T: 'a;
@@ -71,7 +56,7 @@ where
         actual: &'a T,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection<'a>> {
-        let expected = self.expected.borrow();
+        let expected = borrow_for::<T, _>(&self.expected);
         if matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
             Ok(())
         } else {
@@ -80,11 +65,11 @@ where
     }
 }
 
-impl<T: ?Sized, E, B, R> ExpectationDiagnostics<T, R> for LessThan<E, B>
+impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for LessThan<E>
 where
-    T: PartialOrd<E>,
-    B: Borrow<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    T: PartialOrd<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View>,
 {
     const KIND: FailureKind = FailureKind::Ordering;
 
@@ -96,7 +81,10 @@ where
     ) -> FailureBuilder<Target> {
         let render = context.render();
         let (failure, expected) = match rejected {
-            None => (failure.relation("is less than"), self.expected.borrow()),
+            None => (
+                failure.relation("is less than"),
+                borrow_for::<T, _>(&self.expected),
+            ),
             Some((actual, expected)) => (
                 failure
                     .actual(render.value(actual))
@@ -108,13 +96,8 @@ where
     }
 }
 
-/// A reusable partial-order strict lower bound using the subject's heterogeneous [`PartialOrd`]
-/// implementation. Incomparable values, including comparisons involving `NaN`, are rejected.
-///
-/// Construct with [`new`](Self::new) and execute through an assertion chain or a supplied
-/// [`AssertionContext`]. [`PartialOrdAssertions::is_greater_than`] executes this same definition on
-/// an assertion chain. Operand storage `B` defaults to `E` for owned expectations and also lets the
-/// ordinary method borrow its expected operand without cloning it.
+/// Reusable strict lower bound with the borrowing and ordering rules of
+/// [`PartialOrdAssertions::is_greater_than`]. Incomparable values do not match.
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -123,9 +106,8 @@ where
 /// let minimum = GreaterThan::new(18);
 /// assert_that!(42).matches(&minimum);
 /// ```
-pub struct GreaterThan<E, B = E> {
-    expected: B,
-    operand: PhantomData<fn() -> E>,
+pub struct GreaterThan<E> {
+    expected: E,
 }
 
 /// Matches values greater than `expected`. Incomparable values do not match.
@@ -136,27 +118,17 @@ pub fn gt<E>(expected: E) -> GreaterThan<E> {
 }
 
 impl<E> GreaterThan<E> {
-    /// Owns an expected operand. Pass a reference when the subject implements ordering with it.
+    /// Owns an expected operand. Pass a reference to reuse an expected value.
     #[must_use]
     pub const fn new(expected: E) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-
-    fn with_storage<B: Borrow<E>>(expected: B) -> GreaterThan<E, B> {
-        GreaterThan {
-            expected,
-            operand: PhantomData,
-        }
+        Self { expected }
     }
 }
 
-impl<T: ?Sized, E, B, R> Expectation<T, R> for GreaterThan<E, B>
+impl<T: ?Sized, E, R> Expectation<T, R> for GreaterThan<E>
 where
-    T: PartialOrd<E>,
-    B: Borrow<E>,
+    T: PartialOrd<E::View>,
+    E: BorrowFor<T>,
 {
     type Success<'a>
         = ()
@@ -164,7 +136,7 @@ where
         Self: 'a,
         T: 'a;
     type Rejection<'a>
-        = &'a E
+        = &'a E::View
     where
         Self: 'a,
         T: 'a;
@@ -174,7 +146,7 @@ where
         actual: &'a T,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection<'a>> {
-        let expected = self.expected.borrow();
+        let expected = borrow_for::<T, _>(&self.expected);
         if matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
             Ok(())
         } else {
@@ -183,11 +155,11 @@ where
     }
 }
 
-impl<T: ?Sized, E, B, R> ExpectationDiagnostics<T, R> for GreaterThan<E, B>
+impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for GreaterThan<E>
 where
-    T: PartialOrd<E>,
-    B: Borrow<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    T: PartialOrd<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View>,
 {
     const KIND: FailureKind = FailureKind::Ordering;
 
@@ -199,7 +171,10 @@ where
     ) -> FailureBuilder<Target> {
         let render = context.render();
         let (failure, expected) = match rejected {
-            None => (failure.relation("is greater than"), self.expected.borrow()),
+            None => (
+                failure.relation("is greater than"),
+                borrow_for::<T, _>(&self.expected),
+            ),
             Some((actual, expected)) => (
                 failure
                     .actual(render.value(actual))
@@ -211,13 +186,8 @@ where
     }
 }
 
-/// A reusable partial-order upper bound using the subject's heterogeneous [`PartialOrd`]
-/// implementation. Incomparable values, including comparisons involving `NaN`, are rejected.
-///
-/// Construct with [`new`](Self::new) and execute through an assertion chain or a supplied
-/// [`AssertionContext`]. [`PartialOrdAssertions::is_less_or_equal_to`] executes this same
-/// definition on an assertion chain. Operand storage `B` defaults to `E` for owned expectations and
-/// also lets the ordinary method borrow its expected operand without cloning it.
+/// Reusable upper bound with the borrowing and ordering rules of
+/// [`PartialOrdAssertions::is_less_or_equal_to`]. Incomparable values do not match.
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -226,9 +196,8 @@ where
 /// let maximum = LessOrEqual::new(65);
 /// assert_that!(42).matches(&maximum);
 /// ```
-pub struct LessOrEqual<E, B = E> {
-    expected: B,
-    operand: PhantomData<fn() -> E>,
+pub struct LessOrEqual<E> {
+    expected: E,
 }
 
 /// Matches values less than or equal to `expected`. Incomparable values do not match.
@@ -239,27 +208,17 @@ pub fn le<E>(expected: E) -> LessOrEqual<E> {
 }
 
 impl<E> LessOrEqual<E> {
-    /// Owns an expected operand. Pass a reference when the subject implements ordering with it.
+    /// Owns an expected operand. Pass a reference to reuse an expected value.
     #[must_use]
     pub const fn new(expected: E) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-
-    fn with_storage<B: Borrow<E>>(expected: B) -> LessOrEqual<E, B> {
-        LessOrEqual {
-            expected,
-            operand: PhantomData,
-        }
+        Self { expected }
     }
 }
 
-impl<T: ?Sized, E, B, R> Expectation<T, R> for LessOrEqual<E, B>
+impl<T: ?Sized, E, R> Expectation<T, R> for LessOrEqual<E>
 where
-    T: PartialOrd<E>,
-    B: Borrow<E>,
+    T: PartialOrd<E::View>,
+    E: BorrowFor<T>,
 {
     type Success<'a>
         = ()
@@ -267,7 +226,7 @@ where
         Self: 'a,
         T: 'a;
     type Rejection<'a>
-        = &'a E
+        = &'a E::View
     where
         Self: 'a,
         T: 'a;
@@ -277,7 +236,7 @@ where
         actual: &'a T,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection<'a>> {
-        let expected = self.expected.borrow();
+        let expected = borrow_for::<T, _>(&self.expected);
         if matches!(
             actual.partial_cmp(expected),
             Some(Ordering::Less | Ordering::Equal)
@@ -289,11 +248,11 @@ where
     }
 }
 
-impl<T: ?Sized, E, B, R> ExpectationDiagnostics<T, R> for LessOrEqual<E, B>
+impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for LessOrEqual<E>
 where
-    T: PartialOrd<E>,
-    B: Borrow<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    T: PartialOrd<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View>,
 {
     const KIND: FailureKind = FailureKind::Ordering;
 
@@ -307,7 +266,7 @@ where
         let (failure, expected) = match rejected {
             None => (
                 failure.relation("is less than or equal to"),
-                self.expected.borrow(),
+                borrow_for::<T, _>(&self.expected),
             ),
             Some((actual, expected)) => (
                 failure
@@ -320,13 +279,8 @@ where
     }
 }
 
-/// A reusable partial-order lower bound using the subject's heterogeneous [`PartialOrd`]
-/// implementation. Incomparable values, including comparisons involving `NaN`, are rejected.
-///
-/// Construct with [`new`](Self::new) and execute through an assertion chain or a supplied
-/// [`AssertionContext`]. [`PartialOrdAssertions::is_greater_or_equal_to`] executes this same
-/// definition on an assertion chain. Operand storage `B` defaults to `E` for owned expectations and
-/// also lets the ordinary method borrow its expected operand without cloning it.
+/// Reusable lower bound with the borrowing and ordering rules of
+/// [`PartialOrdAssertions::is_greater_or_equal_to`]. Incomparable values do not match.
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -335,9 +289,8 @@ where
 /// let minimum = GreaterOrEqual::new(18);
 /// assert_that!(42).matches(&minimum);
 /// ```
-pub struct GreaterOrEqual<E, B = E> {
-    expected: B,
-    operand: PhantomData<fn() -> E>,
+pub struct GreaterOrEqual<E> {
+    expected: E,
 }
 
 /// Matches values greater than or equal to `expected`. Incomparable values do not match.
@@ -348,27 +301,17 @@ pub fn ge<E>(expected: E) -> GreaterOrEqual<E> {
 }
 
 impl<E> GreaterOrEqual<E> {
-    /// Owns an expected operand. Pass a reference when the subject implements ordering with it.
+    /// Owns an expected operand. Pass a reference to reuse an expected value.
     #[must_use]
     pub const fn new(expected: E) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-
-    fn with_storage<B: Borrow<E>>(expected: B) -> GreaterOrEqual<E, B> {
-        GreaterOrEqual {
-            expected,
-            operand: PhantomData,
-        }
+        Self { expected }
     }
 }
 
-impl<T: ?Sized, E, B, R> Expectation<T, R> for GreaterOrEqual<E, B>
+impl<T: ?Sized, E, R> Expectation<T, R> for GreaterOrEqual<E>
 where
-    T: PartialOrd<E>,
-    B: Borrow<E>,
+    T: PartialOrd<E::View>,
+    E: BorrowFor<T>,
 {
     type Success<'a>
         = ()
@@ -376,7 +319,7 @@ where
         Self: 'a,
         T: 'a;
     type Rejection<'a>
-        = &'a E
+        = &'a E::View
     where
         Self: 'a,
         T: 'a;
@@ -386,7 +329,7 @@ where
         actual: &'a T,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection<'a>> {
-        let expected = self.expected.borrow();
+        let expected = borrow_for::<T, _>(&self.expected);
         if matches!(
             actual.partial_cmp(expected),
             Some(Ordering::Greater | Ordering::Equal)
@@ -398,11 +341,11 @@ where
     }
 }
 
-impl<T: ?Sized, E, B, R> ExpectationDiagnostics<T, R> for GreaterOrEqual<E, B>
+impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for GreaterOrEqual<E>
 where
-    T: PartialOrd<E>,
-    B: Borrow<E>,
-    R: ValueRenderer<T> + ValueRenderer<E>,
+    T: PartialOrd<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View>,
 {
     const KIND: FailureKind = FailureKind::Ordering;
 
@@ -416,7 +359,7 @@ where
         let (failure, expected) = match rejected {
             None => (
                 failure.relation("is greater than or equal to"),
-                self.expected.borrow(),
+                borrow_for::<T, _>(&self.expected),
             ),
             Some((actual, expected)) => (
                 failure
@@ -431,6 +374,38 @@ where
 
 /// Assertions for partially ordered values.
 ///
+/// Expected values use [`BorrowFor`], with `PartialOrd` and renderer support for the selected
+/// view. `String` has no `PartialOrd<str>` implementation, so compare two strings or two string
+/// views:
+///
+/// ```
+/// use assertr::prelude::*;
+/// let bound = String::from("z");
+/// assert_that!(String::from("a")).is_less_than(&bound);
+/// assert_that!("a").is_less_than("z");
+/// ```
+///
+/// ```compile_fail
+/// use assertr::prelude::*;
+/// assert_that!(String::from("a")).is_less_than("z");
+/// ```
+///
+/// Against `str`, `String` selects `str`, but `&String` selects `String`, which `str` cannot order.
+/// Use `as_str()` to borrow such a bound:
+///
+/// ```
+/// use assertr::{prelude::*, matchers::{dereferenced, lt}};
+/// let bound = String::from("z");
+/// assert_that!("a").matches(dereferenced(lt(String::from("z"))));
+/// assert_that!("a").matches(dereferenced(lt(bound.as_str())));
+/// ```
+///
+/// ```compile_fail
+/// use assertr::{prelude::*, matchers::{dereferenced, lt}};
+/// let bound = String::from("z");
+/// assert_that!("a").matches(dereferenced(lt(&bound)));
+/// ```
+///
 /// Each assertion requires the corresponding concrete [`Ordering`] result. Incomparable values
 /// therefore fail every ordering assertion. In particular, a floating-point comparison involving
 /// `NaN` does not satisfy either strict or inclusive ordering.
@@ -438,65 +413,73 @@ where
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait PartialOrdAssertions<T, R> {
     /// Asserts that the subject is strictly less than `expected`.
-    fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
+    fn is_less_than<E>(self, expected: E) -> Self
     where
-        R: ValueRenderer<T> + ValueRenderer<E>,
-        T: PartialOrd<E>;
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+        T: PartialOrd<E::View>,
+        E: BorrowFor<T>;
 
     /// Asserts that the subject is strictly greater than `expected`.
-    fn is_greater_than<E>(self, expected: impl Borrow<E>) -> Self
+    fn is_greater_than<E>(self, expected: E) -> Self
     where
-        R: ValueRenderer<T> + ValueRenderer<E>,
-        T: PartialOrd<E>;
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+        T: PartialOrd<E::View>,
+        E: BorrowFor<T>;
 
     /// Asserts that the subject is less than or equal to `expected`.
-    fn is_less_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    fn is_less_or_equal_to<E>(self, expected: E) -> Self
     where
-        R: ValueRenderer<T> + ValueRenderer<E>,
-        T: PartialOrd<E>;
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+        T: PartialOrd<E::View>,
+        E: BorrowFor<T>;
 
     /// Asserts that the subject is greater than or equal to `expected`.
-    fn is_greater_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    fn is_greater_or_equal_to<E>(self, expected: E) -> Self
     where
-        R: ValueRenderer<T> + ValueRenderer<E>,
-        T: PartialOrd<E>;
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+        T: PartialOrd<E::View>,
+        E: BorrowFor<T>;
 }
 
 impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
-    fn is_less_than<E>(self, expected: impl Borrow<E>) -> Self
+    fn is_less_than<E>(self, expected: E) -> Self
     where
-        R: ValueRenderer<T> + ValueRenderer<E>,
-        T: PartialOrd<E>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+        T: PartialOrd<E::View>,
+        E: BorrowFor<T>,
     {
-        self.apply_assertion(LessThan::<E>::with_storage(expected))
+        self.apply_assertion(LessThan::new(expected))
     }
 
     #[track_caller]
-    fn is_greater_than<E>(self, expected: impl Borrow<E>) -> Self
+    fn is_greater_than<E>(self, expected: E) -> Self
     where
-        R: ValueRenderer<T> + ValueRenderer<E>,
-        T: PartialOrd<E>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+        T: PartialOrd<E::View>,
+        E: BorrowFor<T>,
     {
-        self.apply_assertion(GreaterThan::<E>::with_storage(expected))
+        self.apply_assertion(GreaterThan::new(expected))
     }
 
     #[track_caller]
-    fn is_less_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    fn is_less_or_equal_to<E>(self, expected: E) -> Self
     where
-        R: ValueRenderer<T> + ValueRenderer<E>,
-        T: PartialOrd<E>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+        T: PartialOrd<E::View>,
+        E: BorrowFor<T>,
     {
-        self.apply_assertion(LessOrEqual::<E>::with_storage(expected))
+        self.apply_assertion(LessOrEqual::new(expected))
     }
 
     #[track_caller]
-    fn is_greater_or_equal_to<E>(self, expected: impl Borrow<E>) -> Self
+    fn is_greater_or_equal_to<E>(self, expected: E) -> Self
     where
-        R: ValueRenderer<T> + ValueRenderer<E>,
-        T: PartialOrd<E>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+        T: PartialOrd<E::View>,
+        E: BorrowFor<T>,
     {
-        self.apply_assertion(GreaterOrEqual::<E>::with_storage(expected))
+        self.apply_assertion(GreaterOrEqual::new(expected))
     }
 }
 
@@ -525,48 +508,46 @@ mod tests {
         }
 
         #[test]
-        fn borrowed_heterogeneous_operands_keep_the_original_renderer_bounds() {
-            struct Actual;
-            struct Expected;
-            struct Operand(Expected);
+        fn borrowed_operands_only_require_the_target_renderer() {
+            struct Actual(&'static str);
+            struct Operand(Actual);
             struct Renderer;
 
-            impl PartialEq<Expected> for Actual {
-                fn eq(&self, _: &Expected) -> bool {
+            impl PartialEq for Actual {
+                fn eq(&self, _: &Actual) -> bool {
                     false
                 }
             }
 
-            impl PartialOrd<Expected> for Actual {
-                fn partial_cmp(&self, _: &Expected) -> Option<Ordering> {
+            impl PartialOrd for Actual {
+                fn partial_cmp(&self, _: &Actual) -> Option<Ordering> {
                     None
                 }
             }
+            impl crate::borrow_for::BorrowFor<Actual> for Operand {
+                type View = Actual;
+            }
 
-            impl Borrow<Expected> for Operand {
-                fn borrow(&self) -> &Expected {
+            impl Borrow<Actual> for Operand {
+                fn borrow(&self) -> &Actual {
                     &self.0
                 }
             }
 
             impl ValueRenderer<Actual> for Renderer {
-                fn fmt(&self, _: &Actual, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    f.write_str("actual")
+                fn fmt(&self, value: &Actual, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str(value.0)
                 }
             }
 
-            impl ValueRenderer<Expected> for Renderer {
-                fn fmt(&self, _: &Expected, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    f.write_str("expected")
-                }
-            }
-
-            let failures = assert_that!(Actual).with_renderer(Renderer).capture(|it| {
-                it.is_less_than(Operand(Expected))
-                    .is_greater_than(Operand(Expected))
-                    .is_less_or_equal_to(Operand(Expected))
-                    .is_greater_or_equal_to(Operand(Expected))
-            });
+            let failures = assert_that!(Actual("actual"))
+                .with_renderer(Renderer)
+                .capture(|it| {
+                    it.is_less_than(Operand(Actual("expected")))
+                        .is_greater_than(Operand(Actual("expected")))
+                        .is_less_or_equal_to(Operand(Actual("expected")))
+                        .is_greater_or_equal_to(Operand(Actual("expected")))
+                });
             assert_that!(failures).has_length(4);
             for failure in &failures {
                 assert_that!(rendered_text(failure.actual.as_ref().unwrap())).is_equal_to("actual");
@@ -586,25 +567,28 @@ mod tests {
             comparisons: &'a Cell<usize>,
         }
 
-        impl PartialEq<i32> for Subject<'_> {
-            fn eq(&self, expected: &i32) -> bool {
-                self.value == *expected
+        impl PartialEq for Subject<'_> {
+            fn eq(&self, expected: &Self) -> bool {
+                self.value == expected.value
             }
         }
 
-        impl PartialOrd<i32> for Subject<'_> {
-            fn partial_cmp(&self, expected: &i32) -> Option<Ordering> {
+        impl PartialOrd for Subject<'_> {
+            fn partial_cmp(&self, expected: &Self) -> Option<Ordering> {
                 self.comparisons.set(self.comparisons.get() + 1);
-                self.value.partial_cmp(expected)
+                self.value.partial_cmp(&expected.value)
             }
         }
 
         struct Operand<'a> {
-            value: i32,
+            value: Subject<'a>,
             calls: &'a Cell<usize>,
         }
-        impl Borrow<i32> for Operand<'_> {
-            fn borrow(&self) -> &i32 {
+        impl<'a> crate::borrow_for::BorrowFor<Subject<'a>> for Operand<'a> {
+            type View = Subject<'a>;
+        }
+        impl<'a> Borrow<Subject<'a>> for Operand<'a> {
+            fn borrow(&self) -> &Subject<'a> {
                 self.calls.set(self.calls.get() + 1);
                 &self.value
             }
@@ -620,17 +604,20 @@ mod tests {
                     comparisons: &comparisons,
                 };
                 let operand = || Operand {
-                    value: 1,
+                    value: Subject {
+                        value: 1,
+                        comparisons: &comparisons,
+                    },
                     calls: &calls,
                 };
                 let failures = assert_that!(actual).capture(|it| {
-                    let it = it.is_less_than::<i32>(operand());
+                    let it = it.is_less_than(operand());
                     assert_that!((calls.get(), comparisons.get())).is_equal_to((1, 1));
-                    let it = it.is_greater_than::<i32>(operand());
+                    let it = it.is_greater_than(operand());
                     assert_that!((calls.get(), comparisons.get())).is_equal_to((2, 2));
-                    let it = it.is_less_or_equal_to::<i32>(operand());
+                    let it = it.is_less_or_equal_to(operand());
                     assert_that!((calls.get(), comparisons.get())).is_equal_to((3, 3));
-                    let it = it.is_greater_or_equal_to::<i32>(operand());
+                    let it = it.is_greater_or_equal_to(operand());
                     assert_that!((calls.get(), comparisons.get())).is_equal_to((4, 4));
                     it
                 });
@@ -642,6 +629,9 @@ mod tests {
         #[cfg(feature = "std")]
         fn tracks_before_user_borrow_code_can_panic() {
             struct PanickingOperand;
+            impl crate::borrow_for::BorrowFor<i32> for PanickingOperand {
+                type View = i32;
+            }
             impl Borrow<i32> for PanickingOperand {
                 fn borrow(&self) -> &i32 {
                     panic!("operand conversion panicked")
@@ -660,16 +650,16 @@ mod tests {
             }
 
             check(|it| {
-                it.is_less_than::<i32>(PanickingOperand);
+                it.is_less_than(PanickingOperand);
             });
             check(|it| {
-                it.is_greater_than::<i32>(PanickingOperand);
+                it.is_greater_than(PanickingOperand);
             });
             check(|it| {
-                it.is_less_or_equal_to::<i32>(PanickingOperand);
+                it.is_less_or_equal_to(PanickingOperand);
             });
             check(|it| {
-                it.is_greater_or_equal_to::<i32>(PanickingOperand);
+                it.is_greater_or_equal_to(PanickingOperand);
             });
         }
     }
@@ -871,6 +861,36 @@ mod tests {
                 Expected: 0.0
                 -------- assertr --------
             "});
+        }
+    }
+
+    mod borrowed_operands {
+        use crate::{
+            matchers::{ge, gt, le, lt},
+            prelude::*,
+        };
+        #[derive(Debug, PartialEq, PartialOrd)]
+        struct Point(i32, i32);
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed temporaries are the contract under test.
+        fn reusable_borrowed_matchers_and_temporaries() {
+            let lower = Point(1, 2);
+            let upper = Point(2, 3);
+            let below = lt(&upper);
+            let above = gt(&lower);
+            for _ in 0..2 {
+                assert_that!(&lower).matches(&below).matches(le(&lower));
+                assert_that!(&upper).matches(&above).matches(ge(&upper));
+            }
+            assert_that!(Point(1, 2))
+                .is_less_than(&upper)
+                .is_less_or_equal_to(&Point(1, 2));
+            assert_that!(&upper)
+                .is_greater_than(Point(1, 2))
+                .is_greater_or_equal_to(&lower);
+            let context = AssertionContext::default();
+            assert_that!(lt(String::from("z")).evaluate("a", &context).is_ok()).is_true();
+            assert_that!(ge(vec![1, 2]).evaluate([2, 1].as_slice(), &context).is_ok()).is_true();
         }
     }
 }

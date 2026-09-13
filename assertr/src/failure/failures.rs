@@ -214,10 +214,9 @@ mod tests {
         assert_that!(format!("{}", failures[0])).is_equal_to(single.as_str());
         assert_that!(format!("{:?}", failures[0])).is_equal_to(single.as_str());
         let expected = format!("{}\n{}", single, ToHumanReadableText.render(&failures[1]));
-        assert_that!(format!("{failures}")).is_equal_to(expected.as_str());
-        assert_that!(format!("{failures:?}")).is_equal_to(expected.as_str());
-        assert_that!(ToHumanReadableText.adapt(&failures).unwrap().as_str())
-            .is_equal_to(expected.as_str());
+        assert_that!(format!("{failures}")).is_equal_to(&expected);
+        assert_that!(format!("{failures:?}")).is_equal_to(&expected);
+        assert_that!(ToHumanReadableText.adapt(&failures).unwrap().as_str()).is_equal_to(&expected);
         assert_that!(
             ToHumanReadableText
                 .map_err(|never| never)
@@ -225,7 +224,7 @@ mod tests {
                 .unwrap()
                 .as_str()
         )
-        .is_equal_to(expected.as_str());
+        .is_equal_to(&expected);
         assert_that!(failures.source()).is_none();
         assert_that!(failures[0].source()).is_none();
         assert_that!(format!("{:?}", AssertionFailures::default())).is_equal_to("");

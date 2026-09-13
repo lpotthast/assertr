@@ -229,15 +229,11 @@ mod tests {
         fn succeeds_when_type_matches() {
             let actual = PanicValue(Box::new(String::from("foo")));
 
-            assert_that!(actual)
-                .has_type::<String>()
-                .is_equal_to(String::from("foo"));
+            assert_that!(actual).has_type::<String>().is_equal_to("foo");
 
             let actual = PanicValue(Box::new(String::from("foo")));
 
-            assert_that!(actual)
-                .has_type::<String>()
-                .is_equal_to(String::from("foo"));
+            assert_that!(actual).has_type::<String>().is_equal_to("foo");
         }
 
         #[test]

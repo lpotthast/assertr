@@ -27,15 +27,47 @@ impl<T: ?Sized> ValueRenderer<T> for SentinelRenderer {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) struct RendererActual(pub(crate) u32);
 
 #[derive(Clone, Copy)]
-pub(crate) struct RendererExpected(pub(crate) u32);
+pub(crate) struct RendererExpected(RendererActual);
 
-impl PartialEq<RendererExpected> for RendererActual {
-    fn eq(&self, other: &RendererExpected) -> bool {
-        self.0 == other.0
+impl RendererExpected {
+    pub(crate) fn new(value: u32) -> Self {
+        Self(RendererActual(value))
+    }
+}
+impl crate::borrow_for::BorrowFor<RendererActual> for RendererExpected {
+    type View = RendererActual;
+}
+
+impl core::borrow::Borrow<RendererActual> for RendererExpected {
+    fn borrow(&self) -> &RendererActual {
+        &self.0
+    }
+}
+
+/// Renders comparison targets and structural leaves, with no operand-wrapper implementation.
+pub(crate) struct ComparisonRenderer;
+impl ValueRenderer<RendererActual> for ComparisonRenderer {
+    fn fmt(&self, _: &RendererActual, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(SENTINEL)
+    }
+}
+impl ValueRenderer<usize> for ComparisonRenderer {
+    fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{value}")
+    }
+}
+impl ValueRenderer<str> for ComparisonRenderer {
+    fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(value)
+    }
+}
+impl ValueRenderer<&str> for ComparisonRenderer {
+    fn fmt(&self, value: &&str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(value)
     }
 }
 

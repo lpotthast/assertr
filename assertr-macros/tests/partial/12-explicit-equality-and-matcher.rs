@@ -7,9 +7,13 @@ use renamed_assertr::{
 #[derive(Debug)]
 struct Both(i32);
 
-impl PartialEq<Both> for i32 {
-    fn eq(&self, expected: &Both) -> bool {
-        *self == expected.0
+impl renamed_assertr::borrow_for::BorrowFor<i32> for Both {
+    type View = i32;
+}
+
+impl core::borrow::Borrow<i32> for Both {
+    fn borrow(&self) -> &i32 {
+        &self.0
     }
 }
 

@@ -19,11 +19,11 @@ Assertr supports `std` and `no_std` builds.
 use assertr::prelude::*;
 
 assert_that!("hello, world!")
-    .starts_with("hello")
-    .ends_with("!");
+.starts_with("hello")
+.ends_with("!");
 ```
 
-Match only the struct fields that matter with `partial!`. Enable the `matchers` feature for this
+Match only the struct fields that matter with `partial!`. Enable the `partial` feature for this
 example:
 
 ```rust
@@ -88,23 +88,23 @@ assertr = "0.7.1"
 
 The default features are `std` and `num`. Everything else is opt-in:
 
-| feature                                                    | enables                                                                             |
-|------------------------------------------------------------|-------------------------------------------------------------------------------------|
-| `std`                                                      | Assertions for standard library types (`HashMap`, `Path`, `Command`, `Mutex`, ...). |
-| `num`                                                      | Assertions for numeric types (`is_zero`, `is_positive`, `is_close_to`, ...).        |
-| `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
-| `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
-| `matchers`                                                 | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
-| `serde-json`                                               | `as_json()` serializes to a JSON `Result` subject.                                               |
-| `serde-toml`                                               | `as_toml()` serializes to a TOML `Result` subject.                                               |
-| `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
-| `program`                                                  | Assertions that resolve an executable name or path.                                 |
-| `http`, `jiff`, `reqwest`, `rootcause`, `tokio`            | Assertions for the types of the crate of the same name.                             |
-| `full`                                                     | All of the above.                                                                   |
+| feature                                         | enables                                                                             |
+|-------------------------------------------------|-------------------------------------------------------------------------------------|
+| `std`                                           | Assertions for standard library types (`HashMap`, `Path`, `Command`, `Mutex`, ...). |
+| `num`                                           | Assertions for numeric types (`is_zero`, `is_positive`, `is_close_to`, ...).        |
+| `libm`                                          | Floating-point classifications for `num` assertions without `std`.                  |
+| `fluent`                                        | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
+| `partial`                                       | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
+| `serde-json`                                    | `as_json()` serializes to a JSON `Result` subject.                                  |
+| `serde-toml`                                    | `as_toml()` serializes to a TOML `Result` subject.                                  |
+| `serde`                                         | Combined `serde-json` and `serde-toml`.                                             |
+| `program`                                       | Assertions that resolve an executable name or path.                                 |
+| `http`, `jiff`, `reqwest`, `rootcause`, `tokio` | Assertions for the types of the crate of the same name.                             |
+| `full`                                          | All of the above.                                                                   |
 
 ### no_std
 
-Disable the default features. `matchers`, `fluent`, `num`, `libm`, and `rootcause` support
+Disable the default features. `partial`, `fluent`, `num`, `libm`, and `rootcause` support
 embedded `no_std` targets. The `http` feature leaves Assertr in `no_std` mode but currently
 requires a hosted target through its dependencies. Every other feature enables `std`. Add `libm`
 next to `num` if numeric assertions need floating-point classifications. `libm` does not enable
@@ -118,8 +118,8 @@ methods available for the subject:
 ```rust
 use assertr::prelude::*;
 
-assert_that!("42".parse::<i32>()).is_ok_satisfying(|value| {
-    value.is_greater_than(0).is_less_than(100);
+assert_that!("42".parse::<i32>()).is_ok_satisfying( | value| {
+value.is_greater_than(0).is_less_than(100);
 });
 ```
 
@@ -142,22 +142,23 @@ The consuming variants are named `must_owned()` and `verify_owned()`.
 use assertr::prelude::*;
 
 "hello, world!"
-    .must()
-    .start_with("hello")
-    .end_with("!");
+.must()
+.start_with("hello")
+.end_with("!");
 
-let failures = 3.verify(|it| it.be_equal_to(4));
+let failures = 3.verify( | it| it.be_equal_to(4));
 assert_that!(failures).has_length(1);
 
 let mut values = vec![1, 2, 3];
-let reference = &mut values;
+let reference = & mut values;
 reference.must().contain(2).have_length(3);
 reference.push(4);
 ```
 
 Fluent names follow fixed rules. `is_x` becomes `be_x`, `has_x` becomes `have_x`, other verbs
 become imperative (`contains` -> `contain`), and negations put `not` first (`is_not_x` ->
-`not_be_x`). See [`IntoAssertContext`](https://docs.rs/assertr/latest/assertr/trait.IntoAssertContext.html) for the complete rules.
+`not_be_x`). See [`IntoAssertContext`](https://docs.rs/assertr/latest/assertr/trait.IntoAssertContext.html) for the
+complete rules.
 
 ## Finding assertions
 
@@ -169,6 +170,28 @@ Blanket implementations make general assertions available to user-defined types.
 type has `is_equal_to`, a `PartialOrd` type has `is_greater_than`, and a `HasLength` type has
 `has_length`.
 
+Expected comparison values can be owned or borrowed. String literals also work directly with
+owned strings, including collection elements and map values. Borrowing an expected value lets
+you reuse it in ordinary checks and reusable expectations without cloning:
+
+```rust
+use assertr::{matchers::eq, prelude::*};
+
+let expected = String::from("hello");
+assert_that!(String::from("hello")).is_equal_to( & expected);
+let greeting = eq( & expected);
+assert_that!(String::from("hello")).matches( & greeting);
+assert_that!(expected).is_equal_to("hello");
+assert_that!([String::from("hello")]).contains_exactly(["hello"]);
+```
+
+[`BorrowFor`](https://docs.rs/borrow-for/0.1.0/borrow_for/trait.BorrowFor.html), re-exported from the `borrow-for`
+crate, selects
+the borrowed type for these comparisons.
+Custom `Borrow` wrappers opt in by implementing this trait. See the
+[borrowed equality guide](https://docs.rs/assertr/latest/assertr/#borrowed-equality) for custom
+wrappers and values without `Clone`.
+
 ## Reusable expectations
 
 Use the same check directly, on collection elements, or inside a structural matcher. The
@@ -179,13 +202,19 @@ built-in expectation, grouped by subject family:
 use assertr::{matchers::{all_of, HasLengthOf, string}, prelude::*};
 
 let short_name = all_of((string::IsNotBlank, HasLengthOf::new(3)));
-assert_that!("Ada").matches(&short_name);
-assert_that!(["", "Ada", "Grace"]).contains_matching(&short_name);
+assert_that!("Ada").matches( & short_name);
+assert_that!(["", "Ada", "Grace"]).contains_matching( & short_name);
 ```
 
 An expectation defines a check. A matcher is an expectation used in composition. Both use the
-same implementation. Runtime matchers need no optional feature. The `matchers` feature enables
+same implementation. Runtime matchers need no optional feature. The `partial` feature enables
 `partial!` for selecting struct and enum fields.
+
+Custom chain methods delegate reusable checks to `apply_assertion` or `test_assertion`, which
+track and execute the assertion. Expectation hooks never track or raise. Evaluation retains
+the observation, explanation populates the supplied structured builder, and the chain executor
+raises the completed failure. Execution adapters that own invocation, consumption, or polling
+track explicitly at their operation's boundary.
 
 ## Guides
 
@@ -199,12 +228,16 @@ you can adapt:
 - [Match selected fields and nested values](https://docs.rs/assertr/latest/assertr/matchers/index.html):
   use `partial!` with explicit matchers such as `eq(value)`, or existing assertions through
   `satisfying`. Nest expectations through structs, collections, and maps. Only `partial!`
-  requires the `matchers` feature.
+  requires the `partial` feature.
 - [Collect failures without panicking](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture):
   run several checks, inspect their structured failures, and render a report when needed.
 - [Customize diagnostic values](https://docs.rs/assertr/latest/assertr/renderer/index.html):
-  render types without `Debug`, preserve a renderer across projections, and limit diagnostic
-  output.
+  render types without `Debug`, supply only the leaf renderers a callback needs, and limit
+  diagnostic output. The [structural evidence examples](https://docs.rs/assertr/latest/assertr/#structural-evidence)
+  render collections, maps, and wrappers through the shared failure builder.
+- [Work within async limitations](https://docs.rs/assertr/latest/assertr/#async-limitations):
+  await async assertions in the calling task. Expectation hooks and capture callbacks are
+  synchronous, and chains cannot cross a `Send` boundary.
 - [Process failures and customize reports](https://docs.rs/assertr/latest/assertr/failure/adapter/index.html):
   transform captured failures with adapters or select the presentation used by a panicking
   assertion.

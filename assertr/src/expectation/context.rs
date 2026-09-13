@@ -283,6 +283,7 @@ mod tests {
 
     mod assertion_children {
         use super::*;
+        use crate::failure::adapter::HumanReadableText;
         use crate::{
             assertions::{collection::contains_matching, core::partial_eq::equal_to},
             expectation::all_of,
@@ -357,8 +358,10 @@ mod tests {
                 assert_that!(failure.children).has_length(1);
             }
             assert_that!(failures[0].children[0].path).is_empty();
-            assert_that!(failures[1].children[0].path).is_equal_to([PathSegment::Field("value")]);
-            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(indoc::indoc! {r"
+            assert_that!(failures[1].children[0].path)
+                .contains_exactly([PathSegment::Field("value")]);
+            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(
+                HumanReadableText::new(indoc::indoc! {r"
                 -------- assertr --------
                 does not satisfy the group
 
@@ -367,7 +370,8 @@ mod tests {
 
                       Actual: 1
                 -------- assertr --------
-            "});
+            "}),
+            );
         }
 
         #[test]

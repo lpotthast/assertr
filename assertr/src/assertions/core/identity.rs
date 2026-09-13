@@ -292,7 +292,7 @@ mod tests {
                         .is_equal_to(Some("values[0]"));
                     element
                         .derive(|value| &value.messages)
-                        .is_equal_to(["identity matters"]);
+                        .contains_exactly(["identity matters"]);
                     element
                         .derive_owned(|value| value.unexpected.is_none())
                         .is_true();

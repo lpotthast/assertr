@@ -4,6 +4,7 @@
 //! module's public extension traits require [`StableOrder`](StableOrder), so unordered subjects do
 //! not implement a positional assertion family at all.
 
+use crate::borrow_for::BorrowFor;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
 
@@ -30,6 +31,8 @@ use crate::{
 ///
 /// requires_stable_order(assert_that!(BTreeSet::from([1, 2, 3])));
 /// ```
+///
+/// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait StableOrderAssertions<T, R> {
@@ -73,8 +76,9 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection starts with elements equal to `expected`, in order.
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>;
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the collection's prefix matches the expected matcher list in order.
     fn starts_with_matching<P>(self, expected: P) -> Self
@@ -91,8 +95,9 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection ends with elements equal to `expected`, in order.
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>;
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the collection's suffix matches the expected matcher list in order.
     fn ends_with_matching<P>(self, expected: P) -> Self
@@ -109,8 +114,9 @@ pub trait StableOrderAssertions<T, R> {
     /// Asserts that the collection contains `expected` as a contiguous subsequence.
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
     fn contains_contiguous_matching<P>(self, expected: P) -> Self
@@ -126,13 +132,14 @@ pub trait StableOrderAssertions<T, R> {
 
     /// Asserts positional equality with `expected`, including length.
     ///
-    /// `E` is the element type of the expected values, which only has to be comparable to `T`, not
-    /// identical to it. The expected values are accepted as anything viewable as `&[E]`, so arrays,
-    /// slices, and `Vec`s all work.
+    /// Each expected element `E` selects a borrowed view through [`BorrowFor`] for the declared
+    /// collection item type `T`. Arrays, slices, and vectors supply the expected list through
+    /// `AsRef<[E]>`.
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that each element matches the constraint at the same position, including length.
     fn contains_exactly_matching<P>(self, expected: P) -> Self
@@ -169,8 +176,9 @@ where
     #[track_caller]
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: PartialEq<E>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E> + ValueRenderer<usize>,
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         self.apply_assertion(value::StartsWith::new(expected))
     }
@@ -206,8 +214,9 @@ where
     #[track_caller]
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: PartialEq<E>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E> + ValueRenderer<usize>,
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         self.apply_assertion(value::EndsWith::new(expected))
     }
@@ -243,8 +252,9 @@ where
     #[track_caller]
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: PartialEq<E>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E>,
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.apply_assertion(value::ContainsContiguous::new(expected))
     }
@@ -282,8 +292,9 @@ where
     #[track_caller]
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: PartialEq<E>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E>,
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.apply_assertion(value::ContainsExactly::new(expected))
     }
@@ -594,7 +605,7 @@ mod tests {
             prelude::*,
             renderer::{CollectionPresentation, RenderingOrder},
             test_support::{
-                NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+                ComparisonRenderer, NoRenderer, RendererActual, RendererExpected, assert_trait_impl,
             },
         };
 
@@ -633,11 +644,11 @@ mod tests {
         #[test]
         fn methods_use_the_active_renderer_type() {
             assert_that!([RendererActual(1), RendererActual(2)].as_slice())
-                .with_renderer(SentinelRenderer)
-                .starts_with([RendererExpected(1)])
-                .ends_with([RendererExpected(2)])
-                .contains_contiguous([RendererExpected(1), RendererExpected(2)])
-                .contains_exactly([RendererExpected(1), RendererExpected(2)]);
+                .with_renderer(ComparisonRenderer)
+                .starts_with([RendererExpected::new(1)])
+                .ends_with([RendererExpected::new(2)])
+                .contains_contiguous([RendererExpected::new(1), RendererExpected::new(2)])
+                .contains_exactly([RendererExpected::new(1), RendererExpected::new(2)]);
         }
 
         #[test]
@@ -1413,12 +1424,12 @@ mod tests {
 
         #[test]
         fn compiles_for_different_type_combinations() {
-            assert_that!(["foo".to_owned()].as_slice()).contains_exactly(["foo"]);
+            let expected = String::from("foo");
+            assert_that!([String::from("foo")].as_slice()).contains_exactly([&expected]);
+            assert_that!([String::from("foo")].as_slice()).contains_exactly([String::from("foo")]);
             assert_that!(["foo"].as_slice()).contains_exactly(["foo"]);
-            assert_that!(["foo"].as_slice()).contains_exactly(["foo".to_owned()]);
-            assert_that!(["foo"].as_slice()).contains_exactly(vec!["foo".to_owned()]);
-            assert_that!(vec!["foo"].as_slice())
-                .contains_exactly(vec!["foo".to_owned()].into_iter());
+            assert_that!(["foo"].as_slice()).contains_exactly(vec!["foo"]);
+            assert_that!(vec!["foo"].as_slice()).contains_exactly(vec!["foo"].into_iter());
         }
 
         #[test]
@@ -1464,7 +1475,7 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "matchers")]
+        #[cfg(feature = "partial")]
         fn reports_selected_field_mismatches() {
             struct Record {
                 id: u32,
@@ -1526,7 +1537,7 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "matchers")]
+        #[cfg(feature = "partial")]
         fn unordered_structure_discards_positional_mismatches() {
             struct Record {
                 id: u32,
@@ -1862,7 +1873,7 @@ mod tests {
         }
 
         #[test]
-        fn rejection_diagnostics_reuse_the_expected_slice_view() {
+        fn rejection_diagnostics_accept_repeatable_expected_slice_access() {
             let views = Cell::new(0);
             let expected = || Expected {
                 values: [7, 8, 9],
@@ -1870,17 +1881,12 @@ mod tests {
             };
             let failures = assert_that!([1, 2]).capture(|it| {
                 let it = it.starts_with(expected());
-                assert_that!(views.get()).is_equal_to(1);
                 let it = it.ends_with(expected());
-                assert_that!(views.get()).is_equal_to(2);
                 let it = it.contains_contiguous(expected());
-                assert_that!(views.get()).is_equal_to(3);
                 let it = it.contains_exactly(expected());
-                assert_that!(views.get()).is_equal_to(4);
-                let it = it.contains_exactly_in_any_order(expected());
-                assert_that!(views.get()).is_equal_to(5);
-                it
+                it.contains_exactly_in_any_order(expected())
             });
+            assert_that!(views.get()).is_greater_than(0);
             assert_that!(failures).has_length(5);
         }
 

@@ -17,7 +17,7 @@ pub struct Satisfying<F>(F);
 /// the matcher to match, and their structured failures retain the enclosing field's path.
 ///
 /// ```rust
-/// # #[cfg(feature = "matchers")]
+/// # #[cfg(feature = "partial")]
 /// # {
 /// use assertr::prelude::*;
 /// use assertr::matchers::satisfying;
@@ -39,7 +39,7 @@ pub struct Satisfying<F>(F);
 /// End the final assertion with a semicolon so the synchronous closure returns `()`. It runs in
 /// capture mode, using the active renderer and rendering budget. This adapter requires a
 /// cloneable renderer and a reusable (`Fn`) callback. It can also be used wherever a matcher is
-/// accepted, without enabling the `matchers` feature.
+/// accepted, without enabling the `partial` feature.
 ///
 /// The similarly named [`AssertThat::satisfies`] projects a subject and continues its original
 /// assertion chain. `satisfying` constructs an expectation for a value that will be matched later.

@@ -78,7 +78,7 @@ mod tests {
     }
 
     #[test]
-    fn sequence_views_are_converted_once_after_tracking() {
+    fn sequence_views_are_accessed_after_tracking() {
         for method in 0..5 {
             let conversions = Cell::new(0);
             let failures = assert_that!(()).capture(|root| {
@@ -100,9 +100,41 @@ mod tests {
                 assert_that!(root.state.records.assertion_count()).is_equal_to(1);
                 root
             });
-            assert_that!(conversions.get()).is_equal_to(1);
+            assert_that!(conversions.get()).is_greater_than(0);
             assert_that!(failures).has_length(1);
         }
+    }
+
+    #[test]
+    fn borrowed_bulk_scan_tracks_before_accessing_either_input() {
+        struct Input<F> {
+            values: [i32; 1],
+            observe: F,
+        }
+        impl<'a, F: Fn()> IntoIterator for &'a Input<F> {
+            type Item = &'a i32;
+            type IntoIter = core::slice::Iter<'a, i32>;
+            fn into_iter(self) -> Self::IntoIter {
+                (self.observe)();
+                self.values.iter()
+            }
+        }
+        let failures = assert_that!(()).capture(|root| {
+            let observe = || {
+                assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+            };
+            let expected = ObservedView {
+                values: [9],
+                observe,
+            };
+            root.derive_owned(|()| Input {
+                values: [1],
+                observe,
+            })
+            .into_iter_contains_all(expected);
+            root
+        });
+        assert_that!(failures).has_length(1);
     }
 
     #[test]
@@ -138,12 +170,12 @@ mod tests {
     }
 
     #[test]
-    fn equality_rejections_do_not_repeat_heterogeneous_comparisons() {
+    fn equality_rejections_do_not_repeat_comparisons() {
         #[derive(Debug)]
         struct Actual<'a>(&'a Cell<usize>);
 
-        impl PartialEq<i32> for Actual<'_> {
-            fn eq(&self, _: &i32) -> bool {
+        impl PartialEq for Actual<'_> {
+            fn eq(&self, _: &Self) -> bool {
                 self.0.set(self.0.get() + 1);
                 false
             }
@@ -153,9 +185,9 @@ mod tests {
             let calls = Cell::new(0);
             let failures =
                 assert_that_owned!([Actual(&calls)].into_iter()).capture(|it| match method {
-                    0 => it.starts_with([1]),
-                    1 => it.ends_with([1]),
-                    _ => it.contains_exactly([1]),
+                    0 => it.starts_with([Actual(&calls)]),
+                    1 => it.ends_with([Actual(&calls)]),
+                    _ => it.contains_exactly([Actual(&calls)]),
                 });
             assert_that!(calls.get()).is_equal_to(1);
             assert_that!(failures[0].children).has_length(1);
@@ -337,5 +369,68 @@ mod tests {
                     }));
             },
         ]);
+    }
+
+    #[test]
+    fn value_operands_are_accessed_after_tracking_for_every_streaming_scan() {
+        use crate::test_support::BorrowSpy;
+        for method in 0..11 {
+            let calls = Cell::new(0);
+            let failures = assert_that!(()).capture(|root| {
+                let expected = BorrowSpy {
+                    value: if method == 1 || method == 8 { 2 } else { 9 },
+                    observe: || {
+                        assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                        calls.set(calls.get() + 1);
+                    },
+                };
+                if method < 7 {
+                    let it = root.derive_owned(|()| [1, 2, 3].into_iter());
+                    match method {
+                        0 => it.contains(expected),
+                        1 => it.does_not_contain(expected),
+                        2 => it.starts_with([expected]),
+                        3 => it.ends_with([expected]),
+                        4 => it.contains_contiguous([expected]),
+                        5 => it.contains_exactly([expected]),
+                        _ => it.contains_exactly_in_any_order([expected]),
+                    };
+                } else {
+                    let it = root.derive_owned(|()| [1, 2, 3]);
+                    match method {
+                        7 => it.into_iter_contains(expected),
+                        8 => it.into_iter_does_not_contain(expected),
+                        9 => it.into_iter_contains_all([expected]),
+                        _ => it.into_iter_contains_exactly_in_any_order([expected]),
+                    };
+                }
+                root
+            });
+            if matches!(method, 0 | 1 | 7 | 8) {
+                assert_that!(calls.get()).is_equal_to(1);
+            } else {
+                assert_that!(calls.get()).is_greater_than(0);
+            }
+            assert_that!(failures).has_length(1);
+        }
+    }
+
+    #[test]
+    fn non_copy_expected_values_can_be_reused_by_streaming_scans() {
+        let a = String::from("a");
+        let b = String::from("b");
+        assert_that_owned!([String::from("a")].into_iter()).contains(&a);
+        assert_that_owned!([String::from("a")].into_iter()).does_not_contain(&b);
+        assert_that_owned!([String::from("a")].into_iter()).starts_with([&a]);
+        assert_that_owned!([String::from("a")].into_iter()).ends_with([&a]);
+        assert_that_owned!([String::from("a")].into_iter()).contains_contiguous([&a]);
+        assert_that_owned!([String::from("a")].into_iter()).contains_exactly([&a]);
+        assert_that_owned!([String::from("a")].into_iter()).contains_exactly_in_any_order([&a]);
+        assert_that!([String::from("a")])
+            .into_iter_contains(&a)
+            .into_iter_does_not_contain(&b)
+            .into_iter_contains_all([&a])
+            .into_iter_contains_exactly_in_any_order([&a]);
+        assert_that_owned!([&a].into_iter()).contains(&a);
     }
 }

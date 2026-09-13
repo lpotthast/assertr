@@ -2702,7 +2702,7 @@ mod tests {
                     .with_renderer(TextOnly)
                     .get_header("content-type");
 
-            assert_that!(assertion.actual().as_bytes()).is_equal_to(b"text/plain");
+            assert_that!(assertion.actual().as_bytes()).is_equal_to(b"text/plain".as_slice());
         }
 
         #[test]

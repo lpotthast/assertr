@@ -6,7 +6,6 @@
 //! current subject. For browsing, start with the family that owns the subject:
 //!
 //! - [General-purpose values, wrappers, ranges, and iterators](core)
-//! - [Reusable conditions](condition)
 //! - [Collections and stable order](collection)
 //! - [Sets](set)
 //! - [Maps](map)
@@ -48,8 +47,6 @@
 
 pub mod alloc;
 pub mod collection;
-/// Assertions based on reusable [`crate::condition::AssertrCondition`] values.
-pub mod condition;
 pub mod core;
 mod has_length;
 #[cfg(feature = "http")]

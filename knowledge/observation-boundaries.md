@@ -3,6 +3,7 @@ id: observation-boundaries
 depends_on: [ expectation-execution ]
 sources:
   - assertr/src/assert_that/execution.rs
+  - assertr/src/crate_docs.md
   - assertr/src/assertions/core/fn.rs
   - assertr/src/assertions/core/pattern.rs
   - assertr/src/entry/panic.rs
@@ -75,6 +76,16 @@ resulting `PanicValue` contains `Box<dyn Any>` and has neither unwind-safety tra
 [chain's unwind-safety bounds](assertion-lifecycle.md#unwind-safety). Cancellation of pending operations has no recovery
 guarantee.
 
+`Expectation::evaluate` and `ExpectationDiagnostics::explain` are synchronous. Async function and response methods
+are execution adapters, not async expectation hooks. Await them in the calling task. Chains contain non-thread-safe
+state and cannot cross a `Send` boundary, as explained in [lifecycle](assertion-lifecycle.md#projections-and-continuation).
+The public [async limitations guide](../assertr/src/crate_docs.md#async-limitations) includes a working awaited call
+and compile-fail examples for synchronous capture and a future carrying a chain across an await.
+
+[`invocation_is_lazy_and_panicked_futures_are_never_repolled`](../assertr/src/assertions/core/fn.rs) pins first-poll
+tracking, one invocation, and no polling after a panic. The async assertion methods' `caller_location_is_as_expected`
+tests pin the captured call site across await. These checks do not establish cancellation safety.
+
 ## Filesystem existence observations
 
 [Path absence checks](../assertr/src/assertions/std/path.rs) inspect `Path::try_exists` once. `Ok(false)`
@@ -106,8 +117,9 @@ waiters, reader limits, and concurrent changes affect these observations. They a
 Without acquisition, diagnostics mark the value unavailable.
 
 [Watch receiver checks](../assertr/src/assertions/tokio/watch.rs) borrow the current value without marking it seen.
-Ordinary `has_changed` and `has_not_changed` remain panic-only despite retaining the receiver. Their execution observes
-`has_changed` once and treats channel closure as failure.
+`has_changed` and `has_not_changed` belong to `TokioWatchReceiverAssertions` and support panic and capture modes.
+Their execution observes `has_changed` once, leaves the value and seen state unchanged, and treats channel closure as
+failure. Capture mode records a rejection and continues on the receiver.
 
 ## Awaiting and consuming a response
 
@@ -124,14 +136,26 @@ pins the ownership check before a body-extraction future is returned.
 ## Traversal
 
 Streaming execution owns one iterator for one scan. Retained observations explain decisions without repeating `next`
-or `size_hint`. Expected sequence views convert after tracking and before scanning. The iterator remains alive through
-explanation. Every private `Scan` observes through `&mut I`. The execution adapter returns the owning iterator with
-rejection evidence, renders that evidence into owned diagnostic values, and drops the iterator before failure routing.
+or `size_hint`. Expected list access occurs after tracking and before scanning. Bulk operands are borrowed as
+comparisons reach them and may be borrowed again for explanation under the
+[repeatable expected-data contract](expectation-execution.md#repeatable-bulk-expected-data). On rejection, the streaming
+`execute` adapter keeps the iterator alive until `Scan::explain` returns. Every private `Scan` observes through `&mut I`.
+The execution adapter returns the owning iterator with rejection evidence, renders that evidence into owned diagnostic
+values, and drops the iterator before failure routing.
 This also applies when scanning exits before exhaustion or the iterator owns a guard. Successful scans drop their
 iterator before returning. Neither the iterator nor its items require `Clone` or repeatable traversal.
 
-The [streaming regressions](../assertr/src/assertions/iterator/tests.rs) check resource-dependent rendering for every
-family, direct and borrowed adapters, early exits, exhaustion, `next` and `size_hint` counts, and guard release before
-panic presentation. Cardinality uses the same ownership boundary.
+Named [streaming regressions](../assertr/src/assertions/iterator/tests.rs) pin these boundaries:
+
+- `direct::scans_keep_resources_until_rendering_and_preserve_stopping_points` covers membership, positional, and
+  unordered scans, including equality and matcher paths, early exits, exhaustion, and `next`/`size_hint` counts.
+- `borrowed::membership_and_unordered_adapters_retain_the_owning_iterator` and
+  `borrowed::contains_all_stops_on_success_or_exhaustion` cover borrowed traversal.
+- `borrowed::cardinality_keeps_resources_through_explanation_without_repeating_observations` covers cardinality.
+- `release::panic_routing_releases_the_iterator_before_presentation_without_poisoning` checks guard release before
+  panic presentation.
+
+These iterator ownership guarantees do not apply to every observation. Ordinary pattern assertions release temporary
+guard-closure captures before rendering, as described above.
 [Collection and iterator semantics](collection-semantics.md#borrowed-traversal-versus-terminal-streams) owns stopping
 conditions, preview limits, and the distinction between borrowed traversal and terminal consumption.

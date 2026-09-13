@@ -11,10 +11,10 @@ error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is 
             `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
             `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
             `Anything` implements `ExpectationDiagnostics<A, R>`
-            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
             `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
             `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
-            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+            `ContainsElement<B, E>` implements `ExpectationDiagnostics<Range, R>`
+            `ContainsEntry<'_, Q, E>` implements `ExpectationDiagnostics<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}, DebugRenderer>`
   = note: required for `ElementsAre<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<[{integer}; 1]>`
@@ -37,10 +37,10 @@ error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is 
             `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
             `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
             `Anything` implements `ExpectationDiagnostics<A, R>`
-            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
             `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
             `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
-            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+            `ContainsElement<B, E>` implements `ExpectationDiagnostics<Range, R>`
+            `ContainsEntry<'_, Q, E>` implements `ExpectationDiagnostics<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}, DebugRenderer>`
   = note: required for `ElementsAreInAnyOrder<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<[{integer}; 1]>`
@@ -63,10 +63,10 @@ error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is 
             `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
             `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
             `Anything` implements `ExpectationDiagnostics<A, R>`
-            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
             `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
             `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
-            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+            `ContainsElement<B, E>` implements `ExpectationDiagnostics<Range, R>`
+            `ContainsEntry<'_, Q, E>` implements `ExpectationDiagnostics<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}, DebugRenderer>`
 note: required by a bound in `assertr::prelude::StableOrderAssertions::contains_exactly_matching`
@@ -91,10 +91,10 @@ error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<{integer}>` is 
             `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
             `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
             `Anything` implements `ExpectationDiagnostics<A, R>`
-            `Condition<C>` implements `ExpectationDiagnostics<T, R>`
             `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
             `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
-            `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+            `ContainsElement<B, E>` implements `ExpectationDiagnostics<Range, R>`
+            `ContainsEntry<'_, Q, E>` implements `ExpectationDiagnostics<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>` to implement `EntryMatcherList<BTreeMap<&str, {integer}>, DebugRenderer>`
   = note: required for `EntriesAre<assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<BTreeMap<&str, {integer}>>`

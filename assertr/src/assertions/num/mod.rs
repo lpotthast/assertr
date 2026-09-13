@@ -1,5 +1,6 @@
 //! Assertions for numeric identities, signs, tolerances, and floating-point classifications.
 
+use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, Mode, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
@@ -411,15 +412,15 @@ impl<T: Float, R: ValueRenderer<T>> ExpectationDiagnostics<T, R> for IsNan {
 
 /// Checks distance from an expected value with an inclusive, non-negative deviation.
 /// Uses [`NumericDistance`] without requiring `Clone` or floating-point math features.
-pub struct IsCloseTo<T> {
-    expected: T,
-    allowed_deviation: T,
+pub struct IsCloseTo<E, D = E> {
+    expected: E,
+    allowed_deviation: D,
 }
 
-impl<T> IsCloseTo<T> {
+impl<E, D> IsCloseTo<E, D> {
     /// Owns the expected value and allowed deviation.
     #[must_use]
-    pub const fn new(expected: T, allowed_deviation: T) -> Self {
+    pub const fn new(expected: E, allowed_deviation: D) -> Self {
         Self {
             expected,
             allowed_deviation,
@@ -436,43 +437,59 @@ pub enum CloseToRejection {
     OutsideDeviation,
 }
 
-impl<T: NumericDistance, R> Expectation<T, R> for IsCloseTo<T> {
+impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R> Expectation<T, R>
+    for IsCloseTo<E, D>
+{
     type Success<'a>
         = ()
     where
-        T: 'a;
+        T: 'a,
+        Self: 'a;
     type Rejection<'a>
-        = CloseToRejection
+        = (&'a T, &'a T, CloseToRejection)
     where
-        T: 'a;
+        T: 'a,
+        Self: 'a;
     fn evaluate<'a>(
         &'a self,
         actual: &'a T,
         _: &AssertionContext<'_, R>,
-    ) -> Result<(), CloseToRejection> {
+    ) -> Result<(), Self::Rejection<'a>> {
+        let expected = borrow_for::<T, _>(&self.expected);
+        let allowed_deviation = borrow_for::<T, _>(&self.allowed_deviation);
         let zero = T::zero();
         if !matches!(
-            self.allowed_deviation.partial_cmp(&zero),
+            allowed_deviation.partial_cmp(&zero),
             Some(Ordering::Greater | Ordering::Equal)
         ) {
-            return Err(CloseToRejection::InvalidDeviation);
+            return Err((
+                expected,
+                allowed_deviation,
+                CloseToRejection::InvalidDeviation,
+            ));
         }
         if actual
-            .checked_distance(&self.expected)
-            .is_some_and(|distance| distance <= self.allowed_deviation)
+            .checked_distance(expected)
+            .is_some_and(|distance| &distance <= allowed_deviation)
         {
             Ok(())
         } else {
-            Err(CloseToRejection::OutsideDeviation)
+            Err((
+                expected,
+                allowed_deviation,
+                CloseToRejection::OutsideDeviation,
+            ))
         }
     }
 }
 
-impl<T: NumericDistance, R: ValueRenderer<T>> ExpectationDiagnostics<T, R> for IsCloseTo<T> {
+impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R: ValueRenderer<T>>
+    ExpectationDiagnostics<T, R> for IsCloseTo<E, D>
+{
     const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&T, CloseToRejection)>,
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
@@ -481,18 +498,18 @@ impl<T: NumericDistance, R: ValueRenderer<T>> ExpectationDiagnostics<T, R> for I
             None => {
                 let description = failure
                     .relation("is close to")
-                    .expected(render.value(&self.expected));
+                    .expected(render.value(borrow_for::<T, _>(&self.expected)));
                 if render.max_items() == 0 {
                     description.omitted_children(1)
                 } else {
                     description.children([FailureBuilder::detached::<()>(FailureKind::Matching)
                         .relation("allows a deviation of")
-                        .expected(render.value(&self.allowed_deviation))
+                        .expected(render.value(borrow_for::<T, _>(&self.allowed_deviation)))
                         .build()])
                 }
             }
-            Some((actual, rejection)) => {
-                let allowed_deviation = render.value(&self.allowed_deviation);
+            Some((actual, (expected, allowed_deviation, rejection))) => {
+                let allowed_deviation = render.value(allowed_deviation);
                 match rejection {
                     CloseToRejection::InvalidDeviation => failure
                         .relation("was given an invalid allowed deviation")
@@ -503,7 +520,7 @@ impl<T: NumericDistance, R: ValueRenderer<T>> ExpectationDiagnostics<T, R> for I
                     CloseToRejection::OutsideDeviation => failure
                         .actual(render.value(actual))
                         .relation("is not close to")
-                        .expected(render.value(&self.expected))
+                        .expected(render.value(expected))
                         .fact(Fact::labelled("Allowed deviation", allowed_deviation)),
                 }
             }
@@ -571,7 +588,11 @@ pub trait NumAssertions<T: Num> {
     ///
     /// Custom numeric types must implement [`NumericDistance`]. Neither `Clone` nor floating-point
     /// math features (`std` or `libm`) are required.
-    fn is_close_to(self, expected: T, allowed_deviation: T) -> Self
+    fn is_close_to<E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>>(
+        self,
+        expected: E,
+        allowed_deviation: D,
+    ) -> Self
     where
         T: NumericDistance,
         Self::Renderer: ValueRenderer<T>;
@@ -666,7 +687,11 @@ impl<T: Num, M: Mode, R> NumAssertions<T> for AssertThat<'_, T, M, R> {
     }
 
     #[track_caller]
-    fn is_close_to(self, expected: T, allowed_deviation: T) -> Self
+    fn is_close_to<E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>>(
+        self,
+        expected: E,
+        allowed_deviation: D,
+    ) -> Self
     where
         T: NumericDistance,
         R: ValueRenderer<T>,
@@ -1449,6 +1474,45 @@ mod tests {
                     is not subnormal
                     -------- assertr --------
                 "});
+        }
+    }
+
+    mod borrowed_tolerances {
+        use super::super::IsCloseTo;
+        use crate::{prelude::*, test_support::BorrowSpy};
+        use core::cell::Cell;
+        #[test]
+        fn expected_and_deviation_can_be_borrowed_independently() {
+            let expected = 10;
+            let deviation = 2;
+            assert_that!(11)
+                .is_close_to(expected, deviation)
+                .is_close_to(&expected, deviation)
+                .is_close_to(expected, &deviation)
+                .is_close_to(&expected, &deviation);
+            let matcher = IsCloseTo::new(&expected, &deviation);
+            assert_that!(11).matches(&matcher);
+            assert_that!(9).matches(&matcher);
+        }
+        #[test]
+        fn borrows_both_operands_once_after_tracking_even_for_invalid_deviation() {
+            for deviation in [-1, 1, 10] {
+                let calls = Cell::new(0);
+                let failures = assert_that!(()).capture(|root| {
+                    let operand = |value| BorrowSpy {
+                        value,
+                        observe: || {
+                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                            calls.set(calls.get() + 1);
+                        },
+                    };
+                    root.derive_owned(|()| 5)
+                        .is_close_to(operand(10), operand(deviation));
+                    root
+                });
+                assert_that!(calls.get()).is_equal_to(2);
+                assert_that!(failures).has_length(usize::from(deviation != 10));
+            }
         }
     }
 }

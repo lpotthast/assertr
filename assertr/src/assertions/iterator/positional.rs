@@ -1,9 +1,9 @@
 use super::{
-    AssertThat, AssertionContext, AssertionFailure, Borrow, EqualToRef, Expectation, Fact,
-    FailureBuilder, FailureKind, GroupStyle, Mode, PREVIEW_CAPACITY, PhantomData, Preview, Scan,
-    Tail, UnsatisfiedElements, ValueRenderer, Vec, VecDeque, equal_element, exact_size_hint,
-    execute, indexed_children,
+    AssertThat, AssertionContext, AssertionFailure, Borrow, Fact, FailureBuilder, FailureKind,
+    GroupStyle, Mode, PREVIEW_CAPACITY, PhantomData, Preview, Scan, Tail, UnsatisfiedElements,
+    ValueRenderer, Vec, VecDeque, equal_element, exact_size_hint, execute, indexed_children,
 };
+use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::renderer::RenderingContext;
 
 /// What ended an exact positional scan before it could succeed.
@@ -105,8 +105,9 @@ impl<T, E, I, R> Scan<I, R> for ContainsExactly<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = (Preview<I::Item>, ExactFailure);
     fn observe(
@@ -115,7 +116,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         evaluate_exact(iterator, self.expected.len(), |index, item| {
-            equal_element(context, item, &self.expected[index])
+            equal_element(context, item, borrow_for::<T, _>(&self.expected[index]))
         })
     }
 
@@ -127,7 +128,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let expected = render.borrowed_values::<E, _>(self.expected, GroupStyle::List);
+        let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
         let (preview, outcome) = rejection;
         let failure = failure
             .actual(preview.rendered::<T, _>(render))
@@ -145,8 +146,9 @@ pub(crate) fn assert_contains_exactly<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     execute(
         this,
@@ -247,8 +249,9 @@ impl<T, E, I, R> Scan<I, R> for StartsWith<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = (Preview<I::Item>, PrefixFailure);
     fn observe(
@@ -257,7 +260,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         evaluate_prefix(iterator, self.expected.len(), |index, item| {
-            equal_element(context, item, &self.expected[index])
+            equal_element(context, item, borrow_for::<T, _>(&self.expected[index]))
         })
     }
 
@@ -269,7 +272,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let expected = render.borrowed_values::<E, _>(self.expected, GroupStyle::List);
+        let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
         let (preview, outcome) = rejection;
         let failure = failure
             .actual(preview.rendered::<T, _>(render))
@@ -287,8 +290,9 @@ pub(crate) fn assert_starts_with<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     execute(
         this,
@@ -363,8 +367,9 @@ impl<T, E, I, R> Scan<I, R> for EndsWith<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = (Preview<I::Item>, Option<UnsatisfiedElements>);
     fn observe(
@@ -377,7 +382,7 @@ where
         }
         let preview = collect_tail(iterator, self.expected.len());
         let unsatisfied = check_suffix::<T, _, _>(&preview, self.expected, |item, expected| {
-            equal_element(context, item, expected)
+            equal_element(context, item, borrow_for::<T, _>(expected))
                 .err()
                 .unwrap_or_default()
         });
@@ -396,7 +401,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let expected = render.borrowed_values::<E, _>(self.expected, GroupStyle::List);
+        let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
         let (mut preview, unsatisfied) = rejection;
         trim_preview(&mut preview);
         let too_short = unsatisfied.is_none();
@@ -429,8 +434,9 @@ pub(crate) fn assert_ends_with<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     execute(
         this,
@@ -495,21 +501,21 @@ impl<T, E, I, R> Scan<I, R> for ContainsContiguous<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = (Preview<I::Item>, UnsatisfiedElements);
     fn observe(
         &self,
         iterator: &mut I,
-        context: &AssertionContext<'_, R>,
+        _context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         find_contiguous::<T, _>(iterator, self.expected.len(), |_, window| {
-            let matched = window.iter().zip(self.expected).all(|(item, expected)| {
-                EqualToRef(expected)
-                    .evaluate(item.borrow(), context)
-                    .is_ok()
-            });
+            let matched = window
+                .iter()
+                .zip(self.expected)
+                .all(|(item, expected)| item.borrow().eq(borrow_for::<T, _>(expected)));
             if matched { Ok(()) } else { Err(Vec::new()) }
         })
     }
@@ -522,7 +528,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let expected = render.borrowed_values::<E, _>(self.expected, GroupStyle::List);
+        let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
         let (preview, _) = rejection;
         let failure = failure
             .actual(preview.rendered::<T, _>(render))
@@ -540,8 +546,9 @@ pub(crate) fn assert_contains_contiguous<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     execute(
         this,

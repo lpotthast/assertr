@@ -6,8 +6,8 @@ error[E0597]: `name` does not live long enough
  9 |         let name = String::from("Alice");
    |             ---- binding `name` declared here
 10 |         partial!(User {
-11 |             name: eq(name.as_str())
-   |                      ^^^^ borrowed value does not live long enough
+11 |             name: eq(&name)
+   |                      ^^^^^ borrowed value does not live long enough
 12 |         })
 13 |     }; // `name` is dropped here, but the matcher still borrows it.
    |     - `name` dropped here while still borrowed

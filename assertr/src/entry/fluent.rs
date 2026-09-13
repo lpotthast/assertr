@@ -62,8 +62,7 @@ use crate::{
 /// `need_drop`. Negations put `not` first, as in "must not be equal to". `is_not_x` -> `not_be_x`,
 /// `has_not_x` -> `not_have_x`, `does_not_x` -> `not_x`. The possessive `has_no_x` keeps its order
 /// as `have_no_x`. Namespace prefixes stay in front of the alias. `into_iter_contains` ->
-/// `into_iter_contain`. Explicit aliases cover names outside these rules, such as `is(condition)`
-/// -> `be(condition)`.
+/// `into_iter_contain`. Explicit aliases cover names outside these rules.
 ///
 /// This trait is re-exported by [`crate::prelude`]. Import the prelude and use method syntax rather
 /// than implementing this trait downstream. See the fluent entry-point guide above for reference

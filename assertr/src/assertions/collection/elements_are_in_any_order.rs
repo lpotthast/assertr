@@ -535,7 +535,8 @@ mod tests {
                 let description = missing.constraint.as_ref().unwrap();
                 assert_that!(description.relation.as_deref()).is_equal_to(Some("is equal to"));
                 assert_that!(description.facts).has_length(1);
-                assert_that!(description.facts[0].label).is_equal_to("requirement");
+                assert_that!(description.facts[0].label)
+                    .is_equal_to(alloc::borrow::Cow::Borrowed("requirement"));
                 assert_that!(rendered_text(&description.facts[0].value))
                     .is_equal_to("\"retained\"");
                 assert_that!(missing.children).has_length(1);

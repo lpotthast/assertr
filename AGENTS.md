@@ -49,8 +49,8 @@ fit.
 - Presentation never grants behavior. `CollectionPresentation` and `RenderingOrder` control diagnostics only and remain
   independent of `StableOrder`, `RandomAccess`, and `SetLookup`.
 - Custom `ValueRenderer`s render leaves. Assertr owns structural syntax. Render every diagnostic value through
-  `self.render()` and its adapters so the active renderer and `RenderingBudget` apply. Never format subjects directly
-  with `Debug`.
+  `context.render()` in expectation hooks or `self.render()` in execution adapters, using their adapters so the active
+  renderer and `RenderingBudget` apply. Never format subjects directly with `Debug`.
 - Keep `BTreeSet` and `BTreeMap` support available with `alloc`. Only hash collection implementations belong behind
   `std`. A feature wrapping a std-only dependency must enable `std` itself.
 
@@ -67,12 +67,19 @@ fit.
 - Keep trait implementations independent of renderer capabilities. Put renderer and `Clone` bounds on individual methods
   in both the trait and impl. Preserve the active renderer in projections and extractions. Add a `NoRenderer`
   compile-time regression for a new trait or capability boundary.
-- Mark assertion methods `#[track_caller]` and call `self.track_assertion()` first. A composing method whose entire body
-  delegates to tracked assertions must not track again.
-- Every leaf assertion, built-in or downstream, raises its failure through `self.failure(FailureKind::..)` with
-  `.actual(..)`, `.relation(..)`, `.expected(..)` or `.unexpected(..)`, `.fact(Fact::labelled(..))` or
-  `.fact(Fact::note(..))` (or `.facts(..)` for a group), and nested `.children(..)`, then `.raise()`. Never format a
-  failure body by hand: `Display` renders every failure from its fields with one grammar. Relations are lowercase
+- Mark assertion methods `#[track_caller]`. Delegate reusable checks to `apply_assertion` or `test_assertion`, which
+  track once. Methods delegating to tracked assertions must not track again. Execution adapters track explicitly before
+  the operation they own and preserve the caller location. Built-in adapters then use the private executor entry points
+  that skip tracking. See [observation boundaries](knowledge/observation-boundaries.md) for async timing.
+- Implement reusable leaf checks in `Expectation::evaluate` and diagnostics in `ExpectationDiagnostics::explain`.
+  Neither hook tracks or raises. Evaluation retains the original observation. Explanation populates and returns the
+  supplied structured `FailureBuilder` without repeating observations. Bulk expected lists and operand views may be
+  accessed again when they describe the same logical list and comparison values. Access counts are unspecified. The chain executor raises the
+  completed failure. Child contexts instead build and retain evidence for the enclosing assertion.
+- Use `.actual(..)`, `.relation(..)`, `.expected(..)` or `.unexpected(..)`, `.fact(Fact::labelled(..))` or
+  `.fact(Fact::note(..))` (or `.facts(..)` for a group), and nested `.children(..)` for diagnostics. An execution adapter
+  that constructs a failure directly uses `self.failure(FailureKind::..)` and `.raise()` with the same fields.
+  Never format a failure body by hand. The common report grammar renders the structured fields. Relations are lowercase
   sentences without trailing periods and never embed values.
 - Add explicit negative assertions only when commonly useful and not already represented by an existing assertion.
   Hand-write diagnostics that name the negation and preserve its evidence. There is no generic `.not()`. Allow at most

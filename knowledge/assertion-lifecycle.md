@@ -3,6 +3,7 @@ id: assertion-lifecycle
 depends_on: [ ]
 sources:
   - assertr/src/lib.rs
+  - assertr/src/crate_docs.md
   - assertr/src/actual.rs
   - assertr/src/mode.rs
   - assertr/src/entry/mod.rs
@@ -81,6 +82,14 @@ The [projection methods](../assertr/src/assert_that/projection.rs) differ in sta
 `map_async` awaits a new owned subject. `derive` borrows a sized projection. `derive_owned` and `derive_async` store the
 mapper's result, which may itself be a reference to an unsized target. Derivation does not require cloning the subject.
 Mapping and projection do not count as assertions. Checks performed on their continuations do.
+
+Async projections can be awaited locally, but assertion chains are neither `Send` nor `Sync`. Their state includes an
+`Rc` presentation handle and interior-mutable records even when no custom presentation is installed. A future retaining
+a chain across suspension therefore cannot satisfy `Send`. Construct and complete the chain inside a task after any
+required awaits when a task API requires `Send`. Capture callbacks are synchronous and must return a chain, not a future.
+The public [async limitations guide](../assertr/src/crate_docs.md#async-limitations) pins both restrictions with
+compile-fail examples. [Observation boundaries](observation-boundaries.md#invocation-and-polling) owns async assertion
+timing and cancellation limits.
 
 The storage-level `Actual::map` consumes its receiver and invokes an `FnOnce` mapper exactly once. It returns the
 mapper's owned or borrowed subject unchanged, allowing captured values to move into the result.

@@ -55,7 +55,8 @@
 //! | Elements, maps, and sets | [`collection`], [`map`], [`set`] |
 //! | Ranges, cell borrows, and remaining iterator counts | [`range`], [`cell`], [`iterator`] |
 //! | Numeric properties and tolerances | `numeric` with `num`. Floating-point classifications also need `std` or `libm`. |
-//! | Paths, commands, mutexes, and drop requirements | `path`, `command`, `mutex`, `memory` with `std` |
+//! | Drop requirements | [`memory`] |
+//! | Paths, commands, and mutexes | `path`, `command`, `mutex` with `std` |
 //! | HTTP headers and responses | `header_value` with `http`, `response` with `reqwest` |
 //! | Jiff values | `signed_duration`, `span`, `zoned` with `jiff` |
 //! | Executable lookup and reports | `program` with `program`, `report` with `rootcause` |
@@ -66,12 +67,30 @@
 //! work. Start with explicit imports, or use `matchers::*` alongside `prelude::*` to browse the
 //! catalog with autocomplete.
 //!
+//! Map [`entry`] operands select their query view through
+//! [`BorrowFor`](crate::borrow_for::BorrowFor), using the stored key type as context. Native
+//! [`MapLookup`](crate::assertions::map::MapLookup) separately determines whether that view can
+//! query the map. Query paths render the selected view. For example, vector keys accept slices:
+//!
+//! ```
+//! use assertr::{matchers::{entry, eq}, prelude::*};
+//! use std::collections::BTreeMap;
+//! let query = &[1_u8, 2][..];
+//! assert_that!(BTreeMap::from([(vec![1_u8, 2], 3)]))
+//!     .matches(entries_are![(query, eq(3))]).matches(entry(query, eq(3)));
+//! ```
+//!
 //! ## Execution and features
 //!
 //! Runtime expectations and collection/map macros need no optional feature and support `no_std`
-//! with `alloc`. The `matchers` feature enables only the
+//! with `alloc`. The `partial` feature enables only the
 //! [`partial!`](mod@crate::matchers#structural-syntax) procedural macro. Integration expectations
 //! have the same feature requirements as their ordinary assertion methods.
+//!
+//! Equality and ordering accept owned or borrowed values through
+//! [`crate::borrow_for::BorrowFor`]. For example, `eq("hello")` matches both `String` and `&str`.
+//! Reference-valued fields and iterator items keep their declared types. Use [`dereferenced`] to
+//! compare their pointees.
 //!
 //! Matching borrows the subject. Available checks depend on its capabilities and the active
 //! renderer. Renderer bounds apply to diagnostic leaves, and the rendering budget limits evidence
@@ -92,7 +111,7 @@
 //! derives or attributes:
 //!
 //! ```rust
-//! # #[cfg(feature = "matchers")]
+//! # #[cfg(feature = "partial")]
 //! # {
 //! use assertr::{matchers::*, prelude::*};
 //!
@@ -134,7 +153,7 @@
 //! diagnostic paths:
 //!
 //! ```rust
-//! # #[cfg(feature = "matchers")]
+//! # #[cfg(feature = "partial")]
 //! # {
 //! use assertr::{matchers::eq, prelude::*};
 //!
@@ -178,12 +197,11 @@
 //!
 //! ## Custom expectations and diagnostics
 //!
-//! Use [`predicate`] for a boolean check, such as `predicate(|n: &i32| n % 2 == 0)`, or
-//! [`condition`] to wrap an [`AssertrCondition`](crate::condition::AssertrCondition) with a typed
-//! rejection error. [`pattern!`](crate::pattern) matches Rust patterns. [`satisfying`] combines
+//! Use [`predicate`] for a boolean check, such as `predicate(|n: &i32| n % 2 == 0)`.
+//! [`pattern!`](crate::pattern) matches Rust patterns. [`satisfying`] combines
 //! existing assertion methods and documents callback bounds and type annotations.
 //!
-//! For a reusable check with custom diagnostics, implement [`Expectation`]
+//! For a reusable check with a typed rejection and custom diagnostics, implement [`Expectation`]
 //! and [`ExpectationDiagnostics`]. Ordinary assertions and matcher composition execute the same
 //! definitions. See [`expectation`](crate::expectation) for the evaluation and diagnostic
 //! contracts.
@@ -201,7 +219,6 @@ pub use crate::{
             contains_matching, contains_no_matching, each, elements_are, elements_are_in_any_order,
             ends_with_elements, starts_with_elements,
         },
-        condition::{Condition, condition},
         core::{
             partial_eq::{EqualTo, NotEqualTo, eq, equal_to},
             partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
@@ -323,11 +340,10 @@ pub mod command {
     pub use crate::assertions::std::command::HasArg;
 }
 
-/// Drop-requirement expectations. Requires `std`.
-#[cfg(feature = "std")]
+/// Drop-requirement expectations.
 pub mod memory {
     #[doc(inline)]
-    pub use crate::assertions::std::mem::NeedsDrop;
+    pub use crate::assertions::core::mem::NeedsDrop;
 }
 
 /// Lock and poison-state expectations for standard mutexes. Requires `std`.

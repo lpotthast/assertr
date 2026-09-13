@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Both populate the same structured failure tree. The executor supplies `AssertionContext` for rendering and child
   evidence. `apply_assertion` and `matches` share one chain executor, while `test_assertion` returns the successful
   observation. Nested composition consumes the same definitions. Value comparisons, string and numeric properties,
-  formatting, ranges, variant checks and extraction, type inspection, conditions, collection and map comparisons and
+  formatting, ranges, variant checks and extraction, type inspection, collection and map comparisons and
   matching, identity, lengths, set relations, element projections, cell and lock state, watch receivers, paths, executable
   lookup, HTTP responses and headers, Jiff values, and rootcause reports share these definitions with ordinary methods.
   Consuming and async adapters share executor support for iterator scans and cardinality observations, function
@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Guarded observations are released before raising or continuing to another check. Tokio mutex callback failures
   retain bounded child evidence and omission counts.
   Compose strict and inclusive ordering with `lt`, `gt`, `le`, and `ge`, which all reject incomparable values.
-- Composable expectations support predicates, assertion callbacks, conditions, `pattern!`, and nested positional,
+- Composable expectations support predicates, assertion callbacks, `pattern!`, and nested positional,
   unordered, or keyed checks without optional features or `std`. Custom definitions compose directly through
   `ExpectationDiagnostics`. The `matchers` catalog re-exports every public expectation, with common checks at its root
   and subject namespaces for family-specific names. `DoesNotMatchPattern` supports explicit negative pattern matching.
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for equality. Map keys remain lookup operands.
 - `partial!` matches selected struct or enum fields without derives or attributes on domain types and renders only
   selected leaves. Each selected field requires an explicit matcher, such as `eq(value)` or a nested `partial!`.
-  Enable the new `matchers` feature, which supports `no_std` with `alloc`.
+  Enable the new `partial` feature, which supports `no_std` with `alloc`.
 - Map assertions `contains_entry_matching` and `contains_value_matching` accept composed value matchers.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
   exact comparisons of borrowed targets that preserve duplicate counts, without equality or target renderer bounds.
@@ -60,11 +60,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **Breaking:** Equality and collection, iterator, and map value comparisons now require `PartialEq`, removing
-  `AssertrPartialEq` and the public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`.
-  Move custom comparison policies to expected-side `Expectation` and `ExpectationDiagnostics` definitions and matcher assertions.
+- **Breaking:** Removed `AssertrCondition`, `ConditionAssertions`, `IterableConditionAssertions`, and their
+  `is`, `has`, `are`, `have`, and fluent `be` methods.
+- **Breaking:** Equality, ordering, and collection, iterator, and map value comparisons use standard `PartialEq`
+  and `PartialOrd` with owned or borrowed operands selected by `BorrowFor` from the `borrow-for` crate, re-exported
+  through `assertr::borrow_for`. Ordinary values and references work automatically, and string literals remain usable
+  for equality with `String` subjects, elements, and map values without allocation. Owned and borrowed arrays compare
+  with vectors, and owned and borrowed vectors compare with slice subjects. Custom operand wrappers opt in by declaring
+  their borrowed view. Range containment accepts owned or borrowed operands with owned, borrowed, or unbounded range
+  subjects. Containment matchers infer their bound type from `new`'s operand or select it explicitly with `borrowing`.
+  Numeric tolerance borrows its expected value and deviation independently. This replaces `AssertrPartialEq` and the
+  public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`. Other cross-type comparisons and
+  policies use an explicit borrowed view implementation, a value view, a predicate, or custom `Expectation` and
+  `ExpectationDiagnostics` definitions. Bulk value, key, and entry methods
+  accept finite slice-backed `AsRef` lists. `contains_all<E>`, `into_iter_contains_all<E>`, `contains_keys<E>`, and
+  `contains_exactly_entries<EK, EV>` replace iterator inputs and remove the iterator generic parameter, including
+  their fluent aliases. Collect generators explicitly with `.collect::<Vec<_>>()`. Borrowed lists use the stored
+  operand type's view selection. Bulk slice access and operand borrowing must describe consistent expected data
+  throughout evaluation and explanation, with unspecified access counts. Rejections retain failed observations
+  without full expected-view buffers. Successful collection prefix checks allocate zero bytes even for a million
+  elements.
+- **Breaking:** Removed the published `MapKeyQuery` extension API. Bulk map-key operands and keyed matchers use
+  `BorrowFor<K>::View` with the stored key as context, plus `Borrow<View>`. Custom renderers must render the selected
+  query view, which also supplies diagnostic type metadata and matcher paths, instead of the operand wrapper.
+  Native `MapLookup` requirements and single-key `&Q` calls are preserved. Slice operands now work with vector keys.
 - **Breaking:** Removed `AssertrEq`, its generated companion types and helper attributes, and the `derive` feature.
-  Use `matches(partial!(...))` with `features = ["matchers"]`.
+  Use `matches(partial!(...))` with `features = ["partial"]`.
 - **Breaking:** `assertr-macros` 0.5.0 replaces `assertr-derive` as the procedural macro crate.
   Direct users must update their dependency and replace `assertr_derive::` paths with `assertr_macros::`.
 - **Breaking:** Collection, iterator, and map `*_matching` methods and fluent aliases accept matchers instead of bare
@@ -107,7 +128,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   diagnostics use short Rust type names.
 - Unordered matching evaluates each actual/expected pair at most once and retains evidence for missing expectations
   and unexpected elements. Surplus occurrences are explained through the occupied expectations they satisfy.
-- Tokio watch `has_changed` and `has_not_changed` no longer require renderer or `Clone` bounds.
+- **Breaking:** Tokio watch `has_changed` and `has_not_changed` move to `TokioWatchReceiverAssertions`, supporting
+  panic and capture modes without renderer or `Clone` bounds. Replace imports of the removed
+  `TokioWatchReceiverExtractAssertions` with `TokioWatchReceiverAssertions`.
+- **Breaking:** Memory assertions move from `assertions::std::mem` to `assertions::core::mem` and work without `std`.
+  Update explicit module imports and import `MemAssertions` from the core or crate-wide prelude instead of the
+  standard-library prelude. `matchers::memory::NeedsDrop` also works without optional features.
 - Positive collection, stable-order, and iterator `*_satisfying` assertions no longer require element renderers.
   Map callback assertions require key renderers only. Callbacks can inspect opaque subjects using just the renderers
   needed by their inner assertions and any count or key evidence.
@@ -128,15 +154,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   quotes when expecting string output.
 - **Breaking:** Diagnostic operands now use the active renderer, including strings, paths, numeric evidence, integration
   values, and original errors. Custom renderer callers must add the method-level `ValueRenderer` bounds and supply `R`
-  in condition, formatting, exact-size iterator, reqwest response, and rootcause report-reference assertion trait bounds.
-- **Breaking:** Condition failures render `AssertrCondition::Error` through `ValueRenderer` instead of `Display`.
-  Provide `Debug` for errors used with the default renderer, or provide a custom error renderer.
+  in formatting, exact-size iterator, reqwest response, and rootcause report-reference assertion trait bounds.
 - `Actual::map` accepts `FnOnce` callbacks, allowing captured values to move into the mapped subject.
 - Streaming iterator assertions retain the owning iterator through diagnostic rendering and release it before failure
   handling, preserving resources needed to interpret yielded items without repeating observations or consuming extra elements.
 - Reqwest header diagnostics preserve sensitivity metadata for custom renderers and escape non-ASCII bytes by default.
   The default renderer reveals sensitive contents, and custom renderers can opt in through `SensitiveValuePolicy::Reveal`.
-- Jiff signed-duration tolerance assertions handle extreme values without arithmetic panics, including in capture mode.
+- **Breaking:** Jiff signed-duration tolerance compares exact inclusive nanosecond distances without arithmetic
+  panics at extreme values, including in capture mode.
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 - Tokio `RwLock` state assertions retain acquired guards while rendering failures, preventing lock reacquisition races.
 - Rootcause current-context type mismatches, range `is_outside_of_range`, and standard and Tokio lock `is_free` aliases

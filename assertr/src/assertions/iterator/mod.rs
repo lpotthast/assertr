@@ -13,7 +13,7 @@ mod unordered;
 #[cfg(test)]
 mod tests;
 
-use crate::assertions::core::partial_eq::EqualToRef;
+use crate::assertions::core::partial_eq::EqualTo;
 use alloc::{collections::VecDeque, vec::Vec};
 use core::borrow::Borrow;
 use core::{marker::PhantomData, panic::Location};
@@ -211,7 +211,7 @@ fn indexed_children(
 }
 
 /// Evaluates equality once and retains the original rejected operands as child evidence.
-fn equal_element<T, E, R>(
+fn equal_element<T, E: ?Sized, R>(
     context: &AssertionContext<'_, R>,
     element: &T,
     expected: &E,
@@ -220,18 +220,17 @@ where
     T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
-    let definition = EqualToRef(expected);
-    definition.evaluate(element, context).map_err(|rejection| {
-        alloc::vec![
-            definition
-                .explain(
-                    Some((element, rejection)),
-                    FailureBuilder::detached::<T>(FailureKind::Equality),
-                    context,
-                )
+    if element.eq(expected) {
+        Ok(())
+    } else {
+        let render = context.render();
+        Err(alloc::vec![
+            FailureBuilder::detached::<T>(FailureKind::Equality)
+                .actual(render.value(element))
+                .expected(render.value(expected))
                 .build()
-        ]
-    })
+        ])
+    }
 }
 
 /// A child failure for an element that did not match its predicate.

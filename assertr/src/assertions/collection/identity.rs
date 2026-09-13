@@ -1050,7 +1050,9 @@ mod tests {
                         item.derive(|subject| &subject.facts)
                             .contains_exactly_satisfying([
                                 |element: AssertThat<crate::Fact, Capture>| {
-                                    element.derive(|value| &value.label).is_equal_to(label);
+                                    element
+                                        .derive(|value| &value.label)
+                                        .is_equal_to(alloc::borrow::Cow::Borrowed(label));
                                 },
                             ]);
                     },

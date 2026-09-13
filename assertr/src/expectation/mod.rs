@@ -126,9 +126,18 @@ pub trait ExpectationDiagnostics<T: ?Sized, R = DebugRenderer>: Expectation<T, R
 
     /// Explains a rejected observation or describes a missing expected subject.
     ///
-    /// Render shared operands once and reuse retained views from `rejected` when present. Do not
-    /// evaluate the subject again, repeat user conversions, or retain guards after returning.
-    /// The executor supplies the builder and raises or retains it after this method returns.
+    /// Populate and return the supplied structured builder. Do not track or raise an assertion.
+    /// Render shared operands through [`AssertionContext::render`] and reuse retained views from
+    /// `rejected` when present. Bulk expected lists may be accessed and their operands borrowed
+    /// repeatedly if they describe the same logical list and comparison values. Access counts
+    /// and interleaving with comparisons are unspecified. Constructors store these inputs without
+    /// accessing their views. Library-controlled access occurs after assertion tracking.
+    /// Prepare stateful inputs before the assertion or retain their observation in a custom
+    /// expectation. Scalar borrowing, matcher, callback, guard, and identity contracts are
+    /// unchanged. Do not repeat comparisons, searches, lookups, callbacks, consumption, or
+    /// other observations, or retain guards after returning. The chain executor raises the
+    /// completed failure. Child contexts instead build and retain it as evidence for the
+    /// enclosing assertion.
     fn explain<'a, Target>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,

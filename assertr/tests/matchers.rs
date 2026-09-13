@@ -1,5 +1,5 @@
 //! Structural macro behavior at a downstream call site.
-#![cfg(feature = "matchers")]
+#![cfg(feature = "partial")]
 
 mod catalog {
     use assertr::{matchers::*, prelude::*};
@@ -277,5 +277,40 @@ mod enum_variants {
         assert_that!(Some(1)).matches(partial!(Some(eq(1))));
         assert_that!(Ok::<_, ()>(1)).matches(partial!(Ok(eq(1))));
         assert_that!(None::<i32>).matches(partial!(None));
+    }
+}
+
+mod borrowed_comparisons {
+    use assertr::{
+        matchers::{dereferenced, eq, lt},
+        prelude::*,
+    };
+
+    #[derive(Debug, PartialEq, PartialOrd)]
+    struct Point(i32, i32);
+    struct Row<'a> {
+        value: &'a Point,
+        label: String,
+    }
+
+    #[test]
+    fn borrowed_matchers_keep_field_types_and_reuse_expected_values() {
+        let point = Point(1, 2);
+        let label = String::from("point");
+        let row = Row {
+            value: &point,
+            label: String::from("point"),
+        };
+        let expected = partial!(Row {
+            value: eq(&point),
+            label: eq(&label)
+        });
+        assert_that!(row).matches(&expected);
+        assert_that!(row).matches(&expected);
+        assert_that!(row).matches(partial!(Row {
+            value: dereferenced(lt(Point(2, 3))),
+            label: eq(&String::from("point")),
+        }));
+        assert_that!([&point]).contains_matching(dereferenced(eq(Point(1, 2))));
     }
 }

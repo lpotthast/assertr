@@ -17,6 +17,7 @@
 //!   [`IntoIteratorAssertions`](iter::IntoIteratorAssertions),
 //!   [`ExactSizeIteratorAssertions`](iter::ExactSizeIteratorAssertions)
 //! - String-like values: [`StrAssertions`](string::StrAssertions)
+//! - Type memory properties: [`MemAssertions`](mem::MemAssertions)
 //!
 //! Function and async-function assertions appear in the `fn` module when the `std` feature is
 //! enabled.
@@ -38,6 +39,8 @@ pub mod identity;
 pub mod iter;
 /// Assertions for subjects implementing [`crate::assertions::HasLength`].
 pub mod length;
+/// Assertions about a type's memory properties.
+pub mod mem;
 /// `Option` state and extraction assertions.
 pub mod option;
 /// Equality and inequality assertions.
@@ -74,6 +77,7 @@ pub mod prelude {
         ExactSizeIteratorAssertions, IntoIteratorAssertions, IteratorAssertions,
     };
     pub use super::length::LengthAssertions;
+    pub use super::mem::MemAssertions;
     pub use super::option::OptionAssertions;
     pub use super::option::OptionExtractAssertions;
     pub use super::partial_eq::PartialEqAssertions;

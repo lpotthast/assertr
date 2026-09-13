@@ -41,9 +41,8 @@ mod tests {
     use crate::{matchers::*, prelude::*};
 
     mod matches {
-        use indoc::indoc;
-
         use super::*;
+        use indoc::indoc;
 
         #[cfg(feature = "fluent")]
         #[test]

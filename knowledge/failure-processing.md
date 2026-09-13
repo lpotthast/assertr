@@ -10,6 +10,8 @@ sources:
   - assertr/src/failure/adapter/adapters/writer.rs
   - assertr/src/failure/panic_presentation.rs
   - assertr/src/assert_that/diagnostics.rs
+  - assertr/src/assert_that/execution.rs
+  - assertr/src/expectation/context.rs
   - assertr/tests/failure_adapters.rs
   - assertr-no-std-tests/src/lib.rs
 ---
@@ -37,6 +39,10 @@ The [failure model](../assertr/src/failure/mod.rs) separates meaning, evidence, 
 `Attached` builder. `.raise()` adds chain metadata and delivers the failure through the active mode.
 `FailureBuilder::detached::<T>` creates a `Detached` builder. `.build()` returns data without raising or collecting
 chain metadata. [Expectation explanation](expectation-execution.md#evaluation-and-explanation) uses either target.
+The hook receives `FailureBuilder<Target>` and returns it populated, without tracking, raising, or choosing a completion
+target. The chain executor supplies an attached builder and calls `.raise()` after explanation. A child context supplies
+a detached builder, calls `.build()`, and retains the result as evidence. Execution adapters constructing failures
+directly use this same builder and rendering path.
 
 Diagnostic values pass through the active rendering context before entering the builder. Failure adapters receive
 [budgeted `Rendered` trees](diagnostic-rendering.md#bounded-retention) and cannot recover omitted values.

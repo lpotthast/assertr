@@ -6,6 +6,8 @@ sources:
   - assertr/src/renderer/context.rs
   - assertr/src/renderer/rendered.rs
   - assertr/src/renderer/budget.rs
+  - assertr/src/renderer/mod.rs
+  - assertr/src/crate_docs.md
   - assertr/tests/custom_assertions.rs
   - assertr-no-std-tests/src/lib.rs
   - assertr/src/assertions/core/debug.rs
@@ -30,17 +32,35 @@ An assertion needs only the leaf-rendering implementations its diagnostics use. 
 items, and map checks render keys and values separately. An opaque assertion, such as direct equality, can treat the
 whole subject as one leaf. Method-level bounds let Rust reject a missing rendering capability without hiding unrelated
 assertions. Keeping those bounds off blanket trait implementations is an assertion-author obligation.
+Value comparisons render the actual type and the selected `BorrowFor::View`, plus structural leaves.
+The [operand contract](expectation-execution.md#comparison-operands) retains that view through explanation, so operand
+wrappers need no renderer and are not borrowed again to build their diagnostic.
+
+Bulk map expected keys, missing-key facts, mismatch locations, and keyed matcher paths render the selected query
+view used for native lookup. Actual maps and unexpected keys render stored key types. Exact-entry equality also
+renders the selected expected-value view and counts. This can change diagnostic text and type metadata when an old
+operand wrapper rendered differently. Custom renderers migrate to the query view, without a wrapper renderer.
+`Entry` requires query rendering and the nested matcher's capabilities. Exact keyed matching additionally requires
+stored-key rendering for unexpected keys. These composites construct paths during evaluation and therefore retain
+those diagnostic bounds. Signed-duration tolerance renders only `SignedDuration`, independently of operand wrappers.
 
 Callback wrappers require only the rendering capabilities used by their delegated checks and callback assertions,
 plus `Clone` to carry the active renderer into child chains. Positive collection membership callbacks can inspect opaque
 elements without any leaf renderer. Exact and positional collection checks and iterator scans additionally render
 counts. Map entry callbacks render query keys, and exact keyed callbacks also render unexpected stored keys.
 Negative membership checks retain element renderers because their failures identify unexpectedly matching elements.
+The public [minimal renderer examples](../assertr/src/renderer/mod.rs) exercise a callback with no renderer and an exact
+comparison with only `ValueRenderer<usize>`. The downstream regressions
+[`collection_callbacks_need_only_the_renderers_their_failures_use`](../assertr/tests/custom_assertions.rs) and
+[`stable_order_callbacks_need_only_a_count_renderer`](../assertr/tests/custom_assertions.rs) pin those bounds.
 
 [`RenderingContext`](../assertr/src/renderer/context.rs), obtained through `AssertThat::render()` or
 `AssertionContext::render()`, supplies rendering adapters for values, collections, maps, and fields. These build owned
 [`Rendered`](../assertr/src/renderer/rendered.rs) trees containing leaf text, structural children, type metadata, layout
 settings, and omission counts. Failure adapters can inspect or print them without rendering original values again.
+The public [structural evidence examples](../assertr/src/crate_docs.md#structural-evidence) populate supplied builders in
+expectation explanation, using leaf-only renderers for collections, maps, and wrappers. They delegate tracking and
+raising to `apply_assertion`. Rendering adapters construct values and never grant execution responsibilities.
 Mapping moves the renderer and derivation clones it, as described
 in [assertion lifecycle](assertion-lifecycle.md#projections-and-continuation).
 

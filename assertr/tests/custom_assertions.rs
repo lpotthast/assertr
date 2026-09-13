@@ -24,6 +24,51 @@ fn text_opt(value: Option<&assertr::renderer::Rendered>) -> Option<&str> {
     })
 }
 
+#[cfg(feature = "tokio")]
+mod watch_trait_imports {
+    use assertr::assertions::tokio::watch::TokioWatchReceiverAssertions;
+    use assertr::{
+        assert_that,
+        prelude::{BoolAssertions, LengthAssertions},
+    };
+
+    fn require_changed<R, A: TokioWatchReceiverAssertions<i32, R>>(assertion: A) -> A {
+        assertion.has_changed()
+    }
+
+    #[test]
+    fn canonical_trait_supports_generic_and_qualified_calls_in_both_modes() {
+        struct NoRenderer;
+        let (_sender, mut receiver) = tokio::sync::watch::channel(7);
+        receiver.mark_changed();
+        require_changed(assert_that!(receiver).with_renderer(NoRenderer));
+        TokioWatchReceiverAssertions::has_changed(assert_that!(receiver));
+        let failures = assert_that!(receiver)
+            .with_renderer(NoRenderer)
+            .capture(|it| require_changed(it).has_not_changed());
+        assert_that!(failures).has_length(1);
+        assert_that!(receiver.has_changed().unwrap()).is_true();
+
+        receiver.mark_unchanged();
+        assertr::assertions::tokio::prelude::TokioWatchReceiverAssertions::has_not_changed(
+            assert_that!(receiver),
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "fluent")]
+    fn canonical_import_alone_supplies_fluent_aliases() {
+        use assertr::IntoAssertContext;
+
+        let (_sender, mut receiver) = tokio::sync::watch::channel(7);
+        receiver.must().not_have_changed();
+        receiver.mark_changed();
+        receiver.must().have_changed();
+        let failures = receiver.verify(|it| it.not_have_changed().have_changed());
+        assert_that!(failures).has_length(1);
+    }
+}
+
 #[cfg(feature = "std")]
 mod path_renderer_bounds {
     use super::text_opt;
@@ -516,7 +561,8 @@ mod nested {
                     ]);
                 failure
                     .derive_owned(|failure| ToHumanReadableText.render(failure))
-                    .is_equal_to(formatdoc! {"
+                    .is_equal_to(assertr::failure::adapter::HumanReadableText::new(
+                        formatdoc! {"
             -------- assertr --------
             Expression: `vec![person(30), person(12)]`
 
@@ -528,7 +574,8 @@ mod nested {
 
                 is not an adult
             -------- assertr --------
-            "});
+            "},
+                    ));
             },
         ]);
     }
@@ -589,7 +636,7 @@ mod generated_fluent_aliases {
             .must()
             .have_values::<String, 2>(["first".to_owned(), "second".to_owned()])
             .await;
-        assert_that!(values).is_equal_to(["first", "second"]);
+        assert_that!(values).contains_exactly(["first", "second"]);
     }
 }
 
@@ -1184,6 +1231,185 @@ mod definitions {
     }
 }
 
+mod typed_rejections {
+    use core::{cell::Cell, fmt};
+
+    use assertr::{
+        AssertionContext, Fact,
+        failure::{FailureBuilder, FailureKind},
+        matchers::{all_of, each},
+        prelude::*,
+        renderer::RenderedBody,
+    };
+
+    struct Subject(u32);
+    struct OpaqueError(u32);
+
+    #[derive(Default)]
+    struct Reject {
+        observations: Cell<usize>,
+    }
+
+    impl<R> Expectation<Subject, R> for Reject {
+        type Success<'a> = ();
+        type Rejection<'a> = OpaqueError;
+
+        fn evaluate(
+            &self,
+            actual: &Subject,
+            _: &AssertionContext<'_, R>,
+        ) -> Result<(), OpaqueError> {
+            self.observations.set(self.observations.get() + 1);
+            Err(OpaqueError(actual.0))
+        }
+    }
+
+    impl<R: ValueRenderer<OpaqueError>> ExpectationDiagnostics<Subject, R> for Reject {
+        const KIND: FailureKind = FailureKind::Predicate;
+
+        fn explain<Target>(
+            &self,
+            rejected: Option<(&Subject, OpaqueError)>,
+            failure: FailureBuilder<Target>,
+            context: &AssertionContext<'_, R>,
+        ) -> FailureBuilder<Target> {
+            match rejected {
+                None => failure.relation("is accepted"),
+                Some((_, error)) => failure
+                    .relation("is rejected")
+                    .fact(Fact::note(context.render().value(&error))),
+            }
+        }
+    }
+
+    // No Clone, subject renderer, or formatting traits on the subject or rejection are needed.
+    struct ErrorRenderer;
+    impl ValueRenderer<OpaqueError> for ErrorRenderer {
+        fn fmt(&self, error: &OpaqueError, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "error({})", error.0)
+        }
+    }
+
+    fn assert_error(failure: &AssertionFailure, text: &str, omitted_characters: usize) {
+        assert_that!(failure.kind).is_equal_to(FailureKind::Predicate);
+        assert_that!(failure.relation.as_deref()).is_equal_to(Some("is rejected"));
+        assert_that!(failure.actual).is_none();
+        assert_that!(failure.facts).has_length(1);
+        let fact = &failure.facts[0];
+        assert_that!(fact.label.as_ref()).is_empty();
+        assert_that!(fact.value.type_name).is_equal_to(Some(core::any::type_name::<OpaqueError>()));
+        assert_that!(fact.value.body).is_equal_to(RenderedBody::Text {
+            text: text.into(),
+            omitted_characters,
+        });
+    }
+
+    #[test]
+    fn direct_execution_reuses_definitions_and_renders_original_errors_with_the_budget() {
+        let definition = Reject::default();
+        let failures = assert_that!(Subject(42))
+            .with_renderer(ErrorRenderer)
+            .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
+            .capture(|it| it.apply_assertion(&definition).matches(&definition));
+
+        assert_that!(definition.observations.get()).is_equal_to(2);
+        assert_that!(failures).has_length(2);
+        for failure in &failures {
+            assert_error(failure, "err", 6);
+        }
+    }
+
+    #[test]
+    fn composition_retains_typed_errors_without_rendering_subjects() {
+        let definition = Reject::default();
+        let failures = assert_that!(Subject(42))
+            .with_renderer(ErrorRenderer)
+            .capture(|it| it.matches(all_of((&definition, &definition))));
+
+        assert_that!(definition.observations.get()).is_equal_to(2);
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).has_length(2);
+        for child in &failures[0].children {
+            assert_error(child, "error(42)", 0);
+        }
+
+        let failures = assert_that!([Subject(42), Subject(43)])
+            .with_renderer(ErrorRenderer)
+            .capture(|it| it.matches(each(&definition)));
+
+        assert_that!(definition.observations.get()).is_equal_to(4);
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).has_length(2);
+        assert_error(&failures[0].children[0], "error(42)", 0);
+        assert_error(&failures[0].children[1], "error(43)", 0);
+    }
+
+    struct Probe<'a>(&'a Reject);
+
+    impl<R> Expectation<Subject, R> for Probe<'_> {
+        type Success<'a>
+            = ()
+        where
+            Self: 'a;
+        type Rejection<'a>
+            = ()
+        where
+            Self: 'a;
+
+        fn evaluate(&self, actual: &Subject, context: &AssertionContext<'_, R>) -> Result<(), ()> {
+            if context.probe(actual, self.0) {
+                Err(())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    impl<R> ExpectationDiagnostics<Subject, R> for Probe<'_> {
+        const KIND: FailureKind = FailureKind::Other;
+
+        fn explain<Target>(
+            &self,
+            _: Option<(&Subject, ())>,
+            failure: FailureBuilder<Target>,
+            _: &AssertionContext<'_, R>,
+        ) -> FailureBuilder<Target> {
+            failure.relation("rejects when probed")
+        }
+    }
+
+    #[test]
+    fn probes_evaluate_once_without_requiring_a_renderer() {
+        struct NoRenderer;
+        let definition = Reject::default();
+        assert_that!(Subject(42))
+            .with_renderer(NoRenderer)
+            .apply_assertion(Probe(&definition));
+        assert_that!(definition.observations.get()).is_equal_to(1);
+    }
+
+    #[test]
+    fn exhausted_child_evidence_does_not_render_errors_or_skip_evaluation() {
+        struct NeverRender;
+        impl ValueRenderer<OpaqueError> for NeverRender {
+            fn fmt(&self, _: &OpaqueError, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+                panic!("omitted errors must not be rendered")
+            }
+        }
+
+        let definition = Reject::default();
+        let failures = assert_that!(Subject(42))
+            .with_renderer(NeverRender)
+            .with_rendering_budget(RenderingBudget::default().with_max_items(0))
+            .capture(|it| it.matches(all_of((&definition, &definition))));
+
+        assert_that!(definition.observations.get()).is_equal_to(2);
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).is_empty();
+        assert_that!(failures[0].omitted_children).is_equal_to(2);
+    }
+}
+
 mod structural_rendering {
     use assertr::{
         AssertionContext, Fact, FailureKind,
@@ -1378,7 +1604,8 @@ mod structural_rendering {
         for item in items {
             check_type::<Token>(item, false);
         }
-        assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(indoc::indoc! {"
+        assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(
+            assertr::failure::adapter::HumanReadableText::new(indoc::indoc! {"
             -------- assertr --------
             Subject: tokens
             Expression: `values`
@@ -1390,7 +1617,8 @@ mod structural_rendering {
 
             is not empty
             -------- assertr --------
-        "});
+        "}),
+        );
     }
 
     #[test]
@@ -1633,5 +1861,253 @@ mod structural_rendering {
                 .capture(|it| it.apply_assertion(NoBadTokens));
             assert_that!(failures).is_empty();
         }
+    }
+}
+
+mod borrowed_views {
+    use assertr::{
+        borrow_for::BorrowFor,
+        matchers::{
+            eq, lt,
+            range::{ContainsElement, DoesNotContainElement},
+        },
+        prelude::*,
+    };
+    use core::{borrow::Borrow, cmp::Ordering, fmt};
+
+    #[derive(PartialEq, PartialOrd)]
+    struct Measurement(i32);
+    struct Operand(i32);
+    impl Borrow<i32> for Operand {
+        fn borrow(&self) -> &i32 {
+            &self.0
+        }
+    }
+    impl BorrowFor<Measurement> for Operand {
+        type View = i32;
+    }
+    impl PartialEq<i32> for Measurement {
+        fn eq(&self, other: &i32) -> bool {
+            self.0 == *other
+        }
+    }
+    impl PartialOrd<i32> for Measurement {
+        fn partial_cmp(&self, other: &i32) -> Option<Ordering> {
+            self.0.partial_cmp(other)
+        }
+    }
+    impl PartialEq<Measurement> for i32 {
+        fn eq(&self, other: &Measurement) -> bool {
+            *self == other.0
+        }
+    }
+    impl PartialOrd<Measurement> for i32 {
+        fn partial_cmp(&self, other: &Measurement) -> Option<Ordering> {
+            self.partial_cmp(&other.0)
+        }
+    }
+    struct Renderer;
+    impl ValueRenderer<Measurement> for Renderer {
+        fn fmt(&self, value: &Measurement, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "measurement({})", value.0)
+        }
+    }
+    impl ValueRenderer<i32> for Renderer {
+        fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{value}")
+        }
+    }
+
+    fn check_equal<T, E, R>(actual: &T, expected: E, renderer: R)
+    where
+        E: BorrowFor<T>,
+        T: PartialEq<E::View>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+    {
+        assert_that!(actual)
+            .with_renderer(renderer)
+            .is_equal_to(expected);
+    }
+
+    #[test]
+    fn custom_views_work_in_generic_helpers_and_comparison_families() {
+        check_equal(&Measurement(2), Operand(2), Renderer);
+        check_equal(&String::from("hello"), "hello", DebugRenderer);
+        let expected = Operand(2);
+        let matcher = eq(expected);
+        assert_that!(Measurement(2))
+            .with_renderer(Renderer)
+            .matches(&matcher);
+        assert_that!(Measurement(2))
+            .with_renderer(Renderer)
+            .matches(&matcher);
+        let ordering = lt(Operand(3));
+        assert_that!(Measurement(2))
+            .with_renderer(Renderer)
+            .is_less_than(Operand(3))
+            .matches(&ordering);
+        assert_that!([Measurement(2)])
+            .with_renderer(Renderer)
+            .contains(Operand(2))
+            .contains_exactly([Operand(2)]);
+        let operands = vec![Operand(2)];
+        let expected = assertr::matchers::collection::ContainsAll::new(&operands);
+        assert_that!([Measurement(2)])
+            .with_renderer(Renderer)
+            .contains_all(&operands)
+            .matches(&expected);
+        assert_that!(vec![Measurement(2)])
+            .with_renderer(Renderer)
+            .matches(&expected);
+        assert_that!(Measurement(1)..Measurement(3))
+            .with_renderer(Renderer)
+            .contains_element(Operand(2))
+            .does_not_contain_element(Operand(3));
+        let contained = ContainsElement::<Measurement>::borrowing(Operand(2));
+        let excluded = DoesNotContainElement::<Measurement>::borrowing(Operand(3));
+        assert_that!(Measurement(1)..Measurement(3))
+            .with_renderer(Renderer)
+            .matches(&contained)
+            .matches(&excluded);
+        let lower = Measurement(1);
+        let upper = Measurement(3);
+        assert_that!(&lower..&upper)
+            .with_renderer(Renderer)
+            .matches(&contained)
+            .matches(&excluded);
+    }
+
+    #[test]
+    fn diagnostics_render_the_actual_and_selected_view_without_wrapper_support() {
+        let failures = assert_that!(Measurement(1))
+            .with_renderer(Renderer)
+            .with_location(false)
+            .capture(|it| it.is_equal_to(Operand(2)));
+        assert_that!(failures).has_length(1);
+        let text = ToHumanReadableText.render(&failures[0]);
+        assert_that!(text)
+            .contains("measurement(1)")
+            .contains("Expected: 2");
+    }
+}
+
+mod map_query_operands {
+    use assertr::{
+        borrow_for::BorrowFor,
+        matchers::{entry, eq},
+        prelude::*,
+    };
+    use core::{borrow::Borrow, fmt};
+    use std::collections::BTreeMap;
+
+    #[derive(PartialEq, Eq, PartialOrd, Ord)]
+    struct StoredKey(String);
+    impl Borrow<str> for StoredKey {
+        fn borrow(&self) -> &str {
+            &self.0
+        }
+    }
+    // The operand and stored key are deliberately opaque to renderers.
+    struct Query<'a>(&'a str);
+    impl Borrow<str> for Query<'_> {
+        fn borrow(&self) -> &str {
+            self.0
+        }
+    }
+    impl BorrowFor<StoredKey> for Query<'_> {
+        type View = str;
+    }
+    // Reference operands opt in separately. BorrowFor does not forward a wrapper's selection.
+    impl Borrow<str> for &Query<'_> {
+        fn borrow(&self) -> &str {
+            self.0
+        }
+    }
+    impl BorrowFor<StoredKey> for &Query<'_> {
+        type View = str;
+    }
+
+    #[derive(Clone)]
+    struct QueryRenderer;
+    impl ValueRenderer<str> for QueryRenderer {
+        fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "query({value})")
+        }
+    }
+    impl ValueRenderer<i32> for QueryRenderer {
+        fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{value}")
+        }
+    }
+
+    #[test]
+    fn entry_requires_only_the_selected_query_and_nested_value_renderers() {
+        let actual = BTreeMap::from([(StoredKey(String::from("a")), 1)]);
+        let query = Query("a");
+        assert_that!(actual)
+            .with_renderer(QueryRenderer)
+            .matches(entry(&query, eq(1)));
+        let failures = assert_that!(actual)
+            .with_renderer(QueryRenderer)
+            .capture(|it| {
+                it.matches(entry(Query("a"), eq(2)))
+                    // A single native &str query needs no BorrowFor registration for &str.
+                    .contains_entry_matching("a", eq(2))
+            });
+        assert_that!(failures).has_length(2);
+        for failure in &failures {
+            assert_that!(ToHumanReadableText.render(failure)).contains("At [query(a)]:");
+        }
+    }
+
+    #[derive(Clone)]
+    struct BulkRenderer;
+    impl ValueRenderer<str> for BulkRenderer {
+        fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            QueryRenderer.fmt(value, f)
+        }
+    }
+    impl ValueRenderer<i32> for BulkRenderer {
+        fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            QueryRenderer.fmt(value, f)
+        }
+    }
+    impl ValueRenderer<StoredKey> for BulkRenderer {
+        fn fmt(&self, value: &StoredKey, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "stored({})", value.0)
+        }
+    }
+    impl ValueRenderer<usize> for BulkRenderer {
+        fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{value}")
+        }
+    }
+
+    #[test]
+    fn bulk_methods_use_registered_query_views_and_preserve_stored_evidence() {
+        let actual = BTreeMap::from([(StoredKey(String::from("a")), 1)]);
+        let failures = assert_that!(actual)
+            .with_renderer(BulkRenderer)
+            .capture(|it| {
+                it.contains_keys([Query("missing")])
+                    .contains_exactly_entries([(Query("a"), 2)])
+                    .contains_exactly_entries_matching(assertr::entries_are![(
+                        Query("missing"),
+                        eq(1)
+                    )])
+                    .contains_exactly_entries_satisfying([(
+                        Query("a"),
+                        |it: AssertThat<i32, Capture, BulkRenderer>| {
+                            it.is_equal_to(2);
+                        },
+                    )])
+            });
+        assert_that!(failures).has_length(4);
+        let membership = ToHumanReadableText.render(&failures[0]);
+        assert_that!(membership)
+            .contains("query(missing)")
+            .contains("stored(a)");
+        assert_that!(ToHumanReadableText.render(&failures[1])).contains("At key query(a):");
+        assert_that!(ToHumanReadableText.render(&failures[2])).contains("At [stored(a)]:");
     }
 }

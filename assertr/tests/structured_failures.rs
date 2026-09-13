@@ -110,7 +110,8 @@ fn the_human_readable_adapter_renders_the_stable_format() {
         .with_location(false)
         .capture(|it| it.is_equal_to(43));
 
-    assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {"
+    assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(
+        assertr::failure::adapter::HumanReadableText::new(formatdoc! {"
         -------- assertr --------
         Expression: `42`
 
@@ -118,7 +119,8 @@ fn the_human_readable_adapter_renders_the_stable_format() {
 
           Actual: 42
         -------- assertr --------
-    "});
+    "}),
+    );
 }
 
 #[test]
@@ -148,7 +150,8 @@ fn messages_and_details_render_as_separate_plain_bullet_blocks() {
             it
         });
 
-    assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(indoc::indoc! {"
+    assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(
+        assertr::failure::adapter::HumanReadableText::new(indoc::indoc! {"
         -------- assertr --------
         Expression: `42`
 
@@ -161,7 +164,8 @@ fn messages_and_details_render_as_separate_plain_bullet_blocks() {
           - first detail
             continued detail
         -------- assertr --------
-    "});
+    "}),
+    );
 }
 
 #[test]
@@ -866,7 +870,7 @@ mod matcher_metadata {
                     .is_equal_to(Some("[1]"));
                 element
                     .derive(|value| &value.messages)
-                    .is_equal_to(["request context"]);
+                    .contains_exactly(["request context"]);
                 element
                     .derive_owned(|value| value.location.unwrap().file())
                     .ends_with("structured_failures.rs");

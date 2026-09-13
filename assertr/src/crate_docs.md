@@ -22,6 +22,137 @@ chains. Capture mode stores failures without invoking presentation. Panic mode u
 context's [presentation adapter](AssertThat::with_panic_presentation) to produce the panic text,
 defaulting to [`ToHumanReadableText`](failure::adapter::ToHumanReadableText).
 
+## Borrowed equality
+
+Pass a reference to reuse an expected value without cloning it. An equality definition also
+retains its operand and can be borrowed by several assertions:
+
+```
+use assertr::{matchers::eq, prelude::*};
+
+#[derive(Debug, PartialEq)]
+struct Token(u32); // No Clone implementation.
+
+let actual = Token(7);
+let expected = Token(7);
+assert_that!(actual).is_equal_to(&expected);
+let equal = eq(&expected);
+assert_that!(actual).matches(&equal);
+assert_that!([Token(7)]).contains_matching(&equal);
+assert_that!(expected.0).is_equal_to(7);
+```
+
+[`BorrowFor`](crate::borrow_for::BorrowFor) selects the expected view for the declared actual
+type. A custom wrapper implements `Borrow<View>` and opts in with `BorrowFor<Actual>`. Equality
+then requires `Actual: PartialEq<View>`. Diagnostics render the actual and the selected view,
+so this wrapper needs neither `Debug` nor `Clone`:
+
+```
+use assertr::{borrow_for::BorrowFor, matchers::eq, prelude::*};
+use core::borrow::Borrow;
+
+struct ExpectedName(String);
+impl Borrow<str> for ExpectedName {
+    fn borrow(&self) -> &str { &self.0 }
+}
+impl BorrowFor<String> for ExpectedName {
+    type View = str;
+}
+
+let expected = eq(ExpectedName(String::from("Ada")));
+assert_that!(String::from("Ada")).matches(&expected);
+let failures = assert_that!(String::from("Grace")).capture(|it| it.matches(&expected));
+assert_that!(ToHumanReadableText.render(&failures[0]))
+    .contains("Grace").contains("Ada");
+```
+
+The scalar constructor stores the operand. Evaluation selects its view once, and rejection retains
+that reference for explanation. Missing-subject descriptions select the view without comparing.
+Reference-valued subjects keep their declared type. See
+[`PartialEqAssertions`](assertions::core::partial_eq::PartialEqAssertions) for explicit pointee
+matching and cross-type comparison limits.
+
+## Bulk expected data
+
+Bulk value, key, and entry assertions accept finite, slice-backed expected lists through
+`AsRef`. Arrays, slices, vectors, and compatible wrappers reuse their existing storage.
+Generators require explicit preparation:
+
+```
+use assertr::prelude::*;
+let expected = (1..=3).collect::<Vec<_>>();
+assert_that!([1, 2, 3, 4]).contains_all(&expected);
+assert_that!([1, 2, 3]).contains_all((1..=3).collect::<Vec<_>>());
+```
+
+Borrowed lists of custom operands use the stored element type's `BorrowFor` implementation.
+They need no extra implementation for references to that wrapper. Bulk expected data must be
+repeatable: repeated slice access returns the same logical list, and repeated operand borrowing
+describes the same comparison value throughout evaluation and explanation. Access counts and
+interleaving with comparisons are unspecified. Constructors store inputs without accessing
+views, and library-controlled access occurs after assertion tracking.
+
+Prepare stateful data before the assertion, or use a custom expectation retaining its observation.
+Explanation may access expected data again through budgeted rendering, but never repeats
+comparisons, searches, lookups, callbacks, or iterator consumption. Rejections retain the failed
+observations instead of complete expected-view buffers. Scalar borrowing and matcher, callback,
+guard, and identity contracts remain unchanged.
+
+## Async limitations
+
+Await asynchronous operations before applying synchronous expectations, or use an async
+projection such as [`AssertThat::derive_async`]. With `std`, async function assertions consume
+an owned closure in panic mode. The caller supplies the runtime and awaits the returned future:
+
+```
+# #[cfg(feature = "std")]
+# {
+use assertr::prelude::*;
+
+# tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
+assert_that_owned!(async || 7_u32)
+    .does_not_panic_async().await
+    .is_equal_to(7);
+# });
+# }
+```
+
+Async function assertions capture the caller when called, then track and invoke the closure
+on the first poll. Cancellation does not restore consumed inputs or user state. `panics_async`
+catches invocation, polling, and output-drop panics. `does_not_panic_async` returns the output,
+so its later drop is outside the caught boundary. Reqwest body extraction has a different
+boundary: it checks ownership and tracks before returning the future, then reads when polled.
+
+[`Expectation::evaluate`] and [`ExpectationDiagnostics::explain`] are synchronous hooks.
+[`AssertThat::capture`] likewise expects a synchronous callback returning the chain:
+
+```compile_fail,E0308
+use assertr::prelude::*;
+
+let failures = assert_that!(7).capture(|it| async move {
+    it.is_equal_to(7)
+});
+```
+
+Chains are neither `Send` nor `Sync`. A future keeping a chain across an await cannot be sent
+between threads, even if its subject and renderer are thread-safe:
+
+```compile_fail,E0277
+use assertr::prelude::*;
+
+fn requires_send(_: impl core::future::Future<Output = ()> + Send) {}
+
+requires_send(async {
+    let chain = assert_that_owned!(7);
+    core::future::ready(()).await;
+    chain.is_equal_to(7);
+});
+```
+
+When a task API requires `Send`, await the input first, then construct and complete the chain
+without carrying it across another await. A runtime that supports local futures can instead
+keep the chain in the same task across suspension.
+
 ## Custom assertions
 
 Add a method such as `.is_adult()` when a domain check appears throughout your tests. For a
@@ -52,17 +183,27 @@ report its caller's location. The example below shows two implementation styles:
   to [`AssertThat::apply_assertion`]. This tracks once, evaluates, and raises any explained
   rejection. The same definition also works with `.matches(...)` and nested composition.
 
+An execution adapter owns invocation, consumption, or polling that cannot use the borrowed
+expectation protocol. It tracks explicitly before its operation and preserves the caller
+location. Built-in adapters then use private executor entry points that skip tracking.
+Downstream adapters cannot call those private entry points. If an adapter must construct a
+failure directly, use [`AssertThat::failure`], the same structured fields, and
+[`AssertThat::render`], then raise it. Keep that responsibility outside expectation hooks.
+
 ### Define evaluation and diagnostics
 
 [`Expectation::evaluate`] borrows the subject and returns its original successful observation
 or rejection. Use `()` when no additional observation is needed. It must not track or raise.
 Retain observations such as converted operands, errors, or guards when checking again would
-repeat user code or observe different state.
+repeat an observation or observe different state. Repeatable [bulk expected data](#bulk-expected-data)
+may instead be accessed again during explanation.
 
 [`ExpectationDiagnostics::explain`] receives a builder and either `Some((actual, rejection))`
 or `None`. The latter describes an unmet expectation with no subject, such as a missing element.
 Never evaluate again during explanation. Put diagnostic renderer bounds on this trait, keeping
 evaluation independent when possible. Set its `KIND` to the appropriate [`FailureKind`].
+Explanation must not track or raise. Keep observations alive until the evidence needing them
+has been rendered, and release temporary guards before returning the builder.
 
 Supply the [`actual`](failure::FailureBuilder::actual) value, a lowercase
 [`relation`](failure::FailureBuilder::relation) sentence without embedded values or a trailing
@@ -71,7 +212,8 @@ period, and any [`expected`](failure::FailureBuilder::expected) or
 [`fact`](failure::FailureBuilder::fact) or [`facts`](failure::FailureBuilder::facts), constructing
 [`Fact::labelled`] values or [`Fact::note`] values as appropriate. Add nested
 [`children`](failure::FailureBuilder::children) for further evidence. Return the populated builder.
-The executor records or raises the failure according to the mode.
+The chain executor raises the completed failure through the active mode. Child contexts instead
+build and retain it as evidence for the enclosing assertion.
 
 Render diagnostic values through [`AssertionContext::render`]. Its
 [`value`](renderer::RenderingContext::value), [`values`](renderer::RenderingContext::values),
@@ -196,56 +338,103 @@ even if the ordinary collection presentation sorts diagnostic text.
 single rendered leaf. [`unavailable_struct_field`](renderer::RenderingContext::unavailable_struct_field)
 records a structural placeholder without requiring a field renderer or inventing a field type.
 
-These assertion helpers show the same failure-builder pattern for each kind of subject. Their
-renderer bounds cover only leaves, so the collection, map, and `Option` need no `Debug` implementation:
+These expectations populate the supplied builder for each kind of subject. Their renderer
+bounds cover only leaves, so the collection, map, and `Option` need no `Debug` implementation.
+`apply_assertion` owns tracking and raising for each call:
 
 ```
 # extern crate alloc;
 use alloc::collections::BTreeMap;
-use assertr::{prelude::*, FailureKind};
+use assertr::{prelude::*, AssertionContext, Expectation, ExpectationDiagnostics, FailureKind};
 use assertr::assertions::{collection::Collection, map::Map};
+use assertr::failure::FailureBuilder;
 
-#[track_caller]
-fn check_empty_collection<C: Collection, M: Mode, R: ValueRenderer<C::Item>>(
-    it: AssertThat<'_, C, M, R>,
-) -> AssertThat<'_, C, M, R> {
-    it.track_assertion();
-    if it.actual().length() != 0 {
-        it.failure(FailureKind::Length)
-            .actual(it.render().collection(it.actual()))
-            .relation("is not empty")
-            .raise();
+struct EmptyCollection;
+impl<C: Collection, R> Expectation<C, R> for EmptyCollection {
+    type Success<'a> = () where C: 'a;
+    type Rejection<'a> = () where C: 'a;
+
+    fn evaluate(&self, actual: &C, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.length() == 0 { Ok(()) } else { Err(()) }
     }
-    it
+}
+impl<C: Collection, R: ValueRenderer<C::Item>> ExpectationDiagnostics<C, R> for EmptyCollection {
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&C, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            Some((actual, ())) => failure
+                .actual(context.render().collection(actual))
+                .relation("is not empty"),
+            None => failure.relation("is empty"),
+        }
+    }
 }
 
-#[track_caller]
-fn check_empty_map<T: Map, M: Mode, R>(it: AssertThat<'_, T, M, R>) -> AssertThat<'_, T, M, R>
+struct EmptyMap;
+impl<T: Map, R> Expectation<T, R> for EmptyMap {
+    type Success<'a> = () where T: 'a;
+    type Rejection<'a> = () where T: 'a;
+
+    fn evaluate(&self, actual: &T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        if actual.length() == 0 { Ok(()) } else { Err(()) }
+    }
+}
+impl<T: Map, R> ExpectationDiagnostics<T, R> for EmptyMap
 where
     R: ValueRenderer<T::Key> + ValueRenderer<T::Value>,
 {
-    it.track_assertion();
-    if it.actual().length() != 0 {
-        it.failure(FailureKind::Length)
-            .actual(it.render().map(it.actual()))
-            .relation("is not empty")
-            .raise();
+    const KIND: FailureKind = FailureKind::Length;
+
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&T, ())>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            Some((actual, ())) => failure
+                .actual(context.render().map(actual))
+                .relation("is not empty"),
+            None => failure.relation("is empty"),
+        }
     }
-    it
 }
 
-#[track_caller]
-fn check_none<T, M: Mode, R: ValueRenderer<T>>(
-    it: AssertThat<'_, Option<T>, M, R>,
-) -> AssertThat<'_, Option<T>, M, R> {
-    it.track_assertion();
-    if let Some(value) = it.actual() {
-        it.failure(FailureKind::Variant)
-            .actual(it.render().variant(it.actual(), "Some", value))
-            .relation("is not none")
-            .raise();
+struct NoValue;
+impl<T, R> Expectation<Option<T>, R> for NoValue {
+    type Success<'a> = () where T: 'a;
+    type Rejection<'a> = &'a T where T: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Option<T>,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), &'a T> {
+        match actual { None => Ok(()), Some(value) => Err(value) }
     }
-    it
+}
+impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Option<T>, R> for NoValue {
+    const KIND: FailureKind = FailureKind::Variant;
+
+    fn explain<'a, Target>(
+        &'a self,
+        rejected: Option<(&'a Option<T>, &'a T)>,
+        failure: FailureBuilder<Target>,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder<Target> {
+        match rejected {
+            Some((actual, value)) => failure
+                .actual(context.render().variant(actual, "Some", value))
+                .relation("is not none"),
+            None => failure.relation("is none"),
+        }
+    }
 }
 
 struct Token(u32);
@@ -262,13 +451,18 @@ impl ValueRenderer<u32> for TokenRenderer {
         write!(f, "key({value})")
     }
 }
-let collection = assert_that!([Token(7)]).with_renderer(TokenRenderer).capture(check_empty_collection);
+let collection = assert_that!([Token(7)]).with_renderer(TokenRenderer)
+    .capture(|it| it.apply_assertion(EmptyCollection));
 let map = assert_that!(BTreeMap::from([(1_u32, Token(7))]))
-    .with_renderer(TokenRenderer).capture(check_empty_map);
-let wrapper = assert_that!(Some(Token(7))).with_renderer(TokenRenderer).capture(check_none);
+    .with_renderer(TokenRenderer).capture(|it| it.apply_assertion(EmptyMap));
+let wrapper = assert_that!(Some(Token(7))).with_renderer(TokenRenderer)
+    .capture(|it| it.apply_assertion(NoValue));
 assert_that!(collection).has_length(1);
 assert_that!(map).has_length(1);
 assert_that!(wrapper).has_length(1);
+assert_that!(ToHumanReadableText.render(&collection[0])).contains("token(7)");
+assert_that!(ToHumanReadableText.render(&map[0])).contains("key(1): token(7)");
+assert_that!(ToHumanReadableText.render(&wrapper[0])).contains("Some(").contains("token(7)");
 ```
 
 For synthetic evidence, use [`values`](renderer::RenderingContext::values),

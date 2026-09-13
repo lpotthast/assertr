@@ -25,14 +25,15 @@
 //! `Nested failures:` (its children), each child indented one level and introduced by the element
 //! index or map key it was raised for.
 
+use super::super::Adapter;
 use alloc::string::String;
+use assertr::borrow_for::BorrowFor;
+use core::borrow::Borrow;
 use core::{
     convert::Infallible,
     fmt::{self, Display, Write},
     ops::Deref,
 };
-
-use super::super::Adapter;
 
 use crate::{
     AssertionFailure, Fact,
@@ -116,6 +117,21 @@ impl PartialEq<String> for HumanReadableText {
     fn eq(&self, other: &String) -> bool {
         self.as_str() == other
     }
+}
+
+impl Borrow<str> for HumanReadableText {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+impl BorrowFor<String> for HumanReadableText {
+    type View = str;
+}
+impl BorrowFor<HumanReadableText> for &str {
+    type View = str;
+}
+impl BorrowFor<HumanReadableText> for String {
+    type View = str;
 }
 
 /// Converts an [`AssertionFailure`] to assertr's stable human-readable text.
@@ -465,7 +481,8 @@ mod tests {
             let failure = FailureBuilder::detached::<[i32]>(FailureKind::Matching)
                 .constraint(description)
                 .build();
-            assert_that!(ToHumanReadableText.render(&failure)).is_equal_to(indoc::indoc! {r"
+            assert_that!(ToHumanReadableText.render(&failure)).is_equal_to(
+                crate::failure::adapter::HumanReadableText::new(indoc::indoc! {r"
                 -------- assertr --------
                 Constraint:
                     is not equal to
@@ -478,7 +495,8 @@ mod tests {
                     Nested failures:
                       - has a valid identifier
                 -------- assertr --------
-            "});
+            "}),
+            );
         }
     }
 
@@ -564,7 +582,8 @@ mod tests {
                 it
             });
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(indoc::indoc! {"
+            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(
+                crate::failure::adapter::HumanReadableText::new(indoc::indoc! {"
                 -------- assertr --------
                 Expression: `1`
 
@@ -586,7 +605,8 @@ mod tests {
 
                         Expected: 5
                 -------- assertr --------
-            "});
+            "}),
+            );
         }
     }
 }

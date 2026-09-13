@@ -3,8 +3,9 @@
 //! [`MapAssertions`] is blanket-implemented for every [`Map`]. Maps have their own family because
 //! their entries are key/value pairs rather than plain collection elements.
 //!
-//! Implement [`Map`] and [`MapLookup`] for a custom map. Implement [`MapKeyQuery`] only for custom
-//! expected-key adapters used by bulk key assertions.
+//! Implement [`Map`] and [`MapLookup`] for a custom map. Bulk operands select their query view
+//! through [`BorrowFor`](crate::borrow_for::BorrowFor) with the stored key as context.
+//! See [`MapAssertions`] for operand registration and native lookup requirements.
 
 mod assertions;
 mod entries_are;
@@ -13,14 +14,7 @@ mod entry_matcher_list;
 mod imp;
 mod matching;
 
-use alloc::{
-    borrow::{Cow, ToOwned},
-    boxed::Box,
-    collections::BTreeMap,
-    rc::Rc,
-    string::String,
-    sync::Arc,
-};
+use alloc::collections::BTreeMap;
 use core::borrow::Borrow;
 
 use crate::{assertions::HasLength, renderer::RenderingOrder};
@@ -115,159 +109,6 @@ pub trait Map: HasLength {
 pub trait MapLookup<Q: ?Sized>: Map {
     /// The stored key and value under `key`, if any.
     fn get_key_value(&self, key: &Q) -> Option<(&Self::Key, &Self::Value)>;
-}
-
-/// Adapts one expected bulk key `E` to the query type a [`MapLookup`] implementation accepts.
-///
-/// Rust can infer `Q` from the `&Q` argument of a single-key assertion. It cannot infer the same
-/// type from `E: Borrow<Q>` in a bulk assertion because every `E` also implements `Borrow<E>`. This
-/// associated type keeps `Q` out of the assertion method's generic arguments, so existing calls
-/// remain inference-friendly while bulk methods can use native borrowed lookup.
-///
-/// The standard `Borrow<K>` input forms (`K`, `&K`, `&mut K`, `Box<K>`, `Rc<K>`, `Arc<K>`, and
-/// `Cow<K>`) are implemented generically. String keys additionally accept the corresponding `str`
-/// views, so both of these compile without a turbofish:
-///
-/// ```
-/// use std::collections::BTreeMap;
-///
-/// use assertr::prelude::*;
-///
-/// let map = BTreeMap::from([(String::from("a"), 1)]);
-/// assert_that!(&map).contains_keys(["a"]);
-/// assert_that!(map).contains_exactly_entries([("a", 1)]);
-/// ```
-///
-/// A custom expected-key wrapper or borrowed view implements this trait with the stored key as `K`
-/// and the map's [`MapLookup`] key as [`Query`](MapKeyQuery::Query). The trait is intentionally not
-/// re-exported from the prelude. Only adapter authors need to name it.
-///
-/// ```
-/// use assertr::assertions::map::MapKeyQuery;
-///
-/// struct UserKey(String);
-///
-/// impl MapKeyQuery<UserKey> for &str {
-///     type Query = str;
-///
-///     fn as_query(&self) -> &str {
-///         self
-///     }
-/// }
-/// ```
-pub trait MapKeyQuery<K: ?Sized> {
-    /// The key view passed to [`MapLookup`].
-    type Query: ?Sized;
-
-    /// Borrows this expected key as its lookup query.
-    fn as_query(&self) -> &Self::Query;
-}
-
-impl<K: ?Sized> MapKeyQuery<K> for K {
-    type Query = K;
-
-    fn as_query(&self) -> &K {
-        self
-    }
-}
-
-impl<K: ?Sized> MapKeyQuery<K> for &K {
-    type Query = K;
-
-    fn as_query(&self) -> &K {
-        self
-    }
-}
-
-impl<K: ?Sized> MapKeyQuery<K> for &mut K {
-    type Query = K;
-
-    fn as_query(&self) -> &K {
-        self
-    }
-}
-
-impl<K: ?Sized> MapKeyQuery<K> for Box<K> {
-    type Query = K;
-
-    fn as_query(&self) -> &K {
-        self
-    }
-}
-
-impl<K: ?Sized> MapKeyQuery<K> for Rc<K> {
-    type Query = K;
-
-    fn as_query(&self) -> &K {
-        self
-    }
-}
-
-impl<K: ?Sized> MapKeyQuery<K> for Arc<K> {
-    type Query = K;
-
-    fn as_query(&self) -> &K {
-        self
-    }
-}
-
-impl<K> MapKeyQuery<K> for Cow<'_, K>
-where
-    K: ToOwned + ?Sized,
-{
-    type Query = K;
-
-    fn as_query(&self) -> &K {
-        <Self as Borrow<K>>::borrow(self)
-    }
-}
-
-impl MapKeyQuery<String> for &str {
-    type Query = str;
-
-    fn as_query(&self) -> &str {
-        self
-    }
-}
-
-impl MapKeyQuery<String> for &mut str {
-    type Query = str;
-
-    fn as_query(&self) -> &str {
-        self
-    }
-}
-
-impl MapKeyQuery<String> for Box<str> {
-    type Query = str;
-
-    fn as_query(&self) -> &str {
-        self
-    }
-}
-
-impl MapKeyQuery<String> for Rc<str> {
-    type Query = str;
-
-    fn as_query(&self) -> &str {
-        self
-    }
-}
-
-impl MapKeyQuery<String> for Arc<str> {
-    type Query = str;
-
-    fn as_query(&self) -> &str {
-        self
-    }
-}
-
-impl MapKeyQuery<String> for Cow<'_, str> {
-    type Query = str;
-
-    fn as_query(&self) -> &str {
-        <Self as Borrow<str>>::borrow(self)
-    }
 }
 
 impl<K: Ord, V> Map for BTreeMap<K, V> {

@@ -53,12 +53,12 @@ jobs:
       fail-fast: false
       matrix:
         feature:
-          - matchers
           - fluent
           - http
           - jiff
           - libm
           - num
+          - partial
           - program
           - reqwest
           - rootcause
@@ -84,8 +84,8 @@ jobs:
       - run: cargo test -p assertr --no-default-features --features num --locked
       - run: cargo test -p assertr --locked
       - run: cargo test -p assertr --all-features --locked
-      - run: cargo test -p assertr --no-default-features --features matchers --locked
-      - run: cargo test -p assertr --no-default-features --features matchers,fluent --locked
+      - run: cargo test -p assertr --no-default-features --features partial --locked
+      - run: cargo test -p assertr --no-default-features --features partial,fluent --locked
       - run: cargo test -p assertr-macros --locked
 
   doc:
@@ -109,8 +109,8 @@ jobs:
           targets: thumbv8m.main-none-eabihf
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p assertr-no-std-tests --locked
-      - run: cargo test -p assertr-no-std-tests --features matchers --locked
-      - run: cargo check -p assertr-no-std-tests --features matchers --target thumbv8m.main-none-eabihf --locked
+      - run: cargo test -p assertr-no-std-tests --features partial --locked
+      - run: cargo check -p assertr-no-std-tests --features partial --target thumbv8m.main-none-eabihf --locked
       - run: cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf --locked
       - run: cargo check -p assertr --lib --no-default-features --features num,libm --target thumbv8m.main-none-eabihf --locked
 

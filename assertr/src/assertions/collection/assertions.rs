@@ -1,3 +1,4 @@
+use crate::borrow_for::BorrowFor;
 use crate::{AssertionContext, expectation::Evidence};
 use alloc::vec::Vec;
 use core::borrow::Borrow;
@@ -179,6 +180,15 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostic
 /// Assertions over the elements of a collection: slices, arrays, `Vec`, `VecDeque`, and every type
 /// implementing [`Collection`].
 ///
+/// Expected values can be owned or borrowed through [`BorrowFor<Collection::Item>`](BorrowFor).
+/// Reference-valued items keep their declared type. Use [`crate::matchers::dereferenced`] to match
+/// their pointees. Empty expected lists may need an explicit element type:
+///
+/// ```
+/// use assertr::prelude::*;
+/// assert_that!([] as [String; 0]).contains_exactly([] as [String; 0]);
+/// ```
+///
 /// The collection structure is rendered by Assertr, so value-based methods require rendering
 /// support for the element type rather than the collection type. Identity methods display addresses
 /// and require no rendering support.
@@ -186,6 +196,8 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostic
 /// For a type that supports borrowed traversal but does not implement [`Collection`], use
 /// [`IntoIteratorAssertions`](crate::assertions::core::iter::IntoIteratorAssertions). Its methods
 /// carry the `into_iter_` prefix.
+///
+/// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait CollectionAssertions<T, R> {
@@ -235,8 +247,9 @@ pub trait CollectionAssertions<T, R> {
     /// Asserts that at least one element equals `expected`.
     fn contains<E>(self, expected: E) -> Self
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that at least one element matches `expected`.
     fn contains_matching<P>(self, expected: P) -> Self
@@ -259,19 +272,21 @@ pub trait CollectionAssertions<T, R> {
     /// Extra subject elements are allowed. Expectations are independent, so duplicates do not
     /// require distinct matches. Use `contains_exactly_in_any_order` for multiset equality.
     ///
-    /// `E` is the element type of the expected values, which only has to be comparable to `T`, not
-    /// identical to it. Any iterable of expected values is accepted, including another collection.
-    fn contains_all<E, I>(self, expected: I) -> Self
+    /// Each expected element `E` selects a borrowed view through [`BorrowFor`] for the declared
+    /// collection item type `T`. Arrays, slices, and vectors reuse their storage. Prepare
+    /// generators explicitly with `.contains_all(generator.collect::<Vec<_>>())`.
+    fn contains_all<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: PartialEq<E>,
-        I: IntoIterator<Item = E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that no element equals `not_expected`.
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that no element matches `expected`.
     fn does_not_contain_matching<P>(self, expected: P) -> Self
@@ -294,8 +309,9 @@ pub trait CollectionAssertions<T, R> {
     /// duplicate counts must match. [`PartialEq`] permits different element types.
     fn contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E>;
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts one-to-one matching between subject elements and predicates, independent of order.
     ///
@@ -350,8 +366,9 @@ where
     #[track_caller]
     fn contains<E>(self, expected: E) -> Self
     where
-        C::Item: PartialEq<E>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E>,
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.apply_assertion(value::Contains::new(expected))
     }
@@ -374,22 +391,21 @@ where
     }
 
     #[track_caller]
-    fn contains_all<E, I>(self, expected: I) -> Self
+    fn contains_all<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: PartialEq<E>,
-        I: IntoIterator<Item = E>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E>,
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
-        self.track_assertion();
-        let expected = expected.into_iter().collect::<Vec<_>>();
-        self.apply_assertion_after_tracking(value::ContainsAll::new(expected))
+        self.apply_assertion(value::ContainsAll::new(expected))
     }
 
     #[track_caller]
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
-        C::Item: PartialEq<E>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E>,
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.apply_assertion(value::DoesNotContain::new(not_expected))
     }
@@ -415,8 +431,9 @@ where
     #[track_caller]
     fn contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        C::Item: PartialEq<E>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E>,
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.apply_assertion(value::ContainsExactlyInAnyOrder::new(expected))
     }
@@ -458,7 +475,7 @@ mod tests {
         use crate::{
             prelude::*,
             test_support::{
-                NoRenderer, RendererActual, RendererExpected, SENTINEL, SentinelRenderer,
+                ComparisonRenderer, NoRenderer, RendererActual, RendererExpected, SENTINEL,
                 assert_trait_impl,
             },
         };
@@ -479,15 +496,18 @@ mod tests {
         #[test]
         fn equality_and_failures_use_the_active_renderer_type() {
             assert_that!([RendererActual(1), RendererActual(2)].as_slice())
-                .with_renderer(SentinelRenderer)
-                .contains(RendererExpected(2))
-                .contains_all([RendererExpected(1)])
-                .contains_exactly_in_any_order([RendererExpected(2), RendererExpected(1)]);
+                .with_renderer(ComparisonRenderer)
+                .contains(RendererExpected::new(2))
+                .contains_all([RendererExpected::new(1)])
+                .contains_exactly_in_any_order([
+                    RendererExpected::new(2),
+                    RendererExpected::new(1),
+                ]);
 
             let failures = assert_that!([RendererActual(1)].as_slice())
-                .with_renderer(SentinelRenderer)
+                .with_renderer(ComparisonRenderer)
                 .with_location(false)
-                .capture(|it| it.contains(RendererExpected(2)));
+                .capture(|it| it.contains(RendererExpected::new(2)));
             assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
         }
     }
@@ -513,8 +533,10 @@ mod tests {
         }
 
         #[test]
-        fn compiles_for_comparable_but_different_element_types() {
-            assert_that!(["foo"].as_slice()).contains("foo".to_owned());
+        fn compiles_for_owned_and_borrowed_elements() {
+            let expected = String::from("foo");
+            assert_that!([String::from("foo")]).contains(&expected);
+            assert_that!(["foo"].as_slice()).contains("foo");
         }
 
         #[test]
@@ -868,8 +890,8 @@ mod tests {
         }
 
         #[test]
-        fn compiles_for_comparable_but_different_type() {
-            assert_that!(["foo"].as_slice()).contains_all(["foo".to_owned()]);
+        fn compiles_for_string_values() {
+            assert_that!(["foo"].as_slice()).contains_all(["foo"]);
             assert_that!(["foo".to_owned()].as_slice()).contains_all(["foo"]);
         }
 
@@ -1095,7 +1117,7 @@ mod tests {
             Value(u8),
         }
 
-        #[cfg(feature = "matchers")]
+        #[cfg(feature = "partial")]
         #[derive(Debug)]
         struct DerivedActual {
             pub value: u8,
@@ -1162,9 +1184,13 @@ mod tests {
         }
 
         #[test]
-        fn supports_heterogeneous_partial_eq() {
-            assert_that!([Actual(1), Actual(2)].as_slice())
-                .contains_exactly_in_any_order([Expected(2), Expected(1)]);
+        fn custom_heterogeneous_comparisons_use_predicates() {
+            assert_that!([Actual(1), Actual(2)].as_slice()).contains_exactly_in_any_order_matching(
+                crate::expectation::predicate_list([
+                    |it: &Actual| it.eq(&Expected(2)),
+                    |it: &Actual| it.eq(&Expected(1)),
+                ]),
+            );
         }
 
         #[test]
@@ -1175,7 +1201,7 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "matchers")]
+        #[cfg(feature = "partial")]
         fn supports_structural_wildcards() {
             let actual = [DerivedActual { value: 2 }, DerivedActual { value: 1 }];
             assert_that!(actual.as_slice()).contains_exactly_in_any_order_matching(matchers![
@@ -1533,13 +1559,11 @@ mod tests {
 
         #[test]
         #[cfg(feature = "std")]
-        fn tracks_before_consuming_expected_values() {
+        fn tracks_before_accessing_expected_values() {
             struct PanickingValues;
-            impl IntoIterator for PanickingValues {
-                type Item = i32;
-                type IntoIter = core::iter::Empty<i32>;
-                fn into_iter(self) -> Self::IntoIter {
-                    panic!("expected iterator conversion");
+            impl AsRef<[i32]> for PanickingValues {
+                fn as_ref(&self) -> &[i32] {
+                    panic!("expected slice access");
                 }
             }
             let failures = assert_that!([1, 2]).capture(|root| {
@@ -1548,6 +1572,7 @@ mod tests {
                     child.contains_all(PanickingValues);
                 }));
                 assert_that!(panic).is_err();
+                assert_that!(root.state.records.assertion_count()).is_equal_to(1);
                 root
             });
             assert_that!(failures).is_empty();

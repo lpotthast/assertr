@@ -4,6 +4,7 @@ depends_on: [ expectation-execution, collection-semantics ]
 sources:
   - assertr/src/crate_docs.md
   - assertr/src/assertions/mod.rs
+  - assertr/src/assert_that/execution.rs
   - assertr/src/tracking.rs
   - assertr/tests/custom_assertions.rs
   - assertr-macros/src/fluent_aliases/naming.rs
@@ -22,7 +23,6 @@ An extension participates in the chain's execution, failure, and rendering contr
 | Need                                                  | Extension point                                                                                |
 |-------------------------------------------------------|------------------------------------------------------------------------------------------------|
 | Existing operations on a custom subject               | Implement the appropriate [behavioral capabilities](collection-semantics.md#capability-model). |
-| Reusable domain property with a typed error           | Implement `AssertrCondition`. Use it directly or through `condition`.                          |
 | Reusable check in ordinary assertions and composition | Implement [Expectation and ExpectationDiagnostics](expectation-execution.md).                  |
 | New chain methods                                     | Define a domain assertion trait for `AssertThat`, delegating reusable checks to expectations.  |
 | Different diagnostics                                 | Implement `ValueRenderer` for leaves or a failure `Adapter` for completed failures.            |
@@ -38,16 +38,22 @@ A retaining check normally takes and returns `Self`, implemented for `AssertThat
 Keep the impl independent of renderer capabilities. Put `ValueRenderer` and `Clone` bounds on individual methods in both
 trait and impl.
 
-The implementation must preserve caller tracking and record its attempt before the work it invokes, whether the check
-passes or fails. Argument expressions have already been evaluated before the method starts. Delegation to
-`apply_assertion`, `test_assertion`, or other tracked assertions must not track again. Missing tracking makes a passing
-capture look empty. Double tracking inflates the count.
+Mark chain methods `#[track_caller]`. Delegate reusable checks to `apply_assertion` or `test_assertion`, which record
+the attempt before evaluation, whether the check passes or fails. Do not also call `track_assertion`. Methods composed
+entirely of tracked assertions likewise delegate tracking. Argument expressions have already been evaluated before the
+method starts. Missing tracking makes a passing capture look empty. Double tracking inflates the count.
 
 Implement a leaf's decision in `Expectation::evaluate` and its diagnostics in `ExpectationDiagnostics::explain`.
 Populate the supplied builder's [structured fields](failure-processing.md#structured-construction-and-ownership),
 rendering values through `context.render()` and its rendering adapters. The chain executor raises through the attached
 failure builder. Neither hook tracks or raises, and explanation never repeats the observation. Composing methods
 delegate to existing tracked assertions. Do not assemble a failure body manually.
+
+An [execution adapter](observation-boundaries.md) owns invocation, consumption, or polling around the check. It tracks
+explicitly before that operation and preserves the caller location. Built-in adapters use private executor entry points
+that skip tracking. Those entry points are unavailable downstream. A downstream adapter that must execute outside the
+public expectation protocol tracks and raises through `AssertThat::failure` using the same structured fields and
+`self.render()`. This is an execution responsibility, never an expectation hook or a separate diagnostic format.
 
 Preserve the active renderer when changing subjects.
 Choose [mapping or derivation](assertion-lifecycle.md#projections-and-continuation)

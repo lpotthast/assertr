@@ -1,7 +1,7 @@
 # Every feature of the `assertr` crate, checked one at a time by `check-each-feature` and
 # friends. Cargo unifies features across a single invocation, so an integration that silently
 # depends on another feature only shows up when it is the only feature enabled.
-features := "matchers fluent http jiff libm num program reqwest rootcause serde serde-json serde-toml std tokio"
+features := "fluent http jiff libm num partial program reqwest rootcause serde serde-json serde-toml std tokio"
 
 # Lists all available commands.
 list:
@@ -54,9 +54,9 @@ check-each-feature:
 check-no-std:
     cargo test -p assertr-no-std-tests
     cargo test -p assertr-no-std-tests --features num
-    cargo test -p assertr-no-std-tests --features matchers
+    cargo test -p assertr-no-std-tests --features partial
     cargo check -p assertr-no-std-tests --features num --target thumbv8m.main-none-eabihf
-    cargo check -p assertr-no-std-tests --features matchers --target thumbv8m.main-none-eabihf
+    cargo check -p assertr-no-std-tests --features partial --target thumbv8m.main-none-eabihf
     cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf
     cargo check -p assertr --lib --no-default-features --features num,libm --target thumbv8m.main-none-eabihf
 
@@ -77,8 +77,8 @@ test:
     cargo test -p assertr --no-default-features --features num
     cargo test -p assertr
     cargo test -p assertr --all-features
-    cargo test -p assertr --no-default-features --features matchers
-    cargo test -p assertr --no-default-features --features matchers,fluent
+    cargo test -p assertr --no-default-features --features partial
+    cargo test -p assertr --no-default-features --features partial,fluent
     cargo test -p assertr-macros
     cargo test -p assertr-no-std-tests
 

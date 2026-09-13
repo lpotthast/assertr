@@ -4,7 +4,7 @@
 #![allow(clippy::needless_continue)]
 //! Procedural macros for `assertr`.
 //!
-//! The `matchers` feature of `assertr` re-exports [`partial`]. [`fluent_aliases`] supports
+//! The `partial` feature of `assertr` re-exports [`partial`]. [`fluent_aliases`] supports
 //! assertion-trait authors and is used internally by `assertr` when the `fluent` feature is
 //! enabled.
 
@@ -88,7 +88,7 @@ pub fn fluent_expressions(attr: TokenStream, item: TokenStream) -> TokenStream {
 mod partial;
 /// Constructs a partial matcher without annotating the production type.
 ///
-/// Use through `assertr::partial!` with the `matchers` feature enabled. Pass the result to
+/// Use through `assertr::partial!` with the `partial` feature enabled. Pass the result to
 /// `.matches(...)` or a collection assertion such as `.contains_matching(...)`.
 ///
 /// List the fields that matter to the test and use `..` to ignore the rest. Every selected field

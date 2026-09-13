@@ -19,13 +19,16 @@ sources:
 The runtime requires `alloc` and supports `no_std`. The [runtime manifest](../assertr/Cargo.toml) owns feature
 dependencies. The [CI workflow](../.github/workflows/ci.yml) and [Justfile](../Justfile) own the validation matrix.
 
+The `borrow-for` dependency always enables its `alloc` feature for standard operand wrappers, strings, and vectors.
+It does not require `std`. The sibling crate is currently connected through a local path dependency.
+
 ## Feature topology
 
 | Feature                                                           | Boundary                                                                                                                                          |
 |-------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
 | Defaults                                                          | `std` and `num`.                                                                                                                                  |
-| `matchers`                                                        | Enables procedural `partial!`. Runtime matchers and declarative matcher macros need no feature.                                                   |
-| `fluent`                                                          | Independently enables fluent entry, aliases, and expression capture. Uses `assertr-macros`, as does `matchers`.                                   |
+| `partial`                                                        | Enables procedural `partial!`. Runtime matchers and declarative matcher macros need no feature.                                                   |
+| `fluent`                                                          | Independently enables fluent entry, aliases, and expression capture. Uses `assertr-macros`, as does `partial`.                                   |
 | `std`                                                             | Enables hash collections and unwind-catching APIs. Also enables optional `num-traits` std support.                                                |
 | `num`, `libm`                                                     | `num` enables numeric assertions. Add `libm` for floating-point classifications without `std`. Neither `std` nor `libm` implicitly enables `num`. |
 | `jiff`, `tokio`, `program`, `reqwest`, `serde-json`, `serde-toml` | Enable `std` because their wrapped dependencies require it. `serde` combines JSON and TOML.                                                       |
@@ -34,7 +37,8 @@ dependencies. The [CI workflow](../.github/workflows/ci.yml) and [Justfile](../J
 | `full`                                                            | Enables every optional API and integration.                                                                                                       |
 
 Without `std`, core assertions, capture, structured failures, rendering, tree collections, and streaming remain
-available. Panic presentation falls back on returned adapter errors in both configurations. Catching adapter panics
+available. Memory assertions live in `assertions::core::mem`, and `matchers::memory::NeedsDrop` also needs no optional
+feature. Panic presentation falls back on returned adapter errors in both configurations. Catching adapter panics
 requires `std`, as described in [panic presentation](failure-processing.md#presentation-and-fallback). Unwind-safety
 traits and presentation's `RefUnwindSafe` bound come from `core` and apply independently.
 
@@ -51,7 +55,7 @@ configurations. Each optional feature is also checked alone to expose dependenci
 
 The [no-std fixture](../assertr-no-std-tests/) checks downstream use without the runtime's `std` feature. Hosted tests
 can catch panics through their test harness. Embedded checks on `thumbv8m.main-none-eabihf` cover the base runtime,
-`num,libm`, and the fixture with `matchers`. A hosted feature check is not evidence of embedded compatibility.
+`num,libm`, and the fixture with `partial`. A hosted feature check is not evidence of embedded compatibility.
 
 Rustdoc builds enable all features and deny warnings.
 README freshness is checked against literal crate-level rustdoc. MSRV CI checks the all-feature runtime, macro crate,

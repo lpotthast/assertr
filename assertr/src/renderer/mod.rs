@@ -40,8 +40,57 @@
 //!
 //! Lengths, counts, user-supplied expected indices, and errors are evidence too. Methods displaying
 //! numeric evidence require `ValueRenderer<usize>`. Errors retain their original type, including
-//! condition errors. The default renderer requires `Debug`, while a custom renderer may support
-//! errors implementing neither `Debug` nor `Display`. There is no fallback renderer for evidence.
+//! expectation rejections. The default renderer requires `Debug`, while a custom renderer may
+//! support errors implementing neither `Debug` nor `Display`. There is no fallback renderer for
+//! evidence.
+//!
+//! ## Minimal renderer capabilities
+//!
+//! A callback that only checks an `Option` variant needs no payload renderer. Positive collection
+//! membership adds no leaf requirement of its own:
+//!
+//! ```
+//! use assertr::prelude::*;
+//!
+//! struct Secret;
+//! #[derive(Clone)]
+//! struct NoRenderer;
+//!
+//! assert_that!([Some(Secret)])
+//!     .with_renderer(NoRenderer)
+//!     .contains_satisfying(|it| { it.is_some(); });
+//! ```
+//!
+//! An exact callback comparison also reports counts. Implement just `ValueRenderer<usize>` to
+//! retain that evidence, even when neither the collection nor its items can be rendered:
+//!
+//! ```
+//! use assertr::prelude::*;
+//!
+//! struct Secret;
+//! #[derive(Clone)]
+//! struct Counts;
+//! impl ValueRenderer<usize> for Counts {
+//!     fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//!         write!(f, "count({value})")
+//!     }
+//! }
+//! fn is_some(it: AssertThat<'_, Option<Secret>, Capture, Counts>) {
+//!     it.is_some();
+//! }
+//!
+//! let failures = assert_that!([Some(Secret), Some(Secret)])
+//!     .with_renderer(Counts)
+//!     .capture(|it| it.contains_exactly_satisfying([is_some]));
+//! assert_that!(failures).has_length(1);
+//! assert_that!(ToHumanReadableText.render(&failures[0])).contains("count(2)");
+//! ```
+//!
+//! `Clone` carries the renderer into callback child chains. Passing a check does not remove its
+//! method's diagnostic bounds. A direct equality check on `Secret` would still require a
+//! renderer for `Secret` as well as its comparison capability.
+//!
+//! ## Structural metadata
 //!
 //! Structural positions and diagnostic paths, matcher branch and expected-slot identifiers,
 //! omission summaries, type names, status-class labels such as `2xx`, and explicit diagnostic prose

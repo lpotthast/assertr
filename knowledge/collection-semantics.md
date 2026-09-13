@@ -4,6 +4,7 @@ depends_on: [ ]
 sources:
   - assertr/src/assertions/has_length.rs
   - assertr/src/assertions/collection/mod.rs
+  - assertr/src/assertions/collection/value.rs
   - assertr/src/assertions/set/mod.rs
   - assertr/src/assertions/map/mod.rs
   - assertr/src/assertions/map/imp.rs
@@ -44,6 +45,11 @@ order-free collection checks. Strings use `StrAssertions`, not element-collectio
 Tree sets and maps work with `alloc`. Hash collections require `std`. Their
 [presentation settings](diagnostic-rendering.md#capabilities-and-structure) affect syntax and evidence ordering only.
 
+Expected elements and map values follow the [borrowed-view contract](expectation-execution.md#comparison-operands).
+Bulk value lists use [repeatable expected data](expectation-execution.md#repeatable-bulk-expected-data).
+List storage stays independent of element storage, so borrowed non-`Copy` elements need no clones.
+Empty generic lists may require an explicit element type.
+
 ## Exact comparisons and keyed maps
 
 Exact element comparisons preserve occurrence counts. In any-order comparisons, each actual occurrence must match a
@@ -53,12 +59,24 @@ values, identity, matchers, and assertion callbacks, including overlapping expec
 Exact keyed map checks instead use native lookup, length, and stored-key identity. `Map::entries` and
 `MapLookup::get_key_value` must return references to the same stored keys and values. Checks remember visited entries,
 so repeating a query cannot hide a missing distinct entry. A present key whose value is rejected remains visited and is
-not also reported as unexpected. Each keyed expectation converts and looks up its query once, retaining the result for
-explanation.
+not also reported as unexpected. Each expected key occurrence performs one native lookup, retaining its result for
+explanation. Bulk expected data may be borrowed again without repeating lookup.
 
-`MapLookup<Q>` supports borrowed views such as `str` for stored `String` keys. `MapKeyQuery<K>` selects `Query` and
-`as_query()` for bulk expected keys, resolving inference without universal `Hash` or `Ord` bounds. Each implementation
-carries its native lookup bounds.
+`BorrowFor<K>` selects a bulk operand's `View` using the stored key type as context. Its `Borrow<View>`
+implementation supplies the query. `MapLookup<View>` separately grants native lookup, carrying only that map's bounds.
+Selection grants no universal `Hash`, `Ord`, or `PartialEq` requirement and never enables an equality-scan fallback.
+Single-key methods still accept native `&Q` queries without operand registration.
+
+String keys accept `str` views, and `Vec<u8>` keys accept `&[u8]` operands. Array operands currently select array views,
+which do not supply native vector-key lookup. Pass an explicit slice. Fixed-view `AsRef` and collection capabilities
+keep their existing contracts. Bulk list `AsRef` access follows the repeatable expected-data contract.
+
+Custom bulk operands migrate from `MapKeyQuery`'s `Query` and `as_query()` to `BorrowFor<K>::View` and `Borrow<View>`.
+The `Borrow` equality, ordering, and hashing obligations apply where those capabilities exist. Arbitrary field
+projections should use an accessor or a dedicated query operand. References to custom wrappers need separate
+implementations or explicit views when passed as individual operands. Borrowing the whole list uses the stored
+wrapper type and needs no reference implementation. Foreign key and query types may require a local operand wrapper under orphan rules.
+See [MapAssertions](../assertr/src/assertions/map/assertions.rs) for checked examples and the native lookup boundary.
 
 ## Borrowed traversal versus terminal streams
 

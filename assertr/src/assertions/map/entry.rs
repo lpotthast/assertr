@@ -1,12 +1,18 @@
+use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
-    assertions::map::{Map, MapKeyQuery, MapLookup},
+    assertions::map::{Map, MapLookup},
     expectation::Evidence,
     failure::{FailureBuilder, FailureKind, PathSegment},
     renderer::IntoRendered,
 };
 
 /// A value matcher under one native map key query.
+///
+/// `K` stores the supplied operand. Its [`BorrowFor`] view is selected using the map
+/// key type as context. Evaluation borrows that view once for native lookup and the matcher path.
+/// Only the view and nested matcher need rendering capabilities. See [`super::MapAssertions`]
+/// for custom operand registration and lookup requirements.
 pub struct Entry<K, M> {
     key: K,
     matcher: M,
@@ -93,10 +99,10 @@ where
 
 impl<MapType, R, K, M> Expectation<MapType, R> for Entry<K, M>
 where
-    MapType: Map + MapLookup<<K as MapKeyQuery<<MapType as Map>::Key>>::Query> + ?Sized,
-    K: MapKeyQuery<MapType::Key>,
+    MapType: Map + MapLookup<<K as BorrowFor<<MapType as Map>::Key>>::View> + ?Sized,
+    K: BorrowFor<MapType::Key>,
     M: ExpectationDiagnostics<MapType::Value, R>,
-    R: ValueRenderer<K>,
+    R: ValueRenderer<K::View>,
 {
     type Success<'a>
         = &'a MapType::Key
@@ -114,22 +120,19 @@ where
         actual: &'a MapType,
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        evaluate_entry(
-            actual,
-            self.key.as_query(),
-            &self.matcher,
-            context,
-            |render| PathSegment::Key(render.value(&self.key).into_rendered()),
-        )
+        let query = borrow_for::<MapType::Key, _>(&self.key);
+        evaluate_entry(actual, query, &self.matcher, context, |render| {
+            PathSegment::Key(render.value(query).into_rendered())
+        })
     }
 }
 
-impl<MapType, R, K, M> ExpectationDiagnostics<MapType, R> for Entry<K, M>
+impl<MapType, StoredKey, R, K, M> ExpectationDiagnostics<MapType, R> for Entry<K, M>
 where
-    MapType: Map + MapLookup<<K as MapKeyQuery<<MapType as Map>::Key>>::Query> + ?Sized,
-    K: MapKeyQuery<MapType::Key>,
+    MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
+    K: BorrowFor<StoredKey>,
     M: ExpectationDiagnostics<MapType::Value, R>,
-    R: ValueRenderer<K>,
+    R: ValueRenderer<K::View>,
 {
     const KIND: FailureKind = FailureKind::Matching;
     const FLATTEN: bool = true;
@@ -140,28 +143,33 @@ where
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        explain_entry::<MapType::Value, _, _, _, _>(
-            &self.key,
-            &self.matcher,
-            rejected.map(|(_, rejection)| rejection.evidence),
-            failure,
-            context,
-        )
+        match rejected {
+            Some((_, rejection)) => rejection
+                .evidence
+                .explain(failure.relation("does not contain a matching entry")),
+            None => explain_entry::<MapType::Value, _, _, _, _>(
+                borrow_for::<StoredKey, _>(&self.key),
+                &self.matcher,
+                None,
+                failure,
+                context,
+            ),
+        }
     }
 }
 
 impl<K, M> Entry<K, M> {
     // Keyed lists retain the original lookup identity while committing already scoped children.
-    pub(super) fn evaluate_and_record<'a, Mp, R>(
+    pub(super) fn evaluate_and_record<'a, Mp, StoredKey, R>(
         &'a self,
         actual: &'a Mp,
         context: &mut AssertionContext<'_, R>,
     ) -> (bool, Option<&'a Mp::Key>)
     where
-        Mp: Map + MapLookup<<K as MapKeyQuery<<Mp as Map>::Key>>::Query> + ?Sized,
-        K: MapKeyQuery<Mp::Key>,
+        Mp: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
+        K: BorrowFor<StoredKey>,
         M: ExpectationDiagnostics<Mp::Value, R>,
-        R: ValueRenderer<K>,
+        R: ValueRenderer<K::View>,
     {
         match self.evaluate(actual, context) {
             Ok(key) => (true, Some(key)),

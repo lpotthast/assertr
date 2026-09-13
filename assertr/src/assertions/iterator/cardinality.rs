@@ -1,5 +1,5 @@
 use super::{
-    AssertThat, AssertionContext, Borrow, EqualToRef, Expectation, FailureBuilder, FailureKind,
+    AssertThat, AssertionContext, Borrow, EqualTo, Expectation, FailureBuilder, FailureKind,
     GroupStyle, Mode, PhantomData, PositionReporting, Preview, Scan, Tail, ValueRenderer, Vec,
     exact_size_hint, execute,
 };
@@ -111,7 +111,7 @@ where
     ) -> Result<(), Self::Rejection> {
         let observation = observe_length(iterator, self.expected);
         if observation.exact
-            && EqualToRef(&self.expected)
+            && EqualTo::new(&self.expected)
                 .evaluate(&observation.length, context)
                 .is_ok()
         {

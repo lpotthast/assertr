@@ -9,8 +9,6 @@ sources:
   - assertr/src/expectation/satisfying.rs
   - assertr/src/expectation/predicate.rs
   - assertr/src/expectation/lists.rs
-  - assertr/src/condition.rs
-  - assertr/src/assertions/condition.rs
   - assertr/src/assertions/collection/elements_are_in_any_order.rs
   - assertr/src/__private/field.rs
   - assertr/src/__private/partial_match.rs
@@ -56,17 +54,6 @@ probe, so callback effects and rendering cannot be suppressed by the outer match
 accept `FnOnce` and retain their method's failure mode. `AssertThat::satisfies` projects and continues a chain, whereas
 `satisfying` constructs an expectation for later evaluation.
 
-## Typed reusable conditions
-
-[`AssertrCondition<T>`](../assertr/src/condition.rs) tests a domain property with `Result<(), Error>`.
-`Condition` retains the original error and renders it as an unlabeled note without testing again. Direct `is` and `has`
-and the `condition` matcher constructor share this definition. They require `ValueRenderer<Error>`, not a subject
-renderer.
-
-Iterable `are` and `have` track one assertion for the call. Capture raises one failure per offending element. Panic mode
-stops at the first failure. Traversal offsets are not reported as stable indexes. See the
-[condition family](../assertr/src/assertions/condition.rs) for these execution adapters.
-
 ## Exact unordered assignment
 
 Exact unordered comparisons pair actual occurrences with distinct expected slots. Greedy assignment is insufficient when
@@ -93,7 +80,7 @@ use native lookup instead.
 ## Structural macros
 
 Runtime constructors and declarative matcher macros require no feature. `matchers!` creates heterogeneous list nodes.
-The `matchers` feature enables procedural `partial!` for named, tuple, unit, and explicitly annotated variant shapes.
+The `partial` feature enables procedural `partial!` for named, tuple, unit, and explicitly annotated variant shapes.
 Only selected fields need comparison or rendering capabilities.
 
 `partial!` emits Rust patterns and borrowed projections, preserving constructor resolution, visibility, field types, and
@@ -102,8 +89,10 @@ Projections attach `Field`, `TupleIndex`, and optional `Variant` paths, includin
 subject.
 
 Expected expressions construct explicit matchers once in source order within one enclosing expression, preserving
-temporary borrows through the caller's statement. Use `eq`, an alias for `equal_to`, for heterogeneous equality. Every
-selected `partial!` field, matcher-list element, and `entries_are!` value uses the shared expectation protocol. Map keys
+temporary borrows through the caller's statement. Use `eq`, an alias for `equal_to`, for equality.
+Every selected `partial!` field, matcher-list element, and `entries_are!` value uses the shared expectation protocol.
+Reference-valued fields and iterator items keep their declared type. Wrap the child matcher in `dereferenced` to
+compare pointees. See [comparison operands](expectation-execution.md#comparison-operands). Map keys
 remain native lookup operands. Expressions that also support equality are still used as matchers unless wrapped in `eq`
 or `equal_to`. Macro-only projection/list plumbing lives in unsupported `__private`. Runtime crate resolution supports
 renamed dependencies.

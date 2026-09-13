@@ -267,7 +267,7 @@ mod borrowed {
             };
             let failures = assert_that!(source)
                 .with_renderer(ResourceRenderer(&source.state))
-                .capture(|it| it.into_iter_contains_all(expected.iter().copied()));
+                .capture(|it| it.into_iter_contains_all(expected));
             source.state.verify(next, 0);
             verify_failure(&failures, &source.state, failed);
         }
@@ -394,6 +394,74 @@ mod release {
                 source.state.verify(if expected == 2 { 2 } else { 4 }, 0);
                 verify_failure(&failures, &source.state, expected == 9);
             }
+        }
+    }
+}
+
+mod string_views {
+    use crate::{
+        prelude::*,
+        test_support::{StrOperand, StringRenderer},
+    };
+    use core::cell::Cell;
+
+    #[test]
+    fn all_streaming_comparisons_accept_literal_operands() {
+        fn values() -> core::array::IntoIter<String, 3> {
+            [String::from("a"), String::from("b"), String::from("a")].into_iter()
+        }
+        assert_that_owned!(values()).contains("b");
+        assert_that_owned!(values()).does_not_contain("c");
+        assert_that_owned!(values()).starts_with(["a", "b"]);
+        assert_that_owned!(values()).ends_with(["b", "a"]);
+        assert_that_owned!(values()).contains_contiguous(["b", "a"]);
+        assert_that_owned!(values()).contains_exactly(["a", "b", "a"]);
+        assert_that_owned!(values()).contains_exactly_in_any_order(["a", "a", "b"]);
+        let borrowed = [String::from("a"), String::from("b")];
+        assert_that!(borrowed)
+            .into_iter_contains("b")
+            .into_iter_contains_all(["a", "b"])
+            .into_iter_does_not_contain("c");
+        assert_that_owned!(borrowed.iter()).contains("a");
+    }
+
+    #[test]
+    fn all_streaming_rejections_access_unsized_views_after_tracking() {
+        for method in 0..8 {
+            let calls = Cell::new(0);
+            let failures = assert_that!(())
+                .with_renderer(StringRenderer)
+                .capture(|root| {
+                    let expected = StrOperand {
+                        value: if method == 1 { "a" } else { "b" },
+                        observe: || {
+                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                            calls.set(calls.get() + 1);
+                        },
+                    };
+                    if method == 2 {
+                        root.derive_owned(|()| [String::from("a")])
+                            .into_iter_contains_all([expected]);
+                    } else {
+                        let it = root.derive_owned(|()| [String::from("a")].into_iter());
+                        match method {
+                            0 => it.contains(expected),
+                            1 => it.does_not_contain(expected),
+                            3 => it.starts_with([expected]),
+                            4 => it.ends_with([expected]),
+                            5 => it.contains_contiguous([expected]),
+                            6 => it.contains_exactly([expected]),
+                            _ => it.contains_exactly_in_any_order([expected]),
+                        };
+                    }
+                    root
+                });
+            if method < 2 {
+                assert_that!(calls.get()).is_equal_to(1);
+            } else {
+                assert_that!(calls.get()).is_greater_than(0);
+            }
+            assert_that!(failures).has_length(1);
         }
     }
 }

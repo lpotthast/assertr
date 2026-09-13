@@ -25,11 +25,11 @@
 //!     .ends_with("!");
 //! ```
 //!
-//! Match only the struct fields that matter with `partial!`. Enable the `matchers` feature for this
+//! Match only the struct fields that matter with `partial!`. Enable the `partial` feature for this
 //! example:
 //!
 //! ```rust
-//! # #[cfg(feature = "matchers")]
+//! # #[cfg(feature = "partial")]
 //! # {
 //! use assertr::{matchers::eq, prelude::*};
 //!
@@ -99,7 +99,7 @@
 //! | `num`                                                      | Assertions for numeric types (`is_zero`, `is_positive`, `is_close_to`, ...).        |
 //! | `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
 //! | `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
-//! | `matchers`                                                 | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
+//! | `partial`                                                  | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
 //! | `serde-json`                                               | `as_json()` serializes to a JSON `Result` subject.                                               |
 //! | `serde-toml`                                               | `as_toml()` serializes to a TOML `Result` subject.                                               |
 //! | `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
@@ -109,7 +109,7 @@
 //!
 //! ### no_std
 //!
-//! Disable the default features. `matchers`, `fluent`, `num`, `libm`, and `rootcause` support
+//! Disable the default features. `partial`, `fluent`, `num`, `libm`, and `rootcause` support
 //! embedded `no_std` targets. The `http` feature leaves Assertr in `no_std` mode but currently
 //! requires a hosted target through its dependencies. Every other feature enables `std`. Add `libm`
 //! next to `num` if numeric assertions need floating-point classifications. `libm` does not enable
@@ -177,6 +177,27 @@
 //! type has `is_equal_to`, a `PartialOrd` type has `is_greater_than`, and a `HasLength` type has
 //! `has_length`.
 //!
+//! Expected comparison values can be owned or borrowed. String literals also work directly with
+//! owned strings, including collection elements and map values. Borrowing an expected value lets
+//! you reuse it in ordinary checks and reusable expectations without cloning:
+//!
+//! ```rust
+//! use assertr::{matchers::eq, prelude::*};
+//!
+//! let expected = String::from("hello");
+//! assert_that!(String::from("hello")).is_equal_to(&expected);
+//! let greeting = eq(&expected);
+//! assert_that!(String::from("hello")).matches(&greeting);
+//! assert_that!(expected).is_equal_to("hello");
+//! assert_that!([String::from("hello")]).contains_exactly(["hello"]);
+//! ```
+//!
+//! [`BorrowFor`](crate::borrow_for::BorrowFor), re-exported from the `borrow-for` crate, selects
+//! the borrowed type for these comparisons.
+//! Custom `Borrow` wrappers opt in by implementing this trait. See the
+//! [borrowed equality guide](https://docs.rs/assertr/latest/assertr/#borrowed-equality) for custom
+//! wrappers and values without `Clone`.
+//!
 //! ## Reusable expectations
 //!
 //! Use the same check directly, on collection elements, or inside a structural matcher. The
@@ -192,8 +213,14 @@
 //! ```
 //!
 //! An expectation defines a check. A matcher is an expectation used in composition. Both use the
-//! same implementation. Runtime matchers need no optional feature. The `matchers` feature enables
+//! same implementation. Runtime matchers need no optional feature. The `partial` feature enables
 //! `partial!` for selecting struct and enum fields.
+//!
+//! Custom chain methods delegate reusable checks to `apply_assertion` or `test_assertion`, which
+//! track and execute the assertion. Expectation hooks never track or raise. Evaluation retains
+//! the observation, explanation populates the supplied structured builder, and the chain executor
+//! raises the completed failure. Execution adapters that own invocation, consumption, or polling
+//! track explicitly at their operation's boundary.
 //!
 //! ## Guides
 //!
@@ -207,12 +234,16 @@
 //! - [Match selected fields and nested values](https://docs.rs/assertr/latest/assertr/matchers/index.html):
 //!   use `partial!` with explicit matchers such as `eq(value)`, or existing assertions through
 //!   `satisfying`. Nest expectations through structs, collections, and maps. Only `partial!`
-//!   requires the `matchers` feature.
+//!   requires the `partial` feature.
 //! - [Collect failures without panicking](https://docs.rs/assertr/latest/assertr/struct.AssertThat.html#method.capture):
 //!   run several checks, inspect their structured failures, and render a report when needed.
 //! - [Customize diagnostic values](https://docs.rs/assertr/latest/assertr/renderer/index.html):
-//!   render types without `Debug`, preserve a renderer across projections, and limit diagnostic
-//!   output.
+//!   render types without `Debug`, supply only the leaf renderers a callback needs, and limit
+//!   diagnostic output. The [structural evidence examples](https://docs.rs/assertr/latest/assertr/#structural-evidence)
+//!   render collections, maps, and wrappers through the shared failure builder.
+//! - [Work within async limitations](https://docs.rs/assertr/latest/assertr/#async-limitations):
+//!   await async assertions in the calling task. Expectation hooks and capture callbacks are
+//!   synchronous, and chains cannot cross a `Send` boundary.
 //! - [Process failures and customize reports](https://docs.rs/assertr/latest/assertr/failure/adapter/index.html):
 //!   transform captured failures with adapters or select the presentation used by a panicking
 //!   assertion.
@@ -266,7 +297,6 @@ pub mod __private;
 pub mod actual;
 mod assert_that;
 pub mod assertions;
-pub mod condition;
 mod conversion;
 mod details;
 mod entry;
@@ -292,9 +322,12 @@ use core::{cell::RefCell, marker::PhantomData, panic::AssertUnwindSafe};
 use mode::Mode;
 use tracking::NumberOfAssertions;
 
+/// Borrowed view selection for assertion operands.
+pub use ::borrow_for;
+
 #[cfg(feature = "fluent")]
 pub use assertr_macros::fluent_expressions;
-#[cfg(feature = "matchers")]
+#[cfg(feature = "partial")]
 pub use assertr_macros::partial;
 #[cfg(feature = "fluent")]
 pub use entry::{IntoAssertContext, IntoOwnedAssertContext};

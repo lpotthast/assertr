@@ -6,6 +6,42 @@ use assertr::matchers::{entry_matchers, predicate};
 use assertr::prelude::*;
 
 #[allow(dead_code)]
+fn memory_assertions_compile_without_std() {
+    use alloc::string::String;
+    use assertr::assertions::core::mem::{MemAssertions, NeedsDrop};
+
+    struct NoRenderer;
+    fn check<A: MemAssertions>(assertion: A) -> A {
+        assertion.needs_drop()
+    }
+
+    check(assert_that_type::<String>().with_renderer(NoRenderer))
+        .matches(NeedsDrop)
+        .matches(assertr::matchers::memory::NeedsDrop);
+    // The core prelude and the crate-wide prelude expose the same trait.
+    assertr::assertions::core::prelude::MemAssertions::needs_drop(assert_that_type::<String>());
+    assertr::prelude::MemAssertions::needs_drop(assert_that_type::<String>());
+
+    let failures = assert_that_type::<u32>()
+        .with_renderer(NoRenderer)
+        .capture(|it| {
+            check(it)
+                .matches(NeedsDrop)
+                .matches(assertr::matchers::memory::NeedsDrop)
+        });
+    assert_that!(failures).has_length(3);
+    for failure in &failures {
+        assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not need drop"));
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn memory_assertions_run_without_std() {
+    memory_assertions_compile_without_std();
+}
+
+#[allow(dead_code)]
 fn projections_compile_without_renderer_support() {
     struct Field {
         byte: u8,
@@ -314,7 +350,7 @@ fn set_and_map_assertions_compile_without_std() {
             .contains_key("a")
             .does_not_contain_key("b")
             .contains_value(1)
-            .contains_entry::<i32, _>("a", 1)
+            .contains_entry("a", 1)
             .contains_entry_satisfying("a", satisfies_one)
             .contains_keys(["a"])
             .contains_exactly_entries([("a", 1)])
@@ -358,7 +394,7 @@ mod tests {
         use assertr::matchers::{eq, ge};
         use assertr::prelude::*;
 
-        #[cfg(feature = "matchers")]
+        #[cfg(feature = "partial")]
         #[test]
         fn structural_matchers_work_with_alloc() {
             crate::structural_matchers_without_std();
@@ -526,7 +562,7 @@ mod tests {
 }
 
 /// Structural matching remains available with alloc and no std.
-#[cfg(feature = "matchers")]
+#[cfg(feature = "partial")]
 pub fn structural_matchers_without_std() {
     use assertr::{matchers::eq, prelude::*};
     struct Hidden;
@@ -565,18 +601,40 @@ impl assertr::ValueRenderer<usize> for NumericRenderer {
 }
 
 #[allow(dead_code)]
-fn typed_condition_and_numeric_evidence_compile_without_std() {
-    use assertr::{Expectation, assertions::condition::Condition};
+fn typed_rejections_and_numeric_evidence_compile_without_std() {
+    use assertr::{
+        AssertionContext, Expectation, Fact,
+        failure::{FailureBuilder, FailureKind},
+        matchers::each,
+    };
 
     struct OpaqueError(u32);
     struct Reject;
-    impl AssertrCondition<u32> for Reject {
-        type Error = OpaqueError;
-        fn test(&self, value: &u32) -> Result<(), OpaqueError> {
+    impl<R> Expectation<u32, R> for Reject {
+        type Success<'a> = ();
+        type Rejection<'a> = OpaqueError;
+
+        fn evaluate(&self, value: &u32, _: &AssertionContext<'_, R>) -> Result<(), OpaqueError> {
             Err(OpaqueError(*value))
         }
     }
-    #[derive(Clone, Copy)]
+    impl<R: ValueRenderer<OpaqueError>> ExpectationDiagnostics<u32, R> for Reject {
+        const KIND: FailureKind = FailureKind::Predicate;
+
+        fn explain<Target>(
+            &self,
+            rejected: Option<(&u32, OpaqueError)>,
+            failure: FailureBuilder<Target>,
+            context: &AssertionContext<'_, R>,
+        ) -> FailureBuilder<Target> {
+            match rejected {
+                None => failure.relation("is accepted"),
+                Some((_, error)) => failure
+                    .relation("is rejected")
+                    .fact(Fact::note(context.render().value(&error))),
+            }
+        }
+    }
     struct ErrorRenderer;
     impl ValueRenderer<OpaqueError> for ErrorRenderer {
         fn fmt(&self, error: &OpaqueError, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -584,28 +642,29 @@ fn typed_condition_and_numeric_evidence_compile_without_std() {
         }
     }
     struct NoRenderer;
-    fn condition_trait<A: ConditionAssertions<u32, ErrorRenderer>>() {}
-    fn iterable_trait<A: IterableConditionAssertions<u32, [u32; 1], ErrorRenderer>>() {}
     fn iterator_trait<A: ExactSizeIteratorAssertions<NumericRenderer>>() {}
-    condition_trait::<AssertThat<'static, u32, Panic, ErrorRenderer>>();
-    iterable_trait::<AssertThat<'static, [u32; 1], Panic, ErrorRenderer>>();
     iterator_trait::<AssertThat<'static, core::array::IntoIter<u32, 1>, Panic, NumericRenderer>>();
-    let assertion = Condition::new(Reject);
+    let assertion = Reject;
     with_context(NoRenderer, |context| {
         let error = assertion.evaluate(&7, context).unwrap_err();
         assert_that!(error.0).is_equal_to(7);
         let failures = assert_that!(7_u32)
             .with_renderer(ErrorRenderer)
-            .capture(|it| it.is(Reject));
+            .capture(|it| it.apply_assertion(&assertion));
         assert_that!(failures[0].facts[0].value.type_name)
             .is_equal_to(Some(core::any::type_name::<OpaqueError>()));
-        let failures = assert_that!([7_u32])
+        let failures = assert_that!([7_u32, 8])
             .with_renderer(ErrorRenderer)
-            .capture(|it| it.are(Reject));
+            .capture(|it| it.matches(each(&assertion)));
         assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).has_length(2);
+        for child in &failures[0].children {
+            assert_that!(child.facts[0].value.type_name)
+                .is_equal_to(Some(core::any::type_name::<OpaqueError>()));
+        }
         let failures = assert_that!(7_u32)
             .with_renderer(ErrorRenderer)
-            .capture(|it| it.matches(assertr::matchers::condition(Reject)));
+            .capture(|it| it.matches(&assertion));
         assert_that!(failures).has_length(1);
         let failures = assert_that!([7_u32].into_iter())
             .with_renderer(NumericRenderer)
@@ -616,8 +675,8 @@ fn typed_condition_and_numeric_evidence_compile_without_std() {
 
 #[cfg(test)]
 #[test]
-fn typed_condition_and_numeric_evidence_run_without_std() {
-    typed_condition_and_numeric_evidence_compile_without_std();
+fn typed_rejections_and_numeric_evidence_run_without_std() {
+    typed_rejections_and_numeric_evidence_compile_without_std();
 }
 
 #[allow(dead_code)]
@@ -912,4 +971,138 @@ mod structural_rendering {
     fn public_structural_adapters_work_with_alloc() {
         verify();
     }
+}
+
+struct TextOperand<'a>(&'a str);
+impl core::borrow::Borrow<str> for TextOperand<'_> {
+    fn borrow(&self) -> &str {
+        self.0
+    }
+}
+impl assertr::borrow_for::BorrowFor<alloc::string::String> for TextOperand<'_> {
+    type View = str;
+}
+
+fn reusable_bulk_views_compile_without_std() {
+    use alloc::{collections::BTreeMap, string::String, vec};
+    let operands = vec![TextOperand("hello")];
+    let expected_list = assertr::matchers::collection::ContainsAll::new(&operands);
+    assert_that!([String::from("hello")])
+        .contains_all(&operands)
+        .into_iter_contains_all(operands.as_slice())
+        .matches(&expected_list);
+    assert_that!(vec![String::from("hello")]).matches(&expected_list);
+    let keys = vec![TextOperand("key")];
+    let entries = vec![(TextOperand("key"), TextOperand("hello"))];
+    let actual = BTreeMap::from([(String::from("key"), String::from("hello"))]);
+    assert_that!(actual)
+        .contains_keys(&keys)
+        .contains_exactly_entries(&entries)
+        .matches(assertr::matchers::map::ContainsKeys::new(keys.as_slice()))
+        .matches(assertr::matchers::map::ContainsExactlyEntries::new(
+            entries.as_slice(),
+        ));
+}
+
+#[allow(dead_code)]
+fn borrowed_views_compile_without_std() {
+    use alloc::{collections::BTreeMap, string::String, vec};
+    use assertr::matchers::{
+        EqualTo, all_of, dereferenced, each,
+        range::{ContainsElement, DoesNotContainElement},
+    };
+    let bytes = BTreeMap::from([(vec![1_u8, 2], 3)]);
+    let query = &[1_u8, 2][..];
+    assert_that!(bytes)
+        .contains_key(query)
+        .contains_keys([query])
+        .contains_exactly_entries([(query, 3)])
+        .matches(assertr::entries_are![(query, assertr::matchers::eq(3))]);
+    assert_that!(BTreeMap::from([(String::from("key"), 1)]))
+        .contains_keys([TextOperand("key")])
+        .contains_exactly_entries([(TextOperand("key"), 1)])
+        .matches(assertr::matchers::entry(
+            TextOperand("key"),
+            assertr::matchers::eq(1),
+        ));
+
+    reusable_bulk_views_compile_without_std();
+
+    let expected = String::from("hello");
+    assert_that!(String::from("hello"))
+        .is_equal_to("hello")
+        .is_equal_to(&expected)
+        .is_less_or_equal_to(&expected);
+    assert_that!([String::from("hello")])
+        .contains(&expected)
+        .contains("hello")
+        .contains_exactly([&expected])
+        .contains_exactly(["hello"])
+        .into_iter_contains_all(["hello"]);
+    assert_that_owned!([String::from("hello")].into_iter()).contains(&expected);
+    assert_that_owned!([String::from("hello")].into_iter()).contains("hello");
+    assert_that!(BTreeMap::from([(1, String::from("hello"))]))
+        .contains_entry(&1, &expected)
+        .contains_entry(&1, "hello")
+        .contains_exactly_entries([(1, &expected)])
+        .contains_exactly_entries([(1, "hello")]);
+    assert_that!(String::from("a")..String::from("z")).contains_element(&expected);
+    let lower = String::from("a");
+    let upper = String::from("z");
+    assert_that!(&lower..&upper)
+        .contains_element(&expected)
+        .does_not_contain_element(&upper);
+    let failures = assert_that!(..).capture(|it| {
+        it.contains_element(&expected)
+            .does_not_contain_element(&expected)
+    });
+    assert_that!(failures).has_length(1);
+    let range_matcher = all_of((
+        ContainsElement::<String>::borrowing(&expected),
+        DoesNotContainElement::<String>::borrowing(&upper),
+    ));
+    assert_that!(String::from("a")..String::from("z")).matches(&range_matcher);
+    assert_that!([&lower..&upper]).matches(each(&range_matcher));
+    assert_that!(&1..&3).matches(ContainsElement::new(&2));
+    assert_that!(..).matches(ContainsElement::new(String::from("a")));
+    assert_that_owned!(&expected).matches(dereferenced(EqualTo::new("hello")));
+    let matcher = EqualTo::new(&expected);
+    assert_that!(String::from("hello")).matches(&matcher);
+    assert_that!(String::from("hello")).matches(&matcher);
+    let literal_matcher = EqualTo::new("hello");
+    assert_that!(expected).matches(&literal_matcher);
+    assert_that!("hello").matches(&literal_matcher);
+
+    let expected_values = vec![1, 2];
+    assert_that!(expected_values).is_equal_to([1, 2]);
+    assert_that!([1, 2].as_slice())
+        .is_equal_to(vec![1, 2])
+        .is_equal_to(&expected_values)
+        .matches(dereferenced(EqualTo::new(&expected_values)));
+
+    assert_that!(expected).is_equal_to(TextOperand("hello"));
+    #[cfg(feature = "partial")]
+    {
+        struct Message {
+            text: String,
+        }
+        assert_that!(Message {
+            text: expected.clone()
+        })
+        .matches(assertr::partial!(Message {
+            text: EqualTo::new("hello")
+        }));
+    }
+    #[cfg(feature = "num")]
+    {
+        let value = 10;
+        let deviation = 2;
+        assert_that!(11).is_close_to(&value, &deviation);
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn borrowed_views_run_without_std() {
+    borrowed_views_compile_without_std();
 }

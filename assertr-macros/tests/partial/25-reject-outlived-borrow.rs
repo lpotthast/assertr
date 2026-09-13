@@ -8,7 +8,7 @@ fn main() {
     let matcher = {
         let name = String::from("Alice");
         partial!(User {
-            name: eq(name.as_str())
+            name: eq(&name)
         })
     }; // `name` is dropped here, but the matcher still borrows it.
 

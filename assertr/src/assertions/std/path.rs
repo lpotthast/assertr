@@ -1262,7 +1262,8 @@ mod tests {
                     assert_that!(failure.relation.as_deref())
                         .is_equal_to(Some("could not determine whether the path exists"));
                     assert_that!(failure.facts).has_length(1);
-                    assert_that!(failure.facts[0].label).is_equal_to("I/O error");
+                    assert_that!(failure.facts[0].label)
+                        .is_equal_to(alloc::borrow::Cow::Borrowed("I/O error"));
                     assert_custom_value(
                         &failure.facts[0].value,
                         &io::Error::new(io::ErrorKind::PermissionDenied, "inspection denied"),

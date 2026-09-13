@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "matchers")]
+    #[cfg(feature = "partial")]
     fn missing_partial_struct_descriptions_identify_each_selected_field() {
         struct Row {
             age: i32,

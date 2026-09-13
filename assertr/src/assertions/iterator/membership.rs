@@ -1,16 +1,16 @@
 use super::{
-    AssertThat, AssertionContext, Borrow, EqualToRef, Expectation, FailureBuilder, FailureKind,
-    GroupStyle, Mode, PhantomData, PositionReporting, Preview, Scan, Tail, ValueRenderer, Vec,
-    execute,
+    AssertThat, AssertionContext, Borrow, FailureBuilder, FailureKind, GroupStyle, Mode,
+    PhantomData, PositionReporting, Preview, Scan, Tail, ValueRenderer, Vec, execute,
 };
 use crate::Fact;
+use crate::borrow_for::{BorrowFor, borrow_for};
 
-struct Contains<'e, T, E> {
+struct Contains<'e, T, E: ?Sized> {
     expected: &'e E,
     item: PhantomData<fn() -> T>,
 }
 
-impl<T, E, I, R> Scan<I, R> for Contains<'_, T, E>
+impl<T, E: ?Sized, I, R> Scan<I, R> for Contains<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -21,13 +21,11 @@ where
     fn observe(
         &self,
         iterator: &mut I,
-        context: &AssertionContext<'_, R>,
+        _context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         let mut tail = Tail::new();
         for item in iterator {
-            let matched = EqualToRef(self.expected)
-                .evaluate(item.borrow(), context)
-                .is_ok();
+            let matched = item.borrow().eq(self.expected);
             tail.push(item);
             if matched {
                 return Ok(());
@@ -62,14 +60,15 @@ impl<T, E, I, R> Scan<I, R> for ContainsAll<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = (Preview<I::Item>, Vec<usize>);
     fn observe(
         &self,
         iterator: &mut I,
-        context: &AssertionContext<'_, R>,
+        _context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         if self.expected.is_empty() {
             return Ok(());
@@ -79,11 +78,7 @@ where
         let mut tail = Tail::new();
         for item in iterator {
             for (index, expected) in self.expected.iter().enumerate() {
-                if !found[index]
-                    && EqualToRef(expected)
-                        .evaluate(item.borrow(), context)
-                        .is_ok()
-                {
+                if !found[index] && item.borrow().eq(borrow_for::<T, _>(expected)) {
                     found[index] = true;
                     remaining -= 1;
                 }
@@ -109,11 +104,11 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let expected = render.borrowed_values::<E, _>(self.expected, GroupStyle::List);
+        let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
         let (preview, missing) = rejection;
         let missing = missing
             .into_iter()
-            .map(|index| &self.expected[index])
+            .map(|index| borrow_for::<T, _>(&self.expected[index]))
             .collect::<Vec<_>>();
         let failure = failure
             .actual(preview.rendered::<T, _>(render))
@@ -121,19 +116,19 @@ where
             .expected(expected)
             .fact(Fact::labelled(
                 "Elements not found",
-                render.borrowed_values::<E, _>(missing.as_slice(), GroupStyle::List),
+                render.borrowed_values::<E::View, _>(missing.as_slice(), GroupStyle::List),
             ));
         preview.facts(failure, render, None)
     }
 }
 
-struct DoesNotContain<'e, T, E> {
+struct DoesNotContain<'e, T, E: ?Sized> {
     expected: &'e E,
     item: PhantomData<fn() -> T>,
     positions: PositionReporting,
 }
 
-impl<T, E, I, R> Scan<I, R> for DoesNotContain<'_, T, E>
+impl<T, E: ?Sized, I, R> Scan<I, R> for DoesNotContain<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -144,13 +139,11 @@ where
     fn observe(
         &self,
         iterator: &mut I,
-        context: &AssertionContext<'_, R>,
+        _context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         let mut tail = Tail::new();
         for (index, item) in iterator.enumerate() {
-            let matched = EqualToRef(self.expected)
-                .evaluate(item.borrow(), context)
-                .is_ok();
+            let matched = item.borrow().eq(self.expected);
             tail.push(item);
             if matched {
                 return Err((tail.finish(), index));
@@ -185,13 +178,15 @@ pub(crate) fn assert_contains<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
+    let expected = borrow_for::<T, _>(expected);
     execute(
         this,
         iterator,
-        &Contains::<T, E> {
+        &Contains::<T, E::View> {
             expected,
             item: PhantomData,
         },
@@ -206,8 +201,9 @@ pub(crate) fn assert_contains_all<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     execute(
         this,
@@ -228,13 +224,15 @@ pub(crate) fn assert_does_not_contain<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
+    let expected = borrow_for::<T, _>(expected);
     execute(
         this,
         iterator,
-        &DoesNotContain::<T, E> {
+        &DoesNotContain::<T, E::View> {
             expected,
             item: PhantomData,
             positions,

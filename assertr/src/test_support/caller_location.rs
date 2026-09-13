@@ -48,11 +48,11 @@ pub(crate) fn check_caller_location(
     assert_that!(outcome)
         .with_detail_message("expected an assertion failure")
         .is_err();
-    assert_that!(recorded_locations.lock().unwrap().as_slice())
+    assert_that!(*recorded_locations.lock().unwrap())
         .with_detail_message(
             "incorrect assertion caller location (or no structured assertion failure)",
         )
-        .is_equal_to(&[Some(expected)]);
+        .is_equal_to([Some(expected)]);
 }
 
 /// Checks one failing assertion method's exact caller location.

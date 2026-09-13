@@ -35,7 +35,7 @@ pub use crate::assertions::rootcause::prelude::*;
 pub use crate::assertions::std::prelude::*;
 #[cfg(feature = "tokio")]
 pub use crate::assertions::tokio::prelude::*;
-#[cfg(feature = "matchers")]
+#[cfg(feature = "partial")]
 pub use crate::partial;
 #[cfg(test)]
 pub(crate) use crate::test_support::FailureReportAssertions;
@@ -50,13 +50,11 @@ pub use crate::{
             CollectionAssertions, RandomAccessExtractAssertions, StableOrderAssertions,
             StableOrderExtractAssertions,
         },
-        condition::{ConditionAssertions, IterableConditionAssertions},
         core::prelude::*,
         map::MapAssertions,
         matcher::MatcherAssertions,
         set::SetAssertions,
     },
-    condition::AssertrCondition,
     elements_are, elements_are_in_any_order, entries_are,
     expectation::{Expectation, ExpectationDiagnostics},
     failure::adapter::ToHumanReadableText,

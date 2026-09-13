@@ -13,7 +13,7 @@ struct Nested<'a> {
 }
 
 fn main() {
-    // Keep the temporary Strings inside each assertion. Their borrowed slices must live
+    // Keep the temporary Strings inside each assertion. Their borrowed operands must live
     // through the whole statement, including when passed to matchers or nested `partial!` calls.
     assert_that!(Named {
         text: "hello",
@@ -21,12 +21,12 @@ fn main() {
     })
     .matches(partial!(Named {
         text: starts_with(String::from("he").as_str()),
-        owned: eq(String::from("world").as_str()),
+        owned: eq(&String::from("world")),
     }));
 
     assert_that!(Tuple("hello", String::from("world"))).matches(partial!(Tuple(
         starts_with(String::from("he").as_str()),
-        eq(String::from("world").as_str()),
+        eq(&String::from("world")),
     )));
 
     assert_that!(Nested {
@@ -38,7 +38,7 @@ fn main() {
     .matches(partial!(Nested {
         inner: partial!(Named {
             text: starts_with(String::from("he").as_str()),
-            owned: eq(String::from("world").as_str()),
+            owned: eq(&String::from("world")),
         }),
     }));
 }

@@ -25,6 +25,8 @@ rules. The [glossary](glossary.md) defines preferred terminology.
 
 An ordinary reusable assertion follows this execution path. Composition uses child contexts inside evaluation and
 contributes evidence to the enclosing failure. It does not raise each candidate rejection on the outer chain.
+Chain methods delegate tracking to the executor. [Execution adapters](observation-boundaries.md) that track before
+their own operation use executor entry points that skip tracking. Expectation hooks never track or raise.
 
 ```mermaid
 flowchart TD
@@ -32,14 +34,15 @@ flowchart TD
     track --> evaluate["Evaluate expectation"]
     evaluate -->|success| continuation["Continue, project, or extract"]
     evaluate -->|rejection| explain["Explain retained observation and render values"]
-    explain --> failure["Owned AssertionFailure"]
+    explain --> builder["Return populated structured builder"]
+    builder --> failure["Executor raises owned AssertionFailure"]
     failure --> mode{"Failure mode"}
     mode -->|Capture| records["Store at capture root and continue"]
     mode -->|Panic| presentation["Failure adapter produces text, then panic"]
 ```
 
 [Lifecycle](assertion-lifecycle.md) explains state and ownership. [Expectation execution](expectation-execution.md)
-explains evaluation and continuation. [Rendering](diagnostic-rendering.md) constructs diagnostic values before
+explains evaluation, repeatable expected data, and continuation. [Rendering](diagnostic-rendering.md) constructs diagnostic values before
 [failure processing](failure-processing.md) stores or presents them. Assertion attempts, candidate evaluations, and
 failure nodes have [different counts](expectation-execution.md#counts-and-evaluation-scope).
 
@@ -60,6 +63,8 @@ failure nodes have [different counts](expectation-execution.md#counts-and-evalua
 [entry](../assertr/src/entry/) and [assert_that](../assertr/src/assert_that/) own chain entry, state transitions,
 execution, and callback capture. [assertions](../assertr/src/assertions/) owns assertion families and their reusable
 definitions. [expectation](../assertr/src/expectation/) owns shared contracts and generic composition.
+The independent `borrow-for` crate owns view selection, standard implementations, and the `borrow_for` helper.
+Assertr re-exports the dependency as `assertr::borrow_for` from its [crate root](../assertr/src/lib.rs).
 [matchers.rs](../assertr/src/matchers.rs) catalogs public expectations with common imports and subject namespaces.
 
 [failure](../assertr/src/failure/) and [renderer](../assertr/src/renderer/) own completed failures and diagnostic

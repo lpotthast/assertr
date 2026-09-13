@@ -1,6 +1,25 @@
+use crate::borrow_for::BorrowFor;
 use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, assertions::iterator, mode::Capture};
 
 /// Terminal assertions for an owned iterator.
+///
+/// Expected values use [`BorrowFor`] for the declared item type, including reference layers.
+/// Use [`crate::matchers::dereferenced`] to match an item's pointee:
+///
+/// ```
+/// use assertr::{prelude::*, matchers::{dereferenced, eq}};
+/// let expected = String::from("hello");
+/// assert_that_owned!([String::from("hello")].into_iter()).contains(&expected);
+/// assert_that_owned!([&expected].into_iter()).contains(&expected);
+/// assert_that_owned!([&expected].into_iter())
+///     .contains_matching(dereferenced(eq("hello")));
+/// ```
+///
+/// ```compile_fail
+/// use assertr::prelude::*;
+/// let expected = String::from("hello");
+/// assert_that_owned!([&expected].into_iter()).contains(String::from("hello"));
+/// ```
 ///
 /// These assertions drive the iterator itself and therefore need to own it: create the assertion
 /// with `assert_that_owned!(...)` (or the fluent `.must_owned()`). To assert on a borrowed
@@ -17,17 +36,19 @@ use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, assertions::iterato
 ///
 /// Exact positional assertions read at most `expected.len() + 1` elements. Exact unordered
 /// assertions buffer at most that many elements. Failure diagnostics retain only the last 16
-/// consumed elements, regardless of how long the scan ran. Equality criteria accept comparable
-/// expected element types, matchers evaluate `&T`, and `_satisfying` closures receive a
-/// capture-mode assertion borrowing each candidate element.
+/// consumed elements, regardless of how long the scan ran. Matchers evaluate `&T`, and
+/// `_satisfying` closures receive a capture-mode assertion borrowing each candidate element.
+///
+/// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait IteratorAssertions<'t, T, M: Mode, R> {
     /// Asserts that the iterator contains an element equal to `expected`.
     fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator contains an element matching `expected`.
@@ -47,8 +68,9 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     /// Asserts that the iterator starts with elements equal to `expected`, in order.
     fn starts_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator's prefix matches the expected matcher list in order.
@@ -68,8 +90,9 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     /// Asserts that the iterator ends with elements equal to `expected`, in order.
     fn ends_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that the iterator's suffix matches the expected matcher list in order.
@@ -89,8 +112,9 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     /// Asserts that the iterator contains `expected` as a contiguous subsequence.
     fn contains_contiguous<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
@@ -113,8 +137,9 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     /// Asserts that no iterator element equals `not_expected`.
     fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that no iterator element matches `expected`.
@@ -134,8 +159,9 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
     /// Asserts positional equality with `expected`, including length.
     fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts that each element matches the constraint at the same position, including length.
@@ -161,8 +187,9 @@ pub trait IteratorAssertions<'t, T, M: Mode, R> {
         expected: impl AsRef<[E]>,
     ) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u;
 
     /// Asserts one-to-one matching between elements and the expected matcher list, independent of
@@ -191,8 +218,9 @@ where
     #[track_caller]
     fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
         let (iter, this) = take_iterator(self);
@@ -230,8 +258,9 @@ where
     #[track_caller]
     fn starts_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
         self.track_assertion();
@@ -274,8 +303,9 @@ where
     #[track_caller]
     fn ends_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
         self.track_assertion();
@@ -318,8 +348,9 @@ where
     #[track_caller]
     fn contains_contiguous<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
         self.track_assertion();
@@ -365,8 +396,9 @@ where
     #[track_caller]
     fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
         let (iter, this) = take_iterator(self);
@@ -409,8 +441,9 @@ where
     #[track_caller]
     fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
         self.track_assertion();
@@ -459,8 +492,9 @@ where
         expected: impl AsRef<[E]>,
     ) -> AssertThat<'u, (), M, R>
     where
-        T: PartialEq<E>,
-        R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
         self.track_assertion();
@@ -545,7 +579,7 @@ mod tests {
         use crate::{
             prelude::*,
             test_support::{
-                NoRenderer, RendererActual, RendererExpected, SentinelRenderer, assert_trait_impl,
+                ComparisonRenderer, NoRenderer, RendererActual, RendererExpected, assert_trait_impl,
             },
         };
 
@@ -560,12 +594,12 @@ mod tests {
         #[test]
         fn membership_and_sequence_equality_use_the_active_renderer_type() {
             assert_that_owned!(vec![RendererActual(1), RendererActual(2)].into_iter())
-                .with_renderer(SentinelRenderer)
-                .contains(RendererExpected(2));
+                .with_renderer(ComparisonRenderer)
+                .contains(RendererExpected::new(2));
 
             assert_that_owned!(vec![RendererActual(1), RendererActual(2)].into_iter())
-                .with_renderer(SentinelRenderer)
-                .starts_with([RendererExpected(1)]);
+                .with_renderer(ComparisonRenderer)
+                .starts_with([RendererExpected::new(1)]);
         }
     }
 
@@ -595,7 +629,7 @@ mod tests {
         }
 
         #[test]
-        fn compiles_for_comparable_but_different_type() {
+        fn compiles_for_string_values() {
             assert_that_owned!(vec!["foo".to_owned()].into_iter()).contains("foo");
         }
 
@@ -919,7 +953,7 @@ mod tests {
         }
 
         #[test]
-        fn compiles_for_comparable_but_different_type() {
+        fn compiles_for_string_values() {
             assert_that_owned!(vec!["foo".to_owned()].into_iter()).does_not_contain("bar");
         }
 
@@ -1104,7 +1138,7 @@ mod tests {
         }
 
         #[test]
-        fn compiles_for_comparable_but_different_type() {
+        fn compiles_for_string_values() {
             assert_that_owned!(vec!["a".to_owned(), "b".to_owned()].into_iter()).starts_with(["a"]);
         }
 
@@ -1420,7 +1454,7 @@ mod tests {
         }
 
         #[test]
-        fn compiles_for_comparable_but_different_type() {
+        fn compiles_for_string_values() {
             assert_that_owned!(vec!["a".to_owned(), "b".to_owned()].into_iter()).ends_with(["b"]);
         }
 
@@ -1715,7 +1749,7 @@ mod tests {
         }
 
         #[test]
-        fn compiles_for_comparable_but_different_type() {
+        fn compiles_for_string_values() {
             assert_that_owned!(vec!["a".to_owned(), "b".to_owned()].into_iter())
                 .contains_contiguous(["a", "b"]);
         }
@@ -1967,7 +2001,7 @@ mod tests {
         }
 
         #[test]
-        fn compiles_for_comparable_but_different_type() {
+        fn compiles_for_string_values() {
             assert_that_owned!(vec!["a".to_owned(), "b".to_owned()].into_iter())
                 .contains_exactly(["a", "b"]);
         }
@@ -2360,15 +2394,21 @@ mod tests {
         }
 
         #[test]
-        fn supports_heterogeneous_partial_eq() {
+        fn custom_heterogeneous_comparisons_use_predicates() {
             assert_that_owned!([Actual(1), Actual(2)].into_iter())
-                .contains_exactly_in_any_order([Expected(2), Expected(1)]);
+                .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                    |it: &Actual| it.eq(&Expected(2)),
+                    |it: &Actual| it.eq(&Expected(1)),
+                ]));
         }
 
         #[test]
-        fn supports_non_equivalence_partial_eq() {
+        fn supports_non_equivalence_predicates() {
             assert_that_owned!([Actual(2), Actual(1)].into_iter())
-                .contains_exactly_in_any_order([WildcardExpected::Any, WildcardExpected::Value(2)]);
+                .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                    |it: &Actual| it.eq(&WildcardExpected::Any),
+                    |it: &Actual| it.eq(&WildcardExpected::Value(2)),
+                ]));
         }
 
         #[test]

@@ -18,7 +18,7 @@ mod assertion_details {
         let failures = assert_that!(VecDeque::from([1, 2, 3]))
             .with_location(false)
             .capture(|it| {
-                it.contains_exactly_in_any_order_matching(assertr::matchers::predicate_list([
+                it.contains_exactly_in_any_order_matching(matchers::predicate_list([
                     |it: &i32| *it == 1,
                     |it: &i32| *it == 2,
                     |it: &i32| *it == 9,
@@ -43,9 +43,10 @@ mod assertion_details {
     }
 }
 
-#[cfg(feature = "matchers")]
+#[cfg(feature = "partial")]
 mod matcher_differences {
     use super::*;
+    use matchers::eq;
 
     #[test]
     fn matcher_differences_are_scoped_to_the_failure_that_produced_them() {
@@ -57,12 +58,8 @@ mod matcher_differences {
         let failures = assert_that!(Data { age: 30 })
             .with_location(false)
             .capture(|it| {
-                it.matches(partial!(Data {
-                    age: assertr::matchers::eq(31)
-                }))
-                .matches(partial!(Data {
-                    age: assertr::matchers::eq(32)
-                }))
+                it.matches(partial!(Data { age: eq(31) }))
+                    .matches(partial!(Data { age: eq(32) }))
             });
 
         assert_that!(&failures).contains_exactly_satisfying([

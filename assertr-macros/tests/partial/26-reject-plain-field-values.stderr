@@ -11,10 +11,10 @@ error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<i32>` is not sa
              `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
              `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
              `Anything` implements `ExpectationDiagnostics<A, R>`
-             `Condition<C>` implements `ExpectationDiagnostics<T, R>`
              `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
              `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
-             `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+             `ContainsElement<B, E>` implements `ExpectationDiagnostics<Range, R>`
+             `ContainsEntry<'_, Q, E>` implements `ExpectationDiagnostics<Mp, R>`
            and $N others
    = note: required for `assertr::__private::field::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>` to implement `ExpectationDiagnostics<Named>`
    = note: required for `assertr::__private::Cons<assertr::__private::field::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Named, DebugRenderer>`
@@ -39,10 +39,10 @@ error[E0277]: the trait bound `{integer}: ExpectationDiagnostics<i32>` is not sa
              `AllOf<L>` implements `ExpectationDiagnostics<A, R>`
              `AnyOf<L>` implements `ExpectationDiagnostics<A, R>`
              `Anything` implements `ExpectationDiagnostics<A, R>`
-             `Condition<C>` implements `ExpectationDiagnostics<T, R>`
              `ContainsAll<E, B>` implements `ExpectationDiagnostics<C, R>`
              `ContainsContiguous<E, B>` implements `ExpectationDiagnostics<C, R>`
-             `ContainsElement<B>` implements `ExpectationDiagnostics<Range, R>`
+             `ContainsElement<B, E>` implements `ExpectationDiagnostics<Range, R>`
+             `ContainsEntry<'_, Q, E>` implements `ExpectationDiagnostics<Mp, R>`
            and $N others
    = note: required for `assertr::__private::field::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:36: 12:54}, {integer}>` to implement `ExpectationDiagnostics<Tuple>`
    = note: required for `assertr::__private::Cons<assertr::__private::field::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:36: 12:54}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Tuple, DebugRenderer>`

@@ -63,8 +63,8 @@ pub enum FailureKind {
     Length,
     /// The subject was checked for an enum variant, such as `is_some` or `is_ok`.
     Variant,
-    /// The subject or its elements were checked against a predicate, condition, or nested
-    /// assertions, such as `matches`, `is(condition)`, or `contains_satisfying`.
+    /// The subject was checked against a domain property or Rust pattern, such as `is_lowercase`
+    /// or `is_matching`.
     Predicate,
     /// A closure was expected to panic or not to panic.
     Panic,

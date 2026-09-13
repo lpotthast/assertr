@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_heterogeneous_equality() {
+    fn supports_owned_string_equality() {
         assert_that!([String::from("hello")]).matches(elements_are![eq("hello")]);
         let failures = assert_that!([String::from("hello")])
             .capture(|it| it.matches(elements_are![eq("world")]));

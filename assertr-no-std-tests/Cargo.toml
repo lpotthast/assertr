@@ -9,7 +9,7 @@ publish = false
 # Keep the fixture no-std by default. Workspace-wide commands exclude it so the dependency's
 # features cannot be unified with those selected for the main `assertr` package.
 default = []
-matchers = ["assertr/matchers"]
+partial = ["assertr/partial"]
 num = ["assertr/num"]
 std = ["assertr/std"]
 

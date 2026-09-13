@@ -236,7 +236,7 @@ mod tests {
         use crate::{
             assertions::{
                 HasLength,
-                map::{Map, MapKeyQuery, MapLookup},
+                map::{Map, MapLookup},
             },
             failure::{FailureKind, PathSegment},
             renderer::RenderingOrder,
@@ -267,11 +267,12 @@ mod tests {
             }
         }
 
-        #[derive(Debug)]
         struct Query<'a>(&'a Cell<usize>);
-        impl MapKeyQuery<u32> for Query<'_> {
-            type Query = u32;
-            fn as_query(&self) -> &u32 {
+        impl crate::borrow_for::BorrowFor<u32> for Query<'_> {
+            type View = u32;
+        }
+        impl core::borrow::Borrow<u32> for Query<'_> {
+            fn borrow(&self) -> &u32 {
                 let previous = self.0.get();
                 self.0.set(previous + 1);
                 if previous == 0 { &1 } else { &2 }

@@ -1,7 +1,8 @@
+use crate::borrow_for::BorrowFor;
 use crate::{
     __private::{Cons, Nil},
     AssertionContext, ExpectationDiagnostics, ValueRenderer,
-    assertions::map::{Entry, Map, MapKeyQuery, MapLookup, entry},
+    assertions::map::{Entry, Map, MapLookup, entry},
     expectation::MatcherList,
 };
 use alloc::vec::Vec;
@@ -38,12 +39,12 @@ impl<MapType: Map + ?Sized, R> EntryMatcherList<MapType, R> for Nil {
 }
 
 impl<K, M, T> sealed::Sealed for Cons<Entry<K, M>, T> {}
-impl<MapType, R, K, M, T> EntryMatcherList<MapType, R> for Cons<Entry<K, M>, T>
+impl<MapType, StoredKey, R, K, M, T> EntryMatcherList<MapType, R> for Cons<Entry<K, M>, T>
 where
-    MapType: Map + MapLookup<<K as MapKeyQuery<<MapType as Map>::Key>>::Query> + ?Sized,
-    K: MapKeyQuery<MapType::Key>,
+    MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
+    K: BorrowFor<StoredKey>,
     M: ExpectationDiagnostics<MapType::Value, R>,
-    R: ValueRenderer<K>,
+    R: ValueRenderer<K::View>,
     T: EntryMatcherList<MapType, R>,
 {
     fn evaluate_entry_at<'a>(
@@ -64,12 +65,12 @@ macro_rules! homogeneous {
     ($type:ty $(, $size:ident)?) => {
         impl<K, M $(, const $size: usize)?> sealed::Sealed for $type {}
 
-        impl<MapType, R, K, M $(, const $size: usize)?> EntryMatcherList<MapType, R> for $type
+        impl<MapType, StoredKey, R, K, M $(, const $size: usize)?> EntryMatcherList<MapType, R> for $type
         where
-            MapType: Map + MapLookup<<K as MapKeyQuery<<MapType as Map>::Key>>::Query> + ?Sized,
-            K: MapKeyQuery<MapType::Key>,
+            MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
+            K: BorrowFor<StoredKey>,
             M: ExpectationDiagnostics<MapType::Value, R>,
-            R: ValueRenderer<K>,
+            R: ValueRenderer<K::View>,
         {
             fn evaluate_entry_at<'a>(
                 &'a self,

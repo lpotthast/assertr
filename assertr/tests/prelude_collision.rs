@@ -1,7 +1,5 @@
-//! Coverage for the collision-prone extension-point names: the assertr prelude exports neither
-//! `Condition` (renamed to `AssertrCondition`) nor `Collection` (the collection extension trait,
-//! which is reachable only through its own module), so both bare names stay usable next to other
-//! glob-imported preludes and next to local definitions.
+//! Coverage for collision-prone extension-point names. Collection capability traits remain in
+//! their own modules, so their bare names stay usable next to other glob-imported preludes.
 
 use assertr::prelude::*;
 
@@ -64,19 +62,8 @@ fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
     assert_that!(failures).has_length(1);
 }
 
-/// Stand-in for a downstream prelude (e.g. `bevy::prelude`) exporting its own `Condition` and
-/// `Collection` items.
+/// Stand-in for a downstream prelude exporting its own collection names.
 mod downstream_prelude {
-    pub trait Condition {
-        fn holds(&self) -> bool;
-    }
-
-    impl Condition for bool {
-        fn holds(&self) -> bool {
-            *self
-        }
-    }
-
     pub struct Collection {
         pub size: usize,
     }
@@ -96,48 +83,8 @@ mod downstream_prelude {
 
 use downstream_prelude::*;
 
-// Using the bare name compiles only while the assertr prelude does not also glob-export a
-// `Condition`; two glob imports providing the same name would make it ambiguous here.
-fn evaluate(condition: &dyn Condition) -> bool {
-    condition.holds()
-}
-
-#[test]
-fn bare_condition_name_stays_usable_next_to_a_second_glob_imported_prelude() {
-    assert_that!(evaluate(&true)).is_true();
-}
-
-#[test]
-fn locally_defined_condition_type_coexists_with_the_prelude() {
-    struct Condition {
-        active: bool,
-    }
-
-    let condition = Condition { active: true };
-    assert_that!(condition.active).is_true();
-}
-
-#[test]
-fn assertr_conditions_remain_usable_alongside_a_foreign_condition_trait() {
-    struct IsPositive;
-
-    impl AssertrCondition<i32> for IsPositive {
-        type Error = String;
-
-        fn test(&self, value: &i32) -> Result<(), Self::Error> {
-            if *value > 0 {
-                Ok(())
-            } else {
-                Err(format!("{value} is not positive!"))
-            }
-        }
-    }
-
-    assert_that!(42).is(IsPositive);
-}
-
-// Same reasoning as `evaluate` above: `Collection` is the name of assertr's collection extension
-// trait, but it is not re-exported from the prelude, so the bare name stays unambiguous.
+// `Collection` is the name of assertr's collection extension trait, but it is not re-exported
+// from the prelude, so the bare name stays unambiguous next to another glob import.
 fn size_of(collection: &Collection) -> usize {
     collection.size
 }

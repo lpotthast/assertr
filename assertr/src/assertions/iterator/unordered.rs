@@ -1,9 +1,10 @@
 use super::{
-    AssertThat, AssertionContext, Borrow, EqualToRef, Expectation, FailureBuilder, FailureKind,
-    GroupStyle, Mode, PREVIEW_CAPACITY, PhantomData, Preview, Scan, ValueRenderer, Vec,
-    exact_size_hint, execute, match_bipartite,
+    AssertThat, AssertionContext, Borrow, FailureBuilder, FailureKind, GroupStyle, Mode,
+    PREVIEW_CAPACITY, PhantomData, Preview, Scan, ValueRenderer, Vec, exact_size_hint, execute,
+    match_bipartite,
 };
 use crate::Fact;
+use crate::borrow_for::{BorrowFor, borrow_for};
 
 struct Captured<Item> {
     items: Vec<Item>,
@@ -54,21 +55,22 @@ impl<T, E, I, R> Scan<I, R> for ContainsExactlyInAnyOrder<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = Captured<I::Item>;
     fn observe(
         &self,
         iterator: &mut I,
-        context: &AssertionContext<'_, R>,
+        _context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         let captured = capture_unordered(iterator, self.expected.len());
         let exact = captured.known_length.is_none()
             && match_bipartite(captured.items.len(), self.expected.len(), |a, e| {
-                EqualToRef(&self.expected[e])
-                    .evaluate(captured.items[a].borrow(), context)
-                    .is_ok()
+                captured.items[a]
+                    .borrow()
+                    .eq(borrow_for::<T, _>(&self.expected[e]))
             })
             .is_exact();
         if exact { Ok(()) } else { Err(captured) }
@@ -82,7 +84,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let expected = render.borrowed_values::<E, _>(self.expected, GroupStyle::List);
+        let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
         let captured = rejection;
         let known_length = captured.known_length;
         let preview = bounded_preview(captured);
@@ -111,8 +113,9 @@ pub(crate) fn assert_contains_exactly_in_any_order<S, T, E, I, M: Mode, R>(
 ) where
     I: Iterator,
     I::Item: Borrow<T>,
-    T: PartialEq<E>,
-    R: ValueRenderer<T> + ValueRenderer<E> + ValueRenderer<usize>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     execute(
         this,

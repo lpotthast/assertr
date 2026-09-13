@@ -1,3 +1,4 @@
+use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
 use crate::{AssertThat, ValueRenderer, renderer::Compact};
@@ -138,18 +139,40 @@ where
     }
 }
 /// Compares exact nanosecond distance within a non-negative inclusive deviation.
-pub struct IsCloseTo {
-    expected: SignedDuration,
-    allowed_deviation: SignedDuration,
+///
+/// Expected value and deviation independently select `SignedDuration` views through [`BorrowFor`].
+/// Construction only stores the operands. Each evaluation borrows expected value first and
+/// deviation second, once each. Rejection retains both views, with `true` marking an invalid
+/// negative deviation. Diagnostics require only a renderer for `SignedDuration`.
+///
+/// The default type parameters preserve the owned `IsCloseTo` spelling:
+///
+/// ```
+/// use assertr::{matchers::signed_duration::IsCloseTo, prelude::*};
+/// use jiff::SignedDuration;
+/// const ZERO: IsCloseTo = IsCloseTo::new(SignedDuration::ZERO, SignedDuration::ZERO);
+/// assert_that!(SignedDuration::ZERO).matches(ZERO);
+/// let expected = SignedDuration::from_secs(3);
+/// let deviation = SignedDuration::from_secs(1);
+/// let reusable = IsCloseTo::new(&expected, deviation);
+/// assert_that!(SignedDuration::from_secs(4)).matches(&reusable);
+/// ```
+pub struct IsCloseTo<E = SignedDuration, D = E> {
+    expected: E,
+    allowed_deviation: D,
 }
-impl<R> Expectation<SignedDuration, R> for IsCloseTo {
+impl<E, D, R> Expectation<SignedDuration, R> for IsCloseTo<E, D>
+where
+    E: BorrowFor<SignedDuration, View = SignedDuration>,
+    D: BorrowFor<SignedDuration, View = SignedDuration>,
+{
     type Success<'a>
         = ()
     where
         Self: 'a,
         SignedDuration: 'a;
     type Rejection<'a>
-        = bool
+        = (&'a SignedDuration, &'a SignedDuration, bool)
     where
         Self: 'a,
         SignedDuration: 'a;
@@ -158,20 +181,24 @@ impl<R> Expectation<SignedDuration, R> for IsCloseTo {
         actual: &'a SignedDuration,
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if self.allowed_deviation.is_negative() {
-            return Err(true);
+        let expected = borrow_for::<SignedDuration, _>(&self.expected);
+        let allowed_deviation = borrow_for::<SignedDuration, _>(&self.allowed_deviation);
+        if allowed_deviation.is_negative() {
+            return Err((expected, allowed_deviation, true));
         }
         // The full MIN-to-MAX distance fits in i128 nanoseconds.
-        let distance = (actual.as_nanos() - self.expected.as_nanos()).abs();
-        if distance <= self.allowed_deviation.as_nanos() {
+        let distance = (actual.as_nanos() - expected.as_nanos()).abs();
+        if distance <= allowed_deviation.as_nanos() {
             Ok(())
         } else {
-            Err(false)
+            Err((expected, allowed_deviation, false))
         }
     }
 }
-impl<R> ExpectationDiagnostics<SignedDuration, R> for IsCloseTo
+impl<E, D, R> ExpectationDiagnostics<SignedDuration, R> for IsCloseTo<E, D>
 where
+    E: BorrowFor<SignedDuration, View = SignedDuration>,
+    D: BorrowFor<SignedDuration, View = SignedDuration>,
     R: ValueRenderer<SignedDuration>,
 {
     const KIND: FailureKind = FailureKind::Ordering;
@@ -183,36 +210,44 @@ where
     ) -> FailureBuilder<Target> {
         let render = context.render();
         match rejected {
-            Some((_, true)) => failure
+            Some((_, (_, allowed_deviation, true))) => failure
                 .relation("was given an invalid allowed deviation")
                 .fact(Fact::labelled(
                     "Allowed deviation",
-                    Compact(render.value(&self.allowed_deviation)),
+                    Compact(render.value(allowed_deviation)),
                 ))
                 .fact(Fact::note(
                     "The allowed deviation must be a non-negative duration.",
                 )),
             observation => {
-                let failure = match observation {
-                    None => failure.relation("is close to"),
-                    Some((actual, _)) => failure
-                        .actual(Compact(render.value(actual)))
-                        .relation("is not close to"),
+                let (expected, allowed_deviation, failure) = match observation {
+                    None => (
+                        borrow_for::<SignedDuration, _>(&self.expected),
+                        borrow_for::<SignedDuration, _>(&self.allowed_deviation),
+                        failure.relation("is close to"),
+                    ),
+                    Some((actual, (expected, allowed_deviation, _))) => (
+                        expected,
+                        allowed_deviation,
+                        failure
+                            .actual(Compact(render.value(actual)))
+                            .relation("is not close to"),
+                    ),
                 };
                 failure
-                    .expected(Compact(render.value(&self.expected)))
+                    .expected(Compact(render.value(expected)))
                     .fact(Fact::labelled(
                         "Allowed deviation",
-                        Compact(render.value(&self.allowed_deviation)),
+                        Compact(render.value(allowed_deviation)),
                     ))
             }
         }
     }
 }
-impl IsCloseTo {
+impl<E, D> IsCloseTo<E, D> {
     /// Expects a duration within this inclusive deviation of `expected`.
     #[must_use]
-    pub const fn new(expected: SignedDuration, allowed_deviation: SignedDuration) -> Self {
+    pub const fn new(expected: E, allowed_deviation: D) -> Self {
         Self {
             expected,
             allowed_deviation,
@@ -245,8 +280,23 @@ pub trait SignedDurationAssertions<R = crate::DebugRenderer> {
     /// without overflowing even at [`SignedDuration::MIN`] or [`SignedDuration::MAX`].
     ///
     /// A negative `allowed_deviation` is invalid and fails the assertion.
-    fn is_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self
+    /// Both operands can independently be owned, borrowed, or custom [`BorrowFor`] wrappers with
+    /// `View = SignedDuration`. The renderer only needs to support that selected duration view.
+    ///
+    /// Explicitly typed calls remain valid. Unlike the former concrete parameters, these generic
+    /// parameters cannot determine the target of some `.into()` or `Default::default()` calls.
+    /// Use `SignedDuration::default()` or otherwise state the intended type.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use jiff::SignedDuration;
+    /// let expected = SignedDuration::from_secs(3);
+    /// assert_that!(expected).is_close_to(&expected, SignedDuration::default());
+    /// ```
+    fn is_close_to<E, D>(self, expected: E, allowed_deviation: D) -> Self
     where
+        E: BorrowFor<SignedDuration, View = SignedDuration>,
+        D: BorrowFor<SignedDuration, View = SignedDuration>,
         R: ValueRenderer<SignedDuration>;
 }
 
@@ -276,8 +326,10 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     }
 
     #[track_caller]
-    fn is_close_to(self, expected: SignedDuration, allowed_deviation: SignedDuration) -> Self
+    fn is_close_to<E, D>(self, expected: E, allowed_deviation: D) -> Self
     where
+        E: BorrowFor<SignedDuration, View = SignedDuration>,
+        D: BorrowFor<SignedDuration, View = SignedDuration>,
         R: ValueRenderer<SignedDuration>,
     {
         self.apply_assertion(IsCloseTo::new(expected, allowed_deviation))
@@ -494,6 +546,129 @@ mod tests {
                 assert_that!(SignedDuration::ZERO),
                 is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1))
             );
+        }
+
+        #[test]
+        // Borrowed forms are the API contract being tested, even for Copy durations.
+        #[allow(clippy::needless_borrows_for_generic_args)]
+        fn accepts_owned_borrowed_and_independently_typed_operands() {
+            use super::super::IsCloseTo;
+            const TYPED: IsCloseTo = IsCloseTo::new(SignedDuration::ZERO, SignedDuration::ZERO);
+            let expected = SignedDuration::from_secs(3);
+            let deviation = SignedDuration::from_secs(1);
+            let actual = SignedDuration::from_secs(4);
+            assert_that!(SignedDuration::ZERO).matches(TYPED);
+            assert_that!(actual)
+                .is_close_to(expected, &deviation)
+                .is_close_to(&expected, deviation)
+                .is_close_to(&expected, &deviation)
+                .matches(IsCloseTo::new(&expected, deviation));
+            let reusable = IsCloseTo::new(expected, &deviation);
+            assert_that!(actual).matches(&reusable).matches(&reusable);
+            #[cfg(feature = "fluent")]
+            actual.must().be_close_to(&expected, &deviation);
+        }
+
+        #[test]
+        fn resolves_operands_once_in_order_and_reuses_rejected_views() {
+            use super::super::IsCloseTo;
+            use crate::{borrow_for::BorrowFor, test_support::NoRenderer};
+            use core::{
+                borrow::Borrow,
+                cell::{Cell, RefCell},
+            };
+            struct Operand<'a> {
+                value: SignedDuration,
+                calls: Cell<usize>,
+                name: &'static str,
+                events: &'a RefCell<Vec<&'static str>>,
+            }
+            impl Borrow<SignedDuration> for Operand<'_> {
+                fn borrow(&self) -> &SignedDuration {
+                    self.events.borrow_mut().push(self.name);
+                    let previous = self.calls.replace(self.calls.get() + 1);
+                    if previous == 0 {
+                        &self.value
+                    } else {
+                        &SignedDuration::MAX
+                    }
+                }
+            }
+            impl BorrowFor<SignedDuration> for Operand<'_> {
+                type View = SignedDuration;
+            }
+            struct DurationRenderer;
+            impl ValueRenderer<SignedDuration> for DurationRenderer {
+                fn fmt(
+                    &self,
+                    value: &SignedDuration,
+                    f: &mut core::fmt::Formatter<'_>,
+                ) -> core::fmt::Result {
+                    write!(f, "{} seconds", value.as_secs())
+                }
+            }
+            for deviation in [-1, 0, 1] {
+                let events = RefCell::new(Vec::new());
+                let operand = |value, name| Operand {
+                    value: SignedDuration::from_secs(value),
+                    calls: Cell::new(0),
+                    name,
+                    events: &events,
+                };
+                let matcher =
+                    IsCloseTo::new(operand(3, "expected"), operand(deviation, "deviation"));
+                assert_that!(&*events.borrow()).is_empty();
+                let failures = assert_that!(SignedDuration::from_secs(4))
+                    .with_renderer(DurationRenderer)
+                    .with_location(false)
+                    .capture(|it| it.matches(&matcher));
+                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
+                let plain = assert_that!(SignedDuration::from_secs(4))
+                    .with_renderer(DurationRenderer)
+                    .with_location(false)
+                    .capture(|it| {
+                        it.is_close_to(
+                            SignedDuration::from_secs(3),
+                            SignedDuration::from_secs(deviation),
+                        )
+                    });
+                assert_that!(failures).is_equal_to(plain);
+                events.borrow_mut().clear();
+                let root = assert_that!(SignedDuration::ZERO).with_renderer(DurationRenderer);
+                let description = root
+                    .assertion_context()
+                    .describe::<SignedDuration, _>(&matcher);
+                assert_that!(description.relation.as_deref()).is_equal_to(Some("is close to"));
+                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
+                // Re-evaluation resolves the new views, and the leaf needs no renderer to check
+                // them.
+                events.borrow_mut().clear();
+                let root = assert_that!(SignedDuration::MAX).with_renderer(NoRenderer);
+                assert_that!(
+                    matcher
+                        .evaluate(&SignedDuration::MAX, &root.assertion_context())
+                        .is_ok()
+                )
+                .is_true();
+                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
+
+                events.borrow_mut().clear();
+                assert_that!(SignedDuration::from_secs(4))
+                    .with_renderer(DurationRenderer)
+                    .is_close_to(operand(3, "expected"), SignedDuration::from_secs(1));
+                assert_that!(&*events.borrow()).contains_exactly(["expected"]);
+                #[cfg(feature = "fluent")]
+                {
+                    events.borrow_mut().clear();
+                    let failures = assert_that!(SignedDuration::from_secs(4))
+                        .with_renderer(DurationRenderer)
+                        .capture(|it| {
+                            it.be_close_to(operand(3, "expected"), operand(deviation, "deviation"))
+                        });
+                    assert_that!(failures).has_length(usize::from(deviation < 1));
+                    assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
+                }
+            }
         }
 
         #[test]
