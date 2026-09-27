@@ -64,7 +64,7 @@ where
             for index in 0..self.fields.len() {
                 matched &= self.fields.evaluate_at(index, actual, context);
             }
-            if !matched && context.evidence.is_empty() {
+            if !matched && !context.has_evidence() {
                 context.outcome(matched, |_| {
                     FailureBuilder::detached::<()>(FailureKind::Matching)
                         .relation("has the required structure")
@@ -160,8 +160,8 @@ mod tests {
         let actual: [Row; 0] = [];
         let failures = assert_that!(actual).capture(|it| {
             it.matches(crate::elements_are_in_any_order![crate::partial!(Row {
-                age: crate::matchers::eq(1),
-                score: crate::matchers::eq(2)
+                age: matchers::eq(1),
+                score: matchers::eq(2)
             })])
         });
         let description = failures[0].children[0].constraint.as_ref().unwrap();

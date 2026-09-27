@@ -329,12 +329,12 @@ mod tests {
                     => PatternAssertions<i32, NoRenderer>
             );
             assert_trait_impl!(
-                crate::matchers::DoesNotMatchPattern<fn(&i32) -> bool>
-                    => crate::Expectation<i32, NoRenderer>
+                matchers::DoesNotMatchPattern<fn(&i32) -> bool>
+                    => Expectation<i32, NoRenderer>
             );
             assert_trait_impl!(
-                crate::matchers::Pattern<fn(&i32) -> bool>
-                    => crate::ExpectationDiagnostics<i32, NoRenderer>
+                matchers::Pattern<fn(&i32) -> bool>
+                    => ExpectationDiagnostics<i32, NoRenderer>
             );
         }
     }
@@ -377,7 +377,7 @@ mod tests {
 
         #[test]
         fn supports_consuming_one_shot_guards() {
-            let token = alloc::string::String::from("token");
+            let token = String::from("token");
             assert_that!(Some(1)).is_matching(pattern!(Some(_) if { drop(token); true }));
         }
 

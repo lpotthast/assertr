@@ -26,7 +26,7 @@ pub fn entries_are<L>(list: L) -> EntriesAre<L> {
 
 impl<MapType: Map + ?Sized, R, L> Expectation<MapType, R> for EntriesAre<L>
 where
-    R: crate::ValueRenderer<MapType::Key>,
+    R: ValueRenderer<MapType::Key>,
     L: EntryMatcherList<MapType, R>,
 {
     type Success<'a>
@@ -61,7 +61,9 @@ where
                 if extras.is_diagnostic() {
                     extras.record(
                         FailureBuilder::detached::<MapType>(FailureKind::Matching)
-                            .path([PathSegment::Key(extras.render().value(key).into_rendered())])
+                            .path([PathSegment::Key(
+                                extras.render().value(key).into_rendered_compact(),
+                            )])
                             .relation("has an unexpected key")
                             .build(),
                     );
@@ -75,14 +77,7 @@ where
             }
         }
         context.append(extras.into_evidence());
-        if matched {
-            Ok(())
-        } else {
-            if context.evidence.is_empty() {
-                context.outcome(false, |context| context.describe::<MapType, _>(self));
-            }
-            Err(context.into_evidence())
-        }
+        context.finish(matched, |context| context.describe::<MapType, _>(self))
     }
 }
 impl<MapType: Map + ?Sized, R, L> ExpectationDiagnostics<MapType, R> for EntriesAre<L>
@@ -210,7 +205,7 @@ mod tests {
 
         #[test]
         fn empty_arrays_and_slices_require_an_empty_map() {
-            let expected: [crate::matchers::Entry<&str, crate::matchers::EqualTo<i32>>; 0] = [];
+            let expected: [matchers::Entry<&str, matchers::EqualTo<i32>>; 0] = [];
             let empty = BTreeMap::<&str, i32>::new();
             assert_that!(empty).matches(entries_are(&expected[..]));
             assert_that!(empty).matches(entries_are(&expected));
@@ -268,7 +263,7 @@ mod tests {
         }
 
         struct Query<'a>(&'a Cell<usize>);
-        impl crate::borrow_for::BorrowFor<u32> for Query<'_> {
+        impl borrow_for::BorrowFor<u32> for Query<'_> {
             type View = u32;
         }
         impl core::borrow::Borrow<u32> for Query<'_> {
@@ -309,6 +304,20 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn limits_repeated_value_evidence_to_the_rendering_budget() {
+        let failures = assert_that!(BTreeMap::from([("a", 1), ("b", 2), ("c", 3),]))
+            .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+            .with_location(false)
+            .capture(|it| it.matches(entries_are![("a", eq(0)), ("b", eq(0)), ("c", eq(0))]));
+
+        assert_that!(failures[0].children).has_length(1);
+        assert_that!(failures[0].children[0].path).contains_exactly_matching([
+            pattern!(crate::failure::PathSegment::Key(key) if rendered_text(key) == "\"a\""),
+        ]);
+        assert_that!(failures[0].omitted_children).is_equal_to(2);
     }
 
     #[test]

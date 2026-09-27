@@ -157,7 +157,7 @@ impl<T, R> ExpectationDiagnostics<tokio::sync::watch::Receiver<T>, R> for HasNot
 /// These checks support panic and capture modes without changing the receiver's seen state.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait TokioWatchReceiverAssertions<T, R = crate::DebugRenderer> {
+pub trait TokioWatchReceiverAssertions<T, R = DebugRenderer> {
     /// Asserts that the receiver's current value equals `expected` without marking it seen.
     fn has_current_value<E>(self, expected: E) -> Self
     where
@@ -207,7 +207,7 @@ mod tests {
         use core::{borrow::Borrow, cell::Cell};
 
         struct Expected<'a>(&'a Cell<usize>);
-        impl crate::borrow_for::BorrowFor<i32> for Expected<'_> {
+        impl borrow_for::BorrowFor<i32> for Expected<'_> {
             type View = i32;
         }
         impl Borrow<i32> for Expected<'_> {

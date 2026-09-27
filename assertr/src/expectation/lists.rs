@@ -33,6 +33,32 @@ pub trait MatcherList<A: ?Sized, R>: sealed::Sealed {
     fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool;
 }
 
+/// A borrowed callback list that adapts only the slot being evaluated or described.
+pub(crate) struct SatisfyingList<'a, F>(pub(crate) &'a [F]);
+
+impl<F> sealed::Sealed for SatisfyingList<'_, F> {}
+
+impl<A, R: Clone, F> MatcherList<A, R> for SatisfyingList<'_, F>
+where
+    F: for<'a> Fn(crate::AssertThat<'a, A, crate::mode::Capture, R>),
+{
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn describe_at(
+        &self,
+        index: usize,
+        context: &AssertionContext<'_, R>,
+    ) -> crate::AssertionFailure {
+        context.describe(&super::satisfying(&self.0[index]))
+    }
+
+    fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool {
+        context.evaluate(actual, &super::satisfying(&self.0[index]))
+    }
+}
+
 impl sealed::Sealed for Nil {}
 
 impl<H, T> sealed::Sealed for Cons<H, T> {}
@@ -230,4 +256,37 @@ macro_rules! matchers {
     ($($value:expr),* $(,)?) => {
         $crate::matchers!(@list $($value),*)
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prelude::*;
+    use core::cell::Cell;
+
+    #[test]
+    fn borrowed_callbacks_need_no_clone_or_item_renderer_and_descriptions_do_not_invoke_them() {
+        struct Opaque;
+        struct NotClone;
+        #[derive(Clone)]
+        struct NoRenderer;
+        let not_clone = NotClone;
+        let calls = Cell::new(0);
+        let calls_ref = &calls;
+        let callbacks = [move |it: AssertThat<'_, Opaque, Capture, NoRenderer>| {
+            core::hint::black_box(&not_clone);
+            calls_ref.set(calls_ref.get() + 1);
+            it.derive_owned(|_| true)
+                .with_renderer(DebugRenderer)
+                .is_true();
+        }];
+        let list = SatisfyingList(&callbacks);
+        let mut context = AssertionContext::new(&NoRenderer, RenderingBudget::default());
+        assert_that!(list.len()).is_equal_to(1);
+        let description = list.describe_at(0, &context);
+        assert_that!(description.relation.as_deref()).is_equal_to(Some("satisfies the assertions"));
+        assert_that!(calls.get()).is_equal_to(0);
+        assert_that!(list.evaluate_at(0, &Opaque, &mut context)).is_true();
+        assert_that!(calls.get()).is_equal_to(1);
+    }
 }

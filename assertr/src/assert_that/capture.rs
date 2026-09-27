@@ -159,7 +159,7 @@ mod tests {
                 it.with_renderer(DebugRenderer).contains(4)
             });
         assert_that!(failures).contains_exactly_satisfying(
-            [|failure: AssertThat<crate::AssertionFailure, Capture>| {
+            [|failure: AssertThat<AssertionFailure, Capture>| {
                 failure
                     .derive(|failure| &failure.messages)
                     .contains("root detail");

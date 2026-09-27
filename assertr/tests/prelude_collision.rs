@@ -369,10 +369,10 @@ fn a_custom_map_gets_every_map_assertion() {
         .contains_entry_satisfying("retries", satisfies_three)
         .contains_keys(["retries"])
         .contains_exactly_entries([("retries", 3)])
-        .contains_exactly_entries_matching(assertr::matchers::entry_matchers(
+        .contains_exactly_entries_matching(matchers::entry_matchers(
             ([("retries", is_three)])
                 .into_iter()
-                .map(|(key, p)| (key, assertr::matchers::predicate(p))),
+                .map(|(key, p)| (key, matchers::predicate(p))),
         ))
         .contains_exactly_entries_satisfying([("retries", satisfies_three)])
         .has_length(1);
@@ -405,12 +405,12 @@ mod matcher_names {
         use foreign_prelude::*;
         let _ = (ConstraintDescription, Matcher);
         assert_that!(equal_to() && anything()).is_true();
-        assert_that!(1).matches(assertr::matchers::equal_to(1));
+        assert_that!(1).matches(matchers::equal_to(1));
     }
 }
 
 struct NumericRenderer;
-impl assertr::ValueRenderer<usize> for NumericRenderer {
+impl ValueRenderer<usize> for NumericRenderer {
     fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(value, f)
     }

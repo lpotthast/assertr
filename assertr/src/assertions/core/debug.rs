@@ -196,8 +196,8 @@ mod tests {
                 AssertThat<'static, i32, Panic, NoRenderer> => DebugAssertions<NoRenderer>
             );
 
-            assert_trait_impl!(super::super::HasDebugString<&'static str> => crate::Expectation<str, NoRenderer>);
-            assert_trait_impl!(super::super::HasDebugValue<i32> => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::HasDebugString<&'static str> => Expectation<str, NoRenderer>);
+            assert_trait_impl!(super::super::HasDebugValue<i32> => Expectation<i32, NoRenderer>);
         }
     }
 

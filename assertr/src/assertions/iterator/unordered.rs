@@ -1,10 +1,9 @@
 use super::{
     AssertThat, AssertionContext, Borrow, FailureBuilder, FailureKind, GroupStyle, Mode,
     PREVIEW_CAPACITY, PhantomData, Preview, Scan, ValueRenderer, Vec, exact_size_hint, execute,
-    match_bipartite,
 };
-use crate::Fact;
 use crate::borrow_for::{BorrowFor, borrow_for};
+use crate::{Fact, util::matching::matches_exactly};
 
 struct Captured<Item> {
     items: Vec<Item>,
@@ -41,7 +40,7 @@ fn bounded_preview<Item>(mut captured: Captured<Item>) -> Preview<Item> {
         captured.items.drain(..remove);
     }
     Preview {
-        items: captured.items,
+        items: captured.items.into(),
         consumed,
     }
 }
@@ -67,12 +66,11 @@ where
     ) -> Result<(), Self::Rejection> {
         let captured = capture_unordered(iterator, self.expected.len());
         let exact = captured.known_length.is_none()
-            && match_bipartite(captured.items.len(), self.expected.len(), |a, e| {
+            && matches_exactly(captured.items.len(), self.expected.len(), |a, e| {
                 captured.items[a]
                     .borrow()
                     .eq(borrow_for::<T, _>(&self.expected[e]))
-            })
-            .is_exact();
+            });
         if exact { Ok(()) } else { Err(captured) }
     }
 
@@ -125,4 +123,48 @@ pub(crate) fn assert_contains_exactly_in_any_order<S, T, E, I, M: Mode, R>(
             item: PhantomData,
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prelude::*;
+    use core::cell::Cell;
+
+    #[derive(Debug)]
+    struct Compared<'a>(&'a Cell<usize>);
+    impl BorrowFor<Compared<'_>> for i32 {
+        type View = i32;
+    }
+    impl PartialEq<i32> for Compared<'_> {
+        fn eq(&self, _: &i32) -> bool {
+            self.0.set(self.0.get() + 1);
+            true
+        }
+    }
+
+    #[test]
+    fn unequal_buffered_lengths_skip_comparisons_and_keep_the_consumption_limit() {
+        for length in [0, 1, 3, 100] {
+            let comparisons = Cell::new(0);
+            let consumed = Cell::new(0);
+            let mut iterator = (0..length)
+                .map(|_| {
+                    consumed.set(consumed.get() + 1);
+                    Compared(&comparisons)
+                })
+                .filter(|_| true);
+            let scan = ContainsExactlyInAnyOrder::<Compared<'_>, i32> {
+                expected: &[1, 2],
+                item: PhantomData,
+            };
+            assert_that!(
+                scan.observe(&mut iterator, &AssertionContext::default())
+                    .is_err()
+            )
+            .is_true();
+            assert_that!(comparisons.get()).is_equal_to(0);
+            assert_that!(consumed.get()).is_equal_to(length.min(3));
+        }
+    }
 }

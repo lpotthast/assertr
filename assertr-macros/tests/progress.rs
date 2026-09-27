@@ -18,6 +18,7 @@ fn fluent_expressions() {
     t.pass("tests/fluent_expressions/06-user-verify.rs");
     t.pass("tests/fluent_expressions/07-user-verify-owned.rs");
     t.pass("tests/fluent_expressions/08-callback-call-traits.rs");
+    t.pass("tests/fluent_expressions/09-branch-callbacks.rs");
 }
 
 mod partial {
@@ -49,6 +50,7 @@ mod partial {
         t.pass("tests/partial/14-match-without-renderer.rs");
         t.pass("tests/partial/15-generated-items-are-documented.rs");
         t.pass("tests/partial/16-infer-empty-matcher-list.rs");
+        t.pass("tests/partial/30-qualified-variants.rs");
 
         // Invalid syntax and fields come before lifetime, inference, and capability boundaries.
         t.compile_fail("tests/partial/17-reject-duplicate-fields.rs");

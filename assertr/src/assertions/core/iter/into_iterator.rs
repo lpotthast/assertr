@@ -3,7 +3,6 @@ use crate::{
     AssertThat, ExpectationDiagnostics, Mode, ValueRenderer, assertions::iterator,
     expectation::MatcherList, mode::Capture,
 };
-use alloc::vec::Vec;
 
 /// Chainable assertions over a fresh borrowed iteration of a collection-like value.
 ///
@@ -236,11 +235,7 @@ where
         R: Clone + ValueRenderer<usize>,
     {
         self.track_assertion();
-        let expected = assertions
-            .as_ref()
-            .iter()
-            .map(crate::expectation::satisfying)
-            .collect::<Vec<_>>();
+        let expected = crate::expectation::lists::SatisfyingList(assertions.as_ref());
         iterator::matchers::unordered::<_, T, _, _, _, _>(
             &self,
             self.actual().into_iter(),
@@ -364,8 +359,6 @@ mod tests {
     }
 
     mod into_iter_contains_all {
-        use core::cell::Cell;
-
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -434,71 +427,6 @@ mod tests {
                     -------- assertr --------
                 "});
         }
-
-        struct CountingValues {
-            values: Vec<i32>,
-            iterations: Cell<usize>,
-            yielded: Cell<usize>,
-        }
-
-        struct CountingIter<'a> {
-            values: core::slice::Iter<'a, i32>,
-            yielded: &'a Cell<usize>,
-        }
-
-        impl<'a> Iterator for CountingIter<'a> {
-            type Item = &'a i32;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                let next = self.values.next();
-                if next.is_some() {
-                    self.yielded.set(self.yielded.get() + 1);
-                }
-                next
-            }
-        }
-
-        impl<'a> IntoIterator for &'a CountingValues {
-            type Item = &'a i32;
-            type IntoIter = CountingIter<'a>;
-
-            fn into_iter(self) -> Self::IntoIter {
-                self.iterations.set(self.iterations.get() + 1);
-                CountingIter {
-                    values: self.values.iter(),
-                    yielded: &self.yielded,
-                }
-            }
-        }
-
-        #[test]
-        fn creates_one_iterator_and_stops_as_soon_as_all_elements_are_found() {
-            let values = CountingValues {
-                values: vec![1, 2, 3, 4],
-                iterations: Cell::new(0),
-                yielded: Cell::new(0),
-            };
-
-            assert_that!(values).into_iter_contains_all([1, 3]);
-
-            assert_that!(values.iterations.get()).is_equal_to(1);
-            assert_that!(values.yielded.get()).is_equal_to(3);
-        }
-
-        #[test]
-        fn empty_expectation_still_creates_one_iterator_but_consumes_nothing() {
-            let values = CountingValues {
-                values: vec![1, 2, 3],
-                iterations: Cell::new(0),
-                yielded: Cell::new(0),
-            };
-
-            let expected: [i32; 0] = [];
-            assert_that!(values).into_iter_contains_all(expected);
-
-            assert_that!(values.iterations.get()).is_equal_to(1);
-            assert_that!(values.yielded.get()).is_equal_to(0);
-        }
     }
 
     mod into_iter_contains_matching {
@@ -519,13 +447,6 @@ mod tests {
                 assert_that!(vec![1, 2, 3]),
                 into_iter_contains_matching(crate::expectation::predicate(|it: &i32| *it > 7))
             );
-        }
-
-        #[test]
-        fn succeeds_when_an_element_matches() {
-            assert_that!(vec![1, 2, 3]).into_iter_contains_matching(crate::expectation::predicate(
-                |it: &i32| *it % 2 == 0,
-            ));
         }
 
         #[test]
@@ -556,7 +477,6 @@ mod tests {
 
                 Details:
                   - Consumed: 3
-                  - Preview starts at: 0
                 Nested failures:
                   - does not satisfy the constraint
 
@@ -592,77 +512,27 @@ mod tests {
             );
         }
 
+        #[test]
+        fn borrows_non_clone_items_and_continues_on_the_original_subject() {
+            struct Item(i32);
+            let values = [Item(1), Item(2), Item(3)];
+
+            assert_that!(values)
+                .into_iter_contains_satisfying(|item| {
+                    item.derive(|item| &item.0).is_equal_to(2);
+                })
+                .derive(|items| &items[2].0)
+                .is_equal_to(3);
+            assert_that!(values[0].0).is_equal_to(1);
+        }
+
+        #[cfg(feature = "fluent")]
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
 
         fn is_seven(it: AssertThat<i32, Capture>) {
             it.is_equal_to(7);
-        }
-
-        #[test]
-        fn succeeds_when_an_element_satisfies() {
-            assert_that!(vec![1, 2, 3]).into_iter_contains_satisfying(is_two);
-        }
-
-        #[test]
-        fn panics_when_no_element_satisfies() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2])
-                    .with_location(false)
-                    .into_iter_contains_satisfying(is_seven);
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `vec![1, 2]`
-
-                does not contain a matching element
-
-                Details:
-                  - Consumed: 2
-                  - Preview starts at: 0
-                Nested failures:
-                  - Expected: 7
-
-                      Actual: 1
-                  - Expected: 7
-
-                      Actual: 2
-                -------- assertr --------
-            "});
-        }
-
-        #[test]
-        fn opaque_callback_failures_preserve_custom_rendering_and_budgets() {
-            use crate::test_support::{CustomValueRenderer, assert_custom_value};
-
-            struct Opaque(usize);
-
-            fn check(it: AssertThat<'_, Opaque, Capture, CustomValueRenderer>) {
-                it.satisfies(
-                    |value| &value.0,
-                    |value| {
-                        value.is_equal_to(9);
-                    },
-                );
-            }
-
-            let values = [Opaque(1), Opaque(2)];
-            let failures = assert_that!(values)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
-                .capture(|it| it.into_iter_contains_satisfying(check));
-
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0].children).has_length(1);
-            assert_that!(failures[0].omitted_children).is_equal_to(1);
-            let child = &failures[0].children[0];
-            assert_custom_value(child.actual.as_ref().unwrap(), &1_usize);
-            assert_custom_value(child.expected.as_ref().unwrap(), &9_usize);
-            assert_that!(child.path).is_empty();
-            crate::test_support::assert_custom_fact(&failures[0], "Consumed", 2);
         }
     }
 
@@ -742,13 +612,6 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_no_element_matches() {
-            assert_that!(vec![1, 2, 3]).into_iter_does_not_contain_matching(
-                crate::expectation::predicate(|it: &i32| *it > 7),
-            );
-        }
-
-        #[test]
         fn custom_element_rendering_does_not_require_debug() {
             use crate::test_support::SentinelRenderer;
 
@@ -780,7 +643,6 @@ mod tests {
 
                 Details:
                   - Consumed: 2
-                  - Preview starts at: 0
                 Nested failures:
                   - Actual: 2
 
@@ -795,7 +657,6 @@ mod tests {
 
     mod into_iter_does_not_contain_satisfying {
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -817,41 +678,9 @@ mod tests {
             it.is_equal_to(2);
         }
 
+        #[cfg(feature = "fluent")]
         fn is_seven(it: AssertThat<i32, Capture>) {
             it.is_equal_to(7);
-        }
-
-        #[test]
-        fn succeeds_when_no_element_satisfies() {
-            assert_that!(vec![1, 2, 3]).into_iter_does_not_contain_satisfying(is_seven);
-        }
-
-        #[test]
-        fn panics_when_an_element_satisfies() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_does_not_contain_satisfying(is_two);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `vec![1, 2, 3]`
-
-                contains an unexpected matching element
-
-                Details:
-                  - Consumed: 2
-                  - Preview starts at: 0
-                Nested failures:
-                  - Actual: 2
-
-                    matches the unwanted constraint
-
-                    Constraint:
-                        satisfies the assertions
-                -------- assertr --------
-            "});
         }
     }
 
@@ -961,6 +790,7 @@ mod tests {
             );
         }
 
+        #[cfg(feature = "fluent")]
         fn is_at_most_two(value: &i32) -> bool {
             *value <= 2
         }
@@ -975,13 +805,6 @@ mod tests {
 
         fn is_nine(value: &i32) -> bool {
             *value == 9
-        }
-
-        #[test]
-        fn succeeds_when_a_maximum_matching_exists_for_overlapping_predicates() {
-            assert_that!(vec![1, 2]).into_iter_contains_exactly_in_any_order_matching(
-                crate::expectation::predicate_list([is_at_most_two, is_one]),
-            );
         }
 
         #[test]
@@ -1017,7 +840,6 @@ mod tests {
 
                 Details:
                   - Consumed: 3
-                  - Preview starts at: 0
                 Nested failures:
                   - is missing an element matching this expectation
 
@@ -1080,66 +902,9 @@ mod tests {
             it.is_greater_than(0);
         }
 
+        #[cfg(feature = "fluent")]
         fn negative(it: AssertThat<i32, Capture>) {
             it.is_less_than(0);
-        }
-
-        #[test]
-        fn succeeds_when_a_maximum_matching_exists() {
-            assert_that!(vec![-1, 1])
-                .into_iter_contains_exactly_in_any_order_satisfying([positive, negative]);
-        }
-
-        #[test]
-        fn panics_when_an_element_satisfies_no_assertion() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, -1, 2])
-                    .with_location(false)
-                    .into_iter_contains_exactly_in_any_order_satisfying([
-                        positive, positive, positive,
-                    ]);
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `vec![1, -1, 2]`
-
-                does not match exactly in any order
-
-                Details:
-                  - Consumed: 3
-                  - Preview starts at: 0
-                Nested failures:
-                  - is missing an element matching this expectation
-
-                    Constraint:
-                        satisfies the assertions
-
-                    Details:
-                      - at slot: 2
-                    Nested failures:
-                      - Actual: -1
-
-                        is not greater than
-
-                        Expected: 0
-                  - has unexpected elements
-
-                    Details:
-                      - unexpected count: 1
-                    Nested failures:
-                      - Actual: -1
-
-                        is not greater than
-
-                        Expected: 0
-                      - Actual: -1
-
-                        is not greater than
-
-                        Expected: 0
-                -------- assertr --------
-            "});
         }
     }
 

@@ -76,7 +76,7 @@ mod tests {
                 AssertThat<'static, Type<i32>, Capture, NoRenderer> => MemAssertions
             );
 
-            assert_trait_impl!(super::super::NeedsDrop => crate::ExpectationDiagnostics<crate::Type<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::NeedsDrop => ExpectationDiagnostics<Type<i32>, NoRenderer>);
         }
     }
 

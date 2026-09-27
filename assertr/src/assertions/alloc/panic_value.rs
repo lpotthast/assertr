@@ -117,7 +117,7 @@ mod tests {
 
         #[test]
         fn caller_location_is_as_expected() {
-            let value = crate::PanicValue(alloc::boxed::Box::new(1_i32));
+            let value = crate::PanicValue(Box::new(1_i32));
             assert_caller_location!(assert_that!(value), is_of_type::<u8>());
         }
 
@@ -173,7 +173,7 @@ mod tests {
                     => PanicValueExtractAssertions<'static, NoRenderer>
             );
 
-            assert_trait_impl!(crate::assertions::alloc::boxed::IsOfType<i32> => crate::ExpectationDiagnostics<crate::PanicValue, NoRenderer>);
+            assert_trait_impl!(crate::assertions::alloc::boxed::IsOfType<i32> => ExpectationDiagnostics<crate::PanicValue, NoRenderer>);
         }
     }
 
@@ -191,7 +191,7 @@ mod tests {
 
         #[test]
         fn caller_location_is_as_expected() {
-            let value = crate::PanicValue(alloc::boxed::Box::new(1_i32));
+            let value = PanicValue(Box::new(1_i32));
             assert_caller_location!(assert_that!(value), has_type::<u8>());
         }
 
@@ -272,7 +272,7 @@ mod tests {
 
         #[test]
         fn caller_location_is_as_expected() {
-            let value = crate::PanicValue(alloc::boxed::Box::new(1_i32));
+            let value = PanicValue(Box::new(1_i32));
             assert_caller_location!(assert_that!(value), has_type_ref::<u8>());
         }
 

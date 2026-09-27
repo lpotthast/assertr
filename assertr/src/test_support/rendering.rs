@@ -6,8 +6,8 @@ use crate::{
 };
 use core::fmt;
 
-pub(crate) fn rendered_text(value: &Rendered) -> alloc::string::String {
-    let mut text = alloc::string::String::new();
+pub(crate) fn rendered_text(value: &Rendered) -> String {
+    let mut text = String::new();
     value
         .write(&mut text, true)
         .expect("writing a rendered value to a String cannot fail");
@@ -38,7 +38,7 @@ impl RendererExpected {
         Self(RendererActual(value))
     }
 }
-impl crate::borrow_for::BorrowFor<RendererActual> for RendererExpected {
+impl borrow_for::BorrowFor<RendererActual> for RendererExpected {
     type View = RendererActual;
 }
 

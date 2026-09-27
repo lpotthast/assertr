@@ -4,39 +4,34 @@ use super::{Map, MapLookup};
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     AssertionContext, AssertionFailure, Expectation, ExpectationDiagnostics, ValueRenderer,
-    failure::{Fact, FailureBuilder, FailureKind, adapter::ToHumanReadableText},
-    renderer::{GroupStyle, RenderingOrder},
+    failure::{Fact, FailureBuilder, FailureKind, PathSegment, adapter::ToHumanReadableText},
+    renderer::{GroupStyle, IntoRendered, RenderingOrder},
+    util::selection::{Keyed, Smallest},
 };
-use alloc::{collections::BTreeSet, string::String, vec::Vec};
+use alloc::{collections::BTreeSet, vec::Vec};
 use core::{marker::PhantomData, ptr};
 
-/// Whether diagnostics over `Mp`'s entries are sorted by their rendered text because the map has no
-/// deterministic iteration order.
-fn sorts_for_rendering<Mp: Map + ?Sized>() -> bool {
-    Mp::RENDERING_ORDER == RenderingOrder::SortByRenderedText
-}
-
-/// Flattens the failures raised for the values under the expected keys into the children of one
-/// failure. Every failure is already located at its key.
+/// Selects one child per mismatched expected entry. Every failure is already located at its key.
 ///
 /// Keys keep the order the caller gave them. For a map whose rendering sorts entries by their text,
 /// the keys are sorted the same way, so the nested failures and the rendered map agree in order. At
-/// most `maximum` keys are kept. Returns the children and the number of omitted keys.
+/// most `maximum` children are kept. Returns the children and the number of omitted mismatches.
+/// Consumes every failure, including at zero, to preserve the caller's explanation sequence.
 fn keyed_children<Mp: Map + ?Sized>(
-    mut unsatisfied: Vec<Vec<AssertionFailure>>,
+    unsatisfied: impl ExactSizeIterator<Item = AssertionFailure>,
     maximum: usize,
 ) -> (Vec<AssertionFailure>, usize) {
-    if sorts_for_rendering::<Mp>() {
-        unsatisfied.sort_by_cached_key(|failures| {
-            failures
-                .iter()
-                .map(|failure| ToHumanReadableText.render(failure).into_string())
-                .collect::<String>()
+    let omitted = unsatisfied.len().saturating_sub(maximum);
+    let mut selected = Smallest::new(maximum);
+    for (rank, failure) in unsatisfied.enumerate() {
+        let key = (Mp::RENDERING_ORDER == RenderingOrder::SortByRenderedText)
+            .then(|| ToHumanReadableText::render_child(&failure));
+        selected.offer(Keyed {
+            key: (key, rank),
+            value: failure,
         });
     }
-    let omitted = unsatisfied.len().saturating_sub(maximum);
-    unsatisfied.truncate(maximum);
-    (unsatisfied.into_iter().flatten().collect(), omitted)
+    (selected.into_values(), omitted)
 }
 
 /// The stored entries the expected keys resolved to, identified by the address of their stored key.
@@ -414,8 +409,10 @@ where
                             FailureBuilder::detached::<Mp::Value>(FailureKind::Equality)
                                 .actual(render.value(value))
                                 .expected(render.value(expected))
-                                .build()
-                                .located_at(Fact::key(render.value(self.key))),
+                                .path([PathSegment::Key(
+                                    render.value(self.key).into_rendered_compact(),
+                                )])
+                                .build(),
                         ),
                 }
             }
@@ -723,18 +720,13 @@ where
                     .iter()
                     .map(|(key, _, _)| *key)
                     .collect::<Vec<_>>();
-                let unexpected_values = mismatches
-                    .iter()
-                    .map(|(key, expected, value)| {
-                        alloc::vec![
-                            FailureBuilder::detached::<Mp::Value>(FailureKind::Equality)
-                                .actual(render.value(*value))
-                                .expected(render.value(*expected))
-                                .build()
-                                .located_at(Fact::key(render.value(*key)))
-                        ]
-                    })
-                    .collect();
+                let unexpected_values = mismatches.iter().map(|(key, expected, value)| {
+                    FailureBuilder::detached::<Mp::Value>(FailureKind::Equality)
+                        .actual(render.value(*value))
+                        .expected(render.value(*expected))
+                        .path([PathSegment::Key(render.value(*key).into_rendered_compact())])
+                        .build()
+                });
                 let (children, omitted) =
                     keyed_children::<Mp>(unexpected_values, render.max_items());
                 let mut failure = failure
@@ -783,5 +775,154 @@ where
                 RenderingOrder::PreserveIteration,
             ),
         )
+    }
+}
+
+#[cfg(test)]
+mod child_paths {
+    use super::*;
+    use crate::{prelude::*, test_support::CustomValueRenderer};
+    use alloc::collections::BTreeMap;
+    use core::fmt;
+
+    #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+    struct Key {
+        id: i32,
+    }
+
+    fn key_failures<R>(renderer: R, budget: RenderingBudget) -> AssertionFailures
+    where
+        R: ValueRenderer<Key> + ValueRenderer<i32> + ValueRenderer<usize>,
+    {
+        let actual = BTreeMap::from([(Key { id: 1 }, 1)]);
+        assert_that!(actual)
+            .with_renderer(renderer)
+            .with_rendering_budget(budget)
+            .with_location(false)
+            .capture(|it| {
+                it.contains_entry(&Key { id: 1 }, 2)
+                    .contains_exactly_entries([(Key { id: 1 }, 2)])
+                    .contains_entry_matching(&Key { id: 1 }, matchers::eq(2))
+                    .matches(entries_are![(Key { id: 1 }, matchers::eq(2))])
+                    .matches(entries_are![])
+            })
+    }
+
+    #[test]
+    fn structured_keys_have_compact_child_headings() {
+        let failures = key_failures(DebugRenderer, RenderingBudget::unlimited());
+        assert_that!(failures).has_length(5);
+        for (index, failure) in failures.iter().enumerate() {
+            assert_that!(failure.children).has_length(1);
+            let expected = if index == 4 {
+                indoc::formatdoc! {"
+                    Nested failures:
+                      - At [Key {{ id: 1 }}]:
+                        has an unexpected key
+                "}
+            } else {
+                indoc::formatdoc! {"
+                    Nested failures:
+                      - At [Key {{ id: 1 }}]:
+                        Expected: 2
+
+                          Actual: 1
+                "}
+            };
+            assert_that!(ToHumanReadableText::render_child(&failure.children[0]))
+                .is_equal_to(expected);
+        }
+    }
+
+    #[test]
+    fn compact_key_paths_preserve_custom_rendering_metadata_and_leaf_budgets() {
+        struct AlternateAwareRenderer;
+        impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for AlternateAwareRenderer {
+            fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                if f.alternate() {
+                    write!(f, "pretty({value:#?})")
+                } else {
+                    write!(f, "compact({value:?})")
+                }
+            }
+        }
+
+        let compact = "compact(Key { id: 1 })";
+        for maximum in [0, 8, usize::MAX] {
+            let failures = key_failures(
+                AlternateAwareRenderer,
+                RenderingBudget::default().with_max_leaf_characters(maximum),
+            );
+            assert_that!(failures).has_length(5);
+            for failure in &failures {
+                assert_that!(failure.children).has_length(1);
+                let [PathSegment::Key(key)] = failure.children[0].path.as_slice() else {
+                    panic!("expected one key segment");
+                };
+                let retained = compact.len().min(maximum);
+                assert_that!(key.type_name()).is_equal_to(Some(core::any::type_name::<Key>()));
+                assert_that!(&key.body).is_equal_to(&crate::renderer::RenderedBody::Text {
+                    text: compact[..retained].into(),
+                    omitted_characters: compact.len() - retained,
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn equality_and_matching_share_budgeted_query_key_paths() {
+        let actual = BTreeMap::from([(String::from("alpha"), 1)]);
+        let failures = assert_that!(actual)
+            .with_renderer(CustomValueRenderer)
+            .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(8))
+            .capture(|it| {
+                it.contains_entry("alpha", 2)
+                    .contains_exactly_entries([("alpha", 2)])
+                    .contains_entry_matching("alpha", matchers::eq(2))
+            });
+        assert_that!(failures).has_length(3);
+        let matcher_path = &failures[2].children[0].path;
+        for failure in &failures {
+            assert_that!(failure.children).has_length(1);
+            let child = &failure.children[0];
+            assert_that!(child.facts).is_empty();
+            assert_that!(child.path).is_equal_to(matcher_path);
+            let [PathSegment::Key(key)] = child.path.as_slice() else {
+                panic!("expected one query key segment");
+            };
+            assert_that!(key.type_name).is_equal_to(Some(core::any::type_name::<str>()));
+            assert_that!(&key.body).is_equal_to(&crate::renderer::RenderedBody::Text {
+                text: String::from("custom(\""),
+                omitted_characters: 7,
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod keyed_children_tests {
+    use super::*;
+    use crate::{prelude::*, test_support::UnorderedMap};
+    use core::cell::Cell;
+
+    #[test]
+    fn counts_omitted_mismatches_and_explains_every_entry_even_at_zero() {
+        for limit in [0, 1, 2, 3, usize::MAX] {
+            let explained = Cell::new(0);
+            let failures = ["b", "a"].into_iter().map(|relation| {
+                explained.set(explained.get() + 1);
+                FailureBuilder::detached::<()>(FailureKind::Equality)
+                    .relation(relation)
+                    .build()
+            });
+            let (children, omitted) = keyed_children::<UnorderedMap>(failures, limit);
+            assert_that!(explained.get()).is_equal_to(2);
+            assert_that!(omitted).is_equal_to(2 - limit.min(2));
+            let relations = children
+                .iter()
+                .map(|child| child.relation.as_deref().unwrap())
+                .collect::<Vec<_>>();
+            assert_that!(relations).is_equal_to(&["a", "b"][..limit.min(2)]);
+        }
     }
 }

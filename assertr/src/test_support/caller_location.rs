@@ -90,7 +90,7 @@ macro_rules! assert_caller_location {
 pub(crate) use assert_caller_location;
 
 #[cfg(feature = "std")]
-pub(crate) fn block_on<F: core::future::Future>(future: F) -> F::Output {
+pub(crate) fn block_on<F: Future>(future: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()
         .build()
         .unwrap()
@@ -136,9 +136,7 @@ mod tests {
     #[test]
     fn accepts_multiline_generic_extractions() {
         assert_caller_location!(
-            assert_that_owned!(
-                alloc::boxed::Box::new(1_i32) as alloc::boxed::Box<dyn core::any::Any>
-            ),
+            assert_that_owned!(Box::new(1_i32) as Box<dyn core::any::Any>),
             has_type::<u8>()
         );
     }

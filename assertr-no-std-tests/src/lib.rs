@@ -1,14 +1,23 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+//! Downstream compatibility checks for `core`, `alloc`, and optional features.
+//! Keep representative capabilities, borrowed views, and observation types here. Assertion
+//! behavior belongs in the owning unit tests. `cfg_attr(test, test)` runs compile checks on the
+//! host while keeping their bodies available to embedded builds.
+
 extern crate alloc;
 
 use assertr::matchers::{entry_matchers, predicate};
 use assertr::prelude::*;
 
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn memory_assertions_compile_without_std() {
     use alloc::string::String;
     use assertr::assertions::core::mem::{MemAssertions, NeedsDrop};
+    use assertr::assertions::core::prelude::MemAssertions as CoreMemAssertions;
+    use assertr::matchers::memory::NeedsDrop as MemoryNeedsDrop;
+    use assertr::prelude::MemAssertions as PreludeMemAssertions;
 
     struct NoRenderer;
     fn check<A: MemAssertions>(assertion: A) -> A {
@@ -17,31 +26,22 @@ fn memory_assertions_compile_without_std() {
 
     check(assert_that_type::<String>().with_renderer(NoRenderer))
         .matches(NeedsDrop)
-        .matches(assertr::matchers::memory::NeedsDrop);
+        .matches(MemoryNeedsDrop);
     // The core prelude and the crate-wide prelude expose the same trait.
-    assertr::assertions::core::prelude::MemAssertions::needs_drop(assert_that_type::<String>());
-    assertr::prelude::MemAssertions::needs_drop(assert_that_type::<String>());
+    CoreMemAssertions::needs_drop(assert_that_type::<String>());
+    PreludeMemAssertions::needs_drop(assert_that_type::<String>());
 
     let failures = assert_that_type::<u32>()
         .with_renderer(NoRenderer)
-        .capture(|it| {
-            check(it)
-                .matches(NeedsDrop)
-                .matches(assertr::matchers::memory::NeedsDrop)
-        });
+        .capture(|it| check(it).matches(NeedsDrop).matches(MemoryNeedsDrop));
     assert_that!(failures).has_length(3);
     for failure in &failures {
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not need drop"));
     }
 }
 
-#[cfg(test)]
-#[test]
-fn memory_assertions_run_without_std() {
-    memory_assertions_compile_without_std();
-}
-
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn projections_compile_without_renderer_support() {
     struct Field {
         byte: u8,
@@ -76,12 +76,6 @@ fn projections_compile_without_renderer_support() {
         .derive(assertr::Fact::value)
         .derive(assertr::renderer::Rendered::body)
         .is_same_instance_as(fact.value().body());
-}
-
-#[cfg(test)]
-#[test]
-fn projections_run_without_std() {
-    projections_compile_without_renderer_support();
 }
 
 #[allow(dead_code)]
@@ -121,6 +115,7 @@ fn unwind_safe_projections_run_without_std() {
 
 #[cfg(feature = "num")]
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn numeric_assertions_compile_without_std() {
     use assertr::assertions::num::NumericDistance;
     struct NoRenderer;
@@ -137,15 +132,9 @@ fn numeric_assertions_compile_without_std() {
         .capture(|it| it.is_close_to(9_007_199_254_740_994.0, 1.0));
     assert_that!(failures).has_length(1);
     with_context(NoRenderer, |context| {
-        let close = assertr::matchers::numeric::IsCloseTo::new(2, 1);
-        assert_that!(assertr::Expectation::evaluate(&close, &3, context).is_ok()).is_true();
+        let close = matchers::numeric::IsCloseTo::new(2, 1);
+        assert_that!(Expectation::evaluate(&close, &3, context).is_ok()).is_true();
     });
-}
-
-#[cfg(all(test, feature = "num"))]
-#[test]
-fn numeric_assertions_run_without_std_or_libm() {
-    numeric_assertions_compile_without_std();
 }
 
 #[allow(dead_code)]
@@ -228,7 +217,7 @@ fn failure_adapters_compile_without_std() {
         }
     }
 
-    fn accepts_failure_adapter<A: Adapter<assertr::AssertionFailure>>(_adapter: A) {}
+    fn accepts_failure_adapter<A: Adapter<AssertionFailure>>(_adapter: A) {}
 
     struct NoRenderer;
 
@@ -237,7 +226,7 @@ fn failure_adapters_compile_without_std() {
         .with_renderer(NoRenderer)
         .with_panic_presentation(ToHumanReadableText);
     let presentation = ToHumanReadableText.map_err(|error: Infallible| error.to_string());
-    let adapter: &dyn Adapter<assertr::AssertionFailure, Output = HumanReadableText, Error = String> =
+    let adapter: &dyn Adapter<AssertionFailure, Output = HumanReadableText, Error = String> =
         &presentation;
     accepts_failure_adapter(adapter);
 }
@@ -268,6 +257,7 @@ fn iterator_assertions_compile_without_std() {
 }
 
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn callback_assertions_compile_without_subject_renderers() {
     struct Secret;
     #[derive(Clone)]
@@ -305,12 +295,6 @@ fn callback_assertions_compile_without_subject_renderers() {
         .with_renderer(NoRenderer)
         .capture(|it| it.contains_satisfying(is_some));
     assert_that!(failures).has_length(1);
-}
-
-#[cfg(test)]
-#[test]
-fn callback_assertions_run_without_subject_renderers() {
-    callback_assertions_compile_without_subject_renderers();
 }
 
 /// The set and map families live outside the `std` module, so `BTreeSet` and `BTreeMap` carry them
@@ -358,10 +342,10 @@ fn set_and_map_assertions_compile_without_std() {
             .contains_exactly_entries_satisfying([("a", satisfies_one)])
             .has_length(1);
 
-        let expected = [assertr::matchers::entry("a", predicate(is_one))];
+        let expected = [matchers::entry("a", predicate(is_one))];
         assert_that!(BTreeMap::from([("a", 1)]))
             .contains_exactly_entries_matching(&expected[..])
-            .matches(assertr::matchers::entries_are(expected));
+            .matches(matchers::entries_are(expected));
     });
 }
 
@@ -404,6 +388,7 @@ mod tests {
         fn runtime_matchers_need_no_features() {
             assert_that!([1, 2]).matches(elements_are![eq(1), eq(2)]);
             assert_that!(3).matches(ge(2));
+            crate::bounded_unordered_matching_without_std();
         }
     }
 
@@ -561,6 +546,21 @@ mod tests {
     }
 }
 
+/// Exercises shared candidate selection and routing on hosted and embedded alloc targets.
+#[allow(dead_code)]
+fn bounded_unordered_matching_without_std() {
+    use assertr::matchers::{eq, ge};
+    for limit in [0, 1, 2, usize::MAX] {
+        let failures = assert_that!([1, 2, 99])
+            .with_rendering_budget(RenderingBudget::unlimited().with_max_items(limit))
+            .capture(|it| it.matches(elements_are_in_any_order![ge(0), eq(1), eq(3)]));
+        assert_that!(failures).has_length(1);
+        assert_that!([1, 2])
+            .with_rendering_budget(RenderingBudget::unlimited().with_max_items(limit))
+            .matches(elements_are_in_any_order![ge(0), eq(1)]);
+    }
+}
+
 /// Structural matching remains available with alloc and no std.
 #[cfg(feature = "partial")]
 pub fn structural_matchers_without_std() {
@@ -579,7 +579,7 @@ pub fn structural_matchers_without_std() {
     assert_that!(children)
         .with_renderer(NumericRenderer)
         .into_iter_contains_matching(partial!(Child {
-            id: assertr::matchers::anything(),
+            id: matchers::anything(),
             ..
         }));
     let map = alloc::collections::BTreeMap::from([(
@@ -594,13 +594,14 @@ pub fn structural_matchers_without_std() {
 
 #[derive(Clone)]
 struct NumericRenderer;
-impl assertr::ValueRenderer<usize> for NumericRenderer {
+impl ValueRenderer<usize> for NumericRenderer {
     fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(value, f)
     }
 }
 
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn typed_rejections_and_numeric_evidence_compile_without_std() {
     use assertr::{
         AssertionContext, Expectation, Fact,
@@ -673,79 +674,46 @@ fn typed_rejections_and_numeric_evidence_compile_without_std() {
     });
 }
 
-#[cfg(test)]
-#[test]
-fn typed_rejections_and_numeric_evidence_run_without_std() {
-    typed_rejections_and_numeric_evidence_compile_without_std();
-}
-
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn assertion_definitions_compile_without_std() {
+    use alloc::string::String;
     use assertr::matchers::{
-        EqualTo, Expectation, GreaterOrEqual, GreaterThan, HasDebugString, IsOfType, IsOk, IsReady,
-        LessOrEqual, LessThan, NotEqualTo, all_of, gt, le, lt,
-        string::{DoesNotContain, StartsWith},
+        EqualTo, Expectation, GreaterOrEqual, HasDebugString, IsOfType, IsOk, IsReady, IsSome,
+        cell::{IsBorrowed, IsNotMutablyBorrowed},
+        string::StartsWith,
     };
     struct NoRenderer;
     with_context(NoRenderer, |context| {
+        // One definition per leaf capability, evaluated without renderer support.
         assert_that!(EqualTo::new(3).evaluate(&3, context).is_ok()).is_true();
-        assert_that!(NotEqualTo::new(3).evaluate(&4, context).is_ok()).is_true();
-        let expected = EqualTo::new("hello");
-        assert_that!(alloc::string::String::from("hello")).matches(&expected);
-        assert_that!(3).is_equal_to(3).is_not_equal_to(4);
-        let optional = Some(3);
-        let assertion = assert_that!(optional).with_renderer(NoRenderer);
-        let value = assertion.test_assertion(&assertr::matchers::IsSome);
-        assert_that!(value).is_equal_to(Some(&3));
-        let minimum = GreaterOrEqual::new(0.0);
-        assert_that!(minimum.evaluate(&f64::NAN, context).is_err()).is_true();
-        assert_that!(1.0)
-            .matches(&minimum)
-            .is_greater_or_equal_to(0.0);
-        assert_that!(LessThan::new(2.0).evaluate(&1.0, context).is_ok()).is_true();
-        assert_that!(GreaterThan::new(0.0).evaluate(&1.0, context).is_ok()).is_true();
-        assert_that!(LessOrEqual::new(1.0).evaluate(&1.0, context).is_ok()).is_true();
-        assert_that!(1.0)
-            .matches(all_of((lt(2.0), gt(0.0), le(1.0))))
-            .is_less_than(2.0)
-            .is_greater_than(0.0)
-            .is_less_or_equal_to(1.0);
+        assert_that!(GreaterOrEqual::new(0.0).evaluate(&1.0, context).is_ok()).is_true();
         let prefix = StartsWith::new("hel");
         assert_that!(prefix.evaluate("hello", context).is_ok()).is_true();
-        assert_that!(alloc::string::String::from("hello"))
-            .matches(&prefix)
-            .starts_with("hel");
+        assert_that!(HasDebugString::new("123").evaluate(&123, context).is_ok()).is_true();
 
+        // Rejection and success can retain different guard types.
         let cell = core::cell::RefCell::new(7);
-        let rejection = assertr::matchers::cell::IsBorrowed
-            .evaluate(&cell, context)
-            .err()
-            .unwrap();
-        assert_that!(cell.try_borrow().is_err()).is_true();
+        let rejection: core::cell::RefMut<'_, i32> =
+            IsBorrowed.evaluate(&cell, context).err().unwrap();
         drop(rejection);
         let assertion = assert_that!(cell).with_renderer(NoRenderer);
-        let guard = assertion
-            .test_assertion(&assertr::matchers::cell::IsNotMutablyBorrowed)
-            .unwrap();
-        assert_that!(*guard).is_equal_to(7);
+        let guard: core::cell::Ref<'_, i32> =
+            assertion.test_assertion(&IsNotMutablyBorrowed).unwrap();
         drop(guard);
-        assert_that!(cell.try_borrow_mut().is_ok()).is_true();
 
-        // Borrowed observations and renderer-independent definitions also work on embedded targets.
-        let result = Ok::<_, ()>(alloc::string::String::from("borrowed"));
+        // Borrowed payloads include an optional value, an allocated value, and a nested reference.
+        let optional = Some(3);
+        let assertion = assert_that!(optional).with_renderer(NoRenderer);
+        let value: Option<&i32> = assertion.test_assertion(&IsSome);
+        assert_that!(value).is_equal_to(Some(&3));
+        let result = Ok::<_, ()>(String::from("borrowed"));
         let value = IsOk.evaluate(&result, context).unwrap();
         assert_that!(value).is_same_instance_as(result.as_ref().unwrap());
         let ready = core::task::Poll::Ready(value);
         let assertion = assert_that!(ready).with_renderer(NoRenderer);
         let observed = assertion.test_assertion(&IsReady).unwrap();
         assert_that!(*observed).is_same_instance_as(value);
-        assert_that!(
-            DoesNotContain::new("other")
-                .evaluate(value, context)
-                .is_ok()
-        )
-        .is_true();
-        assert_that!(HasDebugString::new("123").evaluate(&123, context).is_ok()).is_true();
         let boxed: alloc::boxed::Box<dyn core::any::Any> = alloc::boxed::Box::new(123);
         assert_that!(boxed)
             .with_renderer(NoRenderer)
@@ -753,13 +721,8 @@ fn assertion_definitions_compile_without_std() {
     });
 }
 
-#[cfg(test)]
-#[test]
-fn assertion_definitions_run_without_std() {
-    assertion_definitions_compile_without_std();
-}
-
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn collection_assertion_definitions_compile_without_std() {
     use assertr::matchers::{Expectation, HasLengthOf, collection, iterator, map, set};
 
@@ -805,16 +768,10 @@ fn collection_assertion_definitions_compile_without_std() {
     });
 }
 
-#[cfg(test)]
-#[test]
-fn collection_assertion_definitions_run_without_std() {
-    collection_assertion_definitions_compile_without_std();
-}
-
 // Tests renderer-independent evaluation through the same boundary available downstream.
 struct InContext<F>(F);
 
-impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> assertr::Expectation<(), R> for InContext<F> {
+impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> Expectation<(), R> for InContext<F> {
     type Success<'a>
         = ()
     where
@@ -834,9 +791,7 @@ impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> assertr::Expectation<(), R> fo
     }
 }
 
-impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> assertr::ExpectationDiagnostics<(), R>
-    for InContext<F>
-{
+impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> ExpectationDiagnostics<(), R> for InContext<F> {
     const KIND: assertr::FailureKind = assertr::FailureKind::Other;
 
     fn explain<'a, Target>(
@@ -858,20 +813,16 @@ fn with_context<R, F: Fn(&assertr::AssertionContext<'_, R>)>(renderer: R, f: F) 
         .apply_assertion(InContext(f));
 }
 
+// Keep the alloc-only API boundary here. Detailed rendering behavior is tested in the renderer.
 #[allow(dead_code)]
 mod structural_rendering {
-    use alloc::{
-        collections::{BTreeMap, BTreeSet},
-        string::String,
-    };
+    use alloc::collections::{BTreeMap, BTreeSet};
     use assertr::{
         Fact, FailureKind,
         prelude::*,
-        renderer::{
-            GroupStyle, IntoRendered, Rendered, RenderedBody, RenderingContext, RenderingOrder,
-        },
+        renderer::{GroupStyle, IntoRendered, Rendered, RenderingContext, RenderingOrder},
     };
-    use core::{any::type_name, cell::RefCell, fmt};
+    use core::{cell::RefCell, fmt};
 
     #[derive(Eq, PartialEq, Ord, PartialOrd)]
     struct Token(u8);
@@ -884,87 +835,55 @@ mod structural_rendering {
         }
     }
 
-    fn text(value: &Rendered) -> String {
-        let mut output = String::new();
-        value.write(&mut output, false).unwrap();
-        output
-    }
-
     fn verify() {
-        let map = BTreeMap::from([(Token(2), Token(20)), (Token(1), Token(10))]);
-        let set = BTreeSet::from([Token(2), Token(1)]);
-        let budget = RenderingBudget::unlimited().with_max_items(1);
-        let failures = assert_that!(map)
-            .with_renderer(LeafRenderer)
-            .with_rendering_budget(budget)
-            .capture(|it| {
-                it.track_assertion();
-                if !it.actual().is_empty() {
-                    let render = it.render();
-                    assert_that!(render.budget()).is_equal_to(budget);
-                    it.failure(FailureKind::Length)
-                        .actual(render.map(it.actual()))
-                        .relation("is not empty")
-                        .fact(Fact::labelled("Keys", render.collection(&set)))
-                        .raise();
-                }
-                it
-            });
-        let actual = failures[0].actual.as_ref().unwrap();
-        assert_that!(actual.type_name()).is_equal_to(Some(type_name::<BTreeMap<Token, Token>>()));
-        assert_that!(text(actual))
-            .is_equal_to("BTreeMap {token(1): token(10)} (... 1 more entry ...)");
-        assert_that!(text(&failures[0].facts[0].value))
-            .is_equal_to("BTreeSet {token(1)} (... 1 more element ...)");
+        let map = BTreeMap::from([(Token(1), Token(10))]);
+        let set = BTreeSet::from([Token(1)]);
+        let failures = assert_that!(map).with_renderer(LeafRenderer).capture(|it| {
+            it.track_assertion();
+            it.failure(FailureKind::Length)
+                .actual(it.render().map(it.actual()))
+                .relation("is not empty")
+                .fact(Fact::labelled("Keys", it.render().collection(&set)))
+                .raise();
+            it
+        });
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].actual).is_some();
+        assert_that!(failures[0].facts).has_length(1);
 
-        let render = RenderingContext::new(&LeafRenderer, budget);
-        let tokens = [Token(2), Token(1)];
-        let ordered = render.stable_collection(&tokens).into_rendered();
-        assert_that!(text(&ordered)).is_equal_to("[token(2)] (... 1 more element ...)");
-        let borrowed = [&tokens[0], &tokens[1]];
-        let view = render
-            .stable_borrowed_collection::<Token, _>(&borrowed)
-            .into_rendered();
-        assert_that!(text(&view)).is_equal_to(text(&ordered));
-        let values = render
-            .borrowed_values::<Token, _>(&borrowed, GroupStyle::Set)
-            .with_order(RenderingOrder::SortByRenderedText)
-            .into_rendered();
-        assert_that!(text(&values))
-            .is_equal_to("{token(1)} (... 1 more element ...) (sorted for rendering)");
-        let view = render
-            .borrowed_collection::<Token, _>(&borrowed)
-            .into_rendered();
-        assert_that!(text(&view)).is_equal_to(text(&ordered));
-
-        let entries = [(&tokens[0], &tokens[0]), (&tokens[1], &tokens[1])];
-        let entries = render
-            .entry_list::<Token, Token, _, _, _>(&entries, RenderingOrder::SortByRenderedText)
-            .into_rendered();
-        assert_that!(entries.type_name()).is_none();
-        assert_that!(text(&entries))
-            .is_equal_to("[(token(1), token(1))] (... 1 more entry ...) (sorted for rendering)");
-
+        let render = RenderingContext::new(&LeafRenderer, RenderingBudget::default());
+        let tokens = [Token(1)];
+        let borrowed = [&tokens[0]];
+        let entries = [(&tokens[0], &tokens[0])];
         let owner = Some(Token(3));
-        let variant = render
-            .variant(&owner, "Some", owner.as_ref().unwrap())
-            .into_rendered();
-        assert_that!(variant.type_name()).is_equal_to(Some(type_name::<Option<Token>>()));
-        assert_that!(text(&variant)).is_equal_to("Some(token(3))");
         let cell = RefCell::new(Token(4));
-        let field = render
-            .struct_field(&cell, "RefCell", "value", &*cell.borrow())
-            .into_rendered();
-        assert_that!(field.type_name()).is_equal_to(Some(type_name::<RefCell<Token>>()));
-        assert_that!(text(&field)).is_equal_to("RefCell { value: token(4) }");
-        let placeholder = RenderingContext::new(&NoRenderer, budget)
+        // Conversion, not just construction, must compile with alloc and leaf-only rendering.
+        let _: [Rendered; 8] = [
+            render.stable_collection(&tokens).into_rendered(),
+            render.values(&tokens, GroupStyle::List).into_rendered(),
+            render
+                .stable_borrowed_collection::<Token, _>(&borrowed)
+                .into_rendered(),
+            render
+                .borrowed_values::<Token, _>(&borrowed, GroupStyle::Set)
+                .with_order(RenderingOrder::SortByRenderedText)
+                .into_rendered(),
+            render
+                .borrowed_collection::<Token, _>(&borrowed)
+                .into_rendered(),
+            render
+                .entry_list::<Token, Token, _, _, _>(&entries, RenderingOrder::SortByRenderedText)
+                .into_rendered(),
+            render
+                .variant(&owner, "Some", owner.as_ref().unwrap())
+                .into_rendered(),
+            render
+                .struct_field(&cell, "RefCell", "value", &*cell.borrow())
+                .into_rendered(),
+        ];
+        let _: Rendered = RenderingContext::new(&NoRenderer, RenderingBudget::default())
             .unavailable_struct_field(&cell, "RefCell", "value", "<borrowed>")
             .into_rendered();
-        let RenderedBody::Struct { fields, .. } = &placeholder.body else {
-            panic!("expected a struct")
-        };
-        assert_that!(fields[0].1.type_name()).is_none();
-        assert_that!(text(&placeholder)).is_equal_to("RefCell { value: <borrowed> }");
     }
 
     #[test]
@@ -985,10 +904,11 @@ impl assertr::borrow_for::BorrowFor<alloc::string::String> for TextOperand<'_> {
 
 fn reusable_bulk_views_compile_without_std() {
     use alloc::{collections::BTreeMap, string::String, vec};
+
+    // Borrow non-Clone custom operands as a Vec and a slice, and reuse their matcher.
     let operands = vec![TextOperand("hello")];
-    let expected_list = assertr::matchers::collection::ContainsAll::new(&operands);
+    let expected_list = matchers::collection::ContainsAll::new(&operands);
     assert_that!([String::from("hello")])
-        .contains_all(&operands)
         .into_iter_contains_all(operands.as_slice())
         .matches(&expected_list);
     assert_that!(vec![String::from("hello")]).matches(&expected_list);
@@ -997,65 +917,45 @@ fn reusable_bulk_views_compile_without_std() {
     let actual = BTreeMap::from([(String::from("key"), String::from("hello"))]);
     assert_that!(actual)
         .contains_keys(&keys)
-        .contains_exactly_entries(&entries)
-        .matches(assertr::matchers::map::ContainsKeys::new(keys.as_slice()))
-        .matches(assertr::matchers::map::ContainsExactlyEntries::new(
+        .matches(matchers::map::ContainsExactlyEntries::new(
             entries.as_slice(),
         ));
 }
 
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn borrowed_views_compile_without_std() {
     use alloc::{collections::BTreeMap, string::String, vec};
     use assertr::matchers::{
         EqualTo, all_of, dereferenced, each,
         range::{ContainsElement, DoesNotContainElement},
     };
+
+    // Native map lookup accepts both built-in slice views and downstream text views.
     let bytes = BTreeMap::from([(vec![1_u8, 2], 3)]);
     let query = &[1_u8, 2][..];
     assert_that!(bytes)
         .contains_key(query)
-        .contains_keys([query])
-        .contains_exactly_entries([(query, 3)])
-        .matches(assertr::entries_are![(query, assertr::matchers::eq(3))]);
+        .matches(assertr::entries_are![(query, matchers::eq(3))]);
     assert_that!(BTreeMap::from([(String::from("key"), 1)]))
-        .contains_keys([TextOperand("key")])
-        .contains_exactly_entries([(TextOperand("key"), 1)])
-        .matches(assertr::matchers::entry(
-            TextOperand("key"),
-            assertr::matchers::eq(1),
-        ));
+        .matches(matchers::entry(TextOperand("key"), matchers::eq(1)));
 
     reusable_bulk_views_compile_without_std();
 
+    // Cover borrowed and unsized operands across collection, iterator, map, and ordering bounds.
     let expected = String::from("hello");
-    assert_that!(String::from("hello"))
-        .is_equal_to("hello")
-        .is_equal_to(&expected)
-        .is_less_or_equal_to(&expected);
+    assert_that!(String::from("hello")).is_less_or_equal_to(&expected);
     assert_that!([String::from("hello")])
-        .contains(&expected)
         .contains("hello")
-        .contains_exactly([&expected])
-        .contains_exactly(["hello"])
-        .into_iter_contains_all(["hello"]);
+        .contains_exactly([&expected]);
     assert_that_owned!([String::from("hello")].into_iter()).contains(&expected);
-    assert_that_owned!([String::from("hello")].into_iter()).contains("hello");
-    assert_that!(BTreeMap::from([(1, String::from("hello"))]))
-        .contains_entry(&1, &expected)
-        .contains_entry(&1, "hello")
-        .contains_exactly_entries([(1, &expected)])
-        .contains_exactly_entries([(1, "hello")]);
-    assert_that!(String::from("a")..String::from("z")).contains_element(&expected);
+    assert_that!(BTreeMap::from([(1, String::from("hello"))])).contains_entry(&1, "hello");
+
+    // Range bounds can be owned, borrowed, or inferred from an operand on an unbounded range.
     let lower = String::from("a");
     let upper = String::from("z");
-    assert_that!(&lower..&upper)
-        .contains_element(&expected)
-        .does_not_contain_element(&upper);
-    let failures = assert_that!(..).capture(|it| {
-        it.contains_element(&expected)
-            .does_not_contain_element(&expected)
-    });
+    assert_that!(&lower..&upper).contains_element(&expected);
+    let failures = assert_that!(..).capture(|it| it.does_not_contain_element(&expected));
     assert_that!(failures).has_length(1);
     let range_matcher = all_of((
         ContainsElement::<String>::borrowing(&expected),
@@ -1065,9 +965,10 @@ fn borrowed_views_compile_without_std() {
     assert_that!([&lower..&upper]).matches(each(&range_matcher));
     assert_that!(&1..&3).matches(ContainsElement::new(&2));
     assert_that!(..).matches(ContainsElement::new(String::from("a")));
+
+    // Reusable matchers borrow non-Copy operands and accept sized or unsized subjects.
     assert_that_owned!(&expected).matches(dereferenced(EqualTo::new("hello")));
     let matcher = EqualTo::new(&expected);
-    assert_that!(String::from("hello")).matches(&matcher);
     assert_that!(String::from("hello")).matches(&matcher);
     let literal_matcher = EqualTo::new("hello");
     assert_that!(expected).matches(&literal_matcher);
@@ -1099,10 +1000,4 @@ fn borrowed_views_compile_without_std() {
         let deviation = 2;
         assert_that!(11).is_close_to(&value, &deviation);
     }
-}
-
-#[cfg(test)]
-#[test]
-fn borrowed_views_run_without_std() {
-    borrowed_views_compile_without_std();
 }

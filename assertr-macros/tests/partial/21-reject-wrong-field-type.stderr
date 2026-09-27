@@ -8,11 +8,13 @@ error[E0277]: the trait bound `&str: BorrowFor<i32>` is not satisfied
   |
   = help: the following other types implement trait `BorrowFor<Context>`:
             `&&str` implements `BorrowFor<String>`
+            `&mut str` implements `BorrowFor<Cow<'_, str>>`
             `&mut str` implements `BorrowFor<String>`
             `&str` implements `BorrowFor<&String>`
             `&str` implements `BorrowFor<Cow<'_, str>>`
             `&str` implements `BorrowFor<HumanReadableText>`
             `&str` implements `BorrowFor<String>`
+            `str` implements `BorrowFor<Cow<'_, str>>`
             `str` implements `BorrowFor<String>`
   = note: required for `EqualTo<&str>` to implement `ExpectationDiagnostics<i32>`
   = note: 1 redundant requirement hidden

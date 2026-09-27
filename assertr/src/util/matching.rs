@@ -56,22 +56,7 @@ pub(crate) fn match_bipartite(
     expected_len: usize,
     mut matches: impl FnMut(usize, usize) -> bool,
 ) -> BipartiteMatchResult {
-    let mut expected_to_actual = vec![None; expected_len];
-    let mut visited_expected = vec![false; expected_len];
-    let mut path = Vec::new();
-
-    for actual_index in 0..actual_len {
-        let assigned = augment(
-            actual_index,
-            &mut expected_to_actual,
-            &mut visited_expected,
-            &mut path,
-            &mut matches,
-        );
-        if assigned {
-            visited_expected.fill(false);
-        }
-    }
+    let expected_to_actual = assign(actual_len, expected_len, &mut matches);
 
     let mut matched_actual = vec![false; actual_len];
     for actual_index in expected_to_actual.iter().flatten() {
@@ -95,6 +80,43 @@ pub(crate) fn match_bipartite(
             .filter_map(|(index, actual)| actual.is_none().then_some(index))
             .collect(),
     }
+}
+
+/// Checks exact assignment without materializing diagnostic pairs or unmatched indexes.
+pub(crate) fn matches_exactly(
+    actual_len: usize,
+    expected_len: usize,
+    matches: impl FnMut(usize, usize) -> bool,
+) -> bool {
+    actual_len == expected_len
+        && assign(actual_len, expected_len, matches)
+            .iter()
+            .all(Option::is_some)
+}
+
+fn assign(
+    actual_len: usize,
+    expected_len: usize,
+    mut matches: impl FnMut(usize, usize) -> bool,
+) -> Vec<Option<usize>> {
+    let mut expected_to_actual = vec![None; expected_len];
+    let mut visited_expected = vec![false; expected_len];
+    let mut path = Vec::new();
+
+    for actual_index in 0..actual_len {
+        let assigned = augment(
+            actual_index,
+            &mut expected_to_actual,
+            &mut visited_expected,
+            &mut path,
+            &mut matches,
+        );
+        if assigned {
+            visited_expected.fill(false);
+        }
+    }
+
+    expected_to_actual
 }
 
 /// Assigns `root_actual` to a slot, shifting earlier assignments along an alternating path when
@@ -169,6 +191,41 @@ where
 
 #[cfg(test)]
 mod tests {
+    mod matches_exactly {
+        use crate::{
+            prelude::*,
+            util::matching::{match_bipartite, matches_exactly},
+        };
+        use alloc::vec::Vec;
+
+        #[test]
+        fn agrees_with_detailed_assignment_for_every_small_relation() {
+            for actual in 0..=3 {
+                for expected in 0..=3 {
+                    for mask in 0_u32..(1 << (actual * expected)) {
+                        let relation = |a, e| mask & (1_u32 << (a * expected + e)) != 0;
+                        let mut detailed_calls = Vec::new();
+                        let detailed = match_bipartite(actual, expected, |a, e| {
+                            detailed_calls.push((a, e));
+                            relation(a, e)
+                        });
+                        let mut boolean_calls = Vec::new();
+                        let accepted = matches_exactly(actual, expected, |a, e| {
+                            boolean_calls.push((a, e));
+                            relation(a, e)
+                        });
+                        assert_that!(accepted).is_equal_to(detailed.is_exact());
+                        if actual == expected {
+                            assert_that!(boolean_calls).is_equal_to(detailed_calls);
+                        } else {
+                            assert_that!(boolean_calls).is_empty();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     mod match_bipartite {
         use crate::prelude::*;
         use crate::util::matching::match_bipartite;

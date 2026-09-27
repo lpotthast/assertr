@@ -265,7 +265,7 @@ mod tests {
         };
         use core::cell::RefCell;
 
-        struct RecordingRenderer<'a>(&'a RefCell<alloc::vec::Vec<i32>>);
+        struct RecordingRenderer<'a>(&'a RefCell<Vec<i32>>);
         impl ValueRenderer<i32> for RecordingRenderer<'_> {
             fn fmt(&self, value: &i32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 self.0.borrow_mut().push(*value);
@@ -275,7 +275,7 @@ mod tests {
 
         #[test]
         fn shared_operands_render_once_and_follow_the_actual_value() {
-            let calls = RefCell::new(alloc::vec::Vec::new());
+            let calls = RefCell::new(Vec::new());
             let failures = assert_that!(1)
                 .with_renderer(RecordingRenderer(&calls))
                 .capture(|it| it.apply_assertion(EqualTo::new(2)));
@@ -747,8 +747,8 @@ mod string_views {
         let context = AssertionContext::default();
         assert_that!(literal.evaluate("hello", &context).is_ok()).is_true();
         assert_that!(borrowed.evaluate("hello", &context).is_ok()).is_true();
-        assert_trait_impl!(EqualTo<&str> => crate::Expectation<String, NoRenderer>);
-        assert_trait_impl!(EqualTo<&String> => crate::Expectation<str, NoRenderer>);
+        assert_trait_impl!(EqualTo<&str> => Expectation<String, NoRenderer>);
+        assert_trait_impl!(EqualTo<&String> => Expectation<str, NoRenderer>);
     }
 
     #[test]

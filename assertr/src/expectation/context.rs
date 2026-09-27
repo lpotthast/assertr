@@ -8,6 +8,7 @@ use crate::{
         adapter::{HumanReadableText, ToHumanReadableText},
     },
     renderer::{RenderingContext, RenderingOrder},
+    util::selection::{Keyed, Smallest},
 };
 use alloc::vec::Vec;
 
@@ -29,10 +30,9 @@ pub struct AssertionContext<'r, R = DebugRenderer> {
     diagnostic: bool,
     limit: usize,
     evidence_order: RenderingOrder,
-    // Parallel to retained children only in sorted scopes. Completed evidence owns no sort keys.
-    sort_keys: Vec<HumanReadableText>,
     path: Vec<PathSegment>,
-    pub(crate) evidence: Evidence,
+    pub(crate) children: Smallest<Keyed<(Option<HumanReadableText>, usize), AssertionFailure>>,
+    pub(crate) omitted: usize,
 }
 
 impl<'r, R> AssertionContext<'r, R> {
@@ -51,12 +51,12 @@ impl<'r, R> AssertionContext<'r, R> {
         Self {
             limit: rendering.max_items(),
             evidence_order: RenderingOrder::PreserveIteration,
-            sort_keys: Vec::new(),
+            children: Smallest::new(rendering.max_items()),
             rendering,
             include_location,
             diagnostic: true,
             path: Vec::new(),
-            evidence: Evidence::default(),
+            omitted: 0,
         }
     }
 
@@ -79,9 +79,34 @@ impl<'r, R> AssertionContext<'r, R> {
 
     /// Consumes a completed evaluation's bounded evidence, retaining its already scoped paths.
     #[must_use]
-    pub fn into_evidence(mut self) -> Evidence {
-        self.evidence.path_prefix_len = self.path.len();
-        self.evidence
+    pub fn into_evidence(self) -> Evidence {
+        Evidence {
+            children: self.children.into_values(),
+            omitted: self.omitted,
+            path_prefix_len: self.path.len(),
+        }
+    }
+
+    /// Completes a composition using its truth result, independently of retained evidence.
+    /// A rejection with no retained or omitted failures gets the caller's fallback constraint.
+    /// The fallback is lazy and obeys the same budget and probe rules as other outcomes.
+    pub(crate) fn finish(
+        mut self,
+        matched: bool,
+        fallback: impl FnOnce(&Self) -> AssertionFailure,
+    ) -> Result<(), Evidence> {
+        if matched {
+            return Ok(());
+        }
+        if !self.has_evidence() {
+            self.outcome(false, fallback);
+        }
+        Err(self.into_evidence())
+    }
+
+    /// Whether this scope has retained or omitted failure evidence.
+    pub(crate) fn has_evidence(&self) -> bool {
+        self.children.len() > 0 || self.omitted > 0
     }
 
     /// Executes and immediately explains one definition. Observations cannot escape to siblings.
@@ -101,7 +126,7 @@ impl<'r, R> AssertionContext<'r, R> {
                     .explain(Some((actual, rejection)), failure, self)
                     .build();
                 if D::FLATTEN {
-                    self.evidence.omitted += failure.omitted_children;
+                    self.omitted += failure.omitted_children;
                     for child in failure.children {
                         self.record(child);
                     }
@@ -110,7 +135,7 @@ impl<'r, R> AssertionContext<'r, R> {
                 }
             } else {
                 drop(rejection);
-                self.evidence.omitted += usize::from(self.diagnostic);
+                self.omitted += usize::from(self.diagnostic);
             }
         }
         matched
@@ -149,20 +174,24 @@ impl<'r, R> AssertionContext<'r, R> {
     /// Whether evidence is requested. Built-in leaves do not render during probes.
     #[must_use]
     pub fn is_diagnostic(&self) -> bool {
-        self.diagnostic
-            && (self.evidence.children.len() < self.limit
-                || ((self.evidence_order == RenderingOrder::SortByRenderedText) && self.limit > 0))
+        self.diagnostic && self.child_limit() > 0
     }
 
     /// Records detached evidence, preserving structured values and inner assertion metadata.
-    pub fn record(&mut self, mut failure: AssertionFailure) {
+    pub fn record(&mut self, failure: AssertionFailure) {
+        self.record_with(|_| failure);
+    }
+
+    /// Builds detached evidence only when this scope can retain it.
+    pub(crate) fn record_with(&mut self, description: impl FnOnce(&Self) -> AssertionFailure) {
         if !self.diagnostic {
             return;
         }
         if !self.is_diagnostic() {
-            self.evidence.omitted += 1;
+            self.omitted += 1;
             return;
         }
+        let mut failure = description(self);
         let mut path = self.path.clone();
         path.append(&mut failure.path);
         failure.path = path;
@@ -173,7 +202,7 @@ impl<'r, R> AssertionContext<'r, R> {
     pub fn outcome(
         &mut self,
         matched: bool,
-        description: impl FnOnce(&Self) -> crate::AssertionFailure,
+        description: impl FnOnce(&Self) -> AssertionFailure,
     ) -> bool {
         if !matched {
             if self.is_diagnostic() {
@@ -184,7 +213,7 @@ impl<'r, R> AssertionContext<'r, R> {
                         .build(),
                 );
             } else if self.diagnostic {
-                self.evidence.omitted += 1;
+                self.omitted += 1;
             }
         }
         matched
@@ -214,20 +243,16 @@ impl<'r, R> AssertionContext<'r, R> {
     /// children.
     #[must_use]
     pub fn isolated(&self) -> Self {
+        let limit = self.child_limit();
         Self {
-            // Sorted branches compete for the same retained slots, even after the group fills.
-            limit: if self.evidence_order == RenderingOrder::SortByRenderedText {
-                self.limit
-            } else {
-                self.limit.saturating_sub(self.evidence.children.len())
-            },
+            limit,
             evidence_order: self.evidence_order,
-            sort_keys: Vec::new(),
+            children: Smallest::new(limit),
             rendering: self.rendering,
             include_location: self.include_location,
             diagnostic: self.diagnostic,
             path: self.path.clone(),
-            evidence: Evidence::default(),
+            omitted: 0,
         }
     }
 
@@ -240,29 +265,39 @@ impl<'r, R> AssertionContext<'r, R> {
         context
     }
 
-    fn retain(&mut self, failure: AssertionFailure) {
-        if self.evidence_order == RenderingOrder::SortByRenderedText && self.limit > 0 {
-            let text = ToHumanReadableText::render_child(&failure);
-            let index = self.sort_keys.partition_point(|retained| retained <= &text);
-            if self.evidence.children.len() == self.limit {
-                self.evidence.omitted += 1;
-                if index == self.limit {
-                    return;
-                }
-                self.evidence.children.pop();
-                self.sort_keys.pop();
-            }
-            self.sort_keys.insert(index, text);
-            self.evidence.children.insert(index, failure);
-        } else if self.evidence.children.len() < self.limit {
-            self.evidence.children.push(failure);
+    /// Effective allowance and inherited order for independently retained candidate evidence.
+    pub(crate) fn evidence_policy(&self) -> (usize, RenderingOrder) {
+        let limit = if self.diagnostic {
+            self.child_limit()
         } else {
-            self.evidence.omitted += 1;
+            0
+        };
+        (limit, self.evidence_order)
+    }
+
+    // Sorted children keep competing after the group fills. Iteration-preserving children share
+    // the remaining slots. Probes inherit the same allowance but disable diagnostics separately.
+    fn child_limit(&self) -> usize {
+        if self.evidence_order == RenderingOrder::SortByRenderedText {
+            self.limit
+        } else {
+            self.limit.saturating_sub(self.children.len())
         }
     }
 
+    fn retain(&mut self, failure: AssertionFailure) {
+        let rank = self.children.len() + self.omitted;
+        self.omitted += usize::from(self.children.len() == self.limit);
+        let text = (self.evidence_order == RenderingOrder::SortByRenderedText && self.limit > 0)
+            .then(|| ToHumanReadableText::render_child(&failure));
+        self.children.offer(Keyed {
+            key: (text, rank),
+            value: failure,
+        });
+    }
+
     pub(crate) fn append(&mut self, other: Evidence) {
-        self.evidence.omitted += other.omitted;
+        self.omitted += other.omitted;
         for failure in other.children {
             self.retain(failure);
         }
@@ -281,6 +316,75 @@ mod tests {
     use crate::{AssertionContext, expectation::predicate, prelude::*};
     use core::cell::Cell;
 
+    mod record_with {
+        use super::*;
+        use crate::{
+            DebugRenderer, RenderingBudget,
+            failure::{FailureBuilder, FailureKind, PathSegment},
+            renderer::RenderingOrder,
+        };
+
+        #[test]
+        fn builds_only_retained_failures_and_suppresses_probes() {
+            for probe in [false, true] {
+                for maximum in [0, 1, 3] {
+                    let calls = Cell::new(0);
+                    let mut context = AssertionContext::new(
+                        &DebugRenderer,
+                        RenderingBudget::default().with_max_items(maximum),
+                    )
+                    .with_diagnostics(!probe);
+                    context.scoped(PathSegment::Field("items"), |context| {
+                        for index in 0..3 {
+                            context.record_with(|_| {
+                                calls.set(calls.get() + 1);
+                                FailureBuilder::detached::<i32>(FailureKind::Equality)
+                                    .path([PathSegment::Index(index)])
+                                    .build()
+                            });
+                        }
+                    });
+                    let retained = if probe { 0 } else { maximum };
+                    assert_that!(calls.get()).is_equal_to(retained);
+                    let evidence = context.into_evidence();
+                    assert_that!(evidence.children).has_length(retained);
+                    assert_that!(evidence.omitted).is_equal_to(if probe {
+                        0
+                    } else {
+                        3 - retained
+                    });
+                    for (index, failure) in evidence.children.iter().enumerate() {
+                        assert_that!(failure.path).contains_exactly([
+                            PathSegment::Field("items"),
+                            PathSegment::Index(index),
+                        ]);
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn sorted_evidence_keeps_competing_after_retention_fills() {
+            let calls = Cell::new(0);
+            let mut context =
+                AssertionContext::new(&DebugRenderer, RenderingBudget::default().with_max_items(1))
+                    .isolated_for_order(RenderingOrder::SortByRenderedText);
+            for relation in ["z", "a", "m"] {
+                context.record_with(|_| {
+                    calls.set(calls.get() + 1);
+                    FailureBuilder::detached::<i32>(FailureKind::Matching)
+                        .relation(relation)
+                        .build()
+                });
+            }
+            assert_that!(calls.get()).is_equal_to(3);
+            let evidence = context.into_evidence();
+            assert_that!(evidence.children).has_length(1);
+            assert_that!(evidence.children[0].relation.as_deref()).is_equal_to(Some("a"));
+            assert_that!(evidence.omitted).is_equal_to(2);
+        }
+    }
+
     mod assertion_children {
         use super::*;
         use crate::failure::adapter::HumanReadableText;
@@ -294,7 +398,7 @@ mod tests {
 
         struct Group<D>(D);
 
-        impl<D: ExpectationDiagnostics<i32>> crate::Expectation<i32> for Group<D> {
+        impl<D: ExpectationDiagnostics<i32>> Expectation<i32> for Group<D> {
             type Success<'a>
                 = ()
             where
@@ -410,7 +514,7 @@ mod tests {
             });
 
             assert_that!(result).is_false();
-            assert_that!(context.evidence.omitted).is_equal_to(5);
+            assert_that!(context.omitted).is_equal_to(5);
             assert_that!(context.into_evidence().children).contains_exactly_satisfying([
                 |failure: AssertThat<AssertionFailure, Capture>| {
                     failure
@@ -455,13 +559,13 @@ mod tests {
                     context.evaluate(&actual, &matcher)
                 });
                 assert_that!(result).is_false();
-                assert_that!(context.evidence.omitted).is_equal_to(2 - limit);
+                assert_that!(context.omitted).is_equal_to(2 - limit);
                 let retained = context
                     .into_evidence()
                     .children
                     .into_iter()
                     .map(|failure| failure.path)
-                    .collect::<alloc::vec::Vec<_>>();
+                    .collect::<Vec<_>>();
                 assert_that!(retained).is_equal_to(&paths[..limit]);
             }
         }
@@ -477,20 +581,41 @@ mod tests {
 
         #[test]
         fn retains_remaining_capacity_and_suppresses_rendering_in_probes() {
-            let renders = Cell::new(0);
-            let renderer = CountingRenderer(&renders);
-            let mut context =
-                AssertionContext::new(&renderer, RenderingBudget::default().with_max_items(2));
-            context.evaluate(&0, &equal_to(9));
-            let matcher = contains_matching(equal_to(9));
-            assert_that!(context.evaluate(&[1, 2, 3], &matcher)).is_false();
+            for order in [
+                RenderingOrder::PreserveIteration,
+                RenderingOrder::SortByRenderedText,
+            ] {
+                for limit in [0, 1, 2, 4, 5, usize::MAX] {
+                    let renders = Cell::new(0);
+                    let renderer = CountingRenderer(&renders);
+                    let mut context = AssertionContext::new(
+                        &renderer,
+                        RenderingBudget::default().with_max_items(limit),
+                    )
+                    .isolated_for_order(order);
+                    context.evaluate(&0, &equal_to(9));
+                    let matcher = contains_matching(equal_to(9));
+                    assert_that!(context.evaluate(&[1, 2, 3], &matcher)).is_false();
 
-            assert_that!(context.evidence.omitted).is_equal_to(2);
-            assert_that!(renders.get()).is_equal_to(4);
-            assert_that!(context.probe(&[1, 2, 3], &matcher)).is_false();
-            assert_that!(context.probe(&[9], &matcher)).is_true();
-            assert_that!(renders.get()).is_equal_to(4);
-            assert_that!(context.into_evidence().children).has_length(2);
+                    let retained = limit.min(4);
+                    let expected_renders =
+                        if order == RenderingOrder::SortByRenderedText && limit > 0 {
+                            8
+                        } else {
+                            2 * retained
+                        };
+                    assert_that!(context.omitted).is_equal_to(4 - retained);
+                    assert_that!(renders.get()).is_equal_to(expected_renders);
+                    assert_that!(context.probe(&[1, 2, 3], &matcher)).is_false();
+                    assert_that!(context.probe(&[9], &matcher)).is_true();
+                    assert_that!(renders.get()).is_equal_to(expected_renders);
+                    let evidence = context
+                        .finish(false, |_| panic!("replaced existing evidence"))
+                        .err()
+                        .unwrap();
+                    assert_that!(evidence.children).has_length(retained);
+                }
+            }
         }
     }
 
@@ -523,13 +648,17 @@ mod tests {
                 *actual == 2
             });
             let context = AssertionContext::default();
-            {
+            for finish_success in [false, true] {
                 let mut fork = context.isolated();
                 assert_that!(fork.evaluate(&1, &matcher)).is_false();
+                if finish_success {
+                    assert_that!(fork.finish(true, |_| panic!("described a successful group")))
+                        .is_ok();
+                }
             }
 
             assert_that!(context.into_evidence().children).is_empty();
-            assert_that!(calls.get()).is_equal_to(1);
+            assert_that!(calls.get()).is_equal_to(2);
         }
 
         #[test]

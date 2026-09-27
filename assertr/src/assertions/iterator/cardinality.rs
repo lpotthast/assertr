@@ -1,6 +1,6 @@
 use super::{
     AssertThat, AssertionContext, Borrow, EqualTo, Expectation, FailureBuilder, FailureKind,
-    GroupStyle, Mode, PhantomData, PositionReporting, Preview, Scan, Tail, ValueRenderer, Vec,
+    GroupStyle, Mode, PhantomData, PositionReporting, Preview, Scan, Tail, ValueRenderer, VecDeque,
     exact_size_hint, execute,
 };
 use crate::Fact;
@@ -180,14 +180,14 @@ fn observe_length<I: Iterator>(iterator: &mut I, expected: usize) -> LengthObser
     if let Some(length) = exact_size_hint(&iterator) {
         return LengthObservation {
             preview: Preview {
-                items: Vec::new(),
+                items: VecDeque::new(),
                 consumed: 0,
             },
             length,
             exact: true,
         };
     }
-    let mut tail = Tail::new();
+    let mut tail = Tail::new(super::PREVIEW_CAPACITY);
     let mut exact = false;
     for _ in 0..=expected {
         let Some(item) = iterator.next() else {

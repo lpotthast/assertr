@@ -104,23 +104,29 @@ impl VisitMut for FluentExpressions {
                 let result = Ident::new("__assertr_result", Span::mixed_site());
                 let location = Ident::new("__assertr_location", Span::mixed_site());
                 let callback = Ident::new("__assertr_callback", Span::mixed_site());
-                let callback_type = Ident::new("__assertr_callback_type", Span::mixed_site());
+                let mut callback_types = Vec::new();
                 let assertions = entry_call
                     .args
                     .first_mut()
                     .expect("verify rewrites have exactly one argument");
-                if !adapt_verify_callback(assertions, &assertr, &receiver, &callback_type, span) {
+                if !adapt_verify_callback(
+                    assertions,
+                    &assertr,
+                    &receiver,
+                    &mut callback_types,
+                    span,
+                ) {
                     *expression = Expr::MethodCall(entry_call);
                     return;
                 }
 
                 *expression = syn::parse_quote_spanned! {span=>
                     {
-                        let mut #callback_type = ::core::option::Option::None;
+                        #(let mut #callback_types = ::core::option::Option::None;)*
                         #assertr::__private::fluent_expressions::finish(
                             #entry_call,
                             |mut #result, #location| {
-                                if let ::core::option::Option::Some(#callback) = #callback_type {
+                                #(if let ::core::option::Option::Some(#callback) = #callback_types {
                                     #[allow(unused_imports)]
                                     use #assertr::__private::fluent_expressions::{
                                         CaptureCallback as _, CaptureCallbackFallback as _,
@@ -132,7 +138,7 @@ impl VisitMut for FluentExpressions {
                                         )
                                         .attach(::core::stringify!(#receiver), #location);
                                     }
-                                }
+                                })*
                                 #result
                             },
                         )
@@ -145,12 +151,13 @@ impl VisitMut for FluentExpressions {
 
 /// Literal closures retain the method's expected callback signature, including coercions to
 /// function pointers. Other callback values keep their concrete type for inspection after the
-/// original call has resolved it. Returns whether a callback type needs to be retained.
+/// original call has resolved it. Each branch gets its own probe so distinct function items can
+/// still coerce to a common function pointer. Returns whether any callback type is retained.
 fn adapt_verify_callback(
     expression: &mut Expr,
     assertr: &TokenStream,
     receiver: &TokenStream,
-    callback_type: &Ident,
+    callback_types: &mut Vec<Ident>,
     span: Span,
 ) -> bool {
     match expression {
@@ -185,42 +192,43 @@ fn adapt_verify_callback(
         }
         Expr::Block(block) => {
             if let Some(syn::Stmt::Expr(tail, None)) = block.block.stmts.last_mut() {
-                adapt_verify_callback(tail, assertr, receiver, callback_type, span)
+                adapt_verify_callback(tail, assertr, receiver, callback_types, span)
             } else {
                 false
             }
         }
         Expr::Paren(inner) => {
-            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_type, span)
+            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_types, span)
         }
         Expr::Group(inner) => {
-            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_type, span)
+            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_types, span)
         }
         Expr::Reference(inner) => {
             let mut value = (*inner.expr).clone();
-            if !adapt_verify_callback(&mut value, assertr, receiver, callback_type, span) {
+            // Probes in this tentative rewrite are discarded when the reference itself is
+            // retained. Emitting their declarations would leave unconstrained callback types.
+            let mut referent_types = Vec::new();
+            if !adapt_verify_callback(&mut value, assertr, receiver, &mut referent_types, span) {
                 *inner.expr = value;
                 return false;
             }
             // Remember the reference itself. Moving its referent into the helper would consume
             // a callback that the original call only borrowed.
-            *expression = syn::parse_quote_spanned! {span=>
-                #assertr::__private::fluent_expressions::remember_callback(#expression, &mut #callback_type)
-            };
+            retain_callback(expression, assertr, callback_types, span);
             true
         }
         Expr::Cast(inner) => {
-            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_type, span)
+            adapt_verify_callback(&mut inner.expr, assertr, receiver, callback_types, span)
         }
         Expr::If(branch) => {
             let then_retained =
                 if let Some(syn::Stmt::Expr(tail, None)) = branch.then_branch.stmts.last_mut() {
-                    adapt_verify_callback(tail, assertr, receiver, callback_type, span)
+                    adapt_verify_callback(tail, assertr, receiver, callback_types, span)
                 } else {
                     false
                 };
             let else_retained = branch.else_branch.as_mut().is_some_and(|(_, tail)| {
-                adapt_verify_callback(tail, assertr, receiver, callback_type, span)
+                adapt_verify_callback(tail, assertr, receiver, callback_types, span)
             });
             then_retained || else_retained
         }
@@ -228,17 +236,31 @@ fn adapt_verify_callback(
             let mut retained = false;
             for arm in &mut branch.arms {
                 retained |=
-                    adapt_verify_callback(&mut arm.body, assertr, receiver, callback_type, span);
+                    adapt_verify_callback(&mut arm.body, assertr, receiver, callback_types, span);
             }
             retained
         }
         _ => {
-            *expression = syn::parse_quote_spanned! {span=>
-                #assertr::__private::fluent_expressions::remember_callback(#expression, &mut #callback_type)
-            };
+            retain_callback(expression, assertr, callback_types, span);
             true
         }
     }
+}
+
+fn retain_callback(
+    expression: &mut Expr,
+    assertr: &TokenStream,
+    callback_types: &mut Vec<Ident>,
+    span: Span,
+) {
+    let callback_type = Ident::new(
+        &format!("__assertr_callback_type_{}", callback_types.len()),
+        Span::mixed_site(),
+    );
+    *expression = syn::parse_quote_spanned! {span=>
+        #assertr::__private::fluent_expressions::remember_callback(#expression, &mut #callback_type)
+    };
+    callback_types.push(callback_type);
 }
 
 fn assertr_path() -> TokenStream {

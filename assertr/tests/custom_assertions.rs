@@ -38,6 +38,8 @@ mod watch_trait_imports {
 
     #[test]
     fn canonical_trait_supports_generic_and_qualified_calls_in_both_modes() {
+        use assertr::assertions::tokio::prelude::TokioWatchReceiverAssertions as PreludeAssertions;
+
         struct NoRenderer;
         let (_sender, mut receiver) = tokio::sync::watch::channel(7);
         receiver.mark_changed();
@@ -50,9 +52,7 @@ mod watch_trait_imports {
         assert_that!(receiver.has_changed().unwrap()).is_true();
 
         receiver.mark_unchanged();
-        assertr::assertions::tokio::prelude::TokioWatchReceiverAssertions::has_not_changed(
-            assert_that!(receiver),
-        );
+        PreludeAssertions::has_not_changed(assert_that!(receiver));
     }
 
     #[test]
@@ -472,115 +472,6 @@ mod leaf {
     }
 }
 
-mod nested {
-    use super::Person;
-    use assertr::failure::FailureBuilder;
-    use assertr::prelude::*;
-    use assertr::{Fact, FailureKind};
-    use indoc::formatdoc;
-
-    /// A downstream assertion over a group of people that reports each rejected member as a nested
-    /// failure located by its index, the way the built-in positional assertions do.
-    trait GroupAssertions<R = DebugRenderer> {
-        #[allow(clippy::wrong_self_convention)]
-        fn are_adults(self) -> Self
-        where
-            R: ValueRenderer<Person>;
-    }
-
-    impl<M: Mode, R> GroupAssertions<R> for AssertThat<'_, Vec<Person>, M, R> {
-        #[track_caller]
-        fn are_adults(self) -> Self
-        where
-            R: ValueRenderer<Person>,
-        {
-            self.track_assertion();
-
-            let minors = self
-                .actual()
-                .iter()
-                .enumerate()
-                .filter(|(_, person)| person.age < 18)
-                .map(|(index, person)| {
-                    FailureBuilder::detached::<Person>(FailureKind::Ordering)
-                        .actual(self.render().value(person))
-                        .relation("is not an adult")
-                        .build()
-                        .located_at(Fact::index(index))
-                })
-                .collect::<Vec<_>>();
-            if !minors.is_empty() {
-                self.failure(FailureKind::Predicate)
-                    .relation("contains people who are not adults")
-                    .children(minors)
-                    .raise();
-            }
-            self
-        }
-    }
-
-    fn person(age: u32) -> Person {
-        Person {
-            age,
-            meta: super::Metadata { alive: true },
-        }
-    }
-
-    #[derive(Clone, Copy)]
-    struct AgeRenderer;
-
-    impl ValueRenderer<Person> for AgeRenderer {
-        fn fmt(&self, value: &Person, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            write!(f, "Person(age={})", value.age)
-        }
-    }
-
-    #[test]
-    fn a_downstream_assertion_attaches_located_children() {
-        let failures = assert_that!(vec![person(30), person(12)])
-            .with_renderer(AgeRenderer)
-            .with_location(false)
-            .capture(|it| it.are_adults());
-
-        assert_that!(failures).contains_exactly_satisfying([
-            |failure: AssertThat<AssertionFailure, Capture>| {
-                failure
-                    .derive(|failure| &failure.children)
-                    .contains_exactly_satisfying([
-                        |child: AssertThat<AssertionFailure, Capture>| {
-                            child
-                                .derive(|child| &child.kind)
-                                .is_equal_to(FailureKind::Ordering);
-                            child
-                                .derive_owned(|child| super::text_opt(child.actual.as_ref()))
-                                .is_equal_to(Some("Person(age=12)"));
-                            child
-                                .derive(|child| &child.facts)
-                                .contains_exactly([Fact::index(1)]);
-                        },
-                    ]);
-                failure
-                    .derive_owned(|failure| ToHumanReadableText.render(failure))
-                    .is_equal_to(assertr::failure::adapter::HumanReadableText::new(
-                        formatdoc! {"
-            -------- assertr --------
-            Expression: `vec![person(30), person(12)]`
-
-            contains people who are not adults
-
-            Nested failures:
-              - At index 1:
-                Actual: Person(age=12)
-
-                is not an adult
-            -------- assertr --------
-            "},
-                    ));
-            },
-        ]);
-    }
-}
-
 #[cfg(feature = "fluent")]
 mod generated_fluent_aliases {
     // The explicit method lifetime is the regression subject.
@@ -637,93 +528,6 @@ mod generated_fluent_aliases {
             .have_values::<String, 2>(["first".to_owned(), "second".to_owned()])
             .await;
         assert_that!(values).contains_exactly(["first", "second"]);
-    }
-}
-
-mod matcher_authoring {
-    use assertr::prelude::*;
-
-    struct AgeAtLeast(u32);
-    impl<R> assertr::Expectation<super::Person, R> for AgeAtLeast {
-        type Success<'a> = ();
-        type Rejection<'a> = u32;
-        fn evaluate(
-            &self,
-            actual: &super::Person,
-            _: &assertr::AssertionContext<'_, R>,
-        ) -> Result<(), u32> {
-            if actual.age >= self.0 {
-                Ok(())
-            } else {
-                Err(actual.age)
-            }
-        }
-    }
-    impl<R: ValueRenderer<u32>> ExpectationDiagnostics<super::Person, R> for AgeAtLeast {
-        const KIND: assertr::FailureKind = assertr::FailureKind::Ordering;
-        fn explain<Target>(
-            &self,
-            rejected: Option<(&super::Person, u32)>,
-            failure: assertr::failure::FailureBuilder<Target>,
-            context: &assertr::AssertionContext<'_, R>,
-        ) -> assertr::failure::FailureBuilder<Target> {
-            let render = context.render();
-            let failure = failure.expected(render.value(&self.0));
-            match rejected {
-                None => failure.relation("has at least the required age"),
-                Some((_, age)) => failure
-                    .path([assertr::failure::PathSegment::Field("age")])
-                    .actual(render.value(&age))
-                    .relation("is not greater or equal to"),
-            }
-        }
-    }
-    #[test]
-    fn a_downstream_definition_executes_directly_through_the_chain() {
-        let person = super::Person {
-            age: 12,
-            meta: super::Metadata { alive: true },
-        };
-        let failures = assert_that!(person)
-            .with_renderer(AgeRenderer)
-            .capture(|it| it.apply_assertion(AgeAtLeast(18)));
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].kind).is_equal_to(assertr::FailureKind::Ordering);
-    }
-
-    struct AgeRenderer;
-    impl ValueRenderer<u32> for AgeRenderer {
-        fn fmt(&self, value: &u32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            write!(f, "age={value}")
-        }
-    }
-    #[test]
-    fn downstream_matchers_compose_without_parent_rendering() {
-        let person = super::Person {
-            age: 12,
-            meta: super::Metadata { alive: true },
-        };
-        let matcher = assertr::matchers::all_of((AgeAtLeast(18), AgeAtLeast(21)));
-        let failures = assert_that!(person)
-            .with_renderer(AgeRenderer)
-            .capture(|it| it.matches(&matcher));
-        assert_that!(failures).contains_exactly_satisfying([
-            |element: AssertThat<AssertionFailure, Capture>| {
-                element
-                    .derive(|value| &value.children)
-                    .contains_exactly_satisfying(
-                        [|child: AssertThat<AssertionFailure, Capture>| {
-                            child
-                                .derive_owned(|child| super::text_opt(child.actual.as_ref()))
-                                .is_equal_to(Some("age=12"));
-                        }; 2],
-                    );
-            },
-        ]);
-        let failures = assert_that!(person)
-            .with_renderer(AgeRenderer)
-            .capture(|it| it.matches(&matcher));
-        assert_that!(failures).has_length(1);
     }
 }
 
@@ -1061,15 +865,21 @@ mod callback_renderer_bounds {
     }
 }
 
-mod definitions {
-    use core::cell::{Ref, RefCell};
+mod matcher_authoring {
+    use super::text_opt;
+    use core::{
+        cell::{Cell, Ref, RefCell},
+        fmt,
+    };
 
-    use assertr::assertions::core::partial_eq::{EqualTo, NotEqualTo};
-    use assertr::failure::{FailureBuilder, FailureKind};
-    use assertr::prelude::*;
-    use assertr::{AssertionContext, Expectation, ExpectationDiagnostics};
-
-    struct NoRenderer;
+    use assertr::{
+        AssertionContext, Fact,
+        expectation::Evidence,
+        failure::{FailureBuilder, FailureKind},
+        matchers::{EqualTo, NotEqualTo, all_of, each},
+        prelude::*,
+        renderer::RenderedBody,
+    };
 
     // Retain a guarded observation, as assertions over cells, locks, and receivers need to do.
     struct HasText<'e>(&'e str);
@@ -1089,6 +899,8 @@ mod definitions {
             actual: &'a RefCell<String>,
             _: &AssertionContext<'_, R>,
         ) -> Result<(), Self::Rejection<'a>> {
+            // An exclusive acquisition also catches a guard retained by a preceding pair.
+            drop(actual.borrow_mut());
             let observed = actual.borrow();
             if observed.as_str() == self.0 {
                 Ok(())
@@ -1115,132 +927,6 @@ mod definitions {
             failure.expected(render.value(self.0))
         }
     }
-
-    struct RendererIndependent;
-
-    impl Expectation<String, NoRenderer> for RendererIndependent {
-        type Success<'a> = ();
-        type Rejection<'a> = core::convert::Infallible;
-
-        fn evaluate<'a>(
-            &'a self,
-            actual: &'a String,
-            context: &AssertionContext<'_, NoRenderer>,
-        ) -> Result<(), core::convert::Infallible> {
-            assert_that!(EqualTo::new("expected").evaluate(actual, context).is_err()).is_true();
-            assert_that!(
-                NotEqualTo::new("expected")
-                    .evaluate(actual, context)
-                    .is_ok()
-            )
-            .is_true();
-            Ok(())
-        }
-    }
-
-    impl ExpectationDiagnostics<String, NoRenderer> for RendererIndependent {
-        const KIND: FailureKind = FailureKind::Other;
-
-        fn explain<Target>(
-            &self,
-            rejected: Option<(&String, core::convert::Infallible)>,
-            failure: FailureBuilder<Target>,
-            _: &AssertionContext<'_, NoRenderer>,
-        ) -> FailureBuilder<Target> {
-            match rejected {
-                None => failure.relation("evaluates without a renderer"),
-                Some((_, never)) => match never {},
-            }
-        }
-    }
-
-    #[test]
-    fn public_definitions_evaluate_inside_the_executor_without_rendering() {
-        assert_that!(String::from("actual"))
-            .with_renderer(NoRenderer)
-            .apply_assertion(RendererIndependent);
-    }
-
-    #[test]
-    fn diagnostics_use_the_retained_observation_and_release_its_guard() {
-        let expected = String::from("expected");
-        let definition = HasText(&expected);
-        let actual = RefCell::new(String::from("observed"));
-        let failures = assert_that!(actual).capture(|it| it.apply_assertion(&definition));
-        assert_that!(failures).has_length(1);
-        *actual.borrow_mut() = String::from("changed");
-        assert_that!(super::text_opt(failures[0].actual.as_ref()))
-            .is_equal_to(Some("\"observed\""));
-        assert_that!(super::text_opt(failures[0].expected.as_ref()))
-            .is_equal_to(Some("\"expected\""));
-    }
-    struct Twice<D>(D);
-
-    impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R>> Expectation<T, R> for Twice<D> {
-        type Success<'a>
-            = ()
-        where
-            Self: 'a,
-            T: 'a;
-        type Rejection<'a>
-            = assertr::expectation::Evidence
-        where
-            Self: 'a,
-            T: 'a;
-
-        fn evaluate(
-            &self,
-            actual: &T,
-            context: &AssertionContext<'_, R>,
-        ) -> Result<(), assertr::expectation::Evidence> {
-            let mut children = context.isolated();
-            let first = children.evaluate(actual, &self.0);
-            let second = children.evaluate(actual, &self.0);
-            if first && second {
-                Ok(())
-            } else {
-                Err(children.into_evidence())
-            }
-        }
-    }
-
-    impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R>> ExpectationDiagnostics<T, R> for Twice<D> {
-        const KIND: FailureKind = D::KIND;
-
-        fn explain<'a, Target>(
-            &'a self,
-            rejected: Option<(&'a T, assertr::expectation::Evidence)>,
-            failure: FailureBuilder<Target>,
-            context: &AssertionContext<'_, R>,
-        ) -> FailureBuilder<Target> {
-            match rejected {
-                None => self.0.explain(None, failure, context),
-                Some((_, children)) => children.explain(failure),
-            }
-        }
-    }
-
-    #[test]
-    fn downstream_compositions_retain_children_with_the_supplied_context() {
-        let actual = RefCell::new(String::from("observed"));
-        let failures =
-            assert_that!(actual).capture(|it| it.apply_assertion(Twice(HasText("expected"))));
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).has_length(2);
-        *actual.borrow_mut() = String::from("released");
-    }
-}
-
-mod typed_rejections {
-    use core::{cell::Cell, fmt};
-
-    use assertr::{
-        AssertionContext, Fact,
-        failure::{FailureBuilder, FailureKind},
-        matchers::{all_of, each},
-        prelude::*,
-        renderer::RenderedBody,
-    };
 
     struct Subject(u32);
     struct OpaqueError(u32);
@@ -1290,142 +976,224 @@ mod typed_rejections {
         }
     }
 
-    fn assert_error(failure: &AssertionFailure, text: &str, omitted_characters: usize) {
-        assert_that!(failure.kind).is_equal_to(FailureKind::Predicate);
-        assert_that!(failure.relation.as_deref()).is_equal_to(Some("is rejected"));
-        assert_that!(failure.actual).is_none();
-        assert_that!(failure.facts).has_length(1);
-        let fact = &failure.facts[0];
-        assert_that!(fact.label.as_ref()).is_empty();
-        assert_that!(fact.value.type_name).is_equal_to(Some(core::any::type_name::<OpaqueError>()));
-        assert_that!(fact.value.body).is_equal_to(RenderedBody::Text {
-            text: text.into(),
-            omitted_characters,
-        });
-    }
+    // A downstream composite must use only the public context and retain owned child evidence.
+    struct Twice<D>(D);
 
-    #[test]
-    fn direct_execution_reuses_definitions_and_renders_original_errors_with_the_budget() {
-        let definition = Reject::default();
-        let failures = assert_that!(Subject(42))
-            .with_renderer(ErrorRenderer)
-            .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
-            .capture(|it| it.apply_assertion(&definition).matches(&definition));
-
-        assert_that!(definition.observations.get()).is_equal_to(2);
-        assert_that!(failures).has_length(2);
-        for failure in &failures {
-            assert_error(failure, "err", 6);
-        }
-    }
-
-    #[test]
-    fn composition_retains_typed_errors_without_rendering_subjects() {
-        let definition = Reject::default();
-        let failures = assert_that!(Subject(42))
-            .with_renderer(ErrorRenderer)
-            .capture(|it| it.matches(all_of((&definition, &definition))));
-
-        assert_that!(definition.observations.get()).is_equal_to(2);
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).has_length(2);
-        for child in &failures[0].children {
-            assert_error(child, "error(42)", 0);
-        }
-
-        let failures = assert_that!([Subject(42), Subject(43)])
-            .with_renderer(ErrorRenderer)
-            .capture(|it| it.matches(each(&definition)));
-
-        assert_that!(definition.observations.get()).is_equal_to(4);
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).has_length(2);
-        assert_error(&failures[0].children[0], "error(42)", 0);
-        assert_error(&failures[0].children[1], "error(43)", 0);
-    }
-
-    struct Probe<'a>(&'a Reject);
-
-    impl<R> Expectation<Subject, R> for Probe<'_> {
+    impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R>> Expectation<T, R> for Twice<D> {
         type Success<'a>
             = ()
         where
-            Self: 'a;
+            Self: 'a,
+            T: 'a;
         type Rejection<'a>
-            = ()
+            = Evidence
         where
-            Self: 'a;
+            Self: 'a,
+            T: 'a;
 
-        fn evaluate(&self, actual: &Subject, context: &AssertionContext<'_, R>) -> Result<(), ()> {
-            if context.probe(actual, self.0) {
-                Err(())
-            } else {
+        fn evaluate(&self, actual: &T, context: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+            let mut children = context.isolated();
+            let first = children.evaluate(actual, &self.0);
+            let second = children.evaluate(actual, &self.0);
+            if first && second {
                 Ok(())
+            } else {
+                Err(children.into_evidence())
             }
         }
     }
 
-    impl<R> ExpectationDiagnostics<Subject, R> for Probe<'_> {
-        const KIND: FailureKind = FailureKind::Other;
+    impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R>> ExpectationDiagnostics<T, R> for Twice<D> {
+        const KIND: FailureKind = D::KIND;
 
-        fn explain<Target>(
-            &self,
-            _: Option<(&Subject, ())>,
+        fn explain<'a, Target>(
+            &'a self,
+            rejected: Option<(&'a T, Evidence)>,
             failure: FailureBuilder<Target>,
-            _: &AssertionContext<'_, R>,
+            context: &AssertionContext<'_, R>,
         ) -> FailureBuilder<Target> {
-            failure.relation("rejects when probed")
+            match rejected {
+                None => self.0.explain(None, failure, context),
+                Some((_, children)) => children.explain(failure),
+            }
         }
     }
 
     #[test]
-    fn probes_evaluate_once_without_requiring_a_renderer() {
+    fn expectations_and_probes_are_available_without_renderer_support() {
         struct NoRenderer;
-        let definition = Reject::default();
-        assert_that!(Subject(42))
-            .with_renderer(NoRenderer)
-            .apply_assertion(Probe(&definition));
-        assert_that!(definition.observations.get()).is_equal_to(1);
+        fn accepts_expectation<T: ?Sized, D: Expectation<T, NoRenderer>>(_: &D) {}
+
+        accepts_expectation::<String, _>(&EqualTo::new("expected"));
+        accepts_expectation::<String, _>(&NotEqualTo::new("expected"));
+        accepts_expectation::<RefCell<String>, _>(&HasText("expected"));
+        accepts_expectation::<Subject, _>(&Reject::default());
+        // Pin the public probe's bounds without introducing an expectation just to get a context.
+        let _ = AssertionContext::<NoRenderer>::probe::<Subject, Reject>;
     }
 
-    #[test]
-    fn exhausted_child_evidence_does_not_render_errors_or_skip_evaluation() {
-        struct NeverRender;
-        impl ValueRenderer<OpaqueError> for NeverRender {
-            fn fmt(&self, _: &OpaqueError, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-                panic!("omitted errors must not be rendered")
+    mod guarded_observations {
+        use super::*;
+
+        #[test]
+        fn diagnostics_use_the_retained_observation_and_release_its_guard() {
+            let expected = String::from("expected");
+            let definition = HasText(&expected);
+            let actual = RefCell::new(String::from("observed"));
+            let failures = assert_that!(actual)
+                .apply_assertion(HasText("observed"))
+                .capture(|it| it.apply_assertion(&definition).matches(&definition));
+            assert_that!(failures).has_length(2);
+            *actual.borrow_mut() = String::from("changed");
+            for failure in &failures {
+                assert_that!(text_opt(failure.actual.as_ref())).is_equal_to(Some("\"observed\""));
+                assert_that!(text_opt(failure.expected.as_ref())).is_equal_to(Some("\"expected\""));
             }
         }
 
-        let definition = Reject::default();
-        let failures = assert_that!(Subject(42))
-            .with_renderer(NeverRender)
-            .with_rendering_budget(RenderingBudget::default().with_max_items(0))
-            .capture(|it| it.matches(all_of((&definition, &definition))));
+        #[test]
+        fn unordered_samples_explain_each_guarded_observation_before_the_next_pair() {
+            for limit in [0, 1, 2, usize::MAX] {
+                let actual = [
+                    RefCell::new(String::from("first")),
+                    RefCell::new(String::from("second")),
+                ];
+                let failures = assert_that!(actual)
+                    .with_rendering_budget(RenderingBudget::unlimited().with_max_items(limit))
+                    .capture(|it| {
+                        it.matches(elements_are_in_any_order![
+                            HasText("expected"),
+                            HasText("expected")
+                        ])
+                    });
+                assert_that!(failures).has_length(1);
+                assert_that!(actual[0].borrow().as_str()).is_equal_to("first");
+                assert_that!(actual[1].borrow().as_str()).is_equal_to("second");
+                actual[0].borrow_mut().clear();
+                actual[1].borrow_mut().clear();
+                if limit > 0 {
+                    let missing = &failures[0].children[0];
+                    assert_that!(missing.children).has_length(limit.min(2));
+                    assert_that!(text_opt(missing.children[0].actual.as_ref()))
+                        .is_equal_to(Some("\"first\""));
+                    assert_that!(missing.omitted_children).is_equal_to(2 - limit.min(2));
+                }
+            }
+        }
 
-        assert_that!(definition.observations.get()).is_equal_to(2);
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].children).is_empty();
-        assert_that!(failures[0].omitted_children).is_equal_to(2);
+        #[test]
+        fn downstream_compositions_retain_children_with_the_supplied_context() {
+            let actual = RefCell::new(String::from("observed"));
+            let matcher = Twice(HasText("expected"));
+            let failures =
+                assert_that!(actual).capture(|it| it.apply_assertion(&matcher).matches(&matcher));
+            assert_that!(failures).has_length(2);
+            *actual.borrow_mut() = String::from("released");
+            for failure in &failures {
+                assert_that!(failure.children).has_length(2);
+                for child in &failure.children {
+                    assert_that!(text_opt(child.actual.as_ref())).is_equal_to(Some("\"observed\""));
+                    assert_that!(text_opt(child.expected.as_ref()))
+                        .is_equal_to(Some("\"expected\""));
+                }
+            }
+        }
+    }
+
+    mod owned_rejections {
+        use super::*;
+
+        fn assert_error(failure: &AssertionFailure, text: &str, omitted_characters: usize) {
+            assert_that!(failure.kind).is_equal_to(FailureKind::Predicate);
+            assert_that!(failure.relation.as_deref()).is_equal_to(Some("is rejected"));
+            assert_that!(failure.actual).is_none();
+            assert_that!(failure.facts).has_length(1);
+            let fact = &failure.facts[0];
+            assert_that!(fact.label.as_ref()).is_empty();
+            assert_that!(fact.value.type_name)
+                .is_equal_to(Some(core::any::type_name::<OpaqueError>()));
+            assert_that!(fact.value.body).is_equal_to(RenderedBody::Text {
+                text: text.into(),
+                omitted_characters,
+            });
+        }
+
+        #[test]
+        fn direct_execution_reuses_definitions_and_renders_original_errors_with_the_budget() {
+            let definition = Reject::default();
+            let failures = assert_that!(Subject(42))
+                .with_renderer(ErrorRenderer)
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
+                .capture(|it| it.apply_assertion(&definition).matches(&definition));
+
+            assert_that!(definition.observations.get()).is_equal_to(2);
+            assert_that!(failures).has_length(2);
+            for failure in &failures {
+                assert_error(failure, "err", 6);
+            }
+        }
+
+        #[test]
+        fn composition_retains_typed_errors_without_rendering_subjects() {
+            let definition = Reject::default();
+            let failures = assert_that!(Subject(42))
+                .with_renderer(ErrorRenderer)
+                .capture(|it| it.matches(Twice(&definition)));
+
+            assert_that!(definition.observations.get()).is_equal_to(2);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(2);
+            for child in &failures[0].children {
+                assert_error(child, "error(42)", 0);
+            }
+
+            let failures = assert_that!([Subject(42), Subject(43)])
+                .with_renderer(ErrorRenderer)
+                .capture(|it| it.matches(each(&definition)));
+
+            assert_that!(definition.observations.get()).is_equal_to(4);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(2);
+            assert_error(&failures[0].children[0], "error(42)", 0);
+            assert_error(&failures[0].children[1], "error(43)", 0);
+        }
+
+        #[test]
+        fn exhausted_child_evidence_does_not_render_errors_or_skip_evaluation() {
+            struct NeverRender;
+            impl ValueRenderer<OpaqueError> for NeverRender {
+                fn fmt(&self, _: &OpaqueError, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    panic!("omitted errors must not be rendered")
+                }
+            }
+
+            let definition = Reject::default();
+            let failures = assert_that!(Subject(42))
+                .with_renderer(NeverRender)
+                .with_rendering_budget(RenderingBudget::default().with_max_items(0))
+                .capture(|it| it.matches(all_of((&definition, &definition))));
+
+            assert_that!(definition.observations.get()).is_equal_to(2);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).is_empty();
+            assert_that!(failures[0].omitted_children).is_equal_to(2);
+        }
     }
 }
 
 mod structural_rendering {
     use assertr::{
-        AssertionContext, Fact, FailureKind,
-        assertions::{
-            collection::{Collection, StableOrder},
-            map::Map,
-        },
-        failure::FailureBuilder,
+        AssertionContext, FailureKind,
+        assertions::{collection::Collection, map::Map},
+        failure::{FailureBuilder, PathSegment},
         prelude::*,
         renderer::{
             CollectionPresentation, EntryList, GroupStyle, IntoRendered, MapEntries, Rendered,
-            RenderedBody, RenderedValues, RenderingContext, RenderingOrder, StructField, TypeHint,
-            Typed, UnavailableStructField, Variant,
+            RenderedBody, RenderedValue, RenderedValues, RenderingContext, RenderingOrder,
+            StructField, Typed, UnavailableStructField, Variant,
         },
     };
-    use core::{any::type_name, cell::RefCell, fmt};
+    use core::{cell::RefCell, fmt};
 
     // Neither subjects nor leaves implement Debug. The renderer is deliberately not Clone.
     struct Token(&'static str);
@@ -1444,25 +1212,21 @@ mod structural_rendering {
         }
     }
 
-    struct SortedSequence<T>(Vec<T>);
+    struct Bag<T>(Vec<T>);
 
-    impl<T> HasLength for SortedSequence<T> {
+    impl<T> HasLength for Bag<T> {
         fn length(&self) -> usize {
             self.0.len()
         }
     }
 
-    impl<T> Collection for SortedSequence<T> {
+    impl<T> Collection for Bag<T> {
         type Item = T;
-        const PRESENTATION: CollectionPresentation = CollectionPresentation::list()
-            .with_type_hint()
-            .with_order(RenderingOrder::SortByRenderedText);
+        const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
         fn elements(&self) -> impl Iterator<Item = &T> {
             self.0.iter()
         }
     }
-
-    impl<T> StableOrder for SortedSequence<T> {}
 
     struct Table(Vec<(Token, Token)>);
 
@@ -1482,285 +1246,112 @@ mod structural_rendering {
         }
     }
 
-    #[track_caller]
-    fn assert_empty_collection<C: Collection, M: Mode, R: ValueRenderer<C::Item>>(
-        it: AssertThat<'_, C, M, R>,
-    ) -> AssertThat<'_, C, M, R> {
-        it.track_assertion();
-        if it.actual().length() != 0 {
-            it.failure(FailureKind::Length)
-                .actual(it.render().collection(it.actual()))
-                .relation("is not empty")
-                .raise();
-        }
-        it
-    }
-
-    #[track_caller]
-    fn assert_empty_map<M: Mode, R: ValueRenderer<Token>>(
-        it: AssertThat<'_, Table, M, R>,
-    ) -> AssertThat<'_, Table, M, R> {
-        it.track_assertion();
-        if it.actual().length() != 0 {
-            let render = it.render();
-            it.failure(FailureKind::Length)
-                .actual(render.map(it.actual()))
-                .relation("is not empty")
-                .fact(Fact::labelled(
-                    "Entries",
-                    render.entry_list::<Token, Token, _, _, _>(
-                        &it.actual().0,
-                        Table::RENDERING_ORDER,
-                    ),
-                ))
-                .raise();
-        }
-        it
-    }
-
-    #[track_caller]
-    fn assert_none<M: Mode, R: ValueRenderer<Token>>(
-        it: AssertThat<'_, Option<Token>, M, R>,
-    ) -> AssertThat<'_, Option<Token>, M, R> {
-        it.track_assertion();
-        if let Some(value) = it.actual() {
-            it.failure(FailureKind::Variant)
-                .actual(it.render().variant(it.actual(), "Some", value))
-                .relation("is not none")
-                .raise();
-        }
-        it
-    }
-
-    #[track_caller]
-    fn assert_empty_cell<M: Mode, R: ValueRenderer<Token>>(
-        it: AssertThat<'_, RefCell<Token>, M, R>,
-    ) -> AssertThat<'_, RefCell<Token>, M, R> {
-        it.track_assertion();
-        let failure = match it.actual().try_borrow() {
-            Ok(value) if value.0.is_empty() => None,
-            Ok(value) => Some(
-                it.failure(FailureKind::Predicate)
-                    .actual(
-                        it.render()
-                            .struct_field(it.actual(), "RefCell", "value", &*value),
-                    )
-                    .relation("does not contain an empty token"),
-            ),
-            Err(_) => Some(
-                it.failure(FailureKind::Predicate)
-                    .actual(it.render().unavailable_struct_field(
-                        it.actual(),
-                        "RefCell",
-                        "value",
-                        "<borrowed>",
-                    ))
-                    .relation("could not inspect the token"),
-            ),
-        };
-        if let Some(failure) = failure {
-            failure.raise();
-        }
-        it
-    }
-
-    fn text(value: &Rendered) -> String {
-        let mut output = String::new();
-        value.write(&mut output, false).unwrap();
-        output
-    }
-
-    fn check_type<T: ?Sized>(value: &Rendered, shown: bool) {
-        assert_that!(value.type_name()).is_equal_to(Some(type_name::<T>()));
-        assert_that!(value.hint).is_equal_to(TypeHint::Short);
-        assert_that!(value.shows_type_hint).is_equal_to(shown);
-    }
-
+    // Detailed tree metadata, ordering, and omission behavior live in renderer::context tests.
     #[test]
-    fn collection_assertion_preserves_structure_types_and_bounded_custom_leaves() {
-        let values = SortedSequence(vec![Token("z"), Token("a"), Token("m")]);
+    fn chain_settings_reach_a_custom_collection_adapter() {
+        let values = Bag(vec![Token("first"), Token("second")]);
+        let budget = RenderingBudget::unlimited()
+            .with_max_items(1)
+            .with_max_leaf_characters(5);
         let failures = assert_that!(values)
             .with_renderer(LeafRenderer)
             .with_subject_name("tokens")
             .with_location(false)
-            .with_rendering_budget(RenderingBudget::unlimited().with_max_items(2))
-            .capture(assert_empty_collection);
+            .with_rendering_budget(budget)
+            .capture(|it| {
+                it.track_assertion();
+                assert_that!(it.render().budget()).is_equal_to(budget);
+                it.failure(FailureKind::Length)
+                    .actual(it.render().collection(it.actual()))
+                    .relation("is not empty")
+                    .raise();
+                it
+            });
         assert_that!(failures).has_length(1);
-        let actual = failures[0].actual.as_ref().unwrap();
-        check_type::<SortedSequence<Token>>(actual, true);
-        let RenderedBody::Group {
-            style,
-            items,
-            omitted,
-            sorted,
-        } = &actual.body
+        assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("tokens"));
+        assert_that!(failures[0].location).is_none();
+        let RenderedBody::Group { items, omitted, .. } = &failures[0].actual.as_ref().unwrap().body
         else {
             panic!("expected a collection");
         };
-        assert_that!(*style).is_equal_to(GroupStyle::List);
         assert_that!(*omitted).is_equal_to(1);
-        assert_that!(*sorted).is_true();
-        assert_that!(items).has_length(2);
-        for item in items {
-            check_type::<Token>(item, false);
-        }
-        assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(
-            assertr::failure::adapter::HumanReadableText::new(indoc::indoc! {"
-            -------- assertr --------
-            Subject: tokens
-            Expression: `values`
-
-            Actual: SortedSequence [
-                token(a),
-                token(m),
-            ] (... 1 more element ...) (sorted for rendering)
-
-            is not empty
-            -------- assertr --------
-        "}),
-        );
+        assert_that!(items).has_length(1);
+        assert_that!(&items[0].body).is_equal_to(RenderedBody::Text {
+            text: "token".into(),
+            omitted_characters: 7,
+        });
     }
 
     #[test]
-    fn positional_and_borrowed_collection_views_keep_their_distinct_contracts() {
-        let values = SortedSequence(vec![
-            String::from("z"),
-            String::from("a"),
-            String::from("m"),
-        ]);
-        let root = assert_that!(values)
-            .with_renderer(LeafRenderer)
-            .with_rendering_budget(RenderingBudget::unlimited().with_max_items(2));
-        let render = root.render();
-        let sorted = render
-            .borrowed_collection::<str, _>(&values)
-            .into_rendered();
-        let stable = render
-            .stable_borrowed_collection::<str, _>(&values)
-            .into_rendered();
-        assert_that!(text(&sorted)).is_equal_to(
-            "SortedSequence [text(a), text(m)] (... 1 more element ...) (sorted for rendering)",
-        );
-        assert_that!(text(&stable))
-            .is_equal_to("SortedSequence [text(z), text(a)] (... 1 more element ...)");
-        for value in [&sorted, &stable] {
-            check_type::<SortedSequence<String>>(value, true);
-            let RenderedBody::Group { items, .. } = &value.body else {
-                panic!("expected a group")
-            };
-            for item in items {
-                check_type::<str>(item, false);
-            }
-        }
-        let tokens = SortedSequence(vec![Token("z"), Token("a")]);
-        let stable = render
-            .stable_collection(&tokens)
-            .show_type_hint(false)
-            .into_rendered();
-        check_type::<SortedSequence<Token>>(&stable, false);
-        assert_that!(text(&stable)).is_equal_to("[token(z), token(a)]");
-        // This chain only supplied a rendering context, so record the inspection.
-        root.track_assertion();
-    }
-
-    #[test]
-    fn map_assertion_renders_keys_values_and_synthetic_entries_without_parent_support() {
-        let map = Table(vec![(Token("z"), Token("one")), (Token("a"), Token("two"))]);
-        let failures = assert_that!(map)
-            .with_renderer(LeafRenderer)
-            .with_location(false)
-            .with_rendering_budget(RenderingBudget::unlimited().with_max_items(1))
-            .capture(assert_empty_map);
-        let actual = failures[0].actual.as_ref().unwrap();
-        check_type::<Table>(actual, true);
-        let RenderedBody::Map {
-            entries,
-            omitted,
-            sorted,
-        } = &actual.body
-        else {
-            panic!("expected a map");
-        };
-        assert_that!(*omitted).is_equal_to(1);
-        assert_that!(*sorted).is_true();
-        assert_that!(entries).has_length(1);
-        check_type::<Token>(&entries[0].0, false);
-        check_type::<Token>(&entries[0].1, false);
-        assert_that!(text(actual)).is_equal_to(
-            "Table {token(a): token(two)} (... 1 more entry ...) (sorted for rendering)",
-        );
-        let evidence = &failures[0].facts[0].value;
-        assert_that!(evidence.type_name()).is_none();
-        let RenderedBody::EntryList {
-            entries,
-            omitted,
-            sorted,
-        } = &evidence.body
-        else {
-            panic!("expected an entry list");
-        };
-        assert_that!(*omitted).is_equal_to(1);
-        assert_that!(*sorted).is_true();
-        check_type::<Token>(&entries[0].0, false);
-        check_type::<Token>(&entries[0].1, false);
-        assert_that!(text(evidence))
-            .is_equal_to("[(token(a), token(two))] (... 1 more entry ...) (sorted for rendering)");
-    }
-
-    #[test]
-    fn wrapper_assertions_retain_owner_and_leaf_types_and_untyped_placeholders() {
-        let failures = assert_that!(Some(Token("a")))
-            .with_renderer(LeafRenderer)
-            .capture(assert_none);
-        let actual = failures[0].actual.as_ref().unwrap();
-        check_type::<Option<Token>>(actual, false);
-        let RenderedBody::Variant { name, value } = &actual.body else {
-            panic!("expected a variant")
-        };
-        assert_that!(*name).is_equal_to("Some");
-        check_type::<Token>(value, false);
-        assert_that!(text(actual)).is_equal_to("Some(token(a))");
-
+    fn structural_adapters_render_custom_leaves_without_parent_or_clone_support() {
+        let render = RenderingContext::new(&LeafRenderer, RenderingBudget::unlimited());
+        let tokens = Bag(vec![Token("a")]);
+        let strings = Bag(vec![String::from("a")]);
+        let map = Table(vec![(Token("a"), Token("a"))]);
+        let owner = Some(Token("a"));
         let cell = RefCell::new(Token("a"));
-        let failures = assert_that!(cell)
-            .with_renderer(LeafRenderer)
-            .capture(assert_empty_cell);
-        let actual = failures[0].actual.as_ref().unwrap();
-        check_type::<RefCell<Token>>(actual, false);
-        let RenderedBody::Struct { name, fields } = &actual.body else {
-            panic!("expected a struct")
-        };
-        assert_that!(*name).is_equal_to("RefCell");
-        assert_that!(fields[0].0).is_equal_to("value");
-        check_type::<Token>(&fields[0].1, false);
-        assert_that!(text(actual)).is_equal_to("RefCell { value: token(a) }");
 
-        let _guard = cell.borrow_mut();
-        let failures = assert_that!(cell)
-            .with_renderer(LeafRenderer)
-            .capture(assert_empty_cell);
-        let actual = failures[0].actual.as_ref().unwrap();
-        check_type::<RefCell<Token>>(actual, false);
-        let RenderedBody::Struct { fields, .. } = &actual.body else {
-            panic!("expected a struct")
-        };
-        assert_that!(fields[0].1.type_name()).is_none();
-        assert_that!(&fields[0].1.body).is_equal_to(RenderedBody::Placeholder("<borrowed>"));
-        assert_that!(text(actual)).is_equal_to("RefCell { value: <borrowed> }");
+        // Bag has no StableOrder and Table has no lookup, equality, or ordering capabilities.
+        // Neither has Debug or a parent renderer. Strings render only through their str view.
+        for rendered in [
+            render.collection(&tokens).into_rendered(),
+            render.stable_collection(&tokens.0).into_rendered(),
+            render.values(&tokens, GroupStyle::Set).into_rendered(),
+            render
+                .borrowed_collection::<str, _>(&strings)
+                .into_rendered(),
+            render
+                .stable_borrowed_collection::<str, _>(&strings.0)
+                .into_rendered(),
+            render
+                .borrowed_values::<str, _>(&strings, GroupStyle::List)
+                .into_rendered(),
+            render.map(&map).into_rendered(),
+            render
+                .entry_list::<Token, Token, _, _, _>(&map.0, Table::RENDERING_ORDER)
+                .into_rendered(),
+            render
+                .variant(&owner, "Some", owner.as_ref().unwrap())
+                .into_rendered(),
+            render
+                .struct_field(&cell, "RefCell", "value", &*cell.borrow())
+                .into_rendered(),
+        ] {
+            let leaf = match &rendered.body {
+                RenderedBody::Group { items, .. } => &items[0],
+                RenderedBody::Map { entries, .. } | RenderedBody::EntryList { entries, .. } => {
+                    assert_that!(super::text_opt(Some(&entries[0].1)))
+                        .is_equal_to(Some("token(a)"));
+                    &entries[0].0
+                }
+                RenderedBody::Variant { value, .. } => value,
+                RenderedBody::Struct { fields, .. } => &fields[0].1,
+                _ => panic!("expected a structural adapter"),
+            };
+            assert_that!([Some("token(a)"), Some("text(a)")]).contains(super::text_opt(Some(leaf)));
+        }
     }
 
     #[test]
     fn all_adapter_types_are_nameable_and_construction_needs_no_renderer() {
         let render = RenderingContext::new(&NoRenderer, RenderingBudget::default());
-        let values = SortedSequence(vec![Token("a")]);
+        let values = Bag(vec![Token("a")]);
         let map = Table(vec![(Token("k"), Token("v"))]);
-        let _: Typed<RenderedValues<'_, Token, SortedSequence<Token>, NoRenderer>> =
+        let strings = Bag(vec![String::from("a")]);
+        let _: Typed<RenderedValues<'_, Token, Bag<Token>, NoRenderer>> =
             render.collection(&values);
-        let _: Typed<RenderedValues<'_, Token, SortedSequence<Token>, NoRenderer>> =
-            render.stable_collection(&values);
-        let _: RenderedValues<'_, Token, SortedSequence<Token>, NoRenderer> = render
+        let _: Typed<RenderedValues<'_, Token, Vec<Token>, NoRenderer>> =
+            render.stable_collection(&values.0);
+        let _: RenderedValues<'_, Token, Bag<Token>, NoRenderer> = render
             .values(&values, GroupStyle::Set)
             .with_order(RenderingOrder::SortByRenderedText);
+        let _: Typed<RenderedValues<'_, str, Bag<String>, NoRenderer>> =
+            render.borrowed_collection::<str, _>(&strings);
+        let _: Typed<RenderedValues<'_, str, Vec<String>, NoRenderer>> =
+            render.stable_borrowed_collection::<str, _>(&strings.0);
+        let _: RenderedValues<'_, str, Bag<String>, NoRenderer> =
+            render.borrowed_values::<str, _>(&strings, GroupStyle::List);
+        let _: Typed<RenderedValue<'_, Token, NoRenderer>> = render.value(&values.0[0]);
         let _: Typed<MapEntries<'_, Table, NoRenderer>> = render.map(&map);
         let _: EntryList<'_, Token, Token, Vec<(Token, Token)>, NoRenderer> =
             render.entry_list::<Token, Token, _, _, _>(&map.0, RenderingOrder::PreserveIteration);
@@ -1770,97 +1361,65 @@ mod structural_rendering {
             render.struct_field(&values, "Owner", "item", &values.0[0]);
         let placeholder: Typed<UnavailableStructField> =
             render.unavailable_struct_field(&values, "Owner", "item", "<hidden>");
-        assert_that!(text(&placeholder.into_rendered())).is_equal_to("Owner { item: <hidden> }");
-        assert_that!(render.budget()).is_equal_to(RenderingBudget::default());
+        let _: Rendered = placeholder.into_rendered();
     }
 
-    struct NoBadTokens;
-    struct BadTokens<'a> {
-        retained: Vec<&'a Token>,
-        omitted: usize,
-    }
+    struct ForwardEvidence(RenderingBudget);
 
-    impl<R> Expectation<SortedSequence<Token>, R> for NoBadTokens {
+    impl<R> Expectation<Token, R> for ForwardEvidence {
         type Success<'a> = ();
-        type Rejection<'a> = BadTokens<'a>;
-        fn evaluate<'a>(
-            &'a self,
-            actual: &'a SortedSequence<Token>,
-            context: &AssertionContext<'_, R>,
-        ) -> Result<(), BadTokens<'a>> {
-            let maximum = if context.is_diagnostic() {
-                context.render().budget().max_items()
-            } else {
-                0
-            };
-            let mut rejected = BadTokens {
-                retained: Vec::new(),
-                omitted: 0,
-            };
-            for token in actual.elements().filter(|token| token.0 == "bad") {
-                if rejected.retained.len() < maximum {
-                    rejected.retained.push(token);
-                } else {
-                    rejected.omitted += 1;
-                }
-            }
-            if rejected.retained.is_empty() && rejected.omitted == 0 {
-                Ok(())
-            } else {
-                Err(rejected)
-            }
+        type Rejection<'a> = ();
+
+        fn evaluate(&self, _: &Token, context: &AssertionContext<'_, R>) -> Result<(), ()> {
+            assert_that!(context.render().budget()).is_equal_to(self.0);
+            Err(())
         }
     }
 
-    impl<R: ValueRenderer<Token>> ExpectationDiagnostics<SortedSequence<Token>, R> for NoBadTokens {
+    impl<R: ValueRenderer<Token>> ExpectationDiagnostics<Token, R> for ForwardEvidence {
         const KIND: FailureKind = FailureKind::Predicate;
+
         fn explain<'a, Target>(
             &'a self,
-            rejected: Option<(&'a SortedSequence<Token>, BadTokens<'a>)>,
+            rejected: Option<(&'a Token, ())>,
             failure: FailureBuilder<Target>,
             context: &AssertionContext<'_, R>,
         ) -> FailureBuilder<Target> {
-            let Some((actual, rejected)) = rejected else {
-                return failure.relation("contains no bad tokens");
-            };
             let render = context.render();
+            assert_that!(render.budget()).is_equal_to(self.0);
+            let failure = failure.relation("has rejected evidence");
+            let Some((token, ())) = rejected else {
+                return failure;
+            };
+            // Fixed evidence exercises the downstream builder contract without a local collector.
             failure
-                .actual(render.collection(actual))
-                .relation("contains bad tokens")
-                .omitted_children(rejected.omitted)
-                .children(rejected.retained.into_iter().map(|token| {
-                    FailureBuilder::detached::<Token>(FailureKind::Predicate)
-                        .actual(render.value(token))
-                        .relation("is a bad token")
-                        .build()
-                }))
+                .omitted_children(2)
+                .children([FailureBuilder::detached::<Token>(FailureKind::Predicate)
+                    .actual(render.value(token))
+                    .relation("is rejected")
+                    .path([PathSegment::Index(1)])
+                    .build()])
         }
     }
 
     #[test]
-    fn custom_evidence_retention_uses_the_budget_without_changing_truth() {
-        for maximum in [0, 1, usize::MAX] {
-            let budget = RenderingBudget::unlimited().with_max_items(maximum);
-            let failures = assert_that!(SortedSequence(vec![
-                Token("bad"),
-                Token("bad"),
-                Token("bad")
-            ]))
+    fn custom_expectation_receives_the_budget_and_forwards_located_children_and_omissions() {
+        let budget = RenderingBudget::default()
+            .with_max_items(1)
+            .with_max_leaf_characters(8);
+        let failures = assert_that!(Token("a"))
             .with_renderer(LeafRenderer)
             .with_rendering_budget(budget)
-            .capture(|it| it.apply_assertion(NoBadTokens));
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0].children).has_length(maximum.min(3));
-            assert_that!(failures[0].omitted_children).is_equal_to(3 - maximum.min(3));
-            for child in &failures[0].children {
-                assert_that!(text(child.actual.as_ref().unwrap())).is_equal_to("token(bad)");
-            }
-            let failures = assert_that!(SortedSequence(vec![Token("good")]))
-                .with_renderer(LeafRenderer)
-                .with_rendering_budget(budget)
-                .capture(|it| it.apply_assertion(NoBadTokens));
-            assert_that!(failures).is_empty();
-        }
+            .capture(|it| it.apply_assertion(ForwardEvidence(budget)));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).has_length(1);
+        assert_that!(failures[0].omitted_children).is_equal_to(2);
+        let child = &failures[0].children[0];
+        assert_that!(super::text_opt(child.actual.as_ref())).is_equal_to(Some("token(a)"));
+        assert_that!(child.kind).is_equal_to(FailureKind::Predicate);
+        assert_that!(child.relation.as_deref()).is_equal_to(Some("is rejected"));
+        assert_that!(child.path).contains_exactly([PathSegment::Index(1)]);
+        assert_that!(child.facts).is_empty();
     }
 }
 
@@ -1951,7 +1510,7 @@ mod borrowed_views {
             .contains(Operand(2))
             .contains_exactly([Operand(2)]);
         let operands = vec![Operand(2)];
-        let expected = assertr::matchers::collection::ContainsAll::new(&operands);
+        let expected = matchers::collection::ContainsAll::new(&operands);
         assert_that!([Measurement(2)])
             .with_renderer(Renderer)
             .contains_all(&operands)
@@ -2107,7 +1666,7 @@ mod map_query_operands {
         assert_that!(membership)
             .contains("query(missing)")
             .contains("stored(a)");
-        assert_that!(ToHumanReadableText.render(&failures[1])).contains("At key query(a):");
+        assert_that!(ToHumanReadableText.render(&failures[1])).contains("At [query(a)]:");
         assert_that!(ToHumanReadableText.render(&failures[2])).contains("At [stored(a)]:");
     }
 }

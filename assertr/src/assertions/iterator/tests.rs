@@ -14,6 +14,8 @@ struct State {
     drops: Cell<usize>,
     renders: Cell<usize>,
     iterations: Cell<usize>,
+    callbacks: Cell<usize>,
+    clones: Cell<usize>,
 }
 
 struct Observed<'a, I> {
@@ -69,10 +71,27 @@ impl State {
 
 struct ResourceRenderer<'a>(&'a State);
 
+impl Clone for ResourceRenderer<'_> {
+    fn clone(&self) -> Self {
+        self.0.clones.set(self.0.clones.get() + 1);
+        Self(self.0)
+    }
+}
+
+fn callback<'s>(
+    state: &'s State,
+    expected: i32,
+) -> impl for<'a> Fn(AssertThat<'a, i32, Capture, ResourceRenderer<'s>>) {
+    move |it| {
+        state.callbacks.set(state.callbacks.get() + 1);
+        it.is_equal_to(expected);
+    }
+}
+
 impl ResourceRenderer<'_> {
     fn render(&self, value: impl fmt::Display, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // The items are plain numbers. Their interpretation still needs the iterator's resource.
-        assert_that!(self.0.drops.get()).is_equal_to(0);
+        assert_that!(self.0.drops.get() + 1).is_equal_to(self.0.iterations.get());
         assert_that!(self.0.resource.try_borrow_mut().is_err()).is_true();
         self.0.renders.set(self.0.renders.get() + 1);
         write!(f, "resource({value})")
@@ -117,6 +136,14 @@ enum Operation {
     Unordered,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum Entry {
+    Equality,
+    Matcher,
+    Callback,
+}
+use Entry::{Callback, Equality, Matcher};
+
 fn verify_failure(failures: &AssertionFailures, state: &State, failed: bool) {
     assert_that!(failures.len()).is_equal_to(usize::from(failed));
     if failed {
@@ -132,61 +159,86 @@ mod direct {
     use super::*;
     use Operation::{Contains, Contiguous, Exact, Prefix, Reject, Suffix, Unordered};
 
-    type Case<'a> = (Operation, &'a [i32], &'a [i32], usize, bool);
+    type Case<'a> = (Operation, &'a [i32], &'a [i32], usize, bool, Option<usize>);
+
+    // Each row pins next calls for unknown hints, the outcome, and every stopping boundary.
+    const CASES: &[Case<'_>] = &[
+        (Contains, &[], &[2], 1, true, Some(0)),
+        (Reject, &[], &[2], 1, false, Some(0)),
+        (Contains, &[1, 2, 3], &[2], 2, false, Some(2)),
+        (Contains, &[1, 2, 3], &[9], 4, true, Some(3)),
+        (Reject, &[1, 2, 3], &[2], 2, true, Some(2)),
+        (Reject, &[1, 2, 3], &[9], 4, false, Some(3)),
+        (Prefix, &[1, 2, 3], &[1, 2], 2, false, Some(2)),
+        (Prefix, &[1, 2, 3], &[9], 1, true, Some(1)),
+        (Prefix, &[1], &[1, 2], 2, true, Some(1)),
+        (Prefix, &[1, 2, 3], &[], 0, false, Some(0)),
+        (Suffix, &[1, 2, 3], &[2, 3], 4, false, Some(2)),
+        (Suffix, &[1, 2, 3], &[9], 4, true, Some(1)),
+        (Suffix, &[1], &[1, 2], 2, true, Some(0)),
+        (Suffix, &[1, 2, 3], &[], 0, false, Some(0)),
+        (Contiguous, &[1, 2, 3], &[1, 2], 2, false, Some(2)),
+        (Contiguous, &[1, 1, 2], &[1, 2], 3, false, Some(4)),
+        (Contiguous, &[0, 1, 2, 3], &[2, 3], 4, false, Some(6)),
+        (Contiguous, &[1, 2, 3], &[9], 4, true, Some(3)),
+        (Contiguous, &[1], &[1, 2], 2, true, Some(0)),
+        (Contiguous, &[1, 2, 3], &[], 0, false, Some(0)),
+        (Exact, &[1, 2, 3], &[1, 2, 3], 4, false, Some(3)),
+        (Exact, &[1, 2, 3], &[9, 2, 3], 1, true, Some(1)),
+        (Exact, &[1, 2, 3], &[1], 2, true, Some(1)),
+        (Exact, &[1], &[1, 2], 2, true, Some(1)),
+        (Exact, &[], &[], 1, false, Some(0)),
+        (Exact, &[1], &[], 1, true, Some(0)),
+        (Prefix, &[], &[], 0, false, Some(0)),
+        (Suffix, &[], &[], 0, false, Some(0)),
+        (Contiguous, &[], &[], 0, false, Some(0)),
+        (Unordered, &[], &[], 1, false, Some(0)),
+        (Unordered, &[1, 1, 2], &[1, 2, 2], 4, true, None),
+        (Unordered, &[1, 2, 3], &[3, 2, 1], 4, false, None),
+        (Unordered, &[1, 2, 3], &[9, 2, 1], 4, true, None),
+        (Unordered, &[1, 2, 3], &[1], 2, true, None),
+        (Unordered, &[1], &[1, 2], 2, true, None),
+    ];
 
     #[test]
     fn scans_keep_resources_until_rendering_and_preserve_stopping_points() {
-        // Each row pins next calls for unknown hints, the outcome, and every stopping boundary.
-        let cases: &[Case<'_>] = &[
-            (Contains, &[1, 2, 3], &[2], 2, false),
-            (Contains, &[1, 2, 3], &[9], 4, true),
-            (Reject, &[1, 2, 3], &[2], 2, true),
-            (Reject, &[1, 2, 3], &[9], 4, false),
-            (Prefix, &[1, 2, 3], &[1, 2], 2, false),
-            (Prefix, &[1, 2, 3], &[9], 1, true),
-            (Prefix, &[1], &[1, 2], 2, true),
-            (Prefix, &[1, 2, 3], &[], 0, false),
-            (Suffix, &[1, 2, 3], &[2, 3], 4, false),
-            (Suffix, &[1, 2, 3], &[9], 4, true),
-            (Suffix, &[1], &[1, 2], 2, true),
-            (Suffix, &[1, 2, 3], &[], 0, false),
-            (Contiguous, &[1, 2, 3], &[1, 2], 2, false),
-            (Contiguous, &[1, 2, 3], &[9], 4, true),
-            (Contiguous, &[1], &[1, 2], 2, true),
-            (Contiguous, &[1, 2, 3], &[], 0, false),
-            (Exact, &[1, 2, 3], &[1, 2, 3], 4, false),
-            (Exact, &[1, 2, 3], &[9, 2, 3], 1, true),
-            (Exact, &[1, 2, 3], &[1], 2, true),
-            (Exact, &[1], &[1, 2], 2, true),
-            (Unordered, &[1, 2, 3], &[3, 2, 1], 4, false),
-            (Unordered, &[1, 2, 3], &[9, 2, 1], 4, true),
-            (Unordered, &[1, 2, 3], &[1], 2, true),
-            (Unordered, &[1], &[1, 2], 2, true),
-        ];
-        for &(operation, values, expected, unknown_next, failed) in cases {
-            for matching in [false, true] {
+        for &(operation, values, expected, unknown_next, failed, callback_calls) in CASES {
+            for entry in [Equality, Matcher, Callback] {
                 for exact_hint in [false, true] {
                     let state = State::default();
                     let iterator = state.observe(values.iter().copied(), exact_hint);
                     let matchers: Vec<_> = expected.iter().copied().map(eq).collect();
+                    let callbacks: Vec<_> = expected
+                        .iter()
+                        .map(|&value| callback(&state, value))
+                        .collect();
                     let failures = assert_that_owned!(iterator)
                         .with_renderer(ResourceRenderer(&state))
-                        .capture(|it| match (operation, matching) {
-                            (Contains, false) => it.contains(expected[0]),
-                            (Contains, true) => it.contains_matching(eq(expected[0])),
-                            (Reject, false) => it.does_not_contain(expected[0]),
-                            (Reject, true) => it.does_not_contain_matching(eq(expected[0])),
-                            (Prefix, false) => it.starts_with(expected),
-                            (Prefix, true) => it.starts_with_matching(matchers),
-                            (Suffix, false) => it.ends_with(expected),
-                            (Suffix, true) => it.ends_with_matching(matchers),
-                            (Contiguous, false) => it.contains_contiguous(expected),
-                            (Contiguous, true) => it.contains_contiguous_matching(matchers),
-                            (Exact, false) => it.contains_exactly(expected),
-                            (Exact, true) => it.contains_exactly_matching(matchers),
-                            (Unordered, false) => it.contains_exactly_in_any_order(expected),
-                            (Unordered, true) => {
+                        .capture(|it| match (operation, entry) {
+                            (Contains, Equality) => it.contains(expected[0]),
+                            (Contains, Matcher) => it.contains_matching(eq(expected[0])),
+                            (Reject, Equality) => it.does_not_contain(expected[0]),
+                            (Reject, Matcher) => it.does_not_contain_matching(eq(expected[0])),
+                            (Prefix, Equality) => it.starts_with(expected),
+                            (Prefix, Matcher) => it.starts_with_matching(matchers),
+                            (Suffix, Equality) => it.ends_with(expected),
+                            (Suffix, Matcher) => it.ends_with_matching(matchers),
+                            (Contiguous, Equality) => it.contains_contiguous(expected),
+                            (Contiguous, Matcher) => it.contains_contiguous_matching(matchers),
+                            (Exact, Equality) => it.contains_exactly(expected),
+                            (Exact, Matcher) => it.contains_exactly_matching(matchers),
+                            (Unordered, Equality) => it.contains_exactly_in_any_order(expected),
+                            (Unordered, Matcher) => {
                                 it.contains_exactly_in_any_order_matching(matchers)
+                            }
+                            (Contains, Callback) => it.contains_satisfying(&callbacks[0]),
+                            (Reject, Callback) => it.does_not_contain_satisfying(&callbacks[0]),
+                            (Prefix, Callback) => it.starts_with_satisfying(&callbacks),
+                            (Suffix, Callback) => it.ends_with_satisfying(&callbacks),
+                            (Contiguous, Callback) => it.contains_contiguous_satisfying(&callbacks),
+                            (Exact, Callback) => it.contains_exactly_satisfying(&callbacks),
+                            (Unordered, Callback) => {
+                                it.contains_exactly_in_any_order_satisfying(&callbacks)
                             }
                         });
                     let short_circuit = exact_hint
@@ -197,11 +249,29 @@ mod direct {
                         };
                     let hints = match operation {
                         Prefix | Exact => 1,
-                        Unordered => 1 + usize::from(matching && !short_circuit),
+                        Unordered => {
+                            1 + usize::from(
+                                !matches!(entry, Equality) && !short_circuit && !values.is_empty(),
+                            )
+                        }
                         _ => 0,
                     };
                     state.verify(if short_circuit { 0 } else { unknown_next }, hints);
                     verify_failure(&failures, &state, failed);
+                    assert_that!(state.clones.get()).is_equal_to(2 * state.callbacks.get());
+                    let callback_calls = if short_circuit || !matches!(entry, Callback) {
+                        Some(0)
+                    } else {
+                        callback_calls
+                    };
+                    let calls = assert_that_owned!(state.callbacks.get())
+                        .with_detail_message(format!("{operation:?}, {entry:?}, exact hint: {exact_hint}, values: {values:?}, expected: {expected:?}"));
+                    if let Some(expected) = callback_calls {
+                        calls.is_equal_to(expected);
+                    } else {
+                        // Unordered assignment owns pair scheduling and its once-per-pair tests.
+                        calls.is_greater_than(0);
+                    }
                 }
             }
         }
@@ -221,7 +291,7 @@ mod borrowed {
             (Reject, 9, 4, false),
             (Unordered, 2, 2, true),
         ] {
-            for matching in [false, true] {
+            for entry in [Equality, Matcher, Callback] {
                 let source = Source {
                     values: &[1, 2, 3],
                     state: State::default(),
@@ -229,34 +299,76 @@ mod borrowed {
                 };
                 let failures = assert_that!(source)
                     .with_renderer(ResourceRenderer(&source.state))
-                    .capture(|it| match (operation, matching) {
-                        (Contains, false) => it.into_iter_contains(expected),
-                        (Contains, true) => it.into_iter_contains_matching(eq(expected)),
-                        (Reject, false) => it.into_iter_does_not_contain(expected),
-                        (Reject, true) => it.into_iter_does_not_contain_matching(eq(expected)),
-                        (Unordered, false) => {
+                    .capture(|it| match (operation, entry) {
+                        (Contains, Equality) => it.into_iter_contains(expected),
+                        (Contains, Matcher) => it.into_iter_contains_matching(eq(expected)),
+                        (Reject, Equality) => it.into_iter_does_not_contain(expected),
+                        (Reject, Matcher) => it.into_iter_does_not_contain_matching(eq(expected)),
+                        (Unordered, Equality) => {
                             it.into_iter_contains_exactly_in_any_order([expected])
                         }
-                        (Unordered, true) => {
+                        (Unordered, Matcher) => {
                             it.into_iter_contains_exactly_in_any_order_matching([eq(expected)])
                         }
+                        (Contains, Callback) => {
+                            it.into_iter_contains_satisfying(callback(&source.state, expected))
+                        }
+                        (Reject, Callback) => it.into_iter_does_not_contain_satisfying(callback(
+                            &source.state,
+                            expected,
+                        )),
+                        (Unordered, Callback) => it
+                            .into_iter_contains_exactly_in_any_order_satisfying([callback(
+                                &source.state,
+                                expected,
+                            )]),
                         _ => unreachable!(),
                     });
                 let hints = if matches!(operation, Unordered) {
-                    1 + usize::from(matching)
+                    1 + usize::from(!matches!(entry, Equality))
                 } else {
                     0
                 };
                 source.state.verify(next, hints);
                 verify_failure(&failures, &source.state, failed);
+                assert_that!(source.state.clones.get())
+                    .is_equal_to(2 * source.state.callbacks.get());
+                if matches!(entry, Callback) {
+                    assert_that!(source.state.callbacks.get()).is_greater_than(0);
+                }
             }
         }
+    }
+
+    #[test]
+    fn chained_callbacks_create_fresh_iterators_and_reuse_borrowed_lists() {
+        let source = Source {
+            values: &[1, 2],
+            state: State::default(),
+            exact_hint: false,
+        };
+        let callbacks = [1, 2].map(|value| callback(&source.state, value));
+        let chain = assert_that!(source).with_renderer(ResourceRenderer(&source.state));
+        let failures = chain.capture(|it| {
+            it.into_iter_contains_satisfying(&callbacks[1])
+                .into_iter_contains_exactly_in_any_order_satisfying(&callbacks)
+                .into_iter_does_not_contain_satisfying(callback(&source.state, 9))
+        });
+        assert_that!(failures).is_empty();
+        assert_that!(source.state.iterations.get()).is_equal_to(3);
+        assert_that!(source.state.drops.get()).is_equal_to(3);
+        assert_that!(source.state.next.get()).is_equal_to(8);
+        assert_that!(source.state.resource.try_borrow_mut().is_ok()).is_true();
+        assert_that!(source.state.clones.get()).is_equal_to(2 * source.state.callbacks.get());
+        assert_that!(source.values).contains_exactly([1, 2]);
     }
 
     #[test]
     fn contains_all_stops_on_success_or_exhaustion() {
         for (expected, next, failed) in [
             (&[2][..], 2, false),
+            (&[1, 3][..], 3, false),
+            (&[1, 1, 1][..], 1, false),
             (&[9][..], 4, true),
             (&[][..], 0, false),
         ] {
@@ -462,6 +574,139 @@ mod string_views {
                 assert_that!(calls.get()).is_greater_than(0);
             }
             assert_that!(failures).has_length(1);
+        }
+    }
+}
+
+mod callbacks {
+    use super::*;
+    use crate::{
+        failure::{FailureKind, PathSegment},
+        test_support::assert_custom_value,
+    };
+
+    struct Opaque(i32);
+
+    struct Renderer<'a>(&'a Cell<usize>);
+
+    impl Clone for Renderer<'_> {
+        fn clone(&self) -> Self {
+            self.0.set(self.0.get() + 1);
+            Self(self.0)
+        }
+    }
+
+    impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for Renderer<'_> {
+        fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "custom({value:?})")
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum Adapter {
+        Iterator,
+        Borrowed,
+        StableOrder,
+    }
+
+    fn equality_failures<'a>(
+        failure: &'a AssertionFailure,
+        leaves: &mut Vec<&'a AssertionFailure>,
+    ) {
+        if failure.kind == FailureKind::Equality {
+            leaves.push(failure);
+        }
+        for child in &failure.children {
+            equality_failures(child, leaves);
+        }
+    }
+
+    #[test]
+    fn adapters_propagate_callback_evidence_and_clone_the_renderer_for_opaque_items() {
+        use Adapter::{Borrowed, Iterator, StableOrder};
+        use Operation::{Contains, Contiguous, Exact, Prefix, Suffix, Unordered};
+
+        // Each adapter runs one candidate. The callback has two failing assertions on a
+        // projection. Capture clones for its root and child, then the projection clones again.
+        for (adapter, operation) in [
+            (Iterator, Contains),
+            (Iterator, Prefix),
+            (Iterator, Suffix),
+            (Iterator, Contiguous),
+            (Iterator, Exact),
+            (Iterator, Unordered),
+            (Borrowed, Contains),
+            (Borrowed, Unordered),
+            (StableOrder, Prefix),
+            (StableOrder, Suffix),
+            (StableOrder, Contiguous),
+            (StableOrder, Exact),
+        ] {
+            for maximum in [1, 2] {
+                let clones = Cell::new(0);
+                let calls = Cell::new(0);
+                let values = [Opaque(1)];
+                let check = |it: AssertThat<'_, Opaque, Capture, Renderer<'_>>| {
+                    calls.set(calls.get() + 1);
+                    it.derive(|item| &item.0).is_equal_to(9).is_equal_to(10);
+                };
+                let budget = RenderingBudget::default().with_max_items(maximum);
+                let failures = if matches!(adapter, Iterator) {
+                    assert_that_owned!(values.into_iter())
+                        .with_renderer(Renderer(&clones))
+                        .with_rendering_budget(budget)
+                        .with_location(false)
+                        .capture(|it| match operation {
+                            Contains => it.contains_satisfying(check),
+                            Prefix => it.starts_with_satisfying([check]),
+                            Suffix => it.ends_with_satisfying([check]),
+                            Contiguous => it.contains_contiguous_satisfying([check]),
+                            Exact => it.contains_exactly_satisfying([check]),
+                            Unordered => it.contains_exactly_in_any_order_satisfying([check]),
+                            Operation::Reject => unreachable!(),
+                        })
+                } else {
+                    assert_that!(values)
+                        .with_renderer(Renderer(&clones))
+                        .with_rendering_budget(budget)
+                        .with_location(false)
+                        .capture(|it| match (adapter, operation) {
+                            (Borrowed, Contains) => it.into_iter_contains_satisfying(check),
+                            (Borrowed, Unordered) => {
+                                it.into_iter_contains_exactly_in_any_order_satisfying([check])
+                            }
+                            (StableOrder, Prefix) => it.starts_with_satisfying([check]),
+                            (StableOrder, Suffix) => it.ends_with_satisfying([check]),
+                            (StableOrder, Contiguous) => it.contains_contiguous_satisfying([check]),
+                            (StableOrder, Exact) => it.contains_exactly_satisfying([check]),
+                            _ => unreachable!(),
+                        })
+                };
+                assert_that!(calls.get()).is_equal_to(1);
+                assert_that!(clones.get()).is_equal_to(3);
+                assert_that!(failures).has_length(1);
+                let mut leaves = Vec::new();
+                equality_failures(&failures[0], &mut leaves);
+                assert_that!(leaves.len()).is_equal_to(maximum);
+                for (index, leaf) in leaves.into_iter().enumerate() {
+                    assert_custom_value(leaf.actual.as_ref().unwrap(), &1_i32);
+                    assert_custom_value(
+                        leaf.expected.as_ref().unwrap(),
+                        &(9 + i32::try_from(index).unwrap()),
+                    );
+                    assert_that!(leaf.location).is_none();
+                    let path = if matches!(adapter, Borrowed) || matches!(operation, Unordered) {
+                        vec![]
+                    } else {
+                        vec![PathSegment::Index(0)]
+                    };
+                    assert_that!(leaf.path).is_equal_to(path);
+                }
+                if maximum == 1 {
+                    assert_that!(ToHumanReadableText.render(&failures[0]).as_str())
+                        .contains("1 more");
+                }
+            }
         }
     }
 }

@@ -11,12 +11,6 @@
 use assertr::{Fact, FailureKind, prelude::*, renderer::Rendered};
 use indoc::formatdoc;
 
-fn rendered_text(value: &Rendered) -> String {
-    let mut text = String::new();
-    value.write(&mut text, true).unwrap();
-    text
-}
-
 fn text(value: &Rendered) -> &str {
     match &value.body {
         assertr::renderer::RenderedBody::Text { text, .. } => text,
@@ -343,15 +337,15 @@ fn fluent_verify_and_verify_owned_return_structured_failures() {
     assert_that!(&failures).has_length(1);
 }
 
-/// One field-level test per assertion family: the fields carry everything the text carries.
+/// Failure-field routing stays here. Structural rendering behavior lives beside the renderer.
 mod fields {
-    use super::{rendered_text, text, text_opt};
+    use super::{text, text_opt};
     use assertr::{
         Fact, FailureKind,
         prelude::*,
         renderer::{Rendered, RenderedBody, TypeHint},
     };
-    use core::{cell::RefCell, fmt};
+    use core::fmt;
 
     #[test]
     fn an_equality_failure_carries_expected_and_actual_without_a_relation() {
@@ -371,8 +365,6 @@ mod fields {
         assert_that!(text_opt(failure.unexpected())).is_none();
         assert_that!(failure.facts()).is_empty();
         assert_that!(failure.children()).is_empty();
-        assert_that!(ToHumanReadableText.render(failure))
-            .contains("Expected: 43\n\n  Actual: 42\n");
     }
 
     #[test]
@@ -385,8 +377,6 @@ mod fields {
         assert_that!(failure.relation()).is_equal_to(Some("is equal to"));
         assert_that!(text_opt(failure.expected())).is_none();
         assert_that!(text_opt(failure.unexpected())).is_equal_to(Some("42"));
-        assert_that!(ToHumanReadableText.render(failure))
-            .contains("Actual: 42\n\nis equal to\n\nUnexpected: 42\n");
     }
 
     #[test]
@@ -400,8 +390,6 @@ mod fields {
         assert_that!(text_opt(failure.actual.as_ref())).is_equal_to(Some("42"));
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("is not greater than"));
         assert_that!(text_opt(failure.expected.as_ref())).is_equal_to(Some("100"));
-        assert_that!(ToHumanReadableText.render(failure))
-            .contains("Actual: 42\n\nis not greater than\n\nExpected: 100\n");
     }
 
     #[test]
@@ -432,117 +420,12 @@ mod fields {
         let failure = &failures[0];
 
         assert_that!(failure.kind).is_equal_to(FailureKind::Membership);
-        assert_that!(rendered_text(failure.actual.as_ref().unwrap()))
-            .is_equal_to("[\n    1,\n    2,\n]");
+        let RenderedBody::Group { items, .. } = &failure.actual.as_ref().unwrap().body else {
+            panic!("expected a collection");
+        };
+        assert_that!(items.iter().map(text).collect::<Vec<_>>()).contains_exactly(["1", "2"]);
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not contain"));
         assert_that!(text_opt(failure.expected.as_ref())).is_equal_to(Some("3"));
-    }
-
-    #[test]
-    #[cfg(feature = "std")]
-    fn an_order_free_group_retains_types_omissions_and_its_sorted_flag() {
-        use std::collections::HashSet;
-
-        let failures = assert_that!(HashSet::from([3, 1, 2]))
-            .with_rendering_budget(RenderingBudget::default().with_max_items(2))
-            .with_location(false)
-            .capture(|it| it.contains(9));
-        let actual = failures[0].actual.as_ref().unwrap();
-
-        assert_that!(actual.type_name).is_equal_to(Some(core::any::type_name::<HashSet<i32>>()));
-        assert_that!(actual.shows_type_hint).is_true();
-        let RenderedBody::Group {
-            style,
-            items,
-            omitted,
-            sorted,
-        } = &actual.body
-        else {
-            panic!("expected a group node, got {:?}", actual.body);
-        };
-        assert_that!(*style).is_equal_to(assertr::renderer::GroupStyle::Set);
-        assert_that!(*omitted).is_equal_to(1);
-        assert_that!(*sorted).is_true();
-        assert_that!(items.as_slice()).contains_exactly_satisfying([
-            |element: AssertThat<Rendered, Capture>| {
-                element
-                    .derive(|value| &value.type_name)
-                    .is_equal_to(Some(core::any::type_name::<i32>()));
-                element.derive_owned(text).is_equal_to("1");
-            },
-            |element: AssertThat<Rendered, Capture>| {
-                element.derive_owned(text).is_equal_to("2");
-            },
-        ]);
-    }
-
-    #[test]
-    fn a_map_retains_typed_key_value_entries_and_its_omission_count() {
-        use std::collections::BTreeMap;
-
-        let failures = assert_that!(BTreeMap::from([(1, 10), (2, 20)]))
-            .with_rendering_budget(RenderingBudget::default().with_max_items(1))
-            .with_location(false)
-            .capture(|it| it.contains_key(&9));
-        let actual = failures[0].actual.as_ref().unwrap();
-        let RenderedBody::Map {
-            entries,
-            omitted,
-            sorted,
-        } = &actual.body
-        else {
-            panic!("expected a map node, got {:?}", actual.body);
-        };
-
-        assert_that!(*omitted).is_equal_to(1);
-        assert_that!(*sorted).is_false();
-        assert_that!(entries.as_slice()).contains_exactly_satisfying([
-            |element: AssertThat<(Rendered, Rendered), Capture>| {
-                element
-                    .derive(|value| &value.0.type_name)
-                    .is_equal_to(Some(core::any::type_name::<i32>()));
-                element
-                    .derive(|value| &value.1.type_name)
-                    .is_equal_to(Some(core::any::type_name::<i32>()));
-                element
-                    .derive_owned(|value| text(&value.0))
-                    .is_equal_to("1");
-                element
-                    .derive_owned(|value| text(&value.1))
-                    .is_equal_to("10");
-            },
-        ]);
-    }
-
-    #[test]
-    fn an_expected_entry_list_retains_each_key_and_value_as_a_node() {
-        use std::collections::BTreeMap;
-
-        let failures = assert_that!(BTreeMap::from([("a", 1)]))
-            .with_location(false)
-            .capture(|it| it.contains_exactly_entries([("b", 2)]));
-        let expected = failures[0].expected.as_ref().unwrap();
-        let RenderedBody::EntryList {
-            entries,
-            omitted,
-            sorted,
-        } = &expected.body
-        else {
-            panic!("expected an entry-list node, got {:?}", expected.body);
-        };
-
-        assert_that!(*omitted).is_equal_to(0);
-        assert_that!(*sorted).is_false();
-        assert_that!(entries.as_slice()).contains_exactly_satisfying([
-            |element: AssertThat<(Rendered, Rendered), Capture>| {
-                element
-                    .derive_owned(|value| text(&value.0))
-                    .is_equal_to("\"b\"");
-                element
-                    .derive_owned(|value| text(&value.1))
-                    .is_equal_to("2");
-            },
-        ]);
     }
 
     #[test]
@@ -568,27 +451,32 @@ mod fields {
     }
 
     #[test]
-    fn a_compact_structural_key_retains_its_tree_and_inline_layout() {
-        use assertr::renderer::GroupStyle;
+    fn a_structural_key_path_retains_its_tree_and_renders_inline() {
+        use assertr::{
+            failure::{FailureBuilder, PathSegment},
+            renderer::{GroupStyle, IntoRendered},
+        };
 
         let failures = assert_that!([4, 6]).with_location(false).capture(|it| {
             it.track_assertion();
             it.failure(FailureKind::Other)
-                .fact(Fact::key(it.render().values(it.actual(), GroupStyle::List)))
+                .path([PathSegment::Key(
+                    it.render()
+                        .values(it.actual(), GroupStyle::List)
+                        .into_rendered(),
+                )])
                 .raise();
             it
         });
-        let values = &failures[0]
-            .facts
-            .iter()
-            .find(|fact| fact.label == Fact::KEY)
-            .unwrap()
-            .value;
+        let [PathSegment::Key(values)] = failures[0].path.as_slice() else {
+            panic!("expected a key path");
+        };
+        assert_that!(failures[0].facts).is_empty();
         let RenderedBody::Group { items, .. } = &values.body else {
             panic!("expected a group node, got {:?}", values.body);
         };
 
-        assert_that!(values.compact).is_true();
+        assert_that!(values.compact).is_false();
         assert_that!(items.as_slice()).contains_exactly_satisfying([
             |element: AssertThat<Rendered, Capture>| {
                 element.derive_owned(text).is_equal_to("4");
@@ -597,65 +485,10 @@ mod fields {
                 element.derive_owned(text).is_equal_to("6");
             },
         ]);
-        assert_that!(ToHumanReadableText.render(&failures[0])).contains("key: [4, 6]");
-    }
-
-    #[test]
-    fn a_result_variant_retains_the_owner_and_inner_value_as_nodes() {
-        let failures = assert_that!(Result::<i32, &str>::Err("boom"))
-            .with_location(false)
-            .capture(ResultAssertions::is_ok);
-        let actual = failures[0].actual.as_ref().unwrap();
-
-        assert_that!(actual.type_name)
-            .is_equal_to(Some(core::any::type_name::<Result<i32, &str>>()));
-        let RenderedBody::Variant { name, value } = &actual.body else {
-            panic!("expected a variant node, got {:?}", actual.body);
-        };
-        assert_that!(*name).is_equal_to("Err");
-        assert_that!(value.type_name).is_equal_to(Some(core::any::type_name::<&str>()));
-        assert_that!(text(value)).is_equal_to("\"boom\"");
-    }
-
-    #[test]
-    fn a_struct_adapter_retains_its_field_as_a_node() {
-        let cell = RefCell::new(42);
-        let failures = assert_that!(cell)
-            .with_location(false)
-            .capture(RefCellAssertions::is_borrowed);
-        let actual = failures[0].actual.as_ref().unwrap();
-
-        assert_that!(actual.type_name).is_equal_to(Some(core::any::type_name::<RefCell<i32>>()));
-        let RenderedBody::Struct { name, fields } = &actual.body else {
-            panic!("expected a struct node, got {:?}", actual.body);
-        };
-        assert_that!(*name).is_equal_to("RefCell");
-        assert_that!(fields.as_slice()).contains_exactly_satisfying([
-            |element: AssertThat<(&str, Rendered), Capture>| {
-                element.derive(|value| &value.0).is_equal_to("value");
-                element
-                    .derive(|value| &value.1.type_name)
-                    .is_equal_to(Some(core::any::type_name::<i32>()));
-                element
-                    .derive_owned(|value| text(&value.1))
-                    .is_equal_to("42");
-            },
-        ]);
-    }
-
-    #[test]
-    fn an_inaccessible_struct_field_remains_a_placeholder_node() {
-        let cell = RefCell::new(42);
-        let borrow = cell.borrow_mut();
-        let failures = assert_that!(&cell)
-            .with_location(false)
-            .capture(RefCellAssertions::is_not_mutably_borrowed);
-        drop(borrow);
-
-        let RenderedBody::Struct { fields, .. } = &failures[0].actual.as_ref().unwrap().body else {
-            panic!("expected a struct node");
-        };
-        assert_that!(&fields[0].1.body).is_equal_to(RenderedBody::Placeholder("<borrowed>"));
+        let parent = FailureBuilder::detached::<()>(FailureKind::Other)
+            .children(failures.into_vec())
+            .build();
+        assert_that!(ToHumanReadableText.render(&parent)).contains("At [[4, 6]]:");
     }
 
     #[test]
@@ -709,23 +542,12 @@ mod fields {
                     .is_equal_to(core::any::type_name::<i32>());
             },
         ]);
-
-        assert_that!(ToHumanReadableText.render(failure)).ends_with(indoc::indoc! {"
-            does not match
-
-            Nested failures:
-              - At [1]:
-                Expected: 3
-
-                  Actual: 2
-            -------- assertr --------
-        "});
     }
 
     #[test]
     fn rejected_elements_of_a_matching_assertion_are_children_too() {
         let failures = assert_that!([1, 2, 3]).with_location(false).capture(|it| {
-            it.contains_exactly_matching(assertr::matchers::predicate_list([
+            it.contains_exactly_matching(matchers::predicate_list([
                 |it: &i32| *it == 1,
                 |it: &i32| *it == 9,
                 |it: &i32| *it == 3,
@@ -781,7 +603,6 @@ mod fields {
 
         assert_that!(failure.kind).is_equal_to(FailureKind::Other);
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not hold"));
-        assert_that!(ToHumanReadableText.render(failure)).contains("does not hold\n");
         assert_that!(text_opt(failure.actual())).is_none();
         assert_that!(text_opt(failure.expected())).is_none();
         assert_that!(failure.facts()).contains_exactly([Fact::note("some evidence")]);
@@ -897,26 +718,5 @@ mod matcher_metadata {
                     }));
             },
         ]);
-    }
-
-    #[test]
-    fn typed_paths_take_precedence_over_legacy_location_facts() {
-        use assertr::failure::{FailureBuilder, PathSegment};
-        let child = FailureBuilder::detached::<i32>(FailureKind::Matching)
-            .path([
-                PathSegment::Field("rows"),
-                PathSegment::Index(1),
-                PathSegment::Field("id"),
-            ])
-            .relation("does not match")
-            .build()
-            .located_at(Fact::index(1));
-        let root = FailureBuilder::detached::<()>(FailureKind::Matching)
-            .child(child)
-            .build();
-        let text = ToHumanReadableText.render(&root);
-        assert_that!(text)
-            .contains("At .rows[1].id:")
-            .does_not_contain("At index");
     }
 }

@@ -680,7 +680,7 @@ mod tests {
                         let pending = child.does_not_panic_async();
                         assert_that!(root.state.records.assertion_count()).is_equal_to(0);
                         assert_that!(invocations.get()).is_equal_to(0);
-                        crate::assert_that_panic_by_async(async || {
+                        assert_that_panic_by_async(async || {
                             pending.await;
                         })
                         .await

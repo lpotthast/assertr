@@ -171,11 +171,7 @@ mod tests {
 
         assert_that!(failures).contains_exactly_satisfying([
             |element: AssertThat<AssertionFailure, Capture>| {
-                element
-                    .derive_owned(|value| value.facts.as_slice())
-                    .does_not_contain_matching(crate::expectation::predicate(
-                        |fact: &crate::Fact| fact.label == crate::Fact::INDEX,
-                    ));
+                element.derive(|value| &value.path).is_empty();
             },
         ]);
     }

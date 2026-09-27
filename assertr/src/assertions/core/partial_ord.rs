@@ -524,7 +524,7 @@ mod tests {
                     None
                 }
             }
-            impl crate::borrow_for::BorrowFor<Actual> for Operand {
+            impl borrow_for::BorrowFor<Actual> for Operand {
                 type View = Actual;
             }
 
@@ -584,7 +584,7 @@ mod tests {
             value: Subject<'a>,
             calls: &'a Cell<usize>,
         }
-        impl<'a> crate::borrow_for::BorrowFor<Subject<'a>> for Operand<'a> {
+        impl<'a> borrow_for::BorrowFor<Subject<'a>> for Operand<'a> {
             type View = Subject<'a>;
         }
         impl<'a> Borrow<Subject<'a>> for Operand<'a> {
@@ -629,7 +629,7 @@ mod tests {
         #[cfg(feature = "std")]
         fn tracks_before_user_borrow_code_can_panic() {
             struct PanickingOperand;
-            impl crate::borrow_for::BorrowFor<i32> for PanickingOperand {
+            impl borrow_for::BorrowFor<i32> for PanickingOperand {
                 type View = i32;
             }
             impl Borrow<i32> for PanickingOperand {

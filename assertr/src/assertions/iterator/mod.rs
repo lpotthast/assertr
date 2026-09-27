@@ -19,11 +19,9 @@ use core::borrow::Borrow;
 use core::{marker::PhantomData, panic::Location};
 
 use crate::{
-    AssertThat, AssertionContext, AssertionFailure, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
-    failure::{Fact, FailureBuilder, FailureKind},
+    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::{GroupStyle, RenderedValues, RenderingContext},
-    util::matching::match_bipartite,
 };
 
 pub(crate) use cardinality::{assert_has_length, assert_is_empty, assert_is_not_empty};
@@ -82,7 +80,7 @@ fn execute<S, I: Iterator, D, M: Mode, R>(
 }
 
 struct Preview<Item> {
-    items: Vec<Item>,
+    items: VecDeque<Item>,
     consumed: usize,
 }
 
@@ -95,7 +93,7 @@ impl<Item> Preview<Item> {
     fn rendered<'a, T, R>(
         &'a self,
         rendering: RenderingContext<'a, R>,
-    ) -> RenderedValues<'a, T, Vec<Item>, R>
+    ) -> RenderedValues<'a, T, VecDeque<Item>, R>
     where
         Item: Borrow<T>,
         R: ValueRenderer<T>,
@@ -154,32 +152,34 @@ impl PositionReporting {
     }
 }
 
-/// The failures of the elements that did not satisfy a positional criterion, each with the
-/// element's index in yield order.
-type UnsatisfiedElements = Vec<(usize, Vec<AssertionFailure>)>;
-
 struct Tail<Item> {
+    limit: usize,
     items: VecDeque<Item>,
     consumed: usize,
 }
 
 impl<Item> Tail<Item> {
-    fn new() -> Self {
+    fn new(limit: usize) -> Self {
         Self {
+            limit,
             items: VecDeque::new(),
             consumed: 0,
         }
     }
     fn push(&mut self, item: Item) {
         self.consumed += 1;
-        if self.items.len() == PREVIEW_CAPACITY {
+        if self.items.len() == self.limit {
             let _ = self.items.pop_front();
         }
-        self.items.push_back(item);
+        if self.limit > 0 {
+            self.items.push_back(item);
+        }
     }
-    fn finish(self) -> Preview<Item> {
+    fn finish(mut self) -> Preview<Item> {
+        let remove = self.items.len().saturating_sub(PREVIEW_CAPACITY);
+        self.items.drain(..remove);
         Preview {
-            items: self.items.into_iter().collect(),
+            items: self.items,
             consumed: self.consumed,
         }
     }
@@ -190,47 +190,29 @@ fn exact_size_hint<I: Iterator>(iterator: &I) -> Option<usize> {
     (upper == Some(lower)).then_some(lower)
 }
 
-/// Flattens the failures of unsatisfied elements into children, each located at its index in yield
-/// order. At most `maximum` elements are kept. Returns the children and the number of omitted
-/// elements.
-fn indexed_children(
-    mut unsatisfied: UnsatisfiedElements,
-    maximum: usize,
-) -> (Vec<AssertionFailure>, usize) {
-    let omitted = unsatisfied.len().saturating_sub(maximum);
-    unsatisfied.truncate(maximum);
-    let children = unsatisfied
-        .into_iter()
-        .flat_map(|(index, failures)| {
-            failures
-                .into_iter()
-                .map(move |failure| failure.located_at(Fact::index(index)))
-        })
-        .collect();
-    (children, omitted)
-}
-
-/// Evaluates equality once and retains the original rejected operands as child evidence.
+/// Compares once, constructing indexed equality evidence only for retained rejections.
 fn equal_element<T, E: ?Sized, R>(
-    context: &AssertionContext<'_, R>,
+    context: &mut AssertionContext<'_, R>,
+    index: usize,
     element: &T,
     expected: &E,
-) -> Result<(), Vec<AssertionFailure>>
+) -> bool
 where
     T: PartialEq<E>,
     R: ValueRenderer<T> + ValueRenderer<E>,
 {
-    if element.eq(expected) {
-        Ok(())
-    } else {
-        let render = context.render();
-        Err(alloc::vec![
+    let matched = element.eq(expected);
+    if !matched {
+        context.record_with(|context| {
+            let render = context.render();
             FailureBuilder::detached::<T>(FailureKind::Equality)
                 .actual(render.value(element))
                 .expected(render.value(expected))
+                .path([PathSegment::Index(index)])
                 .build()
-        ])
+        });
     }
+    matched
 }
 
 /// A child failure for an element that did not match its predicate.

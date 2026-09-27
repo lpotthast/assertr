@@ -45,10 +45,7 @@ where
             }
             context.append(evidence);
         }
-        if context.evidence.is_empty() {
-            context.outcome(false, |context| context.describe::<A, _>(self));
-        }
-        Err(context.into_evidence())
+        context.finish(false, |context| context.describe::<A, _>(self))
     }
 }
 impl<A: ?Sized, R, L> ExpectationDiagnostics<A, R> for AnyOf<L>
@@ -106,7 +103,18 @@ mod tests {
 
     #[test]
     fn empty_disjunction_fails() {
-        let failures = assert_that!(2).capture(|it| it.matches(any_of(())));
-        assert_that!(failures).has_length(1);
+        for limit in [0, 1, usize::MAX] {
+            let failures = assert_that!(2)
+                .with_rendering_budget(RenderingBudget::default().with_max_items(limit))
+                .capture(|it| it.matches(any_of(())));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(limit.min(1));
+            assert_that!(failures[0].omitted_children).is_equal_to(usize::from(limit == 0));
+            if limit > 0 {
+                let constraint = failures[0].children[0].constraint.as_ref().unwrap();
+                assert_that!(constraint.relation.as_deref())
+                    .is_equal_to(Some("satisfies any constraint"));
+            }
+        }
     }
 }

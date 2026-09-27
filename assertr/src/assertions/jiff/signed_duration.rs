@@ -1,9 +1,19 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
-use crate::{AssertThat, ValueRenderer, renderer::Compact};
+use crate::{
+    AssertThat, ValueRenderer,
+    renderer::{IntoRendered, Rendered},
+};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use jiff::SignedDuration;
+
+// SignedDuration's alternate Debug form shows raw nanoseconds. Keep its compact form in reports.
+fn compact(value: impl IntoRendered) -> Rendered {
+    let mut rendered = value.into_rendered_compact();
+    rendered.compact = true;
+    rendered
+}
 
 /// Checks whether a `SignedDuration` is zero.
 pub struct IsZero;
@@ -41,10 +51,10 @@ where
         match rejected {
             None => failure
                 .relation("is zero")
-                .expected(Compact(render.value(&SignedDuration::ZERO))),
+                .expected(compact(render.value(&SignedDuration::ZERO))),
             Some((actual, ())) => failure
-                .actual(Compact(render.value(actual)))
-                .expected(Compact(render.value(&SignedDuration::ZERO))),
+                .actual(compact(render.value(actual)))
+                .expected(compact(render.value(&SignedDuration::ZERO))),
         }
     }
 }
@@ -88,7 +98,7 @@ where
         match rejected {
             None => failure.relation("is negative"),
             Some((actual, ())) => failure
-                .actual(Compact(render.value(actual)))
+                .actual(compact(render.value(actual)))
                 .relation("is not negative"),
         }
     }
@@ -133,7 +143,7 @@ where
         match rejected {
             None => failure.relation("is positive"),
             Some((actual, ())) => failure
-                .actual(Compact(render.value(actual)))
+                .actual(compact(render.value(actual)))
                 .relation("is not positive"),
         }
     }
@@ -214,7 +224,7 @@ where
                 .relation("was given an invalid allowed deviation")
                 .fact(Fact::labelled(
                     "Allowed deviation",
-                    Compact(render.value(allowed_deviation)),
+                    compact(render.value(allowed_deviation)),
                 ))
                 .fact(Fact::note(
                     "The allowed deviation must be a non-negative duration.",
@@ -230,15 +240,15 @@ where
                         expected,
                         allowed_deviation,
                         failure
-                            .actual(Compact(render.value(actual)))
+                            .actual(compact(render.value(actual)))
                             .relation("is not close to"),
                     ),
                 };
                 failure
-                    .expected(Compact(render.value(expected)))
+                    .expected(compact(render.value(expected)))
                     .fact(Fact::labelled(
                         "Allowed deviation",
-                        Compact(render.value(allowed_deviation)),
+                        compact(render.value(allowed_deviation)),
                     ))
             }
         }

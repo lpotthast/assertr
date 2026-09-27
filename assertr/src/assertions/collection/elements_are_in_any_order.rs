@@ -1,40 +1,85 @@
 //! Exact unordered assignment and its diagnostic evidence.
 //!
-//! The sparse candidate cache stores each pair's boolean result and owned evidence. It retains
-//! no evaluation context or borrowed observation. A failed assignment completes unvisited pairs
-//! involving unmatched actual elements or expected slots before sorting and truncating evidence.
-//! This prevents search pruning from hiding diagnostic candidates. Passing matches, probes, and
-//! zero-item budgets skip completion. The result is unchanged, while candidate work and storage
-//! can approach the Cartesian product.
+//! The sparse cache stores each pair's boolean result and total direct failure count, never failure
+//! evidence or borrowed observations. Cache misses evaluate and explain eligible rejections
+//! immediately, releasing guards before another pair runs. Hits never repeat evaluation,
+//! explanation, or sample offers. Search and completion keep their existing order. Passing matches,
+//! probes, and zero allowances skip completion.
 //!
-//! Missing slots consume candidate rejections first and retain the complete missing-subject
-//! constraint. Unexpected occurrences consume remaining rejections. A surplus occurrence that
-//! satisfies an occupied expectation uses that expectation's description. Separate occurrence
-//! groups preserve multiplicity without inventing actual collection indexes.
+//! Shared candidate sampling and destination ownership live in `expectation::assignment`. This
+//! assertion supplies the pair cache, drives search and diagnostic completion, and then assembles
+//! missing constraints, unexpected groups, and surplus descriptions. Assembly starts after
+//! completion so retained failures cannot change later pair budgets or explanation eligibility.
 
 use crate::{
     AssertionContext, Expectation, ExpectationDiagnostics, Fact,
     assertions::collection::Collection,
-    expectation::{Evidence, MatcherList},
+    expectation::{
+        Evidence, MatcherList,
+        assignment::{AssignedEvidence, CandidateSamples},
+    },
     failure::{FailureBuilder, FailureKind},
     renderer::IntoRendered,
     util::matching::{BipartiteMatchResult, match_bipartite},
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 
+/// The sparse cache owns scalar outcomes only, never failure evidence, report keys, or
+/// observations.
+struct PairOutcome {
+    matched: bool,
+    failures: usize,
+}
+
+fn evaluate_pair(
+    cache: &mut BTreeMap<(usize, usize), PairOutcome>,
+    pair: (usize, usize),
+    evaluate: impl FnOnce() -> (bool, Evidence),
+    retain: impl FnOnce(Evidence),
+) -> bool {
+    cache
+        .entry(pair)
+        .or_insert_with(|| {
+            let (matched, evidence) = evaluate();
+            let failures = if matched {
+                0
+            } else {
+                evidence.children.len() + evidence.omitted
+            };
+            if !matched {
+                retain(evidence);
+            }
+            PairOutcome { matched, failures }
+        })
+        .matched
+}
+
 /// Exact one-to-one order-free matching, preserving multiplicity.
 pub struct ElementsAreInAnyOrder<L>(L);
 
 /// Matches every actual element to one distinct expectation using maximum bipartite matching.
 ///
-/// Each actual/expectation pair is evaluated at most once. When explaining a mismatch, comparisons
-/// involving unmatched elements or expectations are completed before evidence is sorted and
-/// limited. Surplus occurrences that satisfy occupied expectations are explained through those
-/// expectations' descriptions, without requiring an element renderer. Probes and zero-item budgets
-/// skip diagnostic completion. Cached candidate evidence can require quadratic space.
+/// Each actual/expectation pair is evaluated at most once. Requested rejection diagnostics are
+/// built immediately from that observation.
+/// A mismatch completes unvisited comparisons involving unmatched elements or expectations. Probes
+/// and zero evidence allowances skip completion. Surplus occurrences that satisfy occupied
+/// expectations use those expectations' descriptions, without requiring an element renderer.
 ///
-/// Candidate rejections retain their complete nested failures. The `at slot` fact identifies a
-/// zero-based expectation position, never an actual collection index.
+/// During assignment, each occurrence and expectation slot samples at most the inherited item
+/// allowance of direct child failures. Each sampled item is one owned
+/// [`AssertionFailure`](crate::AssertionFailure), including its rendered values and any constraint
+/// description or nested child failures. Those nested failures do not take additional sample
+/// positions.
+///
+/// The union of the samples is routed after assignment, and completed comparisons feed their final
+/// groups directly. Missing expectations own their rejections exclusively. Finite samples may
+/// remain underfilled when assignment disqualifies retained children and eligible replacements were
+/// discarded. Omission counts include those lost
+/// candidates. Unlimited budgets retain all evidence. Budgets bound neither comparison work nor
+/// total memory, and the scalar comparison cache can require quadratic space.
+///
+/// The `at slot` fact identifies a zero-based expectation position, never an actual collection
+/// index.
 pub fn elements_are_in_any_order<L>(list: L) -> ElementsAreInAnyOrder<L> {
     ElementsAreInAnyOrder(list)
 }
@@ -56,79 +101,58 @@ where
         C: 'a;
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated();
-        let matched = {
-            let context = &mut context;
-            let actual = actual.elements().collect::<Vec<_>>();
-            let expected_length = self.0.len();
-            // A sparse cache avoids allocating the full Cartesian product for easy exact matches.
-            let mut cache = BTreeMap::new();
-            let mut evaluate_pair = |index: usize, slot| {
-                cache
-                    .entry((index, slot))
-                    .or_insert_with(|| {
-                        let mut branch = context.isolated_for_order(C::PRESENTATION.order());
-                        let matched = self.0.evaluate_at(slot, actual[index], &mut branch);
-                        (matched, branch.into_evidence())
-                    })
-                    .0
-            };
-            let result = match_bipartite(actual.len(), expected_length, &mut evaluate_pair);
-            let matched = result.is_exact();
-            if !matched && context.is_diagnostic() {
-                complete_unmatched_pairs(&result, actual.len(), expected_length, evaluate_pair);
-            }
-            if !matched {
-                for slot in result.unmatched_expected {
-                    let rejections = (0..actual.len()).filter_map(|index| {
-                        cache
-                            .remove(&(index, slot))
-                            .and_then(|(matched, branch)| (!matched).then_some(branch))
-                    });
-                    record_missing::<C, _, _>(&self.0, slot, rejections, context);
-                }
-                if !result.unmatched_actual.is_empty() {
-                    let mut unexpected = context.isolated_for_order(C::PRESENTATION.order());
-                    for index in &result.unmatched_actual {
-                        let occupied = result.matched_pairs.iter().filter_map(|&(_, slot)| {
-                            cache
-                                .get(&(*index, slot))
-                                .and_then(|(matched, _)| matched.then_some(slot))
-                        });
-                        if record_surplus::<C::Item, _, _>(&self.0, occupied, &mut unexpected) {
-                            continue;
-                        }
-                        for slot in 0..expected_length {
-                            if let Some((false, branch)) = cache.remove(&(*index, slot)) {
-                                unexpected.append(branch);
-                            }
-                        }
-                    }
-                    if context.is_diagnostic() {
-                        context.record(
-                            unexpected
-                                .into_evidence()
-                                .explain(
-                                    FailureBuilder::detached::<C>(FailureKind::Matching)
-                                        .relation("has unexpected elements")
-                                        .fact(Fact::labelled(
-                                            "unexpected count",
-                                            context
-                                                .render()
-                                                .value(&result.unmatched_actual.len())
-                                                .into_rendered(),
-                                        )),
-                                )
-                                .build(),
-                        );
-                    } else {
-                        context.outcome(false, |context| context.describe::<C, _>(self));
-                    }
-                }
-            }
-            matched
+        let actual = actual.elements().collect::<Vec<_>>();
+        let expected_length = self.0.len();
+        // A sparse cache avoids allocating the full Cartesian product for easy exact matches.
+        let mut cache = BTreeMap::new();
+        let branch_settings = context.isolated_for_order(C::PRESENTATION.order());
+        let (limit, order) = branch_settings.evidence_policy();
+        let mut samples = CandidateSamples::new(actual.len(), expected_length, limit, order);
+        let evaluate = |index: usize, slot| {
+            let mut branch = branch_settings.isolated();
+            let matched = self.0.evaluate_at(slot, actual[index], &mut branch);
+            (matched, branch.into_evidence())
         };
-        let evidence = context.into_evidence();
-        if matched { Ok(()) } else { Err(evidence) }
+        let result = match_bipartite(actual.len(), expected_length, |index, slot| {
+            evaluate_pair(
+                &mut cache,
+                (index, slot),
+                || evaluate(index, slot),
+                |evidence| {
+                    samples.offer((index, slot), evidence);
+                },
+            )
+        });
+        if result.is_exact() {
+            return Ok(());
+        }
+        let mut destinations = samples.resolve(&result);
+        if context.is_diagnostic() {
+            complete_unmatched_pairs(&result, actual.len(), expected_length, |index, slot| {
+                evaluate_pair(
+                    &mut cache,
+                    (index, slot),
+                    || evaluate(index, slot),
+                    |evidence| {
+                        destinations.offer((index, slot), evidence);
+                    },
+                )
+            });
+        }
+        for &slot in &result.unmatched_expected {
+            let total = (0..actual.len())
+                .filter_map(|index| cache.get(&(index, slot)))
+                .map(|outcome| outcome.failures)
+                .sum();
+            record_missing::<C, _, _>(
+                &self.0,
+                slot,
+                destinations.take_missing(slot, total),
+                &mut context,
+            );
+        }
+        record_unexpected::<C, _, _>(&self.0, &result, &cache, &mut destinations, &mut context);
+        Err(context.into_evidence())
     }
 }
 impl<C: Collection + ?Sized, R, L> ExpectationDiagnostics<C, R> for ElementsAreInAnyOrder<L>
@@ -154,6 +178,61 @@ where
     }
 }
 
+fn record_unexpected<
+    C: Collection + ?Sized,
+    R: crate::ValueRenderer<usize>,
+    L: MatcherList<C::Item, R>,
+>(
+    list: &L,
+    result: &BipartiteMatchResult,
+    cache: &BTreeMap<(usize, usize), PairOutcome>,
+    destinations: &mut AssignedEvidence,
+    context: &mut AssertionContext<'_, R>,
+) {
+    if !result.unmatched_actual.is_empty() {
+        let mut unexpected = context.isolated_for_order(C::PRESENTATION.order());
+        for index in &result.unmatched_actual {
+            let occupied = result.matched_pairs.iter().filter_map(|&(_, slot)| {
+                cache
+                    .get(&(*index, slot))
+                    .and_then(|outcome| outcome.matched.then_some(slot))
+            });
+            if record_surplus::<C::Item, _, _>(list, occupied, &mut unexpected) {
+                destinations.discard_surplus(*index);
+                continue;
+            }
+            let total = (0..list.len())
+                .filter(|slot| result.unmatched_expected.binary_search(slot).is_err())
+                .filter_map(|slot| cache.get(&(*index, slot)))
+                .map(|outcome| outcome.failures)
+                .sum();
+            unexpected.append(destinations.take_unexpected(*index, total));
+        }
+        if context.is_diagnostic() {
+            context.record(
+                unexpected
+                    .into_evidence()
+                    .explain(
+                        FailureBuilder::detached::<C>(FailureKind::Matching)
+                            .relation("has unexpected elements")
+                            .fact(Fact::labelled(
+                                "unexpected count",
+                                context
+                                    .render()
+                                    .value(&result.unmatched_actual.len())
+                                    .into_rendered(),
+                            )),
+                    )
+                    .build(),
+            );
+        } else {
+            context.outcome(false, |context| {
+                context.describe::<C, _>(&ElementsAreInAnyOrder(list))
+            });
+        }
+    }
+}
+
 /// Retains the complete missing-subject constraint and bounded candidate rejections.
 fn record_missing<
     C: Collection + ?Sized,
@@ -162,16 +241,14 @@ fn record_missing<
 >(
     list: &L,
     slot: usize,
-    rejections: impl Iterator<Item = Evidence>,
+    rejections: Evidence,
     context: &mut AssertionContext<'_, R>,
 ) {
     let description = context
         .is_diagnostic()
         .then(|| list.describe_at(slot, context));
     let mut alternatives = context.isolated_for_order(C::PRESENTATION.order());
-    for branch in rejections {
-        alternatives.append(branch);
-    }
+    alternatives.append(rejections);
     if let Some(description) = description {
         let failure = FailureBuilder::detached::<C>(FailureKind::Matching).fact(Fact::labelled(
             "at slot",
@@ -588,61 +665,27 @@ mod tests {
 
         #[test]
         fn candidate_failures_count_all_omitted_rejections() {
-            use crate::assertions::core::partial_eq::equal_to;
-            struct DetailedMatcher;
-            use crate::{
-                AssertionContext, Expectation,
-                expectation::Evidence,
-                failure::{FailureBuilder, FailureKind},
-            };
-            impl Expectation<i32> for DetailedMatcher {
-                type Success<'a> = ();
-                type Rejection<'a> = Evidence;
-                fn evaluate(
-                    &self,
-                    actual: &i32,
-                    settings: &AssertionContext<'_>,
-                ) -> Result<(), Evidence> {
-                    let mut context = settings.isolated();
-                    let result = context.evaluate(actual, &equal_to(99));
-                    if *actual == 2 {
-                        context.record(
-                            FailureBuilder::detached::<i32>(FailureKind::Matching)
-                                .relation("also fails a second requirement")
-                                .build(),
-                        );
-                    }
-                    if result {
-                        Ok(())
-                    } else {
-                        Err(context.into_evidence())
-                    }
-                }
-            }
-            impl ExpectationDiagnostics<i32> for DetailedMatcher {
-                const KIND: FailureKind = FailureKind::Equality;
-                const FLATTEN: bool = true;
-                fn explain<Target>(
-                    &self,
-                    rejected: Option<(&i32, Evidence)>,
-                    failure: FailureBuilder<Target>,
-                    context: &AssertionContext<'_, DebugRenderer>,
-                ) -> FailureBuilder<Target> {
-                    let render = context.render();
-                    match rejected {
-                        None => failure.relation("is equal to").expected(render.value(&99)),
-                        Some((_, evidence)) => evidence.explain(failure),
-                    }
-                }
-            }
+            use crate::{expectation::all_of, test_support::UnorderedSet};
+            let matcher =
+                elements_are_in_any_order![all_of((eq(99), predicate(|value: &i32| *value != 2)))];
             for values in [[1, 2], [2, 1]] {
-                let failures =
-                    bounded_failures(&values, &elements_are_in_any_order![DetailedMatcher], 1);
-                let missing = &failures[0].children[0];
-                assert_that!(missing.constraint.is_some()).is_true();
-                assert_that!(missing.facts).has_length(1);
-                assert_that!(missing.children).has_length(1);
-                assert_that!(missing.omitted_children).is_equal_to(2);
+                for prefix in [0, 1] {
+                    let mut context = AssertionContext::new(
+                        &DebugRenderer,
+                        RenderingBudget::default().with_max_items(prefix + 1),
+                    );
+                    if prefix > 0 {
+                        context.evaluate(&0, &eq(1));
+                    }
+                    assert_that!(context.evaluate(&UnorderedSet(values.to_vec()), &matcher))
+                        .is_false();
+                    let failures = context.into_evidence().children;
+                    let missing = &failures[prefix];
+                    assert_that!(missing.constraint.is_some()).is_true();
+                    assert_that!(missing.facts).has_length(1);
+                    assert_that!(missing.children).has_length(1);
+                    assert_that!(missing.omitted_children).is_equal_to(2);
+                }
             }
         }
 
@@ -869,7 +912,7 @@ mod tests {
                 AssertionContext::new(&NeverRender, RenderingBudget::default().with_max_items(0));
             assert_that!(context.evaluate(&[1, 1, 99], &elements_are_in_any_order![eq(1)]))
                 .is_false();
-            assert_that!(context.evidence.omitted).is_equal_to(1);
+            assert_that!(context.omitted).is_equal_to(1);
             assert_that!(context.into_evidence().children).is_empty();
         }
 
@@ -905,6 +948,125 @@ mod tests {
                 },
             ]);
         }
+
+        fn matrix_matchers<'a, const M: usize>(
+            matrix: &'a [[bool; M]],
+            calls: &'a RefCell<Vec<(usize, usize)>>,
+        ) -> impl crate::expectation::MatcherList<usize, DebugRenderer> + 'a {
+            use crate::expectation::{all_of, predicate};
+            (0..M)
+                .map(|slot| {
+                    all_of((
+                        predicate(move |index: &usize| {
+                            calls.borrow_mut().push((*index, slot));
+                            matrix[*index][slot]
+                        }),
+                        predicate(move |index: &usize| matrix[*index][slot]),
+                    ))
+                })
+                .collect::<Vec<_>>()
+        }
+
+        #[test]
+        fn assignment_can_starve_an_unexpected_sample_without_replaying_discarded_pairs() {
+            use crate::renderer::RenderingOrder;
+            let matrix = [
+                [false, false, true],
+                [false, true, false],
+                [false, false, false],
+                [false, true, false],
+            ];
+            for order in [
+                RenderingOrder::PreserveIteration,
+                RenderingOrder::SortByRenderedText,
+            ] {
+                for (limit, missing_count, unexpected_count, omitted) in
+                    [(2, 2, 1, 4), (usize::MAX, 8, 5, 0)]
+                {
+                    let calls = RefCell::new(Vec::new());
+                    let matcher = crate::assertions::collection::elements_are_in_any_order(
+                        matrix_matchers(&matrix, &calls),
+                    );
+                    let mut context = AssertionContext::new(
+                        &DebugRenderer,
+                        RenderingBudget::unlimited().with_max_items(limit),
+                    )
+                    .isolated_for_order(order);
+                    assert_that!(context.evaluate(&[0, 1, 2, 3], &matcher)).is_false();
+                    assert_that!(*calls.borrow()).is_equal_to([
+                        (0, 0),
+                        (0, 1),
+                        (0, 2),
+                        (1, 0),
+                        (1, 1),
+                        (2, 0),
+                        (2, 1),
+                        (2, 2),
+                        (3, 0),
+                        (3, 1),
+                        (1, 2),
+                        (3, 2),
+                    ]);
+                    let failures = context.into_evidence().children;
+                    let missing = failures
+                        .iter()
+                        .find(|failure| failure.constraint.is_some())
+                        .unwrap();
+                    assert_that!(missing.children).has_length(missing_count);
+                    assert_that!(missing.omitted_children).is_equal_to(8 - missing_count);
+                    let unexpected = failures
+                        .iter()
+                        .find(|failure| failure.constraint.is_none())
+                        .unwrap();
+                    // Every pair was visited. Four eligible children of occurrence 2 have been
+                    // discarded, so k = 2 retains only the surplus description for occurrence 3.
+                    assert_that!(unexpected.children).has_length(unexpected_count);
+                    assert_that!(unexpected.omitted_children).is_equal_to(omitted);
+                }
+            }
+        }
+
+        #[test]
+        fn truth_and_pair_traces_match_the_original_search_and_completion_across_budgets() {
+            for n in [2, 3] {
+                // Exhaust small relations, including exact matches, duplicates and both unmatched
+                // sides.
+                for bits in 0..(1 << (n * 2)) {
+                    let matrix: Vec<_> = (0..n)
+                        .map(|index| {
+                            core::array::from_fn::<_, 2, _>(|slot| {
+                                bits & (1 << (index * 2 + slot)) != 0
+                            })
+                        })
+                        .collect();
+                    for limit in [0, 1, 2, usize::MAX] {
+                        let mut reference = Vec::new();
+                        let mut seen = alloc::collections::BTreeSet::new();
+                        let mut evaluate = |index: usize, slot: usize| {
+                            if seen.insert((index, slot)) {
+                                reference.push((index, slot));
+                            }
+                            matrix[index][slot]
+                        };
+                        let result = crate::util::matching::match_bipartite(n, 2, &mut evaluate);
+                        if limit > 0 && !result.is_exact() {
+                            super::super::complete_unmatched_pairs(&result, n, 2, evaluate);
+                        }
+                        let calls = RefCell::new(Vec::new());
+                        let matcher = crate::assertions::collection::elements_are_in_any_order(
+                            matrix_matchers(&matrix, &calls),
+                        );
+                        let mut context = AssertionContext::new(
+                            &DebugRenderer,
+                            RenderingBudget::unlimited().with_max_items(limit),
+                        );
+                        assert_that!(context.evaluate(&(0..n).collect::<Vec<_>>(), &matcher))
+                            .is_equal_to(result.is_exact());
+                        assert_that!(*calls.borrow()).is_equal_to(reference);
+                    }
+                }
+            }
+        }
     }
 
     mod probe {
@@ -930,7 +1092,7 @@ mod tests {
             assert_that!(*calls.borrow()).is_equal_to([1, 1, 0]);
             assert_that!(context.probe(&[1, 1, 99], &elements_are_in_any_order![equal_to(1)]))
                 .is_false();
-            assert_that!(context.evidence.omitted).is_equal_to(0);
+            assert_that!(context.omitted).is_equal_to(0);
             assert_that!(context.into_evidence().children).is_empty();
         }
 

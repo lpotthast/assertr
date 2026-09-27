@@ -33,11 +33,7 @@ where
         for item in actual.elements() {
             matched &= context.evaluate(item, &self.0);
         }
-        if !matched && context.evidence.is_empty() {
-            context.outcome(false, |context| context.describe::<C, _>(self));
-        }
-        let evidence = context.into_evidence();
-        if matched { Ok(()) } else { Err(evidence) }
+        context.finish(matched, |context| context.describe::<C, _>(self))
     }
 }
 impl<C: Collection + ?Sized, R, M> ExpectationDiagnostics<C, R> for Each<M>

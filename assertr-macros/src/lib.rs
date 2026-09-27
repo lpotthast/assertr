@@ -105,6 +105,10 @@ mod partial;
 /// positions are wildcards, and a tuple `..` must be final. Nested collection and map expectations
 /// use `elements_are!`, `elements_are_in_any_order!`, `each`, and `entries_are!`.
 ///
+/// Prefix a constructor with `variant` to include its variant in diagnostic paths. Qualified
+/// paths, including `variant crate::Message::Ready` and `variant ::core::option::Option::None`,
+/// are supported. Use `r#variant::Type` for an unmarked path through a module named `variant`.
+///
 /// See the [partial matching guide](https://docs.rs/assertr/latest/assertr/matchers/index.html)
 /// for field constraints, nested examples, collection policies, and diagnostics.
 #[proc_macro]

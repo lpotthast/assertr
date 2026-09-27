@@ -65,7 +65,7 @@ mod tests {
 
         #[test]
         fn tracks_once_and_keeps_capture_assertions_isolated() {
-            let subject = assert_that!(1).with_renderer(crate::DebugRenderer);
+            let subject = assert_that!(1).with_renderer(DebugRenderer);
             let subject = subject.matches(satisfying(|it| {
                 it.is_equal_to(1).is_less_than(2);
             }));

@@ -767,18 +767,18 @@ mod tests {
                 AssertThat<'static, f64, Panic, NoRenderer> => NumAssertions<f64>
             );
 
-            assert_trait_impl!(super::super::IsZero => crate::Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsOne => crate::Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsNegative => crate::Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsPositive => crate::Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsCloseTo<i32> => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsZero => Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsOne => Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsNegative => Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsPositive => Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsCloseTo<i32> => Expectation<i32, NoRenderer>);
             #[cfg(any(feature = "std", feature = "libm"))]
             {
-                assert_trait_impl!(super::super::IsNan => crate::Expectation<f64, NoRenderer>);
-                assert_trait_impl!(super::super::IsFinite => crate::Expectation<f64, NoRenderer>);
-                assert_trait_impl!(super::super::IsInfinite => crate::Expectation<f64, NoRenderer>);
-                assert_trait_impl!(super::super::IsNormal => crate::Expectation<f64, NoRenderer>);
-                assert_trait_impl!(super::super::IsSubnormal => crate::Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsNan => Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsFinite => Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsInfinite => Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsNormal => Expectation<f64, NoRenderer>);
+                assert_trait_impl!(super::super::IsSubnormal => Expectation<f64, NoRenderer>);
             }
         }
     }
@@ -1085,7 +1085,7 @@ mod tests {
 
             for limit in [0, 1] {
                 let budget = RenderingBudget::default().with_max_items(limit);
-                let context = crate::AssertionContext::new(&DebugRenderer, budget);
+                let context = AssertionContext::new(&DebugRenderer, budget);
                 let description = context.describe::<i32, _>(&IsCloseTo::new(42, 2));
                 assert_that!(description.children.len()).is_equal_to(limit);
                 assert_that!(description.omitted_children).is_equal_to(1 - limit);

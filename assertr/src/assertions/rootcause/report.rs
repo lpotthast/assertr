@@ -1,7 +1,7 @@
 use crate::failure::FailureKind;
 use crate::{AssertThat, Mode, ValueRenderer, mode::Panic};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
-use alloc::format;
+use alloc::{format, string::String};
 use core::any::{TypeId, type_name};
 use core::fmt::Display;
 use rootcause::markers::Dynamic;
@@ -127,7 +127,7 @@ where
         Self: 'a,
         rootcause::ReportRef<'r, C, O, T>: 'a;
     type Rejection<'a>
-        = (alloc::string::String, alloc::string::String)
+        = (String, String)
     where
         Self: 'a,
         rootcause::ReportRef<'r, C, O, T>: 'a;
@@ -190,7 +190,7 @@ where
         Self: 'a,
         rootcause::ReportRef<'r, C, O, T>: 'a;
     type Rejection<'a>
-        = (alloc::string::String, &'a str)
+        = (String, &'a str)
     where
         Self: 'a,
         rootcause::ReportRef<'r, C, O, T>: 'a;
@@ -714,10 +714,10 @@ mod tests {
         #[test]
         fn traits_are_implemented_without_renderer_support() {
             fn assert_dynamic_report<'t, O, T, R>(
-                _: &AssertThat<'t, rootcause::Report<Dynamic, O, T>, Panic, R>,
+                _: &AssertThat<'t, Report<Dynamic, O, T>, Panic, R>,
             ) where
-                O: rootcause::markers::ReportOwnershipMarker,
-                AssertThat<'t, rootcause::Report<Dynamic, O, T>, Panic, R>:
+                O: markers::ReportOwnershipMarker,
+                AssertThat<'t, Report<Dynamic, O, T>, Panic, R>:
                     RootcauseReportAssertions<R>
                         + RootcauseDynamicReportAssertions<'t, Panic, R>
                         + RootcauseDynamicReportExtractAssertions<'t, R>,

@@ -129,7 +129,7 @@ impl FailureBuilder<Detached> {
     /// Starts a failure over a subject of type `T` that is not raised on a chain but returned by
     /// [`build`](Self::build), to be attached to another failure as a child.
     ///
-    /// Locate such a child within its parent's subject with [`AssertionFailure::located_at`].
+    /// Locate such a child within its parent's subject with [`Self::path`].
     pub fn detached<T: ?Sized>(kind: FailureKind) -> Self {
         Self::new(Detached, core::any::type_name::<T>(), kind)
     }
@@ -171,7 +171,7 @@ impl<T> FailureBuilder<T> {
         self
     }
 
-    /// Sets the relative typed path of this failure.
+    /// Appends segments to the relative typed path of this failure.
     pub fn path(mut self, path: impl IntoIterator<Item = PathSegment>) -> Self {
         self.failure.path.extend(path);
         self

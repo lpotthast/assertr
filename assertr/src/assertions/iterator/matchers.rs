@@ -2,7 +2,7 @@
 
 use super::{
     AssertThat, AssertionContext, Borrow, ExpectationDiagnostics, Mode, PREVIEW_CAPACITY,
-    PhantomData, PositionReporting, Scan, Vec, VecDeque, exact_size_hint, execute,
+    PhantomData, PositionReporting, Scan, Tail, Vec, VecDeque, exact_size_hint, execute,
 };
 use crate::{
     Fact, ValueRenderer,
@@ -17,20 +17,10 @@ fn explain_scan<Target, R: ValueRenderer<usize>>(
     relation: &'static str,
     consumed: usize,
 ) -> FailureBuilder<Target> {
-    evidence.explain(
-        failure
-            .relation(relation)
-            .fact(Fact::labelled(
-                "Consumed",
-                context.render().value(&consumed),
-            ))
-            .fact(Fact::labelled(
-                "Preview starts at",
-                context
-                    .render()
-                    .value(&consumed.saturating_sub(PREVIEW_CAPACITY)),
-            )),
-    )
+    evidence.explain(failure.relation(relation).fact(Fact::labelled(
+        "Consumed",
+        context.render().value(&consumed),
+    )))
 }
 
 struct ContainsMatching<'e, T, P> {
@@ -76,14 +66,13 @@ where
             retained.push_back(child.into_evidence());
         }
         let mut child = context.isolated();
-        child.evidence.omitted = discarded;
+        child.omitted = discarded;
         for evidence in retained {
             child.append(evidence);
         }
-        if child.evidence.children.is_empty() {
-            child.outcome(false, |child| child.describe(self.expected));
-        }
-        Err((child.into_evidence(), consumed))
+        child
+            .finish(false, |child| child.describe(self.expected))
+            .map_err(|evidence| (evidence, consumed))
     }
 
     const KIND: FailureKind = FailureKind::Matching;
@@ -304,8 +293,7 @@ where
         if expected_length == 0 {
             return Ok(());
         }
-        let mut window = VecDeque::new();
-        let mut consumed = 0;
+        let mut window = Tail::new(expected_length);
         let mut final_window = Evidence::default();
         let evaluate_window = |window: &VecDeque<I::Item>, consumed: usize| {
             let mut child = context.isolated();
@@ -323,25 +311,21 @@ where
             }
         };
         for item in iterator {
-            if window.len() == expected_length {
-                window.pop_front();
-            }
-            window.push_back(item);
-            consumed += 1;
-            if !self.suffix && window.len() == expected_length {
-                match evaluate_window(&window, consumed) {
+            window.push(item);
+            if !self.suffix && window.items.len() == expected_length {
+                match evaluate_window(&window.items, window.consumed) {
                     Ok(()) => return Ok(()),
                     Err(evidence) => final_window = evidence,
                 }
             }
         }
-        if self.suffix && window.len() == expected_length {
-            match evaluate_window(&window, consumed) {
+        if self.suffix && window.items.len() == expected_length {
+            match evaluate_window(&window.items, window.consumed) {
                 Ok(()) => return Ok(()),
                 Err(evidence) => final_window = evidence,
             }
         }
-        Err((final_window, consumed, expected_length))
+        Err((final_window, window.consumed, expected_length))
     }
 
     const KIND: FailureKind = FailureKind::Matching;
@@ -392,7 +376,7 @@ where
 
 struct Items<'a, T, I> {
     items: &'a [I],
-    view: core::marker::PhantomData<T>,
+    view: PhantomData<T>,
 }
 
 impl<T, I> crate::assertions::HasLength for Items<'_, T, I> {
@@ -609,7 +593,6 @@ pub(crate) fn unordered<S, T, L, I, M: Mode, R>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        Fact,
         expectation::ExpectationDiagnostics,
         prelude::*,
         renderer::{Rendered, RenderedBody},
@@ -619,12 +602,115 @@ mod tests {
 
     use crate::failure::{FailureBuilder, FailureKind};
 
+    mod evidence_budget {
+        use super::*;
+        use crate::{failure::PathSegment, matchers::eq};
+
+        #[test]
+        fn membership_completion_counts_only_rejected_candidates_or_the_empty_fallback() {
+            for count in [0, 1, 2, 3, 20] {
+                for budget in [0, 1, 32] {
+                    let failures = assert_that_owned!(0..count)
+                        .with_rendering_budget(RenderingBudget::default().with_max_items(budget))
+                        .capture(|it| it.contains_matching(eq(99)));
+                    let retained = count.clamp(1, 16).min(budget);
+                    assert_that!(failures).has_length(1);
+                    assert_that!(failures[0].children).has_length(retained);
+                    assert_that!(failures[0].omitted_children).is_equal_to(count.max(1) - retained);
+                    assert_that!(ToHumanReadableText.render(&failures[0]).as_str())
+                        .does_not_contain("Preview starts at");
+                }
+            }
+        }
+
+        #[test]
+        fn contiguous_retains_the_final_window_and_keeps_evaluating_after_budget_exhaustion() {
+            let failures = assert_that_owned!(0..30)
+                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+                .capture(|it| it.contains_contiguous_matching([eq(99), eq(99)]));
+            assert_that!(failures[0].children).has_length(1);
+            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(28)]);
+            assert_that!(failures[0].omitted_children).is_equal_to(1);
+            assert_that_owned!(0..)
+                .with_rendering_budget(RenderingBudget::default().with_max_items(0))
+                .contains_contiguous_matching([eq(20), eq(21)]);
+        }
+
+        #[test]
+        fn membership_limits_rejections_after_selecting_the_preview() {
+            let failures = assert_that_owned!(0..20)
+                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+                .with_location(false)
+                .capture(|it| it.contains_matching(eq(99)));
+
+            assert_that!(failures[0].children).has_length(1);
+            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(4)]);
+            assert_that!(failures[0].omitted_children).is_equal_to(19);
+        }
+
+        #[test]
+        fn suffix_limits_repeated_position_evidence() {
+            let failures = assert_that_owned!([1, 2, 3].into_iter())
+                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+                .with_location(false)
+                .capture(|it| it.ends_with_matching([eq(0), eq(0), eq(0)]));
+
+            assert_that!(failures[0].children).has_length(1);
+            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(0)]);
+            assert_that!(failures[0].omitted_children).is_equal_to(2);
+        }
+    }
+
+    mod windows {
+        use super::*;
+
+        #[test]
+        fn wraparound_and_overlapping_windows_preserve_matching_and_stopping_points() {
+            for length in [1, 3, 16, 17, 40] {
+                let expected = (0..length).map(matchers::eq).collect::<Vec<_>>();
+                let consumed = Cell::new(0);
+                let actual = core::iter::repeat_n(99, 77)
+                    .chain(0..)
+                    .inspect(|_| consumed.set(consumed.get() + 1));
+                assert_that_owned!(actual).contains_contiguous_matching(&expected);
+                assert_that!(consumed.get()).is_equal_to(77 + length);
+                assert_that_owned!(core::iter::repeat_n(99, 77).chain(0..length))
+                    .ends_with_matching(expected);
+            }
+            assert_that_owned!([1, 1, 1, 2].into_iter()).contains_contiguous_matching([
+                matchers::eq(1),
+                matchers::eq(1),
+                matchers::eq(2),
+            ]);
+        }
+
+        #[test]
+        fn non_fused_windows_stop_at_first_exhaustion() {
+            for suffix in [false, true] {
+                let mut yielded = [Some(1), None, Some(2)].into_iter();
+                let mut iterator = core::iter::from_fn(|| yielded.next().flatten());
+                let expected = [matchers::eq(1), matchers::eq(2)];
+                let scan = super::super::MatchingWindow::<i32, _> {
+                    expected: &expected,
+                    item: core::marker::PhantomData,
+                    suffix,
+                };
+                let (_, consumed, _) =
+                    super::super::Scan::observe(&scan, &mut iterator, &AssertionContext::default())
+                        .err()
+                        .unwrap();
+                assert_that!(consumed).is_equal_to(1);
+                assert_that!(iterator.next()).is_equal_to(Some(2));
+            }
+        }
+    }
+
     struct DescriptionOnly<'a> {
         expected: i32,
         descriptions: &'a Cell<usize>,
     }
 
-    impl<R> crate::Expectation<i32, R> for DescriptionOnly<'_> {
+    impl<R> Expectation<i32, R> for DescriptionOnly<'_> {
         type Success<'a>
             = ()
         where
@@ -660,22 +746,23 @@ mod tests {
         }
     }
 
-    fn assert_truncated_value(
-        value: &AssertThat<Rendered, Capture>,
-        type_name: &str,
-        omitted_characters: usize,
-    ) {
-        value
-            .derive_owned(Rendered::type_name)
-            .is_some_satisfying(|name| {
-                name.is_equal_to(type_name);
-            });
-        value
-            .derive(Rendered::body)
-            .is_equal_to(RenderedBody::Text {
-                text: "cus".into(),
-                omitted_characters,
-            });
+    fn assert_truncated_value(value: &Rendered, type_name: &str, omitted_characters: usize) {
+        assert_that!(value.type_name()).is_equal_to(Some(type_name));
+        assert_that!(value.body()).is_equal_to(RenderedBody::Text {
+            text: "cus".into(),
+            omitted_characters,
+        });
+    }
+
+    fn assert_truncated_lengths(failure: &AssertionFailure) {
+        for label in ["Consumed", "Expected length"] {
+            let fact = failure
+                .facts()
+                .iter()
+                .find(|fact| fact.label() == label)
+                .unwrap();
+            assert_truncated_value(fact.value(), "usize", 6);
+        }
     }
 
     #[test]
@@ -718,50 +805,17 @@ mod tests {
                 assert_that!(evaluations.get()).is_equal_to(1);
                 assert_that!(descriptions.get()).is_equal_to(retained);
                 assert_that!(later_descriptions.get()).is_equal_to(0);
-                assert_that!(failures).contains_exactly_satisfying([
-                    |failure: AssertThat<AssertionFailure, Capture>| {
-                        failure
-                            .derive(|failure| &failure.omitted_children)
-                            .is_equal_to(1 - retained);
-                        failure
-                            .derive_owned(AssertionFailure::children)
-                            .contains_exactly_satisfying(
-                                (0..retained)
-                                    .map(|_| {
-                                        |child: AssertThat<AssertionFailure, Capture>| {
-                                            child.derive(|child| &child.path).is_equal_to([
-                                                crate::failure::PathSegment::Index(1),
-                                            ]);
-                                            child
-                                                .derive_owned(AssertionFailure::constraint)
-                                                .is_some_satisfying(|constraint| {
-                                                    constraint
-                                                        .derive_owned(|constraint| {
-                                                            constraint.relation()
-                                                        })
-                                                        .is_equal_to(Some("is equal to"));
-                                                    constraint
-                                                        .derive(|constraint| &constraint.expected)
-                                                        .is_some_satisfying(|expected| {
-                                                            assert_truncated_value(
-                                                                &expected, "i32", 11,
-                                                            );
-                                                        });
-                                                });
-                                        }
-                                    })
-                                    .collect::<Vec<_>>(),
-                            );
-                        for label in ["Consumed", "Expected length"] {
-                            failure
-                                .derive_owned(AssertionFailure::facts)
-                                .contains_satisfying(|fact| {
-                                    fact.derive_owned(Fact::label).is_equal_to(label);
-                                    assert_truncated_value(&fact.derive(Fact::value), "usize", 6);
-                                });
-                        }
-                    },
-                ]);
+                assert_that!(failures).has_length(1);
+                let failure = &failures[0];
+                assert_that!(failure.omitted_children).is_equal_to(1 - retained);
+                assert_that!(failure.children).has_length(retained);
+                for child in &failure.children {
+                    assert_that!(child.path).is_equal_to([crate::failure::PathSegment::Index(1)]);
+                    let constraint = child.constraint().unwrap();
+                    assert_that!(constraint.relation()).is_equal_to(Some("is equal to"));
+                    assert_truncated_value(constraint.expected.as_ref().unwrap(), "i32", 11);
+                }
+                assert_truncated_lengths(failure);
             }
         }
     }
@@ -791,47 +845,68 @@ mod tests {
                     });
 
                 assert_that!(descriptions.get()).is_equal_to(maximum);
-                assert_that!(failures).contains_exactly_satisfying([
-                    |failure: AssertThat<AssertionFailure, Capture>| {
-                        failure
-                            .derive_owned(AssertionFailure::constraint)
-                            .is_some_satisfying(|constraint| {
-                                constraint
-                                    .derive(|constraint| &constraint.omitted_children)
-                                    .is_equal_to(2 - maximum);
-                                constraint
-                                    .derive(|constraint| &constraint.children)
-                                    .contains_exactly_satisfying(
-                                        (0..maximum)
-                                            .map(|index| {
-                                                move |child: AssertThat<
-                                                    crate::AssertionFailure,
-                                                    Capture,
-                                                >| {
-                                                    child
-                                                        .derive(|child| &child.expected)
-                                                        .is_some_satisfying(|expected| {
-                                                            assert_truncated_value(
-                                                                &expected,
-                                                                "i32",
-                                                                6 + index,
-                                                            );
-                                                        });
-                                                }
-                                            })
-                                            .collect::<Vec<_>>(),
-                                    );
-                            });
-                        for label in ["Consumed", "Expected length"] {
-                            failure
-                                .derive_owned(AssertionFailure::facts)
-                                .contains_satisfying(|fact| {
-                                    fact.derive_owned(Fact::label).is_equal_to(label);
-                                    assert_truncated_value(&fact.derive(Fact::value), "usize", 6);
-                                });
-                        }
-                    },
-                ]);
+                assert_that!(failures).has_length(1);
+                let failure = &failures[0];
+                let constraint = failure.constraint().unwrap();
+                assert_that!(constraint.omitted_children).is_equal_to(2 - maximum);
+                assert_that!(constraint.children).has_length(maximum);
+                for (index, child) in constraint.children.iter().enumerate() {
+                    assert_truncated_value(child.expected.as_ref().unwrap(), "i32", 6 + index);
+                }
+                assert_truncated_lengths(failure);
+            }
+        }
+    }
+
+    #[test]
+    fn short_scans_describe_the_missing_constraints_and_observed_length() {
+        use crate::test_support::assert_custom_fact;
+
+        // Prefix/exact retain the first missing slot. Suffix/contiguous describe the full
+        // missing window. Both cases use the same diagnostics for empty and short iterators.
+        for consumed in 0..=1 {
+            for operation in 0..4 {
+                let expected = [matchers::eq(1), matchers::eq(987_654)];
+                let mut values = (0..consumed).map(|_| 1);
+                let iterator = core::iter::from_fn(move || values.next());
+                let failures = assert_that_owned!(iterator)
+                    .with_renderer(CustomValueRenderer)
+                    .capture(|it| match operation {
+                        0 => it.starts_with_matching(expected),
+                        1 => it.contains_exactly_matching(expected),
+                        2 => it.ends_with_matching(expected),
+                        _ => it.contains_contiguous_matching(expected),
+                    });
+                assert_that!(failures).has_length(1);
+                let failure = &failures[0];
+                assert_custom_fact(failure, "Consumed", consumed);
+                assert_custom_fact(failure, "Expected length", 2);
+                if operation < 2 {
+                    assert_that!(failure.relation())
+                        .is_equal_to(Some("is missing a matching position"));
+                    assert_that!(failure.children).has_length(1);
+                    let child = &failure.children[0];
+                    assert_that!(child.path)
+                        .is_equal_to([crate::failure::PathSegment::Index(consumed)]);
+                    crate::test_support::assert_custom_value(
+                        child.constraint().unwrap().expected.as_ref().unwrap(),
+                        &if consumed == 0 { 1_i32 } else { 987_654_i32 },
+                    );
+                } else {
+                    let constraint = failure.constraint().unwrap();
+                    assert_that!(constraint.relation()).is_equal_to(Some(if operation == 2 {
+                        "ends with these positions"
+                    } else {
+                        "contains these contiguous positions"
+                    }));
+                    assert_that!(constraint.children).has_length(2);
+                    for (child, value) in constraint.children.iter().zip([1_i32, 987_654]) {
+                        crate::test_support::assert_custom_value(
+                            child.expected.as_ref().unwrap(),
+                            &value,
+                        );
+                    }
+                }
             }
         }
     }

@@ -63,7 +63,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         F: FnOnce(&'a Self, FailureBuilder<Attached<'a>>) -> FailureBuilder<Attached<'a>>,
     {
         self.track_assertion();
-        self.test_assertion_after_tracking(definition, prepare)
+        self.test_observation_with_failure(self.actual(), definition, Location::caller(), prepare)
     }
 
     // Consuming adapters track before invoking user code, then execute the observed or collected
@@ -84,19 +84,6 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ) -> Self {
         drop(self.test_observation_after_tracking(self.actual(), &definition, location));
         self
-    }
-
-    #[track_caller]
-    fn test_assertion_after_tracking<'a, D, F>(
-        &'a self,
-        definition: &'a D,
-        prepare: F,
-    ) -> Option<D::Success<'a>>
-    where
-        D: ExpectationDiagnostics<T, R>,
-        F: FnOnce(&'a Self, FailureBuilder<Attached<'a>>) -> FailureBuilder<Attached<'a>>,
-    {
-        self.test_observation_with_failure(self.actual(), definition, Location::caller(), prepare)
     }
 
     /// Executes an adapter's borrowed observation on the original chain. The adapter has already

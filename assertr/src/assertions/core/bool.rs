@@ -114,8 +114,8 @@ mod tests {
                 AssertThat<'static, bool, Panic, NoRenderer> => BoolAssertions<NoRenderer>
             );
 
-            assert_trait_impl!(super::super::IsTrue => crate::Expectation<bool, NoRenderer>);
-            assert_trait_impl!(super::super::IsFalse => crate::Expectation<bool, NoRenderer>);
+            assert_trait_impl!(super::super::IsTrue => Expectation<bool, NoRenderer>);
+            assert_trait_impl!(super::super::IsFalse => Expectation<bool, NoRenderer>);
         }
 
         #[test]

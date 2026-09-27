@@ -5,7 +5,7 @@ pub(crate) fn bounded_failures(
     values: &[i32],
     matcher: &impl ExpectationDiagnostics<UnorderedSet>,
     limit: usize,
-) -> crate::AssertionFailures {
+) -> AssertionFailures {
     let actual = UnorderedSet(values.to_vec());
     assert_that!(actual)
         .with_location(false)

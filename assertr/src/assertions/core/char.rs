@@ -284,11 +284,11 @@ mod tests {
                 AssertThat<'static, char, Panic, NoRenderer> => CharAssertions<NoRenderer>
             );
 
-            assert_trait_impl!(super::super::EqualToIgnoringAsciiCase => crate::Expectation<char, NoRenderer>);
-            assert_trait_impl!(super::super::IsLowercase => crate::Expectation<char, NoRenderer>);
-            assert_trait_impl!(super::super::IsUppercase => crate::Expectation<char, NoRenderer>);
-            assert_trait_impl!(super::super::IsAsciiLowercase => crate::Expectation<char, NoRenderer>);
-            assert_trait_impl!(super::super::IsAsciiUppercase => crate::Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::EqualToIgnoringAsciiCase => Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::IsLowercase => Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::IsUppercase => Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::IsAsciiLowercase => Expectation<char, NoRenderer>);
+            assert_trait_impl!(super::super::IsAsciiUppercase => Expectation<char, NoRenderer>);
         }
 
         #[test]

@@ -171,4 +171,4 @@ pub use rendered::{IntoRendered, Rendered, RenderedBody};
 pub use type_info::{TypeHint, Typed};
 pub use value::{CustomRenderer, DebugRenderer, SensitiveValuePolicy, ValueRenderer};
 
-pub(crate) use context::{Compact, omission};
+pub(crate) use context::omission;

@@ -23,9 +23,15 @@ enum Shape {
 
 impl Parse for Input {
     fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
-        let variant = if input.peek(keyword::variant) && input.peek2(Ident) {
-            input.parse::<keyword::variant>()?;
-            true
+        let variant = if input.peek(keyword::variant) {
+            let fork = input.fork();
+            fork.parse::<keyword::variant>()?;
+            if fork.parse::<Path>().is_ok() {
+                input.parse::<keyword::variant>()?;
+                true
+            } else {
+                false
+            }
         } else {
             false
         };

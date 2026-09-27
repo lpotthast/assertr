@@ -90,7 +90,7 @@ where
         };
         let mut alternatives = context.isolated();
         for start in starts {
-            let mut window = context.isolated();
+            let mut window = alternatives.isolated();
             let mut matched = actual_length >= expected_length;
             if matches!(self.position, Position::Exact) {
                 matched &= actual_length == expected_length;
@@ -201,8 +201,41 @@ mod tests {
     }
 
     #[test]
-    fn supports_explicit_equality() {
-        assert_that!([1, 2]).matches(elements_are![eq(1), eq(2)]);
+    fn positional_policies_cover_empty_short_reordered_and_overlapping_sequences() {
+        use super::{
+            ElementsAre,
+            Position::{Contiguous, Exact, Prefix, Suffix},
+        };
+
+        // Outcomes are exact, prefix, suffix, and contiguous respectively. Exercise the
+        // shared algorithm here. Public adapters retain diagnostics and boundary checks.
+        let cases: &[(&[i32], &[i32], [bool; 4])] = &[
+            (&[], &[], [true, true, true, true]),
+            (&[1], &[], [false, true, true, true]),
+            (&[], &[1], [false, false, false, false]),
+            (&[1], &[1, 2], [false, false, false, false]),
+            (&[1, 2], &[1, 2], [true, true, true, true]),
+            (&[1, 2], &[2, 1], [false, false, false, false]),
+            (&[1, 2, 3], &[1, 2], [false, true, false, true]),
+            (&[1, 2, 3], &[2, 3], [false, false, true, true]),
+            (&[0, 1, 2, 3], &[1, 2], [false, false, false, true]),
+            (&[1, 2, 3], &[1, 3], [false, false, false, false]),
+            (&[1, 1, 2], &[1, 2], [false, false, true, true]),
+            (&[1, 1, 2], &[1, 2, 2], [false, false, false, false]),
+        ];
+        for &(actual, expected, outcomes) in cases {
+            for (position, accepted) in [Exact, Prefix, Suffix, Contiguous]
+                .into_iter()
+                .zip(outcomes)
+            {
+                let matcher = ElementsAre {
+                    list: expected.iter().copied().map(eq).collect::<Vec<_>>(),
+                    position,
+                };
+                let failures = assert_that!(actual).capture(|it| it.matches(matcher));
+                assert_that!(failures.is_empty()).is_equal_to(accepted);
+            }
+        }
     }
 
     #[test]
@@ -213,11 +246,6 @@ mod tests {
         assert_that!(failures).has_length(1);
         assert_that!(failures[0].children[0].kind)
             .is_equal_to(crate::failure::FailureKind::Equality);
-    }
-
-    #[test]
-    fn matches_empty_sequences() {
-        assert_that!([0; 0]).matches(elements_are![]);
     }
 
     #[test]
@@ -253,6 +281,59 @@ mod tests {
             },
         ]);
         assert_that!(renders.get()).is_equal_to(2);
+    }
+
+    mod alternatives {
+        use super::*;
+        use crate::{assertions::collection::contains_contiguous_elements, failure::PathSegment};
+
+        #[derive(Debug)]
+        struct Compared<'a> {
+            value: i32,
+            comparisons: &'a Cell<usize>,
+        }
+        impl borrow_for::BorrowFor<Compared<'_>> for i32 {
+            type View = i32;
+        }
+        impl PartialEq<i32> for Compared<'_> {
+            fn eq(&self, other: &i32) -> bool {
+                self.comparisons.set(self.comparisons.get() + 1);
+                self.value == *other
+            }
+        }
+        impl ValueRenderer<Compared<'_>> for CountingRenderer<'_> {
+            fn fmt(&self, value: &Compared<'_>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.set(self.0.get() + 1);
+                write!(f, "{}", value.value)
+            }
+        }
+
+        #[test]
+        fn completed_windows_share_the_remaining_allowance_without_changing_truth() {
+            for later_success in [false, true] {
+                let comparisons = Cell::new(0);
+                let renders = Cell::new(0);
+                let actual = (0..20)
+                    .map(|index| Compared {
+                        value: if later_success && index == 19 { 9 } else { 0 },
+                        comparisons: &comparisons,
+                    })
+                    .collect::<Vec<_>>();
+                let failures = assert_that!(actual)
+                    .with_renderer(CountingRenderer(&renders))
+                    .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+                    .capture(|it| it.matches(contains_contiguous_elements([eq(9)])));
+                assert_that!(comparisons.get()).is_equal_to(20);
+                assert_that!(renders.get()).is_equal_to(2);
+                assert_that!(failures.len()).is_equal_to(usize::from(!later_success));
+                if !later_success {
+                    assert_that!(failures[0].children).has_length(1);
+                    assert_that!(failures[0].children[0].path)
+                        .contains_exactly([PathSegment::Index(0)]);
+                    assert_that!(failures[0].omitted_children).is_equal_to(19);
+                }
+            }
+        }
     }
 
     mod evaluate {
@@ -309,7 +390,7 @@ mod tests {
             use indoc::formatdoc;
             struct NeverRender;
             impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                fn fmt(&self, _: &T, _: &mut fmt::Formatter<'_>) -> fmt::Result {
                     panic!("rendered omitted evidence")
                 }
             }
@@ -345,7 +426,7 @@ mod tests {
         fn length_mismatches_do_not_render_numeric_evidence() {
             struct NeverRender;
             impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                fn fmt(&self, _: &T, _: &mut fmt::Formatter<'_>) -> fmt::Result {
                     panic!("probe rendered evidence")
                 }
             }

@@ -609,14 +609,14 @@ mod tests {
                     => RangeAssertions<i32, NoRenderer>
             );
 
-            assert_trait_impl!(super::super::ContainsElement<i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
-            assert_trait_impl!(super::super::DoesNotContainElement<i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
-            assert_trait_impl!(super::super::ContainsElement<&'static i32> => crate::Expectation<core::ops::Range<&'static i32>, NoRenderer>);
-            assert_trait_impl!(super::super::DoesNotContainElement<&'static i32> => crate::Expectation<core::ops::Range<&'static i32>, NoRenderer>);
-            assert_trait_impl!(super::super::ContainsElement<i32, &'static i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
-            assert_trait_impl!(super::super::DoesNotContainElement<i32, &'static i32> => crate::Expectation<core::ops::Range<i32>, NoRenderer>);
-            assert_trait_impl!(super::super::IsInRange<core::ops::Range<i32>> => crate::Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsNotInRange<core::ops::Range<i32>> => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::ContainsElement<i32> => Expectation<core::ops::Range<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::DoesNotContainElement<i32> => Expectation<core::ops::Range<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::ContainsElement<&'static i32> => Expectation<core::ops::Range<&'static i32>, NoRenderer>);
+            assert_trait_impl!(super::super::DoesNotContainElement<&'static i32> => Expectation<core::ops::Range<&'static i32>, NoRenderer>);
+            assert_trait_impl!(super::super::ContainsElement<i32, &'static i32> => Expectation<core::ops::Range<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::DoesNotContainElement<i32, &'static i32> => Expectation<core::ops::Range<i32>, NoRenderer>);
+            assert_trait_impl!(super::super::IsInRange<core::ops::Range<i32>> => Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::IsNotInRange<core::ops::Range<i32>> => Expectation<i32, NoRenderer>);
         }
 
         #[test]

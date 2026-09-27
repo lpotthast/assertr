@@ -97,16 +97,10 @@ where
             &self.0,
         );
         let matched = failures.is_empty();
-        if !matched {
-            for failure in failures {
-                context.record(failure);
-            }
-            if context.evidence.is_empty() {
-                context.outcome(false, |context| context.describe::<A, _>(self));
-            }
+        for failure in failures {
+            context.record(failure);
         }
-        let evidence = context.into_evidence();
-        if matched { Ok(()) } else { Err(evidence) }
+        context.finish(matched, |context| context.describe::<A, _>(self))
     }
 }
 impl<A, R, F> ExpectationDiagnostics<A, R> for Satisfying<F>
@@ -133,12 +127,45 @@ where
 mod tests {
     use super::satisfying;
     use crate::prelude::*;
+    use core::cell::Cell;
 
     #[test]
     fn adapts_assertion_closures() {
-        assert_that!(2).matches(satisfying(|it| {
-            it.is_equal_to(2);
-        }));
+        let calls = Cell::new(0);
+        let matcher = satisfying(|it| {
+            calls.set(calls.get() + 1);
+            it.is_equal_to(2).is_greater_than(0);
+        });
+
+        assert_that!(2).matches(&matcher).matches(&matcher);
+        assert_that!(calls.get()).is_equal_to(2);
+    }
+
+    #[test]
+    fn captures_every_failure_including_derived_assertions() {
+        let failures = assert_that!(1).with_location(false).capture(|it| {
+            it.matches(satisfying(|it| {
+                let it = it.is_equal_to(2);
+                it.derive_owned(|value| value + 1).is_equal_to(3);
+            }))
+        });
+
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0]).has_text_report(indoc::formatdoc! {r"
+            -------- assertr --------
+            Expression: `1`
+
+            does not match
+
+            Nested failures:
+              - Expected: 2
+
+                  Actual: 1
+              - Expected: 3
+
+                  Actual: 2
+            -------- assertr --------
+        "});
     }
 
     #[test]
@@ -148,5 +175,116 @@ mod tests {
         })
         .has_type::<&str>()
         .is_equal_to("The closure passed to satisfying performed no assertions!");
+    }
+
+    #[test]
+    fn propagates_user_panics_even_after_capturing_a_failure() {
+        assert_that_panic_by(|| {
+            assert_that!(1).matches(satisfying(|it| {
+                it.is_equal_to(2);
+                panic!("callback panic");
+            }));
+        })
+        .has_type::<&str>()
+        .is_equal_to("callback panic");
+    }
+
+    #[test]
+    fn describes_missing_subjects_without_invoking_the_callback() {
+        let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
+        let matcher = satisfying(|_: AssertThat<i32, Capture>| panic!("callback invoked"));
+
+        let description = context.describe::<i32, _>(&matcher);
+
+        assert_that!(description.relation).is_equal_to(Some("satisfies the assertions".into()));
+        assert_that!(description.children).is_empty();
+    }
+
+    #[test]
+    fn scopes_captured_failures_to_the_enclosing_path_once() {
+        let mut context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
+        let matcher = satisfying(|it| {
+            it.is_equal_to(2).is_equal_to(3);
+        });
+        let path = crate::failure::PathSegment::Index(4);
+
+        let accepted = context.scoped(path.clone(), |context| context.evaluate(&1, &matcher));
+
+        assert_that!(accepted).is_false();
+        let evidence = context.into_evidence();
+        assert_that!(evidence.children).has_length(2);
+        for failure in evidence.children {
+            assert_that!(failure.path).contains_exactly([path.clone()]);
+        }
+    }
+
+    mod inherited_settings {
+        use super::*;
+        use crate::test_support::{CustomValueRenderer, assert_custom_value};
+
+        #[test]
+        fn renders_derived_values_without_requiring_a_subject_renderer() {
+            struct Opaque(usize);
+
+            let failures = assert_that!(Opaque(1))
+                .with_renderer(CustomValueRenderer)
+                .capture(|it| {
+                    it.matches(satisfying(
+                        |it: AssertThat<'_, Opaque, Capture, CustomValueRenderer>| {
+                            it.satisfies(
+                                |value| &value.0,
+                                |value| {
+                                    value.is_equal_to(9);
+                                },
+                            );
+                        },
+                    ))
+                });
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(1);
+            let child = &failures[0].children[0];
+            assert_custom_value(child.actual.as_ref().unwrap(), &1_usize);
+            assert_custom_value(child.expected.as_ref().unwrap(), &9_usize);
+        }
+
+        #[test]
+        fn limits_captured_failures_and_their_rendered_leaves() {
+            let failures = assert_that!(123_456)
+                .with_rendering_budget(
+                    RenderingBudget::default()
+                        .with_max_items(1)
+                        .with_max_leaf_characters(3),
+                )
+                .capture(|it| {
+                    it.matches(satisfying(|it| {
+                        it.is_equal_to(99).is_equal_to(100);
+                    }))
+                });
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(1);
+            assert_that!(failures[0].omitted_children).is_equal_to(1);
+            assert_that!(rendered_text(
+                failures[0].children[0].actual.as_ref().unwrap()
+            ))
+            .is_equal_to("123... 3 more characters ...");
+        }
+
+        #[test]
+        fn preserves_the_location_policy_for_captured_assertions() {
+            for include_location in [false, true] {
+                let failures = assert_that!(1)
+                    .with_location(include_location)
+                    .capture(|it| {
+                        it.matches(satisfying(|it| {
+                            it.is_equal_to(2);
+                        }))
+                    });
+
+                assert_that!(failures[0].children[0].location.is_some())
+                    .is_equal_to(include_location);
+            }
+        }
     }
 }

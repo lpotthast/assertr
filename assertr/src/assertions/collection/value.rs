@@ -4,7 +4,7 @@ use super::{Collection, StableOrder};
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
-    failure::{Fact, FailureBuilder, FailureKind},
+    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::GroupStyle,
     util::matching::match_bipartite,
 };
@@ -363,13 +363,16 @@ where
                     expected,
                 }) = mismatch
                 {
-                    failure = failure.child(
+                    let mut child = context.isolated();
+                    child.record_with(|context| {
+                        let render = context.render();
                         FailureBuilder::detached::<C::Item>(FailureKind::Equality)
                             .actual(render.value(element))
                             .expected(render.value(expected))
+                            .path([PathSegment::Index(index)])
                             .build()
-                            .located_at(Fact::index(index)),
-                    );
+                    });
+                    failure = child.into_evidence().explain(failure);
                 }
                 failure
             }
@@ -472,13 +475,16 @@ where
                     expected,
                 }) = mismatch
                 {
-                    failure = failure.child(
+                    let mut child = context.isolated();
+                    child.record_with(|context| {
+                        let render = context.render();
                         FailureBuilder::detached::<C::Item>(FailureKind::Equality)
                             .actual(render.value(element))
                             .expected(render.value(expected))
+                            .path([PathSegment::Index(index)])
                             .build()
-                            .located_at(Fact::index(index)),
-                    );
+                    });
+                    failure = child.into_evidence().explain(failure);
                 }
                 failure
             }
@@ -818,6 +824,139 @@ where
 
 #[cfg(test)]
 mod tests {
+    mod evidence_budget {
+        use crate::{
+            failure::{FailureKind, PathSegment},
+            prelude::*,
+        };
+        use core::{cell::Cell, fmt};
+
+        struct Compared<'a> {
+            value: i32,
+            comparisons: &'a Cell<usize>,
+        }
+        impl PartialEq for Compared<'_> {
+            fn eq(&self, other: &Self) -> bool {
+                self.comparisons.set(self.comparisons.get() + 1);
+                self.value == other.value
+            }
+        }
+
+        struct Renderer<'a>(&'a Cell<usize>);
+        impl ValueRenderer<Compared<'_>> for Renderer<'_> {
+            fn fmt(&self, value: &Compared<'_>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.set(self.0.get() + 1);
+                write!(f, "{}", value.value)
+            }
+        }
+        impl ValueRenderer<usize> for Renderer<'_> {
+            fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{value}")
+            }
+        }
+
+        #[test]
+        fn prefix_and_suffix_bound_mismatch_evidence_without_repeating_comparisons() {
+            for suffix in [false, true] {
+                for budget in [
+                    RenderingBudget::default().with_max_items(0),
+                    RenderingBudget::default().with_max_items(1),
+                    RenderingBudget::unlimited(),
+                ] {
+                    let comparisons = Cell::new(0);
+                    let renders = Cell::new(0);
+                    let item = |value| Compared {
+                        value,
+                        comparisons: &comparisons,
+                    };
+                    let actual = [1, 2, 3].map(item);
+                    let expected = [if suffix { 2 } else { 1 }, 9].map(item);
+                    let failures = assert_that!(actual)
+                        .with_renderer(Renderer(&renders))
+                        .with_rendering_budget(budget)
+                        .capture(|it| {
+                            if suffix {
+                                it.ends_with(&expected)
+                            } else {
+                                it.starts_with(&expected)
+                            }
+                        });
+                    assert_that!(comparisons.get()).is_equal_to(2);
+                    let retained = usize::from(budget.max_items() > 0);
+                    assert_that!(renders.get()).is_equal_to(
+                        actual.len().min(budget.max_items())
+                            + expected.len().min(budget.max_items())
+                            + retained * 2,
+                    );
+                    assert_that!(failures).has_length(1);
+                    let failure = &failures[0];
+                    assert_that!(failure.children).has_length(retained);
+                    assert_that!(failure.omitted_children).is_equal_to(1 - retained);
+                    for child in &failure.children {
+                        assert_that!(child.path)
+                            .contains_exactly([PathSegment::Index(if suffix { 2 } else { 1 })]);
+                        assert_that!(child.kind).is_equal_to(FailureKind::Equality);
+                    }
+                    // Presenting retained evidence never performs another leaf conversion.
+                    let before = renders.get();
+                    let report = ToHumanReadableText.render(failure);
+                    assert_that!(report.as_str()).contains(if suffix {
+                        "does not end with"
+                    } else {
+                        "does not start with"
+                    });
+                    assert_that!(renders.get()).is_equal_to(before);
+                }
+            }
+        }
+
+        #[test]
+        fn zero_budget_preserves_success_and_does_not_invent_length_mismatches() {
+            let budget = RenderingBudget::default().with_max_items(0);
+            let failures = assert_that!([1, 2, 3])
+                .with_rendering_budget(budget)
+                .capture(|it| {
+                    it.starts_with([1, 2])
+                        .ends_with([2, 3])
+                        .starts_with([] as [i32; 0])
+                });
+            assert_that!(failures).is_empty();
+
+            let failures = assert_that!([] as [i32; 0])
+                .with_rendering_budget(budget)
+                .capture(|it| it.starts_with([1]).ends_with([1]));
+            assert_that!(failures).has_length(2);
+            for failure in failures {
+                assert_that!(failure.children).is_empty();
+                assert_that!(failure.omitted_children).is_equal_to(0);
+            }
+        }
+    }
+
+    mod child_paths {
+        use super::super::{EndsWith, StartsWith};
+        use crate::{failure::PathSegment, matchers::all_of, prelude::*};
+
+        #[test]
+        fn prefix_and_suffix_mismatches_keep_relative_paths_inside_matchers() {
+            let failures = assert_that!([[1, 2, 3]]).capture(|it| {
+                it.matches(elements_are![all_of((
+                    StartsWith::new([1, 9]),
+                    EndsWith::new([2, 9]),
+                ))])
+            });
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(2);
+            for (failure, index) in failures[0].children.iter().zip([1, 2]) {
+                assert_that!(failure.path).contains_exactly([PathSegment::Index(0)]);
+                assert_that!(failure.children).has_length(1);
+                let child = &failure.children[0];
+                assert_that!(child.path).contains_exactly([PathSegment::Index(index)]);
+                assert_that!(child.facts).is_empty();
+            }
+        }
+    }
+
     mod contains_exactly {
         use super::super::ContainsExactly;
         use crate::{AssertionContext, prelude::*, test_support::NoRenderer};

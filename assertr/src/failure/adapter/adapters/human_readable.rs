@@ -22,11 +22,11 @@
 //! ```
 //!
 //! The body is followed by the chain's `Messages:`, the failure's `Details:` (its facts), and its
-//! `Nested failures:` (its children), each child indented one level and introduced by the element
-//! index or map key it was raised for.
+//! `Nested failures:` (its children), each child indented one level and introduced by the
+//! typed path it was raised for, when present.
 
 use super::super::Adapter;
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 use assertr::borrow_for::BorrowFor;
 use core::borrow::Borrow;
 use core::{
@@ -153,8 +153,7 @@ impl ToHumanReadableText {
     pub fn render(self, failure: &AssertionFailure) -> HumanReadableText {
         let mut report = String::new();
         report.push_str(BANNER);
-        write_report(failure, &mut report, false)
-            .expect("writing a text report to a String cannot fail");
+        write_report(failure, &mut report).expect("writing a text report to a String cannot fail");
         report.push_str(BANNER);
         HumanReadableText(report)
     }
@@ -248,10 +247,7 @@ fn write_value(output: &mut String, value: &Rendered) {
 }
 
 /// Writes everything between the banners.
-///
-/// `located` is set for a child whose position was already written as its heading, so the fact that
-/// carries the position is not repeated among its details.
-fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) -> fmt::Result {
+fn write_report(failure: &AssertionFailure, w: &mut dyn Write) -> fmt::Result {
     if let Some(location) = failure.location {
         write!(
             w,
@@ -287,7 +283,7 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) ->
             w.write_str("\n")?;
         }
         w.write_str("Constraint:\n")?;
-        write_report(constraint, &mut Indented::at_line_start(w), false)?;
+        write_report(constraint, &mut Indented::at_line_start(w))?;
     }
 
     let omission_note = (failure.omitted_children > 0).then(|| {
@@ -299,9 +295,8 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write, located: bool) ->
     let facts = failure
         .facts
         .iter()
-        .filter(|fact| !(located && fact.is_location()))
         .chain(omission_note.iter())
-        .collect::<alloc::vec::Vec<_>>();
+        .collect::<Vec<_>>();
     let has_blocks =
         !failure.messages.is_empty() || !facts.is_empty() || !failure.children.is_empty();
     if has_body && has_blocks {
@@ -356,8 +351,9 @@ fn write_children(w: &mut dyn Write, children: &[AssertionFailure]) -> fmt::Resu
     writeln!(w, "Nested failures:")?;
     for child in children {
         w.write_str("  - ")?;
-        let heading = child.facts.iter().find(|fact| fact.is_location());
-        if !child.path.is_empty() {
+        if child.path.is_empty() {
+            write_report(child, &mut Indented::continuing(w))?;
+        } else {
             w.write_str("At ")?;
             for segment in &child.path {
                 match segment {
@@ -373,14 +369,7 @@ fn write_children(w: &mut dyn Write, children: &[AssertionFailure]) -> fmt::Resu
                 }
             }
             w.write_str(":\n")?;
-            write_report(child, &mut Indented::at_line_start(w), true)?;
-        } else if let Some(heading) = heading {
-            write!(w, "At {} ", heading.label)?;
-            heading.value.write(w, false)?;
-            writeln!(w, ":")?;
-            write_report(child, &mut Indented::at_line_start(w), true)?;
-        } else {
-            write_report(child, &mut Indented::continuing(w), false)?;
+            write_report(child, &mut Indented::at_line_start(w))?;
         }
     }
     Ok(())
@@ -460,6 +449,81 @@ mod tests {
     use crate::renderer::IntoRendered;
 
     use super::{ToHumanReadableText, body};
+
+    mod child_locations {
+        use super::*;
+        use crate::failure::{Fact, FailureBuilder, FailureKind, PathSegment};
+        use crate::test_support::FailureReportAssertions;
+        use indoc::formatdoc;
+
+        #[test]
+        fn index_and_key_facts_remain_evidence_with_and_without_paths() {
+            for path in [alloc::vec![], alloc::vec![PathSegment::Index(1)]] {
+                let heading = if path.is_empty() {
+                    "  - does not match"
+                } else {
+                    "  - At [1]:\n    does not match"
+                };
+                let child = FailureBuilder::detached::<()>(FailureKind::Matching)
+                    .path(path)
+                    .relation("does not match")
+                    .facts([
+                        Fact::labelled("index", "7"),
+                        Fact::labelled("key", "evidence"),
+                    ])
+                    .build();
+                let root = FailureBuilder::detached::<()>(FailureKind::Matching)
+                    .relation("does not hold")
+                    .facts([
+                        Fact::labelled("index", "8"),
+                        Fact::labelled("key", "root evidence"),
+                    ])
+                    .child(child)
+                    .build();
+
+                assert_that!(root).has_text_report(formatdoc! {"
+                    -------- assertr --------
+                    does not hold
+
+                    Details:
+                      - index: 8
+                      - key: root evidence
+                    Nested failures:
+                    {heading}
+
+                        Details:
+                          - index: 7
+                          - key: evidence
+                    -------- assertr --------
+                "});
+            }
+        }
+
+        #[test]
+        fn every_path_segment_contributes_to_the_child_heading() {
+            let child = FailureBuilder::detached::<()>(FailureKind::Matching)
+                .path([
+                    PathSegment::Field("rows"),
+                    PathSegment::Index(1),
+                    PathSegment::Variant("Some"),
+                    PathSegment::TupleIndex(0),
+                    PathSegment::Key("\"id\"".into_rendered()),
+                ])
+                .relation("does not match")
+                .build();
+            let root = FailureBuilder::detached::<()>(FailureKind::Matching)
+                .child(child)
+                .build();
+
+            assert_that!(root).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Nested failures:
+                  - At .rows[1]::Some.0["id"]:
+                    does not match
+                -------- assertr --------
+            "#});
+        }
+    }
 
     mod constraint_fields {
         use super::*;
@@ -557,7 +621,7 @@ mod tests {
 
     mod indentation {
         use super::*;
-        use crate::failure::{Fact, FailureBuilder, FailureKind};
+        use crate::failure::{Fact, FailureBuilder, FailureKind, PathSegment};
 
         #[test]
         fn nested_failures_are_indented_one_level_per_depth_with_empty_lines_left_empty() {
@@ -565,8 +629,8 @@ mod tests {
                 .actual(1)
                 .relation("is not greater than")
                 .expected(5)
-                .build()
-                .located_at(Fact::index(0));
+                .path([PathSegment::Index(0)])
+                .build();
             let child = FailureBuilder::detached::<[i32; 1]>(FailureKind::Predicate)
                 .actual(format_args!("[1]"))
                 .relation("does not exactly satisfy the assertions")
@@ -598,7 +662,7 @@ mod tests {
                     does not exactly satisfy the assertions
 
                     Nested failures:
-                      - At index 0:
+                      - At [0]:
                         Actual: 1
 
                         is not greater than

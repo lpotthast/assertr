@@ -256,8 +256,8 @@ mod tests {
                     => ResultExtractAssertions<'static, i32, i32, NoRenderer>
             );
 
-            assert_trait_impl!(super::super::IsOk => crate::Expectation<Result<(), ()>, NoRenderer>);
-            assert_trait_impl!(super::super::IsErr => crate::Expectation<Result<(), ()>, NoRenderer>);
+            assert_trait_impl!(super::super::IsOk => Expectation<Result<(), ()>, NoRenderer>);
+            assert_trait_impl!(super::super::IsErr => Expectation<Result<(), ()>, NoRenderer>);
         }
 
         #[test]

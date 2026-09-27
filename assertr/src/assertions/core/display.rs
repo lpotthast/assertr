@@ -107,7 +107,7 @@ mod tests {
                 AssertThat<'static, i32, Panic, NoRenderer> => DisplayAssertions<NoRenderer>
             );
 
-            assert_trait_impl!(super::super::HasDisplayValue<i32> => crate::Expectation<i32, NoRenderer>);
+            assert_trait_impl!(super::super::HasDisplayValue<i32> => Expectation<i32, NoRenderer>);
         }
     }
 

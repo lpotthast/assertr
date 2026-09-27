@@ -184,7 +184,7 @@ fn presentation_is_inherited_by_projections_and_renderer_changes() {
     let message = panic_text(|| {
         assert_that_owned!(1)
             .with_panic_presentation(KindAdapter)
-            .with_renderer(assertr::DebugRenderer)
+            .with_renderer(DebugRenderer)
             .map_owned(|_| 2)
             .is_equal_to(3);
     });
@@ -411,8 +411,8 @@ mod matcher_capture {
             .with_panic_presentation(CountPresentations(Rc::clone(&count)))
             .capture(|it| {
                 it.matches(elements_are![
-                    assertr::matchers::eq(1),
-                    assertr::matchers::predicate(|x: &i32| *x == 3)
+                    matchers::eq(1),
+                    matchers::predicate(|x: &i32| *x == 3)
                 ])
             });
         assert_that!(count.load(Ordering::Relaxed)).is_equal_to(0);

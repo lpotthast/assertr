@@ -31,6 +31,7 @@ use alloc::vec::Vec;
 mod all_of;
 mod any_of;
 mod anything;
+pub(crate) mod assignment;
 mod dereferenced;
 pub(crate) mod lists;
 mod predicate;
@@ -61,10 +62,6 @@ pub struct Evidence {
 }
 
 impl Evidence {
-    pub(crate) fn is_empty(&self) -> bool {
-        self.children.is_empty() && self.omitted == 0
-    }
-
     /// Attaches child failures with paths relative to the enclosing expectation's subject.
     /// The context's path prefix is removed once, preserving paths within each child failure.
     pub fn explain<T>(mut self, failure: FailureBuilder<T>) -> FailureBuilder<T> {

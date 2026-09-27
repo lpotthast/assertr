@@ -2,3 +2,6 @@
 resolver = "3"
 members = ["assertr", "assertr-macros", "assertr-no-std-tests"]
 default-members = ["assertr"]
+
+[workspace.lints.rust]
+unused_qualifications = "deny"

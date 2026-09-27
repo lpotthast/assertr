@@ -166,6 +166,124 @@ fn iterator_prefix_and_exact_allocation_is_constant_beyond_preview_capacity() {
     }
 }
 
+#[test]
+fn successful_suffix_allocates_only_for_incremental_window_growth() {
+    use std::collections::VecDeque;
+    for length in [16, 128, 4096] {
+        let values = vec![1_u64; length];
+        let required = allocated(|| {
+            let mut window = VecDeque::new();
+            for value in core::iter::repeat_n(1_u64, length * 2) {
+                if window.len() == length {
+                    window.pop_front();
+                }
+                window.push_back(black_box(value));
+            }
+            black_box(window);
+        });
+        let actual = allocated(|| {
+            black_box(
+                assert_that_owned!(core::iter::repeat_n(1_u64, length * 2))
+                    .ends_with(black_box(&values)),
+            );
+        });
+        assert_that!(actual).is_equal_to(required);
+    }
+}
+
+#[test]
+fn short_suffix_does_not_reserve_the_requested_pattern_length() {
+    let expected = vec![1_u64; 1_000_000];
+    let mut failures = None;
+    let bytes = allocated(|| {
+        failures = Some(black_box(
+            assert_that_owned!([1_u64].into_iter())
+                .with_rendering_budget(RenderingBudget::default().with_max_items(0))
+                .capture(|it| it.ends_with(black_box(&expected))),
+        ));
+    });
+    assert_that!(failures.unwrap()).has_length(1);
+    assert_that!(bytes).is_less_than(64 * 1024);
+}
+
+#[test]
+fn callback_list_adapters_allocate_no_wrapper_vector() {
+    let callbacks: [fn(AssertThat<'_, u64, Capture>); 32] = [|it| {
+        it.is_equal_to(1);
+    }; 32];
+    let matchers = callbacks
+        .iter()
+        .map(assertr::expectation::satisfying)
+        .collect::<Vec<_>>();
+    let values = [1_u64; 32];
+    macro_rules! compare {
+        ($entry:expr, $matching:ident, $satisfying:ident) => {{
+            let prepared = allocated(|| {
+                black_box($entry.$matching(black_box(&matchers)));
+            });
+            let adapted = allocated(|| {
+                black_box($entry.$satisfying(black_box(&callbacks)));
+            });
+            assert_that!(adapted).is_equal_to(prepared);
+        }};
+    }
+    compare!(
+        assert_that_owned!(values.into_iter()),
+        starts_with_matching,
+        starts_with_satisfying
+    );
+    compare!(
+        assert_that_owned!(values.into_iter()),
+        ends_with_matching,
+        ends_with_satisfying
+    );
+    compare!(
+        assert_that_owned!(values.into_iter()),
+        contains_contiguous_matching,
+        contains_contiguous_satisfying
+    );
+    compare!(
+        assert_that_owned!(values.into_iter()),
+        contains_exactly_matching,
+        contains_exactly_satisfying
+    );
+    compare!(
+        assert_that_owned!(values.into_iter()),
+        contains_exactly_in_any_order_matching,
+        contains_exactly_in_any_order_satisfying
+    );
+    compare!(
+        assert_that!(values),
+        starts_with_matching,
+        starts_with_satisfying
+    );
+    compare!(
+        assert_that!(values),
+        ends_with_matching,
+        ends_with_satisfying
+    );
+    compare!(
+        assert_that!(values),
+        contains_contiguous_matching,
+        contains_contiguous_satisfying
+    );
+    compare!(
+        assert_that!(values),
+        contains_exactly_matching,
+        contains_exactly_satisfying
+    );
+    compare!(
+        assert_that!(values),
+        contains_exactly_in_any_order_matching,
+        contains_exactly_in_any_order_satisfying
+    );
+    compare!(
+        assert_that!(values),
+        into_iter_contains_exactly_in_any_order_matching,
+        into_iter_contains_exactly_in_any_order_satisfying
+    );
+}
+
 mod working_storage {
     use super::*;
     use assertr::borrow_for::BorrowFor;

@@ -44,7 +44,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         super::entry::evaluate_entry(actual, self.key, &self.expected, context, |render| {
-            PathSegment::Key(render.value(self.key).into_rendered())
+            PathSegment::Key(render.value(self.key).into_rendered_compact())
         })
     }
 }
@@ -106,22 +106,14 @@ where
         settings: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let mut context = settings.isolated_for_order(Mp::RENDERING_ORDER);
-        let mut matched = false;
         for (_, value) in actual.entries() {
             let mut branch = context.isolated();
             if branch.evaluate(value, &self.0) {
-                matched = true;
-                break;
+                return Ok(());
             }
             context.append(branch.into_evidence());
         }
-        if matched {
-            return Ok(());
-        }
-        if context.evidence.is_empty() {
-            context.outcome(false, |context| context.describe(&self.0));
-        }
-        Err(context.into_evidence())
+        context.finish(false, |context| context.describe(&self.0))
     }
 }
 

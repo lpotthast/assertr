@@ -1,107 +1,35 @@
 use super::{
-    AssertThat, AssertionContext, AssertionFailure, Borrow, Fact, FailureBuilder, FailureKind,
-    GroupStyle, Mode, PREVIEW_CAPACITY, PhantomData, Preview, Scan, Tail, UnsatisfiedElements,
-    ValueRenderer, Vec, VecDeque, equal_element, exact_size_hint, execute, indexed_children,
+    AssertThat, AssertionContext, Borrow, Fact, FailureBuilder, FailureKind, GroupStyle, Mode,
+    PREVIEW_CAPACITY, PhantomData, Preview, Scan, Tail, ValueRenderer, equal_element,
+    exact_size_hint, execute,
 };
 use crate::borrow_for::{BorrowFor, borrow_for};
-use crate::renderer::RenderingContext;
+use crate::expectation::Evidence;
 
-/// What ended an exact positional scan before it could succeed.
-enum ExactFailure {
-    KnownLength {
-        actual: usize,
-    },
-    Exhausted {
-        index: usize,
-    },
-    Criterion {
-        index: usize,
-        failures: Vec<AssertionFailure>,
-    },
-    Extra {
-        index: usize,
-    },
+/// What ended an equality prefix or exact scan before it could succeed.
+enum SequenceFailure {
+    KnownLength { actual: usize },
+    Exhausted { index: usize },
+    Criterion { index: usize, evidence: Evidence },
+    Extra { index: usize },
 }
 
-impl ExactFailure {
+impl SequenceFailure {
     fn decisive_index(&self) -> Option<usize> {
         match self {
             Self::Criterion { index, .. } | Self::Extra { index } => Some(*index),
             Self::KnownLength { .. } | Self::Exhausted { .. } => None,
         }
     }
-
-    /// Attaches the scan's outcome to the failure: the preview facts, what ended the scan, and the
-    /// failures of the decisive element as children located at its index.
-    fn apply<S, Item, R: ValueRenderer<usize>>(
-        self,
-        failure: FailureBuilder<S>,
-        preview: &Preview<Item>,
-        rendering: RenderingContext<'_, R>,
-        expected_len: usize,
-    ) -> FailureBuilder<S> {
-        let failure = preview.facts(failure, rendering, self.decisive_index());
-        match self {
-            Self::KnownLength { actual } => failure
-                .fact(Fact::labelled("Reported length", rendering.value(&actual)))
-                .fact(Fact::labelled(
-                    "Expected length",
-                    rendering.value(&expected_len),
-                )),
-            Self::Exhausted { index } => failure.fact(Fact::labelled("Exhausted at index", index)),
-            Self::Extra { index } => failure.fact(Fact::labelled("Extra element at index", index)),
-            Self::Criterion { index, failures } => failure.children(
-                failures
-                    .into_iter()
-                    .map(|failure| failure.located_at(Fact::index(index))),
-            ),
-        }
-    }
 }
 
-fn evaluate_exact<T, I>(
-    iterator: &mut I,
-    expected_len: usize,
-    mut criterion: impl FnMut(usize, &T) -> Result<(), Vec<AssertionFailure>>,
-) -> Result<(), (Preview<I::Item>, ExactFailure)>
-where
-    I: Iterator,
-    I::Item: Borrow<T>,
-{
-    if let Some(actual) = exact_size_hint(&iterator)
-        && actual != expected_len
-    {
-        return Err((Tail::new().finish(), ExactFailure::KnownLength { actual }));
-    }
-    let mut tail = Tail::new();
-    for index in 0..expected_len {
-        let Some(item) = iterator.next() else {
-            return Err((tail.finish(), ExactFailure::Exhausted { index }));
-        };
-        let result = criterion(index, item.borrow());
-        tail.push(item);
-        if let Err(failures) = result {
-            return Err((tail.finish(), ExactFailure::Criterion { index, failures }));
-        }
-    }
-    if let Some(item) = iterator.next() {
-        tail.push(item);
-        return Err((
-            tail.finish(),
-            ExactFailure::Extra {
-                index: expected_len,
-            },
-        ));
-    }
-    Ok(())
-}
-
-struct ContainsExactly<'e, T, E> {
+// The policy is constant because exact equality and prefix membership have different failure kinds.
+struct ElementsEqual<'e, T, E, const EXACT: bool> {
     expected: &'e [E],
     item: PhantomData<fn() -> T>,
 }
 
-impl<T, E, I, R> Scan<I, R> for ContainsExactly<'_, T, E>
+impl<T, E, I, R, const EXACT: bool> Scan<I, R> for ElementsEqual<'_, T, E, EXACT>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -109,18 +37,62 @@ where
     E: BorrowFor<T>,
     R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
-    type Rejection = (Preview<I::Item>, ExactFailure);
+    type Rejection = (Preview<I::Item>, SequenceFailure);
     fn observe(
         &self,
         iterator: &mut I,
         context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
-        evaluate_exact(iterator, self.expected.len(), |index, item| {
-            equal_element(context, item, borrow_for::<T, _>(&self.expected[index]))
-        })
+        let expected_len = self.expected.len();
+        if let Some(actual) = exact_size_hint(&iterator)
+            && ((EXACT && actual != expected_len) || (!EXACT && actual < expected_len))
+        {
+            return Err((
+                Tail::new(PREVIEW_CAPACITY).finish(),
+                SequenceFailure::KnownLength { actual },
+            ));
+        }
+        let mut tail = Tail::new(PREVIEW_CAPACITY);
+        let mut child = context.isolated();
+        for (index, expected) in self.expected.iter().enumerate() {
+            let Some(item) = iterator.next() else {
+                return Err((tail.finish(), SequenceFailure::Exhausted { index }));
+            };
+            let matched = equal_element(
+                &mut child,
+                index,
+                item.borrow(),
+                borrow_for::<T, _>(expected),
+            );
+            tail.push(item);
+            if !matched {
+                return Err((
+                    tail.finish(),
+                    SequenceFailure::Criterion {
+                        index,
+                        evidence: child.into_evidence(),
+                    },
+                ));
+            }
+        }
+        if EXACT && let Some(item) = iterator.next() {
+            tail.push(item);
+            return Err((
+                tail.finish(),
+                SequenceFailure::Extra {
+                    index: expected_len,
+                },
+            ));
+        }
+        Ok(())
     }
 
-    const KIND: FailureKind = FailureKind::Equality;
+    const KIND: FailureKind = if EXACT {
+        FailureKind::Equality
+    } else {
+        FailureKind::Membership
+    };
+
     fn explain<Target>(
         &self,
         rejection: Self::Rejection,
@@ -132,9 +104,32 @@ where
         let (preview, outcome) = rejection;
         let failure = failure
             .actual(preview.rendered::<T, _>(render))
-            .relation("does not contain exactly")
+            .relation(if EXACT {
+                "does not contain exactly"
+            } else {
+                "does not start with"
+            })
             .expected(expected);
-        outcome.apply(failure, &preview, render, self.expected.len())
+        let failure = preview.facts(failure, render, outcome.decisive_index());
+        match outcome {
+            SequenceFailure::KnownLength { actual } => failure
+                .fact(Fact::labelled("Reported length", render.value(&actual)))
+                .fact(Fact::labelled(
+                    if EXACT {
+                        "Expected length"
+                    } else {
+                        "Prefix length"
+                    },
+                    render.value(&self.expected.len()),
+                )),
+            SequenceFailure::Exhausted { index } => {
+                failure.fact(Fact::labelled("Exhausted at index", index))
+            }
+            SequenceFailure::Extra { index } => {
+                failure.fact(Fact::labelled("Extra element at index", index))
+            }
+            SequenceFailure::Criterion { evidence, .. } => evidence.explain(failure),
+        }
     }
 }
 
@@ -153,133 +148,11 @@ pub(crate) fn assert_contains_exactly<S, T, E, I, M: Mode, R>(
     execute(
         this,
         iterator,
-        &ContainsExactly::<T, E> {
+        &ElementsEqual::<T, E, true> {
             expected,
             item: PhantomData,
         },
     );
-}
-
-/// What ended a prefix scan before it could succeed.
-enum PrefixFailure {
-    KnownTooShort {
-        actual: usize,
-    },
-    Exhausted {
-        index: usize,
-    },
-    Criterion {
-        index: usize,
-        failures: Vec<AssertionFailure>,
-    },
-}
-
-impl PrefixFailure {
-    fn decisive_index(&self) -> Option<usize> {
-        match self {
-            Self::Criterion { index, .. } => Some(*index),
-            Self::KnownTooShort { .. } | Self::Exhausted { .. } => None,
-        }
-    }
-
-    /// Attaches the scan's outcome to the failure: the preview facts, what ended the scan, and the
-    /// failures of the decisive element as children located at its index.
-    fn apply<S, Item, R: ValueRenderer<usize>>(
-        self,
-        failure: FailureBuilder<S>,
-        preview: &Preview<Item>,
-        rendering: RenderingContext<'_, R>,
-        prefix_len: usize,
-    ) -> FailureBuilder<S> {
-        let failure = preview.facts(failure, rendering, self.decisive_index());
-        match self {
-            Self::KnownTooShort { actual } => failure
-                .fact(Fact::labelled("Reported length", rendering.value(&actual)))
-                .fact(Fact::labelled(
-                    "Prefix length",
-                    rendering.value(&prefix_len),
-                )),
-            Self::Exhausted { index } => failure.fact(Fact::labelled("Exhausted at index", index)),
-            Self::Criterion { index, failures } => failure.children(
-                failures
-                    .into_iter()
-                    .map(|failure| failure.located_at(Fact::index(index))),
-            ),
-        }
-    }
-}
-
-fn evaluate_prefix<T, I>(
-    iterator: &mut I,
-    expected_len: usize,
-    mut criterion: impl FnMut(usize, &T) -> Result<(), Vec<AssertionFailure>>,
-) -> Result<(), (Preview<I::Item>, PrefixFailure)>
-where
-    I: Iterator,
-    I::Item: Borrow<T>,
-{
-    if let Some(actual) = exact_size_hint(&iterator)
-        && actual < expected_len
-    {
-        return Err((
-            Tail::new().finish(),
-            PrefixFailure::KnownTooShort { actual },
-        ));
-    }
-    let mut tail = Tail::new();
-    for index in 0..expected_len {
-        let Some(item) = iterator.next() else {
-            return Err((tail.finish(), PrefixFailure::Exhausted { index }));
-        };
-        let result = criterion(index, item.borrow());
-        tail.push(item);
-        if let Err(failures) = result {
-            return Err((tail.finish(), PrefixFailure::Criterion { index, failures }));
-        }
-    }
-    Ok(())
-}
-
-struct StartsWith<'e, T, E> {
-    expected: &'e [E],
-    item: PhantomData<fn() -> T>,
-}
-
-impl<T, E, I, R> Scan<I, R> for StartsWith<'_, T, E>
-where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    T: PartialEq<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-{
-    type Rejection = (Preview<I::Item>, PrefixFailure);
-    fn observe(
-        &self,
-        iterator: &mut I,
-        context: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection> {
-        evaluate_prefix(iterator, self.expected.len(), |index, item| {
-            equal_element(context, item, borrow_for::<T, _>(&self.expected[index]))
-        })
-    }
-
-    const KIND: FailureKind = FailureKind::Membership;
-    fn explain<Target>(
-        &self,
-        rejection: Self::Rejection,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
-        let (preview, outcome) = rejection;
-        let failure = failure
-            .actual(preview.rendered::<T, _>(render))
-            .relation("does not start with")
-            .expected(expected);
-        outcome.apply(failure, &preview, render, self.expected.len())
-    }
 }
 
 #[track_caller]
@@ -297,65 +170,16 @@ pub(crate) fn assert_starts_with<S, T, E, I, M: Mode, R>(
     execute(
         this,
         iterator,
-        &StartsWith::<T, E> {
+        &ElementsEqual::<T, E, false> {
             expected,
             item: PhantomData,
         },
     );
 }
 
-fn collect_tail<I: Iterator>(iterator: &mut I, required: usize) -> Preview<I::Item> {
-    let capacity = core::cmp::max(required, PREVIEW_CAPACITY);
-    let mut items = VecDeque::new();
-    let mut consumed = 0;
-    for item in iterator {
-        consumed += 1;
-        if items.len() == capacity {
-            let _ = items.pop_front();
-        }
-        items.push_back(item);
-    }
-    Preview {
-        items: items.into_iter().collect(),
-        consumed,
-    }
-}
-
-fn trim_preview<Item>(preview: &mut Preview<Item>) {
-    if preview.items.len() > PREVIEW_CAPACITY {
-        let remove = preview.items.len() - PREVIEW_CAPACITY;
-        preview.items.drain(..remove);
-    }
-}
-
-/// Checks the retained tail against a per-element suffix criterion.
-///
-/// Returns `None` when the iterator yielded fewer elements than the suffix needs. Otherwise returns
-/// the failures of the suffix elements that did not satisfy the criterion, each with its index in
-/// yield order.
-fn check_suffix<T, Item, C>(
-    preview: &Preview<Item>,
-    criteria: &[C],
-    mut criterion: impl FnMut(&T, &C) -> Vec<AssertionFailure>,
-) -> Option<UnsatisfiedElements>
-where
-    Item: Borrow<T>,
-{
-    if preview.consumed < criteria.len() {
-        return None;
-    }
-    let start = preview.items.len().saturating_sub(criteria.len());
-    let first_index = preview.consumed - criteria.len();
-    let unsatisfied = preview.items[start..]
-        .iter()
-        .zip(criteria)
-        .enumerate()
-        .filter_map(|(offset, (item, criterion_of_element))| {
-            let failures = criterion(item.borrow(), criterion_of_element);
-            (!failures.is_empty()).then_some((first_index + offset, failures))
-        })
-        .collect();
-    Some(unsatisfied)
+enum SuffixFailure {
+    Short,
+    Mismatch(Evidence),
 }
 
 struct EndsWith<'e, T, E> {
@@ -371,7 +195,7 @@ where
     E: BorrowFor<T>,
     R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
-    type Rejection = (Preview<I::Item>, Option<UnsatisfiedElements>);
+    type Rejection = (Preview<I::Item>, SuffixFailure);
     fn observe(
         &self,
         iterator: &mut I,
@@ -380,16 +204,34 @@ where
         if self.expected.is_empty() {
             return Ok(());
         }
-        let preview = collect_tail(iterator, self.expected.len());
-        let unsatisfied = check_suffix::<T, _, _>(&preview, self.expected, |item, expected| {
-            equal_element(context, item, borrow_for::<T, _>(expected))
-                .err()
-                .unwrap_or_default()
-        });
-        if unsatisfied.as_ref().is_some_and(Vec::is_empty) {
+        let mut tail = Tail::new(self.expected.len().max(PREVIEW_CAPACITY));
+        for item in iterator {
+            tail.push(item);
+        }
+        if tail.consumed < self.expected.len() {
+            return Err((tail.finish(), SuffixFailure::Short));
+        }
+        let mut child = context.isolated();
+        let mut matched = true;
+        let start = tail.items.len() - self.expected.len();
+        let first_index = tail.consumed - self.expected.len();
+        for (offset, (item, expected)) in
+            tail.items.iter().skip(start).zip(self.expected).enumerate()
+        {
+            matched &= equal_element(
+                &mut child,
+                first_index + offset,
+                item.borrow(),
+                borrow_for::<T, _>(expected),
+            );
+        }
+        if matched {
             Ok(())
         } else {
-            Err((preview, unsatisfied))
+            Err((
+                tail.finish(),
+                SuffixFailure::Mismatch(child.into_evidence()),
+            ))
         }
     }
 
@@ -402,27 +244,19 @@ where
     ) -> FailureBuilder<Target> {
         let render = context.render();
         let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
-        let (mut preview, unsatisfied) = rejection;
-        trim_preview(&mut preview);
-        let too_short = unsatisfied.is_none();
-        let (children, omitted) =
-            indexed_children(unsatisfied.unwrap_or_default(), render.max_items());
+        let (preview, outcome) = rejection;
         let failure = failure
             .actual(preview.rendered::<T, _>(render))
             .relation("does not end with")
             .expected(expected);
         let failure = preview.facts(failure, render, None);
-        let failure = if too_short {
-            failure.fact(Fact::labelled(
+        match outcome {
+            SuffixFailure::Short => failure.fact(Fact::labelled(
                 "Suffix length",
                 render.value(&self.expected.len()),
-            ))
-        } else {
-            failure
-        };
-        failure
-            .omitted(omitted, "unsatisfied element")
-            .children(children)
+            )),
+            SuffixFailure::Mismatch(evidence) => evidence.explain(failure),
+        }
     }
 }
 
@@ -448,48 +282,27 @@ pub(crate) fn assert_ends_with<S, T, E, I, M: Mode, R>(
     );
 }
 
-/// Scans for a window of `pattern_len` consecutive elements satisfying `criterion`, which receives
-/// the window and the index of its first element in yield order.
-///
-/// On failure, returns the preview together with the failing elements of the last candidate window,
-/// each with its index in yield order.
-fn find_contiguous<T, I>(
+/// Searches overlapping windows, keeping required storage independent of the diagnostic budget.
+fn find_contiguous<I: Iterator>(
     iterator: &mut I,
     pattern_len: usize,
-    mut criterion: impl FnMut(usize, &[I::Item]) -> Result<(), UnsatisfiedElements>,
-) -> Result<(), (Preview<I::Item>, UnsatisfiedElements)>
-where
-    I: Iterator,
-    I::Item: Borrow<T>,
-{
+    mut criterion: impl FnMut(
+        core::iter::Skip<alloc::collections::vec_deque::Iter<'_, I::Item>>,
+    ) -> bool,
+) -> Result<(), Preview<I::Item>> {
     if pattern_len == 0 {
         return Ok(());
     }
-    let capacity = core::cmp::max(pattern_len, PREVIEW_CAPACITY);
-    let mut window = VecDeque::new();
-    let mut consumed = 0;
-    let mut last_unsatisfied = Vec::new();
+    let mut tail = Tail::new(pattern_len.max(PREVIEW_CAPACITY));
     for item in iterator {
-        consumed += 1;
-        if window.len() == capacity {
-            let _ = window.pop_front();
-        }
-        window.push_back(item);
-        if window.len() >= pattern_len {
-            let contiguous = window.make_contiguous();
-            let start = contiguous.len() - pattern_len;
-            match criterion(consumed - pattern_len, &contiguous[start..]) {
-                Ok(()) => return Ok(()),
-                Err(unsatisfied) => last_unsatisfied = unsatisfied,
-            }
+        tail.push(item);
+        if tail.items.len() >= pattern_len
+            && criterion(tail.items.iter().skip(tail.items.len() - pattern_len))
+        {
+            return Ok(());
         }
     }
-    let mut preview = Preview {
-        items: window.into_iter().collect(),
-        consumed,
-    };
-    trim_preview(&mut preview);
-    Err((preview, last_unsatisfied))
+    Err(tail.finish())
 }
 
 struct ContainsContiguous<'e, T, E> {
@@ -505,18 +318,16 @@ where
     E: BorrowFor<T>,
     R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
-    type Rejection = (Preview<I::Item>, UnsatisfiedElements);
+    type Rejection = Preview<I::Item>;
     fn observe(
         &self,
         iterator: &mut I,
         _context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
-        find_contiguous::<T, _>(iterator, self.expected.len(), |_, window| {
-            let matched = window
-                .iter()
+        find_contiguous(iterator, self.expected.len(), |window| {
+            window
                 .zip(self.expected)
-                .all(|(item, expected)| item.borrow().eq(borrow_for::<T, _>(expected)));
-            if matched { Ok(()) } else { Err(Vec::new()) }
+                .all(|(item, expected)| item.borrow().eq(borrow_for::<T, _>(expected)))
         })
     }
 
@@ -529,7 +340,7 @@ where
     ) -> FailureBuilder<Target> {
         let render = context.render();
         let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
-        let (preview, _) = rejection;
+        let preview = rejection;
         let failure = failure
             .actual(preview.rendered::<T, _>(render))
             .relation("does not contain the contiguous subsequence")
@@ -558,4 +369,347 @@ pub(crate) fn assert_contains_contiguous<S, T, E, I, M: Mode, R>(
             item: PhantomData,
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::failure::PathSegment;
+    use crate::{
+        prelude::*,
+        test_support::{CustomValueRenderer, assert_custom_fact},
+    };
+    use alloc::vec::Vec;
+    use core::cell::Cell;
+    use indoc::formatdoc;
+
+    mod evidence_budget {
+        use super::*;
+        use core::fmt;
+
+        struct Renderer<'a>(&'a Cell<usize>);
+        impl ValueRenderer<Compared<'_>> for Renderer<'_> {
+            fn fmt(&self, value: &Compared<'_>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.set(self.0.get() + 1);
+                write!(f, "{}", value.value)
+            }
+        }
+        impl ValueRenderer<usize> for Renderer<'_> {
+            fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{value}")
+            }
+        }
+
+        #[test]
+        fn suffix_compares_every_position_and_renders_only_retained_evidence() {
+            for (length, alternating, budget) in [
+                (10_000, false, RenderingBudget::default().with_max_items(0)),
+                (10_000, false, RenderingBudget::default().with_max_items(1)),
+                (20, true, RenderingBudget::default().with_max_items(1)),
+                (20, true, RenderingBudget::unlimited()),
+            ] {
+                let comparisons = Cell::new(0);
+                let renders = Cell::new(0);
+                let item = |value| Compared {
+                    value,
+                    comparisons: &comparisons,
+                };
+                let expected = (0..length).map(|_| item(9)).collect::<Vec<_>>();
+                let actual = (0..length)
+                    .map(|index| item(if alternating && index % 2 == 0 { 9 } else { 0 }));
+                let failures = assert_that_owned!(actual)
+                    .with_renderer(Renderer(&renders))
+                    .with_rendering_budget(budget)
+                    .capture(|it| it.ends_with(&expected));
+                let rejected = if alternating { length / 2 } else { length };
+                let retained = rejected.min(budget.max_items());
+                assert_that!(comparisons.get()).is_equal_to(length);
+                assert_that!(renders.get()).is_equal_to(
+                    16.min(budget.max_items()) + length.min(budget.max_items()) + retained * 2,
+                );
+                assert_that!(failures).has_length(1);
+                let failure = &failures[0];
+                assert_that!(failure.kind).is_equal_to(FailureKind::Membership);
+                assert_that!(failure.children).has_length(retained);
+                assert_that!(failure.omitted_children).is_equal_to(rejected - retained);
+                for (slot, child) in failure.children.iter().enumerate() {
+                    let index = if alternating { slot * 2 + 1 } else { slot };
+                    assert_that!(child.path).contains_exactly([PathSegment::Index(index)]);
+                    assert_that!(child.kind).is_equal_to(FailureKind::Equality);
+                }
+            }
+        }
+
+        #[test]
+        fn prefix_and_exact_suppress_mismatch_children_without_changing_the_observation() {
+            for exact in [false, true] {
+                let comparisons = Cell::new(0);
+                let renders = Cell::new(0);
+                let item = |value| Compared {
+                    value,
+                    comparisons: &comparisons,
+                };
+                let expected = [item(0), item(9), item(2)];
+                let actual = (0..).map(item);
+                let failures = assert_that_owned!(actual)
+                    .with_renderer(Renderer(&renders))
+                    .with_rendering_budget(RenderingBudget::default().with_max_items(0))
+                    .capture(|it| {
+                        if exact {
+                            it.contains_exactly(expected)
+                        } else {
+                            it.starts_with(expected)
+                        }
+                    });
+                assert_that!(comparisons.get()).is_equal_to(2);
+                assert_that!(renders.get()).is_equal_to(0);
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0].children).is_empty();
+                assert_that!(failures[0].omitted_children).is_equal_to(1);
+                assert_that!(failures[0].kind).is_equal_to(if exact {
+                    FailureKind::Equality
+                } else {
+                    FailureKind::Membership
+                });
+                let report = ToHumanReadableText.render(&failures[0]);
+                assert_that!(report.as_str())
+                    .contains("Consumed elements: 2")
+                    .contains("Decisive index: 1");
+            }
+        }
+    }
+
+    mod windows {
+        use super::*;
+
+        #[test]
+        fn deque_wraparound_preserves_overlaps_and_first_success() {
+            for length in [1, 3, 16, 17, 40] {
+                let pattern = (0..length).collect::<Vec<_>>();
+                let mut iterator = core::iter::repeat_n(99, 77).chain(0..).inspect(|_| {});
+                let scan = ContainsContiguous::<usize, _> {
+                    expected: &pattern,
+                    item: PhantomData,
+                };
+                assert_that!(
+                    scan.observe(&mut iterator, &AssertionContext::default())
+                        .is_ok()
+                )
+                .is_true();
+                assert_that!(iterator.next()).is_equal_to(Some(length));
+                let expected = (80 - length..80).collect::<Vec<_>>();
+                assert_that_owned!(0..80).ends_with(expected);
+            }
+            assert_that_owned!([1, 1, 1, 2].into_iter()).contains_contiguous([1, 1, 2]);
+        }
+
+        #[test]
+        fn short_and_non_fused_inputs_stop_at_first_exhaustion() {
+            for suffix in [false, true] {
+                let mut yielded = [Some(1), None, Some(2)].into_iter();
+                let mut iterator = core::iter::from_fn(|| yielded.next().flatten());
+                let expected = [1, 2];
+                let context = AssertionContext::default();
+                if suffix {
+                    let scan = EndsWith::<i32, _> {
+                        expected: &expected,
+                        item: PhantomData,
+                    };
+                    let (preview, outcome) = scan.observe(&mut iterator, &context).err().unwrap();
+                    assert_that!(preview.consumed).is_equal_to(1);
+                    assert_that!(matches!(outcome, SuffixFailure::Short)).is_true();
+                } else {
+                    let scan = ContainsContiguous::<i32, _> {
+                        expected: &expected,
+                        item: PhantomData,
+                    };
+                    let preview = scan.observe(&mut iterator, &context).err().unwrap();
+                    assert_that!(preview.consumed).is_equal_to(1);
+                }
+                assert_that!(iterator.next()).is_equal_to(Some(2));
+            }
+        }
+
+        #[test]
+        fn empty_windows_do_not_advance_infinite_inputs() {
+            let mut iterator = 0..;
+            let context = AssertionContext::default();
+            let suffix = EndsWith::<i32, i32> {
+                expected: &[],
+                item: PhantomData,
+            };
+            let contiguous = ContainsContiguous::<i32, i32> {
+                expected: &[],
+                item: PhantomData,
+            };
+            assert_that!(suffix.observe(&mut iterator, &context).is_ok()).is_true();
+            assert_that!(contiguous.observe(&mut iterator, &context).is_ok()).is_true();
+            assert_that!(iterator.next()).is_equal_to(Some(0));
+        }
+    }
+
+    #[test]
+    fn equality_scans_locate_child_evidence_by_yield_position() {
+        let prefix = assert_that_owned!([1, 2, 3].into_iter()).capture(|it| it.starts_with([1, 9]));
+        let exact =
+            assert_that_owned!([1, 2, 3].into_iter()).capture(|it| it.contains_exactly([1, 9, 3]));
+        let suffix = assert_that_owned!([1, 2, 3].into_iter()).capture(|it| it.ends_with([9, 3]));
+        for failures in [prefix, exact, suffix] {
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(1);
+            let child = &failures[0].children[0];
+            assert_that!(child.path).contains_exactly([PathSegment::Index(1)]);
+            assert_that!(child.facts).is_empty();
+        }
+    }
+
+    #[test]
+    fn prefix_and_exact_mismatches_retain_the_decisive_element() {
+        for (exact, relation) in [
+            (false, "does not start with"),
+            (true, "does not contain exactly"),
+        ] {
+            assert_that_panic_by(|| {
+                let it = assert_that_owned!([1, 2, 3].into_iter()).with_location(false);
+                if exact {
+                    it.contains_exactly([1, 9, 3]);
+                } else {
+                    it.starts_with([1, 9, 3]);
+                }
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                -------- assertr --------
+                Expression: `[1, 2, 3].into_iter()`
+
+                Actual: [
+                    1,
+                    2,
+                ]
+
+                {relation}
+
+                Expected: [
+                    1,
+                    9,
+                    3,
+                ]
+
+                Details:
+                  - Consumed elements: 2
+                  - Decisive index: 1
+                Nested failures:
+                  - At [1]:
+                    Expected: 9
+
+                      Actual: 2
+                -------- assertr --------
+            "});
+        }
+    }
+
+    #[test]
+    fn known_lengths_preserve_failure_kinds_and_render_numeric_evidence() {
+        for (exact, relation, label, kind) in [
+            (
+                false,
+                "does not start with",
+                "Prefix length",
+                FailureKind::Membership,
+            ),
+            (
+                true,
+                "does not contain exactly",
+                "Expected length",
+                FailureKind::Equality,
+            ),
+        ] {
+            let failures = assert_that_owned!([1, 2].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .with_location(false)
+                .capture(|it| {
+                    if exact {
+                        it.contains_exactly([1, 2, 3])
+                    } else {
+                        it.starts_with([1, 2, 3])
+                    }
+                });
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure
+                        .derive_owned(AssertionFailure::kind)
+                        .is_equal_to(kind);
+                    assert_custom_fact(failure.actual(), "Consumed elements", 0);
+                    assert_custom_fact(failure.actual(), "Reported length", 2);
+                    assert_custom_fact(failure.actual(), label, 3);
+                    failure.has_text_report(formatdoc! {"
+                        -------- assertr --------
+                        Expression: `[1, 2].into_iter()`
+
+                        Actual: []
+
+                        {relation}
+
+                        Expected: [
+                            custom(1),
+                            custom(2),
+                            custom(3),
+                        ]
+
+                        Details:
+                          - Consumed elements: custom(0)
+                          - Reported length: custom(2)
+                          - {label}: custom(3)
+                        -------- assertr --------
+                    "});
+                },
+            ]);
+        }
+    }
+
+    #[derive(Debug)]
+    struct Compared<'a> {
+        value: i32,
+        comparisons: &'a Cell<usize>,
+    }
+
+    impl PartialEq for Compared<'_> {
+        fn eq(&self, other: &Self) -> bool {
+            self.comparisons.set(self.comparisons.get() + 1);
+            self.value == other.value
+        }
+    }
+
+    #[test]
+    fn prefix_and_exact_scans_bound_the_preview_and_compare_each_item_once() {
+        fn check<const EXACT: bool>() {
+            let comparisons = Cell::new(0);
+            let item = |value| Compared {
+                value,
+                comparisons: &comparisons,
+            };
+            let expected: Vec<_> = (0..19).chain([99]).map(item).collect();
+            let scan = ElementsEqual::<Compared<'_>, _, EXACT> {
+                expected: &expected,
+                item: PhantomData,
+            };
+            let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
+            let mut iterator = (0..).map(item);
+            let (preview, outcome) = scan.observe(&mut iterator, &context).unwrap_err();
+            assert_that!(preview.consumed).is_equal_to(20);
+            assert_that!(
+                preview
+                    .items
+                    .iter()
+                    .map(|item| item.value)
+                    .collect::<Vec<_>>()
+            )
+            .contains_exactly((4..20).collect::<Vec<_>>());
+            assert_that!(outcome.decisive_index()).is_equal_to(Some(19));
+            assert_that!(comparisons.get()).is_equal_to(20);
+            assert_that!(iterator.next().map(|item| item.value)).is_equal_to(Some(20));
+        }
+        check::<false>();
+        check::<true>();
+    }
 }

@@ -1,13 +1,16 @@
-use alloc::{boxed::Box, format, string::String, vec::Vec};
+use alloc::{boxed::Box, format, string::String};
 use core::{
     borrow::Borrow,
     fmt::{self, Debug, Write},
     marker::PhantomData,
 };
 
-use crate::assertions::{
-    collection::{Collection, StableOrder},
-    map::Map,
+use crate::{
+    assertions::{
+        collection::{Collection, StableOrder},
+        map::Map,
+    },
+    util::selection::select_smallest,
 };
 
 use super::{
@@ -32,6 +35,13 @@ use super::{
 /// wrap one leaf without requiring a renderer for the owner. Adapters are lazy: construction
 /// requires no renderer capability, and each formatting or [`IntoRendered`] conversion renders
 /// their leaves with this context's budget. Converting once retains an owned tree for reuse.
+///
+/// Sorted collection, map, and entry-list adapters inspect every entry for a nonzero item limit.
+/// They retain at most that limit plus the incoming entry during selection, with cached text keys
+/// and encounter order for ties. Groups exceeding the limit use heap selection. Smaller groups sort
+/// once. Zero limits do not advance or render entries, and unlimited limits collect and sort all.
+/// Every inspected leaf uses the renderer once per conversion, including both leaves of map
+/// entries. Selection preserves full-sort output in the requested compact or pretty style.
 pub struct RenderingContext<'r, R> {
     renderer: &'r R,
     budget: RenderingBudget,
@@ -526,28 +536,6 @@ where
     }
 }
 
-/// Renders a value in compact `Debug` form even where the failure grammar pretty-prints.
-///
-/// For a leaf whose alternate `Debug` form is less readable than its compact one, such as a
-/// `jiff::SignedDuration`, which prints raw nanoseconds when pretty-printed.
-pub(crate) struct Compact<T>(pub(crate) T);
-
-impl<T: Debug> Debug for Compact<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
-
-impl<T: IntoRendered> IntoRendered for Compact<T> {
-    fn into_rendered(self) -> Rendered {
-        self.0.into_rendered_compact().compact()
-    }
-
-    fn into_rendered_compact(self) -> Rendered {
-        self.0.into_rendered_compact().compact()
-    }
-}
-
 /// Adapts a formatting closure to `Debug`.
 struct FormatterFn<F>(F);
 
@@ -700,27 +688,16 @@ where
 {
     fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
         let maximum = self.rendering.max_items();
-        let mut items = if self.sorted_for_rendering && maximum == 0 {
-            Vec::new()
+        let candidates = self.items.elements().map(|value| {
+            self.rendering
+                .value_with_type_info(value.borrow(), self.item_type)
+                .rendered(pretty_leaves)
+        });
+        let items = if self.sorted_for_rendering {
+            select_smallest(candidates, maximum, |item| item.text(pretty_leaves))
         } else {
-            self.items
-                .elements()
-                .take(if self.sorted_for_rendering {
-                    usize::MAX
-                } else {
-                    maximum
-                })
-                .map(|value| {
-                    self.rendering
-                        .value_with_type_info(value.borrow(), self.item_type)
-                        .rendered(pretty_leaves)
-                })
-                .collect::<Vec<_>>()
+            candidates.take(maximum).collect()
         };
-        if self.sorted_for_rendering {
-            items.sort_by_cached_key(|item| item.text(pretty_leaves));
-            items.truncate(maximum);
-        }
         RenderedBody::Group {
             style: self.style,
             items,
@@ -750,34 +727,23 @@ where
 {
     fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
         let maximum = self.rendering.max_items();
-        let mut entries = if self.sorted_for_rendering && maximum == 0 {
-            Vec::new()
-        } else {
-            self.map
-                .entries()
-                .take(if self.sorted_for_rendering {
-                    usize::MAX
-                } else {
-                    maximum
-                })
-                .map(|(key, value)| {
-                    (
-                        self.rendering
-                            .value_with_type_info(key, self.key_type)
-                            .rendered(pretty_leaves),
-                        self.rendering
-                            .value_with_type_info(value, self.value_type)
-                            .rendered(pretty_leaves),
-                    )
-                })
-                .collect::<Vec<_>>()
-        };
-        if self.sorted_for_rendering {
-            entries.sort_by_cached_key(|(key, value)| {
+        let candidates = self.map.entries().map(|(key, value)| {
+            (
+                self.rendering
+                    .value_with_type_info(key, self.key_type)
+                    .rendered(pretty_leaves),
+                self.rendering
+                    .value_with_type_info(value, self.value_type)
+                    .rendered(pretty_leaves),
+            )
+        });
+        let entries = if self.sorted_for_rendering {
+            select_smallest(candidates, maximum, |(key, value)| {
                 (key.text(pretty_leaves), value.text(pretty_leaves))
-            });
-            entries.truncate(maximum);
-        }
+            })
+        } else {
+            candidates.take(maximum).collect()
+        };
         RenderedBody::Map {
             entries,
             omitted: self.map.length().saturating_sub(maximum),
@@ -795,32 +761,23 @@ where
 {
     fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
         let maximum = self.rendering.max_items();
-        let mut entries = if self.sorted_for_rendering && maximum == 0 {
-            Vec::new()
+        let candidates = self.entries.elements().map(|(key, value)| {
+            (
+                self.rendering
+                    .value_with_type_info(key.borrow(), self.key_type)
+                    .rendered(pretty_leaves),
+                self.rendering
+                    .value_with_type_info(value.borrow(), self.value_type)
+                    .rendered(pretty_leaves),
+            )
+        });
+        let entries = if self.sorted_for_rendering {
+            select_smallest(candidates, maximum, |(key, value)| {
+                tuple_text(key, value, pretty_leaves)
+            })
         } else {
-            self.entries
-                .elements()
-                .take(if self.sorted_for_rendering {
-                    usize::MAX
-                } else {
-                    maximum
-                })
-                .map(|(key, value)| {
-                    (
-                        self.rendering
-                            .value_with_type_info(key.borrow(), self.key_type)
-                            .rendered(pretty_leaves),
-                        self.rendering
-                            .value_with_type_info(value.borrow(), self.value_type)
-                            .rendered(pretty_leaves),
-                    )
-                })
-                .collect::<Vec<_>>()
+            candidates.take(maximum).collect()
         };
-        if self.sorted_for_rendering {
-            entries.sort_by_cached_key(|(key, value)| tuple_text(key, value, pretty_leaves));
-            entries.truncate(maximum);
-        }
         RenderedBody::EntryList {
             entries,
             omitted: self.entries.length().saturating_sub(maximum),
@@ -888,16 +845,21 @@ fn grouped_count(value: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use alloc::collections::{BTreeMap, BTreeSet, BinaryHeap};
+    use alloc::{
+        boxed::Box,
+        collections::{BTreeMap, BTreeSet, BinaryHeap},
+    };
     use core::{any::type_name, cell::RefCell, fmt};
 
     use crate::{
         prelude::*,
-        renderer::{GroupStyle, IntoRendered, RenderedBody, RenderingOrder, TypeHint},
+        renderer::{GroupStyle, IntoRendered, Rendered, RenderedBody, RenderingOrder, TypeHint},
         test_support::{PreservedBag, UnorderedMap, UnorderedSet},
     };
 
-    use super::{RenderingContext, grouped_count, omission};
+    use super::{
+        BuildRendered, BuildRenderedBody, RenderingContext, grouped_count, omission, untyped,
+    };
 
     struct AlternateAwareRenderer;
 
@@ -929,6 +891,118 @@ mod tests {
 
     fn with_max_items<R>(renderer: &R, maximum: usize) -> RenderingContext<'_, R> {
         RenderingContext::new(renderer, RenderingBudget::default().with_max_items(maximum))
+    }
+
+    fn check_type<T: ?Sized>(value: &Rendered, shown: bool) {
+        assert_that!(value.type_name()).is_equal_to(Some(type_name::<T>()));
+        assert_that!(value.hint).is_equal_to(TypeHint::Short);
+        assert_that!(value.shows_type_hint).is_equal_to(shown);
+    }
+
+    fn leaf<T: ?Sized>(text: &str) -> Rendered {
+        Rendered::typed(
+            RenderedBody::Text {
+                text: text.into(),
+                omitted_characters: 0,
+            },
+            type_name::<T>(),
+            TypeHint::Short,
+            false,
+        )
+    }
+
+    mod bounded_sorting {
+        use super::super::tuple_text;
+        use super::*;
+        use crate::renderer::Rendered;
+        use core::cell::Cell;
+
+        // The old adapter algorithm, applied to trees built by iteration-preserving paths.
+        fn full_sort(mut tree: Rendered, limit: usize, pretty: bool) -> Rendered {
+            match &mut tree.body {
+                RenderedBody::Group {
+                    items,
+                    omitted,
+                    sorted,
+                    ..
+                } => {
+                    items.sort_by_cached_key(|item| item.text(pretty));
+                    *omitted = items.len().saturating_sub(limit);
+                    items.truncate(limit);
+                    *sorted = true;
+                }
+                RenderedBody::Map {
+                    entries,
+                    omitted,
+                    sorted,
+                } => {
+                    entries
+                        .sort_by_cached_key(|(key, value)| (key.text(pretty), value.text(pretty)));
+                    *omitted = entries.len().saturating_sub(limit);
+                    entries.truncate(limit);
+                    *sorted = true;
+                }
+                RenderedBody::EntryList {
+                    entries,
+                    omitted,
+                    sorted,
+                } => {
+                    entries.sort_by_cached_key(|(key, value)| tuple_text(key, value, pretty));
+                    *omitted = entries.len().saturating_sub(limit);
+                    entries.truncate(limit);
+                    *sorted = true;
+                }
+                _ => panic!("expected a structural group"),
+            }
+            tree
+        }
+
+        pub(super) struct StatefulRenderer(Cell<usize>);
+
+        impl ValueRenderer<i32> for StatefulRenderer {
+            fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let call = self.0.get();
+                self.0.set(call + 1);
+                write!(f, "{value}:{call}:{}", f.alternate())
+            }
+        }
+
+        pub(super) fn assert_full_sort(
+            leaves: usize,
+            build: impl Fn(RenderingContext<'_, StatefulRenderer>, RenderingOrder, bool) -> Rendered,
+        ) {
+            for leaf_limit in [0, 1, 2, usize::MAX] {
+                for limit in [0, 1, 2, 4, 5, 6, usize::MAX] {
+                    for pretty in [false, true] {
+                        let budget =
+                            RenderingBudget::unlimited().with_max_leaf_characters(leaf_limit);
+                        let renderer = StatefulRenderer(Cell::new(0));
+                        let actual = build(
+                            RenderingContext::new(&renderer, budget.with_max_items(limit)),
+                            RenderingOrder::SortByRenderedText,
+                            pretty,
+                        );
+                        // In particular, losing map entries still render both leaves in order.
+                        assert_that!(renderer.0.get()).is_equal_to(if limit == 0 {
+                            0
+                        } else {
+                            leaves
+                        });
+                        let renderer = StatefulRenderer(Cell::new(0));
+                        let reference = build(
+                            RenderingContext::new(&renderer, budget),
+                            RenderingOrder::PreserveIteration,
+                            pretty,
+                        );
+                        let reference = full_sort(reference, limit, pretty);
+                        assert_that!(actual).is_equal_to(&reference);
+                        for style in [false, true] {
+                            assert_that!(actual.text(style)).is_equal_to(reference.text(style));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     mod budget {
@@ -1211,25 +1285,42 @@ mod tests {
         }
 
         #[test]
-        fn retain_the_outer_and_inner_type_information() {
-            let renderer = AlternateAwareRenderer;
-            let rendering = RenderingContext::new(&renderer, RenderingBudget::unlimited());
+        fn retain_owner_and_leaf_metadata_in_owned_nodes() {
+            let rendering =
+                RenderingContext::new(&AlternateAwareRenderer, RenderingBudget::unlimited());
             let value = 7;
             let result = Result::<(), i32>::Err(value);
             let cell = RefCell::new(value);
 
-            let variant = rendering.variant(&result, "Err", &value);
-            assert_that!(variant.info.type_name).is_equal_to(type_name::<Result<(), i32>>());
-            assert_that!(variant.info.hint).is_equal_to(TypeHint::Short);
-            assert_that!(variant.body.value.info.type_name).is_equal_to(type_name::<i32>());
+            let variant = rendering.variant(&result, "Err", &value).into_rendered();
+            check_type::<Result<(), i32>>(&variant, false);
+            assert_that!(variant.body).is_equal_to(RenderedBody::Variant {
+                name: "Err",
+                value: Box::new(leaf::<i32>("pretty(7)")),
+            });
 
-            let field = rendering.struct_field(&cell, "RefCell", "value", &value);
-            assert_that!(field.info.type_name).is_equal_to(type_name::<RefCell<i32>>());
-            assert_that!(field.body.value.info.type_name).is_equal_to(type_name::<i32>());
+            let field = rendering
+                .struct_field(&cell, "RefCell", "value", &value)
+                .into_rendered();
+            check_type::<RefCell<i32>>(&field, false);
+            assert_that!(field.body).is_equal_to(RenderedBody::Struct {
+                name: "RefCell",
+                fields: vec![("value", leaf::<i32>("pretty(7)"))],
+            });
 
-            let unavailable =
-                rendering.unavailable_struct_field(&cell, "RefCell", "value", "<borrowed>");
-            assert_that!(unavailable.info.type_name).is_equal_to(type_name::<RefCell<i32>>());
+            let unavailable = rendering
+                .unavailable_struct_field(&cell, "RefCell", "value", "<borrowed>")
+                .into_rendered();
+            check_type::<RefCell<i32>>(&unavailable, false);
+            let RenderedBody::Struct { name, fields } = &unavailable.body else {
+                panic!("expected a struct");
+            };
+            assert_that!(*name).is_equal_to("RefCell");
+            assert_that!(fields).has_length(1);
+            assert_that!(fields[0].0).is_equal_to("value");
+            assert_that!(fields[0].1.type_name()).is_none();
+            assert_that!(fields[0].1.shows_type_hint).is_false();
+            assert_that!(&fields[0].1.body).is_equal_to(RenderedBody::Placeholder("<borrowed>"));
         }
     }
 
@@ -1264,6 +1355,14 @@ mod tests {
 
         #[test]
         fn apply_style_order_and_item_budget() {
+            bounded_sorting::assert_full_sort(5, |rendering, order, pretty| {
+                untyped(
+                    rendering
+                        .values(&[11, 10, 2, 10, -1], GroupStyle::Set)
+                        .with_order(order)
+                        .rendered_body(pretty),
+                )
+            });
             let renderer = DebugRenderer;
             let rendering = with_max_items(&renderer, 2);
             let values = [3, 1, 2];
@@ -1286,27 +1385,38 @@ mod tests {
 
         #[test]
         fn render_items_through_an_explicit_borrowed_view() {
-            let renderer = RawRenderer;
-            let rendering = RenderingContext::new(&renderer, RenderingBudget::unlimited());
+            let rendering = RenderingContext::new(&RawRenderer, RenderingBudget::unlimited());
             let values = vec![String::from("alpha"), String::from("beta")];
 
-            assert_that!(format!(
-                "{:?}",
-                rendering.borrowed_values::<str, _>(&values, GroupStyle::List)
-            ))
-            .is_equal_to("[alpha, beta]");
+            let rendered = rendering
+                .borrowed_values::<str, _>(&values, GroupStyle::List)
+                .into_rendered();
+            assert_that!(rendered.type_name()).is_none();
+            assert_that!(rendered.body).is_equal_to(RenderedBody::Group {
+                style: GroupStyle::List,
+                items: vec![leaf::<str>("alpha"), leaf::<str>("beta")],
+                omitted: 0,
+                sorted: false,
+            });
         }
 
         #[test]
-        fn retain_the_item_type_information() {
-            let renderer = DebugRenderer;
-            let rendering = RenderingContext::new(&renderer, RenderingBudget::unlimited());
-            let values = [1, 2];
+        fn synthetic_groups_retain_leaf_metadata_without_an_outer_type() {
+            let rendering = with_max_items(&DebugRenderer, 1);
+            let values = [2, 1];
+            let rendered = rendering
+                .values(&values, GroupStyle::Set)
+                .with_order(RenderingOrder::SortByRenderedText)
+                .into_rendered();
 
-            let adapted = rendering.values(&values, GroupStyle::List);
-
-            assert_that!(adapted.item_type.type_name).is_equal_to(type_name::<i32>());
-            assert_that!(adapted.item_type.hint).is_equal_to(TypeHint::Short);
+            assert_that!(rendered.type_name()).is_none();
+            assert_that!(rendered.shows_type_hint).is_false();
+            assert_that!(rendered.body).is_equal_to(RenderedBody::Group {
+                style: GroupStyle::Set,
+                items: vec![leaf::<i32>("1")],
+                omitted: 1,
+                sorted: true,
+            });
         }
 
         #[test]
@@ -1362,15 +1472,105 @@ mod tests {
         }
 
         #[test]
-        fn retain_the_collection_and_item_type_information() {
-            let renderer = DebugRenderer;
-            let rendering = RenderingContext::new(&renderer, RenderingBudget::unlimited());
-            let values = BTreeSet::from([1, 2]);
+        fn retain_collection_and_leaf_metadata_in_owned_groups() {
+            let rendering = with_max_items(&DebugRenderer, 2);
+            let tree = rendering
+                .collection(&BTreeSet::from([3, 1, 2]))
+                .into_rendered();
+            check_type::<BTreeSet<i32>>(&tree, true);
+            assert_that!(tree.body).is_equal_to(RenderedBody::Group {
+                style: GroupStyle::Set,
+                items: vec![leaf::<i32>("1"), leaf::<i32>("2")],
+                omitted: 1,
+                sorted: false,
+            });
+            let unordered = rendering
+                .collection(&UnorderedSet(vec![3, 1, 2]))
+                .into_rendered();
+            check_type::<UnorderedSet>(&unordered, true);
+            assert_that!(unordered.body).is_equal_to(RenderedBody::Group {
+                style: GroupStyle::Set,
+                items: vec![leaf::<i32>("1"), leaf::<i32>("2")],
+                omitted: 1,
+                sorted: true,
+            });
+            #[cfg(feature = "std")]
+            {
+                let hashed = rendering
+                    .collection(&std::collections::HashSet::from([3, 1, 2]))
+                    .into_rendered();
+                check_type::<std::collections::HashSet<i32>>(&hashed, true);
+                assert_that!(hashed.body).is_equal_to(&unordered.body);
+            }
+        }
 
-            let adapted = rendering.collection(&values);
+        struct SortedSequence<T>(Vec<T>);
 
-            assert_that!(adapted.info.type_name).is_equal_to(type_name::<BTreeSet<i32>>());
-            assert_that!(adapted.body.item_type.type_name).is_equal_to(type_name::<i32>());
+        impl<T> HasLength for SortedSequence<T> {
+            fn length(&self) -> usize {
+                self.0.len()
+            }
+        }
+
+        impl<T> crate::assertions::collection::Collection for SortedSequence<T> {
+            type Item = T;
+            const PRESENTATION: crate::renderer::CollectionPresentation =
+                crate::renderer::CollectionPresentation::list()
+                    .with_type_hint()
+                    .with_order(RenderingOrder::SortByRenderedText);
+
+            fn elements(&self) -> impl Iterator<Item = &T> {
+                self.0.iter()
+            }
+        }
+
+        impl<T> crate::assertions::collection::StableOrder for SortedSequence<T> {}
+
+        #[test]
+        fn borrowed_and_stable_views_preserve_metadata_but_select_their_own_order() {
+            let rendering = with_max_items(&RawRenderer, 2);
+            let values = SortedSequence(vec![
+                String::from("z"),
+                String::from("a"),
+                String::from("m"),
+            ]);
+            for (rendered, expected, sorted) in [
+                (
+                    rendering
+                        .borrowed_collection::<str, _>(&values)
+                        .into_rendered(),
+                    ["a", "m"],
+                    true,
+                ),
+                (
+                    rendering
+                        .stable_borrowed_collection::<str, _>(&values)
+                        .into_rendered(),
+                    ["z", "a"],
+                    false,
+                ),
+            ] {
+                check_type::<SortedSequence<String>>(&rendered, true);
+                assert_that!(rendered.body).is_equal_to(RenderedBody::Group {
+                    style: GroupStyle::List,
+                    items: expected.map(leaf::<str>).into(),
+                    omitted: 1,
+                    sorted,
+                });
+            }
+            let rendering = with_max_items(&DebugRenderer, 2);
+            let values = SortedSequence(vec![3, 1, 2]);
+            let stable = rendering
+                .stable_collection(&values)
+                .show_type_hint(false)
+                .into_rendered();
+            check_type::<SortedSequence<i32>>(&stable, false);
+            assert_that!(stable.body).is_equal_to(RenderedBody::Group {
+                style: GroupStyle::List,
+                items: vec![leaf::<i32>("3"), leaf::<i32>("1")],
+                omitted: 1,
+                sorted: false,
+            });
         }
     }
 
@@ -1403,6 +1603,12 @@ mod tests {
 
         #[test]
         fn apply_type_hint_order_and_item_budget() {
+            bounded_sorting::assert_full_sort(10, |rendering, order, pretty| {
+                let map = UnorderedMap(vec![(11, 2), (10, 20), (10, 11), (10, 11), (-1, 9)]);
+                let mut adapter = rendering.map(&map);
+                adapter.body.sorted_for_rendering = order == RenderingOrder::SortByRenderedText;
+                adapter.rendered(pretty)
+            });
             let renderer = DebugRenderer;
             let rendering = with_max_items(&renderer, 2);
 
@@ -1421,16 +1627,26 @@ mod tests {
         }
 
         #[test]
-        fn retain_the_map_key_and_value_type_information() {
-            let renderer = DebugRenderer;
-            let rendering = RenderingContext::new(&renderer, RenderingBudget::unlimited());
-            let values = BTreeMap::from([(1, "one")]);
-
-            let adapted = rendering.map(&values);
-
-            assert_that!(adapted.info.type_name).is_equal_to(type_name::<BTreeMap<i32, &str>>());
-            assert_that!(adapted.body.key_type.type_name).is_equal_to(type_name::<i32>());
-            assert_that!(adapted.body.value_type.type_name).is_equal_to(type_name::<&str>());
+        fn retain_map_and_entry_metadata_in_owned_nodes() {
+            let rendering = with_max_items(&DebugRenderer, 1);
+            let tree = rendering
+                .map(&BTreeMap::from([(2, "two"), (1, "one")]))
+                .into_rendered();
+            check_type::<BTreeMap<i32, &str>>(&tree, true);
+            assert_that!(tree.body).is_equal_to(RenderedBody::Map {
+                entries: vec![(leaf::<i32>("1"), leaf::<&str>("\"one\""))],
+                omitted: 1,
+                sorted: false,
+            });
+            let unordered = rendering
+                .map(&UnorderedMap(vec![(2, 20), (1, 10)]))
+                .into_rendered();
+            check_type::<UnorderedMap>(&unordered, true);
+            assert_that!(unordered.body).is_equal_to(RenderedBody::Map {
+                entries: vec![(leaf::<i32>("1"), leaf::<i32>("10"))],
+                omitted: 1,
+                sorted: true,
+            });
         }
 
         #[test]
@@ -1485,6 +1701,28 @@ mod tests {
 
         #[test]
         fn apply_order_and_item_budget() {
+            bounded_sorting::assert_full_sort(10, |rendering, order, pretty| {
+                untyped(
+                    rendering
+                        .entry_list::<i32, i32, _, _, _>(
+                            &[(11, 2), (10, 20), (10, 11), (10, 11), (-1, 9)],
+                            order,
+                        )
+                        .rendered_body(pretty),
+                )
+            });
+            // Tuple punctuation participates in ordering, unlike a map's separate key/value keys.
+            let punctuation = [("a", "z"), ("a!", "z"), ("a", "b")];
+            assert_that!(
+                with_max_items(&RawRenderer, 2)
+                    .entry_list::<str, str, _, _, _>(
+                        &punctuation,
+                        RenderingOrder::SortByRenderedText,
+                    )
+                    .into_rendered()
+                    .text(false)
+            )
+            .is_equal_to("[(a!, z), (a, b)] (... 1 more entry ...) (sorted for rendering)");
             let renderer = DebugRenderer;
             let rendering = with_max_items(&renderer, 2);
             let entries = [(3, 30), (1, 10), (2, 20)];
@@ -1504,16 +1742,24 @@ mod tests {
         }
 
         #[test]
-        fn retain_the_key_and_value_type_information() {
-            let renderer = DebugRenderer;
-            let rendering = RenderingContext::new(&renderer, RenderingBudget::unlimited());
-            let entries = [(1, "one")];
-
-            let adapted = rendering
-                .entry_list::<i32, str, _, _, _>(&entries, RenderingOrder::PreserveIteration);
-
-            assert_that!(adapted.key_type.type_name).is_equal_to(type_name::<i32>());
-            assert_that!(adapted.value_type.type_name).is_equal_to(type_name::<str>());
+        fn retain_borrowed_entry_metadata_without_an_outer_type() {
+            let rendering = with_max_items(&DebugRenderer, 1);
+            let entries = [(2, String::from("two")), (1, String::from("one"))];
+            for (order, key, value) in [
+                (RenderingOrder::PreserveIteration, "2", "\"two\""),
+                (RenderingOrder::SortByRenderedText, "1", "\"one\""),
+            ] {
+                let rendered = rendering
+                    .entry_list::<i32, str, _, _, _>(&entries, order)
+                    .into_rendered();
+                assert_that!(rendered.type_name()).is_none();
+                assert_that!(rendered.shows_type_hint).is_false();
+                assert_that!(rendered.body).is_equal_to(RenderedBody::EntryList {
+                    entries: vec![(leaf::<i32>(key), leaf::<str>(value))],
+                    omitted: 1,
+                    sorted: order == RenderingOrder::SortByRenderedText,
+                });
+            }
         }
 
         #[test]

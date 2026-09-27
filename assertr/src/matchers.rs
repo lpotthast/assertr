@@ -150,7 +150,9 @@
 //!
 //! Structs and enum variants support named, tuple, and unit syntax. In tuples, `_` skips one
 //! field and a final `..` skips the rest. The `variant` prefix includes the enum variant in
-//! diagnostic paths:
+//! diagnostic paths. Constructor paths may be qualified with `crate`, `self`, `super`, `Self`,
+//! or a leading `::`. After `variant`, a leading `::` starts the constructor's absolute path.
+//! Use `r#variant::Type` for an unmarked path beginning with a module named `variant`:
 //!
 //! ```rust
 //! # #[cfg(feature = "partial")]
@@ -160,6 +162,7 @@
 //! struct Pair(i32, i32);
 //! assert_that!(Pair(1, 2)).matches(partial!(Pair(eq(1), _)));
 //! assert_that!(Some(3)).matches(partial!(variant Some(eq(3))));
+//! assert_that!(Some(3)).matches(partial!(variant ::core::option::Option::Some(eq(3))));
 //! # }
 //! ```
 //!

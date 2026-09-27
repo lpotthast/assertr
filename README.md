@@ -19,8 +19,8 @@ Assertr supports `std` and `no_std` builds.
 use assertr::prelude::*;
 
 assert_that!("hello, world!")
-.starts_with("hello")
-.ends_with("!");
+    .starts_with("hello")
+    .ends_with("!");
 ```
 
 Match only the struct fields that matter with `partial!`. Enable the `partial` feature for this
@@ -88,19 +88,19 @@ assertr = "0.7.1"
 
 The default features are `std` and `num`. Everything else is opt-in:
 
-| feature                                         | enables                                                                             |
-|-------------------------------------------------|-------------------------------------------------------------------------------------|
-| `std`                                           | Assertions for standard library types (`HashMap`, `Path`, `Command`, `Mutex`, ...). |
-| `num`                                           | Assertions for numeric types (`is_zero`, `is_positive`, `is_close_to`, ...).        |
-| `libm`                                          | Floating-point classifications for `num` assertions without `std`.                  |
-| `fluent`                                        | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
-| `partial`                                       | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
-| `serde-json`                                    | `as_json()` serializes to a JSON `Result` subject.                                  |
-| `serde-toml`                                    | `as_toml()` serializes to a TOML `Result` subject.                                  |
-| `serde`                                         | Combined `serde-json` and `serde-toml`.                                             |
-| `program`                                       | Assertions that resolve an executable name or path.                                 |
-| `http`, `jiff`, `reqwest`, `rootcause`, `tokio` | Assertions for the types of the crate of the same name.                             |
-| `full`                                          | All of the above.                                                                   |
+| feature                                                    | enables                                                                             |
+|------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| `std`                                                      | Assertions for standard library types (`HashMap`, `Path`, `Command`, `Mutex`, ...). |
+| `num`                                                      | Assertions for numeric types (`is_zero`, `is_positive`, `is_close_to`, ...).        |
+| `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
+| `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
+| `partial`                                                  | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
+| `serde-json`                                               | `as_json()` serializes to a JSON `Result` subject.                                               |
+| `serde-toml`                                               | `as_toml()` serializes to a TOML `Result` subject.                                               |
+| `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
+| `program`                                                  | Assertions that resolve an executable name or path.                                 |
+| `http`, `jiff`, `reqwest`, `rootcause`, `tokio`            | Assertions for the types of the crate of the same name.                             |
+| `full`                                                     | All of the above.                                                                   |
 
 ### no_std
 
@@ -118,8 +118,8 @@ methods available for the subject:
 ```rust
 use assertr::prelude::*;
 
-assert_that!("42".parse::<i32>()).is_ok_satisfying( | value| {
-value.is_greater_than(0).is_less_than(100);
+assert_that!("42".parse::<i32>()).is_ok_satisfying(|value| {
+    value.is_greater_than(0).is_less_than(100);
 });
 ```
 
@@ -142,23 +142,22 @@ The consuming variants are named `must_owned()` and `verify_owned()`.
 use assertr::prelude::*;
 
 "hello, world!"
-.must()
-.start_with("hello")
-.end_with("!");
+    .must()
+    .start_with("hello")
+    .end_with("!");
 
-let failures = 3.verify( | it| it.be_equal_to(4));
+let failures = 3.verify(|it| it.be_equal_to(4));
 assert_that!(failures).has_length(1);
 
 let mut values = vec![1, 2, 3];
-let reference = & mut values;
+let reference = &mut values;
 reference.must().contain(2).have_length(3);
 reference.push(4);
 ```
 
 Fluent names follow fixed rules. `is_x` becomes `be_x`, `has_x` becomes `have_x`, other verbs
 become imperative (`contains` -> `contain`), and negations put `not` first (`is_not_x` ->
-`not_be_x`). See [`IntoAssertContext`](https://docs.rs/assertr/latest/assertr/trait.IntoAssertContext.html) for the
-complete rules.
+`not_be_x`). See [`IntoAssertContext`](https://docs.rs/assertr/latest/assertr/trait.IntoAssertContext.html) for the complete rules.
 
 ## Finding assertions
 
@@ -178,15 +177,14 @@ you reuse it in ordinary checks and reusable expectations without cloning:
 use assertr::{matchers::eq, prelude::*};
 
 let expected = String::from("hello");
-assert_that!(String::from("hello")).is_equal_to( & expected);
-let greeting = eq( & expected);
-assert_that!(String::from("hello")).matches( & greeting);
+assert_that!(String::from("hello")).is_equal_to(&expected);
+let greeting = eq(&expected);
+assert_that!(String::from("hello")).matches(&greeting);
 assert_that!(expected).is_equal_to("hello");
 assert_that!([String::from("hello")]).contains_exactly(["hello"]);
 ```
 
-[`BorrowFor`](https://docs.rs/borrow-for/0.1.0/borrow_for/trait.BorrowFor.html), re-exported from the `borrow-for`
-crate, selects
+[`BorrowFor`](https://docs.rs/borrow_for/latest/borrow_for/trait.BorrowFor.html), re-exported from the `borrow-for` crate, selects
 the borrowed type for these comparisons.
 Custom `Borrow` wrappers opt in by implementing this trait. See the
 [borrowed equality guide](https://docs.rs/assertr/latest/assertr/#borrowed-equality) for custom
@@ -202,8 +200,8 @@ built-in expectation, grouped by subject family:
 use assertr::{matchers::{all_of, HasLengthOf, string}, prelude::*};
 
 let short_name = all_of((string::IsNotBlank, HasLengthOf::new(3)));
-assert_that!("Ada").matches( & short_name);
-assert_that!(["", "Ada", "Grace"]).contains_matching( & short_name);
+assert_that!("Ada").matches(&short_name);
+assert_that!(["", "Ada", "Grace"]).contains_matching(&short_name);
 ```
 
 An expectation defines a check. A matcher is an expectation used in composition. Both use the

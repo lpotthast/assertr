@@ -33,9 +33,9 @@ pub(crate) mod panic_presentation;
 use crate::{
     AssertThat,
     prelude::Mode,
-    renderer::{Compact, IntoRendered, Rendered},
+    renderer::{IntoRendered, Rendered},
 };
-use alloc::{borrow::Cow, string::String, vec::Vec};
+use alloc::{borrow::Cow, boxed::Box, string::String, vec::Vec};
 
 pub use builder::{Attached, Detached, FailureBuilder};
 
@@ -72,7 +72,7 @@ pub enum FailureKind {
     Other,
 }
 
-/// A relative location within a matched subject. Paths compose from parent to child.
+/// A relative location within an assertion subject. Paths compose from parent to child.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PathSegment {
@@ -82,7 +82,7 @@ pub enum PathSegment {
     TupleIndex(usize),
     /// A required enum variant.
     Variant(&'static str),
-    /// A position in a stable-order collection.
+    /// A position in a stable-order collection or the yield order of a direct iterator assertion.
     Index(usize),
     /// A map key rendered with the active renderer.
     Key(Rendered),
@@ -92,6 +92,8 @@ pub enum PathSegment {
 ///
 /// Facts carry what is neither the expected nor the actual value: lengths, missing keys, unexpected
 /// elements, recorded differences, or a panic payload. A fact with an empty label is a plain note.
+/// Labels receive no special treatment in the built-in report. Locations belong in
+/// [`AssertionFailure::path`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Fact {
@@ -103,16 +105,6 @@ pub struct Fact {
 }
 
 impl Fact {
-    /// The label of the fact locating a nested failure at a zero-based element index.
-    ///
-    /// Positional collection and iterator assertions attach it to each
-    /// [child](AssertionFailure::children) they raise for one element. Order-free collections do
-    /// not expose an iteration offset and attach no such fact.
-    pub const INDEX: &'static str = "index";
-
-    /// The label of the fact locating a nested failure at a rendered map key.
-    pub const KEY: &'static str = "key";
-
     /// Creates a labeled fact, rendering its value once into an owned evidence tree.
     ///
     /// Pass diagnostic values through [`AssertThat::render`] so the active renderer and budget
@@ -132,22 +124,6 @@ impl Fact {
         Self::labelled("", value)
     }
 
-    /// Creates the [`INDEX`](Self::INDEX) fact locating a nested failure at an element index.
-    #[must_use]
-    pub fn index(index: usize) -> Self {
-        Self::labelled(Self::INDEX, index)
-    }
-
-    /// Creates the [`KEY`](Self::KEY) fact locating a nested failure at a map key. Pass the key as
-    /// an adapter obtained from [`AssertThat::render`], which is printed compactly here.
-    #[must_use]
-    pub fn key(rendered_key: impl IntoRendered) -> Self {
-        Self {
-            label: Cow::Borrowed(Self::KEY),
-            value: Compact(rendered_key).into_rendered(),
-        }
-    }
-
     /// Returns what this fact describes, or an empty string for a plain note.
     #[must_use]
     pub fn label(&self) -> &str {
@@ -158,11 +134,6 @@ impl Fact {
     #[must_use]
     pub const fn value(&self) -> &Rendered {
         &self.value
-    }
-
-    /// Whether this fact locates a nested failure within its parent's subject.
-    pub(crate) fn is_location(&self) -> bool {
-        self.label == Self::INDEX || self.label == Self::KEY
     }
 }
 
@@ -201,7 +172,7 @@ impl Fact {
 #[non_exhaustive]
 pub struct AssertionFailure {
     /// An unmet expectation with no subject, using the same diagnostic fields as a rejection.
-    pub constraint: Option<alloc::boxed::Box<AssertionFailure>>,
+    pub constraint: Option<Box<AssertionFailure>>,
     /// Relative path from the parent subject.
     pub path: Vec<PathSegment>,
 
@@ -258,10 +229,11 @@ pub struct AssertionFailure {
     /// Failures raised by nested assertions, such as the per-element assertions of
     /// `contains_satisfying`, or produced for the elements a positional assertion rejected.
     ///
-    /// A child raised for one element of a positional subject carries a [`Fact::INDEX`] fact, a
-    /// child raised for one map value a [`Fact::KEY`] fact. Children of a sequence are ordered by
-    /// element position. Children of a set or map whose iteration order is not deterministic are
-    /// ordered by their rendered text.
+    /// A child raised for one element of a positional subject carries a [`PathSegment::Index`],
+    /// and a child raised for one map value a [`PathSegment::Key`], in its relative
+    /// [`path`](Self::path). Order-free element evidence has no index path. Children of a
+    /// sequence are ordered by element position. Children of a set or map whose iteration
+    /// order is not deterministic are ordered by their rendered text.
     pub children: Vec<AssertionFailure>,
 
     /// The assertion family that raised this failure.
@@ -321,14 +293,6 @@ impl AssertionFailure {
     #[must_use]
     pub const fn kind(&self) -> FailureKind {
         self.kind
-    }
-
-    /// Prepends a fact locating this failure within its parent's subject, such as [`Fact::index`]
-    /// or [`Fact::key`]. The human-readable adapter uses it as the heading of the nested failure.
-    #[must_use]
-    pub fn located_at(mut self, fact: Fact) -> Self {
-        self.facts.insert(0, fact);
-        self
     }
 }
 

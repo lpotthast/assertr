@@ -49,7 +49,7 @@ where
     let evaluate = |context: &mut AssertionContext<'_, R>| {
         if let Some((_, value)) = found {
             let matched = context.evaluate(value, expected);
-            if !matched && context.evidence.is_empty() {
+            if !matched && !context.has_evidence() {
                 context.outcome(false, |context| context.describe(expected));
             }
             matched
@@ -122,7 +122,7 @@ where
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let query = borrow_for::<MapType::Key, _>(&self.key);
         evaluate_entry(actual, query, &self.matcher, context, |render| {
-            PathSegment::Key(render.value(query).into_rendered())
+            PathSegment::Key(render.value(query).into_rendered_compact())
         })
     }
 }

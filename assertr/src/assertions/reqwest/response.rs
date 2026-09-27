@@ -716,7 +716,7 @@ pub trait ReqwestResponseExtractAssertions<'t, R> {
     fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
         T: serde::de::DeserializeOwned + 't,
-        R: crate::ValueRenderer<String>
+        R: ValueRenderer<String>
             + ValueRenderer<str>
             + ValueRenderer<reqwest::Error>
             + ValueRenderer<serde_json::Error>;
@@ -760,7 +760,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
         T: serde::de::DeserializeOwned + 't,
-        R: crate::ValueRenderer<String>
+        R: ValueRenderer<String>
             + ValueRenderer<str>
             + ValueRenderer<reqwest::Error>
             + ValueRenderer<serde_json::Error>,
@@ -1151,7 +1151,7 @@ mod tests {
         calls: &'a core::cell::Cell<usize>,
     }
 
-    impl crate::ValueRenderer<reqwest::header::HeaderValue> for RevealingRenderer<'_> {
+    impl ValueRenderer<reqwest::header::HeaderValue> for RevealingRenderer<'_> {
         fn fmt(
             &self,
             value: &reqwest::header::HeaderValue,
@@ -1170,21 +1170,21 @@ mod tests {
         }
     }
 
-    impl crate::ValueRenderer<str> for RevealingRenderer<'_> {
+    impl ValueRenderer<str> for RevealingRenderer<'_> {
         fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            crate::ValueRenderer::fmt(&crate::DebugRenderer, value, f)
+            ValueRenderer::fmt(&DebugRenderer, value, f)
         }
     }
 
     struct TextOnly;
 
-    impl crate::ValueRenderer<str> for TextOnly {
+    impl ValueRenderer<str> for TextOnly {
         fn fmt(&self, _: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             f.write_str("<redacted text>")
         }
     }
 
-    impl crate::ValueRenderer<reqwest::header::HeaderValue> for RedactingRenderer {
+    impl ValueRenderer<reqwest::header::HeaderValue> for RedactingRenderer {
         fn fmt(
             &self,
             value: &reqwest::header::HeaderValue,
@@ -1198,7 +1198,7 @@ mod tests {
         }
     }
 
-    impl crate::ValueRenderer<str> for RedactingRenderer {
+    impl ValueRenderer<str> for RedactingRenderer {
         fn fmt(&self, _: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             f.write_str("<redacted text>")
         }
@@ -2310,9 +2310,7 @@ mod tests {
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
-                        .derive_owned(|item| {
-                            crate::test_support::rendered_text(&item.facts[1].value)
-                        })
+                        .derive_owned(|item| rendered_text(&item.facts[1].value))
                         .is_equal_to(r#"revealed("secret-\xff")"#);
                 },
             ]);
@@ -2508,8 +2506,7 @@ mod tests {
                 .capture(|it| it.has_header_value("x-api-key", "other"));
 
             let actual = failures[0].actual.as_ref().expect("actual value");
-            assert_that!(crate::test_support::rendered_text(actual))
-                .is_equal_to(r#"header("visible-\xff")"#);
+            assert_that!(rendered_text(actual)).is_equal_to(r#"header("visible-\xff")"#);
         }
 
         #[test]
@@ -2546,7 +2543,7 @@ mod tests {
                             .derive(|failure| &failure.actual)
                             .is_some_satisfying(|actual| {
                                 actual
-                                    .derive_owned(crate::test_support::rendered_text)
+                                    .derive_owned(rendered_text)
                                     .is_equal_to(r#"revealed("secret-\xff")"#);
                                 actual.derive(|actual| &actual.type_name).is_equal_to(Some(
                                     core::any::type_name::<reqwest::header::HeaderValue>(),

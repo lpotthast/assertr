@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for equality. Map keys remain lookup operands.
 - `partial!` matches selected struct or enum fields without derives or attributes on domain types and renders only
   selected leaves. Each selected field requires an explicit matcher, such as `eq(value)` or a nested `partial!`.
+  Qualified constructor paths work with the optional `variant` prefix for variant diagnostic paths.
   Enable the new `partial` feature, which supports `no_std` with `alloc`.
 - Map assertions `contains_entry_matching` and `contains_value_matching` accept composed value matchers.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
@@ -43,7 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `RenderingBudget` defaults to 256 items per diagnostic group and 4,096 characters per rendered leaf.
   Set limits with `with_max_items` and `with_max_leaf_characters`, then apply it with `with_rendering_budget`.
   Use `RenderingBudget::unlimited()` to disable both limits. Custom evidence collectors can read the active limits
-  through `RenderingContext::budget()` without changing the chain.
+  through `RenderingContext::budget()` without changing the chain. Child evidence preserves omission counts even at
+  zero, without changing assertion outcomes or skipping required checks.
 - `failure::adapter::Adapter` and `AdapterExt` provide typed failure processing with `then` and `map_err`, including
   human-readable reports and an opt-in `Writer` sink for text or bytes with `std`. Configure any `std::io::Write`
   target or use stdout/stderr constructors. With `tokio`, write to asynchronous targets through `adapt_async`,
@@ -104,7 +106,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** `capture`, `verify`, and `verify_owned` return `AssertionFailures` instead of a vector.
   Use `into_vec()` where a vector is required.
 - **Breaking:** `AssertionFailure` replaces `description` and `details` with structured values, relations, facts,
-  nested failures, matcher paths and constraints, type metadata, and `FailureKind` tags.
+  nested failures, typed child paths and constraints, type metadata, and `FailureKind` tags.
+  Child locations use `PathSegment` for equality, identity, and matcher evidence, with compact rendered map keys.
+  Facts describe additional evidence without special treatment of their labels.
   Read the fields or accessors directly, or use `Display` and `ToHumanReadableText` for text.
 - **Breaking:** Custom leaf assertions must replace `fail`, `fail_with_details`, and `failure::Failure` with
   `self.failure(kind)`, structured evidence, and `raise()`, using `Fact::labelled` or `Fact::note` for additional facts.
@@ -125,9 +129,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Update diagnostic text snapshots.
 - Hash collection diagnostics sort values and per-element evidence by rendered text before applying item limits.
   Positional diagnostics preserve iteration order, order-free diagnostics omit traversal indexes, and length
-  diagnostics use short Rust type names.
+  diagnostics use short Rust type names. Sorted value, map, and entry-list adapters bound temporary entry retention
+  by the item limit while preserving stable full-sort output and rendering every inspected leaf once per conversion.
 - Unordered matching evaluates each actual/expected pair at most once and retains evidence for missing expectations
   and unexpected elements. Surplus occurrences are explained through the occupied expectations they satisfy.
+  Failure evidence is sampled per occurrence and expectation slot, then routed after assignment. Completion sends
+  newly evaluated rejections directly to their final groups. Finite samples can remain underfilled when assignment
+  excludes retained candidates, with exact omission counts. Unlimited budgets preserve complete evidence. Comparison
+  work and total memory remain unbounded by the rendering budget.
 - **Breaking:** Tokio watch `has_changed` and `has_not_changed` move to `TokioWatchReceiverAssertions`, supporting
   panic and capture modes without renderer or `Clone` bounds. Replace imports of the removed
   `TokioWatchReceiverExtractAssertions` with `TokioWatchReceiverAssertions`.
@@ -158,6 +167,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Actual::map` accepts `FnOnce` callbacks, allowing captured values to move into the mapped subject.
 - Streaming iterator assertions retain the owning iterator through diagnostic rendering and release it before failure
   handling, preserving resources needed to interpret yielded items without repeating observations or consuming extra elements.
+  Equality failures retain indexed mismatches and structured omission counts. Matcher failures report consumption
+  and selected candidate evidence. Unordered equality rejects unequal buffered lengths before comparing operands
+  and avoids diagnostic assignment storage for equal-length checks.
 - Reqwest header diagnostics preserve sensitivity metadata for custom renderers and escape non-ASCII bytes by default.
   The default renderer reveals sensitive contents, and custom renderers can opt in through `SensitiveValuePolicy::Reveal`.
 - **Breaking:** Jiff signed-duration tolerance compares exact inclusive nanosecond distances without arithmetic

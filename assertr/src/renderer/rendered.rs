@@ -60,11 +60,6 @@ impl Rendered {
         }
     }
 
-    pub(crate) fn compact(mut self) -> Self {
-        self.compact = true;
-        self
-    }
-
     /// Writes the human-readable representation of this value.
     ///
     /// Pretty output uses the same indentation and trailing commas as Rust's alternate `Debug`
@@ -184,7 +179,7 @@ pub trait IntoRendered {
     /// Renders the value once, using pretty leaf formatting where the renderer distinguishes it.
     fn into_rendered(self) -> Rendered;
 
-    /// Internal compact-leaf counterpart used for map-key headings and specialized adapters.
+    /// Internal compact-leaf counterpart used by specialized rendering adapters.
     #[doc(hidden)]
     fn into_rendered_compact(self) -> Rendered
     where
@@ -392,7 +387,7 @@ fn write_suffix(
     Ok(())
 }
 
-impl super::IntoRendered for Rendered {
+impl IntoRendered for Rendered {
     fn into_rendered(self) -> Self {
         self
     }

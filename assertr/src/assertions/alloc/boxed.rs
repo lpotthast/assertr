@@ -164,7 +164,7 @@ mod tests {
 
         #[test]
         fn caller_location_is_as_expected() {
-            let value: alloc::boxed::Box<dyn core::any::Any> = alloc::boxed::Box::new(1_i32);
+            let value: Box<dyn core::any::Any> = Box::new(1_i32);
             assert_caller_location!(assert_that!(value), is_of_type::<u8>());
         }
 
@@ -222,7 +222,7 @@ mod tests {
                     => BoxExtractAssertions<'static, NoRenderer>
             );
 
-            assert_trait_impl!(super::super::IsOfType<i32> => crate::ExpectationDiagnostics<Box<dyn core::any::Any>, NoRenderer>);
+            assert_trait_impl!(super::super::IsOfType<i32> => ExpectationDiagnostics<Box<dyn core::any::Any>, NoRenderer>);
         }
     }
 
@@ -241,7 +241,7 @@ mod tests {
 
         #[test]
         fn caller_location_is_as_expected() {
-            let value: alloc::boxed::Box<dyn core::any::Any> = alloc::boxed::Box::new(1_i32);
+            let value: Box<dyn Any> = Box::new(1_i32);
             assert_caller_location!(assert_that!(value), has_type::<u8>());
         }
 
@@ -357,7 +357,7 @@ mod tests {
 
         #[test]
         fn caller_location_is_as_expected() {
-            let value: alloc::boxed::Box<dyn core::any::Any> = alloc::boxed::Box::new(1_i32);
+            let value: Box<dyn Any> = Box::new(1_i32);
             assert_caller_location!(assert_that!(value), has_type_ref::<u8>());
         }
 

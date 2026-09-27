@@ -5,7 +5,6 @@
 //! not implement a positional assertion family at all.
 
 use crate::borrow_for::BorrowFor;
-use alloc::vec::Vec;
 use core::borrow::Borrow;
 
 use super::{StableOrder, identity, value};
@@ -203,11 +202,7 @@ where
     {
         self.track_assertion();
         self.apply_assertion_after_tracking(crate::assertions::collection::starts_with_elements(
-            assertions
-                .as_ref()
-                .iter()
-                .map(crate::expectation::satisfying)
-                .collect::<Vec<_>>(),
+            crate::expectation::lists::SatisfyingList(assertions.as_ref()),
         ))
     }
 
@@ -241,11 +236,7 @@ where
     {
         self.track_assertion();
         self.apply_assertion_after_tracking(crate::assertions::collection::ends_with_elements(
-            assertions
-                .as_ref()
-                .iter()
-                .map(crate::expectation::satisfying)
-                .collect::<Vec<_>>(),
+            crate::expectation::lists::SatisfyingList(assertions.as_ref()),
         ))
     }
 
@@ -280,11 +271,7 @@ where
         self.track_assertion();
         self.apply_assertion_after_tracking(
             crate::assertions::collection::contains_contiguous_elements(
-                assertions
-                    .as_ref()
-                    .iter()
-                    .map(crate::expectation::satisfying)
-                    .collect::<Vec<_>>(),
+                crate::expectation::lists::SatisfyingList(assertions.as_ref()),
             ),
         )
     }
@@ -317,11 +304,7 @@ where
     {
         self.track_assertion();
         self.apply_assertion_after_tracking(crate::assertions::collection::elements_are(
-            assertions
-                .as_ref()
-                .iter()
-                .map(crate::expectation::satisfying)
-                .collect::<Vec<_>>(),
+            crate::expectation::lists::SatisfyingList(assertions.as_ref()),
         ))
     }
 }
@@ -845,7 +828,7 @@ mod tests {
                     ]
 
                     Nested failures:
-                      - At index 1:
+                      - At [1]:
                         Expected: 9
 
                           Actual: 2
@@ -918,34 +901,25 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_for_matching_prefix_predicates() {
-            assert_that!([1, 2, 3])
-                .starts_with_matching(crate::expectation::predicate_list([is_one, is_two]));
-        }
-
-        #[test]
         fn traverses_only_the_requested_prefix() {
             let actual = super::CountingCollection::new();
             assert_that!(actual).starts_with_matching(matchers![]);
             assert_that!(actual.visits.get()).is_equal_to(0);
 
-            assert_that!(actual)
-                .starts_with_matching(matchers![crate::matchers::eq(1), crate::matchers::eq(2)]);
+            assert_that!(actual).starts_with_matching(matchers![matchers::eq(1), matchers::eq(2)]);
             assert_that!(actual.visits.get()).is_equal_to(2);
 
             actual.visits.set(0);
-            let failures = assert_that!(actual).capture(|it| {
-                it.starts_with_matching(matchers![crate::matchers::eq(1), crate::matchers::eq(9)])
-            });
+            let failures = assert_that!(actual)
+                .capture(|it| it.starts_with_matching(matchers![matchers::eq(1), matchers::eq(9)]));
             assert_that!(failures).has_length(1);
             assert_that!(actual.visits.get()).is_equal_to(2);
         }
 
         #[test]
         fn reports_missing_prefix_positions_and_actual_length() {
-            let failures = assert_that!([1]).capture(|it| {
-                it.starts_with_matching(matchers![crate::matchers::eq(1), crate::matchers::eq(2)])
-            });
+            let failures = assert_that!([1])
+                .capture(|it| it.starts_with_matching(matchers![matchers::eq(1), matchers::eq(2)]));
             assert_that!(failures[0].children).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
@@ -954,9 +928,7 @@ mod tests {
                 },
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
-                        .derive_owned(|item| {
-                            crate::test_support::rendered_text(&item.facts[0].value)
-                        })
+                        .derive_owned(|item| rendered_text(&item.facts[0].value))
                         .is_equal_to("1");
                 },
             ]);
@@ -1013,48 +985,21 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_the_prefix_satisfies_the_assertions() {
-            assert_that!([1, 2, 3]).starts_with_satisfying([is_one, is_two]);
-        }
+        fn accepts_borrowed_lists_of_capturing_callbacks() {
+            let calls = core::cell::Cell::new(0);
+            let callbacks = [1, 2].map(|expected| {
+                let calls = &calls;
+                move |it: AssertThat<i32, Capture>| {
+                    calls.set(calls.get() + 1);
+                    it.is_equal_to(expected);
+                }
+            });
 
-        #[test]
-        fn traverses_only_the_requested_prefix() {
-            let actual = super::CountingCollection::new();
-            let empty: [fn(AssertThat<i32, Capture>); 0] = [];
-            assert_that!(actual).starts_with_satisfying(empty);
-            assert_that!(actual.visits.get()).is_equal_to(0);
+            assert_that!([1, 2, 3])
+                .starts_with_satisfying(callbacks.as_slice())
+                .starts_with_satisfying(callbacks);
 
-            assert_that!(actual).starts_with_satisfying([is_one, is_two]);
-            assert_that!(actual.visits.get()).is_equal_to(2);
-
-            actual.visits.set(0);
-            let failures =
-                assert_that!(actual).capture(|it| it.starts_with_satisfying([is_two, is_one]));
-            assert_that!(failures).has_length(1);
-            assert_that!(actual.visits.get()).is_equal_to(2);
-        }
-
-        #[test]
-        fn reports_nested_failures() {
-            assert_that_panic_by(|| {
-                assert_that!([1, 3])
-                    .with_location(false)
-                    .starts_with_satisfying([is_one, is_two]);
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 3]`
-
-                does not match
-
-                Nested failures:
-                  - At [1]:
-                    Expected: 2
-
-                      Actual: 3
-                -------- assertr --------
-            "});
+            assert_that!(calls.get()).is_equal_to(4);
         }
     }
 
@@ -1086,7 +1031,7 @@ mod tests {
             })
             .has_type::<String>()
             .contains("does not end with\n\nExpected: [\n    2,\n    9,\n]")
-            .contains("Nested failures:\n  - At index 2:\n    Expected: 9\n\n      Actual: 3\n");
+            .contains("Nested failures:\n  - At [2]:\n    Expected: 9\n\n      Actual: 3\n");
         }
 
         #[test]
@@ -1154,12 +1099,6 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_for_matching_suffix_predicates() {
-            assert_that!([1, 2, 3])
-                .ends_with_matching(crate::expectation::predicate_list([is_two, is_three]));
-        }
-
-        #[test]
         fn reports_a_suffix_predicate_mismatch() {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 4])
@@ -1207,34 +1146,6 @@ mod tests {
                 assert_that!([1, 2, 4]),
                 ends_with_satisfying([is_two, is_three])
             );
-        }
-
-        #[test]
-        fn succeeds_when_the_suffix_satisfies_the_assertions() {
-            assert_that!([1, 2, 3]).ends_with_satisfying([is_two, is_three]);
-        }
-
-        #[test]
-        fn reports_nested_suffix_failures() {
-            assert_that_panic_by(|| {
-                assert_that!([1, 2, 4])
-                    .with_location(false)
-                    .ends_with_satisfying([is_two, is_three]);
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2, 4]`
-
-                does not match
-
-                Nested failures:
-                  - At [2]:
-                    Expected: 3
-
-                      Actual: 4
-                -------- assertr --------
-            "});
         }
     }
 
@@ -1304,13 +1215,6 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_for_contiguous_matching_elements() {
-            assert_that!([0, 1, 3]).contains_contiguous_matching(
-                crate::expectation::predicate_list([is_one, is_three]),
-            );
-        }
-
-        #[test]
         fn reports_when_no_contiguous_match_exists() {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3])
@@ -1367,34 +1271,6 @@ mod tests {
                 assert_that!([1, 2]),
                 contains_contiguous_satisfying([is_one, is_three])
             );
-        }
-
-        #[test]
-        fn succeeds_for_contiguous_satisfying_elements() {
-            assert_that!([0, 1, 3]).contains_contiguous_satisfying([is_one, is_three]);
-        }
-
-        #[test]
-        fn reports_nested_failures_from_the_final_candidate() {
-            assert_that_panic_by(|| {
-                assert_that!([1, 2])
-                    .with_location(false)
-                    .contains_contiguous_satisfying([is_one, is_three]);
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2]`
-
-                does not match
-
-                Nested failures:
-                  - At [1]:
-                    Expected: 3
-
-                      Actual: 2
-                -------- assertr --------
-            "});
         }
     }
 
@@ -1482,7 +1358,7 @@ mod tests {
             }
             let failures = assert_that!([Record { id: 1 }]).capture(|it| {
                 it.contains_exactly_matching(matchers![partial!(Record {
-                    id: crate::matchers::eq(2)
+                    id: matchers::eq(2)
                 })])
             });
             assert_that!(failures).contains_exactly_satisfying([
@@ -1495,9 +1371,7 @@ mod tests {
                         ]);
                     element
                         .derive_owned(|value| {
-                            crate::test_support::rendered_text(
-                                value.children[0].expected.as_ref().unwrap(),
-                            )
+                            rendered_text(value.children[0].expected.as_ref().unwrap())
                         })
                         .is_equal_to("2");
                 },
@@ -1545,19 +1419,19 @@ mod tests {
             let records = [Record { id: 1 }, Record { id: 2 }];
             assert_that!(records).contains_exactly_in_any_order_matching(matchers![
                 partial!(Record {
-                    id: crate::matchers::eq(2)
+                    id: matchers::eq(2)
                 }),
                 partial!(Record {
-                    id: crate::matchers::eq(1)
+                    id: matchers::eq(1)
                 })
             ]);
             let failures = assert_that!(records).capture(|it| {
                 it.contains_exactly_matching(matchers![
                     partial!(Record {
-                        id: crate::matchers::eq(2)
+                        id: matchers::eq(2)
                     }),
                     partial!(Record {
-                        id: crate::matchers::eq(1)
+                        id: matchers::eq(1)
                     })
                 ])
             });
@@ -1643,17 +1517,6 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_each_element_matches_its_predicate() {
-            assert_that!([1, 2, 3].as_slice()).contains_exactly_matching(
-                crate::expectation::predicate_list([
-                    move |it: &i32| *it == 1,
-                    move |it: &i32| *it < 3,
-                    move |it: &i32| *it > 2,
-                ]),
-            );
-        }
-
-        #[test]
         fn panics_when_elements_only_match_in_a_different_order() {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
@@ -1715,10 +1578,6 @@ mod tests {
     mod contains_exactly_satisfying {
         use crate::prelude::*;
 
-        fn is_zero(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(0);
-        }
-
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
@@ -1740,119 +1599,6 @@ mod tests {
                     it.is_equal_to(1);
                 }])
             );
-        }
-
-        #[test]
-        fn succeeds_when_each_element_satisfies_its_assertions() {
-            assert_that!([1, 2, 3].as_slice()).contains_exactly_satisfying([
-                |it: AssertThat<i32, Capture>| {
-                    it.is_equal_to(1);
-                },
-                |it: AssertThat<i32, Capture>| {
-                    it.is_equal_to(2);
-                },
-                |it: AssertThat<i32, Capture>| {
-                    it.is_equal_to(3);
-                },
-            ]);
-        }
-
-        #[test]
-        fn panics_when_an_element_does_not_satisfy_its_positional_assertions() {
-            assert_that_panic_by(|| {
-                assert_that!([1, 2].as_slice())
-                    .with_location(false)
-                    .contains_exactly_satisfying([
-                        |it: AssertThat<i32, Capture>| {
-                            it.is_equal_to(1);
-                        },
-                        |it: AssertThat<i32, Capture>| {
-                            it.is_equal_to(3);
-                        },
-                    ]);
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2].as_slice()`
-
-                does not match
-
-                Nested failures:
-                  - At [1]:
-                    Expected: 3
-
-                      Actual: 2
-                -------- assertr --------
-            "});
-        }
-
-        #[test]
-        fn panics_when_lengths_differ() {
-            assert_that_panic_by(|| {
-                assert_that!([1, 2, 3].as_slice())
-                    .with_location(false)
-                    .contains_exactly_satisfying([|it: AssertThat<i32, Capture>| {
-                        it.is_equal_to(1);
-                    }]);
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2, 3].as_slice()`
-
-                does not match
-
-                Nested failures:
-                  - does not have the required sequence
-
-                    Details:
-                      - actual length: 3
-                      - expected length: 1
-                -------- assertr --------
-            "});
-        }
-
-        #[test]
-        fn limits_repeated_element_evidence_to_the_rendering_budget() {
-            let failures = assert_that!([1, 2, 3])
-                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
-                .with_location(false)
-                .capture(|it| it.contains_exactly_satisfying([is_zero; 3]));
-
-            assert_that!(failures[0].children.as_slice()).has_length(1);
-            assert_that!(failures[0].omitted_children).is_equal_to(2);
-        }
-
-        #[test]
-        fn opaque_callback_failures_preserve_custom_rendering_and_budgets() {
-            use crate::test_support::{CustomValueRenderer, assert_custom_value};
-
-            struct Opaque(usize);
-
-            fn check(it: AssertThat<'_, Opaque, Capture, CustomValueRenderer>) {
-                it.satisfies(
-                    |value| &value.0,
-                    |value| {
-                        value.is_equal_to(9);
-                    },
-                );
-            }
-
-            let values = [Opaque(1), Opaque(2)];
-            let failures = assert_that!(values)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
-                .capture(|it| it.contains_exactly_satisfying([check, check]));
-
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0].children).has_length(1);
-            assert_that!(failures[0].omitted_children).is_equal_to(1);
-            let child = &failures[0].children[0];
-            assert_custom_value(child.actual.as_ref().unwrap(), &1_usize);
-            assert_custom_value(child.expected.as_ref().unwrap(), &9_usize);
-            assert_that!(child.path).contains_exactly([crate::failure::PathSegment::Index(0)]);
         }
     }
 

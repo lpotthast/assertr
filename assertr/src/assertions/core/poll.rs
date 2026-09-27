@@ -193,8 +193,8 @@ mod tests {
                     => PollExtractAssertions<'static, (), NoRenderer>
             );
 
-            assert_trait_impl!(super::super::IsReady => crate::Expectation<core::task::Poll<()>, NoRenderer>);
-            assert_trait_impl!(super::super::IsPending => crate::Expectation<core::task::Poll<()>, NoRenderer>);
+            assert_trait_impl!(super::super::IsReady => Expectation<Poll<()>, NoRenderer>);
+            assert_trait_impl!(super::super::IsPending => Expectation<Poll<()>, NoRenderer>);
         }
 
         #[test]

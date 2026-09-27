@@ -1,6 +1,5 @@
 use crate::borrow_for::BorrowFor;
 use crate::{AssertionContext, expectation::Evidence};
-use alloc::vec::Vec;
 use core::borrow::Borrow;
 
 use super::{Collection, identity, value};
@@ -67,15 +66,12 @@ where
             }
             context.append(branch.into_evidence());
         }
-        if context.evidence.is_empty() {
-            context.outcome(false, |context| {
-                FailureBuilder::detached::<()>(FailureKind::Matching)
-                    .relation("contains a matching element")
-                    .children([context.describe(&self.0)])
-                    .build()
-            });
-        }
-        Err(context.into_evidence())
+        context.finish(false, |context| {
+            FailureBuilder::detached::<()>(FailureKind::Matching)
+                .relation("contains a matching element")
+                .children([context.describe(&self.0)])
+                .build()
+        })
     }
 }
 impl<C: Collection + ?Sized, R, M> ExpectationDiagnostics<C, R> for ContainsMatching<M>
@@ -459,11 +455,7 @@ where
         self.track_assertion();
         self.apply_assertion_after_tracking(
             crate::assertions::collection::elements_are_in_any_order(
-                assertions
-                    .as_ref()
-                    .iter()
-                    .map(satisfying)
-                    .collect::<Vec<_>>(),
+                crate::expectation::lists::SatisfyingList(assertions.as_ref()),
             ),
         )
     }
@@ -489,7 +481,7 @@ mod tests {
             assert_trait_impl!(
                 crate::assertions::collection::ContainsMatching<
                     crate::expectation::Predicate<fn(&i32) -> bool>
-                > => crate::Expectation<[i32], NoRenderer>
+                > => Expectation<[i32], NoRenderer>
             );
         }
 
@@ -768,95 +760,6 @@ mod tests {
                 })
             );
         }
-
-        #[test]
-        fn succeeds_when_an_element_satisfies() {
-            assert_that!([1, 2, 3].as_slice()).contains_satisfying(|it| {
-                it.is_equal_to(2);
-            });
-        }
-
-        #[test]
-        fn panics_when_no_element_satisfies_and_lists_every_elements_failures() {
-            assert_that_panic_by(|| {
-                assert_that!([1, 2].as_slice())
-                    .with_location(false)
-                    .contains_satisfying(|it| {
-                        it.is_equal_to(7);
-                    });
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2].as_slice()`
-
-                does not match
-
-                Nested failures:
-                  - Expected: 7
-
-                      Actual: 1
-                  - Expected: 7
-
-                      Actual: 2
-                -------- assertr --------
-            "});
-        }
-
-        #[test]
-        fn rendering_budget_limits_items_and_nested_failure_values() {
-            let failures = assert_that!([123_456, 234_567, 345_678].as_slice())
-                .with_rendering_budget(
-                    RenderingBudget::default()
-                        .with_max_items(1)
-                        .with_max_leaf_characters(3),
-                )
-                .with_location(false)
-                .capture(|it| {
-                    it.contains_satisfying(|element| {
-                        element.is_equal_to(99);
-                    })
-                });
-
-            assert_that!(failures[0].children.as_slice()).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element
-                        .derive_owned(|value| value.actual.as_ref().map(rendered_text))
-                        .is_equal_to(Some("123... 3 more characters ...".to_owned()));
-                },
-            ]);
-            assert_that!(failures[0].omitted_children).is_equal_to(2);
-        }
-
-        #[test]
-        fn opaque_callback_failures_preserve_custom_rendering_and_budgets() {
-            use crate::test_support::{CustomValueRenderer, assert_custom_value};
-
-            struct Opaque(usize);
-
-            fn check(it: AssertThat<'_, Opaque, Capture, CustomValueRenderer>) {
-                it.satisfies(
-                    |value| &value.0,
-                    |value| {
-                        value.is_equal_to(9);
-                    },
-                );
-            }
-
-            let values = [Opaque(1), Opaque(2)];
-            let failures = assert_that!(values)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .with_rendering_budget(RenderingBudget::default().with_max_items(1))
-                .capture(|it| it.contains_satisfying(check));
-
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0].children).has_length(1);
-            assert_that!(failures[0].omitted_children).is_equal_to(1);
-            let child = &failures[0].children[0];
-            assert_custom_value(child.actual.as_ref().unwrap(), &1_usize);
-            assert_custom_value(child.expected.as_ref().unwrap(), &9_usize);
-        }
     }
 
     mod contains_all {
@@ -993,7 +896,6 @@ mod tests {
 
     mod does_not_contain_satisfying {
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -1011,46 +913,6 @@ mod tests {
                     it.is_greater_than(1);
                 })
             );
-        }
-
-        #[test]
-        fn succeeds_when_no_element_satisfies() {
-            assert_that!([1, 2, 3].as_slice()).does_not_contain_satisfying(|it| {
-                it.is_equal_to(7);
-            });
-        }
-
-        #[test]
-        fn panics_when_elements_satisfy_and_lists_them() {
-            assert_that_panic_by(|| {
-                assert_that!([1, 2, 3].as_slice())
-                    .with_location(false)
-                    .does_not_contain_satisfying(|it| {
-                        it.is_greater_than(1);
-                    });
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2, 3].as_slice()`
-
-                contains matching elements
-
-                Nested failures:
-                  - Actual: 2
-
-                    matches the unwanted constraint
-
-                    Constraint:
-                        satisfies the assertions
-                  - Actual: 3
-
-                    matches the unwanted constraint
-
-                    Constraint:
-                        satisfies the assertions
-                -------- assertr --------
-            "});
         }
     }
 
@@ -1129,7 +991,7 @@ mod tests {
             }
         }
 
-        impl<R> crate::Expectation<Actual, R> for WildcardExpected {
+        impl<R> Expectation<Actual, R> for WildcardExpected {
             type Success<'a>
                 = ()
             where
@@ -1209,7 +1071,7 @@ mod tests {
                     value: crate::expectation::anything()
                 }),
                 partial!(DerivedActual {
-                    value: crate::matchers::eq(2)
+                    value: matchers::eq(2)
                 }),
             ]);
         }
@@ -1466,90 +1328,6 @@ mod tests {
                     it.is_equal_to(2);
                 }])
             );
-        }
-
-        #[test]
-        fn succeeds_when_assertions_are_satisfied_in_different_order() {
-            assert_that!([1, 2, 3].as_slice()).contains_exactly_in_any_order_satisfying([
-                |it: AssertThat<i32, Capture>| {
-                    it.is_equal_to(3);
-                },
-                |it: AssertThat<i32, Capture>| {
-                    it.is_equal_to(1);
-                },
-                |it: AssertThat<i32, Capture>| {
-                    it.is_equal_to(2);
-                },
-            ]);
-        }
-
-        #[test]
-        fn succeeds_when_overlapping_assertions_have_an_exact_assignment() {
-            assert_that!([1, 2].as_slice()).contains_exactly_in_any_order_satisfying([
-                |it: AssertThat<i32, Capture>| {
-                    it.is_less_than(3);
-                },
-                |it: AssertThat<i32, Capture>| {
-                    it.is_equal_to(1);
-                },
-            ]);
-        }
-
-        #[test]
-        fn panics_when_elements_are_unmatched() {
-            assert_that_panic_by(|| {
-                assert_that!([1, 2, 3].as_slice())
-                    .with_location(false)
-                    .contains_exactly_in_any_order_satisfying([
-                        |it: AssertThat<i32, Capture>| {
-                            it.is_equal_to(2);
-                        },
-                        |it: AssertThat<i32, Capture>| {
-                            it.is_equal_to(3);
-                        },
-                        |it: AssertThat<i32, Capture>| {
-                            it.is_equal_to(4);
-                        },
-                    ]);
-            })
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2, 3].as_slice()`
-
-                does not match
-
-                Nested failures:
-                  - is missing an element matching this expectation
-
-                    Constraint:
-                        satisfies the assertions
-
-                    Details:
-                      - at slot: 2
-                    Nested failures:
-                      - Expected: 4
-
-                          Actual: 1
-                      - Expected: 4
-
-                          Actual: 2
-                      - Expected: 4
-
-                          Actual: 3
-                  - has unexpected elements
-
-                    Details:
-                      - unexpected count: 1
-                    Nested failures:
-                      - Expected: 2
-
-                          Actual: 1
-                      - Expected: 3
-
-                          Actual: 1
-                -------- assertr --------
-            "});
         }
     }
 

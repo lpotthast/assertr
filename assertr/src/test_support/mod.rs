@@ -7,6 +7,8 @@ mod collections;
 mod panic;
 mod rendering;
 
+use alloc::string::String;
+
 pub(crate) use assertions::{FailureReportAssertions, assert_trait_impl};
 #[cfg(feature = "std")]
 pub(crate) use caller_location::block_on;
@@ -31,7 +33,7 @@ impl<T, F: Fn()> core::borrow::Borrow<T> for BorrowSpy<T, F> {
         &self.value
     }
 }
-impl<T, F: Fn()> crate::borrow_for::BorrowFor<T> for BorrowSpy<T, F> {
+impl<T, F: Fn()> borrow_for::BorrowFor<T> for BorrowSpy<T, F> {
     type View = T;
 }
 
@@ -46,7 +48,7 @@ impl<F: Fn()> core::borrow::Borrow<str> for StrOperand<F> {
         self.value
     }
 }
-impl<F: Fn()> crate::borrow_for::BorrowFor<alloc::string::String> for StrOperand<F> {
+impl<F: Fn()> borrow_for::BorrowFor<String> for StrOperand<F> {
     type View = str;
 }
 
@@ -58,12 +60,8 @@ impl crate::ValueRenderer<str> for StringRenderer {
         write!(f, "{value:?}")
     }
 }
-impl crate::ValueRenderer<alloc::string::String> for StringRenderer {
-    fn fmt(
-        &self,
-        value: &alloc::string::String,
-        f: &mut core::fmt::Formatter<'_>,
-    ) -> core::fmt::Result {
+impl crate::ValueRenderer<String> for StringRenderer {
+    fn fmt(&self, value: &String, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         crate::ValueRenderer::<str>::fmt(self, value, f)
     }
 }

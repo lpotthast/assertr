@@ -3,9 +3,12 @@
 use super::{Collection, StableOrder};
 use crate::{
     AssertionContext, Expectation, ExpectationDiagnostics,
-    failure::{Fact, FailureBuilder, FailureKind},
+    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::{GroupStyle, IntoRendered, Rendered, RenderingOrder},
-    util::matching::match_bipartite,
+    util::{
+        matching::match_bipartite,
+        selection::{Keyed, Smallest},
+    },
 };
 use alloc::{string::String, vec::Vec};
 use core::{borrow::Borrow, marker::PhantomData, ptr};
@@ -16,8 +19,7 @@ const METADATA_NOTE: &str = "Some pointers have equal data addresses but differe
 // presentation. Inspected counts are independent of retention, so explanation never repeats
 // Borrow on a target that evaluation already visited.
 struct ObservedTargets<'a, U: ?Sized> {
-    targets: Vec<&'a U>,
-    sort_keys: Vec<String>,
+    targets: Smallest<Keyed<(Option<String>, usize), &'a U>>,
     inspected: usize,
     limit: usize,
     order: RenderingOrder,
@@ -25,15 +27,15 @@ struct ObservedTargets<'a, U: ?Sized> {
 
 impl<'a, U: ?Sized> ObservedTargets<'a, U> {
     fn new<R>(context: &AssertionContext<'_, R>, order: RenderingOrder) -> Self {
+        let limit = if context.is_diagnostic() {
+            context.render().max_items()
+        } else {
+            0
+        };
         Self {
-            targets: Vec::new(),
-            sort_keys: Vec::new(),
+            targets: Smallest::new(limit),
             inspected: 0,
-            limit: if context.is_diagnostic() {
-                context.render().max_items()
-            } else {
-                0
-            },
+            limit,
             order,
         }
     }
@@ -43,28 +45,19 @@ impl<'a, U: ?Sized> ObservedTargets<'a, U> {
         if self.limit == 0 {
             return;
         }
-        if self.order == RenderingOrder::PreserveIteration {
-            if self.targets.len() < self.limit {
-                self.targets.push(target);
-            }
-            return;
-        }
         // Compare the budgeted text, including truncation markers, just like collection rendering.
-        let key = context
-            .render()
-            .identities()
-            .value(target)
-            .into_rendered()
-            .text(true);
-        let index = self.sort_keys.partition_point(|existing| existing <= &key);
-        if index < self.limit {
-            if self.targets.len() == self.limit {
-                self.targets.pop();
-                self.sort_keys.pop();
-            }
-            self.targets.insert(index, target);
-            self.sort_keys.insert(index, key);
-        }
+        let key = (self.order == RenderingOrder::SortByRenderedText).then(|| {
+            context
+                .render()
+                .identities()
+                .value(target)
+                .into_rendered()
+                .text(true)
+        });
+        self.targets.offer(Keyed {
+            key: (key, self.inspected),
+            value: target,
+        });
     }
 
     fn complete<C: Collection + ?Sized, R>(
@@ -85,13 +78,14 @@ impl<'a, U: ?Sized> ObservedTargets<'a, U> {
     }
 
     fn render<C: Collection + ?Sized, R>(
-        &self,
+        self,
         actual: &C,
         context: &AssertionContext<'_, R>,
     ) -> Rendered {
+        let targets = self.targets.into_values();
         context.render().identities().observed_collection(
             actual,
-            &self.targets,
+            &targets,
             actual.length(),
             self.order,
         )
@@ -414,8 +408,8 @@ where
                                 .actual(rendering.value(element))
                                 .relation("is not the same instance as")
                                 .expected(rendering.value(expected))
-                                .build()
-                                .located_at(Fact::index(index)),
+                                .path([PathSegment::Index(index)])
+                                .build(),
                         );
                     }
                 }
@@ -820,8 +814,9 @@ mod tests {
                         .contains_exactly_satisfying([
                             |element: AssertThat<AssertionFailure, Capture>| {
                                 element
-                                    .derive(|value| &value.facts)
-                                    .is_equal_to([Fact::index(0)]);
+                                    .derive(|value| &value.path)
+                                    .is_equal_to([PathSegment::Index(0)]);
+                                element.derive(|value| &value.facts).is_empty();
                             },
                         ]);
                     item.derive(|subject| subject).has_text_report(formatdoc! {"
@@ -841,7 +836,7 @@ mod tests {
                 ]
 
                 Nested failures:
-                  - At index 0:
+                  - At [0]:
                     Actual: {b:p}
 
                     is not the same instance as
@@ -1048,13 +1043,11 @@ mod tests {
                 assert_that!(failures).contains_exactly_satisfying([
                     |item: AssertThat<AssertionFailure, Capture>| {
                         item.derive(|subject| &subject.facts)
-                            .contains_exactly_satisfying([
-                                |element: AssertThat<crate::Fact, Capture>| {
-                                    element
-                                        .derive(|value| &value.label)
-                                        .is_equal_to(alloc::borrow::Cow::Borrowed(label));
-                                },
-                            ]);
+                            .contains_exactly_satisfying([|element: AssertThat<Fact, Capture>| {
+                                element
+                                    .derive(|value| &value.label)
+                                    .is_equal_to(alloc::borrow::Cow::Borrowed(label));
+                            }]);
                     },
                 ]);
             }
@@ -1241,7 +1234,8 @@ mod tests {
                 .is_equal_to(Some(core::any::type_name::<Opaque>()));
             assert_that!(rendered_text(&items(rendered)[0]))
                 .is_equal_to(format!("{:p}", references[0]));
-            assert_that!(failures[0].children[0].facts).contains_exactly([Fact::index(0)]);
+            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(0)]);
+            assert_that!(failures[0].children[0].facts).is_empty();
         }
 
         #[test]
@@ -1263,7 +1257,8 @@ mod tests {
                 RenderedBody::Text { text, omitted_characters }
                     if text == "0x" && *omitted_characters > 0
             ));
-            assert_that!(failures[0].children[0].facts).contains_exactly([Fact::index(1)]);
+            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(1)]);
+            assert_that!(failures[0].children[0].facts).is_empty();
 
             let failures = assert_that!(actual)
                 .with_renderer(NumericRenderer)
@@ -1315,7 +1310,7 @@ mod tests {
                 );
                 let matcher = ContainsSameInstanceAs::new(&missing);
                 let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-                assert_that!(rejection.observed.targets).has_length(limit);
+                assert_that!(rejection.observed.targets.len()).is_equal_to(limit);
                 assert_that!(rejection.observed.inspected).is_equal_to(targets.len());
                 let failure = matcher
                     .explain(
@@ -1334,7 +1329,7 @@ mod tests {
 
                 let matcher = DoesNotContainSameInstanceAs::new(&targets[4095]);
                 let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-                assert_that!(rejection.observed.targets).has_length(limit);
+                assert_that!(rejection.observed.targets.len()).is_equal_to(limit);
                 assert_that!(rejection.observed.inspected).is_equal_to(targets.len());
 
                 let expected = targets.iter().rev().collect::<Vec<_>>();
@@ -1352,21 +1347,21 @@ mod tests {
                 .with_diagnostics(false);
             let matcher = ContainsSameInstanceAs::new(&missing);
             let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-            assert_that!(rejection.observed.targets).is_empty();
+            assert_that!(rejection.observed.targets.len()).is_equal_to(0);
             let matcher = DoesNotContainSameInstanceAs::new(&targets[4095]);
             let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-            assert_that!(rejection.observed.targets).is_empty();
+            assert_that!(rejection.observed.targets.len()).is_equal_to(0);
             let expected = targets.iter().rev().collect::<Vec<_>>();
             let matcher = ContainsExactlySameInstances::new(expected);
             let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-            assert_that!(rejection.observed.targets).is_empty();
+            assert_that!(rejection.observed.targets.len()).is_equal_to(0);
         }
 
         #[test]
         fn sorted_retention_matches_full_rendering_before_truncation() {
             let missing = 99_i32;
             let actual = UnorderedSet((0..32).rev().collect());
-            for limit in [0, 1, 3] {
+            for limit in [0, 1, 3, 32, 33, usize::MAX] {
                 for leaf_limit in [0, 4, usize::MAX] {
                     let context = AssertionContext::new(
                         &NoRenderer,
@@ -1376,8 +1371,8 @@ mod tests {
                     );
                     let matcher = ContainsSameInstanceAs::new(&missing);
                     let rejection = matcher.evaluate(&actual, &context).err().unwrap();
-                    assert_that!(rejection.observed.targets).has_length(limit);
-                    assert_that!(rejection.observed.sort_keys).has_length(limit);
+                    assert_that!(rejection.observed.targets.len())
+                        .is_equal_to(limit.min(actual.length()));
                     let expected = context
                         .render()
                         .identities()

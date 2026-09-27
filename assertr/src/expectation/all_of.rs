@@ -33,11 +33,7 @@ where
         for index in 0..self.0.len() {
             matched &= self.0.evaluate_at(index, actual, &mut context);
         }
-        if !matched && context.evidence.is_empty() {
-            context.outcome(false, |context| context.describe::<A, _>(self));
-        }
-        let evidence = context.into_evidence();
-        if matched { Ok(()) } else { Err(evidence) }
+        context.finish(matched, |context| context.describe::<A, _>(self))
     }
 }
 impl<A: ?Sized, R, L> ExpectationDiagnostics<A, R> for AllOf<L>
