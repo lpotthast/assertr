@@ -50,37 +50,29 @@ where
         Self: 'a,
         A: 'a;
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
-        let mut context = settings.isolated();
-        let evaluate = |context: &mut AssertionContext<'_, R>| {
-            if !(self.shape)(actual) {
-                return context.outcome(false, |_| {
-                    FailureBuilder::detached::<()>(FailureKind::Matching)
-                        .relation("has the required structure")
-                        .expected(self.name)
-                        .build()
-                });
-            }
-            let mut matched = true;
-            for index in 0..self.fields.len() {
-                matched &= self.fields.evaluate_at(index, actual, context);
-            }
-            if !matched && !context.has_evidence() {
-                context.outcome(matched, |_| {
-                    FailureBuilder::detached::<()>(FailureKind::Matching)
-                        .relation("has the required structure")
-                        .expected(self.name)
-                        .build()
-                });
-            }
-            matched
+        let structure = |_: &AssertionContext<'_, R>| {
+            FailureBuilder::detached::<()>(FailureKind::Matching)
+                .relation("has the required structure")
+                .expected(self.name)
+                .build()
         };
+        // A wrong shape skips the fields. The fallback stays within the variant scope.
+        let evaluate = |context: &mut AssertionContext<'_, R>| {
+            let mut matched = (self.shape)(actual);
+            if matched {
+                for index in 0..self.fields.len() {
+                    matched &= self.fields.evaluate_at(index, actual, context);
+                }
+            }
+            context.complete(matched, structure)
+        };
+        let mut context = settings.isolated();
         let matched = if let Some(variant) = self.variant {
             context.scoped(PathSegment::Variant(variant), evaluate)
         } else {
             evaluate(&mut context)
         };
-        let evidence = context.into_evidence();
-        if matched { Ok(()) } else { Err(evidence) }
+        context.finish(matched, structure)
     }
 }
 impl<A: ?Sized, R, F, L> ExpectationDiagnostics<A, R> for PartialMatch<A, F, L>

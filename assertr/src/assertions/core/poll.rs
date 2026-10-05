@@ -1,6 +1,7 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
-    actual::Actual,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics,
+    ValueRenderer,
+    assertions::support::project_checked,
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
 };
@@ -95,7 +96,7 @@ impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Poll<T>, R> for IsPending {
 /// Non-extracting assertions for `Poll` subjects.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PollAssertions<'t, T, M: Mode, R> {
+pub trait PollAssertions<T, M: Mode, R = DebugRenderer> {
     /// Asserts that the subject is `Ready`.
     ///
     /// Non-extracting: the subject stays the full `Poll`, so further assertions can be chained in
@@ -117,7 +118,7 @@ pub trait PollAssertions<'t, T, M: Mode, R> {
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>);
 }
 
-impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, M, R> {
+impl<T, M: Mode, R> PollAssertions<T, M, R> for AssertThat<'_, Poll<T>, M, R> {
     #[track_caller]
     fn is_ready(self) -> Self {
         self.apply_assertion(IsReady)
@@ -146,7 +147,7 @@ impl<'t, T, M: Mode, R> PollAssertions<'t, T, M, R> for AssertThat<'t, Poll<T>, 
 
 /// Panic-mode extraction from `Poll` subjects.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PollExtractAssertions<'t, T, R> {
+pub trait PollExtractAssertions<'t, T, R = DebugRenderer> {
     /// Asserts that the subject is `Ready`, then returns an assertion over its value.
     ///
     /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
@@ -160,15 +161,18 @@ pub trait PollExtractAssertions<'t, T, R> {
 impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic, R> {
     #[track_caller]
     fn get_ready(self) -> AssertThat<'t, T, Panic, R> {
-        self.apply_assertion(IsReady).map(|it| match it {
-            Actual::Owned(p) => Actual::Owned(match p {
-                Poll::Ready(t) => t,
-                Poll::Pending => unreachable!("already checked"),
-            }),
-            Actual::Borrowed(p) => Actual::Borrowed(match p {
-                Poll::Ready(t) => t,
-                Poll::Pending => unreachable!("already checked"),
-            }),
+        self.apply_assertion(IsReady).map(|actual| {
+            project_checked(
+                actual,
+                |poll| match poll {
+                    Poll::Ready(value) => Some(value),
+                    Poll::Pending => None,
+                },
+                |poll| match poll {
+                    Poll::Ready(value) => Some(value),
+                    Poll::Pending => None,
+                },
+            )
         })
     }
 }
@@ -186,7 +190,7 @@ mod tests {
         fn traits_are_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, Poll<()>, Panic, NoRenderer>
-                    => PollAssertions<'static, (), Panic, NoRenderer>
+                    => PollAssertions<(), Panic, NoRenderer>
             );
             assert_trait_impl!(
                 AssertThat<'static, Poll<()>, Panic, NoRenderer>

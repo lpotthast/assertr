@@ -20,7 +20,7 @@ use crate::{
     },
     failure::{FailureBuilder, FailureKind},
     renderer::IntoRendered,
-    util::matching::{BipartiteMatchResult, match_bipartite},
+    util::matching::{BipartiteMatchResult, match_bipartite, matches_exactly},
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 
@@ -62,8 +62,10 @@ pub struct ElementsAreInAnyOrder<L>(L);
 /// Each actual/expectation pair is evaluated at most once. Requested rejection diagnostics are
 /// built immediately from that observation.
 /// A mismatch completes unvisited comparisons involving unmatched elements or expectations. Probes
-/// and zero evidence allowances skip completion. Surplus occurrences that satisfy occupied
-/// expectations use those expectations' descriptions, without requiring an element renderer.
+/// and zero evidence allowances skip completion. Probes also reject unequal lengths without
+/// comparisons and stop at the first occurrence that cannot be assigned. Surplus occurrences that
+/// satisfy occupied expectations use those expectations' descriptions, without requiring an element
+/// renderer.
 ///
 /// During assignment, each occurrence and expectation slot samples at most the inherited item
 /// allowance of direct child failures. Each sampled item is one owned
@@ -113,6 +115,18 @@ where
             let matched = self.0.evaluate_at(slot, actual[index], &mut branch);
             (matched, branch.into_evidence())
         };
+        if context.is_probe() {
+            // A probe discards evidence. Unequal lengths and the first unassignable occurrence
+            // already decide the outcome, so it neither completes pairs nor assembles groups.
+            let accepted = matches_exactly(actual.len(), expected_length, |index, slot| {
+                evaluate_pair(&mut cache, (index, slot), || evaluate(index, slot), drop)
+            });
+            return if accepted {
+                Ok(())
+            } else {
+                Err(context.into_evidence())
+            };
+        }
         let result = match_bipartite(actual.len(), expected_length, |index, slot| {
             evaluate_pair(
                 &mut cache,
@@ -208,28 +222,22 @@ fn record_unexpected<
                 .sum();
             unexpected.append(destinations.take_unexpected(*index, total));
         }
-        if context.is_diagnostic() {
-            context.record(
-                unexpected
-                    .into_evidence()
-                    .explain(
-                        FailureBuilder::detached::<C>(FailureKind::Matching)
-                            .relation("has unexpected elements")
-                            .fact(Fact::labelled(
-                                "unexpected count",
-                                context
-                                    .render()
-                                    .value(&result.unmatched_actual.len())
-                                    .into_rendered(),
-                            )),
-                    )
-                    .build(),
-            );
-        } else {
-            context.outcome(false, |context| {
-                context.describe::<C, _>(&ElementsAreInAnyOrder(list))
-            });
-        }
+        context.record_with(|context| {
+            unexpected
+                .into_evidence()
+                .explain(
+                    FailureBuilder::detached::<C>(FailureKind::Matching)
+                        .relation("has unexpected elements")
+                        .fact(Fact::labelled(
+                            "unexpected count",
+                            context
+                                .render()
+                                .value(&result.unmatched_actual.len())
+                                .into_rendered(),
+                        )),
+                )
+                .build()
+        });
     }
 }
 
@@ -244,29 +252,18 @@ fn record_missing<
     rejections: Evidence,
     context: &mut AssertionContext<'_, R>,
 ) {
-    let description = context
-        .is_diagnostic()
-        .then(|| list.describe_at(slot, context));
     let mut alternatives = context.isolated_for_order(C::PRESENTATION.order());
     alternatives.append(rejections);
-    if let Some(description) = description {
-        let failure = FailureBuilder::detached::<C>(FailureKind::Matching).fact(Fact::labelled(
-            "at slot",
-            context.render().value(&slot).into_rendered(),
-        ));
-        let failure = alternatives.into_evidence().explain(
-            failure
-                .relation("is missing an element matching this expectation")
-                .constraint(description),
-        );
-        context.record(failure.build());
-    } else {
-        context.outcome(false, |_| {
-            FailureBuilder::detached::<()>(FailureKind::Matching)
-                .relation("is missing a matching element")
-                .build()
-        });
-    }
+    context.record_with(|context| {
+        let failure = FailureBuilder::detached::<C>(FailureKind::Matching)
+            .fact(Fact::labelled(
+                "at slot",
+                context.render().value(&slot).into_rendered(),
+            ))
+            .relation("is missing an element matching this expectation")
+            .constraint(list.describe_at(slot, context));
+        alternatives.into_evidence().explain(failure).build()
+    });
 }
 
 /// Search marks can skip pairs needed for evidence. Complete both unmatched sides before consuming
@@ -304,57 +301,37 @@ where
     let Some(first) = occupied.next() else {
         return false;
     };
-    if context.is_diagnostic() {
+    context.record_with(|context| {
         if occupied.peek().is_none() {
-            context.record(
-                FailureBuilder::detached::<A>(FailureKind::Matching)
-                    .relation("has an extra occurrence matching an already satisfied expectation")
-                    .constraint(list.describe_at(first, context))
-                    .fact(Fact::labelled(
-                        "at slot",
-                        context.render().value(&first).into_rendered(),
-                    ))
-                    .build(),
-            );
-            return true;
+            return FailureBuilder::detached::<A>(FailureKind::Matching)
+                .relation("has an extra occurrence matching an already satisfied expectation")
+                .constraint(list.describe_at(first, context))
+                .fact(Fact::labelled(
+                    "at slot",
+                    context.render().value(&first).into_rendered(),
+                ))
+                .build();
         }
         let mut constraints = context.isolated();
         for slot in core::iter::once(first).chain(occupied) {
-            if constraints.is_diagnostic() {
-                constraints.record(
-                    FailureBuilder::detached::<A>(FailureKind::Matching)
-                        .fact(Fact::labelled(
-                            "at slot",
-                            constraints.render().value(&slot).into_rendered(),
-                        ))
-                        .constraint(list.describe_at(slot, &constraints))
-                        .build(),
-                );
-            } else {
-                constraints.outcome(false, |_| {
-                    FailureBuilder::detached::<()>(FailureKind::Matching)
-                        .relation("already has a matching element")
-                        .build()
-                });
-            }
+            constraints.record_with(|constraints| {
+                FailureBuilder::detached::<A>(FailureKind::Matching)
+                    .fact(Fact::labelled(
+                        "at slot",
+                        constraints.render().value(&slot).into_rendered(),
+                    ))
+                    .constraint(list.describe_at(slot, constraints))
+                    .build()
+            });
         }
-        context.record(
-            constraints
-                .into_evidence()
-                .explain(
-                    FailureBuilder::detached::<A>(FailureKind::Matching).relation(
-                        "has an extra occurrence matching already satisfied expectations",
-                    ),
-                )
-                .build(),
-        );
-    } else {
-        context.outcome(false, |_| {
-            FailureBuilder::detached::<()>(FailureKind::Matching)
-                .relation("has an extra occurrence matching an already satisfied expectation")
-                .build()
-        });
-    }
+        constraints
+            .into_evidence()
+            .explain(
+                FailureBuilder::detached::<A>(FailureKind::Matching)
+                    .relation("has an extra occurrence matching already satisfied expectations"),
+            )
+            .build()
+    });
     true
 }
 
@@ -1089,11 +1066,36 @@ mod tests {
             })];
             let context = AssertionContext::new(&NeverRender, RenderingBudget::default());
             assert_that!(context.probe(&[0, 1, 2], &matcher)).is_false();
-            assert_that!(*calls.borrow()).is_equal_to([1, 1, 0]);
+            // Unequal lengths decide a probe before any comparison.
+            assert_that!(*calls.borrow()).is_equal_to([0, 0, 0]);
             assert_that!(context.probe(&[1, 1, 99], &elements_are_in_any_order![equal_to(1)]))
                 .is_false();
             assert_that!(context.omitted).is_equal_to(0);
             assert_that!(context.into_evidence().children).is_empty();
+        }
+
+        #[test]
+        fn stops_at_the_first_unassignable_occurrence() {
+            use crate::expectation::predicate_list;
+            use core::cell::Cell;
+            let calls = Cell::new(0);
+            let counted = |expected: usize| {
+                let calls = &calls;
+                move |actual: &usize| {
+                    calls.set(calls.get() + 1);
+                    *actual == expected
+                }
+            };
+            let matcher =
+                super::super::elements_are_in_any_order(predicate_list([counted(1), counted(2)]));
+            let context = AssertionContext::default();
+
+            assert_that!(context.probe(&[0, 1], &matcher)).is_false();
+            assert_that!(calls.get()).is_equal_to(2);
+
+            calls.set(0);
+            assert_that!(context.probe(&[1, 2, 3], &matcher)).is_false();
+            assert_that!(calls.get()).is_equal_to(0);
         }
 
         #[test]

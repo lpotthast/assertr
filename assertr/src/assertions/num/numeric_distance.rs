@@ -1,14 +1,18 @@
+use core::num::Wrapping;
+
 use num_traits::Num;
 
 /// Numeric values whose distance can be calculated without integer overflow.
 ///
 /// This capability enables [`super::NumAssertions::is_close_to`] for custom numeric types.
-/// Implementations are provided for all primitive integers, `f32`, and `f64`, including with only
-/// the `num` feature enabled. Other numeric assertions require only their own `num_traits` bounds.
+/// Implementations are provided for all primitive integers, `f32`, `f64`, and [`Wrapping`] of a
+/// primitive integer, including with only the `num` feature enabled. Other numeric assertions
+/// require only their own `num_traits` bounds.
 ///
 /// Integer implementations subtract the smaller endpoint from the larger with checked arithmetic.
-/// Floating-point implementations use the rounded result of `(self - other).abs()`, treating equal
-/// infinities as zero distance. They do not rearrange the comparison into tolerance boundaries.
+/// `Wrapping` integers use the distance of their inner values and never wrap it. Floating-point
+/// implementations use the rounded result of `(self - other).abs()`, treating equal infinities as
+/// zero distance. They do not rearrange the comparison into tolerance boundaries.
 ///
 /// Generic helpers calling `is_close_to` must include this bound:
 ///
@@ -22,6 +26,29 @@ use num_traits::Num;
 /// }
 ///
 /// assert_close(0.25_f64, 0.5, 0.25);
+/// # }
+/// ```
+///
+/// # Foreign numeric types
+///
+/// The orphan rule prevents implementing this trait for a type from another crate, such as a
+/// big integer or decimal type. For those, either assert on a projection that already supports
+/// `is_close_to`, express the tolerance with a predicate, or wrap the value in a local newtype
+/// implementing `num_traits::Num`, `PartialOrd`, and `NumericDistance`. For example,
+/// `core::num::Saturating` implements no `num_traits` traits:
+///
+/// ```
+/// # #[cfg(feature = "num")] {
+/// use assertr::{matchers::predicate, prelude::*};
+/// use core::num::Saturating;
+///
+/// let actual = Saturating(5_u8);
+/// assert_that!(actual).satisfies_owned(|it| it.0, |inner| {
+///     inner.is_close_to(4, 1);
+/// });
+/// assert_that!(actual).matches(
+///     predicate(|it: &Saturating<u8>| it.0.abs_diff(4) <= 1).described_as("is within 1 of 4"),
+/// );
 /// # }
 /// ```
 pub trait NumericDistance: Num + PartialOrd {
@@ -74,6 +101,16 @@ macro_rules! float_distance {
 }
 
 float_distance!(f32, f64);
+
+impl<T> NumericDistance for Wrapping<T>
+where
+    T: NumericDistance,
+    Self: Num + PartialOrd,
+{
+    fn checked_distance(&self, other: &Self) -> Option<Self> {
+        self.0.checked_distance(&other.0).map(Wrapping)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -380,6 +417,40 @@ mod tests {
                 }
             }
         };
+    }
+
+    mod wrapping {
+        use core::num::Wrapping;
+
+        use super::assert_distance;
+        use crate::prelude::*;
+
+        #[test]
+        fn uses_the_unwrapped_distance() {
+            assert_distance(Wrapping(5_u8), Wrapping(4), Some(Wrapping(1)));
+            assert_distance(Wrapping(-3_i32), Wrapping(4), Some(Wrapping(7)));
+            assert_distance(
+                Wrapping(u8::MIN),
+                Wrapping(u8::MAX),
+                Some(Wrapping(u8::MAX)),
+            );
+        }
+
+        #[test]
+        fn unrepresentable_distances_do_not_wrap() {
+            assert_distance(Wrapping(i8::MIN), Wrapping(i8::MAX), None);
+        }
+
+        #[test]
+        fn enables_is_close_to() {
+            assert_that!(Wrapping(5)).is_close_to(Wrapping(4), Wrapping(1));
+            assert_that!(Wrapping(5_u64)).is_close_to(&Wrapping(7), Wrapping(2));
+
+            let failures = assert_that!(Wrapping(5))
+                .with_location(false)
+                .capture(|it| it.is_close_to(Wrapping(2), Wrapping(1)));
+            assert_that!(failures).has_length(1);
+        }
     }
 
     unsigned_integer_tests!(u8, u16, u32, u64, u128, usize);

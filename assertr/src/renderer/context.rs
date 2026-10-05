@@ -548,19 +548,32 @@ where
     }
 }
 
+/// The marker appended to a leaf whose value renderer reported a formatting error.
+const RENDERER_ERROR: &str = "<renderer error>";
+
+/// Renders one leaf within the leaf budget, returning the retained text and omitted character
+/// count.
+///
+/// [`BoundedOutput`] never fails, so an error can only originate from the value renderer. The text
+/// written before the error is kept and followed by [`RENDERER_ERROR`], so a faulty renderer never
+/// turns a diagnostic into a panic.
 fn render_leaf<T: ?Sized, R: ValueRenderer<T>>(
     value: &T,
     rendering: RenderingContext<'_, R>,
     alternate: bool,
-) -> Result<(String, usize), fmt::Error> {
+) -> (String, usize) {
     let value = FormatterFn(|f: &mut fmt::Formatter<'_>| rendering.renderer.fmt(value, f));
     let mut output = BoundedOutput::new(rendering.budget.max_leaf_characters());
-    if alternate {
-        write!(output, "{value:#?}")?;
+    let result = if alternate {
+        write!(output, "{value:#?}")
     } else {
-        write!(output, "{value:?}")?;
+        write!(output, "{value:?}")
+    };
+    let (mut text, omitted) = output.finish();
+    if result.is_err() {
+        text.push_str(RENDERER_ERROR);
     }
-    Ok(output.finish())
+    (text, omitted)
 }
 
 /// Retains at most `maximum` characters of the text written to it and counts the rest.
@@ -636,8 +649,7 @@ impl<D: BuildRenderedBody> IntoRendered for Typed<D> {
 
 impl<T: ?Sized, R: ValueRenderer<T>> BuildRenderedBody for RenderedValue<'_, T, R> {
     fn rendered_body(&self, pretty_leaves: bool) -> RenderedBody {
-        let (text, omitted_characters) = render_leaf(self.value, self.rendering, pretty_leaves)
-            .expect("rendering a diagnostic leaf into a String cannot fail");
+        let (text, omitted_characters) = render_leaf(self.value, self.rendering, pretty_leaves);
         RenderedBody::Text {
             text,
             omitted_characters,
@@ -819,12 +831,18 @@ fn write_body(f: &mut fmt::Formatter<'_>, body: RenderedBody) -> fmt::Result {
 
 /// The marker standing in for output the budget omitted, such as `... 1_200 more elements ...`.
 ///
-/// `noun` is singular. It is pluralized for every count other than one.
+/// `noun` is singular. It is pluralized for every count other than one. A `y` following a
+/// consonant becomes `ies`, as in `entries`. Every other noun appends `s`, as in `keys`.
 pub(crate) fn omission(omitted: usize, noun: &str) -> String {
     let count = grouped_count(omitted);
     if omitted == 1 {
         format!("... {count} more {noun} ...")
-    } else if let Some(stem) = noun.strip_suffix('y') {
+    } else if let Some(stem) = noun.strip_suffix('y')
+        && stem
+            .chars()
+            .next_back()
+            .is_some_and(|last| last.is_alphabetic() && !"aeiouAEIOU".contains(last))
+    {
         format!("... {count} more {stem}ies ...")
     } else {
         format!("... {count} more {noun}s ...")
@@ -1114,6 +1132,49 @@ mod tests {
         fn use_the_singular_noun_for_one_omitted_item() {
             assert_that!(omission(1, "element")).is_equal_to("... 1 more element ...");
             assert_that!(omission(1, "entry")).is_equal_to("... 1 more entry ...");
+        }
+
+        #[test]
+        fn replace_y_with_ies_only_after_a_consonant() {
+            assert_that!(omission(2, "entry")).is_equal_to("... 2 more entries ...");
+            assert_that!(omission(2, "key")).is_equal_to("... 2 more keys ...");
+            assert_that!(omission(2, "day")).is_equal_to("... 2 more days ...");
+        }
+    }
+
+    mod renderer_errors {
+        use super::*;
+
+        struct PartialRenderer;
+
+        impl ValueRenderer<i32> for PartialRenderer {
+            fn fmt(&self, _value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("partial")?;
+                Err(fmt::Error)
+            }
+        }
+
+        #[test]
+        fn keep_the_text_written_before_the_error_and_mark_the_leaf() {
+            let renderer = PartialRenderer;
+            let rendering = RenderingContext::new(&renderer, RenderingBudget::default());
+
+            assert_that!(rendering.value(&1).into_rendered().body).is_equal_to(
+                RenderedBody::Text {
+                    text: "partial<renderer error>".into(),
+                    omitted_characters: 0,
+                },
+            );
+        }
+
+        #[test]
+        fn do_not_panic_while_capturing_a_failure() {
+            let failures = assert_that!(1)
+                .with_debug_format(|_, _| Err(fmt::Error))
+                .capture(|it| it.is_equal_to(2));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains("<renderer error>");
         }
     }
 
@@ -1516,7 +1577,7 @@ mod tests {
             type Item = T;
             const PRESENTATION: crate::renderer::CollectionPresentation =
                 crate::renderer::CollectionPresentation::list()
-                    .with_type_hint()
+                    .show_type_hint(true)
                     .with_order(RenderingOrder::SortByRenderedText);
 
             fn elements(&self) -> impl Iterator<Item = &T> {
@@ -1804,7 +1865,7 @@ mod tests {
             assert_that!(format!("{:?}", rendering.map(&BTreeMap::from(entries))))
                 .is_equal_to("BTreeMap {} (... 1 more entry ...)");
             assert_that!(format!("{:?}", rendering.map(&UnorderedMap(vec![(1, 2)]))))
-                .is_equal_to("UnorderedMap {} (... 1 more entry ...) (sorted for rendering)");
+                .is_equal_to("UnorderedMap {} (... 1 more entry ...)");
             assert_that!(format!(
                 "{:?}",
                 rendering
@@ -1816,7 +1877,7 @@ mod tests {
                 rendering
                     .entry_list::<i32, i32, _, _, _>(&entries, RenderingOrder::SortByRenderedText)
             ))
-            .is_equal_to("[] (... 1 more entry ...) (sorted for rendering)");
+            .is_equal_to("[] (... 1 more entry ...)");
         }
     }
 }

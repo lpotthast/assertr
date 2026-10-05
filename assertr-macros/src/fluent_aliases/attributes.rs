@@ -1,7 +1,7 @@
 //! Recognition and parsing of fluent-alias helper attributes.
 
 use syn::punctuated::Punctuated;
-use syn::{Attribute, Meta, Token};
+use syn::{Attribute, LitStr, Meta, Token};
 
 const HELPER_ATTRIBUTES: [&str; 2] = ["fluent_alias", "no_fluent_alias"];
 
@@ -48,19 +48,34 @@ pub(super) fn remove_helper_attributes(attributes: &mut Vec<Attribute>) {
     });
 }
 
-/// Extracts an explicit alias from `fluent_alias`, including its `cfg_attr` form.
-pub(super) fn fluent_alias_name(attributes: &[Attribute]) -> Option<String> {
+/// Extracts an explicit alias literal from `fluent_alias`, including its `cfg_attr` form.
+///
+/// Rejects a `fluent_alias` whose argument is not a single string literal.
+pub(super) fn fluent_alias_literal(attributes: &[Attribute]) -> syn::Result<Option<LitStr>> {
     for attribute in attributes {
-        if attribute.path().is_ident("fluent_alias")
-            && let Ok(alias) = attribute.parse_args::<syn::LitStr>()
-        {
-            return Some(alias.value());
+        if attribute.path().is_ident("fluent_alias") {
+            return alias_literal(&attribute.meta).map(Some);
         }
-        if let Some(alias) = fluent_alias_from_cfg_attr(attribute) {
-            return Some(alias);
+        if let Some(nested) = cfg_attr_nested_attributes(attribute)
+            && let Some(meta) = nested
+                .iter()
+                .find(|meta| meta.path().is_ident("fluent_alias"))
+        {
+            return alias_literal(meta).map(Some);
         }
     }
-    None
+    Ok(None)
+}
+
+fn alias_literal(meta: &Meta) -> syn::Result<LitStr> {
+    meta.require_list()
+        .and_then(syn::MetaList::parse_args::<LitStr>)
+        .map_err(|error| {
+            syn::Error::new(
+                error.span(),
+                "expected the alias name as a string literal, as in `#[fluent_alias(\"be_ready\")]`",
+            )
+        })
 }
 
 /// Parses the attributes nested inside `cfg_attr(predicate, attr, ...)`, skipping the predicate.
@@ -86,18 +101,6 @@ fn cfg_attr_arguments(attribute: &Attribute) -> Option<Punctuated<Meta, Token![,
 fn cfg_attr_contains(attribute: &Attribute, name: &str) -> bool {
     cfg_attr_nested_attributes(attribute)
         .is_some_and(|nested| nested.iter().any(|meta| meta.path().is_ident(name)))
-}
-
-/// Extracts the string argument from a `fluent_alias` nested inside `cfg_attr`.
-fn fluent_alias_from_cfg_attr(attribute: &Attribute) -> Option<String> {
-    cfg_attr_nested_attributes(attribute)?
-        .into_iter()
-        .find_map(|meta| match meta {
-            Meta::List(list) if list.path.is_ident("fluent_alias") => {
-                list.parse_args::<syn::LitStr>().ok().map(|lit| lit.value())
-            }
-            _ => None,
-        })
 }
 
 /// Returns whether a meta item is a helper consumed by the fluent-alias macro.

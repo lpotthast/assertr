@@ -1,5 +1,5 @@
 use super::{SetLookup, imp};
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
 
 /// The set relations: subset, superset, and disjointness.
 ///
@@ -10,7 +10,7 @@ use crate::{AssertThat, Mode, ValueRenderer};
 /// and against a `HashSet` with a different hasher.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait SetAssertions<T, R> {
+pub trait SetAssertions<T, R = DebugRenderer> {
     /// Asserts that every subject element belongs to `expected_superset`.
     fn is_subset_of<O>(self, expected_superset: O) -> Self
     where
@@ -127,10 +127,13 @@ mod tests {
 
         #[test]
         fn a_borrowed_expected_set_keeps_the_underlying_set_type() {
-            let expected = BTreeSet::new();
-            let failures = assert_that!(BTreeSet::from(["extra"]))
+            let mut expected = BTreeSet::new();
+            let mut actual = BTreeSet::from(["extra"]);
+            let failures = assert_that_owned!(&mut actual)
                 .with_location(false)
-                .capture(|it| it.is_subset_of(&expected));
+                .capture(|it| it.is_subset_of(&expected).is_subset_of(&mut expected));
+            assert_that!(failures).has_length(2);
+            assert_that!(failures[1].facts).is_equal_to(failures[0].facts.clone());
 
             assert_that!(failures[0].facts.as_slice()).contains_exactly_satisfying([
                 |element: AssertThat<crate::Fact, Capture>| {
@@ -179,7 +182,7 @@ mod tests {
 
                     Actual: HashSet {{
                         "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     is not a subset of
 
@@ -188,7 +191,7 @@ mod tests {
                     Details:
                       - Elements not in expected: [
                             "bar",
-                        ] (sorted for rendering)
+                        ]
                       - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
                     -------- assertr --------
                 "#});
@@ -298,7 +301,7 @@ mod tests {
                     -------- assertr --------
                     Expression: `HashSet::<&str>::new()`
 
-                    Actual: HashSet {{}} (sorted for rendering)
+                    Actual: HashSet {{}}
 
                     is not a superset of
 
@@ -421,7 +424,7 @@ mod tests {
 
                     Actual: HashSet {{
                         "foo",
-                    }} (sorted for rendering)
+                    }}
 
                     is not disjoint from
 
@@ -432,7 +435,7 @@ mod tests {
                     Details:
                       - Overlapping elements: [
                             "foo",
-                        ] (sorted for rendering)
+                        ]
                       - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
                     -------- assertr --------
                 "#});

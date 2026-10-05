@@ -7,94 +7,94 @@ sources:
   - assertr/src/assertions/collection/value.rs
   - assertr/src/assertions/set/mod.rs
   - assertr/src/assertions/map/mod.rs
+  - assertr/src/assertions/map/assertions.rs
   - assertr/src/assertions/map/imp.rs
+  - assertr/src/assertions/map/entry.rs
   - assertr/src/assertions/map/entries_are.rs
-  - assertr/src/assertions/core/iter/exact_size.rs
-  - assertr/src/assertions/core/iter/iterator.rs
-  - assertr/src/assertions/core/iter/into_iterator.rs
-  - assertr/src/assertions/iterator/mod.rs
 ---
 
-# Collections, maps, and iterators
+# Collection, set, and map semantics
 
 [Architecture overview](README.md)
 
-Rust uses subject capability bounds to select operations. Repeatable traversal, semantic positions, indexed access, and
-native lookup are separate contracts. Diagnostic presentation supplies none of them.
+Collection traits determine which assertions a type supports. Traversal, meaningful positions, indexing, and native
+lookup are separate capabilities. Diagnostic formatting does not grant any of them. Rust checks the trait bounds, but
+implementors must provide the promised behavior and performance.
 
 ## Capability model
 
-Bounds enforce trait availability. Repeatability, meaningful positions, lookup consistency, and complexity are
-implementor obligations that Rust cannot verify. The following table states those obligations.
+| Capability | What the implementation must provide | Enables |
+|---|---|---|
+| `HasLength` | A finite native `length()`. Strings count bytes. Integer range counts must fit `usize` or panic. | Length and emptiness checks. |
+| `Collection: HasLength` | `elements()` repeatedly yields references to the same elements in the same order. | Order-free checks. |
+| `StableOrder: Collection` | Element positions are part of the collection's meaning, as in a list. | Positional checks and indexes in failures. |
+| `RandomAccess: StableOrder` | Constant-time `element_at`, `None` out of bounds. | Indexed extraction. |
+| `SetLookup: Collection` | Unique elements and native membership using the same equivalence that makes elements unique. | Set relations. |
+| `Map: HasLength` | Each traversal returns references to the same stored keys and values. | Map checks that iterate over entries. |
+| `MapLookup<Q>: Map` | Native borrowed-key lookup returning the same stored entries as traversal. | Key and keyed-entry queries. |
 
-| Capability                  | Required contract                                                                                             | Enables                                      |
-|-----------------------------|---------------------------------------------------------------------------------------------------------------|----------------------------------------------|
-| `HasLength`                 | Finite native length through `length()`. Strings count bytes. Integer range counts must fit `usize` or panic. | Length and emptiness checks.                 |
-| `Collection: HasLength`     | `elements()` repeatedly yields references to the same elements in the same order.                             | Order-free element checks.                   |
-| `StableOrder: Collection`   | Iteration positions are part of the value's semantics.                                                        | Positional checks and stable index evidence. |
-| `RandomAccess: StableOrder` | `element_at` takes constant time and returns `None` out of bounds.                                            | Indexed extraction.                          |
-| `SetLookup: Collection`     | Elements are unique. Native membership uses the equivalence relation enforcing that uniqueness.               | Subset, superset, and disjointness checks.   |
-| `Map: HasLength`            | Repeatable `entries()` traversal of stored key/value references.                                              | Iteration-based map checks.                  |
-| `MapLookup<Q>: Map`         | Native borrowed-key lookup returning the stored key and value.                                                | Key and keyed-entry queries.                 |
+A linked list has stable positions without random access. A sorted set always traverses in order, but that order does
+not make its elements positional. Heaps support checks that do not depend on order. Strings use `StrAssertions`.
+Shared and mutable reference subjects forward every collection, set, and map capability of their target.
+Iteration-only implementations (`HasLength`, `Collection`, `Map`) carry no lookup bounds such as `BuildHasher`, `Hash`,
+or `Ord`. Those belong on `SetLookup` and `MapLookup`.
+See [platform compatibility](platform-compatibility.md#feature-support) for collection feature requirements.
 
 The [collection](../assertr/src/assertions/collection/mod.rs), [set](../assertr/src/assertions/set/mod.rs), and
-[map](../assertr/src/assertions/map/mod.rs) rustdoc defines implementor contracts. A linked list has stable positions
-without random access. A sorted set has deterministic traversal without semantic positions. Heaps also support
-order-free collection checks. Strings use `StrAssertions`, not element-collection semantics.
+[map](../assertr/src/assertions/map/mod.rs) rustdoc gives the full trait requirements.
+See [diagnostic rendering](diagnostic-rendering.md#capabilities-and-structure) for presentation rules.
 
-Tree sets and maps work with `alloc`. Hash collections require `std`. Their
-[presentation settings](diagnostic-rendering.md#capabilities-and-structure) affect syntax and evidence ordering only.
+## Membership and exactness
 
-Expected elements and map values follow the [borrowed-view contract](expectation-execution.md#comparison-operands).
-Bulk value lists use [repeatable expected data](expectation-execution.md#repeatable-bulk-expected-data).
-List storage stays independent of element storage, so borrowed non-`Copy` elements need no clones.
-Empty generic lists may require an explicit element type.
+| Operation | Meaning |
+|---|---|
+| Element membership | Search by the [selected comparison view](comparison-operands.md#borrowed-views). Set subjects still use collection equality for these checks. |
+| `contains_all` | Every expected value has a match. Duplicate expectations may reuse one actual occurrence. |
+| Ordered exact | Match every position and require equal lengths. Needs `StableOrder`. |
+| Unordered exact | Pair every actual occurrence and every expected slot exactly once, preserving duplicates. Uses [maximum assignment](matcher-composition.md#exact-unordered-assignment). |
+| Set relations | Native `SetLookup` membership and its uniqueness equivalence. |
 
-## Exact comparisons and keyed maps
+For example, `[1]` contains all of `[1, 1]`, but does not contain exactly those occurrences in any order.
+[Matcher composition](matcher-composition.md#evaluation-and-failure-evidence) explains how matcher-based checks evaluate candidates.
+[Iterator execution](iterator-execution.md) covers checks that scan input once.
 
-Exact element comparisons preserve occurrence counts. In any-order comparisons, each actual occurrence must match a
-distinct expected slot. The [shared assignment algorithm](matcher-composition.md#exact-unordered-assignment) handles
-values, identity, matchers, and assertion callbacks, including overlapping expectations.
+Collection prefix and suffix equality retain the original mismatch and render it as a child failure only when needed.
+A zero item budget records one omitted child. A rejection caused only by length has no mismatch child. Paths remain
+relative to the collection subject. Suffix equality aligns both lists at their ends, so a shorter subject is compared
+with the suffix's tail and reports its length plus only genuine mismatches.
 
-Exact keyed map checks instead use native lookup, length, and stored-key identity. `Map::entries` and
-`MapLookup::get_key_value` must return references to the same stored keys and values. Checks remember visited entries,
-so repeating a query cannot hide a missing distinct entry. A present key whose value is rejected remains visited and is
-not also reported as unexpected. Each expected key occurrence performs one native lookup, retaining its result for
-explanation. Bulk expected data may be borrowed again without repeating lookup.
+## Keyed maps
 
-`BorrowFor<K>` selects a bulk operand's `View` using the stored key type as context. Its `Borrow<View>`
-implementation supplies the query. `MapLookup<View>` separately grants native lookup, carrying only that map's bounds.
-Selection grants no universal `Hash`, `Ord`, or `PartialEq` requirement and never enables an equality-scan fallback.
-Single-key methods still accept native `&Q` queries without operand registration.
+Exact keyed map checks use native lookup, length, and stored-key identity:
 
-String keys accept `str` views, and `Vec<u8>` keys accept `&[u8]` operands. Array operands currently select array views,
-which do not supply native vector-key lookup. Pass an explicit slice. Fixed-view `AsRef` and collection capabilities
-keep their existing contracts. Bulk list `AsRef` access follows the repeatable expected-data contract.
+- `Map::entries` and `MapLookup::get_key_value` must reference the same stored keys and values.
+- Repeated queries cannot cover a missing distinct entry.
+- A present key counts as visited even if its value fails the check. It is not also reported as unexpected.
+- Duplicate queries that match every entry while lengths differ report a length failure.
 
-Custom bulk operands migrate from `MapKeyQuery`'s `Query` and `as_query()` to `BorrowFor<K>::View` and `Borrow<View>`.
-The `Borrow` equality, ordering, and hashing obligations apply where those capabilities exist. Arbitrary field
-projections should use an accessor or a dedicated query operand. References to custom wrappers need separate
-implementations or explicit views when passed as individual operands. Borrowing the whole list uses the stored
-wrapper type and needs no reference implementation. Foreign key and query types may require a local operand wrapper under orphan rules.
-See [MapAssertions](../assertr/src/assertions/map/assertions.rs) for checked examples and the native lookup boundary.
+### Query selection
 
-## Borrowed traversal versus terminal streams
+| Input | Contract |
+|---|---|
+| Bulk key operand | `BorrowFor<K>::View`, with stored key type `K` as context. `Borrow<View>` supplies the query. |
+| Native lookup | Separately requires `MapLookup<View>` with that map's own bounds. No universal `Hash`, `Ord`, or `PartialEq` requirement and no equality-scan fallback. |
+| Single-key method | Accepts native `&Q` without operand registration. |
+| String key | Accepts `str` views. |
+| `Vec<u8>` key | Accepts explicit `&[u8]`. Array operands select array views and do not supply native vector-key lookup. |
 
-[`into_iter_*` assertions](../assertr/src/assertions/core/iter/into_iterator.rs) create one fresh borrowed iterator per
-call and return the original chain. Terminal [`IteratorAssertions`](../assertr/src/assertions/core/iter/iterator.rs)
-require ownership, consume the needed prefix, drop the remainder, and return a chain over `()`. Non-consuming
-`ExactSizeIterator` length checks use `len()` separately.
+Custom wrappers and borrowed lists follow the [operand access rules](comparison-operands.md#operand-access). Native
+lookup also relies on `Borrow` preserving the applicable equality, ordering, and hashing behavior. Arbitrary field
+projections need an accessor or a dedicated query operand. Rust's orphan rules may require a local wrapper when key
+and query types come from another crate.
+See [MapAssertions](../assertr/src/assertions/map/assertions.rs) for checked examples.
 
-Membership stops at the first match or forbidden item. Empty prefixes, suffixes, and contiguous criteria consume
-nothing. Non-empty suffix checks must exhaust the iterator. Positional exact checks read at most the expected length
-plus one, and may stop at the first mismatch. Unordered exact checks buffer at most that many elements. Exact
-`size_hint` metadata can decide some failures without consumption. Infinite streams work only when a decision is
-reachable without exhaustion.
+### Map observations
 
-[Equality previews](../assertr/src/assertions/iterator/mod.rs) retain the last 16 consumed items. Matcher scans retain
-selected owned `Evidence`. Rendering budgets can further truncate either. A missing positional matcher is described
-without evaluating it or running its callback. Direct iterator diagnostics may report yield positions. Borrowed
-traversals do not report offsets as stable collection indexes.
+| Check | Evaluation and retained rejection |
+|---|---|
+| `contains_keys` | One lookup per expected occurrence. Retain missing queries only. |
+| Exact-entry equality | Resolve key, then expected value, then perform one lookup per occurrence. Compare present values. Retain missing queries, unequal-value views, and stored-key coverage. One child failure per mismatched expected entry. |
+| `Entry` | Resolve query once for lookup and path. Retain stored-key identity and owned child evidence. |
 
-The [streaming execution adapter](observation-boundaries.md#traversal) owns the scan and retained observations. Those
-mechanics are independent of the capabilities that select collection operations.
+Explanation repeats neither lookup nor comparison. `Entry` also reuses its query observation without borrowing again.
+Other bulk expected data may still be [read again](comparison-operands.md#reading-expected-data-again).

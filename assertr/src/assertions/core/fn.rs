@@ -2,12 +2,11 @@ use super::result::{IsErr, IsOk};
 use crate::actual::Actual;
 use crate::failure::{Fact, FailureBuilder, FailureKind};
 use crate::mode::Panic;
-use crate::{AssertThat, PanicValue, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, PanicValue, ValueRenderer};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics};
 use alloc::{boxed::Box, string::String};
 use core::any::Any;
 use core::panic::Location;
-#[cfg(feature = "std")]
 use core::task::Poll;
 
 /// The message of a panic payload raised through `panic!` or `panic_any` with a `&str` or a
@@ -105,7 +104,6 @@ impl<O, R: ValueRenderer<str>> ExpectationDiagnostics<Invocation<O>, R> for DidN
 /// so the poll loop needs no unsafe pin projection, and every individual poll is wrapped in
 /// `catch_unwind`. Once a poll panics, its payload is returned and the future is dropped without
 /// ever being polled again.
-#[cfg(feature = "std")]
 async fn catch_unwind_future<Fut>(future: Fut) -> Result<Fut::Output, Box<dyn Any + Send>>
 where
     Fut: Future,
@@ -127,15 +125,13 @@ where
 /// `FnOnce` consumes it, so create the assertion with `assert_that_owned!` or `.must_owned()`.
 /// Calling either method on a borrowed subject panics.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait FnOnceAssertions<'t, O, R = crate::DebugRenderer> {
+pub trait FnOnceAssertions<'t, O, R = DebugRenderer> {
     /// Asserts that invoking the function or dropping its output panics, then returns the payload.
-    #[cfg(feature = "std")]
     fn panics(self) -> AssertThat<'t, PanicValue, Panic, R>;
 
     /// Asserts that invoking the function does not panic, then returns its output.
     ///
     /// Dropping the output is outside the caught unwind boundary.
-    #[cfg(feature = "std")]
     fn does_not_panic(self) -> AssertThat<'t, O, Panic, R>
     where
         R: ValueRenderer<str>;
@@ -143,7 +139,6 @@ pub trait FnOnceAssertions<'t, O, R = crate::DebugRenderer> {
 
 impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F, Panic, R> {
     #[track_caller]
-    #[cfg(feature = "std")]
     fn panics(self) -> AssertThat<'t, PanicValue, Panic, R> {
         self.track_assertion();
 
@@ -174,7 +169,6 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
     }
 
     #[track_caller]
-    #[cfg(feature = "std")]
     fn does_not_panic(self) -> AssertThat<'t, O, Panic, R>
     where
         R: ValueRenderer<str>,
@@ -210,17 +204,15 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
 /// `FnOnce` consumes it, so create the assertion with `assert_that_owned!` or `.must_owned()`.
 /// Awaiting either method on a borrowed subject panics.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait AsyncFnOnceAssertions<'t, O, R = crate::DebugRenderer> {
+pub trait AsyncFnOnceAssertions<'t, O, R = DebugRenderer> {
     /// Asserts that invoking the function, polling its future, or dropping its output panics, then
     /// returns the payload.
-    #[cfg(feature = "std")]
     fn panics_async(self) -> impl Future<Output = AssertThat<'t, PanicValue, Panic, R>>;
 
     /// Asserts that invoking the function and polling its future do not panic, then returns its
     /// output.
     ///
     /// Dropping the output is outside the caught unwind boundary.
-    #[cfg(feature = "std")]
     fn does_not_panic_async(self) -> impl Future<Output = AssertThat<'t, O, Panic, R>>
     where
         O: 't,
@@ -233,13 +225,11 @@ where
     Fut: Future<Output = O>,
 {
     #[track_caller]
-    #[cfg(feature = "std")]
     fn panics_async(self) -> impl Future<Output = AssertThat<'t, PanicValue, Panic, R>> {
         panics_async_at(self, Location::caller())
     }
 
     #[track_caller]
-    #[cfg(feature = "std")]
     fn does_not_panic_async(self) -> impl Future<Output = AssertThat<'t, O, Panic, R>>
     where
         O: 't,
@@ -249,7 +239,6 @@ where
     }
 }
 
-#[cfg(feature = "std")]
 pub(crate) async fn panics_async_at<'t, Fut, O, R, F>(
     assertion: AssertThat<'t, F, Panic, R>,
     location: &'static Location<'static>,
@@ -299,7 +288,6 @@ where
         })
 }
 
-#[cfg(feature = "std")]
 async fn does_not_panic_async_at<'t, Fut, O, R, F>(
     assertion: AssertThat<'t, F, Panic, R>,
     location: &'static Location<'static>,

@@ -2,12 +2,15 @@
 //!
 //! These tests are written the way a downstream crate would write them: only through
 //! `assertr::prelude::*`, without reaching into any private module. They pin the two supported
-//! routes for teaching assertr about your own types:
+//! routes for teaching assertr about your own types, plus the execution-adapter escape hatch:
 //!
 //! - **Composition** - delegate to existing assertions through `satisfies` and friends. Tracking,
 //!   failure formatting and capture-mode behavior come from the assertions delegated to.
-//! - **Leaf assertions** - decide the outcome yourself: call `track_assertion()` first, then raise
-//!   a failure through the `failure(kind)` builder when the check does not hold.
+//! - **Leaf assertions** - implement `Expectation` and `ExpectationDiagnostics`, then delegate to
+//!   `apply_assertion` or `test_assertion`, which track, evaluate, and raise the explained failure.
+//! - **Execution adapters** - for an operation the expectation protocol cannot express, call
+//!   `track_assertion()` first, then raise a failure through the `failure(kind)` builder when the
+//!   check does not hold.
 //!
 //! Custom traits are the supported shape. Assertr's own `*Assertions` traits are public so their
 //! methods participate in method resolution, not as downstream implementation interfaces.
@@ -90,9 +93,11 @@ mod path_renderer_bounds {
         }
     }
 
-    fn check_absence<A: PathAssertions>(assertion: A) -> A
+    fn check_absence<P, R, A>(assertion: A) -> A
     where
-        A::Renderer: ValueRenderer<A::Subject> + ValueRenderer<io::Error>,
+        P: std::ops::Deref<Target = std::path::Path>,
+        R: ValueRenderer<P> + ValueRenderer<io::Error>,
+        A: PathAssertions<P, R>,
     {
         assertion.does_not_exist()
     }
@@ -664,7 +669,7 @@ mod generic_num_traits_bounds {
     #[test]
     fn numeric_trait_is_available_without_renderer_support() {
         struct NoRenderer;
-        fn accepts_numeric_assertions<T: Num, A: NumAssertions<T>>(_: &A) {}
+        fn accepts_numeric_assertions<T: Num, A: NumAssertions<T, NoRenderer>>(_: &A) {}
 
         let value = Money(42);
         let assertion = assert_that!(value).with_renderer(NoRenderer);
@@ -1112,10 +1117,16 @@ mod matcher_authoring {
             assert_that!(fact.label.as_ref()).is_empty();
             assert_that!(fact.value.type_name)
                 .is_equal_to(Some(core::any::type_name::<OpaqueError>()));
-            assert_that!(fact.value.body).is_equal_to(RenderedBody::Text {
-                text: text.into(),
-                omitted_characters,
-            });
+            let RenderedBody::Text {
+                text: retained,
+                omitted_characters: omitted,
+                ..
+            } = &fact.value.body
+            else {
+                panic!("expected a text node, got {:?}", fact.value.body);
+            };
+            assert_that!(retained.as_str()).is_equal_to(text);
+            assert_that!(*omitted).is_equal_to(omitted_characters);
         }
 
         #[test]
@@ -1276,10 +1287,16 @@ mod structural_rendering {
         };
         assert_that!(*omitted).is_equal_to(1);
         assert_that!(items).has_length(1);
-        assert_that!(&items[0].body).is_equal_to(RenderedBody::Text {
-            text: "token".into(),
-            omitted_characters: 7,
-        });
+        let RenderedBody::Text {
+            text,
+            omitted_characters,
+            ..
+        } = &items[0].body
+        else {
+            panic!("expected a text node, got {:?}", items[0].body);
+        };
+        assert_that!(text.as_str()).is_equal_to("token");
+        assert_that!(*omitted_characters).is_equal_to(7);
     }
 
     #[test]

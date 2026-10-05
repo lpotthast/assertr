@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 // Allow functions named `is_*`, taking self by value instead of taking self by mutable reference or
@@ -100,8 +101,8 @@
 //! | `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
 //! | `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
 //! | `partial`                                                  | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
-//! | `serde-json`                                               | `as_json()` serializes to a JSON `Result` subject.                                               |
-//! | `serde-toml`                                               | `as_toml()` serializes to a TOML `Result` subject.                                               |
+//! | `serde-json`                                               | `as_json()` serializes to a JSON `Result` subject.                                  |
+//! | `serde-toml`                                               | `as_toml()` serializes to a TOML `Result` subject.                                  |
 //! | `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
 //! | `program`                                                  | Assertions that resolve an executable name or path.                                 |
 //! | `http`, `jiff`, `reqwest`, `rootcause`, `tokio`            | Assertions for the types of the crate of the same name.                             |
@@ -109,11 +110,10 @@
 //!
 //! ### no_std
 //!
-//! Disable the default features. `partial`, `fluent`, `num`, `libm`, and `rootcause` support
-//! embedded `no_std` targets. The `http` feature leaves Assertr in `no_std` mode but currently
-//! requires a hosted target through its dependencies. Every other feature enables `std`. Add `libm`
-//! next to `num` if numeric assertions need floating-point classifications. `libm` does not enable
-//! `num` by itself.
+//! Disable the default features. `partial`, `fluent`, `num`, `libm`, `rootcause`, `serde-json`, and
+//! `serde-toml` support embedded `no_std` targets with `alloc`. Every other feature enables `std`.
+//! Add `libm` next to `num` if numeric assertions need floating-point classifications. `libm` does
+//! not enable `num` by itself.
 //!
 //! ## Quick start
 //!
@@ -216,11 +216,9 @@
 //! same implementation. Runtime matchers need no optional feature. The `partial` feature enables
 //! `partial!` for selecting struct and enum fields.
 //!
-//! Custom chain methods delegate reusable checks to `apply_assertion` or `test_assertion`, which
-//! track and execute the assertion. Expectation hooks never track or raise. Evaluation retains
-//! the observation, explanation populates the supplied structured builder, and the chain executor
-//! raises the completed failure. Execution adapters that own invocation, consumption, or polling
-//! track explicitly at their operation's boundary.
+//! Custom expectations work the same way and can back your own chainable assertion methods. See
+//! [custom assertions](https://docs.rs/assertr/latest/assertr/#custom-assertions) for a complete
+//! example.
 //!
 //! ## Guides
 //!
@@ -318,17 +316,18 @@ mod util;
 
 use actual::Actual;
 use alloc::{string::String, vec::Vec};
-use core::{cell::RefCell, marker::PhantomData, panic::AssertUnwindSafe};
+use core::{
+    cell::{Cell, RefCell},
+    marker::PhantomData,
+    panic::AssertUnwindSafe,
+};
 use mode::Mode;
-use tracking::NumberOfAssertions;
 
 /// Borrowed view selection for assertion operands.
 pub use ::borrow_for;
 
 #[cfg(feature = "fluent")]
 pub use assertr_macros::fluent_expressions;
-#[cfg(feature = "partial")]
-pub use assertr_macros::partial;
 #[cfg(feature = "fluent")]
 pub use entry::{IntoAssertContext, IntoOwnedAssertContext};
 pub use entry::{PanicValue, Type, assert_that_type};
@@ -337,6 +336,55 @@ pub use entry::{assert_that_panic_by, assert_that_panic_by_async};
 pub use expectation::{AssertionContext, Expectation, ExpectationDiagnostics};
 pub use failure::{AssertionFailure, AssertionFailures, Fact, FailureKind};
 pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
+
+/// Constructs a partial matcher without annotating the production type.
+///
+/// Requires the `partial` feature. Pass the result to
+/// [`.matches(...)`](crate::assertions::matcher::MatcherAssertions::matches) or a collection
+/// assertion such as `.contains_matching(...)`.
+///
+/// ```
+/// use assertr::{matchers::eq, prelude::*};
+///
+/// struct User {
+///     name: &'static str,
+///     age: u32,
+/// }
+///
+/// let user = User { name: "Alice", age: 30 };
+/// assert_that!(user).matches(partial!(User { name: eq("Alice"), .. }));
+/// ```
+///
+/// List the fields that matter to the test and use `..` to ignore the rest. Every selected field
+/// requires a matcher. Use [`matchers::eq(value)`](crate::matchers::eq) or `equal_to(value)` for
+/// `PartialEq` equality, another `partial!` for nested fields, or
+/// [`matchers::satisfying`](crate::matchers::satisfying) to check a field with existing assertion
+/// methods.
+///
+/// Without `..`, every field must be listed. Omitted fields need no comparison or rendering
+/// support. Neither the whole type nor ignored fields need `PartialEq` or `Debug`, and private
+/// fields follow ordinary Rust visibility rules. Field expectation expressions are evaluated
+/// once when the matcher is constructed. Pass `&matcher` to reuse it.
+///
+/// Named structs, tuple structs, enum variants, and unit constructors are supported. Tuple `_`
+/// positions are wildcards, and a tuple `..` must be final. Nested collection and map expectations
+/// use [`elements_are!`], [`elements_are_in_any_order!`], [`each`](crate::matchers::each), and
+/// [`entries_are!`].
+///
+/// Prefix a constructor with `variant` to include its variant in diagnostic paths. Qualified
+/// paths, including `variant crate::Message::Ready` and `variant ::core::option::Option::None`,
+/// are supported. Use `r#variant::Type` for an unmarked path through a module named `variant`.
+///
+/// The macro also works through a re-export of `assertr` in another crate. See the
+/// [partial matching guide](mod@crate::matchers) for field constraints, nested examples, collection
+/// policies, and diagnostics.
+#[cfg(feature = "partial")]
+#[macro_export]
+macro_rules! partial {
+    ($($input:tt)*) => {
+        $crate::__private::partial!($crate; $($input)*)
+    };
+}
 
 /// An assertion chain over a subject of type `T`.
 ///
@@ -470,9 +518,8 @@ pub struct AssertThat<'t, T, M: Mode, R = DebugRenderer> {
     state: ChainState<'t, M, R>,
 }
 
-/// The source expression of one diagnostic subject. Fluent roots defer attachment until the
-/// attribute sees their completed failures when using callback values. Inline closures attach
-/// directly to their inputs. Both forms preserve callback call traits and coercions.
+/// The source expression of one diagnostic subject. Fluent capture roots defer attachment until
+/// `#[fluent_expressions]` sees their completed failures, leaving callback arguments untouched.
 #[derive(Clone, Copy)]
 enum Expression {
     Unset,
@@ -485,6 +532,16 @@ impl Expression {
     fn get(self) -> Option<&'static str> {
         if let Self::Explicit(expression) = self {
             Some(expression)
+        } else {
+            None
+        }
+    }
+
+    /// The location of a fluent root whose receiver expression is attached after completion.
+    #[cfg(feature = "fluent")]
+    fn pending_fluent(self) -> Option<&'static core::panic::Location<'static>> {
+        if let Self::PendingFluent(location) = self {
+            Some(location)
         } else {
             None
         }
@@ -545,7 +602,8 @@ struct ChainState<'t, M: Mode, R> {
 ///
 /// Each child starts with its own records. Assertion counts propagate through every ancestor,
 /// failures are stored at the root, and diagnostics collect local messages before ancestor
-/// messages. Starting `capture` detaches the parent link and retains inherited messages locally.
+/// messages. Starting `capture` detaches the parent link and retains the ancestor messages as
+/// inherited messages, which still follow every local message.
 ///
 /// Parent links expose only these records, never the parent's subject, renderer, or presentation
 /// adapter. This lets a child retain its ancestry without requiring the parent's user values to
@@ -563,7 +621,15 @@ struct ChainRecords<'t> {
     /// Local messages, collected before ancestor messages.
     detail_messages: AssertUnwindSafe<RefCell<Vec<String>>>,
     /// Includes assertions attempted on derived chains, even when an assertion panics.
-    number_of_assertions: AssertUnwindSafe<RefCell<NumberOfAssertions>>,
+    ///
+    /// [`AssertThat::capture`] uses the count to reject capture closures that perform no
+    /// assertions. In panic mode, unused assertion contexts are caught at compile time instead, by
+    /// the `#[must_use]` annotations on the entry points.
+    number_of_assertions: AssertUnwindSafe<Cell<usize>>,
     /// Captured failures owned by this chain. Children forward failures through `parent`.
     failures: AssertUnwindSafe<RefCell<AssertionFailures>>,
+    /// Ancestor messages retained when `capture` detached this chain from its parent. They are
+    /// collected after local messages, exactly where the detached parent's messages would appear.
+    /// This field is never mutated after construction and needs no unwind exemption.
+    inherited_messages: Vec<String>,
 }

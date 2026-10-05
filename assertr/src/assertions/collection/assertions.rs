@@ -1,177 +1,14 @@
 use crate::borrow_for::BorrowFor;
-use crate::{AssertionContext, expectation::Evidence};
 use core::borrow::Borrow;
 
-use super::{Collection, identity, value};
-use crate::expectation::satisfying;
-use crate::{
-    AssertThat, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
-    failure::{FailureBuilder, FailureKind},
-    mode::Capture,
+use super::{
+    Collection, ContainsMatching, DoesNotContainMatching, elements_are_in_any_order, identity,
+    value,
 };
-
-/// A reusable collection membership assertion requiring at least one matching element.
-///
-/// Evaluation stops at the first match. On rejection, it retains the original child failures,
-/// ordered and limited according to the collection's presentation and active rendering budget.
-/// Empty collections reject the assertion. No collection or element renderer is required beyond
-/// the capabilities of the supplied matcher.
-/// [`CollectionAssertions::contains_matching`] executes this same definition.
-///
-/// ```
-/// use assertr::prelude::*;
-/// use assertr::assertions::collection::ContainsMatching;
-/// use assertr::matchers::equal_to;
-///
-/// let expected = ContainsMatching::new(equal_to(2));
-/// assert_that!([1, 2, 3]).matches(&expected);
-/// ```
-pub struct ContainsMatching<M>(M);
-
-/// Matches collections containing at least one matching element.
-///
-/// This is a convenience constructor for [`ContainsMatching::new`].
-pub fn contains_matching<M>(matcher: M) -> ContainsMatching<M> {
-    ContainsMatching::new(matcher)
-}
-
-impl<M> ContainsMatching<M> {
-    /// Owns the element matcher. Pass a reference to reuse a borrowed matcher.
-    #[must_use]
-    pub const fn new(matcher: M) -> Self {
-        Self(matcher)
-    }
-}
-
-impl<C: Collection + ?Sized, R, M> Expectation<C, R> for ContainsMatching<M>
-where
-    M: ExpectationDiagnostics<C::Item, R>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        C: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        C: 'a;
-    fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
-        let mut context = settings.isolated_for_order(C::PRESENTATION.order());
-        for item in actual.elements() {
-            let mut branch = context.isolated();
-            if branch.evaluate(item, &self.0) {
-                return Ok(());
-            }
-            context.append(branch.into_evidence());
-        }
-        context.finish(false, |context| {
-            FailureBuilder::detached::<()>(FailureKind::Matching)
-                .relation("contains a matching element")
-                .children([context.describe(&self.0)])
-                .build()
-        })
-    }
-}
-impl<C: Collection + ?Sized, R, M> ExpectationDiagnostics<C, R> for ContainsMatching<M>
-where
-    M: ExpectationDiagnostics<C::Item, R>,
-{
-    const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&C, Evidence)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure
-                .relation("contains a matching element")
-                .children([context.describe(&self.0)]),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
-        }
-    }
-}
-
-/// Checks that a collection contains no element satisfying the supplied assertion.
-/// Its rejection identifies the unwanted elements. Each element is tested once.
-pub struct ContainsNoMatching<M>(M);
-
-/// Constructs an assertion that rejects collections with any matching elements.
-pub fn contains_no_matching<M>(matcher: M) -> ContainsNoMatching<M> {
-    ContainsNoMatching::new(matcher)
-}
-
-impl<M> ContainsNoMatching<M> {
-    /// Owns the element expectation, which may itself be a reference.
-    #[must_use]
-    pub const fn new(matcher: M) -> Self {
-        Self(matcher)
-    }
-}
-
-impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostics<C::Item, R>>
-    Expectation<C, R> for ContainsNoMatching<M>
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        C: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        C: 'a;
-    fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
-        let mut context = settings
-            .isolated()
-            .isolated_for_order(C::PRESENTATION.order());
-        let mut found = false;
-        for item in actual.elements() {
-            if context.probe(item, &self.0) {
-                found = true;
-                if context.is_diagnostic() {
-                    context.record(
-                        FailureBuilder::detached::<C::Item>(FailureKind::Membership)
-                            .actual(context.render().value(item))
-                            .relation("matches the unwanted constraint")
-                            .constraint(context.describe(&self.0))
-                            .build(),
-                    );
-                } else {
-                    context.outcome(false, |context| context.describe(&self.0));
-                }
-            }
-        }
-        if found {
-            Err(context.into_evidence())
-        } else {
-            Ok(())
-        }
-    }
-}
-impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostics<C::Item, R>>
-    ExpectationDiagnostics<C, R> for ContainsNoMatching<M>
-{
-    const KIND: FailureKind = FailureKind::Membership;
-    const FLATTEN: bool = true;
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&C, Evidence)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure
-                .relation("contains no matching elements")
-                .children([context.describe(&self.0)]),
-            Some((_, evidence)) => evidence.explain(failure.relation("contains matching elements")),
-        }
-    }
-}
+use crate::expectation::{lists::SatisfyingList, satisfying};
+use crate::{
+    AssertThat, DebugRenderer, ExpectationDiagnostics, Mode, ValueRenderer, mode::Capture,
+};
 
 /// Assertions over the elements of a collection: slices, arrays, `Vec`, `VecDeque`, and every type
 /// implementing [`Collection`].
@@ -182,7 +19,7 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostic
 ///
 /// ```
 /// use assertr::prelude::*;
-/// assert_that!([] as [String; 0]).contains_exactly([] as [String; 0]);
+/// assert_that!([] as [String; 0]).contains_exactly_in_any_order([] as [String; 0]);
 /// ```
 ///
 /// The collection structure is rendered by Assertr, so value-based methods require rendering
@@ -196,7 +33,7 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostic
 /// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait CollectionAssertions<T, R> {
+pub trait CollectionAssertions<T, R = DebugRenderer> {
     /// Asserts that at least one element borrows the same instance as `expected`.
     ///
     /// Compares `Borrow<U>` targets with [`core::ptr::eq`], without equality or rendering bounds.
@@ -309,9 +146,9 @@ pub trait CollectionAssertions<T, R> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
-    /// Asserts one-to-one matching between subject elements and predicates, independent of order.
+    /// Asserts one-to-one matching between subject elements and matchers, independent of order.
     ///
-    /// A maximum matching makes overlapping predicates order-independent.
+    /// A maximum matching makes overlapping matchers order-independent.
     fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
         P: crate::expectation::MatcherList<T, R>,
@@ -412,7 +249,7 @@ where
         P: ExpectationDiagnostics<C::Item, R>,
         R: ValueRenderer<C::Item>,
     {
-        self.apply_assertion(ContainsNoMatching::new(expected))
+        self.apply_assertion(DoesNotContainMatching::new(expected))
     }
 
     #[track_caller]
@@ -440,10 +277,7 @@ where
         P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        self.apply_assertion_after_tracking(
-            crate::assertions::collection::elements_are_in_any_order(expected),
-        )
+        self.apply_assertion(elements_are_in_any_order(expected))
     }
 
     #[track_caller]
@@ -452,12 +286,11 @@ where
         R: Clone + ValueRenderer<usize>,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
+        // Borrowing the callback list accesses the operand, so track first.
         self.track_assertion();
-        self.apply_assertion_after_tracking(
-            crate::assertions::collection::elements_are_in_any_order(
-                crate::expectation::lists::SatisfyingList(assertions.as_ref()),
-            ),
-        )
+        self.apply_assertion_after_tracking(elements_are_in_any_order(SatisfyingList(
+            assertions.as_ref(),
+        )))
     }
 }
 
@@ -477,11 +310,6 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, Vec<i32>, Panic, NoRenderer>
                     => CollectionAssertions<i32, NoRenderer>
-            );
-            assert_trait_impl!(
-                crate::assertions::collection::ContainsMatching<
-                    crate::expectation::Predicate<fn(&i32) -> bool>
-                > => Expectation<[i32], NoRenderer>
             );
         }
 
@@ -573,17 +401,8 @@ mod tests {
     }
 
     mod contains_matching {
-        use crate::{
-            assertions::{collection::contains_matching, core::partial_eq::equal_to},
-            expectation::{
-                all_of,
-                test_support::{assert_bounded_order, bounded_failures},
-            },
-            prelude::*,
-            renderer::IntoRendered,
-            test_support::{NoRenderer, UnorderedSet, rendered_text},
-        };
-        use core::{cell::Cell, fmt};
+        use crate::{prelude::*, test_support::NoRenderer};
+        use core::cell::Cell;
         use indoc::formatdoc;
 
         #[test]
@@ -651,7 +470,7 @@ mod tests {
                 -------- assertr --------
                 Expression: `[1, 2, 3].as_slice()`
 
-                does not match
+                does not contain a matching element
 
                 Nested failures:
                   - does not satisfy the constraint
@@ -668,75 +487,6 @@ mod tests {
                         satisfies the predicate
                 -------- assertr --------
             "});
-        }
-        struct ReverseRenderer<'a>(&'a Cell<usize>);
-
-        impl ValueRenderer<i32> for ReverseRenderer<'_> {
-            fn fmt(&self, value: &i32, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.set(self.0.get() + 1);
-                write!(formatter, "{}", 10 - value)
-            }
-        }
-
-        #[test]
-        fn bounded_evidence_is_independent_of_iteration_order() {
-            assert_bounded_order(&contains_matching(equal_to(9)));
-        }
-
-        #[test]
-        fn sorts_nested_branches_before_limiting_them() {
-            let matcher = contains_matching(all_of(matchers![equal_to(9), equal_to(0)]));
-            let failures = bounded_failures(&[3, 2, 1], &matcher, 1);
-
-            assert_that!(failures[0].children).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    assert_that!(failures[0].omitted_children).is_equal_to(5);
-                    element
-                        .derive_owned(|item| item.expected.as_ref())
-                        .is_equal_to(Some(
-                            &AssertionContext::default()
-                                .render()
-                                .value(&0)
-                                .into_rendered(),
-                        ));
-                },
-            ]);
-            assert_bounded_order(&matcher);
-        }
-
-        #[test]
-        fn selects_evidence_using_the_active_renderer_and_skips_zero_budget_rendering() {
-            for limit in [0, 1] {
-                let renders = Cell::new(0);
-                let failures = assert_that!(UnorderedSet(vec![1, 2, 3]))
-                    .with_renderer(ReverseRenderer(&renders))
-                    .with_rendering_budget(RenderingBudget::default().with_max_items(limit))
-                    .capture(|it| it.matches(contains_matching(equal_to(9))));
-
-                assert_that!(renders.get()).is_equal_to(if limit == 0 { 0 } else { 6 });
-                assert_that!(failures).contains_exactly_satisfying([
-                    |failure: AssertThat<AssertionFailure, Capture>| {
-                        failure
-                            .derive(|failure| &failure.omitted_children)
-                            .is_equal_to(3 - limit);
-                        failure
-                            .derive(|failure| &failure.children)
-                            .contains_exactly_satisfying(vec![
-                                |child: AssertThat<
-                                    AssertionFailure,
-                                    Capture,
-                                >| {
-                                    child.derive(|child| &child.actual).is_some_satisfying(
-                                        |actual| {
-                                            actual.derive_owned(rendered_text).is_equal_to("7");
-                                        },
-                                    );
-                                };
-                                limit
-                            ]);
-                    },
-                ]);
-            }
         }
     }
 

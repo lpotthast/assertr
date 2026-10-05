@@ -50,14 +50,31 @@ pub enum ThenError<FirstError, NextError> {
     Next(NextError),
 }
 
+/// Names the failed stage only, such as `first adapter failed`. The stage's own error is available
+/// through [`Error::source`], so error reports walking the source chain print it exactly once.
+///
+/// The alternate form (`{:#}`) appends the stage's error in its own alternate form, such as
+/// `first adapter failed: invalid input`, for contexts that only keep one message.
 impl<FirstError: fmt::Display, NextError: fmt::Display> fmt::Display
     for ThenError<FirstError, NextError>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let alternate = f.alternate();
         match self {
-            Self::First(error) => write!(f, "first adapter failed: {error}"),
-            Self::Next(error) => write!(f, "next adapter failed: {error}"),
+            Self::First(error) => {
+                f.write_str("first adapter failed")?;
+                if alternate {
+                    write!(f, ": {error:#}")?;
+                }
+            }
+            Self::Next(error) => {
+                f.write_str("next adapter failed")?;
+                if alternate {
+                    write!(f, ": {error:#}")?;
+                }
+            }
         }
+        Ok(())
     }
 }
 
@@ -75,7 +92,7 @@ impl<FirstError: Error + 'static, NextError: Error + 'static> Error
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
-    use alloc::{rc::Rc, vec::Vec};
+    use alloc::{format, rc::Rc, string::ToString, vec::Vec};
     use core::{cell::RefCell, error::Error, fmt};
 
     use super::*;
@@ -100,6 +117,24 @@ mod tests {
         ] {
             assert_that!(error.source().unwrap().downcast_ref::<ExampleError>()).is_some();
         }
+    }
+
+    #[test]
+    fn then_error_display_names_the_stage_without_repeating_its_source() {
+        let first: ThenError<ExampleError, ExampleError> = ThenError::First(ExampleError);
+        let next: ThenError<ExampleError, ExampleError> = ThenError::Next(ExampleError);
+
+        assert_that!(first.to_string()).is_equal_to("first adapter failed");
+        assert_that!(next.to_string()).is_equal_to("next adapter failed");
+    }
+
+    #[test]
+    fn then_error_alternate_display_appends_the_nested_errors() {
+        let nested: ThenError<ThenError<ExampleError, ExampleError>, ExampleError> =
+            ThenError::First(ThenError::Next(ExampleError));
+
+        assert_that!(format!("{nested:#}"))
+            .is_equal_to("first adapter failed: next adapter failed: example error");
     }
 
     #[derive(Clone)]

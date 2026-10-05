@@ -7,9 +7,14 @@
 use crate::borrow_for::BorrowFor;
 use core::borrow::Borrow;
 
-use super::{StableOrder, identity, value};
+use super::{
+    StableOrder, contains_contiguous_elements, elements_are, ends_with_elements, identity,
+    starts_with_elements, value,
+};
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, Mode, ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Fact, Mode,
+    ValueRenderer,
+    expectation::lists::SatisfyingList,
     failure::{FailureBuilder, FailureKind},
     mode::{Capture, Panic},
 };
@@ -34,7 +39,7 @@ use crate::{
 /// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait StableOrderAssertions<T, R> {
+pub trait StableOrderAssertions<T, R = DebugRenderer> {
     /// Asserts that the collection borrows exactly the expected instances, in order.
     ///
     /// Lengths must match and every `Borrow<U>` target must match its expected reference using
@@ -188,10 +193,7 @@ where
         P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        self.apply_assertion_after_tracking(crate::assertions::collection::starts_with_elements(
-            expected,
-        ))
+        self.apply_assertion(starts_with_elements(expected))
     }
 
     #[track_caller]
@@ -200,10 +202,11 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: Clone + ValueRenderer<usize>,
     {
+        // Borrowing the callback list accesses the operand, so track first.
         self.track_assertion();
-        self.apply_assertion_after_tracking(crate::assertions::collection::starts_with_elements(
-            crate::expectation::lists::SatisfyingList(assertions.as_ref()),
-        ))
+        self.apply_assertion_after_tracking(starts_with_elements(SatisfyingList(
+            assertions.as_ref(),
+        )))
     }
 
     #[track_caller]
@@ -222,10 +225,7 @@ where
         P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        self.apply_assertion_after_tracking(crate::assertions::collection::ends_with_elements(
-            expected,
-        ))
+        self.apply_assertion(ends_with_elements(expected))
     }
 
     #[track_caller]
@@ -234,10 +234,9 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: Clone + ValueRenderer<usize>,
     {
+        // Borrowing the callback list accesses the operand, so track first.
         self.track_assertion();
-        self.apply_assertion_after_tracking(crate::assertions::collection::ends_with_elements(
-            crate::expectation::lists::SatisfyingList(assertions.as_ref()),
-        ))
+        self.apply_assertion_after_tracking(ends_with_elements(SatisfyingList(assertions.as_ref())))
     }
 
     #[track_caller]
@@ -256,10 +255,7 @@ where
         P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        self.apply_assertion_after_tracking(
-            crate::assertions::collection::contains_contiguous_elements(expected),
-        )
+        self.apply_assertion(contains_contiguous_elements(expected))
     }
 
     #[track_caller]
@@ -268,12 +264,11 @@ where
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
         R: Clone + ValueRenderer<usize>,
     {
+        // Borrowing the callback list accesses the operand, so track first.
         self.track_assertion();
-        self.apply_assertion_after_tracking(
-            crate::assertions::collection::contains_contiguous_elements(
-                crate::expectation::lists::SatisfyingList(assertions.as_ref()),
-            ),
-        )
+        self.apply_assertion_after_tracking(contains_contiguous_elements(SatisfyingList(
+            assertions.as_ref(),
+        )))
     }
 
     #[track_caller]
@@ -292,8 +287,7 @@ where
         P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        self.apply_assertion_after_tracking(crate::assertions::collection::elements_are(expected))
+        self.apply_assertion(elements_are(expected))
     }
 
     #[track_caller]
@@ -302,10 +296,9 @@ where
         R: Clone + ValueRenderer<usize>,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
+        // Borrowing the callback list accesses the operand, so track first.
         self.track_assertion();
-        self.apply_assertion_after_tracking(crate::assertions::collection::elements_are(
-            crate::expectation::lists::SatisfyingList(assertions.as_ref()),
-        ))
+        self.apply_assertion_after_tracking(elements_are(SatisfyingList(assertions.as_ref())))
     }
 }
 
@@ -485,7 +478,7 @@ where
 /// assert_that!(BTreeSet::from([1, 2, 3])).get_first();
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait StableOrderExtractAssertions<'t, T, R> {
+pub trait StableOrderExtractAssertions<'t, T, R = DebugRenderer> {
     /// Asserts that the collection is non-empty, then returns an assertion over its first element.
     fn get_first(&'t self) -> AssertThat<'t, T, Panic, R>
     where
@@ -1042,7 +1035,7 @@ mod tests {
             let failures = assert_that!([1])
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
-                .capture(|it| it.ends_with([1, 2]));
+                .capture(|it| it.ends_with([0, 1]));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element.derive(|item| item).has_text_report(formatdoc! {r"
@@ -1056,8 +1049,8 @@ mod tests {
                 does not end with
 
                 Expected: [
+                    custom(0),
                     custom(1),
-                    custom(2),
                 ]
 
                 Details:
@@ -1568,8 +1561,8 @@ mod tests {
                   - does not have the required sequence
 
                     Details:
-                      - actual length: 3
-                      - expected length: 2
+                      - Actual length: 3
+                      - Expected length: 2
                 -------- assertr --------
             "});
         }

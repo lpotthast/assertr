@@ -1,4 +1,5 @@
-use crate::{AssertThat, Fact, Mode, ValueRenderer, failure::FailureKind};
+use crate::renderer::{IntoRendered, RenderingContext};
+use crate::{AssertThat, DebugRenderer, Fact, Mode, ValueRenderer, failure::FailureKind};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use std::sync::MutexGuard;
 use std::sync::{Mutex, TryLockError};
@@ -85,6 +86,56 @@ impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotPoisoned {
     }
 }
 
+/// Renders lock data that another guard holds, so the lock cannot be observed.
+pub(crate) fn locked_data<O: ?Sized, R>(
+    render: RenderingContext<'_, R>,
+    actual: &O,
+    lock: &'static str,
+) -> impl IntoRendered {
+    render.unavailable_struct_field(actual, lock, "data", "<locked>")
+}
+
+/// Explains a rejected "is locked" check with the data observed through an acquired guard.
+///
+/// Shared by the standard and Tokio lock expectations. The caller releases the guard after
+/// this returns.
+pub(crate) fn explain_acquired_lock<O: ?Sized, T: ?Sized, R: ValueRenderer<T>, Target>(
+    actual: &O,
+    lock: &'static str,
+    data: &T,
+    failure: FailureBuilder<Target>,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder<Target> {
+    failure
+        .actual(context.render().struct_field(actual, lock, "data", data))
+        .relation("is not locked")
+}
+
+/// Explains a rejected "is not locked" check whose lock is held elsewhere.
+///
+/// Shared by the standard and Tokio lock expectations.
+pub(crate) fn explain_held_lock<O: ?Sized, R, Target>(
+    actual: &O,
+    lock: &'static str,
+    failure: FailureBuilder<Target>,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder<Target> {
+    failure
+        .actual(locked_data(context.render(), actual, lock))
+        .relation("is unexpectedly locked")
+}
+
+fn with_poison_note<Target>(
+    failure: FailureBuilder<Target>,
+    poisoned: bool,
+) -> FailureBuilder<Target> {
+    if poisoned {
+        failure.fact(Fact::note("The mutex is poisoned."))
+    } else {
+        failure
+    }
+}
+
 /// Observes whether a mutex is locked, retaining an acquired guard when the check rejects.
 pub struct IsLocked;
 
@@ -131,19 +182,13 @@ impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Mutex<T>, R> for IsLocked {
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        let render = context.render();
         match rejected {
             None => failure.relation("is locked"),
             Some((actual, UnlockedRejection { guard, poisoned })) => {
-                let mut failure = failure
-                    .actual(render.struct_field(actual, "Mutex", "data", &*guard))
-                    .relation("is not locked");
-                if poisoned {
-                    failure = failure.fact(Fact::note("The mutex is poisoned."));
-                }
+                let failure = explain_acquired_lock(actual, "Mutex", &*guard, failure, context);
                 // Release before raising or observing the next composed assertion.
                 drop(guard);
-                failure
+                with_poison_note(failure, poisoned)
             }
         }
     }
@@ -183,18 +228,12 @@ impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotLocked {
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        let render = context.render();
         match rejected {
             None => failure.relation("is not locked"),
-            Some((actual, poisoned)) => {
-                let mut failure = failure
-                    .actual(render.unavailable_struct_field(actual, "Mutex", "data", "<locked>"))
-                    .relation("is unexpectedly locked");
-                if poisoned {
-                    failure = failure.fact(Fact::note("The mutex is poisoned."));
-                }
-                failure
-            }
+            Some((actual, poisoned)) => with_poison_note(
+                explain_held_lock(actual, "Mutex", failure, context),
+                poisoned,
+            ),
         }
     }
 }
@@ -205,7 +244,7 @@ impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotLocked {
 /// unlocked. [`TryLockError::WouldBlock`] means locked.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait MutexAssertions<T, R> {
+pub trait MutexAssertions<T, R = DebugRenderer> {
     /// Asserts that this mutex is locked.
     fn is_locked(self) -> Self
     where

@@ -3,7 +3,7 @@ use crate::{
     AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
     assertions::map::{EntryMatcherList, FoundEntries, Map},
     expectation::{Evidence, MatcherList, lists::sealed as list_sealed},
-    failure::{FailureBuilder, FailureKind, PathSegment},
+    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::IntoRendered,
 };
 
@@ -26,7 +26,7 @@ pub fn entries_are<L>(list: L) -> EntriesAre<L> {
 
 impl<MapType: Map + ?Sized, R, L> Expectation<MapType, R> for EntriesAre<L>
 where
-    R: ValueRenderer<MapType::Key>,
+    R: ValueRenderer<MapType::Key> + ValueRenderer<usize>,
     L: EntryMatcherList<MapType, R>,
 {
     type Success<'a>
@@ -45,11 +45,11 @@ where
         settings: &AssertionContext<'_, R>,
     ) -> Result<(), Evidence> {
         let mut context = settings.isolated();
-        let mut matched = actual.length() == self.0.len();
+        let mut entries_match = true;
         let mut found = FoundEntries::new();
         for index in 0..self.0.len() {
             let (entry_matches, key) = self.0.evaluate_entry_at(index, actual, &mut context);
-            matched &= entry_matches;
+            entries_match &= entry_matches;
             if let Some(key) = key {
                 found.record(key);
             }
@@ -57,32 +57,44 @@ where
         let mut extras = context.isolated_for_order(MapType::RENDERING_ORDER);
         for (key, _) in actual.entries() {
             if !found.contains(key) {
-                matched = false;
-                if extras.is_diagnostic() {
-                    extras.record(
-                        FailureBuilder::detached::<MapType>(FailureKind::Matching)
-                            .path([PathSegment::Key(
-                                extras.render().value(key).into_rendered_compact(),
-                            )])
-                            .relation("has an unexpected key")
-                            .build(),
-                    );
-                } else {
-                    extras.outcome(false, |_| {
-                        FailureBuilder::detached::<()>(FailureKind::Matching)
-                            .relation("has an unexpected key")
-                            .build()
-                    });
-                }
+                entries_match = false;
+                extras.record_with(|context| {
+                    FailureBuilder::detached::<MapType>(FailureKind::Matching)
+                        .path([PathSegment::Key(
+                            context.render().value(key).into_rendered_compact(),
+                        )])
+                        .relation("has an unexpected key")
+                        .build()
+                });
             }
         }
         context.append(extras.into_evidence());
+        // Distinct expected keys make every length difference a missing or unexpected key. Only
+        // duplicate queries can match every entry while the lengths differ.
+        let (actual_length, expected_length) = (actual.length(), self.0.len());
+        if entries_match && actual_length != expected_length {
+            context.record_with(|context| {
+                let render = context.render();
+                FailureBuilder::detached::<MapType>(FailureKind::Length)
+                    .relation("does not have the required number of entries")
+                    .fact(Fact::labelled(
+                        "Actual length",
+                        render.value(&actual_length),
+                    ))
+                    .fact(Fact::labelled(
+                        "Expected length",
+                        render.value(&expected_length),
+                    ))
+                    .build()
+            });
+        }
+        let matched = entries_match && actual_length == expected_length;
         context.finish(matched, |context| context.describe::<MapType, _>(self))
     }
 }
 impl<MapType: Map + ?Sized, R, L> ExpectationDiagnostics<MapType, R> for EntriesAre<L>
 where
-    R: ValueRenderer<MapType::Key>,
+    R: ValueRenderer<MapType::Key> + ValueRenderer<usize>,
     L: EntryMatcherList<MapType, R>,
 {
     const KIND: FailureKind = FailureKind::Matching;
@@ -224,6 +236,44 @@ mod tests {
             .capture(|it| it.matches(entries_are![("a", eq(1)), ("a", eq(1))]));
 
         assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).has_length(1);
+        assert_that!(failures[0].children[0].relation.as_deref())
+            .is_equal_to(Some("has an unexpected key"));
+    }
+
+    #[test]
+    fn duplicate_keys_matching_every_entry_report_the_length_difference() {
+        assert_that_panic_by(|| {
+            assert_that!(BTreeMap::from([(1, 1)]))
+                .with_location(false)
+                .matches(entries_are![(1, eq(1)), (1, eq(1))]);
+        })
+        .has_type::<String>()
+        .is_equal_to(indoc::formatdoc! {r"
+            -------- assertr --------
+            Expression: `BTreeMap::from([(1, 1)])`
+
+            does not match
+
+            Nested failures:
+              - does not have the required number of entries
+
+                Details:
+                  - Actual length: 1
+                  - Expected length: 2
+            -------- assertr --------
+        "});
+    }
+
+    #[test]
+    fn length_differences_count_as_omitted_evidence_at_zero_budget() {
+        let failures = assert_that!(BTreeMap::from([(1, 1)]))
+            .with_rendering_budget(RenderingBudget::default().with_max_items(0))
+            .capture(|it| it.matches(entries_are![(1, eq(1)), (1, eq(1))]));
+
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].children).is_empty();
+        assert_that!(failures[0].omitted_children).is_equal_to(1);
     }
 
     mod retained_lookup {

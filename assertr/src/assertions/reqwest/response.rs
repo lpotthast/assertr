@@ -5,13 +5,21 @@
 //!
 //! Reading a body consumes the response. `get_text()` and `get_json()` are async and require
 //! `assert_that_owned!` or `.must_owned()`.
-//!
-//! With the `http` feature enabled, the value extracted by `get_header` composes with
-//! [`HttpHeaderValueAssertions`](crate::prelude::HttpHeaderValueAssertions): `reqwest` re-exports
-//! `http`'s header types, so the two integrations meet on the same `HeaderValue`.
+#![cfg_attr(
+    feature = "http",
+    doc = "\nWith the `http` feature enabled, the value extracted by `get_header` composes with
+[`HttpHeaderValueAssertions`](crate::prelude::HttpHeaderValueAssertions): `reqwest` re-exports
+`http`'s header types, so the two integrations meet on the same `HeaderValue`."
+)]
+#![cfg_attr(
+    not(feature = "http"),
+    doc = "\nWith the `http` feature enabled, the value extracted by `get_header` composes with
+`HttpHeaderValueAssertions`: `reqwest` re-exports `http`'s header types, so the two integrations
+meet on the same `HeaderValue`."
+)]
 
 use crate::{
-    AssertThat, ValueRenderer,
+    AssertThat, DebugRenderer, ValueRenderer,
     failure::{Fact, FailureKind},
     mode::{Mode, Panic},
     renderer::{GroupStyle, IntoRendered, Rendered, RenderingContext, SensitiveValuePolicy},
@@ -76,247 +84,115 @@ impl HasStatusCode {
         Self(expected)
     }
 }
-/// Checks whether the observed response status is informational.
-pub struct IsInformational;
-impl<R> Expectation<reqwest::Response, R> for IsInformational {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    type Rejection<'a>
-        = reqwest::StatusCode
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a reqwest::Response,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let status = actual.status();
-        if status.is_informational() {
-            Ok(())
-        } else {
-            Err(status)
+/// Generates a status-class expectation from its predicate, relations, and class label.
+macro_rules! status_class_expectation {
+    (
+        $(#[$meta:meta])*
+        $name:ident,
+        $predicate:ident,
+        $met:literal,
+        $unmet:literal,
+        $class:literal $(,)?
+    ) => {
+        $(#[$meta])*
+        pub struct $name;
+        impl<R> Expectation<reqwest::Response, R> for $name {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                reqwest::Response: 'a;
+            type Rejection<'a>
+                = reqwest::StatusCode
+            where
+                Self: 'a,
+                reqwest::Response: 'a;
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a reqwest::Response,
+                _context: &AssertionContext<'_, R>,
+            ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+                let status = actual.status();
+                if status.$predicate() {
+                    Ok(())
+                } else {
+                    Err(status)
+                }
+            }
         }
-    }
-}
-impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsInformational
-where
-    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is informational").expected("1xx"),
-            Some((actual, status)) => failure
-                .actual(render.value(&status))
-                .relation("is not informational")
-                .expected("1xx")
-                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+        impl<R> ExpectationDiagnostics<reqwest::Response, R> for $name
+        where
+            R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+        {
+            const KIND: FailureKind = FailureKind::Other;
+            fn explain<'a, Target>(
+                &'a self,
+                rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+                failure: FailureBuilder<Target>,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder<Target> {
+                let render = context.render();
+                match rejected {
+                    None => failure.relation($met).expected($class),
+                    Some((actual, status)) => failure
+                        .actual(render.value(&status))
+                        .relation($unmet)
+                        .expected($class)
+                        .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
+                }
+            }
         }
-    }
+    };
 }
-/// Checks whether the observed response status is a success.
-pub struct IsSuccess;
-impl<R> Expectation<reqwest::Response, R> for IsSuccess {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    type Rejection<'a>
-        = reqwest::StatusCode
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a reqwest::Response,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let status = actual.status();
-        if status.is_success() {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-}
-impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsSuccess
-where
-    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is a success").expected("2xx"),
-            Some((actual, status)) => failure
-                .actual(render.value(&status))
-                .relation("is not a success")
-                .expected("2xx")
-                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
-        }
-    }
-}
-/// Checks whether the observed response status is a redirection.
-pub struct IsRedirection;
-impl<R> Expectation<reqwest::Response, R> for IsRedirection {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    type Rejection<'a>
-        = reqwest::StatusCode
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a reqwest::Response,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let status = actual.status();
-        if status.is_redirection() {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-}
-impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsRedirection
-where
-    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is a redirection").expected("3xx"),
-            Some((actual, status)) => failure
-                .actual(render.value(&status))
-                .relation("is not a redirection")
-                .expected("3xx")
-                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
-        }
-    }
-}
-/// Checks whether the observed response status is a client error.
-pub struct IsClientError;
-impl<R> Expectation<reqwest::Response, R> for IsClientError {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    type Rejection<'a>
-        = reqwest::StatusCode
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a reqwest::Response,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let status = actual.status();
-        if status.is_client_error() {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-}
-impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsClientError
-where
-    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is a client error").expected("4xx"),
-            Some((actual, status)) => failure
-                .actual(render.value(&status))
-                .relation("is not a client error")
-                .expected("4xx")
-                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
-        }
-    }
-}
-/// Checks whether the observed response status is a server error.
-pub struct IsServerError;
-impl<R> Expectation<reqwest::Response, R> for IsServerError {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    type Rejection<'a>
-        = reqwest::StatusCode
-    where
-        Self: 'a,
-        reqwest::Response: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a reqwest::Response,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let status = actual.status();
-        if status.is_server_error() {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-}
-impl<R> ExpectationDiagnostics<reqwest::Response, R> for IsServerError
-where
-    R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is a server error").expected("5xx"),
-            Some((actual, status)) => failure
-                .actual(render.value(&status))
-                .relation("is not a server error")
-                .expected("5xx")
-                .fact(Fact::labelled(URL, render.value(actual.url().as_str()))),
-        }
-    }
-}
-/// Observes the first header lookup and retains its result.
+
+status_class_expectation!(
+    /// Checks whether the observed response status is informational.
+    IsInformational,
+    is_informational,
+    "is informational",
+    "is not informational",
+    "1xx",
+);
+
+status_class_expectation!(
+    /// Checks whether the observed response status is a success.
+    IsSuccess,
+    is_success,
+    "is a success",
+    "is not a success",
+    "2xx",
+);
+
+status_class_expectation!(
+    /// Checks whether the observed response status is a redirection.
+    IsRedirection,
+    is_redirection,
+    "is a redirection",
+    "is not a redirection",
+    "3xx",
+);
+
+status_class_expectation!(
+    /// Checks whether the observed response status is a client error.
+    IsClientError,
+    is_client_error,
+    "is a client error",
+    "is not a client error",
+    "4xx",
+);
+
+status_class_expectation!(
+    /// Checks whether the observed response status is a server error.
+    IsServerError,
+    is_server_error,
+    "is a server error",
+    "is not a server error",
+    "5xx",
+);
+
+/// Checks that the response contains a header, returning its first value.
+///
+/// Rejection retains the looked-up name. Diagnostics list the present header names.
 pub struct HasHeader<E>(E);
 impl<E, R> Expectation<reqwest::Response, R> for HasHeader<E>
 where
@@ -370,13 +246,15 @@ where
     }
 }
 impl<E> HasHeader<E> {
-    /// Expects presence or absence of this header name.
+    /// Expects a header with this name to be present.
     #[must_use]
     pub const fn new(name: E) -> Self {
         Self(name)
     }
 }
-/// Observes the first header lookup and retains its result.
+/// Checks that the response does not contain a header.
+///
+/// Rejection retains the looked-up name and the header's first value.
 pub struct DoesNotHaveHeader<E>(E);
 impl<E, R> Expectation<reqwest::Response, R> for DoesNotHaveHeader<E>
 where
@@ -431,7 +309,7 @@ where
     }
 }
 impl<E> DoesNotHaveHeader<E> {
-    /// Expects presence or absence of this header name.
+    /// Expects no header with this name.
     #[must_use]
     pub const fn new(name: E) -> Self {
         Self(name)
@@ -524,7 +402,7 @@ impl<N, E> HasHeaderValue<N, E> {
 /// Non-extracting assertions for [`reqwest::Response`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ReqwestResponseAssertions<R = crate::DebugRenderer> {
+pub trait ReqwestResponseAssertions<R = DebugRenderer> {
     /// Asserts that the response has exactly this status code.
     fn has_status_code(self, expected: reqwest::StatusCode) -> Self
     where
@@ -675,12 +553,20 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
 /// Only available in `Panic` mode. Each projection can fail to produce a value, and a captured
 /// failure has no value to continue the chain with.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ReqwestResponseExtractAssertions<'t, R> {
+pub trait ReqwestResponseExtractAssertions<'t, R = DebugRenderer> {
     /// Asserts that the header is present, then continues the chain on a clone of its first value.
-    ///
-    /// With the `http` feature enabled, the extracted `HeaderValue` is the subject of
-    /// [`HttpHeaderValueAssertions`](crate::prelude::HttpHeaderValueAssertions), so
-    /// `.get_header("content-type").is_ascii_satisfying(..)` works across both integrations.
+    #[cfg_attr(
+        feature = "http",
+        doc = "\nWith the `http` feature enabled, the extracted `HeaderValue` is the subject of
+[`HttpHeaderValueAssertions`](crate::prelude::HttpHeaderValueAssertions), so
+`.get_header(\"content-type\").is_ascii_satisfying(..)` works across both integrations."
+    )]
+    #[cfg_attr(
+        not(feature = "http"),
+        doc = "\nWith the `http` feature enabled, the extracted `HeaderValue` is the subject of
+`HttpHeaderValueAssertions`, so `.get_header(\"content-type\").is_ascii_satisfying(..)` works
+across both integrations."
+    )]
     ///
     /// Missing-header diagnostics render header names and the URL through `ValueRenderer<str>`.
     fn get_header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>
@@ -716,10 +602,7 @@ pub trait ReqwestResponseExtractAssertions<'t, R> {
     fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
         T: serde::de::DeserializeOwned + 't,
-        R: ValueRenderer<String>
-            + ValueRenderer<str>
-            + ValueRenderer<reqwest::Error>
-            + ValueRenderer<serde_json::Error>;
+        R: ValueRenderer<str> + ValueRenderer<reqwest::Error> + ValueRenderer<serde_json::Error>;
 }
 
 impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
@@ -752,7 +635,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
 
         let location = core::panic::Location::caller();
         let url = self.actual().url().as_str().to_owned();
-        get_text_at(self, location, url)
+        async move { get_text_at(self, location, &url).await }
     }
 
     #[track_caller]
@@ -760,10 +643,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
         T: serde::de::DeserializeOwned + 't,
-        R: ValueRenderer<String>
-            + ValueRenderer<str>
-            + ValueRenderer<reqwest::Error>
-            + ValueRenderer<serde_json::Error>,
+        R: ValueRenderer<str> + ValueRenderer<reqwest::Error> + ValueRenderer<serde_json::Error>,
     {
         self.track_assertion();
         if matches!(&self.actual, crate::actual::Actual::Borrowed(_)) {
@@ -777,7 +657,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
         async move {
             use crate::actual::Actual;
 
-            let this = get_text_at(self, location, url.clone()).await;
+            let this = get_text_at(self, location, &url).await;
 
             let definition = JsonBody::<T> {
                 url: &url,
@@ -869,7 +749,7 @@ impl<T: serde::de::DeserializeOwned, R> Expectation<String, R> for JsonBody<'_, 
 impl<T, R> ExpectationDiagnostics<String, R> for JsonBody<'_, T>
 where
     T: serde::de::DeserializeOwned,
-    R: ValueRenderer<String> + ValueRenderer<str> + ValueRenderer<serde_json::Error>,
+    R: ValueRenderer<str> + ValueRenderer<serde_json::Error>,
 {
     const KIND: FailureKind = FailureKind::Other;
 
@@ -886,7 +766,7 @@ where
         match rejected {
             None => failure.relation("is valid JSON for the expected type"),
             Some((actual, error)) => failure
-                .actual(render.value(actual))
+                .actual(render.value(actual.as_str()))
                 .relation("is not valid JSON for the expected type")
                 .fact(Fact::labelled("Error", render.value(&error))),
         }
@@ -896,7 +776,7 @@ where
 async fn get_text_at<'t, R>(
     assertion: AssertThat<'t, reqwest::Response, Panic, R>,
     location: &'static core::panic::Location<'static>,
-    url: String,
+    url: &str,
 ) -> AssertThat<'t, String, Panic, R>
 where
     R: ValueRenderer<str> + ValueRenderer<reqwest::Error>,
@@ -913,7 +793,7 @@ where
         })
         .await;
 
-    this.apply_assertion_after_tracking_at(ReadableBody { url: &url }, location)
+    this.apply_assertion_after_tracking_at(ReadableBody { url }, location)
         .map(|it| Actual::Owned(it.unwrap_owned().expect("already checked")))
 }
 
@@ -1051,16 +931,6 @@ mod tests {
             {
                 struct StringRenderer;
 
-                impl ValueRenderer<String> for StringRenderer {
-                    fn fmt(
-                        &self,
-                        value: &String,
-                        f: &mut core::fmt::Formatter<'_>,
-                    ) -> core::fmt::Result {
-                        core::fmt::Debug::fmt(value, f)
-                    }
-                }
-
                 impl ValueRenderer<str> for StringRenderer {
                     fn fmt(
                         &self,
@@ -1144,7 +1014,8 @@ mod tests {
         response
     }
 
-    struct RedactingRenderer;
+    /// Redacts strings and sensitive header values, showing other header values.
+    struct SensitivityAwareRenderer;
 
     struct RevealingRenderer<'a> {
         original: &'a reqwest::header::HeaderValue,
@@ -1176,6 +1047,7 @@ mod tests {
         }
     }
 
+    /// Renders only strings, so tests can show which failures need no other renderer.
     struct TextOnly;
 
     impl ValueRenderer<str> for TextOnly {
@@ -1184,7 +1056,7 @@ mod tests {
         }
     }
 
-    impl ValueRenderer<reqwest::header::HeaderValue> for RedactingRenderer {
+    impl ValueRenderer<reqwest::header::HeaderValue> for SensitivityAwareRenderer {
         fn fmt(
             &self,
             value: &reqwest::header::HeaderValue,
@@ -1198,10 +1070,18 @@ mod tests {
         }
     }
 
-    impl ValueRenderer<str> for RedactingRenderer {
-        fn fmt(&self, _: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            f.write_str("<redacted text>")
+    impl ValueRenderer<str> for SensitivityAwareRenderer {
+        fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            ValueRenderer::fmt(&TextOnly, value, f)
         }
+    }
+
+    /// Drives a future that must run outside an async test, for example inside a panic probe.
+    fn block_on<F: Future>(future: F) -> F::Output {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("runtime")
+            .block_on(future)
     }
 
     fn failing_response() -> reqwest::Response {
@@ -1366,7 +1246,6 @@ mod tests {
     mod is_informational {
         use super::response;
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -1378,131 +1257,11 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(response(200, &[], "")), is_informational());
         }
-
-        #[test]
-        fn renders_status_and_url_evidence() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{
-                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-            };
-            let subject = response(200, &[], "");
-            let failures = assert_that!(subject)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_informational);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: custom(200)
-
-                is not informational
-
-                Expected: 1xx
-
-                Details:
-                  - URL: custom("http://localhost/hello")
-                -------- assertr --------
-            "#});
-
-                    assert_custom_value(
-                        element.actual().actual.as_ref().unwrap(),
-                        &subject.status(),
-                    );
-                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
-                },
-            ]);
-
-            let failures = assert_that!(subject)
-                .with_renderer(RedactingRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_informational);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: <redacted>
-
-                is not informational
-
-                Expected: 1xx
-
-                Details:
-                  - URL: <redacted>
-                -------- assertr --------
-            "});
-
-                    assert_redacted(element.actual(), &["localhost/hello", "200"]);
-                },
-            ]);
-        }
-
-        #[test]
-        fn succeeds_for_any_1xx_status() {
-            assert_that!(response(100, &[], "")).is_informational();
-            assert_that!(response(103, &[], "")).is_informational();
-        }
-
-        #[test]
-        fn panics_when_status_is_outside_the_class() {
-            assert_that_panic_by(|| {
-                assert_that!(response(200, &[], ""))
-                    .with_location(false)
-                    .is_informational();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `response(200, &[], "")`
-
-                Actual: 200
-
-                is not informational
-
-                Expected: 1xx
-
-                Details:
-                  - URL: "http://localhost/hello"
-                -------- assertr --------
-            "#});
-        }
-
-        #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
-            let failures = assert_that!(response(200, &[], ""))
-                .with_location(false)
-                .capture(|it| it.is_informational().is_success());
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Expression: `response(200, &[], "")`
-
-                        Actual: 200
-
-                        is not informational
-
-                        Expected: 1xx
-
-                        Details:
-                          - URL: "http://localhost/hello"
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
-        }
     }
 
     mod is_success {
         use super::response;
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -1514,132 +1273,11 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(response(500, &[], "")), is_success());
         }
-
-        #[test]
-        fn renders_status_and_url_evidence() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{
-                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-            };
-            let subject = response(404, &[], "");
-            let failures = assert_that!(subject)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_success);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: custom(404)
-
-                is not a success
-
-                Expected: 2xx
-
-                Details:
-                  - URL: custom("http://localhost/hello")
-                -------- assertr --------
-            "#});
-
-                    assert_custom_value(
-                        element.actual().actual.as_ref().unwrap(),
-                        &subject.status(),
-                    );
-                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
-                },
-            ]);
-
-            let failures = assert_that!(subject)
-                .with_renderer(RedactingRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_success);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: <redacted>
-
-                is not a success
-
-                Expected: 2xx
-
-                Details:
-                  - URL: <redacted>
-                -------- assertr --------
-            "});
-
-                    assert_redacted(element.actual(), &["localhost/hello", "404"]);
-                },
-            ]);
-        }
-
-        #[test]
-        fn succeeds_for_any_2xx_status() {
-            assert_that!(response(200, &[], "")).is_success();
-            assert_that!(response(204, &[], "")).is_success();
-            assert_that!(response(299, &[], "")).is_success();
-        }
-
-        #[test]
-        fn panics_when_status_is_outside_the_class() {
-            assert_that_panic_by(|| {
-                assert_that!(response(500, &[], ""))
-                    .with_location(false)
-                    .is_success();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `response(500, &[], "")`
-
-                Actual: 500
-
-                is not a success
-
-                Expected: 2xx
-
-                Details:
-                  - URL: "http://localhost/hello"
-                -------- assertr --------
-            "#});
-        }
-
-        #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
-            let failures = assert_that!(response(500, &[], ""))
-                .with_location(false)
-                .capture(|it| it.is_success().is_server_error());
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Expression: `response(500, &[], "")`
-
-                        Actual: 500
-
-                        is not a success
-
-                        Expected: 2xx
-
-                        Details:
-                          - URL: "http://localhost/hello"
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
-        }
     }
 
     mod is_redirection {
         use super::response;
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -1651,131 +1289,11 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(response(200, &[], "")), is_redirection());
         }
-
-        #[test]
-        fn renders_status_and_url_evidence() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{
-                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-            };
-            let subject = response(200, &[], "");
-            let failures = assert_that!(subject)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_redirection);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: custom(200)
-
-                is not a redirection
-
-                Expected: 3xx
-
-                Details:
-                  - URL: custom("http://localhost/hello")
-                -------- assertr --------
-            "#});
-
-                    assert_custom_value(
-                        element.actual().actual.as_ref().unwrap(),
-                        &subject.status(),
-                    );
-                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
-                },
-            ]);
-
-            let failures = assert_that!(subject)
-                .with_renderer(RedactingRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_redirection);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: <redacted>
-
-                is not a redirection
-
-                Expected: 3xx
-
-                Details:
-                  - URL: <redacted>
-                -------- assertr --------
-            "});
-
-                    assert_redacted(element.actual(), &["localhost/hello", "200"]);
-                },
-            ]);
-        }
-
-        #[test]
-        fn succeeds_for_any_3xx_status() {
-            assert_that!(response(301, &[], "")).is_redirection();
-            assert_that!(response(308, &[], "")).is_redirection();
-        }
-
-        #[test]
-        fn panics_when_status_is_outside_the_class() {
-            assert_that_panic_by(|| {
-                assert_that!(response(200, &[], ""))
-                    .with_location(false)
-                    .is_redirection();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `response(200, &[], "")`
-
-                Actual: 200
-
-                is not a redirection
-
-                Expected: 3xx
-
-                Details:
-                  - URL: "http://localhost/hello"
-                -------- assertr --------
-            "#});
-        }
-
-        #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
-            let failures = assert_that!(response(200, &[], ""))
-                .with_location(false)
-                .capture(|it| it.is_redirection().is_success());
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Expression: `response(200, &[], "")`
-
-                        Actual: 200
-
-                        is not a redirection
-
-                        Expected: 3xx
-
-                        Details:
-                          - URL: "http://localhost/hello"
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
-        }
     }
 
     mod is_client_error {
         use super::response;
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -1787,131 +1305,11 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(response(500, &[], "")), is_client_error());
         }
-
-        #[test]
-        fn renders_status_and_url_evidence() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{
-                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-            };
-            let subject = response(200, &[], "");
-            let failures = assert_that!(subject)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_client_error);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: custom(200)
-
-                is not a client error
-
-                Expected: 4xx
-
-                Details:
-                  - URL: custom("http://localhost/hello")
-                -------- assertr --------
-            "#});
-
-                    assert_custom_value(
-                        element.actual().actual.as_ref().unwrap(),
-                        &subject.status(),
-                    );
-                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
-                },
-            ]);
-
-            let failures = assert_that!(subject)
-                .with_renderer(RedactingRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_client_error);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: <redacted>
-
-                is not a client error
-
-                Expected: 4xx
-
-                Details:
-                  - URL: <redacted>
-                -------- assertr --------
-            "});
-
-                    assert_redacted(element.actual(), &["localhost/hello", "200"]);
-                },
-            ]);
-        }
-
-        #[test]
-        fn succeeds_for_any_4xx_status() {
-            assert_that!(response(400, &[], "")).is_client_error();
-            assert_that!(response(451, &[], "")).is_client_error();
-        }
-
-        #[test]
-        fn panics_when_status_is_outside_the_class() {
-            assert_that_panic_by(|| {
-                assert_that!(response(500, &[], ""))
-                    .with_location(false)
-                    .is_client_error();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `response(500, &[], "")`
-
-                Actual: 500
-
-                is not a client error
-
-                Expected: 4xx
-
-                Details:
-                  - URL: "http://localhost/hello"
-                -------- assertr --------
-            "#});
-        }
-
-        #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
-            let failures = assert_that!(response(500, &[], ""))
-                .with_location(false)
-                .capture(|it| it.is_client_error().is_server_error());
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Expression: `response(500, &[], "")`
-
-                        Actual: 500
-
-                        is not a client error
-
-                        Expected: 4xx
-
-                        Details:
-                          - URL: "http://localhost/hello"
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
-        }
     }
 
     mod is_server_error {
         use super::response;
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -1923,124 +1321,186 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(response(404, &[], "")), is_server_error());
         }
+    }
+
+    mod status_classes {
+        use super::response;
+        use crate::prelude::*;
+        use crate::test_support::{
+            CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+        };
+        use crate::{Mode, ValueRenderer};
+        use indoc::formatdoc;
+
+        #[derive(Clone, Copy)]
+        enum Class {
+            Informational,
+            Success,
+            Redirection,
+            ClientError,
+            ServerError,
+        }
+
+        impl Class {
+            fn check<M: Mode, R>(
+                self,
+                it: AssertThat<'_, reqwest::Response, M, R>,
+            ) -> AssertThat<'_, reqwest::Response, M, R>
+            where
+                R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
+            {
+                match self {
+                    Self::Informational => it.is_informational(),
+                    Self::Success => it.is_success(),
+                    Self::Redirection => it.is_redirection(),
+                    Self::ClientError => it.is_client_error(),
+                    Self::ServerError => it.is_server_error(),
+                }
+            }
+        }
+
+        struct Case {
+            class: Class,
+            members: &'static [u16],
+            outsider: u16,
+            relation: &'static str,
+            label: &'static str,
+        }
+
+        const CASES: [Case; 5] = [
+            Case {
+                class: Class::Informational,
+                members: &[100, 103],
+                outsider: 200,
+                relation: "is not informational",
+                label: "1xx",
+            },
+            Case {
+                class: Class::Success,
+                members: &[200, 204, 299],
+                outsider: 500,
+                relation: "is not a success",
+                label: "2xx",
+            },
+            Case {
+                class: Class::Redirection,
+                members: &[301, 308],
+                outsider: 200,
+                relation: "is not a redirection",
+                label: "3xx",
+            },
+            Case {
+                class: Class::ClientError,
+                members: &[400, 451],
+                outsider: 500,
+                relation: "is not a client error",
+                label: "4xx",
+            },
+            Case {
+                class: Class::ServerError,
+                members: &[500, 503],
+                outsider: 404,
+                relation: "is not a server error",
+                label: "5xx",
+            },
+        ];
 
         #[test]
-        fn renders_status_and_url_evidence() {
-            use indoc::formatdoc;
+        fn accept_the_class_and_report_other_statuses_with_the_url() {
+            for case in CASES {
+                for status in case.members {
+                    case.class.check(assert_that!(response(*status, &[], "")));
+                }
 
-            use crate::test_support::{
-                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-            };
-            let subject = response(200, &[], "");
-            let failures = assert_that!(subject)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_server_error);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `subject`
+                let subject = response(case.outsider, &[], "");
+                let status = subject.status();
+                let failures = assert_that!(subject).with_location(false).capture(|it| {
+                    // The chain continues after the failed class check.
+                    case.class.check(it).has_status_code(status)
+                });
+                assert_that!(failures).contains_exactly_satisfying([
+                    |it: AssertThat<AssertionFailure, Capture>| {
+                        it.has_text_report(formatdoc! {r#"
+                            -------- assertr --------
+                            Expression: `subject`
 
-                Actual: custom(200)
+                            Actual: {outsider}
 
-                is not a server error
+                            {relation}
 
-                Expected: 5xx
+                            Expected: {label}
 
-                Details:
-                  - URL: custom("http://localhost/hello")
-                -------- assertr --------
-            "#});
-
-                    assert_custom_value(
-                        element.actual().actual.as_ref().unwrap(),
-                        &subject.status(),
-                    );
-                    assert_custom_value(&element.actual().facts[0].value, subject.url().as_str());
-                },
-            ]);
-
-            let failures = assert_that!(subject)
-                .with_renderer(RedactingRenderer)
-                .with_location(false)
-                .capture(ReqwestResponseAssertions::is_server_error);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: <redacted>
-
-                is not a server error
-
-                Expected: 5xx
-
-                Details:
-                  - URL: <redacted>
-                -------- assertr --------
-            "});
-
-                    assert_redacted(element.actual(), &["localhost/hello", "200"]);
-                },
-            ]);
+                            Details:
+                              - URL: "http://localhost/hello"
+                            -------- assertr --------
+                        "#, outsider = case.outsider, relation = case.relation, label = case.label});
+                    },
+                ]);
+            }
         }
 
         #[test]
-        fn succeeds_for_any_5xx_status() {
-            assert_that!(response(500, &[], "")).is_server_error();
-            assert_that!(response(503, &[], "")).is_server_error();
-        }
-
-        #[test]
-        fn panics_when_status_is_outside_the_class() {
-            assert_that_panic_by(|| {
-                assert_that!(response(404, &[], ""))
+        fn render_status_and_url_evidence_through_the_active_renderer() {
+            for case in CASES {
+                let subject = response(case.outsider, &[], "");
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
                     .with_location(false)
-                    .is_server_error();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `response(404, &[], "")`
+                    .capture(|it| case.class.check(it));
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
+                            -------- assertr --------
+                            Expression: `subject`
 
-                Actual: 404
+                            Actual: custom({outsider})
 
-                is not a server error
+                            {relation}
 
-                Expected: 5xx
+                            Expected: {label}
 
-                Details:
-                  - URL: "http://localhost/hello"
-                -------- assertr --------
-            "#});
-        }
+                            Details:
+                              - URL: custom("http://localhost/hello")
+                            -------- assertr --------
+                        "#, outsider = case.outsider, relation = case.relation, label = case.label});
+                        assert_custom_value(
+                            element.actual().actual.as_ref().unwrap(),
+                            &subject.status(),
+                        );
+                        assert_custom_value(
+                            &element.actual().facts[0].value,
+                            subject.url().as_str(),
+                        );
+                    },
+                ]);
 
-        #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
-            let failures = assert_that!(response(404, &[], ""))
-                .with_location(false)
-                .capture(|it| it.is_server_error().is_client_error());
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| case.class.check(it));
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
+                            -------- assertr --------
+                            Expression: `subject`
 
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Expression: `response(404, &[], "")`
+                            Actual: <redacted>
 
-                        Actual: 404
+                            {relation}
 
-                        is not a server error
+                            Expected: {label}
 
-                        Expected: 5xx
-
-                        Details:
-                          - URL: "http://localhost/hello"
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
+                            Details:
+                              - URL: <redacted>
+                            -------- assertr --------
+                        ", relation = case.relation, label = case.label});
+                        assert_redacted(
+                            element.actual(),
+                            &["localhost/hello", &case.outsider.to_string()],
+                        );
+                    },
+                ]);
+            }
         }
     }
 
@@ -2190,7 +1650,9 @@ mod tests {
     }
 
     mod does_not_have_header {
-        use super::{RedactingRenderer, RevealingRenderer, header_response, ok_response, response};
+        use super::{
+            RevealingRenderer, SensitivityAwareRenderer, header_response, ok_response, response,
+        };
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -2250,7 +1712,7 @@ mod tests {
         fn respects_custom_redaction_and_preserves_header_metadata() {
             let response = header_response(b"secret-\xff", true);
             let failures = assert_that!(response)
-                .with_renderer(RedactingRenderer)
+                .with_renderer(SensitivityAwareRenderer)
                 .with_location(false)
                 .capture(|it| it.does_not_have_header("x-api-key"));
 
@@ -2376,7 +1838,9 @@ mod tests {
     }
 
     mod has_header_value {
-        use super::{RedactingRenderer, RevealingRenderer, header_response, ok_response, response};
+        use super::{
+            RevealingRenderer, SensitivityAwareRenderer, header_response, ok_response, response,
+        };
         use crate::prelude::*;
         use indoc::formatdoc;
 
@@ -2405,7 +1869,7 @@ mod tests {
         fn sensitivity_does_not_change_the_comparison() {
             let response = header_response(b"secret", true);
             assert_that!(response)
-                .with_renderer(RedactingRenderer)
+                .with_renderer(SensitivityAwareRenderer)
                 .has_header_value("x-api-key", "secret");
         }
 
@@ -2442,7 +1906,7 @@ mod tests {
         fn respects_custom_redaction_and_preserves_header_metadata() {
             let response = header_response(b"secret-\xff", true);
             let failures = assert_that!(response)
-                .with_renderer(RedactingRenderer)
+                .with_renderer(SensitivityAwareRenderer)
                 .with_location(false)
                 .capture(|it| it.has_header_value("x-api-key", "another secret"));
 
@@ -2475,7 +1939,7 @@ mod tests {
         fn renders_expected_values_when_the_header_is_missing() {
             let response = header_response(b"secret", true);
             let failures = assert_that!(response)
-                .with_renderer(RedactingRenderer)
+                .with_renderer(SensitivityAwareRenderer)
                 .with_location(false)
                 .capture(|it| it.has_header_value("missing", "another secret"));
 
@@ -2502,7 +1966,7 @@ mod tests {
         fn passes_insensitive_header_bytes_to_custom_renderers_unchanged() {
             let response = header_response(b"visible-\xff", false);
             let failures = assert_that!(response)
-                .with_renderer(RedactingRenderer)
+                .with_renderer(SensitivityAwareRenderer)
                 .capture(|it| it.has_header_value("x-api-key", "other"));
 
             let actual = failures[0].actual.as_ref().expect("actual value");
@@ -2513,7 +1977,7 @@ mod tests {
         fn applies_the_rendering_budget_to_custom_header_output() {
             let response = header_response(b"secret", true);
             let failures = assert_that!(response)
-                .with_renderer(RedactingRenderer)
+                .with_renderer(SensitivityAwareRenderer)
                 .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(4))
                 .capture(|it| it.has_header_value("x-api-key", "other"));
 
@@ -2798,15 +2262,8 @@ mod tests {
     }
 
     mod get_text {
-        use super::{failing_response, ok_response, response};
+        use super::{block_on, failing_response, ok_response, response};
         use crate::prelude::*;
-
-        fn block_on<F: Future>(future: F) -> F::Output {
-            tokio::runtime::Builder::new_current_thread()
-                .build()
-                .expect("runtime")
-                .block_on(future)
-        }
 
         #[tokio::test]
         #[cfg(feature = "fluent")]
@@ -2926,7 +2383,7 @@ mod tests {
 
     #[cfg(feature = "serde-json")]
     mod get_json {
-        use super::response;
+        use super::{block_on, response};
         use crate::prelude::*;
 
         #[derive(Debug, PartialEq, serde::Deserialize)]
@@ -2945,13 +2402,6 @@ mod tests {
         /// `UnwindSafe`. A `reqwest::Response` is not, and neither is any future holding one across
         /// an await, so the async form (`assert_that_panic_by_async`) cannot express them. Building
         /// everything inside the closure keeps the closure's own captures unwind-safe.
-        fn block_on<F: Future>(future: F) -> F::Output {
-            tokio::runtime::Builder::new_current_thread()
-                .build()
-                .expect("runtime")
-                .block_on(future)
-        }
-
         #[tokio::test]
         #[cfg(feature = "fluent")]
         async fn fluent_alias_is_as_expected() {
@@ -3010,7 +2460,7 @@ mod tests {
             use indoc::formatdoc;
 
             use crate::test_support::{CustomValueRenderer, RedactingRenderer};
-            let body = r#"{{"name":"private-body-name","age":"private-body-age"}}"#;
+            let body = r#"{"name":"private-body-name","age":"private-body-age"}"#;
             let expected_type = core::any::type_name::<Person>();
             assert_that_panic_by(|| {
                 block_on(async {
@@ -3026,14 +2476,14 @@ mod tests {
                 -------- assertr --------
                 Expression: `json_response(body)`
 
-                Actual: custom("{{{{\"name\":\"private-body-name\",\"age\":\"private-body-age\"}}}}")
+                Actual: custom("{{\"name\":\"private-body-name\",\"age\":\"private-body-age\"}}")
 
                 is not valid JSON for the expected type
 
                 Details:
                   - URL: custom("http://localhost/hello")
                   - Expected type: {expected_type}
-                  - Error: custom(Error("key must be a string", line: 1, column: 2))
+                  - Error: custom(Error("invalid type: string \"private-body-age\", expected u32", line: 1, column: 52))
                 -------- assertr --------
             "#});
             assert_that_panic_by(|| {

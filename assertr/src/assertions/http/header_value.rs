@@ -1,7 +1,7 @@
+use crate::assertions::HasLength;
 use crate::failure::FailureKind;
 use crate::mode::{Mode, Panic};
-use crate::prelude::{BoolAssertions, PartialEqAssertions, PartialOrdAssertions};
-use crate::{AssertThat, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, ValueRenderer};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use alloc::borrow::ToOwned;
 use alloc::string::String;
@@ -48,29 +48,100 @@ where
     }
 }
 
+/// Generates a header-value sensitivity expectation.
+macro_rules! sensitivity_expectation {
+    ($(#[$meta:meta])* $name:ident, sensitive: $sensitive:literal, $met:literal, $unmet:literal) => {
+        $(#[$meta])*
+        pub struct $name;
+        impl<R> Expectation<http::HeaderValue, R> for $name {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                http::HeaderValue: 'a;
+            type Rejection<'a>
+                = ()
+            where
+                Self: 'a,
+                http::HeaderValue: 'a;
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a http::HeaderValue,
+                _context: &AssertionContext<'_, R>,
+            ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+                if actual.is_sensitive() == $sensitive {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            }
+        }
+        impl<R> ExpectationDiagnostics<http::HeaderValue, R> for $name
+        where
+            R: ValueRenderer<http::HeaderValue>,
+        {
+            const KIND: FailureKind = FailureKind::Other;
+            fn explain<'a, Target>(
+                &'a self,
+                rejected: Option<(&'a http::HeaderValue, Self::Rejection<'a>)>,
+                failure: FailureBuilder<Target>,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder<Target> {
+                match rejected {
+                    None => failure.relation($met),
+                    Some((actual, ())) => failure
+                        .actual(context.render().value(actual))
+                        .relation($unmet),
+                }
+            }
+        }
+    };
+}
+
+sensitivity_expectation!(
+    /// Checks whether a header value is marked sensitive.
+    IsSensitive,
+    sensitive: true,
+    "is sensitive",
+    "is not sensitive"
+);
+
+sensitivity_expectation!(
+    /// Checks whether a header value is not marked sensitive.
+    IsInsensitive,
+    sensitive: false,
+    "is insensitive",
+    "is sensitive"
+);
+
+/// The header value's length in bytes, enabling
+/// [`LengthAssertions`](crate::assertions::core::length::LengthAssertions).
+impl HasLength for http::HeaderValue {
+    fn length(&self) -> usize {
+        self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        http::HeaderValue::is_empty(self)
+    }
+}
+
 /// Non-extracting assertions for [`http::HeaderValue`].
+///
+/// Length assertions such as `is_empty`, `is_not_empty`, and `has_length` come from
+/// [`LengthAssertions`](crate::assertions::core::length::LengthAssertions) and count bytes.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait HttpHeaderValueAssertions<'t, M: Mode, R = crate::DebugRenderer> {
-    /// Asserts that the header value contains no bytes.
-    fn is_empty(self) -> Self
-    where
-        R: ValueRenderer<usize> + Clone;
-
-    /// Asserts that the header value contains at least one byte.
-    fn is_not_empty(self) -> Self
-    where
-        R: ValueRenderer<usize> + Clone;
-
+pub trait HttpHeaderValueAssertions<M: Mode, R = DebugRenderer> {
     /// Asserts that the header value is marked sensitive.
     fn is_sensitive(self) -> Self
     where
-        R: ValueRenderer<bool> + Clone;
+        R: ValueRenderer<http::HeaderValue>;
 
     /// Asserts that the header value is not marked sensitive.
     fn is_insensitive(self) -> Self
     where
-        R: ValueRenderer<bool> + Clone;
+        R: ValueRenderer<http::HeaderValue>;
 
     /// Asserts that [`HeaderValue::to_str`](http::HeaderValue::to_str) accepts the value.
     ///
@@ -93,51 +164,23 @@ pub trait HttpHeaderValueAssertions<'t, M: Mode, R = crate::DebugRenderer> {
         R: ValueRenderer<http::header::HeaderValue> + Clone;
 }
 
-impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
-    for AssertThat<'t, http::header::HeaderValue, M, R>
+impl<M: Mode, R> HttpHeaderValueAssertions<M, R>
+    for AssertThat<'_, http::header::HeaderValue, M, R>
 {
-    #[track_caller]
-    fn is_empty(self) -> Self
-    where
-        R: ValueRenderer<usize> + Clone,
-    {
-        self.derive_owned(http::HeaderValue::len)
-            .with_detail_message("Expected an empty header value.")
-            .is_equal_to(0);
-        self
-    }
-
-    #[track_caller]
-    fn is_not_empty(self) -> Self
-    where
-        R: ValueRenderer<usize> + Clone,
-    {
-        self.derive_owned(http::HeaderValue::len)
-            .with_detail_message("Expected a non-empty header value.")
-            .is_greater_than(0);
-        self
-    }
-
     #[track_caller]
     fn is_sensitive(self) -> Self
     where
-        R: ValueRenderer<bool> + Clone,
+        R: ValueRenderer<http::HeaderValue>,
     {
-        self.derive_owned(http::HeaderValue::is_sensitive)
-            .with_detail_message("Expected a sensitive header value. You might have forgotten to call `set_sensitive(true)` on the header value.")
-            .is_true();
-        self
+        self.apply_assertion(IsSensitive)
     }
 
     #[track_caller]
     fn is_insensitive(self) -> Self
     where
-        R: ValueRenderer<bool> + Clone,
+        R: ValueRenderer<http::HeaderValue>,
     {
-        self.derive_owned(http::HeaderValue::is_sensitive)
-            .with_detail_message("Expected an insensitive header value. You might have forgotten to call `set_sensitive(false)` on the header value.")
-            .is_false();
-        self
+        self.apply_assertion(IsInsensitive)
     }
 
     #[track_caller]
@@ -165,7 +208,7 @@ impl<'t, M: Mode, R> HttpHeaderValueAssertions<'t, M, R>
 ///
 /// A rejected value cannot produce the requested `String`.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait HttpHeaderValueExtractAssertions<'t, R = crate::DebugRenderer> {
+pub trait HttpHeaderValueExtractAssertions<'t, R = DebugRenderer> {
     /// Asserts that [`HeaderValue::to_str`](http::HeaderValue::to_str) accepts the value, then
     /// extracts it as an owned `String`.
     ///
@@ -203,7 +246,7 @@ mod tests {
         fn traits_are_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, HeaderValue, Panic, NoRenderer>
-                    => HttpHeaderValueAssertions<'static, Panic, NoRenderer>
+                    => HttpHeaderValueAssertions<Panic, NoRenderer>
             );
             assert_trait_impl!(
                 AssertThat<'static, HeaderValue, Panic, NoRenderer>
@@ -229,112 +272,36 @@ mod tests {
         }
     }
 
-    mod has_debug_value {
-        use crate::prelude::*;
-        use http::header::HeaderValue;
-
-        #[tokio::test]
-        #[cfg(feature = "fluent")]
-        async fn fluent_alias_is_as_expected() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.must().have_debug_value("http/1.1");
-        }
-
-        #[tokio::test]
-        async fn succeeds_when_matching() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-
-            assert_that!(actual).has_debug_value("http/1.1");
-        }
-    }
-
-    mod is_empty {
+    mod length {
         use crate::prelude::*;
         use http::HeaderValue;
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let actual = HeaderValue::from_str("").expect("valid header value");
-            actual.must().be_empty();
-        }
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            assert_caller_location!(assert_that!(actual), is_empty());
-        }
-
-        #[test]
-        fn succeeds_when_empty() {
-            let actual = HeaderValue::from_str("").expect("valid header value");
-
-            assert_that!(actual).is_empty();
+        fn length_assertions_count_header_bytes() {
+            assert_that!(HeaderValue::from_static("")).is_empty();
+            assert_that!(HeaderValue::from_static("http/1.1"))
+                .is_not_empty()
+                .has_length(8);
+            assert_that!(HeaderValue::from_bytes(b"\xFF").expect("valid opaque header bytes"))
+                .has_length(1);
         }
 
         #[test]
         fn panics_when_not_empty() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+            let actual = HeaderValue::from_static("http/1.1");
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_empty())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Expected: 0
+                    Expression: `actual`
 
-                      Actual: 8
+                    Actual: HeaderValue "http/1.1"
 
-                    Messages:
-                      - Expected an empty header value.
+                    is not empty
                     -------- assertr --------
-                "});
-        }
-    }
-
-    mod is_not_empty {
-        use crate::prelude::*;
-        use http::HeaderValue;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.must().not_be_empty();
-        }
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let actual = HeaderValue::from_str("").expect("valid header value");
-            assert_caller_location!(assert_that!(actual), is_not_empty());
-        }
-
-        #[test]
-        fn succeeds_when_not_empty() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-
-            assert_that!(actual).is_not_empty();
-        }
-
-        #[test]
-        fn panics_when_empty() {
-            let actual = HeaderValue::from_str("").expect("valid header value");
-
-            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_not_empty())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Actual: 0
-
-                    is not greater than
-
-                    Expected: 0
-
-                    Messages:
-                      - Expected a non-empty header value.
-                    -------- assertr --------
-                "});
+                "#});
         }
     }
 
@@ -373,16 +340,15 @@ mod tests {
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_sensitive())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
-                    Actual: false
+                    Expression: `actual`
 
-                    is not true
+                    Actual: "http/1.1"
 
-                    Messages:
-                      - Expected a sensitive header value. You might have forgotten to call `set_sensitive(true)` on the header value.
+                    is not sensitive
                     -------- assertr --------
-                "});
+                "#});
         }
     }
 
@@ -429,12 +395,11 @@ mod tests {
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Actual: true
+                    Expression: `actual`
 
-                    is not false
+                    Actual: Sensitive
 
-                    Messages:
-                      - Expected an insensitive header value. You might have forgotten to call `set_sensitive(false)` on the header value.
+                    is sensitive
                     -------- assertr --------
                 "});
         }

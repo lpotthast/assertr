@@ -2,374 +2,188 @@ use crate::borrow_for::{BorrowFor, borrow_for};
 use core::cmp::Ordering;
 
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 
-/// Reusable strict upper bound with the borrowing and ordering rules of
-/// [`PartialOrdAssertions::is_less_than`]. Incomparable values do not match.
-///
-/// ```
-/// use assertr::prelude::*;
-/// use assertr::assertions::core::partial_ord::LessThan;
-///
-/// let maximum = LessThan::new(65);
-/// assert_that!(42).matches(&maximum);
-/// ```
-pub struct LessThan<E> {
-    expected: E,
-}
-
-/// Matches values less than `expected`. Incomparable values do not match.
-///
-/// This is a convenience constructor for [`LessThan::new`].
-pub fn lt<E>(expected: E) -> LessThan<E> {
-    LessThan::new(expected)
-}
-
-impl<E> LessThan<E> {
-    /// Owns an expected operand. Pass a reference to reuse an expected value.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self { expected }
-    }
-}
-
-impl<T: ?Sized, E, R> Expectation<T, R> for LessThan<E>
-where
-    T: PartialOrd<E::View>,
-    E: BorrowFor<T>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<T, _>(&self.expected);
-        if matches!(actual.partial_cmp(expected), Some(Ordering::Less)) {
-            Ok(())
-        } else {
-            Err(expected)
+/// Generates one reusable ordering bound: the struct, its constructors, and both expectation
+/// hooks. The bound accepts the listed [`Ordering`] results of `actual.partial_cmp(expected)`.
+macro_rules! ordering_expectation {
+    (
+        $(#[$struct_doc:meta])*
+        struct $name:ident;
+        $(#[$fn_doc:meta])*
+        fn $constructor:ident;
+        accepts $($accepted:ident)|+;
+        relation $relation:literal;
+        rejection $rejection:literal;
+    ) => {
+        $(#[$struct_doc])*
+        pub struct $name<E> {
+            expected: E,
         }
-    }
-}
 
-impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for LessThan<E>
-where
-    T: PartialOrd<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
-
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("is less than"),
-                borrow_for::<T, _>(&self.expected),
-            ),
-            Some((actual, expected)) => (
-                failure
-                    .actual(render.value(actual))
-                    .relation("is not less than"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
-}
-
-/// Reusable strict lower bound with the borrowing and ordering rules of
-/// [`PartialOrdAssertions::is_greater_than`]. Incomparable values do not match.
-///
-/// ```
-/// use assertr::prelude::*;
-/// use assertr::assertions::core::partial_ord::GreaterThan;
-///
-/// let minimum = GreaterThan::new(18);
-/// assert_that!(42).matches(&minimum);
-/// ```
-pub struct GreaterThan<E> {
-    expected: E,
-}
-
-/// Matches values greater than `expected`. Incomparable values do not match.
-///
-/// This is a convenience constructor for [`GreaterThan::new`].
-pub fn gt<E>(expected: E) -> GreaterThan<E> {
-    GreaterThan::new(expected)
-}
-
-impl<E> GreaterThan<E> {
-    /// Owns an expected operand. Pass a reference to reuse an expected value.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self { expected }
-    }
-}
-
-impl<T: ?Sized, E, R> Expectation<T, R> for GreaterThan<E>
-where
-    T: PartialOrd<E::View>,
-    E: BorrowFor<T>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<T, _>(&self.expected);
-        if matches!(actual.partial_cmp(expected), Some(Ordering::Greater)) {
-            Ok(())
-        } else {
-            Err(expected)
+        $(#[$fn_doc])*
+        #[must_use]
+        pub const fn $constructor<E>(expected: E) -> $name<E> {
+            $name::new(expected)
         }
-    }
-}
 
-impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for GreaterThan<E>
-where
-    T: PartialOrd<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
-
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("is greater than"),
-                borrow_for::<T, _>(&self.expected),
-            ),
-            Some((actual, expected)) => (
-                failure
-                    .actual(render.value(actual))
-                    .relation("is not greater than"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
-}
-
-/// Reusable upper bound with the borrowing and ordering rules of
-/// [`PartialOrdAssertions::is_less_or_equal_to`]. Incomparable values do not match.
-///
-/// ```
-/// use assertr::prelude::*;
-/// use assertr::assertions::core::partial_ord::LessOrEqual;
-///
-/// let maximum = LessOrEqual::new(65);
-/// assert_that!(42).matches(&maximum);
-/// ```
-pub struct LessOrEqual<E> {
-    expected: E,
-}
-
-/// Matches values less than or equal to `expected`. Incomparable values do not match.
-///
-/// This is a convenience constructor for [`LessOrEqual::new`].
-pub fn le<E>(expected: E) -> LessOrEqual<E> {
-    LessOrEqual::new(expected)
-}
-
-impl<E> LessOrEqual<E> {
-    /// Owns an expected operand. Pass a reference to reuse an expected value.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self { expected }
-    }
-}
-
-impl<T: ?Sized, E, R> Expectation<T, R> for LessOrEqual<E>
-where
-    T: PartialOrd<E::View>,
-    E: BorrowFor<T>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<T, _>(&self.expected);
-        if matches!(
-            actual.partial_cmp(expected),
-            Some(Ordering::Less | Ordering::Equal)
-        ) {
-            Ok(())
-        } else {
-            Err(expected)
+        impl<E> $name<E> {
+            /// Owns an expected operand. Pass a reference to reuse an expected value.
+            #[must_use]
+            pub const fn new(expected: E) -> Self {
+                Self { expected }
+            }
         }
-    }
-}
 
-impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for LessOrEqual<E>
-where
-    T: PartialOrd<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
+        impl<T: ?Sized, E, R> Expectation<T, R> for $name<E>
+        where
+            T: PartialOrd<E::View>,
+            E: BorrowFor<T>,
+        {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                T: 'a;
+            type Rejection<'a>
+                = &'a E::View
+            where
+                Self: 'a,
+                T: 'a;
 
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("is less than or equal to"),
-                borrow_for::<T, _>(&self.expected),
-            ),
-            Some((actual, expected)) => (
-                failure
-                    .actual(render.value(actual))
-                    .relation("is not less or equal to"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
-}
-
-/// Reusable lower bound with the borrowing and ordering rules of
-/// [`PartialOrdAssertions::is_greater_or_equal_to`]. Incomparable values do not match.
-///
-/// ```
-/// use assertr::prelude::*;
-/// use assertr::assertions::core::partial_ord::GreaterOrEqual;
-///
-/// let minimum = GreaterOrEqual::new(18);
-/// assert_that!(42).matches(&minimum);
-/// ```
-pub struct GreaterOrEqual<E> {
-    expected: E,
-}
-
-/// Matches values greater than or equal to `expected`. Incomparable values do not match.
-///
-/// This is a convenience constructor for [`GreaterOrEqual::new`].
-pub fn ge<E>(expected: E) -> GreaterOrEqual<E> {
-    GreaterOrEqual::new(expected)
-}
-
-impl<E> GreaterOrEqual<E> {
-    /// Owns an expected operand. Pass a reference to reuse an expected value.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self { expected }
-    }
-}
-
-impl<T: ?Sized, E, R> Expectation<T, R> for GreaterOrEqual<E>
-where
-    T: PartialOrd<E::View>,
-    E: BorrowFor<T>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<T, _>(&self.expected);
-        if matches!(
-            actual.partial_cmp(expected),
-            Some(Ordering::Greater | Ordering::Equal)
-        ) {
-            Ok(())
-        } else {
-            Err(expected)
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a T,
+                _: &AssertionContext<'_, R>,
+            ) -> Result<(), Self::Rejection<'a>> {
+                let expected = borrow_for::<T, _>(&self.expected);
+                if matches!(
+                    actual.partial_cmp(expected),
+                    Some($(Ordering::$accepted)|+)
+                ) {
+                    Ok(())
+                } else {
+                    Err(expected)
+                }
+            }
         }
-    }
+
+        impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for $name<E>
+        where
+            T: PartialOrd<E::View>,
+            E: BorrowFor<T>,
+            R: ValueRenderer<T> + ValueRenderer<E::View>,
+        {
+            const KIND: FailureKind = FailureKind::Ordering;
+
+            fn explain<'a, Target>(
+                &'a self,
+                rejected: Option<(&'a T, Self::Rejection<'a>)>,
+                failure: FailureBuilder<Target>,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder<Target> {
+                let render = context.render();
+                let (failure, expected) = match rejected {
+                    None => (
+                        failure.relation($relation),
+                        borrow_for::<T, _>(&self.expected),
+                    ),
+                    Some((actual, expected)) => (
+                        failure.actual(render.value(actual)).relation($rejection),
+                        expected,
+                    ),
+                };
+                failure.expected(render.value(expected))
+            }
+        }
+    };
 }
 
-impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for GreaterOrEqual<E>
-where
-    T: PartialOrd<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
+ordering_expectation! {
+    /// Reusable strict upper bound with the borrowing and ordering rules of
+    /// [`PartialOrdAssertions::is_less_than`]. Incomparable values do not match.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use assertr::assertions::core::partial_ord::LessThan;
+    ///
+    /// let maximum = LessThan::new(65);
+    /// assert_that!(42).matches(&maximum);
+    /// ```
+    struct LessThan;
+    /// Matches values less than `expected`. Incomparable values do not match.
+    ///
+    /// This is a convenience constructor for [`LessThan::new`].
+    fn lt;
+    accepts Less;
+    relation "is less than";
+    rejection "is not less than";
+}
 
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("is greater than or equal to"),
-                borrow_for::<T, _>(&self.expected),
-            ),
-            Some((actual, expected)) => (
-                failure
-                    .actual(render.value(actual))
-                    .relation("is not greater or equal to"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
+ordering_expectation! {
+    /// Reusable strict lower bound with the borrowing and ordering rules of
+    /// [`PartialOrdAssertions::is_greater_than`]. Incomparable values do not match.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use assertr::assertions::core::partial_ord::GreaterThan;
+    ///
+    /// let minimum = GreaterThan::new(18);
+    /// assert_that!(42).matches(&minimum);
+    /// ```
+    struct GreaterThan;
+    /// Matches values greater than `expected`. Incomparable values do not match.
+    ///
+    /// This is a convenience constructor for [`GreaterThan::new`].
+    fn gt;
+    accepts Greater;
+    relation "is greater than";
+    rejection "is not greater than";
+}
+
+ordering_expectation! {
+    /// Reusable upper bound with the borrowing and ordering rules of
+    /// [`PartialOrdAssertions::is_less_or_equal_to`]. Incomparable values do not match.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use assertr::assertions::core::partial_ord::LessOrEqual;
+    ///
+    /// let maximum = LessOrEqual::new(65);
+    /// assert_that!(42).matches(&maximum);
+    /// ```
+    struct LessOrEqual;
+    /// Matches values less than or equal to `expected`. Incomparable values do not match.
+    ///
+    /// This is a convenience constructor for [`LessOrEqual::new`].
+    fn le;
+    accepts Less | Equal;
+    relation "is less than or equal to";
+    rejection "is not less than or equal to";
+}
+
+ordering_expectation! {
+    /// Reusable lower bound with the borrowing and ordering rules of
+    /// [`PartialOrdAssertions::is_greater_or_equal_to`]. Incomparable values do not match.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use assertr::assertions::core::partial_ord::GreaterOrEqual;
+    ///
+    /// let minimum = GreaterOrEqual::new(18);
+    /// assert_that!(42).matches(&minimum);
+    /// ```
+    struct GreaterOrEqual;
+    /// Matches values greater than or equal to `expected`. Incomparable values do not match.
+    ///
+    /// This is a convenience constructor for [`GreaterOrEqual::new`].
+    fn ge;
+    accepts Greater | Equal;
+    relation "is greater than or equal to";
+    rejection "is not greater than or equal to";
 }
 
 /// Assertions for partially ordered values.
@@ -411,7 +225,7 @@ where
 /// `NaN` does not satisfy either strict or inclusive ordering.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PartialOrdAssertions<T, R> {
+pub trait PartialOrdAssertions<T, R = DebugRenderer> {
     /// Asserts that the subject is strictly less than `expected`.
     fn is_less_than<E>(self, expected: E) -> Self
     where
@@ -809,7 +623,7 @@ mod tests {
 
                 Actual: NaN
 
-                is not less or equal to
+                is not less than or equal to
 
                 Expected: 0.0
                 -------- assertr --------
@@ -856,7 +670,7 @@ mod tests {
 
                 Actual: NaN
 
-                is not greater or equal to
+                is not greater than or equal to
 
                 Expected: 0.0
                 -------- assertr --------

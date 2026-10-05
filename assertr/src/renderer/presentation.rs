@@ -60,10 +60,12 @@ impl CollectionPresentation {
         }
     }
 
-    /// Makes the rendered collection show its short Rust type hint.
+    /// Selects whether the rendered collection shows its short Rust type hint.
+    ///
+    /// Query the setting with [`shows_type_hint`](Self::shows_type_hint).
     #[must_use]
-    pub const fn with_type_hint(mut self) -> Self {
-        self.show_type_hint = true;
+    pub const fn show_type_hint(mut self, show: bool) -> Self {
+        self.show_type_hint = show;
         self
     }
 
@@ -115,7 +117,7 @@ mod tests {
     #[test]
     fn builders_change_only_the_selected_presentation_property() {
         let presentation = CollectionPresentation::list()
-            .with_type_hint()
+            .show_type_hint(true)
             .with_order(RenderingOrder::SortByRenderedText);
 
         assert_that!(presentation.style()).is_equal_to(GroupStyle::List);

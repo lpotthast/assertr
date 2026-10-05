@@ -1,5 +1,8 @@
-use crate::{AssertThat, Mode, ValueRenderer, failure::FailureKind};
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use crate::{
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
+};
 use core::cell::RefCell;
 
 /// Observes whether a cell is borrowed, retaining an acquired borrow on rejection.
@@ -138,7 +141,7 @@ impl<T, R> ExpectationDiagnostics<RefCell<T>, R> for IsNotMutablyBorrowed {
 /// Assertions for the dynamic borrow state of a [`RefCell`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait RefCellAssertions<T, R> {
+pub trait RefCellAssertions<T, R = DebugRenderer> {
     /// Asserts that the `RefCell` has an active shared or mutable borrow.
     fn is_borrowed(self) -> Self
     where

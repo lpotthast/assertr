@@ -1,10 +1,15 @@
 use crate::renderer::{IntoRendered, Rendered};
-use crate::{AssertThat, Fact, Mode, ValueRenderer, failure::FailureKind};
+use crate::{AssertThat, DebugRenderer, Fact, Mode, ValueRenderer, failure::FailureKind};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use std::ops::Deref;
-use std::{ffi::OsStr, path::Path};
+use std::{ffi::OsStr, io, path::Path};
 
 /// Checks path existence, retaining an I/O error on rejection.
+///
+/// A [`Path::try_exists`] result of `Ok(true)` passes. `Ok(false)` and an
+/// [`io::ErrorKind::NotADirectory`] error, which means that an ancestor is not a directory,
+/// confirm absence. Any other I/O error is retained as evidence that existence could not be
+/// determined.
 pub struct Exists;
 impl<P: Deref<Target = Path>, R> Expectation<P, R> for Exists {
     type Success<'a>
@@ -13,7 +18,7 @@ impl<P: Deref<Target = Path>, R> Expectation<P, R> for Exists {
         Self: 'a,
         P: 'a;
     type Rejection<'a>
-        = Option<std::io::Error>
+        = ExistenceRejection
     where
         Self: 'a,
         P: 'a;
@@ -22,17 +27,13 @@ impl<P: Deref<Target = Path>, R> Expectation<P, R> for Exists {
         actual: &'a P,
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        match actual.deref().try_exists() {
-            Ok(true) => Ok(()),
-            Ok(false) => Err(None),
-            Err(error) => Err(Some(error)),
-        }
+        observe_existence(true, actual.deref().try_exists())
     }
 }
 
 impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for Exists
 where
-    R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
+    R: ValueRenderer<P> + ValueRenderer<io::Error>,
 {
     const KIND: FailureKind = FailureKind::Other;
     fn explain<'a, Target>(
@@ -41,48 +42,74 @@ where
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        let render = context.render();
         match rejected {
             None => failure.relation("exists"),
-            Some((actual, error)) => {
-                let failure = failure
-                    .actual(render.value(actual))
-                    .relation("does not exist");
-                match error {
-                    None => failure,
-                    Some(error) => failure.fact(Fact::labelled("I/O error", render.value(&error))),
-                }
-            }
+            Some((actual, rejection)) => explain_existence(actual, rejection, failure, context),
         }
     }
 }
 
 /// Checks whether a path is absent, rejecting I/O errors that prevent determining existence.
+///
+/// A [`Path::try_exists`] result of `Ok(false)` and an [`io::ErrorKind::NotADirectory`] error,
+/// which means that an ancestor is not a directory, confirm absence. Any other I/O error is
+/// retained as evidence that existence could not be determined.
 pub struct DoesNotExist;
 
-/// Retained evidence that [`DoesNotExist`] could not establish absence.
+/// Retained evidence that [`Exists`] or [`DoesNotExist`] could not establish its expected state.
 ///
-/// The evidence distinguishes an existing path from an inspection error. Its representation is
-/// private and is consumed by [`DoesNotExist`]'s diagnostic implementation without inspecting
-/// again.
-pub struct DoesNotExistRejection {
-    reason: DoesNotExistRejectionReason,
+/// The evidence distinguishes a confirmed existence or absence from an inspection error. Its
+/// representation is private and is consumed by the diagnostic implementations without
+/// inspecting again.
+pub struct ExistenceRejection {
+    reason: ExistenceRejectionReason,
 }
 
-enum DoesNotExistRejectionReason {
+enum ExistenceRejectionReason {
     Exists,
-    InspectionFailed(std::io::Error),
+    Absent,
+    InspectionFailed(io::Error),
 }
 
-fn observe_absence(result: std::io::Result<bool>) -> Result<(), DoesNotExistRejection> {
-    match result {
-        Ok(false) => Ok(()),
-        Ok(true) => Err(DoesNotExistRejection {
-            reason: DoesNotExistRejectionReason::Exists,
-        }),
-        Err(error) => Err(DoesNotExistRejection {
-            reason: DoesNotExistRejectionReason::InspectionFailed(error),
-        }),
+/// Whether an I/O error confirms that the inspected path is absent.
+fn confirms_absence(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+    )
+}
+
+fn observe_existence(expected: bool, result: io::Result<bool>) -> Result<(), ExistenceRejection> {
+    let observed = match result {
+        Err(error) if confirms_absence(&error) => Ok(false),
+        other => other,
+    };
+    let reason = match observed {
+        Ok(exists) if exists == expected => return Ok(()),
+        Ok(true) => ExistenceRejectionReason::Exists,
+        Ok(false) => ExistenceRejectionReason::Absent,
+        Err(error) => ExistenceRejectionReason::InspectionFailed(error),
+    };
+    Err(ExistenceRejection { reason })
+}
+
+fn explain_existence<P, R, Target>(
+    actual: &P,
+    rejection: ExistenceRejection,
+    failure: FailureBuilder<Target>,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder<Target>
+where
+    R: ValueRenderer<P> + ValueRenderer<io::Error>,
+{
+    let render = context.render();
+    let failure = failure.actual(render.value(actual));
+    match rejection.reason {
+        ExistenceRejectionReason::Exists => failure.relation("unexpectedly exists"),
+        ExistenceRejectionReason::Absent => failure.relation("does not exist"),
+        ExistenceRejectionReason::InspectionFailed(error) => failure
+            .relation("could not determine whether the path exists")
+            .fact(Fact::labelled("I/O error", render.value(&error))),
     }
 }
 
@@ -93,7 +120,7 @@ impl<P: Deref<Target = Path>, R> Expectation<P, R> for DoesNotExist {
         Self: 'a,
         P: 'a;
     type Rejection<'a>
-        = DoesNotExistRejection
+        = ExistenceRejection
     where
         Self: 'a,
         P: 'a;
@@ -102,13 +129,13 @@ impl<P: Deref<Target = Path>, R> Expectation<P, R> for DoesNotExist {
         actual: &'a P,
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        observe_absence(actual.deref().try_exists())
+        observe_existence(false, actual.deref().try_exists())
     }
 }
 
 impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for DoesNotExist
 where
-    R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
+    R: ValueRenderer<P> + ValueRenderer<io::Error>,
 {
     const KIND: FailureKind = FailureKind::Other;
     fn explain<'a, Target>(
@@ -117,18 +144,9 @@ where
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        let render = context.render();
         match rejected {
             None => failure.relation("does not exist"),
-            Some((actual, rejection)) => {
-                let failure = failure.actual(render.value(actual));
-                match rejection.reason {
-                    DoesNotExistRejectionReason::Exists => failure.relation("unexpectedly exists"),
-                    DoesNotExistRejectionReason::InspectionFailed(error) => failure
-                        .relation("could not determine whether the path exists")
-                        .fact(Fact::labelled("I/O error", render.value(&error))),
-                }
-            }
+            Some((actual, rejection)) => explain_existence(actual, rejection, failure, context),
         }
     }
 }
@@ -227,374 +245,285 @@ where
     }
 }
 
-/// Checks whether the path is a file, retaining the observed entry kind.
-pub struct IsAFile;
-impl<P: Deref<Target = Path>, R> Expectation<P, R> for IsAFile {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        P: 'a;
-    type Rejection<'a>
-        = &'static str
-    where
-        Self: 'a,
-        P: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a P,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let metadata = actual.deref().metadata();
-        if metadata
-            .as_ref()
-            .is_ok_and(|metadata| metadata.file_type().is_file())
+/// Retained evidence that [`IsAFile`], [`IsADirectory`], or [`IsASymlink`] rejected a path.
+///
+/// The evidence describes the observed entry kind, a confirmed absence, or the I/O error that
+/// prevented inspecting the path. Its representation is private and is consumed by the
+/// diagnostic implementations without inspecting again.
+pub struct EntryKindRejection {
+    observation: EntryKindObservation,
+}
+
+enum EntryKindObservation {
+    Directory,
+    File,
+    OtherEntry,
+    Absent,
+    InspectionFailed(io::Error),
+}
+
+fn observe_entry_kind(
+    metadata: io::Result<std::fs::Metadata>,
+    matches: impl FnOnce(std::fs::FileType) -> bool,
+) -> Result<(), EntryKindRejection> {
+    let observation = match metadata {
+        Ok(metadata) if matches(metadata.file_type()) => return Ok(()),
+        Ok(metadata) if metadata.is_dir() => EntryKindObservation::Directory,
+        Ok(metadata) if metadata.is_file() => EntryKindObservation::File,
+        Ok(_) => EntryKindObservation::OtherEntry,
+        Err(error) if confirms_absence(&error) => EntryKindObservation::Absent,
+        Err(error) => EntryKindObservation::InspectionFailed(error),
+    };
+    Err(EntryKindRejection { observation })
+}
+
+fn explain_entry_kind<P, R, Target>(
+    actual: &P,
+    rejection: EntryKindRejection,
+    relations: (&'static str, &'static str),
+    failure: FailureBuilder<Target>,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder<Target>
+where
+    R: ValueRenderer<P> + ValueRenderer<io::Error>,
+{
+    let (mismatch, inspection_failed) = relations;
+    let render = context.render();
+    let failure = failure.actual(render.value(actual));
+    let note = match rejection.observation {
+        EntryKindObservation::Directory => "The path is a directory.",
+        EntryKindObservation::File => "The path is a file.",
+        EntryKindObservation::OtherEntry => "The path exists.",
+        EntryKindObservation::Absent => "The path does not exist.",
+        EntryKindObservation::InspectionFailed(error) => {
+            return failure
+                .relation(inspection_failed)
+                .fact(Fact::labelled("I/O error", render.value(&error)));
+        }
+    };
+    failure.relation(mismatch).fact(Fact::note(note))
+}
+
+/// Generates a path entry-kind expectation from its metadata source, predicate, and relations.
+macro_rules! entry_kind_expectation {
+    (
+        $(#[$meta:meta])*
+        $name:ident,
+        metadata: $metadata:ident,
+        matches: $matches:expr,
+        relations: $met:literal, $unmet:literal, $inspection_failed:literal $(,)?
+    ) => {
+        $(#[$meta])*
+        pub struct $name;
+        impl<P: Deref<Target = Path>, R> Expectation<P, R> for $name {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                P: 'a;
+            type Rejection<'a>
+                = EntryKindRejection
+            where
+                Self: 'a,
+                P: 'a;
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a P,
+                _context: &AssertionContext<'_, R>,
+            ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+                observe_entry_kind(actual.deref().$metadata(), $matches)
+            }
+        }
+
+        impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for $name
+        where
+            R: ValueRenderer<P> + ValueRenderer<io::Error>,
         {
-            Ok(())
-        } else {
-            Err(entry_kind(metadata.as_ref().ok()))
+            const KIND: FailureKind = FailureKind::Variant;
+            fn explain<'a, Target>(
+                &'a self,
+                rejected: Option<(&'a P, Self::Rejection<'a>)>,
+                failure: FailureBuilder<Target>,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder<Target> {
+                match rejected {
+                    None => failure.relation($met),
+                    Some((actual, rejection)) => explain_entry_kind(
+                        actual,
+                        rejection,
+                        ($unmet, $inspection_failed),
+                        failure,
+                        context,
+                    ),
+                }
+            }
         }
+    };
+}
+
+entry_kind_expectation!(
+    /// Checks whether the path is a regular file, following symbolic links.
+    ///
+    /// Rejection retains the observed entry kind, confirmed absence, or the I/O error that
+    /// prevented inspecting the path.
+    IsAFile,
+    metadata: metadata,
+    matches: |file_type| file_type.is_file(),
+    relations: "is a file", "is not a file", "could not determine whether the path is a file",
+);
+
+entry_kind_expectation!(
+    /// Checks whether the path is a directory, following symbolic links.
+    ///
+    /// Rejection retains the observed entry kind, confirmed absence, or the I/O error that
+    /// prevented inspecting the path.
+    IsADirectory,
+    metadata: metadata,
+    matches: |file_type| file_type.is_dir(),
+    relations: "is a directory", "is not a directory",
+        "could not determine whether the path is a directory",
+);
+
+entry_kind_expectation!(
+    /// Checks whether the path itself is a symbolic link, without following it.
+    ///
+    /// Rejection retains the observed entry kind, confirmed absence, or the I/O error that
+    /// prevented inspecting the path.
+    IsASymlink,
+    metadata: symlink_metadata,
+    matches: |file_type| file_type.is_symlink(),
+    relations: "is a symlink", "is not a symlink",
+        "could not determine whether the path is a symlink",
+);
+
+/// Rejected path component together with the expected component.
+type ComponentRejection<'a> = (Option<&'a OsStr>, &'a OsStr);
+
+fn evaluate_component<'a>(
+    component: Option<&'a OsStr>,
+    expected: &'a OsStr,
+) -> Result<(), ComponentRejection<'a>> {
+    if component == Some(expected) {
+        Ok(())
+    } else {
+        Err((component, expected))
     }
 }
 
-impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for IsAFile
+fn explain_component<P, R, Target>(
+    expected: &impl AsRef<OsStr>,
+    rejected: Option<(&P, ComponentRejection<'_>)>,
+    labels: (&'static str, &'static str, &'static str),
+    failure: FailureBuilder<Target>,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder<Target>
 where
-    R: ValueRenderer<P>,
-{
-    const KIND: FailureKind = FailureKind::Variant;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a P, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is a file"),
-            Some((actual, kind)) => failure
-                .actual(render.value(actual))
-                .relation("is not a file")
-                .fact(Fact::note(kind)),
-        }
-    }
-}
-
-/// Checks whether the path is a directory, retaining the observed entry kind.
-pub struct IsADirectory;
-impl<P: Deref<Target = Path>, R> Expectation<P, R> for IsADirectory {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        P: 'a;
-    type Rejection<'a>
-        = &'static str
-    where
-        Self: 'a,
-        P: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a P,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let metadata = actual.deref().metadata();
-        if metadata
-            .as_ref()
-            .is_ok_and(|metadata| metadata.file_type().is_dir())
-        {
-            Ok(())
-        } else {
-            Err(entry_kind(metadata.as_ref().ok()))
-        }
-    }
-}
-
-impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for IsADirectory
-where
-    R: ValueRenderer<P>,
-{
-    const KIND: FailureKind = FailureKind::Variant;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a P, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is a directory"),
-            Some((actual, kind)) => failure
-                .actual(render.value(actual))
-                .relation("is not a directory")
-                .fact(Fact::note(kind)),
-        }
-    }
-}
-
-/// Checks whether the path is a symlink, retaining the observed entry kind.
-pub struct IsASymlink;
-impl<P: Deref<Target = Path>, R> Expectation<P, R> for IsASymlink {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        P: 'a;
-    type Rejection<'a>
-        = &'static str
-    where
-        Self: 'a,
-        P: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a P,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let metadata = actual.deref().symlink_metadata();
-        if metadata
-            .as_ref()
-            .is_ok_and(|metadata| metadata.file_type().is_symlink())
-        {
-            Ok(())
-        } else {
-            Err(entry_kind(metadata.as_ref().ok()))
-        }
-    }
-}
-
-impl<P: Deref<Target = Path>, R> ExpectationDiagnostics<P, R> for IsASymlink
-where
-    R: ValueRenderer<P>,
-{
-    const KIND: FailureKind = FailureKind::Variant;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a P, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is a symlink"),
-            Some((actual, kind)) => failure
-                .actual(render.value(actual))
-                .relation("is not a symlink")
-                .fact(Fact::note(kind)),
-        }
-    }
-}
-
-/// Compares the observed path file name with an expected component.
-pub struct HasFileName<E>(E);
-impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for HasFileName<E>
-where
-    E: AsRef<OsStr>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        P: 'a;
-    type Rejection<'a>
-        = (Option<&'a OsStr>, &'a OsStr)
-    where
-        Self: 'a,
-        P: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a P,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let component = actual.deref().file_name();
-        let expected = self.0.as_ref();
-        if component == Some(expected) {
-            Ok(())
-        } else {
-            Err((component, expected))
-        }
-    }
-}
-
-impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for HasFileName<E>
-where
-    E: AsRef<OsStr>,
     R: ValueRenderer<P> + ValueRenderer<OsStr>,
 {
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a P, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure
-                .relation("has the file name")
-                .expected(render.value(self.0.as_ref())),
-            Some((actual, (component, expected))) => failure
-                .actual(render.value(actual))
-                .relation("does not have the file name")
-                .expected(render.value(expected))
-                .fact(Fact::labelled(
-                    "Actual file name",
-                    component.map_or_else(
-                        || Rendered::verbatim("<none>".into()),
-                        |value| render.value(value).into_rendered(),
+    let (met, unmet, actual_label) = labels;
+    let render = context.render();
+    match rejected {
+        None => failure
+            .relation(met)
+            .expected(render.value(expected.as_ref())),
+        Some((actual, (component, expected))) => failure
+            .actual(render.value(actual))
+            .relation(unmet)
+            .expected(render.value(expected))
+            .fact(Fact::labelled(
+                actual_label,
+                component.map_or_else(
+                    || Rendered::verbatim("<none>".into()),
+                    |value| render.value(value).into_rendered(),
+                ),
+            )),
+    }
+}
+
+/// Generates a path-component equality expectation from its component accessor and labels.
+macro_rules! component_expectation {
+    ($(#[$meta:meta])* $name:ident, $accessor:ident, $component:literal) => {
+        $(#[$meta])*
+        pub struct $name<E>(E);
+        impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for $name<E>
+        where
+            E: AsRef<OsStr>,
+        {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                P: 'a;
+            type Rejection<'a>
+                = ComponentRejection<'a>
+            where
+                Self: 'a,
+                P: 'a;
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a P,
+                _context: &AssertionContext<'_, R>,
+            ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+                evaluate_component(actual.deref().$accessor(), self.0.as_ref())
+            }
+        }
+
+        impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for $name<E>
+        where
+            E: AsRef<OsStr>,
+            R: ValueRenderer<P> + ValueRenderer<OsStr>,
+        {
+            const KIND: FailureKind = FailureKind::Equality;
+            fn explain<'a, Target>(
+                &'a self,
+                rejected: Option<(&'a P, Self::Rejection<'a>)>,
+                failure: FailureBuilder<Target>,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder<Target> {
+                explain_component(
+                    &self.0,
+                    rejected,
+                    (
+                        concat!("has the ", $component),
+                        concat!("does not have the ", $component),
+                        concat!("Actual ", $component),
                     ),
-                )),
+                    failure,
+                    context,
+                )
+            }
         }
-    }
-}
 
-impl<E> HasFileName<E> {
-    /// Expects this path component.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-/// Compares the observed path file stem with an expected component.
-pub struct HasFileStem<E>(E);
-impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for HasFileStem<E>
-where
-    E: AsRef<OsStr>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        P: 'a;
-    type Rejection<'a>
-        = (Option<&'a OsStr>, &'a OsStr)
-    where
-        Self: 'a,
-        P: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a P,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let component = actual.deref().file_stem();
-        let expected = self.0.as_ref();
-        if component == Some(expected) {
-            Ok(())
-        } else {
-            Err((component, expected))
+        impl<E> $name<E> {
+            /// Expects this path component.
+            #[must_use]
+            pub const fn new(expected: E) -> Self {
+                Self(expected)
+            }
         }
-    }
+    };
 }
 
-impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for HasFileStem<E>
-where
-    E: AsRef<OsStr>,
-    R: ValueRenderer<P> + ValueRenderer<OsStr>,
-{
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a P, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure
-                .relation("has the file stem")
-                .expected(render.value(self.0.as_ref())),
-            Some((actual, (component, expected))) => failure
-                .actual(render.value(actual))
-                .relation("does not have the file stem")
-                .expected(render.value(expected))
-                .fact(Fact::labelled(
-                    "Actual file stem",
-                    component.map_or_else(
-                        || Rendered::verbatim("<none>".into()),
-                        |value| render.value(value).into_rendered(),
-                    ),
-                )),
-        }
-    }
-}
+component_expectation!(
+    /// Compares the observed path file name with an expected component.
+    HasFileName,
+    file_name,
+    "file name"
+);
 
-impl<E> HasFileStem<E> {
-    /// Expects this path component.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
+component_expectation!(
+    /// Compares the observed path file stem with an expected component.
+    HasFileStem,
+    file_stem,
+    "file stem"
+);
 
-/// Compares the observed path extension with an expected component.
-pub struct HasExtension<E>(E);
-impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for HasExtension<E>
-where
-    E: AsRef<OsStr>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        P: 'a;
-    type Rejection<'a>
-        = (Option<&'a OsStr>, &'a OsStr)
-    where
-        Self: 'a,
-        P: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a P,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let component = actual.deref().extension();
-        let expected = self.0.as_ref();
-        if component == Some(expected) {
-            Ok(())
-        } else {
-            Err((component, expected))
-        }
-    }
-}
-
-impl<P: Deref<Target = Path>, E, R> ExpectationDiagnostics<P, R> for HasExtension<E>
-where
-    E: AsRef<OsStr>,
-    R: ValueRenderer<P> + ValueRenderer<OsStr>,
-{
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a P, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure
-                .relation("has the extension")
-                .expected(render.value(self.0.as_ref())),
-            Some((actual, (component, expected))) => failure
-                .actual(render.value(actual))
-                .relation("does not have the extension")
-                .expected(render.value(expected))
-                .fact(Fact::labelled(
-                    "Actual extension",
-                    component.map_or_else(
-                        || Rendered::verbatim("<none>".into()),
-                        |value| render.value(value).into_rendered(),
-                    ),
-                )),
-        }
-    }
-}
-
-impl<E> HasExtension<E> {
-    /// Expects this path component.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
+component_expectation!(
+    /// Compares the observed path extension with an expected component.
+    HasExtension,
+    extension,
+    "extension"
+);
 
 /// Checks whether a path starts with the expected whole components.
 pub struct StartsWith<E>(E);
@@ -732,87 +661,91 @@ impl<E> EndsWith<E> {
 /// references and owned [`std::path::PathBuf`] values.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PathAssertions {
-    /// The path subject rendered in failure diagnostics.
-    type Subject: Deref<Target = Path>;
-
-    /// The renderer carried by the assertion chain.
-    type Renderer;
-
+pub trait PathAssertions<P: Deref<Target = Path>, R = DebugRenderer> {
     /// Asserts that the path exists.
     ///
-    /// An I/O error while checking existence is reported as an assertion failure.
+    /// Passes only when [`Path::try_exists`] returns `Ok(true)`. A missing path, including one
+    /// below an ancestor that is not a directory, fails as absent. Any other I/O error while
+    /// checking existence is reported as an assertion failure, retaining the error as a fact.
     fn exists(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<std::io::Error>;
+        R: ValueRenderer<P> + ValueRenderer<io::Error>;
 
     /// Asserts that the path does not exist.
     ///
-    /// Passes only when [`Path::try_exists`] returns `Ok(false)`. An existing path or an I/O error
-    /// while checking existence is reported as an assertion failure, retaining the error as a fact.
+    /// Passes when [`Path::try_exists`] returns `Ok(false)` or an
+    /// [`io::ErrorKind::NotADirectory`] error, which confirms that an ancestor is not a
+    /// directory. An existing path or any other I/O error while checking existence is reported as
+    /// an assertion failure, retaining the error as a fact.
     fn does_not_exist(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<std::io::Error>;
+        R: ValueRenderer<P> + ValueRenderer<io::Error>;
 
-    /// Asserts that the path exists and refers to a regular file.
+    /// Asserts that the path exists and refers to a regular file, following symbolic links.
+    ///
+    /// An I/O error other than a confirmed absence is reported as an assertion failure,
+    /// retaining the error as a fact.
     fn is_a_file(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<P> + ValueRenderer<io::Error>;
 
-    /// Asserts that the path exists and refers to a directory.
+    /// Asserts that the path exists and refers to a directory, following symbolic links.
+    ///
+    /// An I/O error other than a confirmed absence is reported as an assertion failure,
+    /// retaining the error as a fact.
     fn is_a_directory(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<P> + ValueRenderer<io::Error>;
 
     /// Asserts that the path itself is a symbolic link.
+    ///
+    /// An I/O error other than a confirmed absence is reported as an assertion failure,
+    /// retaining the error as a fact.
     fn is_a_symlink(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<P> + ValueRenderer<io::Error>;
 
     /// Asserts that the path has a root component.
     fn has_a_root(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<P>;
 
     /// Asserts that the path has no root component.
     fn is_relative(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<P>;
 
     /// Asserts that the final path component equals `expected`.
     fn has_file_name(self, expected: impl AsRef<OsStr>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<OsStr>;
+        R: ValueRenderer<P> + ValueRenderer<OsStr>;
 
     /// Asserts that the final path component without its extension equals `expected`.
     fn has_file_stem(self, expected: impl AsRef<OsStr>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<OsStr>;
+        R: ValueRenderer<P> + ValueRenderer<OsStr>;
 
     /// Asserts that the final path component's extension equals `expected`.
     fn has_extension(self, expected: impl AsRef<OsStr>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<OsStr>;
+        R: ValueRenderer<P> + ValueRenderer<OsStr>;
 
     /// Asserts that the path starts with `expected` by whole path components.
     fn starts_with(self, expected: impl AsRef<Path>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<Path>;
+        R: ValueRenderer<P> + ValueRenderer<Path>;
 
     /// Asserts that the path ends with `expected` by whole path components.
     fn ends_with(self, expected: impl AsRef<Path>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<Path>;
+        R: ValueRenderer<P> + ValueRenderer<Path>;
 }
 
-impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M, R> {
-    type Renderer = R;
-    type Subject = P;
-
+impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_, P, M, R> {
     #[track_caller]
     fn exists(self) -> Self
     where
-        R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
+        R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
         self.apply_assertion(Exists)
     }
@@ -820,7 +753,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn does_not_exist(self) -> Self
     where
-        R: ValueRenderer<P> + ValueRenderer<std::io::Error>,
+        R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
         self.apply_assertion(DoesNotExist)
     }
@@ -828,7 +761,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn is_a_file(self) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
         self.apply_assertion(IsAFile)
     }
@@ -836,7 +769,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn is_a_directory(self) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
         self.apply_assertion(IsADirectory)
     }
@@ -844,7 +777,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     #[track_caller]
     fn is_a_symlink(self) -> Self
     where
-        R: ValueRenderer<P>,
+        R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
         self.apply_assertion(IsASymlink)
     }
@@ -906,16 +839,6 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions for AssertThat<'_, P, M
     }
 }
 
-/// Describes the same metadata used by the rejected kind check.
-fn entry_kind(metadata: Option<&std::fs::Metadata>) -> &'static str {
-    match metadata {
-        Some(metadata) if metadata.is_dir() => "The path is a directory.",
-        Some(metadata) if metadata.is_file() => "The path is a file.",
-        Some(_) => "The path exists.",
-        None => "The path does not exist.",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     mod observations {
@@ -956,7 +879,7 @@ mod tests {
         fn trait_is_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, PathBuf, Panic, NoRenderer>
-                    => PathAssertions<Subject = PathBuf, Renderer = NoRenderer>
+                    => PathAssertions<PathBuf, NoRenderer>
             );
             assert_trait_impl!(
                 crate::assertions::std::path::DoesNotExist => Expectation<PathBuf, NoRenderer>
@@ -1037,7 +960,7 @@ mod tests {
 
                     Actual: custom("invalid\0private-path")
 
-                    does not exist
+                    could not determine whether the path exists
 
                     Details:
                       - I/O error: custom({error:?})
@@ -1059,7 +982,7 @@ mod tests {
 
                     Actual: <redacted>
 
-                    does not exist
+                    could not determine whether the path exists
 
                     Details:
                       - I/O error: <redacted>
@@ -1095,6 +1018,24 @@ mod tests {
                         -------- assertr --------
                     "#});
             }
+
+            #[test]
+            #[cfg(unix)]
+            fn reports_a_path_below_a_file_as_absent() {
+                let path = source_path!().join("child");
+                let path = path.as_path();
+                assert_that_panic_by(|| assert_that!(path).with_location(false).exists())
+                    .has_type::<String>()
+                    .is_equal_to(formatdoc! {r"
+                        -------- assertr --------
+                        Expression: `path`
+
+                        Actual: {path:?}
+
+                        does not exist
+                        -------- assertr --------
+                    "});
+            }
         }
 
         mod does_not_exist {
@@ -1118,6 +1059,15 @@ mod tests {
             fn succeeds_when_absent() {
                 let path = Path::new("../../foo/bar/baz.rs");
                 assert_that!(path).does_not_exist();
+            }
+
+            #[test]
+            #[cfg(unix)]
+            fn succeeds_when_an_ancestor_is_a_file() {
+                let path = source_path!().join("child");
+                assert_that!(path.try_exists().unwrap_err().kind())
+                    .is_equal_to(std::io::ErrorKind::NotADirectory);
+                assert_that!(path.as_path()).does_not_exist();
             }
 
             #[test]
@@ -1207,7 +1157,7 @@ mod tests {
 
             mod observations {
                 use crate::assertions::std::path::{
-                    DoesNotExist, DoesNotExistRejectionReason, observe_absence,
+                    DoesNotExist, ExistenceRejectionReason, observe_existence,
                 };
                 use crate::failure::{FailureBuilder, FailureKind};
                 use crate::prelude::*;
@@ -1216,17 +1166,26 @@ mod tests {
 
                 #[test]
                 fn confirmed_absence_succeeds() {
-                    assert_that!(observe_absence(Ok(false)).is_ok()).is_true();
+                    assert_that!(observe_existence(false, Ok(false)).is_ok()).is_true();
+                }
+
+                #[test]
+                fn not_a_directory_error_confirms_absence() {
+                    let not_a_directory = || io::Error::from(io::ErrorKind::NotADirectory);
+                    assert_that!(observe_existence(false, Err(not_a_directory())).is_ok())
+                        .is_true();
+                    let rejection = observe_existence(true, Err(not_a_directory()))
+                        .err()
+                        .unwrap();
+                    assert_that!(matches!(rejection.reason, ExistenceRejectionReason::Absent))
+                        .is_true();
                 }
 
                 #[test]
                 fn confirmed_existence_retains_existing_path_evidence() {
-                    let rejection = observe_absence(Ok(true)).err().unwrap();
-                    assert_that!(matches!(
-                        rejection.reason,
-                        DoesNotExistRejectionReason::Exists
-                    ))
-                    .is_true();
+                    let rejection = observe_existence(false, Ok(true)).err().unwrap();
+                    assert_that!(matches!(rejection.reason, ExistenceRejectionReason::Exists))
+                        .is_true();
                 }
 
                 #[test]
@@ -1234,9 +1193,8 @@ mod tests {
                     let error =
                         io::Error::new(io::ErrorKind::PermissionDenied, "inspection denied");
                     let payload = core::ptr::from_ref(error.get_ref().unwrap());
-                    let rejection = observe_absence(Err(error)).err().unwrap();
-                    let DoesNotExistRejectionReason::InspectionFailed(error) = rejection.reason
-                    else {
+                    let rejection = observe_existence(false, Err(error)).err().unwrap();
+                    let ExistenceRejectionReason::InspectionFailed(error) = rejection.reason else {
                         panic!("inspection error must not establish existence or absence");
                     };
                     assert_that!(error.kind()).is_equal_to(io::ErrorKind::PermissionDenied);
@@ -1249,7 +1207,7 @@ mod tests {
                     let path = source_path!();
                     let error =
                         io::Error::new(io::ErrorKind::PermissionDenied, "inspection denied");
-                    let rejection = observe_absence(Err(error)).err().unwrap();
+                    let rejection = observe_existence(false, Err(error)).err().unwrap();
                     let context =
                         AssertionContext::new(&CustomValueRenderer, RenderingBudget::default());
                     let failure = DoesNotExist
@@ -1334,6 +1292,49 @@ mod tests {
                 .contains("is not a file")
                 .contains("Details:\n  - The path is a directory.");
             }
+
+            #[test]
+            #[cfg(unix)]
+            fn reports_a_path_below_a_file_as_absent() {
+                let path = source_path!().join("child");
+                let path = path.as_path();
+                assert_that_panic_by(|| assert_that!(path).with_location(false).is_a_file())
+                    .has_type::<String>()
+                    .is_equal_to(indoc::formatdoc! {r"
+                        -------- assertr --------
+                        Expression: `path`
+
+                        Actual: {path:?}
+
+                        is not a file
+
+                        Details:
+                          - The path does not exist.
+                        -------- assertr --------
+                    "});
+            }
+
+            #[test]
+            fn retains_inspection_errors() {
+                // A NUL makes inspection fail on every supported platform, even as root.
+                let path = std::path::Path::new("invalid\0path");
+                let error = path.metadata().unwrap_err();
+                let error = format!("{error:#?}").replace('\n', "\n    ");
+                assert_that_panic_by(|| assert_that!(path).with_location(false).is_a_file())
+                    .has_type::<String>()
+                    .is_equal_to(indoc::formatdoc! {r#"
+                        -------- assertr --------
+                        Expression: `path`
+
+                        Actual: "invalid\0path"
+
+                        could not determine whether the path is a file
+
+                        Details:
+                          - I/O error: {error}
+                        -------- assertr --------
+                    "#});
+            }
         }
 
         mod is_a_directory {
@@ -1375,6 +1376,15 @@ mod tests {
                 .contains("src/assertions/std/path.rs\"")
                 .contains("is not a directory")
                 .contains("Details:\n  - The path is a file.");
+            }
+
+            #[test]
+            fn retains_inspection_errors() {
+                let path = std::path::Path::new("invalid\0path");
+                assert_that_panic_by(|| assert_that!(path).with_location(false).is_a_directory())
+                    .has_type::<String>()
+                    .contains("could not determine whether the path is a directory")
+                    .contains("Details:\n  - I/O error: ");
             }
         }
 
@@ -1441,6 +1451,15 @@ mod tests {
                       - The path is a file.
                     -------- assertr --------
                 "#, source_relative_path!().display()});
+            }
+
+            #[test]
+            fn retains_inspection_errors() {
+                let path = std::path::Path::new("invalid\0path");
+                assert_that_panic_by(|| assert_that!(path).with_location(false).is_a_symlink())
+                    .has_type::<String>()
+                    .contains("could not determine whether the path is a symlink")
+                    .contains("Details:\n  - I/O error: ");
             }
         }
 
@@ -1584,106 +1603,6 @@ mod tests {
             }
 
             #[test]
-            fn renders_typed_components_including_absence() {
-                use std::ffi::OsStr;
-                use std::path::PathBuf;
-
-                use indoc::formatdoc;
-
-                use crate::test_support::{
-                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-                    rendered_text,
-                };
-                let subject = PathBuf::from("private-file.secret");
-                let operand = OsStr::new("other-file");
-                let failures = assert_that!(subject)
-                    .with_renderer(CustomValueRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_file_name(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|item| item).has_text_report(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: custom("private-file.secret")
-
-                    does not have the file name
-
-                    Expected: custom("other-file")
-
-                    Details:
-                      - Actual file name: custom("private-file.secret")
-                    -------- assertr --------
-                "#});
-
-                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
-                        assert_custom_value(
-                            &element.actual().facts[0].value,
-                            subject.file_name().unwrap(),
-                        );
-                    },
-                ]);
-                let failures = assert_that!(subject)
-                    .with_renderer(RedactingRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_file_name(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|value| value).has_text_report(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: <redacted>
-
-                    does not have the file name
-
-                    Expected: <redacted>
-
-                    Details:
-                      - Actual file name: <redacted>
-                    -------- assertr --------
-                "});
-
-                        assert_redacted(
-                            element.actual(),
-                            &["private-file", "secret", "other-file"],
-                        );
-                    },
-                ]);
-                let subject = PathBuf::from("/");
-                let failures = assert_that!(subject)
-                    .with_renderer(CustomValueRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_file_name(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|item| item).has_text_report(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: custom("/")
-
-                    does not have the file name
-
-                    Expected: custom("other-file")
-
-                    Details:
-                      - Actual file name: <none>
-                    -------- assertr --------
-                "#});
-
-                        element
-                            .derive_owned(|item| rendered_text(&item.facts[0].value))
-                            .is_equal_to("<none>");
-                        element
-                            .derive(|item| &item.facts[0].value.type_name)
-                            .is_equal_to(None);
-                    },
-                ]);
-            }
-
-            #[test]
             fn succeeds_when_equal() {
                 let path = source_relative_path!();
                 assert_that!(path).has_file_name("path.rs");
@@ -1756,106 +1675,6 @@ mod tests {
             }
 
             #[test]
-            fn renders_typed_components_including_absence() {
-                use std::ffi::OsStr;
-                use std::path::PathBuf;
-
-                use indoc::formatdoc;
-
-                use crate::test_support::{
-                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-                    rendered_text,
-                };
-                let subject = PathBuf::from("private-file.secret");
-                let operand = OsStr::new("other-file");
-                let failures = assert_that!(subject)
-                    .with_renderer(CustomValueRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_file_stem(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|item| item).has_text_report(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: custom("private-file.secret")
-
-                    does not have the file stem
-
-                    Expected: custom("other-file")
-
-                    Details:
-                      - Actual file stem: custom("private-file")
-                    -------- assertr --------
-                "#});
-
-                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
-                        assert_custom_value(
-                            &element.actual().facts[0].value,
-                            subject.file_stem().unwrap(),
-                        );
-                    },
-                ]);
-                let failures = assert_that!(subject)
-                    .with_renderer(RedactingRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_file_stem(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|value| value).has_text_report(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: <redacted>
-
-                    does not have the file stem
-
-                    Expected: <redacted>
-
-                    Details:
-                      - Actual file stem: <redacted>
-                    -------- assertr --------
-                "});
-
-                        assert_redacted(
-                            element.actual(),
-                            &["private-file", "secret", "other-file"],
-                        );
-                    },
-                ]);
-                let subject = PathBuf::from("/");
-                let failures = assert_that!(subject)
-                    .with_renderer(CustomValueRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_file_stem(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|item| item).has_text_report(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: custom("/")
-
-                    does not have the file stem
-
-                    Expected: custom("other-file")
-
-                    Details:
-                      - Actual file stem: <none>
-                    -------- assertr --------
-                "#});
-
-                        element
-                            .derive_owned(|item| rendered_text(&item.facts[0].value))
-                            .is_equal_to("<none>");
-                        element
-                            .derive(|item| &item.facts[0].value.type_name)
-                            .is_equal_to(None);
-                    },
-                ]);
-            }
-
-            #[test]
             fn succeeds_when_equal() {
                 let path = source_relative_path!();
                 assert_that!(path).has_file_stem("path");
@@ -1925,106 +1744,6 @@ mod tests {
             fn caller_location_is_as_expected() {
                 let path = Path::new("/");
                 assert_caller_location!(assert_that!(path), has_extension("rs"));
-            }
-
-            #[test]
-            fn renders_typed_components_including_absence() {
-                use std::ffi::OsStr;
-                use std::path::PathBuf;
-
-                use indoc::formatdoc;
-
-                use crate::test_support::{
-                    CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-                    rendered_text,
-                };
-                let subject = PathBuf::from("private-file.secret");
-                let operand = OsStr::new("other-file");
-                let failures = assert_that!(subject)
-                    .with_renderer(CustomValueRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_extension(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|item| item).has_text_report(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: custom("private-file.secret")
-
-                    does not have the extension
-
-                    Expected: custom("other-file")
-
-                    Details:
-                      - Actual extension: custom("secret")
-                    -------- assertr --------
-                "#});
-
-                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
-                        assert_custom_value(
-                            &element.actual().facts[0].value,
-                            subject.extension().unwrap(),
-                        );
-                    },
-                ]);
-                let failures = assert_that!(subject)
-                    .with_renderer(RedactingRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_extension(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|value| value).has_text_report(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: <redacted>
-
-                    does not have the extension
-
-                    Expected: <redacted>
-
-                    Details:
-                      - Actual extension: <redacted>
-                    -------- assertr --------
-                "});
-
-                        assert_redacted(
-                            element.actual(),
-                            &["private-file", "secret", "other-file"],
-                        );
-                    },
-                ]);
-                let subject = PathBuf::from("/");
-                let failures = assert_that!(subject)
-                    .with_renderer(CustomValueRenderer)
-                    .with_location(false)
-                    .capture(|it| it.has_extension(operand));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|item| item).has_text_report(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `subject`
-
-                    Actual: custom("/")
-
-                    does not have the extension
-
-                    Expected: custom("other-file")
-
-                    Details:
-                      - Actual extension: <none>
-                    -------- assertr --------
-                "#});
-
-                        element
-                            .derive_owned(|item| rendered_text(&item.facts[0].value))
-                            .is_equal_to("<none>");
-                        element
-                            .derive(|item| &item.facts[0].value.type_name)
-                            .is_equal_to(None);
-                    },
-                ]);
             }
 
             #[test]
@@ -2349,6 +2068,158 @@ mod tests {
                           - Only whole path components are matched.
                         -------- assertr --------
                     "#});
+            }
+        }
+    }
+
+    mod component_rendering {
+        use crate::ValueRenderer;
+        use crate::prelude::*;
+        use crate::test_support::{
+            CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
+            rendered_text,
+        };
+        use indoc::formatdoc;
+        use std::ffi::OsStr;
+        use std::path::{Path, PathBuf};
+
+        #[derive(Clone, Copy)]
+        enum Component {
+            FileName,
+            FileStem,
+            Extension,
+        }
+
+        impl Component {
+            const ALL: [Self; 3] = [Self::FileName, Self::FileStem, Self::Extension];
+
+            fn label(self) -> &'static str {
+                match self {
+                    Self::FileName => "file name",
+                    Self::FileStem => "file stem",
+                    Self::Extension => "extension",
+                }
+            }
+
+            fn of(self, path: &Path) -> Option<&OsStr> {
+                match self {
+                    Self::FileName => path.file_name(),
+                    Self::FileStem => path.file_stem(),
+                    Self::Extension => path.extension(),
+                }
+            }
+
+            fn check<'t, R>(
+                self,
+                it: AssertThat<'t, PathBuf, Capture, R>,
+                operand: &OsStr,
+            ) -> AssertThat<'t, PathBuf, Capture, R>
+            where
+                R: ValueRenderer<PathBuf> + ValueRenderer<OsStr>,
+            {
+                match self {
+                    Self::FileName => it.has_file_name(operand),
+                    Self::FileStem => it.has_file_stem(operand),
+                    Self::Extension => it.has_extension(operand),
+                }
+            }
+        }
+
+        #[test]
+        fn renders_typed_components_through_the_active_renderer() {
+            let subject = PathBuf::from("private-file.secret");
+            let operand = OsStr::new("other-file");
+            for component in Component::ALL {
+                let label = component.label();
+                let actual_component = component.of(&subject).unwrap();
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| component.check(it, operand));
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
+                            -------- assertr --------
+                            Expression: `subject`
+
+                            Actual: custom("private-file.secret")
+
+                            does not have the {label}
+
+                            Expected: custom("other-file")
+
+                            Details:
+                              - Actual {label}: custom({actual_component:?})
+                            -------- assertr --------
+                        "#});
+                        assert_custom_value(element.actual().expected.as_ref().unwrap(), operand);
+                        assert_custom_value(&element.actual().facts[0].value, actual_component);
+                    },
+                ]);
+
+                let failures = assert_that!(subject)
+                    .with_renderer(RedactingRenderer)
+                    .with_location(false)
+                    .capture(|it| component.check(it, operand));
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|value| value).has_text_report(formatdoc! {r"
+                            -------- assertr --------
+                            Expression: `subject`
+
+                            Actual: <redacted>
+
+                            does not have the {label}
+
+                            Expected: <redacted>
+
+                            Details:
+                              - Actual {label}: <redacted>
+                            -------- assertr --------
+                        "});
+                        assert_redacted(
+                            element.actual(),
+                            &["private-file", "secret", "other-file"],
+                        );
+                    },
+                ]);
+            }
+        }
+
+        #[test]
+        fn renders_absent_components_verbatim() {
+            let subject = PathBuf::from("/");
+            let operand = OsStr::new("other-file");
+            for component in Component::ALL {
+                let label = component.label();
+                let failures = assert_that!(subject)
+                    .with_renderer(CustomValueRenderer)
+                    .with_location(false)
+                    .capture(|it| component.check(it, operand));
+                assert_that!(failures).contains_exactly_satisfying([
+                    |element: AssertThat<AssertionFailure, Capture>| {
+                        element.derive(|item| item).has_text_report(formatdoc! {r#"
+                            -------- assertr --------
+                            Expression: `subject`
+
+                            Actual: custom("/")
+
+                            does not have the {label}
+
+                            Expected: custom("other-file")
+
+                            Details:
+                              - Actual {label}: <none>
+                            -------- assertr --------
+                        "#});
+                        element
+                            .derive_owned(|item| rendered_text(&item.facts[0].value))
+                            .is_equal_to("<none>");
+                        element
+                            .derive(|item| &item.facts[0].value.type_name)
+                            .is_equal_to(None);
+                    },
+                ]);
             }
         }
     }

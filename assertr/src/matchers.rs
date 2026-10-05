@@ -8,8 +8,7 @@
 //! This module is the catalog of all public built-in expectations. General comparisons, lengths,
 //! variants, and composition helpers are available directly. Subject families have namespaces to
 //! distinguish names such as [`string::Contains`] and [`collection::Contains`]. Existing short
-//! constructors, including [`eq`], [`equal_to`], [`ge`], and [`starts_with`], are available
-//! directly.
+//! constructors, including [`eq`], [`equal_to`], and [`ge`], are available directly.
 //!
 //! ## Build and reuse a check
 //!
@@ -26,7 +25,9 @@
 //! assert_that!([None, Some(42)]).contains_matching(IsSome);
 //! ```
 //!
-//! [`all_of`] requires every branch to pass. [`any_of`] stops at the first passing branch.
+//! [`all_of`] requires every branch to pass and reports each failing branch directly.
+//! [`any_of`] stops at the first passing branch. When every alternative fails, it reports one
+//! nested group whose failures name their zero-based `branch`.
 //! Explicit negative definitions, such as [`NotEqualTo`], [`IsNone`], and
 //! [`DoesNotMatchPattern`], own their checks and diagnostic evidence. There is no generic `not`.
 //! See [`MatcherList`] for tuples, arrays, and the [`matchers!`](crate::matchers!) list macro.
@@ -90,7 +91,7 @@
 //! Equality and ordering accept owned or borrowed values through
 //! [`crate::borrow_for::BorrowFor`]. For example, `eq("hello")` matches both `String` and `&str`.
 //! Reference-valued fields and iterator items keep their declared types. Use [`dereferenced`] to
-//! compare their pointees.
+//! compare the target of a reference, box, `String`, or other `Deref` value.
 //!
 //! Matching borrows the subject. Available checks depend on its capabilities and the active
 //! renderer. Renderer bounds apply to diagnostic leaves, and the rendering budget limits evidence
@@ -219,13 +220,12 @@ pub use crate::{
     assertions::{
         collection::{
             Each, ElementsAre, ElementsAreInAnyOrder, contains_contiguous_elements,
-            contains_matching, contains_no_matching, each, elements_are, elements_are_in_any_order,
-            ends_with_elements, starts_with_elements,
+            contains_matching, does_not_contain_matching, each, elements_are,
+            elements_are_in_any_order, ends_with_elements, starts_with_elements,
         },
         core::{
             partial_eq::{EqualTo, NotEqualTo, eq, equal_to},
             partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
-            string::starts_with,
         },
         map::{EntriesAre, Entry, EntryMatcherList, entries_are, entry, entry_matchers},
     },
@@ -266,7 +266,7 @@ pub mod string {
     #[doc(inline)]
     pub use crate::assertions::core::string::{
         Contains, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
-        EqualToIgnoringAsciiCase, IsBlank, IsBlankAscii, IsNotBlank, StartsWith, starts_with,
+        EqualToIgnoringAsciiCase, IsBlank, IsBlankAscii, IsNotBlank, StartsWith,
     };
 }
 
@@ -276,11 +276,11 @@ pub mod collection {
     pub use crate::assertions::collection::{
         Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
         ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder, ContainsMatching,
-        ContainsNoMatching, ContainsSameInstanceAs, DoesNotContain, DoesNotContainSameInstanceAs,
-        Each, ElementsAre, ElementsAreInAnyOrder, EndsWith, HasElementAt, HasFirst, HasLast,
-        HasSingle, StartsWith, contains_contiguous_elements, contains_matching,
-        contains_no_matching, each, elements_are, elements_are_in_any_order, ends_with_elements,
-        starts_with_elements,
+        ContainsSameInstanceAs, DoesNotContain, DoesNotContainMatching,
+        DoesNotContainSameInstanceAs, Each, ElementsAre, ElementsAreInAnyOrder, EndsWith,
+        HasElementAt, HasFirst, HasLast, HasSingle, StartsWith, contains_contiguous_elements,
+        contains_matching, does_not_contain_matching, each, elements_are,
+        elements_are_in_any_order, ends_with_elements, starts_with_elements,
     };
 }
 
@@ -366,11 +366,11 @@ pub mod path {
     };
 }
 
-/// ASCII header-value expectations. Requires `http`.
+/// ASCII and sensitivity header-value expectations. Requires `http`.
 #[cfg(feature = "http")]
 pub mod header_value {
     #[doc(inline)]
-    pub use crate::assertions::http::header_value::IsAscii;
+    pub use crate::assertions::http::header_value::{IsAscii, IsInsensitive, IsSensitive};
 }
 
 /// Signed-duration properties and tolerances. Requires `jiff`.

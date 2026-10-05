@@ -192,7 +192,7 @@ fn a_custom_bag_gets_only_order_free_collection_assertions() {
     impl AssertrCollection for Multiset {
         type Item = i32;
         const PRESENTATION: CollectionPresentation = CollectionPresentation::list()
-            .with_type_hint()
+            .show_type_hint(true)
             .with_order(RenderingOrder::SortByRenderedText);
 
         fn elements(&self) -> impl Iterator<Item = &i32> {
@@ -252,7 +252,8 @@ fn a_custom_set_gets_every_set_and_collection_assertion() {
 
     impl AssertrCollection for CustomSet {
         type Item = i32;
-        const PRESENTATION: CollectionPresentation = CollectionPresentation::set().with_type_hint();
+        const PRESENTATION: CollectionPresentation =
+            CollectionPresentation::set().show_type_hint(true);
 
         fn elements(&self) -> impl Iterator<Item = &i32> {
             self.0.iter()

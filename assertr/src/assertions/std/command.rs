@@ -1,7 +1,7 @@
 use crate::failure::FailureKind;
 use crate::mode::Mode;
 use crate::renderer::GroupStyle;
-use crate::{AssertThat, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, ValueRenderer};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use alloc::vec::Vec;
 use std::ffi::OsStr;
@@ -28,12 +28,12 @@ where
         actual: &'a Command,
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let args: Vec<&OsStr> = actual.get_args().collect();
         let expected = self.0.as_ref();
-        if args.contains(&expected) {
+        if actual.get_args().any(|arg| arg == expected) {
             Ok(())
         } else {
-            Err((args, expected))
+            // Only a rejection retains the argument list for its diagnostic.
+            Err((actual.get_args().collect(), expected))
         }
     }
 }
@@ -72,7 +72,7 @@ impl<E> HasArg<E> {
 /// Assertions for process commands.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait CommandAssertions<R = crate::DebugRenderer> {
+pub trait CommandAssertions<R = DebugRenderer> {
     /// Asserts that the command contains `expected` in its argument list.
     fn has_arg(self, expected: impl AsRef<OsStr>) -> Self
     where

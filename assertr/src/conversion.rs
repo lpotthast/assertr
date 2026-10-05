@@ -1,5 +1,7 @@
 #[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 use crate::{AssertThat, actual::Actual, mode::Mode};
+#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
+use alloc::string::String;
 
 #[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {

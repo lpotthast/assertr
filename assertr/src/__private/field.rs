@@ -47,19 +47,16 @@ where
         A: 'a;
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated();
-        let matched = if let Some(value) = (self.projection)(actual) {
+        let matched = (self.projection)(actual).is_some_and(|value| {
             context.scoped(self.path.clone(), |context| {
                 context.evaluate(value, &self.matcher)
             })
-        } else {
-            context.outcome(false, |_| {
-                FailureBuilder::detached::<()>(FailureKind::Matching)
-                    .relation("has the required structure")
-                    .build()
-            })
-        };
-        let evidence = context.into_evidence();
-        if matched { Ok(()) } else { Err(evidence) }
+        });
+        context.finish(matched, |_| {
+            FailureBuilder::detached::<()>(FailureKind::Matching)
+                .relation("has the required structure")
+                .build()
+        })
     }
 }
 

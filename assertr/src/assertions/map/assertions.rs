@@ -1,9 +1,16 @@
 use crate::borrow_for::BorrowFor;
 
-use super::{Map, MapLookup, imp};
+use super::{
+    Map, MapLookup, entries_are,
+    entry_matcher_list::SatisfyingEntryList,
+    imp,
+    matching::{ContainsEntryMatching, ContainsValueMatching},
+};
 use crate::{
-    AssertThat, Mode, ValueRenderer, assertions::map::EntryMatcherList,
-    expectation::ExpectationDiagnostics, mode::Capture,
+    AssertThat, DebugRenderer, Mode, ValueRenderer,
+    assertions::map::EntryMatcherList,
+    expectation::{ExpectationDiagnostics, satisfying},
+    mode::Capture,
 };
 
 /// Assertions over the keys, values, and entries of a map: `BTreeMap`, `HashMap`, and every type
@@ -75,7 +82,7 @@ use crate::{
 /// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait MapAssertions<K, V, R> {
+pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// The subject map type. Assertions that query a key require it to implement [`MapLookup`] for
     /// the query type.
     type Map: Map<Key = K, Value = V>;
@@ -116,7 +123,7 @@ pub trait MapAssertions<K, V, R> {
     ///
     /// This performs one assertion covering both key presence and value equality. A missing key is
     /// reported once.
-    fn contains_entry<E, Q>(self, key: &Q, value: E) -> Self
+    fn contains_entry<Q, E>(self, key: &Q, value: E) -> Self
     where
         Q: ?Sized,
         Self::Map: MapLookup<Q>,
@@ -129,7 +136,7 @@ pub trait MapAssertions<K, V, R> {
     /// The assertions run in capture mode against the value. If any fail, this method raises one
     /// map-level failure carrying every captured value failure as a nested failure located at the
     /// key.
-    fn contains_entry_satisfying<A, Q>(self, key: &Q, assertions: A) -> Self
+    fn contains_entry_satisfying<Q, A>(self, key: &Q, assertions: A) -> Self
     where
         Q: ?Sized,
         Self::Map: MapLookup<Q>,
@@ -140,7 +147,7 @@ pub trait MapAssertions<K, V, R> {
     /// well as when it is present with a different value. Like
     /// [`contains_entry`](MapAssertions::contains_entry), the operand selects a borrowed view
     /// through [`BorrowFor`] for the declared value type.
-    fn does_not_contain_entry<E, Q>(self, key: &Q, value: E) -> Self
+    fn does_not_contain_entry<Q, E>(self, key: &Q, value: E) -> Self
     where
         Q: ?Sized,
         Self::Map: MapLookup<Q>,
@@ -176,34 +183,36 @@ pub trait MapAssertions<K, V, R> {
             + ValueRenderer<EV::View>;
 
     /// Asserts that the map contains exactly the given keys and that each value matches the
-    /// predicate paired with its key. Missing and unexpected keys are failures.
+    /// matcher paired with its key. Missing and unexpected keys are failures.
     fn contains_exactly_entries_matching<L>(self, expected: L) -> Self
     where
         L: EntryMatcherList<Self::Map, R>,
-        R: ValueRenderer<K>;
+        R: ValueRenderer<K> + ValueRenderer<usize>;
 
     /// Asserts that the map contains exactly the given keys and that each value satisfies the
     /// assertions paired with its key. Missing and unexpected keys are failures.
     ///
     /// Each value's assertions run in capture mode. Every captured failure is retained as a nested
     /// failure of the map-level diagnostic, located at its expected key.
-    fn contains_exactly_entries_satisfying<EK, A, I>(self, assertions: I) -> Self
+    ///
+    /// Accepts an array, slice, vector, or compatible wrapper of key/callback pairs, like the other
+    /// bulk methods. Collect generators explicitly first.
+    fn contains_exactly_entries_satisfying<EK, A>(self, assertions: impl AsRef<[(EK, A)]>) -> Self
     where
         EK: BorrowFor<K>,
         Self::Map: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
-        I: IntoIterator<Item = (EK, A)>,
-        R: ValueRenderer<K> + ValueRenderer<EK::View> + Clone;
-    /// Asserts that the value at a key satisfies a matcher.
-    #[track_caller]
-    fn contains_entry_matching<Q: ?Sized, E>(self, key: &Q, expected: E) -> Self
+        R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone;
+
+    /// Asserts that the map has `key` and its value matches `expected`.
+    fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
     where
+        Q: ?Sized,
         Self::Map: MapLookup<Q>,
         E: ExpectationDiagnostics<V, R>,
         R: ValueRenderer<Q>;
 
-    /// Asserts that some map value satisfies a matcher.
-    #[track_caller]
+    /// Asserts that some map value matches `expected`.
     fn contains_value_matching<E>(self, expected: E) -> Self
     where
         E: ExpectationDiagnostics<V, R>;
@@ -258,7 +267,7 @@ where
     }
 
     #[track_caller]
-    fn contains_entry<E, Q>(self, key: &Q, value: E) -> Self
+    fn contains_entry<Q, E>(self, key: &Q, value: E) -> Self
     where
         Q: ?Sized,
         Mp: MapLookup<Q>,
@@ -270,18 +279,18 @@ where
     }
 
     #[track_caller]
-    fn contains_entry_satisfying<A, Q>(self, key: &Q, assertions: A) -> Self
+    fn contains_entry_satisfying<Q, A>(self, key: &Q, assertions: A) -> Self
     where
         Q: ?Sized,
         Mp: MapLookup<Q>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<Q> + Clone,
     {
-        self.contains_entry_matching(key, crate::expectation::satisfying(assertions))
+        self.contains_entry_matching(key, satisfying(assertions))
     }
 
     #[track_caller]
-    fn does_not_contain_entry<E, Q>(self, key: &Q, value: E) -> Self
+    fn does_not_contain_entry<Q, E>(self, key: &Q, value: E) -> Self
     where
         Q: ?Sized,
         Mp: MapLookup<Q>,
@@ -322,39 +331,33 @@ where
     fn contains_exactly_entries_matching<L>(self, expected: L) -> Self
     where
         L: EntryMatcherList<Self::Map, R>,
-        R: ValueRenderer<K>,
+        R: ValueRenderer<K> + ValueRenderer<usize>,
     {
-        self.track_assertion();
-
-        self.apply_assertion_after_tracking(crate::assertions::map::entries_are(expected))
+        self.apply_assertion(entries_are(expected))
     }
 
     #[track_caller]
-    fn contains_exactly_entries_satisfying<EK, A, I>(self, assertions: I) -> Self
+    fn contains_exactly_entries_satisfying<EK, A>(self, assertions: impl AsRef<[(EK, A)]>) -> Self
     where
         EK: BorrowFor<K>,
         Mp: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
-        I: IntoIterator<Item = (EK, A)>,
-        R: ValueRenderer<K> + ValueRenderer<EK::View> + Clone,
+        R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone,
     {
+        // Borrowing the callback list accesses the operand, so track first.
         self.track_assertion();
-        let expected = crate::assertions::map::entry_matchers(
-            assertions
-                .into_iter()
-                .map(|(key, assertions)| (key, crate::expectation::satisfying(assertions))),
-        );
-        self.apply_assertion_after_tracking(crate::assertions::map::entries_are(expected))
+        self.apply_assertion_after_tracking(entries_are(SatisfyingEntryList(assertions.as_ref())))
     }
 
     #[track_caller]
-    fn contains_entry_matching<Q: ?Sized, E>(self, key: &Q, expected: E) -> Self
+    fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
     where
-        Self::Map: MapLookup<Q>,
+        Q: ?Sized,
+        Mp: MapLookup<Q>,
         E: ExpectationDiagnostics<V, R>,
         R: ValueRenderer<Q>,
     {
-        self.apply_assertion(super::matching::ContainsEntryMatching::new(key, expected))
+        self.apply_assertion(ContainsEntryMatching::new(key, expected))
     }
 
     #[track_caller]
@@ -362,7 +365,7 @@ where
     where
         E: ExpectationDiagnostics<V, R>,
     {
-        self.apply_assertion(super::matching::ContainsValueMatching::new(expected))
+        self.apply_assertion(ContainsValueMatching::new(expected))
     }
 }
 
@@ -563,7 +566,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain key
 
@@ -624,7 +627,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     contains key
 
@@ -676,7 +679,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain value
 
@@ -750,7 +753,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     contains value
 
@@ -770,7 +773,7 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             let map = HashMap::from([("foo", "bar")]);
-            map.must().contain_entry::<&str, _>("foo", "bar");
+            map.must().contain_entry::<_, &str>("foo", "bar");
         }
 
         #[test]
@@ -831,7 +834,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain key
 
@@ -856,7 +859,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain the expected value at a key
 
@@ -912,7 +915,7 @@ mod tests {
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
             let map = HashMap::from([("foo", "bar")]);
-            map.must().not_contain_entry::<&str, _>("baz", "bar");
+            map.must().not_contain_entry::<_, &str>("baz", "bar");
         }
 
         #[test]
@@ -958,7 +961,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     contains the entry
 
@@ -1017,7 +1020,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain all of
 
@@ -1037,7 +1040,7 @@ mod tests {
 
     #[cfg(feature = "std")]
     mod contains_exactly_entries {
-        use crate::{Fact, prelude::*};
+        use crate::prelude::*;
         use indoc::formatdoc;
         use std::collections::HashMap;
 
@@ -1090,7 +1093,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain exactly
 
@@ -1130,7 +1133,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "a": 1,
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain exactly
 
@@ -1213,7 +1216,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain exactly
 
@@ -1227,7 +1230,7 @@ mod tests {
                                 "foo",
                                 "bar",
                             ),
-                        ] (sorted for rendering)
+                        ]
                     -------- assertr --------
                 "#});
         }
@@ -1247,7 +1250,7 @@ mod tests {
 
                     Actual: HashMap {{
                         "foo": "bar",
-                    }} (sorted for rendering)
+                    }}
 
                     does not contain exactly
 
@@ -1258,10 +1261,6 @@ mod tests {
                         ),
                     ]
 
-                    Details:
-                      - Keys with unexpected values: [
-                            "foo",
-                        ]
                     Nested failures:
                       - At ["foo"]:
                         Expected: "baz"
@@ -1299,11 +1298,8 @@ mod tests {
                         })
                         .collect::<Vec<_>>();
                     assert_that!(actual_keys).is_equal_to(&keys[..retained]);
-                    if retained < keys.len() {
-                        assert_that!(failures[0].facts.as_slice()).contains(Fact::note(
-                            crate::renderer::omission(keys.len() - retained, "unexpected value"),
-                        ));
-                    }
+                    assert_that!(failures[0].omitted_children).is_equal_to(keys.len() - retained);
+                    assert_that!(failures[0].facts).is_empty();
                 }
             }
             let entries = [("a", 3), ("b", 2), ("c", 1)];
@@ -1428,24 +1424,11 @@ mod tests {
                 does not match
 
                 Nested failures:
-                  - does not satisfy the constraint
+                  - does not have the required number of entries
 
-                    Constraint:
-                        has exactly the matching entries
-
-                        Nested failures:
-                          - contains a matching entry
-
-                            Expected: "a"
-
-                            Nested failures:
-                              - satisfies the predicate
-                          - contains a matching entry
-
-                            Expected: "a"
-
-                            Nested failures:
-                              - satisfies the predicate
+                    Details:
+                      - Actual length: 1
+                      - Expected length: 2
                 -------- assertr --------
             "#});
         }
@@ -1569,20 +1552,49 @@ mod tests {
         }
 
         #[test]
-        fn adapts_keyed_callback_iterators_with_borrowed_queries() {
+        fn adapts_collected_keyed_callbacks_with_borrowed_queries() {
             let map = BTreeMap::from([(String::from("a"), 1), (String::from("b"), 2)]);
             let expected = [(String::from("b"), 2), (String::from("a"), 1)];
             let calls = core::cell::Cell::new(0);
-            let checks = expected.iter().map(|(key, value)| {
-                let calls = &calls;
-                (key.as_str(), move |it: AssertThat<i32, Capture>| {
-                    calls.set(calls.get() + 1);
-                    it.is_equal_to(*value);
+            let checks = expected
+                .iter()
+                .map(|(key, value)| {
+                    let calls = &calls;
+                    (key.as_str(), move |it: AssertThat<i32, Capture>| {
+                        calls.set(calls.get() + 1);
+                        it.is_equal_to(*value);
+                    })
                 })
-            });
+                .collect::<Vec<_>>();
 
+            assert_that!(map).contains_exactly_entries_satisfying(&checks);
+            assert_that!(map).contains_exactly_entries_satisfying(checks.as_slice());
             assert_that!(map).contains_exactly_entries_satisfying(checks);
-            assert_that!(calls.get()).is_equal_to(2);
+            assert_that!(calls.get()).is_equal_to(6);
+        }
+
+        #[test]
+        fn accepts_borrowed_arrays_and_reports_like_entry_matchers() {
+            assert_that!(BTreeMap::from([(1, 1)])).contains_exactly_entries_satisfying(&[(
+                1,
+                |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(1);
+                },
+            )]);
+
+            let map = BTreeMap::from([(1, 1), (2, 2)]);
+
+            let adapted = assert_that!(map)
+                .with_location(false)
+                .capture(|it| it.contains_exactly_entries_satisfying([(1, is_two), (3, is_two)]));
+            let prepared = assert_that!(map).with_location(false).capture(|it| {
+                it.contains_exactly_entries_matching(entries_are![
+                    (1, crate::expectation::satisfying(is_two)),
+                    (3, crate::expectation::satisfying(is_two)),
+                ])
+            });
+            assert_that!(adapted).has_length(1);
+            assert_that!(adapted).is_equal_to(prepared);
         }
     }
 
@@ -1616,9 +1628,9 @@ mod tests {
                 .not_contain_key("baz")
                 .contain_value("bar")
                 .not_contain_value("baz")
-                .contain_entry::<&str, _>("foo", "bar")
+                .contain_entry::<_, &str>("foo", "bar")
                 .contain_entry_satisfying("foo", satisfies_bar)
-                .not_contain_entry::<&str, _>("foo", "baz")
+                .not_contain_entry::<_, &str>("foo", "baz")
                 .contain_keys(["foo"])
                 .contain_exactly_entries([("foo", "bar")])
                 .contain_exactly_entries_matching(crate::assertions::map::entry_matchers(
@@ -1942,14 +1954,6 @@ mod tests {
                     panic!("expected value borrow");
                 }
             }
-            struct PanickingIterator<T>(core::marker::PhantomData<fn() -> T>);
-            impl<T> IntoIterator for PanickingIterator<T> {
-                type Item = T;
-                type IntoIter = core::iter::Empty<T>;
-                fn into_iter(self) -> Self::IntoIter {
-                    panic!("expected entries conversion");
-                }
-            }
             struct PanickingList<T>(core::marker::PhantomData<fn() -> T>);
             impl<T> AsRef<[T]> for PanickingList<T> {
                 fn as_ref(&self) -> &[T] {
@@ -1981,9 +1985,9 @@ mod tests {
                 let child = root.derive(|value| value);
                 let panic = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
                     type Callback = for<'a> fn(AssertThat<'a, i32, Capture>);
-                    child.contains_exactly_entries_satisfying(
-                        PanickingIterator::<(i32, Callback)>(core::marker::PhantomData),
-                    );
+                    child.contains_exactly_entries_satisfying(PanickingList::<(i32, Callback)>(
+                        core::marker::PhantomData,
+                    ));
                 }));
                 assert_that!(panic).is_err();
                 assert_that!(root.state.records.assertion_count()).is_equal_to(4);
@@ -2057,535 +2061,534 @@ mod tests {
             }
         }
     }
-}
 
-#[cfg(test)]
-mod string_views {
-    use crate::{
-        assertions::map::{
-            ContainsEntry, ContainsExactlyEntries, ContainsValue, DoesNotContainEntry,
-            DoesNotContainValue,
-        },
-        prelude::*,
-        test_support::{StrOperand, StringRenderer},
-    };
-    use alloc::collections::BTreeMap;
-    use core::cell::Cell;
+    mod string_views {
+        use crate::{
+            assertions::map::{
+                ContainsEntry, ContainsExactlyEntries, ContainsValue, DoesNotContainEntry,
+                DoesNotContainValue,
+            },
+            prelude::*,
+            test_support::{StrOperand, StringRenderer},
+        };
+        use alloc::collections::BTreeMap;
+        use core::cell::Cell;
 
-    #[test]
-    fn string_values_and_native_string_key_queries_work_together() {
-        let values = BTreeMap::from([(String::from("key"), String::from("hello"))]);
-        assert_that!(values)
-            .contains_value("hello")
-            .does_not_contain_value("world")
-            .contains_entry("key", "hello")
-            .does_not_contain_entry("key", "world")
-            .contains_exactly_entries([("key", "hello")])
-            .matches(ContainsValue::new("hello"))
-            .matches(DoesNotContainValue::new("world"))
-            .matches(ContainsEntry::new("key", "hello"))
-            .matches(DoesNotContainEntry::new("key", "world"))
-            .matches(ContainsExactlyEntries::new([("key", "hello")]));
-    }
-
-    #[test]
-    fn map_value_rejections_retain_the_unsized_view() {
-        for method in 0..5 {
-            let calls = Cell::new(0);
-            let values = BTreeMap::from([(0usize, String::from("hello"))]);
-            let failures = assert_that!(values)
-                .with_renderer(StringRenderer)
-                .capture(|root| {
-                    let expected = StrOperand {
-                        value: if method == 1 || method == 3 {
-                            "hello"
-                        } else {
-                            "world"
-                        },
-                        observe: || {
-                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                            calls.set(calls.get() + 1);
-                        },
-                    };
-                    let it = root.derive(|it| it);
-                    match method {
-                        0 => it.contains_value(expected),
-                        1 => it.does_not_contain_value(expected),
-                        2 => it.contains_entry(&0, expected),
-                        3 => it.does_not_contain_entry(&0, expected),
-                        _ => it.contains_exactly_entries([(0, expected)]),
-                    };
-                    root
-                });
-            if method < 4 {
-                assert_that!(calls.get()).is_equal_to(1);
-            } else {
-                assert_that!(calls.get()).is_greater_than(0);
-            }
-            assert_that!(failures).has_length(1);
+        #[test]
+        fn string_values_and_native_string_key_queries_work_together() {
+            let values = BTreeMap::from([(String::from("key"), String::from("hello"))]);
+            assert_that!(values)
+                .contains_value("hello")
+                .does_not_contain_value("world")
+                .contains_entry("key", "hello")
+                .does_not_contain_entry("key", "world")
+                .contains_exactly_entries([("key", "hello")])
+                .matches(ContainsValue::new("hello"))
+                .matches(DoesNotContainValue::new("world"))
+                .matches(ContainsEntry::new("key", "hello"))
+                .matches(DoesNotContainEntry::new("key", "world"))
+                .matches(ContainsExactlyEntries::new([("key", "hello")]));
         }
-    }
-}
 
-#[cfg(test)]
-mod query_views {
-    use crate::{
-        assertions::{
-            HasLength,
-            map::{self, Map, MapLookup},
-        },
-        borrow_for::BorrowFor,
-        matchers::{entries_are, entry, eq},
-        prelude::*,
-        renderer::RenderingOrder,
-        test_support::{NoRenderer, StringRenderer},
-    };
-    use alloc::{collections::BTreeMap, string::String, vec::Vec};
-    use core::{
-        borrow::Borrow,
-        cell::{Cell, RefCell},
-    };
-
-    struct Query<'a> {
-        first: &'a str,
-        borrows: Cell<usize>,
-        repeatable: bool,
-        events: &'a RefCell<Vec<&'static str>>,
-    }
-    impl<'a> Query<'a> {
-        fn new(first: &'a str, events: &'a RefCell<Vec<&'static str>>) -> Self {
-            Self {
-                first,
-                borrows: Cell::new(0),
-                repeatable: true,
-                events,
+        #[test]
+        fn map_value_rejections_retain_the_unsized_view() {
+            for method in 0..5 {
+                let calls = Cell::new(0);
+                let values = BTreeMap::from([(0usize, String::from("hello"))]);
+                let failures = assert_that!(values)
+                    .with_renderer(StringRenderer)
+                    .capture(|root| {
+                        let expected = StrOperand {
+                            value: if method == 1 || method == 3 {
+                                "hello"
+                            } else {
+                                "world"
+                            },
+                            observe: || {
+                                assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                                calls.set(calls.get() + 1);
+                            },
+                        };
+                        let it = root.derive(|it| it);
+                        match method {
+                            0 => it.contains_value(expected),
+                            1 => it.does_not_contain_value(expected),
+                            2 => it.contains_entry(&0, expected),
+                            3 => it.does_not_contain_entry(&0, expected),
+                            _ => it.contains_exactly_entries([(0, expected)]),
+                        };
+                        root
+                    });
+                if method < 4 {
+                    assert_that!(calls.get()).is_equal_to(1);
+                } else {
+                    assert_that!(calls.get()).is_greater_than(0);
+                }
+                assert_that!(failures).has_length(1);
             }
         }
     }
-    impl Borrow<str> for Query<'_> {
-        fn borrow(&self) -> &str {
-            self.events.borrow_mut().push("key");
-            let previous = self.borrows.replace(self.borrows.get() + 1);
-            if self.repeatable || previous == 0 {
-                self.first
-            } else {
-                "later"
+
+    mod query_views {
+        use crate::{
+            assertions::{
+                HasLength,
+                map::{self, Map, MapLookup},
+            },
+            borrow_for::BorrowFor,
+            matchers::{entries_are, entry, eq},
+            prelude::*,
+            renderer::RenderingOrder,
+            test_support::{NoRenderer, StringRenderer},
+        };
+        use alloc::{collections::BTreeMap, string::String, vec::Vec};
+        use core::{
+            borrow::Borrow,
+            cell::{Cell, RefCell},
+        };
+
+        struct Query<'a> {
+            first: &'a str,
+            borrows: Cell<usize>,
+            repeatable: bool,
+            events: &'a RefCell<Vec<&'static str>>,
+        }
+        impl<'a> Query<'a> {
+            fn new(first: &'a str, events: &'a RefCell<Vec<&'static str>>) -> Self {
+                Self {
+                    first,
+                    borrows: Cell::new(0),
+                    repeatable: true,
+                    events,
+                }
             }
         }
-    }
-    impl BorrowFor<String> for Query<'_> {
-        type View = str;
-    }
-
-    struct Inputs<'a, T> {
-        values: Vec<T>,
-        events: &'a RefCell<Vec<&'static str>>,
-    }
-    impl<T> AsRef<[T]> for Inputs<'_, T> {
-        fn as_ref(&self) -> &[T] {
-            self.events.borrow_mut().push("container");
-            &self.values
-        }
-    }
-    struct Value<'a>(&'a RefCell<Vec<&'static str>>);
-    impl PartialEq<str> for Value<'_> {
-        fn eq(&self, expected: &str) -> bool {
-            self.0.borrow_mut().push("compare");
-            expected == "value"
-        }
-    }
-    #[derive(Clone)]
-    struct Leaves;
-    impl ValueRenderer<str> for Leaves {
-        fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            write!(f, "{value:?}")
-        }
-    }
-    impl ValueRenderer<String> for Leaves {
-        fn fmt(&self, value: &String, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            ValueRenderer::<str>::fmt(self, value, f)
-        }
-    }
-    impl ValueRenderer<Value<'_>> for Leaves {
-        fn fmt(&self, _: &Value<'_>, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            f.write_str("\"value\"")
-        }
-    }
-    impl ValueRenderer<usize> for Leaves {
-        fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            write!(f, "{value}")
-        }
-    }
-    struct ObservedMap<'a> {
-        key: String,
-        value: Value<'a>,
-        events: &'a RefCell<Vec<&'static str>>,
-    }
-    impl HasLength for ObservedMap<'_> {
-        fn length(&self) -> usize {
-            1
-        }
-    }
-    impl<'a> Map for ObservedMap<'a> {
-        type Key = String;
-        type Value = Value<'a>;
-        const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
-        fn entries(&self) -> impl Iterator<Item = (&String, &Self::Value)> {
-            core::iter::once((&self.key, &self.value))
-        }
-    }
-    impl MapLookup<str> for ObservedMap<'_> {
-        fn get_key_value(&self, query: &str) -> Option<(&String, &Self::Value)> {
-            self.events.borrow_mut().push("lookup");
-            (query == self.key).then_some((&self.key, &self.value))
-        }
-    }
-
-    fn observations(events: &RefCell<Vec<&'static str>>) -> Vec<&'static str> {
-        events
-            .borrow()
-            .iter()
-            .copied()
-            .filter(|event| matches!(*event, "lookup" | "compare"))
-            .collect()
-    }
-
-    #[test]
-    fn membership_reuses_expected_data_without_repeating_lookup() {
-        for query in ["a", "missing"] {
-            let events = RefCell::new(Vec::new());
-            let actual = ObservedMap {
-                key: String::from("a"),
-                value: Value(&events),
-                events: &events,
-            };
-            let expected = map::ContainsKeys::new(Inputs {
-                values: alloc::vec![Query::new(query, &events)],
-                events: &events,
-            });
-            let root = assert_that!(actual)
-                .with_renderer(Leaves)
-                .with_location(false);
-            let context = root.assertion_context();
-            // Construction neither converts the container nor borrows an operand.
-            assert_that!(&*events.borrow()).is_empty();
-            let result = expected.evaluate(&actual, &context);
-            assert_that!(result.is_ok()).is_equal_to(query == "a");
-            assert_that!(observations(&events)).contains_exactly(["lookup"]);
-            events.borrow_mut().clear();
-            if let Err(rejection) = result {
-                let failure = expected
-                    .explain(
-                        Some((&actual, rejection)),
-                        crate::failure::FailureBuilder::detached::<ObservedMap>(
-                            crate::failure::FailureKind::Membership,
-                        ),
-                        &context,
-                    )
-                    .build();
-                let text = ToHumanReadableText.render(&failure);
-                assert_that!(text)
-                    .contains("Expected: [")
-                    .contains("\"missing\"")
-                    .does_not_contain("later");
-                assert_that!(rendered_text(failure.expected.as_ref().unwrap()))
-                    .is_equal_to("[\n    \"missing\",\n]");
+        impl Borrow<str> for Query<'_> {
+            fn borrow(&self) -> &str {
+                self.events.borrow_mut().push("key");
+                let previous = self.borrows.replace(self.borrows.get() + 1);
+                if self.repeatable || previous == 0 {
+                    self.first
+                } else {
+                    "later"
+                }
             }
-            assert_that!(&*events.borrow()).does_not_contain("lookup");
-            events.borrow_mut().clear();
-            let description = context.describe::<ObservedMap, _>(&expected);
-            assert_that!(rendered_text(description.expected.as_ref().unwrap()))
-                .is_equal_to(alloc::format!("[\n    {query:?},\n]"));
-            assert_that!(&*events.borrow())
-                .contains_all(["container", "key"])
-                .does_not_contain("lookup");
         }
-    }
+        impl BorrowFor<String> for Query<'_> {
+            type View = str;
+        }
 
-    #[test]
-    fn exact_entries_resolve_keys_then_values_and_retain_all_observations() {
-        for (key, value, compares) in [
-            ("a", "value", true),
-            ("a", "wrong", true),
-            ("missing", "value", false),
-        ] {
-            for budget in [0, 1, 256] {
+        struct Inputs<'a, T> {
+            values: Vec<T>,
+            events: &'a RefCell<Vec<&'static str>>,
+        }
+        impl<T> AsRef<[T]> for Inputs<'_, T> {
+            fn as_ref(&self) -> &[T] {
+                self.events.borrow_mut().push("container");
+                &self.values
+            }
+        }
+        struct Value<'a>(&'a RefCell<Vec<&'static str>>);
+        impl PartialEq<str> for Value<'_> {
+            fn eq(&self, expected: &str) -> bool {
+                self.0.borrow_mut().push("compare");
+                expected == "value"
+            }
+        }
+        #[derive(Clone)]
+        struct Leaves;
+        impl ValueRenderer<str> for Leaves {
+            fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "{value:?}")
+            }
+        }
+        impl ValueRenderer<String> for Leaves {
+            fn fmt(&self, value: &String, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                ValueRenderer::<str>::fmt(self, value, f)
+            }
+        }
+        impl ValueRenderer<Value<'_>> for Leaves {
+            fn fmt(&self, _: &Value<'_>, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                f.write_str("\"value\"")
+            }
+        }
+        impl ValueRenderer<usize> for Leaves {
+            fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "{value}")
+            }
+        }
+        struct ObservedMap<'a> {
+            key: String,
+            value: Value<'a>,
+            events: &'a RefCell<Vec<&'static str>>,
+        }
+        impl HasLength for ObservedMap<'_> {
+            fn length(&self) -> usize {
+                1
+            }
+        }
+        impl<'a> Map for ObservedMap<'a> {
+            type Key = String;
+            type Value = Value<'a>;
+            const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
+            fn entries(&self) -> impl Iterator<Item = (&String, &Self::Value)> {
+                core::iter::once((&self.key, &self.value))
+            }
+        }
+        impl MapLookup<str> for ObservedMap<'_> {
+            fn get_key_value(&self, query: &str) -> Option<(&String, &Self::Value)> {
+                self.events.borrow_mut().push("lookup");
+                (query == self.key).then_some((&self.key, &self.value))
+            }
+        }
+
+        fn observations(events: &RefCell<Vec<&'static str>>) -> Vec<&'static str> {
+            events
+                .borrow()
+                .iter()
+                .copied()
+                .filter(|event| matches!(*event, "lookup" | "compare"))
+                .collect()
+        }
+
+        #[test]
+        fn membership_reuses_expected_data_without_repeating_lookup() {
+            for query in ["a", "missing"] {
                 let events = RefCell::new(Vec::new());
                 let actual = ObservedMap {
                     key: String::from("a"),
                     value: Value(&events),
                     events: &events,
                 };
-                let expected = map::ContainsExactlyEntries::new(Inputs {
-                    values: alloc::vec![(
-                        Query::new(key, &events),
-                        crate::test_support::StrOperand {
-                            value,
-                            observe: || events.borrow_mut().push("value"),
-                        }
-                    )],
+                let expected = map::ContainsKeys::new(Inputs {
+                    values: alloc::vec![Query::new(query, &events)],
                     events: &events,
                 });
-                // Value selects str for this custom declared value type as well.
                 let root = assert_that!(actual)
                     .with_renderer(Leaves)
-                    .with_rendering_budget(RenderingBudget::default().with_max_items(budget));
+                    .with_location(false);
                 let context = root.assertion_context();
+                // Construction neither converts the container nor borrows an operand.
+                assert_that!(&*events.borrow()).is_empty();
                 let result = expected.evaluate(&actual, &context);
-                assert_that!(result.is_ok()).is_equal_to(key == "a" && value == "value");
-                let mut wanted = alloc::vec!["lookup"];
-                if compares {
-                    wanted.push("compare");
-                }
-                assert_that!(observations(&events)).contains_exactly(wanted);
+                assert_that!(result.is_ok()).is_equal_to(query == "a");
+                assert_that!(observations(&events)).contains_exactly(["lookup"]);
                 events.borrow_mut().clear();
                 if let Err(rejection) = result {
                     let failure = expected
                         .explain(
                             Some((&actual, rejection)),
                             crate::failure::FailureBuilder::detached::<ObservedMap>(
-                                crate::failure::FailureKind::Equality,
+                                crate::failure::FailureKind::Membership,
                             ),
                             &context,
                         )
                         .build();
-                    if budget > 0 {
-                        assert_that!(ToHumanReadableText.render(&failure))
-                            .contains(key)
-                            .does_not_contain("later");
-                    }
+                    let text = ToHumanReadableText.render(&failure);
+                    assert_that!(text)
+                        .contains("Expected: [")
+                        .contains("\"missing\"")
+                        .does_not_contain("later");
+                    assert_that!(rendered_text(failure.expected.as_ref().unwrap()))
+                        .is_equal_to("[\n    \"missing\",\n]");
                 }
-                assert_that!(&*events.borrow())
-                    .does_not_contain("lookup")
-                    .does_not_contain("compare");
+                assert_that!(&*events.borrow()).does_not_contain("lookup");
                 events.borrow_mut().clear();
-                context.describe::<ObservedMap, _>(&expected);
+                let description = context.describe::<ObservedMap, _>(&expected);
+                assert_that!(rendered_text(description.expected.as_ref().unwrap()))
+                    .is_equal_to(alloc::format!("[\n    {query:?},\n]"));
                 assert_that!(&*events.borrow())
-                    .does_not_contain("lookup")
-                    .does_not_contain("compare");
+                    .contains_all(["container", "key"])
+                    .does_not_contain("lookup");
             }
         }
-    }
-    impl<F: Fn()> BorrowFor<Value<'_>> for crate::test_support::StrOperand<F> {
-        type View = str;
-    }
 
-    #[test]
-    fn missing_bulk_descriptions_borrow_only_budgeted_entries() {
-        let shown = RefCell::new(Vec::new());
-        let omitted = RefCell::new(Vec::new());
-        let keys = [Query::new("a", &shown), Query::new("b", &omitted)];
-        let entries = [
-            (Query::new("a", &shown), Query::new("value", &shown)),
-            (Query::new("b", &omitted), Query::new("value", &omitted)),
-        ];
-        let membership = map::ContainsKeys::new(&keys);
-        let exact = map::ContainsExactlyEntries::new(&entries);
-        assert_that!(&*shown.borrow()).is_empty();
-        assert_that!(&*omitted.borrow()).is_empty();
-        let context = AssertionContext::new(&Leaves, RenderingBudget::default().with_max_items(1));
-        context.describe::<BTreeMap<String, String>, _>(&membership);
-        context.describe::<BTreeMap<String, String>, _>(&exact);
-        assert_that!(&*shown.borrow()).contains("key");
-        assert_that!(&*omitted.borrow()).is_empty();
-    }
-
-    #[test]
-    fn leaf_evaluation_needs_no_renderer() {
-        let actual = BTreeMap::from([(String::from("a"), String::from("value"))]);
-        let root = assert_that!(actual).with_renderer(NoRenderer);
-        let context = root.assertion_context();
-        assert_that!(
-            map::ContainsKeys::new(["a"])
-                .evaluate(&actual, &context)
-                .is_ok()
-        )
-        .is_true();
-        assert_that!(
-            map::ContainsExactlyEntries::new([("a", "value")])
-                .evaluate(&actual, &context)
-                .is_ok()
-        )
-        .is_true();
-    }
-
-    #[test]
-    fn selected_views_match_literal_diagnostics_including_paths() {
-        let actual = BTreeMap::from([(String::from("a"), String::from("value"))]);
-        let events = RefCell::new(Vec::new());
-        let wrapped = assert_that!(actual)
-            .with_renderer(StringRenderer)
-            .with_location(false)
-            .capture(|it| {
-                it.contains_keys([Query::new("missing", &events)])
-                    .contains_exactly_entries([(Query::new("a", &events), "wrong")])
-                    .matches(entry(Query::new("a", &events), eq("wrong")))
-                    .matches(entries_are([entry(Query::new("a", &events), eq("wrong"))]))
-                    .matches(crate::entries_are![(
-                        Query::new("missing", &events),
-                        eq("wrong")
-                    )])
-                    .contains_exactly_entries_satisfying([(
-                        Query::new("a", &events),
-                        |it: AssertThat<String, Capture, StringRenderer>| {
-                            it.is_equal_to("wrong");
-                        },
-                    )])
-            });
-        let literal = assert_that!(actual)
-            .with_renderer(StringRenderer)
-            .with_location(false)
-            .capture(|it| {
-                it.contains_keys(["missing"])
-                    .contains_exactly_entries([("a", "wrong")])
-                    .matches(entry("a", eq("wrong")))
-                    .matches(entries_are([entry("a", eq("wrong"))]))
-                    .matches(crate::entries_are![("missing", eq("wrong"))])
-                    .contains_exactly_entries_satisfying([(
-                        "a",
-                        |it: AssertThat<String, Capture, StringRenderer>| {
-                            it.is_equal_to("wrong");
-                        },
-                    )])
-            });
-        assert_that!(wrapped).is_equal_to(literal);
-        assert_that!(&*events.borrow()).contains("key");
-    }
-
-    #[test]
-    fn keyed_evaluation_resolves_queries_anew_and_probes_suppress_rendering() {
-        struct NeverRender;
-        impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-            fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                panic!("probe rendered a diagnostic leaf")
+        #[test]
+        fn exact_entries_resolve_keys_then_values_and_retain_all_observations() {
+            for (key, value, compares) in [
+                ("a", "value", true),
+                ("a", "wrong", true),
+                ("missing", "value", false),
+            ] {
+                for budget in [0, 1, 256] {
+                    let events = RefCell::new(Vec::new());
+                    let actual = ObservedMap {
+                        key: String::from("a"),
+                        value: Value(&events),
+                        events: &events,
+                    };
+                    let expected = map::ContainsExactlyEntries::new(Inputs {
+                        values: alloc::vec![(
+                            Query::new(key, &events),
+                            crate::test_support::StrOperand {
+                                value,
+                                observe: || events.borrow_mut().push("value"),
+                            }
+                        )],
+                        events: &events,
+                    });
+                    // Value selects str for this custom declared value type as well.
+                    let root = assert_that!(actual)
+                        .with_renderer(Leaves)
+                        .with_rendering_budget(RenderingBudget::default().with_max_items(budget));
+                    let context = root.assertion_context();
+                    let result = expected.evaluate(&actual, &context);
+                    assert_that!(result.is_ok()).is_equal_to(key == "a" && value == "value");
+                    let mut wanted = alloc::vec!["lookup"];
+                    if compares {
+                        wanted.push("compare");
+                    }
+                    assert_that!(observations(&events)).contains_exactly(wanted);
+                    events.borrow_mut().clear();
+                    if let Err(rejection) = result {
+                        let failure = expected
+                            .explain(
+                                Some((&actual, rejection)),
+                                crate::failure::FailureBuilder::detached::<ObservedMap>(
+                                    crate::failure::FailureKind::Equality,
+                                ),
+                                &context,
+                            )
+                            .build();
+                        if budget > 0 {
+                            assert_that!(ToHumanReadableText.render(&failure))
+                                .contains(key)
+                                .does_not_contain("later");
+                        }
+                    }
+                    assert_that!(&*events.borrow())
+                        .does_not_contain("lookup")
+                        .does_not_contain("compare");
+                    events.borrow_mut().clear();
+                    context.describe::<ObservedMap, _>(&expected);
+                    assert_that!(&*events.borrow())
+                        .does_not_contain("lookup")
+                        .does_not_contain("compare");
+                }
             }
         }
-        let events = RefCell::new(Vec::new());
-        let actual = ObservedMap {
-            key: String::from("a"),
-            value: Value(&events),
-            events: &events,
-        };
-        let root = assert_that!(actual).with_renderer(NeverRender);
-        let context = root.assertion_context();
-        let matcher = entry(
-            Query {
-                repeatable: false,
-                ..Query::new("a", &events)
-            },
-            crate::expectation::anything(),
-        );
-        assert_that!(context.probe(&actual, &matcher)).is_true();
-        assert_that!(&*events.borrow()).contains_exactly(["key", "lookup"]);
-        events.borrow_mut().clear();
-        assert_that!(context.probe(&actual, &matcher)).is_false();
-        assert_that!(&*events.borrow()).contains_exactly(["key", "lookup"]);
-        events.borrow_mut().clear();
-        let exact = entries_are([entry(
-            Query::new("missing", &events),
-            crate::expectation::anything(),
-        )]);
-        assert_that!(context.probe(&actual, &exact)).is_false();
-        assert_that!(&*events.borrow()).contains_exactly(["key", "lookup"]);
-        events.borrow_mut().clear();
-        assert_that!(context.probe(
-            &actual,
-            &map::ContainsKeys::new([Query::new("missing", &events)])
-        ))
-        .is_false();
-        assert_that!(observations(&events)).contains_exactly(["lookup"]);
-        events.borrow_mut().clear();
-        let exact = map::ContainsExactlyEntries::new([(
-            Query::new("a", &events),
-            crate::test_support::StrOperand {
-                value: "wrong",
-                observe: || events.borrow_mut().push("value"),
-            },
-        )]);
-        assert_that!(context.probe(&actual, &exact)).is_false();
-        assert_that!(observations(&events)).contains_exactly(["lookup", "compare"]);
-    }
+        impl<F: Fn()> BorrowFor<Value<'_>> for crate::test_support::StrOperand<F> {
+            type View = str;
+        }
 
-    #[test]
-    fn missing_keyed_subjects_borrow_queries_without_lookups_or_callbacks() {
-        let events = RefCell::new(Vec::new());
-        let callbacks = Cell::new(0);
-        let actual = ObservedMap {
-            key: String::from("a"),
-            value: Value(&events),
-            events: &events,
-        };
-        let root = assert_that!(actual).with_renderer(Leaves);
-        let context = root.assertion_context();
-        let matcher = entry(
-            Query::new("a", &events),
-            crate::expectation::satisfying(|_: AssertThat<Value, Capture, Leaves>| {
-                callbacks.set(callbacks.get() + 1);
-            }),
-        );
-        let description = context.describe::<ObservedMap, _>(&matcher);
-        assert_that!(description.relation.as_deref())
-            .is_equal_to(Some("contains a matching entry"));
-        assert_that!(&*events.borrow()).contains_exactly(["key"]);
-        events.borrow_mut().clear();
-        context.describe::<ObservedMap, _>(&entries_are([matcher]));
-        assert_that!(&*events.borrow()).contains_exactly(["key"]);
-        assert_that!(callbacks.get()).is_equal_to(0);
-    }
+        #[test]
+        fn missing_bulk_descriptions_borrow_only_budgeted_entries() {
+            let shown = RefCell::new(Vec::new());
+            let omitted = RefCell::new(Vec::new());
+            let keys = [Query::new("a", &shown), Query::new("b", &omitted)];
+            let entries = [
+                (Query::new("a", &shown), Query::new("value", &shown)),
+                (Query::new("b", &omitted), Query::new("value", &omitted)),
+            ];
+            let membership = map::ContainsKeys::new(&keys);
+            let exact = map::ContainsExactlyEntries::new(&entries);
+            assert_that!(&*shown.borrow()).is_empty();
+            assert_that!(&*omitted.borrow()).is_empty();
+            let context =
+                AssertionContext::new(&Leaves, RenderingBudget::default().with_max_items(1));
+            context.describe::<BTreeMap<String, String>, _>(&membership);
+            context.describe::<BTreeMap<String, String>, _>(&exact);
+            assert_that!(&*shown.borrow()).contains("key");
+            assert_that!(&*omitted.borrow()).is_empty();
+        }
 
-    #[test]
-    fn exact_entries_resolve_each_key_before_its_value_in_input_order() {
-        let events = RefCell::new(Vec::new());
-        let actual = ObservedMap {
-            key: String::from("a"),
-            value: Value(&events),
-            events: &events,
-        };
-        let root = assert_that!(actual).with_renderer(NoRenderer);
-        let expected = map::ContainsExactlyEntries::new(["a", "missing"].map(|key| {
-            (
-                Query::new(key, &events),
+        #[test]
+        fn leaf_evaluation_needs_no_renderer() {
+            let actual = BTreeMap::from([(String::from("a"), String::from("value"))]);
+            let root = assert_that!(actual).with_renderer(NoRenderer);
+            let context = root.assertion_context();
+            assert_that!(
+                map::ContainsKeys::new(["a"])
+                    .evaluate(&actual, &context)
+                    .is_ok()
+            )
+            .is_true();
+            assert_that!(
+                map::ContainsExactlyEntries::new([("a", "value")])
+                    .evaluate(&actual, &context)
+                    .is_ok()
+            )
+            .is_true();
+        }
+
+        #[test]
+        fn selected_views_match_literal_diagnostics_including_paths() {
+            let actual = BTreeMap::from([(String::from("a"), String::from("value"))]);
+            let events = RefCell::new(Vec::new());
+            let wrapped = assert_that!(actual)
+                .with_renderer(StringRenderer)
+                .with_location(false)
+                .capture(|it| {
+                    it.contains_keys([Query::new("missing", &events)])
+                        .contains_exactly_entries([(Query::new("a", &events), "wrong")])
+                        .matches(entry(Query::new("a", &events), eq("wrong")))
+                        .matches(entries_are([entry(Query::new("a", &events), eq("wrong"))]))
+                        .matches(crate::entries_are![(
+                            Query::new("missing", &events),
+                            eq("wrong")
+                        )])
+                        .contains_exactly_entries_satisfying([(
+                            Query::new("a", &events),
+                            |it: AssertThat<String, Capture, StringRenderer>| {
+                                it.is_equal_to("wrong");
+                            },
+                        )])
+                });
+            let literal = assert_that!(actual)
+                .with_renderer(StringRenderer)
+                .with_location(false)
+                .capture(|it| {
+                    it.contains_keys(["missing"])
+                        .contains_exactly_entries([("a", "wrong")])
+                        .matches(entry("a", eq("wrong")))
+                        .matches(entries_are([entry("a", eq("wrong"))]))
+                        .matches(crate::entries_are![("missing", eq("wrong"))])
+                        .contains_exactly_entries_satisfying([(
+                            "a",
+                            |it: AssertThat<String, Capture, StringRenderer>| {
+                                it.is_equal_to("wrong");
+                            },
+                        )])
+                });
+            assert_that!(wrapped).is_equal_to(literal);
+            assert_that!(&*events.borrow()).contains("key");
+        }
+
+        #[test]
+        fn keyed_evaluation_resolves_queries_anew_and_probes_suppress_rendering() {
+            struct NeverRender;
+            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
+                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("probe rendered a diagnostic leaf")
+                }
+            }
+            let events = RefCell::new(Vec::new());
+            let actual = ObservedMap {
+                key: String::from("a"),
+                value: Value(&events),
+                events: &events,
+            };
+            let root = assert_that!(actual).with_renderer(NeverRender);
+            let context = root.assertion_context();
+            let matcher = entry(
+                Query {
+                    repeatable: false,
+                    ..Query::new("a", &events)
+                },
+                crate::expectation::anything(),
+            );
+            assert_that!(context.probe(&actual, &matcher)).is_true();
+            assert_that!(&*events.borrow()).contains_exactly(["key", "lookup"]);
+            events.borrow_mut().clear();
+            assert_that!(context.probe(&actual, &matcher)).is_false();
+            assert_that!(&*events.borrow()).contains_exactly(["key", "lookup"]);
+            events.borrow_mut().clear();
+            let exact = entries_are([entry(
+                Query::new("missing", &events),
+                crate::expectation::anything(),
+            )]);
+            assert_that!(context.probe(&actual, &exact)).is_false();
+            assert_that!(&*events.borrow()).contains_exactly(["key", "lookup"]);
+            events.borrow_mut().clear();
+            assert_that!(context.probe(
+                &actual,
+                &map::ContainsKeys::new([Query::new("missing", &events)])
+            ))
+            .is_false();
+            assert_that!(observations(&events)).contains_exactly(["lookup"]);
+            events.borrow_mut().clear();
+            let exact = map::ContainsExactlyEntries::new([(
+                Query::new("a", &events),
                 crate::test_support::StrOperand {
-                    value: "value",
+                    value: "wrong",
                     observe: || events.borrow_mut().push("value"),
                 },
-            )
-        }));
-        assert_that!(
-            expected
-                .evaluate(&actual, &root.assertion_context())
-                .is_err()
-        )
-        .is_true();
-        assert_that!(observations(&events)).contains_exactly(["lookup", "compare", "lookup"]);
-        let events = events.borrow();
-        for entry_events in events.split_inclusive(|event| *event == "lookup") {
-            let key = entry_events
-                .iter()
-                .position(|event| *event == "key")
-                .unwrap();
-            let value = entry_events
-                .iter()
-                .position(|event| *event == "value")
-                .unwrap();
-            assert_that!(key).is_less_than(value);
+            )]);
+            assert_that!(context.probe(&actual, &exact)).is_false();
+            assert_that!(observations(&events)).contains_exactly(["lookup", "compare"]);
         }
-    }
 
-    #[test]
-    fn slice_queries_work_for_bulk_keys_and_all_keyed_compositions() {
-        let actual = BTreeMap::from([(alloc::vec![1_u8, 2], 3)]);
-        let query = &[1_u8, 2][..];
-        assert_that!(actual)
-            .contains_key(query)
-            .contains_keys([query])
-            .contains_exactly_entries([(query, 3)])
-            .matches(entry(query, eq(3)))
-            .matches(entries_are([entry(query, eq(3))]))
-            .contains_exactly_entries_matching(crate::entries_are![(query, eq(3))])
-            .contains_exactly_entries_satisfying([(query, |it: AssertThat<i32, Capture>| {
-                it.is_equal_to(3);
-            })])
-            .matches(matchers::all_of([entry(query, eq(3))]));
+        #[test]
+        fn missing_keyed_subjects_borrow_queries_without_lookups_or_callbacks() {
+            let events = RefCell::new(Vec::new());
+            let callbacks = Cell::new(0);
+            let actual = ObservedMap {
+                key: String::from("a"),
+                value: Value(&events),
+                events: &events,
+            };
+            let root = assert_that!(actual).with_renderer(Leaves);
+            let context = root.assertion_context();
+            let matcher = entry(
+                Query::new("a", &events),
+                crate::expectation::satisfying(|_: AssertThat<Value, Capture, Leaves>| {
+                    callbacks.set(callbacks.get() + 1);
+                }),
+            );
+            let description = context.describe::<ObservedMap, _>(&matcher);
+            assert_that!(description.relation.as_deref())
+                .is_equal_to(Some("contains a matching entry"));
+            assert_that!(&*events.borrow()).contains_exactly(["key"]);
+            events.borrow_mut().clear();
+            context.describe::<ObservedMap, _>(&entries_are([matcher]));
+            assert_that!(&*events.borrow()).contains_exactly(["key"]);
+            assert_that!(callbacks.get()).is_equal_to(0);
+        }
+
+        #[test]
+        fn exact_entries_resolve_each_key_before_its_value_in_input_order() {
+            let events = RefCell::new(Vec::new());
+            let actual = ObservedMap {
+                key: String::from("a"),
+                value: Value(&events),
+                events: &events,
+            };
+            let root = assert_that!(actual).with_renderer(NoRenderer);
+            let expected = map::ContainsExactlyEntries::new(["a", "missing"].map(|key| {
+                (
+                    Query::new(key, &events),
+                    crate::test_support::StrOperand {
+                        value: "value",
+                        observe: || events.borrow_mut().push("value"),
+                    },
+                )
+            }));
+            assert_that!(
+                expected
+                    .evaluate(&actual, &root.assertion_context())
+                    .is_err()
+            )
+            .is_true();
+            assert_that!(observations(&events)).contains_exactly(["lookup", "compare", "lookup"]);
+            let events = events.borrow();
+            for entry_events in events.split_inclusive(|event| *event == "lookup") {
+                let key = entry_events
+                    .iter()
+                    .position(|event| *event == "key")
+                    .unwrap();
+                let value = entry_events
+                    .iter()
+                    .position(|event| *event == "value")
+                    .unwrap();
+                assert_that!(key).is_less_than(value);
+            }
+        }
+
+        #[test]
+        fn slice_queries_work_for_bulk_keys_and_all_keyed_compositions() {
+            let actual = BTreeMap::from([(alloc::vec![1_u8, 2], 3)]);
+            let query = &[1_u8, 2][..];
+            assert_that!(actual)
+                .contains_key(query)
+                .contains_keys([query])
+                .contains_exactly_entries([(query, 3)])
+                .matches(entry(query, eq(3)))
+                .matches(entries_are([entry(query, eq(3))]))
+                .contains_exactly_entries_matching(crate::entries_are![(query, eq(3))])
+                .contains_exactly_entries_satisfying([(query, |it: AssertThat<i32, Capture>| {
+                    it.is_equal_to(3);
+                })])
+                .matches(matchers::all_of([entry(query, eq(3))]));
+        }
     }
 }

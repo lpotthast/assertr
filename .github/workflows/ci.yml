@@ -109,10 +109,14 @@ jobs:
           targets: thumbv8m.main-none-eabihf
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p assertr-no-std-tests --locked
+      - run: cargo test -p assertr-no-std-tests --features num --locked
       - run: cargo test -p assertr-no-std-tests --features partial --locked
+      - run: cargo check -p assertr-no-std-tests --features num --target thumbv8m.main-none-eabihf --locked
       - run: cargo check -p assertr-no-std-tests --features partial --target thumbv8m.main-none-eabihf --locked
       - run: cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf --locked
       - run: cargo check -p assertr --lib --no-default-features --features num,libm --target thumbv8m.main-none-eabihf --locked
+      - run: cargo check -p assertr --lib --no-default-features --features fluent,rootcause,partial --target thumbv8m.main-none-eabihf --locked
+      - run: cargo check -p assertr --lib --no-default-features --features serde-json,serde-toml --target thumbv8m.main-none-eabihf --locked
 
   msrv:
     runs-on: ubuntu-latest

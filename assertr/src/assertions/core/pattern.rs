@@ -1,5 +1,5 @@
 use crate::failure::{FailureBuilder, FailureKind};
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics};
 
 /// A Rust pattern together with the predicate and source text needed to assert that it matches.
@@ -74,7 +74,7 @@ impl<A: ?Sized, R, F> ExpectationDiagnostics<A, R> for Pattern<F>
 where
     F: Fn(&A) -> bool,
 {
-    const KIND: FailureKind = FailureKind::Matching;
+    const KIND: FailureKind = FailureKind::Predicate;
     fn explain<Target>(
         &self,
         rejected: Option<(&A, ())>,
@@ -93,7 +93,7 @@ where
 }
 
 // Ordinary checks render the subject. Reusable positive patterns instead describe a constraint.
-fn explain_pattern_rejection<T, Target, R: ValueRenderer<T>>(
+fn explain_pattern_rejection<T: ?Sized, Target, R: ValueRenderer<T>>(
     actual: &T,
     description: &'static str,
     negative: bool,
@@ -132,7 +132,7 @@ impl<P> DoesNotMatchPattern<P> {
     }
 }
 
-impl<T, R, P: Fn(&T) -> bool> Expectation<T, R> for DoesNotMatchPattern<P> {
+impl<T: ?Sized, R, P: Fn(&T) -> bool> Expectation<T, R> for DoesNotMatchPattern<P> {
     type Success<'a>
         = ()
     where
@@ -152,7 +152,7 @@ impl<T, R, P: Fn(&T) -> bool> Expectation<T, R> for DoesNotMatchPattern<P> {
     }
 }
 
-impl<T, R: ValueRenderer<T>, P: Fn(&T) -> bool> ExpectationDiagnostics<T, R>
+impl<T: ?Sized, R: ValueRenderer<T>, P: Fn(&T) -> bool> ExpectationDiagnostics<T, R>
     for DoesNotMatchPattern<P>
 {
     const KIND: FailureKind = FailureKind::Predicate;
@@ -179,7 +179,7 @@ impl<T, R: ValueRenderer<T>, P: Fn(&T) -> bool> ExpectationDiagnostics<T, R>
 /// active [`ValueRenderer`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PatternAssertions<T, R> {
+pub trait PatternAssertions<T, R = DebugRenderer> {
     /// Asserts that the subject matches `pattern`.
     fn is_matching<P>(self, pattern: Pattern<P>) -> Self
     where
@@ -288,12 +288,37 @@ mod tests {
     mod matcher {
         use core::cell::Cell;
 
-        use crate::matchers::{DoesNotMatchPattern, elements_are};
+        use crate::FailureKind;
+        use crate::matchers::{DoesNotMatchPattern, dereferenced, elements_are};
         use crate::prelude::*;
 
         #[test]
         fn supports_pattern_guards() {
             assert_that!(Some(2)).matches(pattern!(Some(value) if *value > 0));
+        }
+
+        #[test]
+        fn reusable_and_ordinary_patterns_share_the_predicate_kind() {
+            for failures in [
+                assert_that!(Some(1)).capture(|it| it.matches(pattern!(None))),
+                assert_that!(Some(1)).capture(|it| it.is_matching(pattern!(None))),
+                assert_that!(None::<i32>)
+                    .capture(|it| it.matches(DoesNotMatchPattern::new(pattern!(None)))),
+                assert_that!(None::<i32>).capture(|it| it.is_not_matching(pattern!(None))),
+            ] {
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0].kind).is_equal_to(FailureKind::Predicate);
+            }
+        }
+
+        #[test]
+        fn negative_patterns_accept_unsized_subjects() {
+            let forbidden = DoesNotMatchPattern::new(pattern!("secret"));
+            assert_that!(String::from("public")).matches(dereferenced(&forbidden));
+            let failures = assert_that!(String::from("secret"))
+                .capture(|it| it.matches(dereferenced(&forbidden)));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].kind).is_equal_to(FailureKind::Predicate);
         }
 
         #[test]

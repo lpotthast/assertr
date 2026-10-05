@@ -4,48 +4,81 @@
 #![allow(clippy::needless_continue)]
 //! Procedural macros for `assertr`.
 //!
-//! The `partial` feature of `assertr` re-exports [`partial`]. [`fluent_aliases`] supports
-//! assertion-trait authors and is used internally by `assertr` when the `fluent` feature is
-//! enabled.
+//! Use these macros through `assertr`, which re-exports them behind its features:
+//!
+//! - [`fluent_expressions`], available as `assertr::fluent_expressions` with the `fluent` feature,
+//!   captures receiver expressions of fluent entry calls in a test scope.
+//! - `partial!`, available as `assertr::partial!` with the `partial` feature, builds structural
+//!   matchers. Its documentation lives in `assertr`.
+//! - [`fluent_aliases`] generates fluent aliases for assertion traits. `assertr` applies it to its
+//!   own traits when the `fluent` feature is enabled. Authors of custom assertion traits can apply
+//!   it directly by depending on this crate.
 
 mod fluent_aliases;
 mod fluent_expressions;
+mod partial;
 
 use proc_macro::TokenStream;
 use syn::{Item, ItemTrait, parse_macro_input};
 
 /// Attribute macro that generates fluent aliases for assertion trait methods.
 ///
-/// Place on a trait definition to auto-generate `be_*` aliases for `is_*` methods, `have_*` aliases
-/// for `has_*` methods, and imperative forms for other third-person verbs (`contains` -> `contain`,
-/// `starts_with` -> `start_with`, `panics` -> `panic`, and `needs_*` -> `need_*`). Negated methods
-/// put `not` first: `is_not_*` -> `not_be_*`, `has_not_*` -> `not_have_*`, and `does_not_*` ->
-/// `not_*`. Namespace prefixes such as `into_iter_` stay at the front. Methods beginning with
-/// `get_` are already imperative and get no alias.
+/// Place it on a trait definition. Each eligible method gets a delegating alias named by these
+/// rules:
 ///
-/// Generated aliases are gated by `#[cfg(feature = "fluent")]`. Their documentation links to the
-/// original method, and they inherit its documentation and attributes, including `must_use` and
-/// `deprecated`.
+/// - `is_x` -> `be_x` and `has_x` -> `have_x`. The possessive `has_no_x` keeps its order as
+///   `have_no_x`.
+/// - Negations put `not` first, as in "must not be equal to": `is_not_x` -> `not_be_x`, `has_not_x`
+///   -> `not_have_x`, and `does_not_x` -> `not_x`.
+/// - `contains`, `exists`, `panics`, and `satisfies` turn imperative, alone or as a prefix:
+///   `contains` -> `contain`, `exists` -> `exist`, `panics_async` -> `panic_async`, `satisfies` ->
+///   `satisfy`.
+/// - The prefixes `starts_`, `ends_`, and `needs_` turn imperative: `starts_with` -> `start_with`,
+///   `ends_with` -> `end_with`, `needs_drop` -> `need_drop`.
+/// - `matches` -> `match_expectation`, because `match` is a keyword and `be_matching` belongs to
+///   `is_matching`.
+/// - The namespace prefix `into_iter_` stays in front: `into_iter_contains` -> `into_iter_contain`.
+/// - Names starting with `get_` are already imperative and get no alias. Other names get an alias
+///   only when one is given explicitly.
 ///
-/// Use `#[fluent_alias("custom_name")]` on a method for a custom alias name. Use
-/// `#[no_fluent_alias]` on a method to skip alias generation.
+/// Use `#[fluent_alias("custom_name")]` on a method for a custom alias name. Keywords become raw
+/// identifiers. Use `#[no_fluent_alias]` on a method to skip alias generation.
+///
+/// Aliases are documented as aliases of their original method. They copy its other attributes,
+/// including `must_use`, `deprecated`, and `cfg`, track the caller, and require `Self: Sized`.
+/// The aliases themselves are not feature-gated. To make them optional, apply the attribute and
+/// its helper attributes conditionally:
+///
+/// ```ignore
+/// #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+/// pub trait ReadinessAssertions {
+///     fn is_ready(self) -> Self; // Alias: `be_ready`.
+///
+///     #[cfg_attr(feature = "fluent", fluent_alias("be_set_up"))]
+///     fn is_initialized(self) -> Self;
+/// }
+/// ```
 #[proc_macro_attribute]
-pub fn fluent_aliases(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn fluent_aliases(attr: TokenStream, item: TokenStream) -> TokenStream {
+    if !attr.is_empty() {
+        return syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "fluent_aliases does not accept arguments",
+        )
+        .into_compile_error()
+        .into();
+    }
+
     let trait_def = parse_macro_input!(item as ItemTrait);
     fluent_aliases::fluent_aliases_impl(trait_def).into()
 }
 
 /// Captures receiver expressions for fluent assertion entry points in a test scope.
 ///
-/// Place this attribute on a test function or an inline test module. It rewrites syntactically
-/// visible `value.must()` and `value.must_owned()` calls to attach `stringify!(value)`. For visible
-/// `value.verify(...)` and `value.verify_owned(...)` calls, it attaches the expression to the
-/// completed failures through macro-only support. Calls outside the annotated scope remain
-/// unchanged.
-///
-/// A macro invocation can be the receiver, as in `fixture!().must()`, because the fluent call is
-/// visible to this attribute. The attribute cannot inspect later macro expansion, so a macro that
-/// itself expands to `value.must()` or `value.verify(...)` does not gain expression capture.
+/// Place this attribute on a test function or an inline test module. Failures from visible
+/// `value.must()`, `value.must_owned()`, `value.verify(...)`, and `value.verify_owned(...)` calls
+/// in that scope then report `value` as their expression, as `assert_that!(value)` does. Calls
+/// outside the annotated scope remain unchanged.
 ///
 /// Put this attribute above `#[test]` and proc-macro test attributes such as `#[tokio::test]` or
 /// `#[rstest]`, so expression capture runs before those attributes transform the function body:
@@ -58,16 +91,22 @@ pub fn fluent_aliases(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-/// The rewrite keeps ordinary method resolution. A user-defined zero-argument `must` method is
-/// still called, after which the generated expression attachment fails to compile if its return
-/// type is not an assertion chain. User-defined `verify` and `verify_owned` methods likewise remain
-/// selected, preserving callback `Fn`, `FnMut`, `FnOnce`, and coercions to
-/// concrete function-pointer parameters. Function items and callback variables retain automatic
-/// expression capture for assertr verification. Inline closures attach expressions to capture-mode
-/// inputs. Callback values permit attachment to completed failures only when their input is a
-/// capture-mode chain and the fluent entry location matches. Unrelated callback inputs remain
-/// unchanged even when `#[track_caller]` forwards a nested verification's location. Derived
-/// failures and explicit expression overrides keep their expressions.
+/// A macro invocation can be the receiver, as in `fixture!().must()`. The attribute cannot inspect
+/// later macro expansion, so a macro that itself expands to `value.must()` or `value.verify(...)`
+/// does not gain expression capture.
+///
+/// The attribute recognizes entry calls by method name and keeps ordinary method resolution.
+/// Callback arguments are never rewritten, so they keep their type, call traits, and coercions.
+/// For `verify` and `verify_owned`, the expression reaches failures raised directly on the
+/// callback's input chain. Derived chains and explicit `with_expression` overrides keep their own
+/// expressions, and results of other methods with these names are returned unchanged. A
+/// user-defined zero-argument `must` or `must_owned` method that does not return an assertion chain
+/// fails to compile, because its result receives the expression too. Keep such calls outside
+/// annotated scopes.
+///
+/// Limitation: a user-defined `#[track_caller]` `verify` or `verify_owned` method that returns the
+/// failures of an inner Assertr verification reports them at its own call site. Those failures
+/// therefore receive the outer receiver expression.
 #[proc_macro_attribute]
 pub fn fluent_expressions(attr: TokenStream, item: TokenStream) -> TokenStream {
     if !attr.is_empty() {
@@ -85,34 +124,12 @@ pub fn fluent_expressions(attr: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
-mod partial;
-/// Constructs a partial matcher without annotating the production type.
+/// Implementation of `assertr::partial!`, which forwards its `$crate` path before a `;`.
 ///
-/// Use through `assertr::partial!` with the `partial` feature enabled. Pass the result to
-/// `.matches(...)` or a collection assertion such as `.contains_matching(...)`.
-///
-/// List the fields that matter to the test and use `..` to ignore the rest. Every selected field
-/// requires a matcher. Use `assertr::matchers::eq(value)` or `equal_to(value)` for `PartialEq`
-/// equality, another `partial!` for nested fields, or `assertr::matchers::satisfying` to check
-/// a field with existing assertion methods.
-///
-/// Without `..`, every field must be listed. Omitted fields need no comparison or rendering
-/// support. Neither the whole type nor ignored fields need `PartialEq` or `Debug`, and private
-/// fields follow ordinary Rust visibility rules. Field expectation expressions are evaluated
-/// once when the matcher is constructed. Pass `&matcher` to reuse it.
-///
-/// Named structs, tuple structs, enum variants, and unit constructors are supported. Tuple `_`
-/// positions are wildcards, and a tuple `..` must be final. Nested collection and map expectations
-/// use `elements_are!`, `elements_are_in_any_order!`, `each`, and `entries_are!`.
-///
-/// Prefix a constructor with `variant` to include its variant in diagnostic paths. Qualified
-/// paths, including `variant crate::Message::Ready` and `variant ::core::option::Option::None`,
-/// are supported. Use `r#variant::Type` for an unmarked path through a module named `variant`.
-///
-/// See the [partial matching guide](https://docs.rs/assertr/latest/assertr/matchers/index.html)
-/// for field constraints, nested examples, collection policies, and diagnostics.
+/// Not a public API. Use `assertr::partial!` instead.
+#[doc(hidden)]
 #[proc_macro]
-pub fn partial(input: TokenStream) -> TokenStream {
+pub fn __partial(input: TokenStream) -> TokenStream {
     partial::expand(input.into())
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()

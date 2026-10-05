@@ -1,5 +1,6 @@
+use crate::assertions::std::mutex::locked_data;
 use crate::failure::{Fact, FailureKind};
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use tokio::sync::RwLock;
 
@@ -38,146 +39,85 @@ impl<T> LockObservation<'_, T> {
                 .actual(render.struct_field(actual, "RwLock", "data", &*guard))
                 .fact(Fact::labelled(LOCK_STATE, "read-locked")),
             Self::WriteLocked => failure
-                .actual(render.unavailable_struct_field(actual, "RwLock", "data", "<locked>"))
+                .actual(locked_data(render, actual, "RwLock"))
                 .fact(Fact::labelled(LOCK_STATE, "write-locked")),
         }
     }
 }
-/// Observes whether a Tokio read-write lock is not locked.
-pub struct IsNotLocked;
-impl<T, R> Expectation<RwLock<T>, R> for IsNotLocked {
-    type Success<'a>
-        = LockObservation<'a, T>
-    where
-        Self: 'a,
-        RwLock<T>: 'a;
-    type Rejection<'a>
-        = LockObservation<'a, T>
-    where
-        Self: 'a,
-        RwLock<T>: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a RwLock<T>,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let observation = LockObservation::observe(actual);
-        if matches!(observation, LockObservation::Unlocked(_)) {
-            Ok(observation)
-        } else {
-            Err(observation)
-        }
-    }
-}
-impl<T, R> ExpectationDiagnostics<RwLock<T>, R> for IsNotLocked
-where
-    R: ValueRenderer<T>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a RwLock<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure.relation("is not locked"),
-            Some((actual, observation)) => {
-                observation.explain(actual, failure.relation("is unexpectedly locked"), context)
+/// Generates a Tokio read-write lock expectation from its accepted state and relations.
+macro_rules! lock_state_expectation {
+    ($(#[$meta:meta])* $name:ident, $state:pat, $met:literal, $unmet:literal) => {
+        $(#[$meta])*
+        pub struct $name;
+        impl<T, R> Expectation<RwLock<T>, R> for $name {
+            type Success<'a>
+                = LockObservation<'a, T>
+            where
+                Self: 'a,
+                RwLock<T>: 'a;
+            type Rejection<'a>
+                = LockObservation<'a, T>
+            where
+                Self: 'a,
+                RwLock<T>: 'a;
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a RwLock<T>,
+                _context: &AssertionContext<'_, R>,
+            ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+                let observation = LockObservation::observe(actual);
+                if matches!(observation, $state) {
+                    Ok(observation)
+                } else {
+                    Err(observation)
+                }
             }
         }
-    }
-}
-/// Observes whether a Tokio read-write lock is read-locked.
-pub struct IsReadLocked;
-impl<T, R> Expectation<RwLock<T>, R> for IsReadLocked {
-    type Success<'a>
-        = LockObservation<'a, T>
-    where
-        Self: 'a,
-        RwLock<T>: 'a;
-    type Rejection<'a>
-        = LockObservation<'a, T>
-    where
-        Self: 'a,
-        RwLock<T>: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a RwLock<T>,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let observation = LockObservation::observe(actual);
-        if matches!(observation, LockObservation::ReadLocked(_)) {
-            Ok(observation)
-        } else {
-            Err(observation)
-        }
-    }
-}
-impl<T, R> ExpectationDiagnostics<RwLock<T>, R> for IsReadLocked
-where
-    R: ValueRenderer<T>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a RwLock<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure.relation("is read-locked"),
-            Some((actual, observation)) => {
-                observation.explain(actual, failure.relation("is not read-locked"), context)
+        impl<T, R> ExpectationDiagnostics<RwLock<T>, R> for $name
+        where
+            R: ValueRenderer<T>,
+        {
+            const KIND: FailureKind = FailureKind::Other;
+            fn explain<'a, Target>(
+                &'a self,
+                rejected: Option<(&'a RwLock<T>, Self::Rejection<'a>)>,
+                failure: FailureBuilder<Target>,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder<Target> {
+                match rejected {
+                    None => failure.relation($met),
+                    Some((actual, observation)) => {
+                        observation.explain(actual, failure.relation($unmet), context)
+                    }
+                }
             }
         }
-    }
+    };
 }
-/// Observes whether a Tokio read-write lock is write-locked.
-pub struct IsWriteLocked;
-impl<T, R> Expectation<RwLock<T>, R> for IsWriteLocked {
-    type Success<'a>
-        = LockObservation<'a, T>
-    where
-        Self: 'a,
-        RwLock<T>: 'a;
-    type Rejection<'a>
-        = LockObservation<'a, T>
-    where
-        Self: 'a,
-        RwLock<T>: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a RwLock<T>,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let observation = LockObservation::observe(actual);
-        if matches!(observation, LockObservation::WriteLocked) {
-            Ok(observation)
-        } else {
-            Err(observation)
-        }
-    }
-}
-impl<T, R> ExpectationDiagnostics<RwLock<T>, R> for IsWriteLocked
-where
-    R: ValueRenderer<T>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a RwLock<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure.relation("is write-locked"),
-            Some((actual, observation)) => {
-                observation.explain(actual, failure.relation("is not write-locked"), context)
-            }
-        }
-    }
-}
+
+lock_state_expectation!(
+    /// Observes whether a Tokio read-write lock is not locked.
+    IsNotLocked,
+    LockObservation::Unlocked(_),
+    "is not locked",
+    "is unexpectedly locked"
+);
+
+lock_state_expectation!(
+    /// Observes whether a Tokio read-write lock is read-locked.
+    IsReadLocked,
+    LockObservation::ReadLocked(_),
+    "is read-locked",
+    "is not read-locked"
+);
+
+lock_state_expectation!(
+    /// Observes whether a Tokio read-write lock is write-locked.
+    IsWriteLocked,
+    LockObservation::WriteLocked,
+    "is write-locked",
+    "is not write-locked"
+);
 
 /// Non-blocking assertions for Tokio's [`RwLock`] type.
 ///
@@ -186,7 +126,7 @@ where
 /// not a synchronized count of guards.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait TokioRwLockAssertions<T, R> {
+pub trait TokioRwLockAssertions<T, R = DebugRenderer> {
     /// Asserts that `try_write` can acquire the lock.
     fn is_not_locked(self) -> Self
     where

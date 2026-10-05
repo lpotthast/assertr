@@ -1,6 +1,7 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
-    actual::Actual,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics,
+    ValueRenderer,
+    assertions::support::project_checked,
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
 };
@@ -104,7 +105,7 @@ impl<T, E, R: ValueRenderer<T>> ExpectationDiagnostics<Result<T, E>, R> for IsEr
 /// mode. Use the non-extracting [`ResultAssertions::is_ok`] or [`ResultAssertions::is_err`] when
 /// the contained value is irrelevant.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ResultExtractAssertions<'t, T, E, R> {
+pub trait ResultExtractAssertions<'t, T, E, R = DebugRenderer> {
     /// Asserts that the subject is `Ok`, then returns an assertion over its value.
     ///
     /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
@@ -126,16 +127,8 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     where
         R: ValueRenderer<E>,
     {
-        self.apply_assertion(IsOk).map(|it| match it {
-            Actual::Owned(o) => Actual::Owned(match o {
-                Ok(ok) => ok,
-                Err(_) => unreachable!("already checked"),
-            }),
-            Actual::Borrowed(b) => Actual::Borrowed(match b.as_ref() {
-                Ok(ok) => ok,
-                Err(_) => unreachable!("already checked"),
-            }),
-        })
+        self.apply_assertion(IsOk)
+            .map(|actual| project_checked(actual, Result::ok, |it| it.as_ref().ok()))
     }
 
     #[track_caller]
@@ -143,23 +136,15 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsErr).map(|it| match it {
-            Actual::Owned(o) => Actual::Owned(match o {
-                Ok(_) => unreachable!("already checked"),
-                Err(err) => err,
-            }),
-            Actual::Borrowed(b) => Actual::Borrowed(match b.as_ref() {
-                Ok(_) => unreachable!("already checked"),
-                Err(err) => err,
-            }),
-        })
+        self.apply_assertion(IsErr)
+            .map(|actual| project_checked(actual, Result::err, |it| it.as_ref().err()))
     }
 }
 
 /// Non-extracting assertions for `Result` subjects.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ResultAssertions<'t, M: Mode, T, E, R> {
+pub trait ResultAssertions<T, E, M: Mode, R = DebugRenderer> {
     /// Asserts that the subject is `Ok`.
     ///
     /// Non-extracting: the subject stays the full `Result`, so further assertions can be chained in
@@ -195,7 +180,7 @@ pub trait ResultAssertions<'t, M: Mode, T, E, R> {
         A: for<'a> FnOnce(AssertThat<'a, E, M, R>);
 }
 
-impl<'t, M: Mode, T, E, R> ResultAssertions<'t, M, T, E, R> for AssertThat<'t, Result<T, E>, M, R> {
+impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T, E>, M, R> {
     #[track_caller]
     fn is_ok(self) -> Self
     where
@@ -249,7 +234,7 @@ mod tests {
         fn traits_are_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, Result<i32, i32>, Panic, NoRenderer>
-                    => ResultAssertions<'static, Panic, i32, i32, NoRenderer>
+                    => ResultAssertions<i32, i32, Panic, NoRenderer>
             );
             assert_trait_impl!(
                 AssertThat<'static, Result<i32, i32>, Panic, NoRenderer>

@@ -1,147 +1,15 @@
 use crate::failure::FailureKind;
 use crate::mode::Mode;
-use crate::{AssertThat, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, ValueRenderer};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use jiff::Span;
 
-/// Checks whether a `Span` is zero.
-pub struct IsZero;
-impl<R> Expectation<Span, R> for IsZero {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Span: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        Span: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Span,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.is_zero() { Ok(()) } else { Err(()) }
-    }
-}
-impl<R> ExpectationDiagnostics<Span, R> for IsZero
-where
-    R: ValueRenderer<Span>,
-{
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a Span, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure
-                .relation("is zero")
-                .expected(render.value(&Span::new())),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .expected(render.value(&Span::new())),
-        }
-    }
-}
-/// Checks whether a `Span` is negative.
-pub struct IsNegative;
-impl<R> Expectation<Span, R> for IsNegative {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Span: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        Span: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Span,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.is_negative() {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-}
-impl<R> ExpectationDiagnostics<Span, R> for IsNegative
-where
-    R: ValueRenderer<Span>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a Span, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is negative"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is not negative"),
-        }
-    }
-}
-/// Checks whether a `Span` is positive.
-pub struct IsPositive;
-impl<R> Expectation<Span, R> for IsPositive {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Span: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        Span: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Span,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.is_positive() {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-}
-impl<R> ExpectationDiagnostics<Span, R> for IsPositive
-where
-    R: ValueRenderer<Span>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a Span, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is positive"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is not positive"),
-        }
-    }
-}
+sign_expectations!(subject: Span, zero: Span::new());
 
 /// Assertions for [`Span`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait SpanAssertions<R = crate::DebugRenderer> {
+pub trait SpanAssertions<R = DebugRenderer> {
     /// Asserts that the span is zero.
     fn is_zero(self) -> Self
     where

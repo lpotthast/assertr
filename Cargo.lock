@@ -28,7 +28,6 @@ name = "assertr-macros"
 version = "0.5.0"
 dependencies = [
  "assertr",
- "indoc",
  "proc-macro-crate",
  "proc-macro2",
  "quote",

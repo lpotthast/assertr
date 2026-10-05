@@ -16,47 +16,47 @@ sources:
 
 [Architecture overview](README.md)
 
-The runtime requires `alloc` and supports `no_std`. The [runtime manifest](../assertr/Cargo.toml) owns feature
-dependencies. The [CI workflow](../.github/workflows/ci.yml) and [Justfile](../Justfile) own the validation matrix.
+The runtime supports `no_std` and requires `alloc`. The [runtime manifest](../assertr/Cargo.toml) defines which dependencies
+each feature enables. [CI](../.github/workflows/ci.yml) and [Justfile](../Justfile) define the checks run for each configuration.
 
-The `borrow-for` dependency always enables its `alloc` feature for standard operand wrappers, strings, and vectors.
-It does not require `std`. The sibling crate is currently connected through a local path dependency.
+## Feature support
 
-## Feature topology
+| Feature | What it enables or requires |
+|---|---|
+| Default | `std`, `num`. |
+| `partial` | The `partial!` macro, a `macro_rules!` wrapper that forwards `$crate` to a hidden procedural macro, usable through facade re-exports. Runtime matchers and declarative matcher macros need no optional feature. |
+| `fluent` | Entry, aliases, expression capture. Independently enables the macro dependency, as does `partial`. |
+| `std` | Hash collections, unwind-catching APIs, `borrow-for/std`, and the optional `num-traits/std`, `serde_json/std`, and `toml/std`. |
+| `num` | Numeric assertions. |
+| `libm` | Floating-point classification checks when `num` is enabled without `std`. Neither `libm` nor `std` implicitly enables `num`. |
+| `jiff`, `tokio`, `program`, `reqwest`, `http` | Enable `std` for wrapped std-only dependencies. |
+| `rootcause`, `serde-json`, `serde-toml`, `serde` | Support embedded `no_std` with `alloc` without enabling runtime `std`. `std` enables the `std` features of `serde_json` and `toml` through weak edges. `serde` combines JSON and TOML. |
+| `full` | Every optional API and integration. |
 
-| Feature                                                           | Boundary                                                                                                                                          |
-|-------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| Defaults                                                          | `std` and `num`.                                                                                                                                  |
-| `partial`                                                        | Enables procedural `partial!`. Runtime matchers and declarative matcher macros need no feature.                                                   |
-| `fluent`                                                          | Independently enables fluent entry, aliases, and expression capture. Uses `assertr-macros`, as does `partial`.                                   |
-| `std`                                                             | Enables hash collections and unwind-catching APIs. Also enables optional `num-traits` std support.                                                |
-| `num`, `libm`                                                     | `num` enables numeric assertions. Add `libm` for floating-point classifications without `std`. Neither `std` nor `libm` implicitly enables `num`. |
-| `jiff`, `tokio`, `program`, `reqwest`, `serde-json`, `serde-toml` | Enable `std` because their wrapped dependencies require it. `serde` combines JSON and TOML.                                                       |
-| `rootcause`                                                       | Supports `no_std` without enabling the runtime's `std` feature.                                                                                   |
-| `http`                                                            | Leaves the runtime in `no_std` mode, but the current `http` dependency requires `std` and a hosted target.                                        |
-| `full`                                                            | Enables every optional API and integration.                                                                                                       |
+Core assertions, capture, structured failures, rendering, tree collections, and iterator scans remain available without `std`.
+Memory assertions (`assertions::core::mem`, `matchers::memory::NeedsDrop`) need no optional feature.
 
-Without `std`, core assertions, capture, structured failures, rendering, tree collections, and streaming remain
-available. Memory assertions live in `assertions::core::mem`, and `matchers::memory::NeedsDrop` also needs no optional
-feature. Panic presentation falls back on returned adapter errors in both configurations. Catching adapter panics
-requires `std`, as described in [panic presentation](failure-processing.md#presentation-and-fallback). Unwind-safety
-traits and presentation's `RefUnwindSafe` bound come from `core` and apply independently.
+The published `borrow-for` dependency disables defaults and always enables `alloc` for wrappers, strings, and vectors.
+[Unwind bounds](assertion-lifecycle.md#unwind-safety) use `core` traits. See
+[failure processing](failure-processing.md#presentation-and-fallback) for how panic adapters behave with and without `std`.
 
 ## Runtime and macro compatibility
 
-The runtime pins [assertr-macros](../assertr-macros/Cargo.toml) exactly because generated code calls unsupported
-`assertr::__private` plumbing. Keep the released pair synchronized when that protocol changes. Both crates currently
-declare Rust 1.89.0 as their MSRV. [AGENTS.md](../AGENTS.md) defines release and MSRV update requirements.
+The runtime pins `assertr-macros` exactly: generated code uses unsupported `assertr::__private`. Keep released versions
+synchronized. Both crates declare a minimum supported Rust version (MSRV) of 1.89.0. Follow
+[AGENTS.md](../AGENTS.md) when releasing or updating the MSRV.
 
 ## Validation coverage
 
-CI exercises no-default, isolated `std`, isolated `num`, default, all-feature, macro-crate, and hosted no-std
-configurations. Each optional feature is also checked alone to expose dependencies hidden by Cargo feature unification.
+| Coverage | Configurations |
+|---|---|
+| Runtime | No defaults, isolated `std`, isolated `num`, `partial` with and without `fluent`, defaults, all features. |
+| Feature independence | Each optional feature alone, to catch dependencies otherwise supplied by Cargo feature unification. |
+| Macro crate | Independent build. Tests run in the workspace only, because the package ships only `src` and licenses. |
+| Hosted no-std fixture | Public APIs used from another crate without runtime `std`. The test harness can catch panics. |
+| Embedded | `thumbv8m.main-none-eabihf`: base runtime, `num,libm`, `fluent,rootcause,partial`, `serde-json,serde-toml`, fixture with `num` and `partial`. |
+| Rustdoc | All features, warnings denied. |
+| README | Freshness against literal crate-level rustdoc. |
+| MSRV | All-feature runtime, macro crate, hosted no-std fixture. |
 
-The [no-std fixture](../assertr-no-std-tests/) checks downstream use without the runtime's `std` feature. Hosted tests
-can catch panics through their test harness. Embedded checks on `thumbv8m.main-none-eabihf` cover the base runtime,
-`num,libm`, and the fixture with `partial`. A hosted feature check is not evidence of embedded compatibility.
-
-Rustdoc builds enable all features and deny warnings.
-README freshness is checked against literal crate-level rustdoc. MSRV CI checks the all-feature runtime, macro crate,
-and hosted no-std fixture.
+A check on a hosted target does not establish embedded compatibility. See the [downstream fixture](../assertr-no-std-tests/).

@@ -49,16 +49,14 @@ impl<T> Default for Type<T> {
 
 /// Starts an assertion about the type `T` itself rather than about a value.
 ///
-/// The subject is a [`Type<T>`](Type). With the `std` feature, `needs_drop()` asserts that
-/// [`core::mem::needs_drop`] returns `true`. Other properties are available through [`Type`]'s
-/// accessors and [`AssertThat::satisfies_owned`]:
+/// The subject is a [`Type<T>`](Type). `needs_drop()` asserts that [`core::mem::needs_drop`]
+/// returns `true`. Other properties are available through [`Type`]'s accessors and
+/// [`AssertThat::satisfies_owned`]:
 ///
 /// ```
 /// use assertr::prelude::*;
 ///
-/// # #[cfg(feature = "std")] {
 /// assert_that_type::<String>().needs_drop();
-/// # }
 ///
 /// assert_that_type::<[u8; 4]>().satisfies_owned(|it| it.size(), |size| {
 ///     size.is_equal_to(4);
@@ -69,8 +67,8 @@ impl<T> Default for Type<T> {
 /// });
 /// ```
 ///
-/// The entry point and [`Type`] accessors need no optional feature. For example, without `std`
-/// you can check drop requirements with
+/// The entry point, its assertions, and [`Type`] accessors need no optional feature. To check that
+/// a type has no drop requirements, use
 /// `satisfies_owned(|it| it.needs_drop(), |needed| { needed.is_false(); })`. A `false` result
 /// guarantees no drop side effects. A `true` result is conservative and need not mean that
 /// dropping the type runs code.

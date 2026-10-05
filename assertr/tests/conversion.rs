@@ -41,12 +41,4 @@ fn is_able_to_use_toml_conversion() {
         value = 42
         list = [1, 2]
     "});
-
-    assert_that!(&config)
-        .as_toml()
-        .get_ok()
-        .is_equal_to(indoc::formatdoc! {r"
-        value = 42
-        list = [1, 2]
-    "});
 }

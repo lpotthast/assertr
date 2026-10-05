@@ -26,6 +26,8 @@ pub struct Nil;
 /// One element of a macro-generated heterogeneous list.
 pub struct Cons<H, T>(pub H, pub T);
 
+#[cfg(feature = "partial")]
+pub use assertr_macros::__partial as partial;
 pub use field::field;
 pub use partial_match::partial_match;
 

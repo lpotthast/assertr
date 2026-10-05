@@ -1,14 +1,10 @@
 use super::{
-    AssertThat, AssertionContext, Borrow, EqualTo, Expectation, FailureBuilder, FailureKind,
-    GroupStyle, Mode, PhantomData, PositionReporting, Preview, Scan, Tail, ValueRenderer, VecDeque,
-    exact_size_hint, execute,
+    AssertThat, AssertionContext, Borrow, FailureBuilder, FailureKind, GroupStyle, KnownLength,
+    LengthBound, Mode, PREVIEW_CAPACITY, PhantomData, Preview, Scan, Tail, ValueRenderer, execute,
 };
 use crate::Fact;
 
-struct IsEmpty<T> {
-    positions: PositionReporting,
-    item: PhantomData<fn() -> T>,
-}
+struct IsEmpty<T>(PhantomData<fn() -> T>);
 
 impl<T, I, R> Scan<I, R> for IsEmpty<T>
 where
@@ -37,14 +33,10 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let failure = failure
+        failure
             .actual(render.borrowed_values::<T, _>(core::slice::from_ref(&item), GroupStyle::List))
             .relation("is not empty")
-            .fact(Fact::labelled("Consumed elements", render.value(&1_usize)));
-        match self.positions.index(0) {
-            Some(index) => failure.fact(Fact::labelled("Decisive index", index)),
-            None => failure,
-        }
+            .fact(Fact::labelled("Consumed elements", render.value(&1_usize)))
     }
 }
 
@@ -84,86 +76,96 @@ where
     }
 }
 
-struct LengthObservation<Item> {
-    preview: Preview<Item>,
-    length: usize,
-    exact: bool,
+/// Why a length scan rejected its input.
+enum LengthRejection<Item> {
+    /// An exact size hint ruled out the expected length before consuming anything.
+    Reported(KnownLength),
+    /// Counting decided the rejection. The count is exact if the input ended, and a lower bound
+    /// otherwise.
+    Counted { preview: Preview<Item>, exact: bool },
 }
 
-struct HasLength<T> {
+/// Counts at most `expected + 1` elements. An exact size hint can only reject early. A hint that
+/// agrees with the expected length is verified by counting, because hints are not trusted.
+struct LengthScan<T> {
     expected: usize,
     item: PhantomData<fn() -> T>,
 }
 
-impl<T, I, R> Scan<I, R> for HasLength<T>
+impl<T, I, R> Scan<I, R> for LengthScan<T>
 where
     I: Iterator,
     I::Item: Borrow<T>,
     R: ValueRenderer<T> + ValueRenderer<usize>,
 {
-    type Rejection = LengthObservation<I::Item>;
+    type Rejection = LengthRejection<I::Item>;
     const KIND: FailureKind = FailureKind::Length;
 
     fn observe(
         &self,
         iterator: &mut I,
-        context: &AssertionContext<'_, R>,
+        _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
-        let observation = observe_length(iterator, self.expected);
-        if observation.exact
-            && EqualTo::new(&self.expected)
-                .evaluate(&observation.length, context)
-                .is_ok()
-        {
+        if let Some(known) = KnownLength::mismatch(iterator, self.expected, LengthBound::Exact) {
+            return Err(LengthRejection::Reported(known));
+        }
+        let mut tail = Tail::new(PREVIEW_CAPACITY);
+        let mut exact = false;
+        for _ in 0..=self.expected {
+            let Some(item) = iterator.next() else {
+                exact = true;
+                break;
+            };
+            tail.push(item);
+        }
+        if exact && tail.consumed == self.expected {
             Ok(())
         } else {
-            Err(observation)
+            Err(LengthRejection::Counted {
+                preview: tail.finish(),
+                exact,
+            })
         }
     }
 
     fn explain<Target>(
         &self,
-        actual: Self::Rejection,
+        rejection: Self::Rejection,
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
         let failure = failure
-            .expected(render.value(&self.expected))
-            .actual(render.borrowed_values::<T, _>(&actual.preview.items, GroupStyle::List))
-            .relation("does not have the expected length");
-        actual
-            .preview
-            .facts(failure, render, None)
-            .fact(Fact::labelled(
-                if actual.exact {
-                    "Actual length"
-                } else {
-                    "Minimum actual length"
-                },
-                render.value(&actual.length),
-            ))
+            .relation("does not have the expected length")
+            .expected(render.value(&self.expected));
+        match rejection {
+            LengthRejection::Reported(known) => known.reported_fact(failure, render),
+            LengthRejection::Counted { preview, exact } => {
+                let failure =
+                    failure
+                        .actual(preview.rendered::<T, _>(render))
+                        .fact(Fact::labelled(
+                            if exact {
+                                "Actual length"
+                            } else {
+                                "Minimum actual length"
+                            },
+                            render.value(&preview.consumed),
+                        ));
+                preview.omission(failure)
+            }
+        }
     }
 }
 
 #[track_caller]
-pub(crate) fn assert_is_empty<S, T, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    positions: PositionReporting,
-) where
+pub(crate) fn assert_is_empty<S, T, I, M: Mode, R>(this: &AssertThat<'_, S, M, R>, iterator: I)
+where
     I: Iterator,
     I::Item: Borrow<T>,
     R: ValueRenderer<T> + ValueRenderer<usize>,
 {
-    execute(
-        this,
-        iterator,
-        &IsEmpty::<T> {
-            positions,
-            item: PhantomData,
-        },
-    );
+    execute(this, iterator, &IsEmpty::<T>(PhantomData));
 }
 
 #[track_caller]
@@ -174,33 +176,6 @@ where
     R: ValueRenderer<T>,
 {
     execute(this, iterator, &IsNotEmpty::<T>(PhantomData));
-}
-
-fn observe_length<I: Iterator>(iterator: &mut I, expected: usize) -> LengthObservation<I::Item> {
-    if let Some(length) = exact_size_hint(&iterator) {
-        return LengthObservation {
-            preview: Preview {
-                items: VecDeque::new(),
-                consumed: 0,
-            },
-            length,
-            exact: true,
-        };
-    }
-    let mut tail = Tail::new(super::PREVIEW_CAPACITY);
-    let mut exact = false;
-    for _ in 0..=expected {
-        let Some(item) = iterator.next() else {
-            exact = true;
-            break;
-        };
-        tail.push(item);
-    }
-    LengthObservation {
-        length: tail.consumed,
-        preview: tail.finish(),
-        exact,
-    }
 }
 
 #[track_caller]
@@ -216,7 +191,7 @@ pub(crate) fn assert_has_length<S, T, I, M: Mode, R>(
     execute(
         this,
         iterator,
-        &HasLength::<T> {
+        &LengthScan::<T> {
             expected,
             item: PhantomData,
         },
@@ -316,21 +291,18 @@ mod tests {
                 -------- assertr --------
                 Expression: `()`
 
-                Actual: []
-
                 does not have the expected length
 
                 Expected: custom(3)
 
                 Details:
-                  - Consumed elements: custom(0)
-                  - Actual length: custom(2)
+                  - Reported length: custom(2)
                 -------- assertr --------
             "});
 
                     assert_custom_value(element.actual().expected.as_ref().unwrap(), &3_usize);
-                    assert_custom_fact(element.actual(), "Actual length", 2);
-                    assert_custom_fact(element.actual(), "Consumed elements", 0);
+                    assert_custom_fact(element.actual(), "Reported length", 2);
+                    element.derive(|failure| &failure.actual).is_none();
                 },
             ]);
         }
@@ -357,13 +329,11 @@ mod tests {
                 Expected: custom(1)
 
                 Details:
-                  - Consumed elements: custom(2)
                   - Minimum actual length: custom(2)
                 -------- assertr --------
             "});
 
                     assert_custom_fact(element.actual(), "Minimum actual length", 2);
-                    assert_custom_fact(element.actual(), "Consumed elements", 2);
                 },
             ]);
         }
@@ -393,7 +363,6 @@ mod tests {
                 Expected: cus... 6 more characters ...
 
                 Details:
-                  - Consumed elements: cus... 6 more characters ...
                   - Minimum actual length: cus... 6 more characters ...
                 -------- assertr --------
             "});
@@ -411,6 +380,102 @@ mod tests {
                 text: "cus".into(),
                 omitted_characters: 6,
             });
+        }
+
+        /// Yields `remaining` items while reporting `hint` as its exact length.
+        struct Lying<'a> {
+            remaining: i32,
+            hint: usize,
+            next_calls: &'a core::cell::Cell<usize>,
+        }
+
+        impl Iterator for Lying<'_> {
+            type Item = i32;
+            fn next(&mut self) -> Option<i32> {
+                self.next_calls.set(self.next_calls.get() + 1);
+                (self.remaining > 0).then(|| {
+                    self.remaining -= 1;
+                    self.remaining
+                })
+            }
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                (self.hint, Some(self.hint))
+            }
+        }
+
+        #[test]
+        fn verifies_an_agreeing_size_hint_by_consuming_at_most_one_extra_element() {
+            for (remaining, expected, next_calls, failed) in
+                [(3, 0, 1, true), (3, 2, 3, true), (2, 2, 3, false)]
+            {
+                let calls = core::cell::Cell::new(0);
+                let iterator = Lying {
+                    remaining,
+                    hint: expected,
+                    next_calls: &calls,
+                };
+                let failures = length(iterator, expected, RenderingBudget::default());
+                assert_that!(calls.get()).is_equal_to(next_calls);
+                assert_that!(failures.len()).is_equal_to(usize::from(failed));
+            }
+
+            let calls = core::cell::Cell::new(0);
+            let failures = length(
+                Lying {
+                    remaining: 3,
+                    hint: 0,
+                    next_calls: &calls,
+                },
+                0,
+                RenderingBudget::default(),
+            );
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element.derive(|value| value).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `()`
+
+                Actual: [
+                    custom(2),
+                ]
+
+                does not have the expected length
+
+                Expected: custom(0)
+
+                Details:
+                  - Minimum actual length: custom(1)
+                -------- assertr --------
+            "});
+                },
+            ]);
+        }
+
+        #[test]
+        fn borrowed_length_and_emptiness_agree_on_a_lying_size_hint() {
+            struct LyingSlice<'a>(core::slice::Iter<'a, i32>);
+            impl<'a> Iterator for LyingSlice<'a> {
+                type Item = &'a i32;
+                fn next(&mut self) -> Option<&'a i32> {
+                    self.0.next()
+                }
+                fn size_hint(&self) -> (usize, Option<usize>) {
+                    (0, Some(0))
+                }
+            }
+            struct Source([i32; 3]);
+            impl<'a> IntoIterator for &'a Source {
+                type Item = &'a i32;
+                type IntoIter = LyingSlice<'a>;
+                fn into_iter(self) -> LyingSlice<'a> {
+                    LyingSlice(self.0.iter())
+                }
+            }
+
+            let failures = assert_that!(Source([1, 2, 3]))
+                .with_location(false)
+                .capture(|it| it.into_iter_has_length(0).into_iter_is_empty());
+            assert_that!(failures).has_length(2);
         }
     }
 }

@@ -2,10 +2,12 @@
 //!
 //! Each scan consumes only as much of the iterator as it needs and retains a bounded preview
 //! or owned child evidence for explanation. The chain executor tracks and raises failures. The
-//! equality preview becomes the failure's actual value. Matcher previews retain selected leaf
-//! evidence. What the scan learned about consumption becomes its facts.
+//! equality preview becomes the failure's actual value. Matcher scans share one evidence scope, so
+//! they retain leaf evidence for the first rejections within the rendering budget. What the scan
+//! learned about consumption becomes its facts.
 
 mod cardinality;
+pub(crate) mod matchers;
 mod membership;
 mod positional;
 mod unordered;
@@ -13,15 +15,15 @@ mod unordered;
 #[cfg(test)]
 mod tests;
 
-use crate::assertions::core::partial_eq::EqualTo;
 use alloc::{collections::VecDeque, vec::Vec};
 use core::borrow::Borrow;
 use core::{marker::PhantomData, panic::Location};
 
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    AssertThat, AssertionContext, ExpectationDiagnostics, Mode, ValueRenderer,
+    assertions::{HasLength, collection::Collection},
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
-    renderer::{GroupStyle, RenderedValues, RenderingContext},
+    renderer::{CollectionPresentation, GroupStyle, RenderedValues, RenderingContext},
 };
 
 pub(crate) use cardinality::{assert_has_length, assert_is_empty, assert_is_not_empty};
@@ -110,26 +112,29 @@ impl<Item> Preview<Item> {
         rendering: RenderingContext<'_, R>,
         decisive_index: Option<usize>,
     ) -> FailureBuilder<S> {
-        let mut failure = failure.fact(Fact::labelled(
+        let failure = failure.fact(Fact::labelled(
             "Consumed elements",
             rendering.value(&self.consumed),
         ));
-        let omitted = self.omitted();
-        if omitted == 1 {
-            failure = failure.fact(Fact::note(format_args!(
-                "The preview shows the last {} consumed elements. 1 earlier element was omitted.",
-                self.items.len()
-            )));
-        } else if omitted > 1 {
-            failure = failure.fact(Fact::note(format_args!(
-                "The preview shows the last {} consumed elements. {omitted} earlier elements were omitted.",
-                self.items.len()
-            )));
+        let failure = self.omission(failure);
+        match decisive_index {
+            Some(index) => failure.fact(Fact::labelled("Decisive index", index)),
+            None => failure,
         }
-        if let Some(index) = decisive_index {
-            failure = failure.fact(Fact::labelled("Decisive index", index));
+    }
+
+    /// States how many earlier consumed elements the preview dropped, if any.
+    fn omission<S>(&self, failure: FailureBuilder<S>) -> FailureBuilder<S> {
+        let shown = self.items.len();
+        match self.omitted() {
+            0 => failure,
+            1 => failure.fact(Fact::note(format_args!(
+                "The preview shows the last {shown} consumed elements. 1 earlier element was omitted."
+            ))),
+            omitted => failure.fact(Fact::note(format_args!(
+                "The preview shows the last {shown} consumed elements. {omitted} earlier elements were omitted."
+            ))),
         }
-        failure
     }
 }
 
@@ -152,6 +157,7 @@ impl PositionReporting {
     }
 }
 
+/// The most recently consumed elements, up to a nonzero limit.
 struct Tail<Item> {
     limit: usize,
     items: VecDeque<Item>,
@@ -160,21 +166,23 @@ struct Tail<Item> {
 
 impl<Item> Tail<Item> {
     fn new(limit: usize) -> Self {
+        debug_assert!(limit > 0, "a tail retains at least one element");
         Self {
             limit,
             items: VecDeque::new(),
             consumed: 0,
         }
     }
+
     fn push(&mut self, item: Item) {
         self.consumed += 1;
         if self.items.len() == self.limit {
             let _ = self.items.pop_front();
         }
-        if self.limit > 0 {
-            self.items.push_back(item);
-        }
+        self.items.push_back(item);
     }
+
+    /// Trims the retained elements to the preview capacity.
     fn finish(mut self) -> Preview<Item> {
         let remove = self.items.len().saturating_sub(PREVIEW_CAPACITY);
         self.items.drain(..remove);
@@ -185,9 +193,158 @@ impl<Item> Tail<Item> {
     }
 }
 
-fn exact_size_hint<I: Iterator>(iterator: &I) -> Option<usize> {
-    let (lower, upper) = iterator.size_hint();
-    (upper == Some(lower)).then_some(lower)
+/// The overlapping window [`scan_windows`] passes to its check.
+type Window<'a, Item> = core::iter::Skip<alloc::collections::vec_deque::Iter<'a, Item>>;
+
+/// Where [`scan_windows`] checks complete windows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WindowPlacement {
+    /// Checks every complete window and stops at the first success.
+    Anywhere,
+    /// Reads the whole input and checks only the final window.
+    End,
+}
+
+/// Searches windows of `pattern_len` consecutive elements, retaining at least `retain` elements.
+///
+/// The check receives the window and the yield index of its first element. Required storage is
+/// independent of the diagnostic budget. An empty pattern succeeds without consuming anything.
+/// On rejection, the tail holds the latest elements and the number of elements consumed. An input
+/// shorter than the pattern is never checked.
+fn scan_windows<I: Iterator>(
+    iterator: &mut I,
+    pattern_len: usize,
+    retain: usize,
+    placement: WindowPlacement,
+    mut check: impl FnMut(Window<'_, I::Item>, usize) -> bool,
+) -> Result<(), Tail<I::Item>> {
+    if pattern_len == 0 {
+        return Ok(());
+    }
+    let mut tail = Tail::new(pattern_len.max(retain));
+    let mut check_window = |tail: &Tail<I::Item>| {
+        tail.consumed >= pattern_len
+            && check(
+                tail.items.iter().skip(tail.items.len() - pattern_len),
+                tail.consumed - pattern_len,
+            )
+    };
+    for item in iterator {
+        tail.push(item);
+        if placement == WindowPlacement::Anywhere && check_window(&tail) {
+            return Ok(());
+        }
+    }
+    if placement == WindowPlacement::End && check_window(&tail) {
+        return Ok(());
+    }
+    Err(tail)
+}
+
+/// How an exact size hint must relate to the expected length.
+#[derive(Clone, Copy)]
+enum LengthBound {
+    Exact,
+    AtLeast,
+}
+
+/// A length reported exactly by `size_hint` that already rules out the expected length.
+///
+/// Rejections based on it consume nothing, so their reports show neither an actual value nor a
+/// consumption count.
+#[derive(Clone, Copy)]
+struct KnownLength {
+    reported: usize,
+    expected: usize,
+}
+
+impl KnownLength {
+    /// Calls `size_hint` once and returns the mismatch an exact hint establishes, if any.
+    fn mismatch<I: Iterator>(iterator: &I, expected: usize, bound: LengthBound) -> Option<Self> {
+        let (lower, upper) = iterator.size_hint();
+        let reported = (upper == Some(lower)).then_some(lower)?;
+        let rejected = match bound {
+            LengthBound::Exact => reported != expected,
+            LengthBound::AtLeast => reported < expected,
+        };
+        rejected.then_some(Self { reported, expected })
+    }
+
+    /// Attaches the reported length only, for reports showing the expected length as their value.
+    fn reported_fact<S, R: ValueRenderer<usize>>(
+        self,
+        failure: FailureBuilder<S>,
+        rendering: RenderingContext<'_, R>,
+    ) -> FailureBuilder<S> {
+        failure.fact(Fact::labelled(
+            "Reported length",
+            rendering.value(&self.reported),
+        ))
+    }
+
+    /// Attaches the reported and the expected length.
+    fn facts<S, R: ValueRenderer<usize>>(
+        self,
+        failure: FailureBuilder<S>,
+        rendering: RenderingContext<'_, R>,
+    ) -> FailureBuilder<S> {
+        self.reported_fact(failure, rendering).fact(Fact::labelled(
+            "Expected length",
+            rendering.value(&self.expected),
+        ))
+    }
+}
+
+/// Buffers the elements of an exact unordered comparison.
+///
+/// An exact size hint that rules out `expected` rejects without consuming anything. Otherwise this
+/// reads at most `expected + 1` elements, enough to prove that the input is longer than expected.
+fn buffer_exactly<I: Iterator>(
+    iterator: &mut I,
+    expected: usize,
+) -> Result<Vec<I::Item>, KnownLength> {
+    if let Some(known) = KnownLength::mismatch(iterator, expected, LengthBound::Exact) {
+        return Err(known);
+    }
+    let mut items = Vec::new();
+    // Push one by one. Collecting would query the size hint again.
+    for _ in 0..=expected {
+        let Some(item) = iterator.next() else {
+            break;
+        };
+        items.push(item);
+    }
+    Ok(items)
+}
+
+/// Buffered elements viewed as a list collection, so collection expectations can evaluate them.
+struct Items<'a, T, Item> {
+    items: &'a [Item],
+    view: PhantomData<fn() -> T>,
+}
+
+impl<'a, T, Item> Items<'a, T, Item> {
+    fn new(items: &'a [Item]) -> Self {
+        Self {
+            items,
+            view: PhantomData,
+        }
+    }
+}
+
+impl<T, Item> HasLength for Items<'_, T, Item> {
+    fn length(&self) -> usize {
+        self.items.len()
+    }
+}
+
+impl<T, Item: Borrow<T>> Collection for Items<'_, T, Item> {
+    type Item = T;
+    const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+
+    fn elements(&self) -> impl Iterator<Item = &T> {
+        self.items.iter().map(Borrow::borrow)
+    }
 }
 
 /// Compares once, constructing indexed equality evidence only for retained rejections.
@@ -214,6 +371,3 @@ where
     }
     matched
 }
-
-/// A child failure for an element that did not match its predicate.
-pub(crate) mod matchers;

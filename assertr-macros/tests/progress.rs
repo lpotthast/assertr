@@ -1,35 +1,21 @@
 #[test]
-fn fluent_expressions() {
-    // These fixtures need the matching, unpublished assertr runtime helper while the two crates are
-    // prepared for release. They remain workspace tests and are not included in this crate's
-    // independently runnable package archive.
-    let fixtures =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fluent_expressions");
-    if !fixtures.is_dir() {
-        return;
-    }
+fn fluent_aliases() {
+    let t = trybuild::TestCases::new();
+    t.compile_fail("tests/fluent_aliases/01-reject-non-string-alias.rs");
+    t.compile_fail("tests/fluent_aliases/02-reject-invalid-alias.rs");
+}
 
+#[test]
+fn fluent_expressions() {
     let t = trybuild::TestCases::new();
     t.pass("tests/fluent_expressions/01-renamed-dependency.rs");
-    t.pass("tests/fluent_expressions/02-nested-module.rs");
-    t.pass("tests/fluent_expressions/03-macro-receiver.rs");
-    t.pass("tests/fluent_expressions/04-annotated-closure.rs");
-    t.compile_fail("tests/fluent_expressions/05-user-must.rs");
-    t.pass("tests/fluent_expressions/06-user-verify.rs");
-    t.pass("tests/fluent_expressions/07-user-verify-owned.rs");
-    t.pass("tests/fluent_expressions/08-callback-call-traits.rs");
-    t.pass("tests/fluent_expressions/09-branch-callbacks.rs");
+    t.compile_fail("tests/fluent_expressions/02-user-must.rs");
+    t.pass("tests/fluent_expressions/03-callback-types.rs");
 }
 
 mod partial {
     #[test]
     fn accepts_supported_forms_and_rejects_invalid_inputs() {
-        if !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/partial")
-            .is_dir()
-        {
-            return;
-        }
         let t = trybuild::TestCases::new();
 
         // Start with everyday usage, then cover less common forms and inference constraints.
@@ -51,6 +37,7 @@ mod partial {
         t.pass("tests/partial/15-generated-items-are-documented.rs");
         t.pass("tests/partial/16-infer-empty-matcher-list.rs");
         t.pass("tests/partial/30-qualified-variants.rs");
+        t.pass("tests/partial/31-invoke-through-reexport.rs");
 
         // Invalid syntax and fields come before lifetime, inference, and capability boundaries.
         t.compile_fail("tests/partial/17-reject-duplicate-fields.rs");

@@ -436,7 +436,7 @@ mod fields {
             .with_location(false)
             .capture(|it| it.does_not_contain_entry("a", 1));
         let unexpected = failures[0].unexpected.as_ref().unwrap();
-        let RenderedBody::Tuple { items } = &unexpected.body else {
+        let RenderedBody::Tuple { items, .. } = &unexpected.body else {
             panic!("expected a tuple node, got {:?}", unexpected.body);
         };
 

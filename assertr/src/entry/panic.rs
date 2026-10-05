@@ -8,11 +8,13 @@ use crate::{AssertThat, actual::Actual, mode::Panic};
 
 /// A captured panic payload used as the subject of panic-value assertions.
 ///
-/// With the `std` feature, `assert_that_panic_by` and `assert_that_panic_by_async` create this
-/// subject. Its payload is type-erased. Use the
-/// [`PanicValueAssertions`](crate::assertions::alloc::panic_value::PanicValueAssertions) methods to
-/// inspect it.
-pub struct PanicValue(pub(crate) Box<dyn Any>);
+/// Only panic assertions create this subject, and they require the `std` feature:
+/// `assert_that_panic_by`, `assert_that_panic_by_async`, and the `panics` and `panics_async`
+/// function assertions. Without `std`, the type exists but no value of it can be produced. Its
+/// payload is type-erased, like the `Box<dyn Any + Send>` returned by `std::panic::catch_unwind`.
+/// Use the [`PanicValueAssertions`](crate::assertions::alloc::panic_value::PanicValueAssertions)
+/// methods to inspect it.
+pub struct PanicValue(pub(crate) Box<dyn Any + Send>);
 
 /// Invokes `fun`, asserts that the call or dropping its output panics, and returns an assertion
 /// over the panic payload.
@@ -55,6 +57,12 @@ where
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use crate::prelude::*;
+
+    #[test]
+    fn panic_value_keeps_the_payload_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<crate::PanicValue>();
+    }
 
     #[cfg(feature = "std")]
     #[tokio::test]

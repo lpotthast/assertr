@@ -1,7 +1,4 @@
-use alloc::{
-    rc::Rc,
-    string::{String, ToString},
-};
+use alloc::{format, rc::Rc, string::String};
 
 use crate::{
     AssertThat,
@@ -51,7 +48,9 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// using it is dropped, and the subject's borrow can still end at the context's last use.
     ///
     /// The adapter's error can be any type implementing [`core::fmt::Display`]. This method wraps
-    /// the adapter to convert its errors to [`String`] only when presentation runs.
+    /// the adapter to convert its errors to [`String`] only when presentation runs. The conversion
+    /// uses the alternate form (`{:#}`), so a [`ThenError`](crate::failure::adapter::ThenError)
+    /// reports both the failed stage and that stage's error.
     ///
     /// It runs on the asserting thread and needs neither `Send`, `Sync`, nor `Clone`. Mapped and
     /// derived assertions share the adapter through an internal [`Rc`]. Calling this method again
@@ -72,7 +71,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// panics propagate because unwind catching is unavailable. Assertr never logs the report to
     /// stdout automatically.
     ///
-    /// ```no_run
+    /// ```should_panic
     /// use core::convert::Infallible;
     /// use assertr::failure::adapter::{
     ///     Adapter, AdapterExt, HumanReadableText, ToHumanReadableText,
@@ -104,7 +103,8 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
             + 'static,
         A::Error: core::fmt::Display,
     {
-        let adapter = adapter.map_err(|error| error.to_string());
+        // The alternate form lets composed errors such as `ThenError` keep their stage's error.
+        let adapter = adapter.map_err(|error| format!("{error:#}"));
         self.state.panic_presentation = Some(Rc::new(adapter));
         self
     }

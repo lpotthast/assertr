@@ -1,5 +1,5 @@
-use proc_macro2::{Span, TokenStream};
-use quote::{quote, quote_spanned};
+use proc_macro2::{Delimiter, Group, Span, TokenStream, TokenTree};
+use quote::{ToTokens, quote_spanned};
 use std::collections::BTreeSet;
 use syn::{
     Expr, Ident, Path, Token,
@@ -15,9 +15,10 @@ struct Input {
     path: Path,
     shape: Shape,
 }
+/// Field shapes keep the span of their delimiters for compiler suggestions on the pattern.
 enum Shape {
-    Named(Vec<(Ident, Expr)>, bool),
-    Tuple(Vec<Option<Expr>>),
+    Named(Vec<(Ident, Expr)>, bool, Span),
+    Tuple(Vec<Option<Expr>>, Span),
     Unit,
 }
 
@@ -38,7 +39,7 @@ impl Parse for Input {
         let path = input.parse::<Path>()?;
         let shape = if input.peek(syn::token::Brace) {
             let content;
-            syn::braced!(content in input);
+            let delimiter = syn::braced!(content in input).span.join();
             let mut fields = Vec::new();
             let mut rest = false;
             let mut names = BTreeSet::new();
@@ -66,17 +67,14 @@ impl Parse for Input {
                 }
                 content.parse::<Token![,]>()?;
             }
-            Shape::Named(fields, rest)
+            Shape::Named(fields, rest, delimiter)
         } else if input.peek(syn::token::Paren) {
             let content;
-            syn::parenthesized!(content in input);
+            let delimiter = syn::parenthesized!(content in input).span.join();
             let mut fields = Vec::new();
             let mut rest = false;
             while !content.is_empty() {
                 if content.peek(Token![..]) {
-                    if rest {
-                        return Err(content.error("only one tuple rest is allowed"));
-                    }
                     content.parse::<Token![..]>()?;
                     rest = true;
                     fields.push(None);
@@ -92,7 +90,7 @@ impl Parse for Input {
                         .error("tuple `..` must be final so selected tuple indexes remain exact"));
                 }
             }
-            Shape::Tuple(fields)
+            Shape::Tuple(fields, delimiter)
         } else {
             Shape::Unit
         };
@@ -107,14 +105,38 @@ impl Parse for Input {
     }
 }
 
-fn runtime() -> TokenStream {
-    match proc_macro_crate::crate_name("assertr") {
-        Ok(proc_macro_crate::FoundCrate::Name(name)) => {
-            let name = Ident::new(&name, Span::call_site());
-            quote!(::#name)
-        }
-        Ok(proc_macro_crate::FoundCrate::Itself) | Err(_) => quote!(::assertr),
+/// Splits the runtime crate path, forwarded by `assertr::partial!` as `$crate`, from the matcher
+/// input at the first top-level `;`.
+///
+/// Also returns the span for generated tokens. They resolve at the call site but point at the
+/// user's input rather than into the `macro_rules!` wrapper, keeping diagnostics and closure type
+/// names in the caller's file.
+fn split_runtime(input: TokenStream) -> syn::Result<(TokenStream, TokenStream, Span)> {
+    let mut tokens = input.into_iter();
+    let runtime = tokens
+        .by_ref()
+        .take_while(|token| !matches!(token, TokenTree::Punct(punct) if punct.as_char() == ';'))
+        .collect::<TokenStream>();
+    if runtime.is_empty() {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "use `partial!` through the `assertr` crate",
+        ));
     }
+    let input = tokens.collect::<TokenStream>();
+    let location = input
+        .clone()
+        .into_iter()
+        .next()
+        .map_or_else(Span::call_site, |token| token.span());
+    Ok((runtime, input, Span::call_site().located_at(location)))
+}
+
+/// Wraps generated pattern fields in delimiters located at the user's original delimiters.
+fn delimited(delimiter: Delimiter, fields: TokenStream, span: Span) -> TokenStream {
+    let mut group = Group::new(delimiter, fields);
+    group.set_span(Span::call_site().located_at(span));
+    group.into_token_stream()
 }
 
 fn constructor_label(path: &Path) -> String {
@@ -132,26 +154,31 @@ fn constructor_label(path: &Path) -> String {
 }
 
 pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
+    let (runtime, input, span) = split_runtime(input)?;
     let Input {
         path,
         shape,
         variant,
     } = syn::parse2(input)?;
-    let runtime = runtime();
     let constructor_name = constructor_label(&path);
-    let actual = Ident::new("__assertr_actual", Span::mixed_site());
-    let value = Ident::new("__assertr_value", Span::mixed_site());
+    let actual = Ident::new("__assertr_actual", Span::mixed_site().located_at(span));
+    let value = Ident::new("__assertr_value", Span::mixed_site().located_at(span));
     let mut expectations = Vec::new();
     let mut projections = Vec::new();
     let pattern;
     match shape {
-        Shape::Named(fields, rest) => {
+        Shape::Named(fields, rest, delimiter) => {
             let names = fields.iter().map(|(name, _)| name).collect::<Vec<_>>();
-            let rest = rest.then(|| quote!(..));
-            pattern = quote!(#path {#(#names: _,)* #rest});
+            let rest = rest.then(|| quote_spanned!(span=> ..));
+            let fields_pattern = delimited(
+                Delimiter::Brace,
+                quote_spanned!(span=> #(#names: _,)* #rest),
+                delimiter,
+            );
+            pattern = quote_spanned!(span=> #path #fields_pattern);
             for (name, expression) in &fields {
                 let field_name = name.to_string().trim_start_matches("r#").to_owned();
-                expectations.push(quote!(#expression));
+                expectations.push(quote_spanned!(span=> #expression));
                 projections.push((
                     quote_spanned!(name.span()=> |#actual| {
                         #[allow(unreachable_patterns)]
@@ -160,22 +187,27 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
                             _ => ::core::option::Option::None,
                         }
                     }),
-                    quote!(#runtime::failure::PathSegment::Field(#field_name)),
+                    quote_spanned!(span=> #runtime::failure::PathSegment::Field(#field_name)),
                 ));
             }
         }
-        Shape::Tuple(fields) => {
+        Shape::Tuple(fields, delimiter) => {
             let slots = fields
                 .iter()
                 .map(|field| {
                     if field.is_none() {
-                        quote!(..)
+                        quote_spanned!(span=> ..)
                     } else {
-                        quote!(_)
+                        quote_spanned!(span=> _)
                     }
                 })
                 .collect::<Vec<_>>();
-            pattern = quote!(#path (#(#slots),*));
+            let fields_pattern = delimited(
+                Delimiter::Parenthesis,
+                quote_spanned!(span=> #(#slots),*),
+                delimiter,
+            );
+            pattern = quote_spanned!(span=> #path #fields_pattern);
             for (index, expression) in fields.iter().enumerate() {
                 let Some(expression) = expression else {
                     continue;
@@ -184,34 +216,34 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
                     continue;
                 }
                 let mut projection = slots.clone();
-                projection[index] = quote!(#value);
-                expectations.push(quote!(#expression));
+                projection[index] = quote_spanned!(span=> #value);
+                expectations.push(quote_spanned!(span=> #expression));
                 projections.push((
-                    quote!(|#actual| {
+                    quote_spanned!(span=> |#actual| {
                         #[allow(unreachable_patterns)]
                         match #actual {
                             #path (#(#projection),*) => ::core::option::Option::Some(#value),
                             _ => ::core::option::Option::None,
                         }
                     }),
-                    quote!(#runtime::failure::PathSegment::TupleIndex(#index)),
+                    quote_spanned!(span=> #runtime::failure::PathSegment::TupleIndex(#index)),
                 ));
             }
         }
         Shape::Unit => {
             // Braces force constructor resolution even for a single unqualified identifier.
-            pattern = quote!(#path {});
+            pattern = quote_spanned!(span=> #path {});
         }
     }
     // Keep expectations in one expression so borrowed temporaries live through the caller's
     // statement. Nested constructor arguments evaluate each expectation once in source order.
-    let list = matcher_fields(expectations, projections, &runtime);
+    let list = matcher_fields(expectations, projections, &runtime, span);
     let variant = if variant {
-        quote!(::core::option::Option::Some(#constructor_name))
+        quote_spanned!(span=> ::core::option::Option::Some(#constructor_name))
     } else {
-        quote!(::core::option::Option::None)
+        quote_spanned!(span=> ::core::option::Option::None)
     };
-    Ok(quote!(
+    Ok(quote_spanned!(span=>
         #runtime::__private::partial_match(
             |#actual| {
                 #[allow(unreachable_patterns)]
@@ -229,16 +261,17 @@ fn matcher_fields(
     expectations: Vec<TokenStream>,
     projections: Vec<(TokenStream, TokenStream)>,
     runtime: &TokenStream,
+    span: Span,
 ) -> TokenStream {
     let fields = expectations
         .into_iter()
         .zip(projections)
         .map(|(expectation, (projection, path))| {
-            quote!(#runtime::__private::field(#projection,#expectation,#path))
+            quote_spanned!(span=> #runtime::__private::field(#projection,#expectation,#path))
         })
         .collect::<Vec<_>>();
     fields.into_iter().rev().fold(
-        quote!(#runtime::__private::Nil),
-        |tail, head| quote!(#runtime::__private::Cons(#head,#tail)),
+        quote_spanned!(span=> #runtime::__private::Nil),
+        |tail, head| quote_spanned!(span=> #runtime::__private::Cons(#head,#tail)),
     )
 }

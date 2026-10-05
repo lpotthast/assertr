@@ -45,7 +45,8 @@ fit.
   `CollectionAssertions`. Positional operations require `StableOrder`. Constant-time indexing requires
   `RandomAccess`. Set relations require `SetLookup`. Map iteration uses `Map`, while key queries require `MapLookup`.
   Strings use `StrAssertions` and lengths use `HasLength`. Per-type traits are only for genuinely type-specific
-  behavior.
+  behavior. Iteration-only impls (`Collection`, `Map`, `HasLength`) carry no lookup bounds such as `BuildHasher`,
+  `Hash`, or `Ord`. Those belong on `SetLookup` and `MapLookup`.
 - Presentation never grants behavior. `CollectionPresentation` and `RenderingOrder` control diagnostics only and remain
   independent of `StableOrder`, `RandomAccess`, and `SetLookup`.
 - Custom `ValueRenderer`s render leaves. Assertr owns structural syntax. Render every diagnostic value through
@@ -61,6 +62,8 @@ fit.
   across every adapter.
 - Prefer natural assertion names. Type-changing assertions do not require a `get_` prefix. Keep checking and extracting
   behavior distinguishable, for example `is_of_type` checks and `has_type` extracts.
+- Shape public `*Assertions` traits as `<'t, subject parameters, M: Mode, R = DebugRenderer>`, declaring each parameter
+  only when a signature uses it.
 - New assertion traits use `#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]`. Follow
   `assertr-macros/src/fluent_aliases/naming.rs`. Use an explicit alias only when no rule applies, and
   `#[no_fluent_alias]` for deprecated names.

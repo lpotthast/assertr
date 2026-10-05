@@ -1,0 +1,11 @@
+error: `be ready` is not a valid method name for a fluent alias
+ --> tests/fluent_aliases/02-reject-invalid-alias.rs:3:20
+  |
+3 |     #[fluent_alias("be ready")]
+  |                    ^^^^^^^^^^
+
+error: `` is not a valid method name for a fluent alias
+ --> tests/fluent_aliases/02-reject-invalid-alias.rs:6:20
+  |
+6 |     #[fluent_alias("")]
+  |                    ^^

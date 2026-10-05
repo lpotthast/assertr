@@ -27,8 +27,7 @@ pub struct AssertionFailures {
 }
 
 /// Only failures from the fluent root are eligible. Child failures and explicit expressions
-/// never enter this list. Entry locations distinguish nested verification calls after the macro
-/// checks that the original callback accepts an assertion chain.
+/// never enter this list. Entry locations distinguish nested verification calls.
 #[cfg(feature = "fluent")]
 #[derive(Clone)]
 struct PendingExpression {

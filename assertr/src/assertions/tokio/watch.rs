@@ -338,6 +338,40 @@ mod tests {
                     -------- assertr --------
                 "#});
         }
+
+        mod string_views {
+            use crate::{
+                assertions::tokio::watch::HasCurrentValue,
+                prelude::*,
+                test_support::{StrOperand, StringRenderer},
+            };
+            use core::cell::Cell;
+
+            #[test]
+            fn literal_and_custom_views_preserve_the_watch_observation() {
+                let (_sender, mut receiver) = tokio::sync::watch::channel(String::from("hello"));
+                receiver.mark_changed();
+                assert_that!(receiver)
+                    .has_current_value("hello")
+                    .matches(HasCurrentValue::new("hello"));
+                let calls = Cell::new(0);
+                let failures = assert_that!(receiver)
+                    .with_renderer(StringRenderer)
+                    .capture(|root| {
+                        root.derive(|value| value).has_current_value(StrOperand {
+                            value: "world",
+                            observe: || {
+                                assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                                calls.set(calls.get() + 1);
+                            },
+                        });
+                        root
+                    });
+                assert_that!(failures).has_length(1);
+                assert_that!(calls.get()).is_equal_to(1);
+                assert_that!(receiver.has_changed().unwrap()).is_true();
+            }
+        }
     }
 
     mod has_changed {
@@ -609,39 +643,5 @@ mod tests {
                     -------- assertr --------
                 "});
         }
-    }
-}
-
-#[cfg(test)]
-mod string_views {
-    use crate::{
-        prelude::*,
-        test_support::{StrOperand, StringRenderer},
-    };
-    use core::cell::Cell;
-
-    #[test]
-    fn literal_and_custom_views_preserve_the_watch_observation() {
-        let (_sender, mut receiver) = tokio::sync::watch::channel(String::from("hello"));
-        receiver.mark_changed();
-        assert_that!(receiver)
-            .has_current_value("hello")
-            .matches(super::HasCurrentValue::new("hello"));
-        let calls = Cell::new(0);
-        let failures = assert_that!(receiver)
-            .with_renderer(StringRenderer)
-            .capture(|root| {
-                root.derive(|value| value).has_current_value(StrOperand {
-                    value: "world",
-                    observe: || {
-                        assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                        calls.set(calls.get() + 1);
-                    },
-                });
-                root
-            });
-        assert_that!(failures).has_length(1);
-        assert_that!(calls.get()).is_equal_to(1);
-        assert_that!(receiver.has_changed().unwrap()).is_true();
     }
 }

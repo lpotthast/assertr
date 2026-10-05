@@ -7,6 +7,8 @@
 
 extern crate alloc;
 
+use alloc::{boxed::Box, string::String};
+
 use assertr::matchers::{entry_matchers, predicate};
 use assertr::prelude::*;
 
@@ -154,7 +156,7 @@ fn sensitive_value_policy_compiles_without_std() {
         }
     }
 
-    let prefix = alloc::string::String::from("value: ");
+    let prefix = String::from("value: ");
     let renderer = BorrowedRenderer(&prefix);
     let erased: &dyn ValueRenderer<str> = &renderer;
     assert_that!(erased.sensitive_value_policy()).is_equal_to(SensitiveValuePolicy::Reveal);
@@ -163,13 +165,12 @@ fn sensitive_value_policy_compiles_without_std() {
 }
 
 #[allow(dead_code)]
-fn capture_errors_compile_without_std()
--> Result<(), alloc::boxed::Box<dyn core::error::Error + Send + Sync>> {
+fn capture_errors_compile_without_std() -> Result<(), Box<dyn core::error::Error + Send + Sync>> {
     use alloc::string::ToString;
     let failures = assert_that_owned!(0..).capture(|it| it.starts_with([1, 2]));
     let _report = failures.to_string();
     let single = assert_that!(failures).get_single().actual().clone();
-    let _: alloc::boxed::Box<dyn core::error::Error + Send + Sync> = single.into();
+    let _: Box<dyn core::error::Error + Send + Sync> = single.into();
     let result: Result<(), AssertionFailures> = Err(failures);
     result?;
     Ok(())
@@ -714,7 +715,7 @@ fn assertion_definitions_compile_without_std() {
         let assertion = assert_that!(ready).with_renderer(NoRenderer);
         let observed = assertion.test_assertion(&IsReady).unwrap();
         assert_that!(*observed).is_same_instance_as(value);
-        let boxed: alloc::boxed::Box<dyn core::any::Any> = alloc::boxed::Box::new(123);
+        let boxed: Box<dyn core::any::Any> = Box::new(123);
         assert_that!(boxed)
             .with_renderer(NoRenderer)
             .matches(IsOfType::<i32>::new());
@@ -898,7 +899,7 @@ impl core::borrow::Borrow<str> for TextOperand<'_> {
         self.0
     }
 }
-impl assertr::borrow_for::BorrowFor<alloc::string::String> for TextOperand<'_> {
+impl assertr::borrow_for::BorrowFor<String> for TextOperand<'_> {
     type View = str;
 }
 

@@ -20,68 +20,101 @@ sources:
 
 [Architecture overview](README.md)
 
-A failed assertion becomes an owned `AssertionFailure` before capture storage or panic presentation. Failure adapters
-inspect that structure without parsing the default report or retaining the original Rust values.
+Failures become owned `AssertionFailure` values before capture or panic presentation. Adapters inspect structured data,
+without parsing reports or retaining original Rust values.
 
 ## Structured construction and ownership
 
-The [failure model](../assertr/src/failure/mod.rs) separates meaning, evidence, and location:
+| Fields | Meaning |
+|---|---|
+| `kind` | Non-exhaustive failure family, not a specific assertion. |
+| `actual`, `relation`, `expected`, `unexpected` | Rendered operands and their relation. Relations are lowercase sentences without embedded values or trailing periods. |
+| `facts` | Labelled evidence via `Fact::labelled`, or an unlabelled note via `Fact::note` (empty label). |
+| `children`, `constraint`, omission counts | Nested rejections and missing-subject descriptions. A constraint is another `AssertionFailure`. |
+| `path` | Relative typed location within the parent subject. |
+| Subject/caller metadata | Type, name, expression, caller location, detail messages. |
 
-| Fields                                         | Meaning                                                                                                                                    |
-|------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `kind`                                         | Non-exhaustive family classification for grouping and filtering. It does not identify a specific assertion.                                |
-| `actual`, `relation`, `expected`, `unexpected` | Rendered operands and the sentence connecting them. Relations are lowercase, contain no values, and have no trailing period.               |
-| `facts`                                        | Additional evidence. `Fact::labelled` names it. `Fact::note` uses an empty label.                                                          |
-| `children`, `constraint`, omission counts      | Nested rejections and descriptions of unmet expectations. A constraint is another `AssertionFailure`, not a separate schema.               |
-| `path` and subject/caller metadata             | Relative field, tuple, variant, stable index, or rendered-key location, plus type, name, expression, caller location, and detail messages. |
+### Paths
 
-[`FailureBuilder`](../assertr/src/failure/builder.rs) has two completion targets. `AssertThat::failure` creates an
-`Attached` builder. `.raise()` adds chain metadata and delivers the failure through the active mode.
-`FailureBuilder::detached::<T>` creates a `Detached` builder. `.build()` returns data without raising or collecting
-chain metadata. [Expectation explanation](expectation-execution.md#evaluation-and-explanation) uses either target.
-The hook receives `FailureBuilder<Target>` and returns it populated, without tracking, raising, or choosing a completion
-target. The chain executor supplies an attached builder and calls `.raise()` after explanation. A child context supplies
-a detached builder, calls `.build()`, and retains the result as evidence. Execution adapters constructing failures
-directly use this same builder and rendering path.
+`PathSegment` represents fields, tuple positions, variants, indexes, and rendered keys. All child locations use `path`,
+including equality, identity, and matcher evidence.
 
-Diagnostic values pass through the active rendering context before entering the builder. Failure adapters receive
-[budgeted `Rendered` trees](diagnostic-rendering.md#bounded-retention) and cannot recover omitted values.
-`AssertionFailure`, `Fact`, and `Rendered` expose fields and read-only accessors for inspection without rerendering.
+- `Index`: stable collection position or direct iterator yield position. Order-free element evidence has no index.
+- `Key`: rendered key tree with type metadata and omissions. Build key leaves in compact form through the active
+  rendering context, using `IntoRendered::into_rendered_compact`, before storing the path. Presentation cannot compact
+  an already rendered leaf.
+- Paths compose parent to child. `FailureBuilder::path` appends relative segments.
+- Human-readable child headings use paths, with compact keys. Facts always appear in `Details`. Labels such as `index`
+  and `key` have no special location semantics.
 
-Capture forwards descendant failures to the root in raise order. [
-`AssertionFailures`](../assertr/src/failure/failures.rs)
-is the ordered aggregate returned on [capture completion](assertion-lifecycle.md#entry-subject-ownership-and-mode). It
-supports slice access, iteration, and conversion to a vector. Fluent expression bookkeeping stays private and never
-appears as a placeholder in public fields. Its attachment rules live
-in [fluent entry](fluent-entry.md#scoped-expression-capture).
+### Builder completion
+
+| Target | Construction | Completion |
+|---|---|---|
+| `Attached` | `AssertThat::failure` | `.raise()` adds chain metadata and routes through the mode. The target is a concrete view borrowing the chain's records and settings. |
+| `Detached` | `FailureBuilder::detached::<T>` | `.build()` returns data without raising or collecting chain metadata. |
+
+The [expectation executor](expectation-execution.md#chain-execution) and
+[execution adapters](observation-boundaries.md#execution-adapters) select and complete these targets.
+
+Every diagnostic value enters through the active rendering context. Adapters receive
+[budgeted `Rendered` trees](diagnostic-rendering.md#bounded-retention) and cannot recover omissions. `AssertionFailure`,
+`Fact`, and `Rendered` expose fields and read-only accessors. Every `AssertionFailure` field has an accessor of the same
+name.
+
+`AssertionFailures` is the ordered aggregate returned by capture or fluent verification. It supports slices, iteration,
+and vector conversion. See [assertion lifecycle](assertion-lifecycle.md#entry-subject-ownership-and-mode) for how capture
+collects and returns failures, and [fluent entry](fluent-entry.md#pending-attachment) for delayed expression attachment.
+
+## Report grammar
+
+`ToHumanReadableText` chooses the layout from the populated fields. `FailureKind` does not select a format:
+
+| Fields or section | Presentation |
+|---|---|
+| Ordinary body | Actual → relation → expected → unexpected. Omit absent parts. |
+| Actual and expected, with no relation or unexpected operand | Aligned expected/actual comparison. |
+| `constraint` | Nested description after the body, using the same grammar. |
+| Messages, facts, children | `Messages`, `Details`, `Nested failures`, in that order. |
+| Omitted children | Detail note from structured omission count. |
+
+Caller, subject, and expression metadata precede the body. Children indent one level per depth and use
+[typed path headings](#paths). Assertions supply structured fields rather than report text.
+Exact formatting tests live in [human_readable.rs](../assertr/src/failure/adapter/adapters/human_readable.rs).
 
 ## Presentation and fallback
 
-[`Adapter<Input>`](../assertr/src/failure/adapter/mod.rs) converts borrowed input to a declared output or error.
-`AdapterExt::then` composes conversions. `ToHumanReadableText` renders a failure or aggregate using the default report
-grammar and returns `HumanReadableText`, an owned text wrapper.
+`Adapter<Input>` converts borrowed input to its declared output or error. `AdapterExt::then` composes conversions.
+`AdapterExt` is implemented for every sized type, so importing it adds `then` and `map_err` to all types in that scope.
+Import it only where adapters are composed, because it can clash with methods such as `FutureExt::then`. `ThenError`
+displays only the failed stage and exposes the stage's error through `Error::source`. Its alternate form (`{:#}`)
+appends that error. `ToHumanReadableText` converts one failure or an aggregate using the
+[report grammar](#report-grammar). Its result, `HumanReadableText`, owns the text.
 
-With `std`, `Writer<W>` is an explicit sink accepting `AsRef<[u8]>`, including `HumanReadableText`, strings, and
-byte buffers. Its `Adapter` implementation writes the complete input to a configured `std::io::Write` target and
-flushes it, returning `()` or the I/O error. It adds no separators and preserves the input bytes. The target may be
-owned or borrowed. Constructors select standard output or standard error without performing I/O. The writer uses
-interior mutability for the shared `Adapter::adapt` receiver. Reentrant use returns an I/O error.
+After capture, the caller chooses how to present the failures. Panic mode uses the default text adapter unless
+`with_panic_presentation` installs an owned `'static + RefUnwindSafe` text adapter with a `Display` error. Its errors
+are converted to text with the alternate form (`{error:#}`), so composed errors keep their stage's cause. Derived chains
+share the adapter through `Rc`. It requires none of `Send`, `Sync`, or `Clone`. The private `PanicPresentation` type
+preserves the unwind-safety bound.
 
-With `tokio`, the same `Writer` accepts `AsyncWrite + Unpin` targets through `adapt_async(&mut self, input)`.
-Tokio stdout/stderr constructors are available. Callers await writing and flushing explicitly after any synchronous
-adapter stages. This method never creates or blocks on a runtime and holds no interior borrow guard across an await.
-Errors and cancellation can leave partial output. Neither capture nor panic presentation automatically writes to a
-stream, and a sink's `()` output cannot be installed as panic presentation.
+| Panic-adapter outcome | Behavior |
+|---|---|
+| Returns error | Default report plus presentation diagnostic. |
+| Panics, including while formatting an error, with `std` | Catch and fall back. |
+| Panics without `std` | Propagate. |
 
-Capture leaves adaptation to the caller. Panic mode uses `ToHumanReadableText` unless `with_panic_presentation` installs
-an owned `'static + RefUnwindSafe` text adapter with a `Display` error. Derived chains share it through `Rc`. It needs
-neither `Send`, `Sync`, nor `Clone`. The private `PanicPresentation` trait object retains the unwind-safety bound.
+Fallback does not retry the adapter for that failure, although later assertions may reuse it. Calling an adapter directly
+does not provide this fallback or require the unwind-safety bound used for panic presentation.
+Regressions: [`a_presentation_error_falls_back_without_std`](../assertr-no-std-tests/src/lib.rs) and
+[`a_panicking_error_formatter_preserves_the_original_failure`](../assertr/tests/failure_adapters.rs).
 
-[Panic presentation](../assertr/src/failure/panic_presentation.rs) falls back to the default report and appends a
-presentation diagnostic when the adapter returns an error. With `std`, it also catches adapter panics, including error
-formatting panics. Without `std`, those panics propagate. Fallback does not retry the adapter, though a later assertion
-may use it again. Explicit adapter calls have neither this fallback nor the presentation-specific unwind bound.
+### Explicit output sinks
 
-The regressions [`a_presentation_error_falls_back_without_std`](../assertr-no-std-tests/src/lib.rs) and
-[`a_panicking_error_formatter_preserves_the_original_failure`](../assertr/tests/failure_adapters.rs) pin these two
-boundaries.
+| `Writer<W>` operation | Behavior |
+|---|---|
+| `Adapter::adapt` (`std`) | Write all `AsRef<[u8]>` bytes to `std::io::Write`, then flush. Return `()` or an I/O error. Interior mutability allows a shared receiver. Reentrant calls return an error. |
+| `adapt_async(&mut self, input)` (`tokio`) | Await writing and flushing to `AsyncWrite + Unpin`. Do not create a runtime, block the thread, or hold an interior borrow guard across await. |
+
+Targets may be owned or borrowed. Stdout/stderr constructors perform no I/O. Input bytes are preserved without added
+separators. Async errors or cancellation may leave partial output. Capture and panic presentation never write to streams
+automatically. A sink returning `()` cannot serve as panic presentation.

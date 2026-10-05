@@ -56,13 +56,22 @@ use crate::{
 ///
 /// # Alias names
 ///
-/// The fluent names are derived mechanically from the assertion names. `is_x` becomes `be_x`,
-/// `has_x` becomes `have_x`, and other verbs turn imperative. For example, `contains` -> `contain`,
-/// `starts_with` -> `start_with`, `exists` -> `exist`, `panics` -> `panic`, `needs_drop` ->
-/// `need_drop`. Negations put `not` first, as in "must not be equal to". `is_not_x` -> `not_be_x`,
-/// `has_not_x` -> `not_have_x`, `does_not_x` -> `not_x`. The possessive `has_no_x` keeps its order
-/// as `have_no_x`. Namespace prefixes stay in front of the alias. `into_iter_contains` ->
-/// `into_iter_contain`. Explicit aliases cover names outside these rules.
+/// The fluent names are derived mechanically from the assertion names:
+///
+/// - `is_x` -> `be_x` and `has_x` -> `have_x`. The possessive `has_no_x` keeps its order as
+///   `have_no_x`.
+/// - Negations put `not` first, as in "must not be equal to": `is_not_x` -> `not_be_x`, `has_not_x`
+///   -> `not_have_x`, and `does_not_x` -> `not_x`.
+/// - `contains`, `exists`, `panics`, and `satisfies` turn imperative, alone or as a prefix:
+///   `contains` -> `contain`, `exists` -> `exist`, `panics_async` -> `panic_async`, `satisfies` ->
+///   `satisfy`.
+/// - The prefixes `starts_`, `ends_`, and `needs_` turn imperative: `starts_with` -> `start_with`,
+///   `ends_with` -> `end_with`, `needs_drop` -> `need_drop`.
+/// - `matches` -> `match_expectation`, because `match` is a keyword and `be_matching` belongs to
+///   `is_matching`.
+/// - The namespace prefix `into_iter_` stays in front: `into_iter_contains` -> `into_iter_contain`.
+/// - Names starting with `get_` are already imperative and get no alias. Other names get an alias
+///   only when one is given explicitly.
 ///
 /// This trait is re-exported by [`crate::prelude`]. Import the prelude and use method syntax rather
 /// than implementing this trait downstream. See the fluent entry-point guide above for reference

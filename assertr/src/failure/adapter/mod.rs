@@ -128,6 +128,17 @@ impl<Input: ?Sized, A: Adapter<Input> + ?Sized> Adapter<Input> for &A {
 /// This is separate from [`Adapter`] because that trait's generic input cannot always be inferred
 /// at the point where a chain is assembled. The resulting composition implements [`Adapter`] only
 /// when its adjacent stages have compatible types.
+///
+/// # Scope
+///
+/// For the same reason, this trait cannot be restricted to adapter types: an adapter may accept
+/// several inputs, and a bound naming one of them would make [`then`](Self::then) ambiguous. It is
+/// therefore implemented for every sized type. Importing it adds `then` and `map_err` to all types
+/// in that scope, which can conflict with equally named methods of other extension traits, such as
+/// `FutureExt::then` from the `futures` crate. Import it only where adapters are composed, or call
+/// it explicitly as `AdapterExt::then(first, next)`. Composing a value that is not an adapter
+/// produces a [`Then`] that implements no [`Adapter`], so the mistake is reported where the
+/// composition is used.
 pub trait AdapterExt: Sized {
     /// Passes this adapter's successful output to `next`.
     fn then<Next>(self, next: Next) -> Then<Self, Next> {

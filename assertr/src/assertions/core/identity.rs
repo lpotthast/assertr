@@ -59,8 +59,8 @@ impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsSameInstanceAs<'_, T> {
     }
 }
 
-/// Checks that the subject is not the same instance as, without comparing or rendering its
-/// contents.
+/// Checks that the subject is not the same instance as the expected reference, without comparing
+/// or rendering its contents.
 pub struct IsNotSameInstanceAs<'e, T: ?Sized>(&'e T);
 impl<'e, T: ?Sized> IsNotSameInstanceAs<'e, T> {
     /// Borrows the reference whose full pointer is compared with the subject's pointer.

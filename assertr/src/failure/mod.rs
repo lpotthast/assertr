@@ -9,9 +9,12 @@
 //!
 //! ## From assertion to report
 //!
-//! 1. **Construction:** A failed leaf assertion builds an [`AssertionFailure`] through
-//!    [`AssertThat::failure`] and [`FailureBuilder`]. Diagnostic values are rendered through the
-//!    chain's [renderer and budget](crate::renderer) into owned [`Rendered`] trees.
+//! 1. **Construction:** A rejected [`Expectation`](crate::Expectation) explains itself through
+//!    [`ExpectationDiagnostics::explain`](crate::ExpectationDiagnostics::explain), populating the
+//!    [`FailureBuilder`] supplied by the chain executor. Execution adapters that cannot use the
+//!    expectation protocol start a builder with [`AssertThat::failure`] instead. Diagnostic values
+//!    are rendered through the chain's [renderer and budget](crate::renderer) into owned
+//!    [`Rendered`] trees.
 //! 2. **Handling:** [`AssertThat::capture`] stores failures and returns them to the caller. Panic
 //!    mode stops at the first failure and asks the selected [presentation
 //!    adapter](AssertThat::with_panic_presentation) for panic text.
@@ -247,6 +250,42 @@ impl AssertionFailure {
         self.constraint.as_deref()
     }
 
+    /// Borrows the relative path from the parent subject.
+    #[must_use]
+    pub fn path(&self) -> &[PathSegment] {
+        &self.path
+    }
+
+    /// Returns the number of diagnostic children omitted by the rendering budget.
+    #[must_use]
+    pub const fn omitted_children(&self) -> usize {
+        self.omitted_children
+    }
+
+    /// Returns where the failing assertion was invoked, when location recording was enabled.
+    #[must_use]
+    pub const fn location(&self) -> Option<&'static core::panic::Location<'static>> {
+        self.location
+    }
+
+    /// Returns the name given to the subject via `with_subject_name`, when present.
+    #[must_use]
+    pub fn subject_name(&self) -> Option<&str> {
+        self.subject_name.as_deref()
+    }
+
+    /// Returns the source expression that produced the subject, when the entry point captured it.
+    #[must_use]
+    pub const fn expression(&self) -> Option<&'static str> {
+        self.expression
+    }
+
+    /// Returns the Rust type name of the subject that raised this failure.
+    #[must_use]
+    pub const fn subject_type_name(&self) -> &'static str {
+        self.subject_type_name
+    }
+
     /// Borrows the rendered subject, when present.
     #[must_use]
     pub const fn actual(&self) -> Option<&Rendered> {
@@ -296,28 +335,9 @@ impl AssertionFailure {
     }
 }
 
-/// Failures raised on a chain are stored on its root.
-pub(crate) trait Fallible {
-    fn store_failure(&self, failure: AssertionFailure);
-}
-
-impl<T, M: Mode, R> Fallible for AssertThat<'_, T, M, R> {
-    fn store_failure(&self, failure: AssertionFailure) {
-        #[cfg(feature = "fluent")]
-        let expression = match self.state.expression {
-            crate::Expression::PendingFluent(location) => Some(location),
-            _ => None,
-        };
-        self.state.records.store_failure(
-            failure,
-            #[cfg(feature = "fluent")]
-            expression,
-        );
-    }
-}
-
 impl crate::ChainRecords<'_> {
-    fn store_failure(
+    /// Stores a captured failure on the root of this chain.
+    pub(crate) fn store_failure(
         &self,
         failure: AssertionFailure,
         #[cfg(feature = "fluent")] expression: Option<&'static core::panic::Location<'static>>,
@@ -340,11 +360,17 @@ impl crate::ChainRecords<'_> {
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Starts a failure of the given kind, located at the caller.
     ///
-    /// This is the failure path of every leaf assertion, called after
-    /// [`AssertThat::track_assertion`] when the condition does not hold. Fill in the rendered
-    /// values, the relation, facts, and children, then call [`FailureBuilder::raise`], which
-    /// records the failure in capture mode or panics immediately in panic mode. See
-    /// [custom assertions](crate#custom-assertions) for the shape such an assertion takes.
+    /// This is the failure path of an execution adapter: an assertion that owns an invocation,
+    /// consumption, or polling step the borrowed expectation protocol cannot express. Such an
+    /// adapter calls [`AssertThat::track_assertion`] before its operation. When the condition
+    /// does not hold, fill in the values rendered through [`AssertThat::render`], the relation,
+    /// facts, and children, then call [`FailureBuilder::raise`], which records the failure in
+    /// capture mode or panics immediately in panic mode. [`AssertThat::render`] shows an example.
+    ///
+    /// Reusable leaf checks implement [`Expectation`](crate::Expectation) and
+    /// [`ExpectationDiagnostics`](crate::ExpectationDiagnostics) instead. The executor then
+    /// supplies the builder and raises the failure. See [custom
+    /// assertions](crate#custom-assertions).
     #[track_caller]
     pub fn failure(&self, kind: FailureKind) -> FailureBuilder<Attached<'_>> {
         self.failure_at(kind, core::panic::Location::caller())
@@ -356,7 +382,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         kind: FailureKind,
         location: &'static core::panic::Location<'static>,
     ) -> FailureBuilder<Attached<'_>> {
-        FailureBuilder::attached(self, core::any::type_name::<T>(), location, kind)
+        FailureBuilder::attached(self, location, kind)
     }
 }
 
@@ -373,3 +399,42 @@ impl core::fmt::Debug for AssertionFailure {
 }
 
 impl core::error::Error for AssertionFailure {}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+
+    use super::{FailureBuilder, FailureKind, PathSegment};
+
+    mod accessors {
+        use super::*;
+
+        #[test]
+        fn expose_the_subject_and_location_fields() {
+            let failures = assert_that!(1)
+                .with_subject_name("answer")
+                .capture(|it| it.is_equal_to(2));
+            let failure = &failures[0];
+
+            assert_that!(failure.subject_name()).is_equal_to(Some("answer"));
+            assert_that!(failure.expression()).is_equal_to(Some("1"));
+            assert_that!(failure.subject_type_name()).is_equal_to("i32");
+            assert_that!(failure.location().map(core::panic::Location::file))
+                .is_equal_to(Some(file!()));
+            assert_that!(failure.path()).is_empty();
+            assert_that!(failure.omitted_children()).is_equal_to(0);
+        }
+
+        #[test]
+        fn expose_the_path_and_omitted_children() {
+            let failure = FailureBuilder::detached::<i32>(FailureKind::Other)
+                .path([PathSegment::Index(3)])
+                .omitted_children(2)
+                .build();
+
+            assert_that!(failure.path()).contains_exactly([PathSegment::Index(3)]);
+            assert_that!(failure.omitted_children()).is_equal_to(2);
+            assert_that!(failure.location()).is_none();
+        }
+    }
+}

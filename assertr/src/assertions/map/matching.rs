@@ -3,12 +3,19 @@
 use super::{EntryRejection, Map, MapLookup};
 use crate::{
     AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    assertions::collection::matching::MatchingItem,
     expectation::Evidence,
     failure::{FailureBuilder, FailureKind, PathSegment},
     renderer::IntoRendered,
 };
 
-/// Checks map values with a reusable expectation and retains the original child evidence.
+const MATCHING_VALUE: MatchingItem = MatchingItem {
+    contains: "contains a matching value",
+    does_not_contain: "does not contain a matching value",
+};
+
+/// Checks the value at one native key query with a reusable expectation and retains the original
+/// child evidence, located at the key.
 pub struct ContainsEntryMatching<'e, Q: ?Sized, E> {
     key: &'e Q,
     expected: E,
@@ -74,7 +81,10 @@ where
     }
 }
 
-/// Checks map values with a reusable expectation and retains the original child evidence.
+/// Requires at least one map value matching a reusable expectation, without key lookup.
+///
+/// Evaluation stops at the first match. On rejection, it retains every value's child evidence,
+/// ordered and limited like the map's rendered entries. An empty map rejects the expectation.
 pub struct ContainsValueMatching<E>(E);
 
 impl<E> ContainsValueMatching<E> {
@@ -105,15 +115,12 @@ where
         actual: &'a Mp,
         settings: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let mut context = settings.isolated_for_order(Mp::RENDERING_ORDER);
-        for (_, value) in actual.entries() {
-            let mut branch = context.isolated();
-            if branch.evaluate(value, &self.0) {
-                return Ok(());
-            }
-            context.append(branch.into_evidence());
-        }
-        context.finish(false, |context| context.describe(&self.0))
+        MATCHING_VALUE.find(
+            actual.entries().map(|(_, value)| value),
+            &self.0,
+            Mp::RENDERING_ORDER,
+            settings,
+        )
     }
 }
 
@@ -130,13 +137,11 @@ where
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure
-                .relation("contains a matching value")
-                .child(context.describe::<Mp::Value, _>(&self.0)),
-            Some((_, rejection)) => {
-                rejection.explain(failure.relation("does not contain a matching value"))
-            }
-        }
+        MATCHING_VALUE.explain::<Mp::Value, _, _, _>(
+            &self.0,
+            rejected.map(|(_, evidence)| evidence),
+            failure,
+            context,
+        )
     }
 }

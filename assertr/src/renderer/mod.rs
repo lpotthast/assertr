@@ -22,8 +22,11 @@
 //! map keys, or projections of other types, implement [`ValueRenderer<T>`](ValueRenderer) for each
 //! displayed type on one renderer and install it with
 //! [`AssertThat::with_renderer`](crate::AssertThat::with_renderer). That method includes a reusable
-//! renderer example. Derived borrowed assertions require `Clone`. Owned mappings, Result
-//! extraction, and serialization conversions preserve the renderer without cloning it.
+//! renderer example. Every `derive*` and `satisfies*` projection, and every assertion composed from
+//! them such as `is_some_satisfying`, requires `R: Clone`, because each child chain receives its
+//! own renderer. Installing a reference, as in `with_renderer(&renderer)`, satisfies this for any
+//! renderer. Consuming mappings (`map` and `map_owned`), Result extraction, and serialization
+//! conversions preserve the renderer without cloning it.
 //!
 //! ## Values and structure
 //!

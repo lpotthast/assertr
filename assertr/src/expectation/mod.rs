@@ -118,7 +118,12 @@ pub trait ExpectationDiagnostics<T: ?Sized, R = DebugRenderer>: Expectation<T, R
 
     /// Whether composition contributes this definition's children directly, applying the current
     /// context's path to their relative paths.
-    /// Ordinary chain execution still retains the definition's enclosing failure.
+    ///
+    /// In composition, a flattening definition contributes only its children and omission count.
+    /// Its own relation, actual, expected, unexpected, and facts are not shown. Use it only for
+    /// transparent groups whose children carry the complete explanation. Library probes never call
+    /// [`explain`](Self::explain). Ordinary chain execution still retains the definition's
+    /// enclosing failure.
     const FLATTEN: bool = false;
 
     /// Explains a rejected observation or describes a missing expected subject.

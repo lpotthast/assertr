@@ -1,78 +1,25 @@
-use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
-    failure::{FailureBuilder, FailureKind},
-};
+use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
 
-/// Checks that a boolean is true.
-pub struct IsTrue;
-
-impl<R> Expectation<bool, R> for IsTrue {
-    type Success<'a> = ();
-    type Rejection<'a> = ();
-
-    fn evaluate<'a>(&'a self, actual: &'a bool, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if *actual { Ok(()) } else { Err(()) }
-    }
+property_expectation! {
+    /// Checks that a boolean is true.
+    pub struct IsTrue for bool;
+    kind Equality;
+    check |actual| *actual;
+    relations "is true", "is not true";
 }
 
-impl<R> ExpectationDiagnostics<bool, R> for IsTrue
-where
-    R: ValueRenderer<bool>,
-{
-    const KIND: FailureKind = FailureKind::Equality;
-
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&bool, ())>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is true"),
-            Some((actual, ())) => failure.actual(render.value(actual)).relation("is not true"),
-        }
-    }
-}
-
-/// Checks that a boolean is false.
-pub struct IsFalse;
-
-impl<R> Expectation<bool, R> for IsFalse {
-    type Success<'a> = ();
-    type Rejection<'a> = ();
-
-    fn evaluate<'a>(&'a self, actual: &'a bool, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if *actual { Err(()) } else { Ok(()) }
-    }
-}
-
-impl<R> ExpectationDiagnostics<bool, R> for IsFalse
-where
-    R: ValueRenderer<bool>,
-{
-    const KIND: FailureKind = FailureKind::Equality;
-
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&bool, ())>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is false"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is not false"),
-        }
-    }
+property_expectation! {
+    /// Checks that a boolean is false.
+    pub struct IsFalse for bool;
+    kind Equality;
+    check |actual| !*actual;
+    relations "is false", "is not false";
 }
 
 /// Assertions for boolean values.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait BoolAssertions<R = crate::DebugRenderer> {
+pub trait BoolAssertions<R = DebugRenderer> {
     /// Asserts that the subject is `true`.
     fn is_true(self) -> Self
     where

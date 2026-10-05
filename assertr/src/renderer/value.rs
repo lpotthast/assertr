@@ -74,7 +74,9 @@ pub enum SensitiveValuePolicy {
 /// and [`crate::AssertThat::satisfies`] families, `is_some_satisfying`, `is_ok_satisfying`, and
 /// assertion methods implemented by composing those operations) require the renderer to be `Clone`
 /// so each derived child receives its own copy. [`DebugRenderer`] is `Copy`, so the default adds no
-/// constraint. A custom renderer used in derived contexts must implement `Clone` or `Copy`.
+/// constraint. A custom renderer used in derived contexts must implement `Clone` or `Copy`, or be
+/// installed by reference, as in `with_renderer(&renderer)`. A reference renders exactly like the
+/// renderer it refers to.
 ///
 /// # Pretty-printing
 ///
@@ -133,6 +135,21 @@ pub trait ValueRenderer<T: ?Sized> {
     }
 }
 
+/// A borrowed renderer renders exactly like the renderer it refers to, including its
+/// [`SensitiveValuePolicy`].
+///
+/// References are `Copy`, so `with_renderer(&renderer)` satisfies the `Clone` requirement of
+/// derived assertions even when the renderer itself does not implement `Clone`.
+impl<T: ?Sized, R: ValueRenderer<T> + ?Sized> ValueRenderer<T> for &R {
+    fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(value, f)
+    }
+
+    fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
+        (**self).sensitive_value_policy()
+    }
+}
+
 /// The default renderer. Delegates to [`fmt::Debug`].
 ///
 /// Selects [`SensitiveValuePolicy::Reveal`] so reqwest response header assertions display
@@ -165,5 +182,60 @@ where
 {
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0(value, f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::format;
+    use core::fmt;
+
+    use crate::prelude::*;
+
+    use super::SensitiveValuePolicy;
+
+    /// Deliberately neither `Clone` nor `Copy`.
+    struct Labelled(&'static str);
+
+    impl ValueRenderer<i32> for Labelled {
+        fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}({value})", self.0)
+        }
+
+        fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
+            SensitiveValuePolicy::Reveal
+        }
+    }
+
+    mod borrowed_renderer {
+        use super::*;
+
+        #[test]
+        fn forwards_formatting_and_the_sensitive_value_policy() {
+            let renderer = Labelled("value");
+            let borrowed = &renderer;
+
+            assert_that!(ValueRenderer::<i32>::sensitive_value_policy(&borrowed))
+                .is_equal_to(SensitiveValuePolicy::Reveal);
+            let rendering =
+                crate::renderer::RenderingContext::new(&borrowed, RenderingBudget::default());
+            assert_that!(format!("{:?}", rendering.value(&1))).is_equal_to("value(1)");
+        }
+
+        #[test]
+        fn renders_derived_assertions_without_a_clone_renderer() {
+            let renderer = Labelled("value");
+
+            let failures = assert_that!(Some(1))
+                .with_renderer(&renderer)
+                .capture(|it| {
+                    it.is_some_satisfying(|value| {
+                        value.is_equal_to(2);
+                    })
+                });
+
+            assert_that!(failures).has_length(1);
+            assert_that!(ToHumanReadableText.render(&failures[0])).contains("value(1)");
+        }
     }
 }

@@ -9,87 +9,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Reusable expected-side definitions implement `Expectation::evaluate` with typed `Success` and `Rejection`
-  observations and one `ExpectationDiagnostics::explain` hook for rejected observations and unmet expectations.
-  Both populate the same structured failure tree. The executor supplies `AssertionContext` for rendering and child
-  evidence. `apply_assertion` and `matches` share one chain executor, while `test_assertion` returns the successful
-  observation. Nested composition consumes the same definitions. Value comparisons, string and numeric properties,
-  formatting, ranges, variant checks and extraction, type inspection, collection and map comparisons and
-  matching, identity, lengths, set relations, element projections, cell and lock state, watch receivers, paths, executable
-  lookup, HTTP responses and headers, Jiff values, and rootcause reports share these definitions with ordinary methods.
-  Consuming and async adapters share executor support for iterator scans and cardinality observations, function
-  invocation results, body reads, and JSON decoding, preserving their caller locations and invocation boundaries.
-  Guarded observations are released before raising or continuing to another check. Tokio mutex callback failures
-  retain bounded child evidence and omission counts.
-  Compose strict and inclusive ordering with `lt`, `gt`, `le`, and `ge`, which all reject incomparable values.
-- Composable expectations support predicates, assertion callbacks, `pattern!`, and nested positional,
-  unordered, or keyed checks without optional features or `std`. Custom definitions compose directly through
-  `ExpectationDiagnostics`. The `matchers` catalog re-exports every public expectation, with common checks at its root
-  and subject namespaces for family-specific names. `DoesNotMatchPattern` supports explicit negative pattern matching.
-  Keyed matcher lists accept arrays, slices, and vectors of entries, as well as heterogeneous `entries_are!` lists.
-  Matcher-list elements and keyed value expectations require explicit matchers. Use `eq`, an alias for `equal_to`,
-  for equality. Map keys remain lookup operands.
-- `partial!` matches selected struct or enum fields without derives or attributes on domain types and renders only
+- Reusable expectations. An `Expectation` evaluates a subject once and an `ExpectationDiagnostics` explains a
+  rejection or describes an unmet expectation through the structured failure builder. Apply one to a chain with
+  `matches` (fluent alias `match_expectation`), `apply_assertion`, or `test_assertion`, which also returns the successful
+  observation. Every built-in assertion family is backed by public expectations that compose the same way as custom
+  definitions.
+- The `matchers` catalog re-exports every public expectation, with common checks at its root and subject namespaces
+  for family-specific names. Combine them with `all_of`, `any_of`, `anything`, `predicate`, `predicate_list`,
+  `satisfying` (assertion callbacks), `dereferenced` (any `Deref` subject), `each`, `elements_are!`,
+  `elements_are_in_any_order!`, `entries_are!`, and `pattern!`. Use `eq` (an alias for `equal_to`), `lt`, `gt`, `le`,
+  and `ge` for comparisons. Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a pattern
+  negatively. Matcher lists and keyed value expectations require explicit matchers, and keyed lists accept arrays,
+  slices, vectors, and heterogeneous `entries_are!` lists. All of this works without optional features or `std`.
+- `partial!` matches selected struct or enum fields without derives or attributes on domain types and renders only the
   selected leaves. Each selected field requires an explicit matcher, such as `eq(value)` or a nested `partial!`.
-  Qualified constructor paths work with the optional `variant` prefix for variant diagnostic paths.
-  Enable the new `partial` feature, which supports `no_std` with `alloc`.
+  Qualified constructor paths work with the optional `variant` prefix. It also works through facade crates that
+  re-export `assertr`. Enable the new `partial` feature, which supports `no_std` with `alloc`.
 - Map assertions `contains_entry_matching` and `contains_value_matching` accept composed value matchers.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
   exact comparisons of borrowed targets that preserve duplicate counts, without equality or target renderer bounds.
-  Membership and ordered checks bound diagnostic target retention by the rendering budget.
-- Borrowed panic-mode element projections through `get_first`, `get_last`, and `get_single` for `StableOrder`
-  collections, and `get_at` for `RandomAccess` collections.
-- `BinaryHeap` supports length and order-free collection assertions, with diagnostics sorted by rendered text.
-- Box and panic-payload `is_of_type` checks preserve the subject and work in panic and capture mode.
-- `RenderingBudget` defaults to 256 items per diagnostic group and 4,096 characters per rendered leaf.
-  Set limits with `with_max_items` and `with_max_leaf_characters`, then apply it with `with_rendering_budget`.
-  Use `RenderingBudget::unlimited()` to disable both limits. Custom evidence collectors can read the active limits
-  through `RenderingContext::budget()` without changing the chain. Child evidence preserves omission counts even at
-  zero, without changing assertion outcomes or skipping required checks.
+- Borrowed panic-mode element projections `get_first`, `get_last`, and `get_single` for `StableOrder` collections, and
+  `get_at` for `RandomAccess` collections.
+- `BinaryHeap` supports length and order-free collection assertions.
+- Collection, set, and map assertions work on `&mut` subjects, such as `assert_that_owned!(&mut vec)`.
+- `Box<dyn Any + Send>` and `Box<dyn Any + Send + Sync>` support `is_of_type`, `has_type`, and `has_type_ref`, for
+  example on payloads from `catch_unwind` or `JoinHandle::join`. Box and panic-payload `is_of_type` checks preserve
+  the subject and work in panic and capture mode.
+- `is_close_to` supports `core::num::Wrapping`. The `NumericDistance` documentation explains how to check foreign
+  numeric types.
+- HTTP header values implement `HasLength`, so `is_empty`, `is_not_empty`, and `has_length` count bytes. New
+  `matchers::header_value::{IsSensitive, IsInsensitive}`.
+- `RenderingBudget` limits diagnostics to 256 items per group and 4,096 characters per rendered leaf by default.
+  Configure it with `with_max_items` and `with_max_leaf_characters`, apply it with `with_rendering_budget`, or disable
+  both limits with `RenderingBudget::unlimited()`. Reports state how many items or nested failures were omitted.
+  Limits never change assertion outcomes.
 - `failure::adapter::Adapter` and `AdapterExt` provide typed failure processing with `then` and `map_err`, including
-  human-readable reports and an opt-in `Writer` sink for text or bytes with `std`. Configure any `std::io::Write`
-  target or use stdout/stderr constructors. With `tokio`, write to asynchronous targets through `adapt_async`,
-  including Tokio stdout/stderr constructors. Successful writes flush the target.
+  human-readable reports and, with `std`, a `Writer` sink for any `std::io::Write` target or stdout/stderr. With
+  `tokio`, `adapt_async` writes to asynchronous targets. Successful writes flush the target.
 - `with_panic_presentation` selects an owned `'static + RefUnwindSafe` text adapter shared by derived assertions.
   Presentation errors fall back to the built-in report, as do unwinding adapter panics with `std`.
 - `AssertionFailure` and `AssertionFailures` implement `core::error::Error` with readable `Display` and `Debug` reports.
-- `Fact`, `renderer::Rendered`, and `AssertionFailure` expose read-only diagnostic accessors for use with `derive`
-  and `derive_owned`.
-- `RenderingContext` provides public adapters for collection presentation, stable-order and borrowed collection views,
-  maps, synthetic key/value lists, and one-field variants and structs, including inaccessible fields.
-  Adapters apply the active leaf renderer and budget. `Typed` adapters retain Rust type metadata with configurable
-  hints, hidden by default for single values. Synthetic evidence selects ordering through `RenderingOrder`.
+  `AssertionFailure`, `Fact`, and `renderer::Rendered` expose read-only accessors for every diagnostic field.
+- `RenderingContext` provides public adapters for collections, maps, synthetic key/value lists, and one-field variants
+  and structs, including inaccessible fields. Adapters apply the active leaf renderer and budget. `Typed` adapters
+  retain Rust type metadata with configurable hints. Synthetic evidence selects ordering through `RenderingOrder`.
+- `&R` implements `ValueRenderer<T>` whenever `R` does, so `with_renderer(&renderer)` works with derived assertions for
+  renderers that are not `Clone`.
+- docs.rs shows the features required by feature-gated items.
 
 ### Changed
 
-- **Breaking:** Removed `AssertrCondition`, `ConditionAssertions`, `IterableConditionAssertions`, and their
-  `is`, `has`, `are`, `have`, and fluent `be` methods.
-- **Breaking:** Equality, ordering, and collection, iterator, and map value comparisons use standard `PartialEq`
-  and `PartialOrd` with owned or borrowed operands selected by `BorrowFor` from the `borrow-for` crate, re-exported
-  through `assertr::borrow_for`. Ordinary values and references work automatically, and string literals remain usable
-  for equality with `String` subjects, elements, and map values without allocation. Owned and borrowed arrays compare
-  with vectors, and owned and borrowed vectors compare with slice subjects. Custom operand wrappers opt in by declaring
-  their borrowed view. Range containment accepts owned or borrowed operands with owned, borrowed, or unbounded range
-  subjects. Containment matchers infer their bound type from `new`'s operand or select it explicitly with `borrowing`.
-  Numeric tolerance borrows its expected value and deviation independently. This replaces `AssertrPartialEq` and the
-  public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`. Other cross-type comparisons and
-  policies use an explicit borrowed view implementation, a value view, a predicate, or custom `Expectation` and
-  `ExpectationDiagnostics` definitions. Bulk value, key, and entry methods
-  accept finite slice-backed `AsRef` lists. `contains_all<E>`, `into_iter_contains_all<E>`, `contains_keys<E>`, and
-  `contains_exactly_entries<EK, EV>` replace iterator inputs and remove the iterator generic parameter, including
-  their fluent aliases. Collect generators explicitly with `.collect::<Vec<_>>()`. Borrowed lists use the stored
-  operand type's view selection. Bulk slice access and operand borrowing must describe consistent expected data
-  throughout evaluation and explanation, with unspecified access counts. Rejections retain failed observations
-  without full expected-view buffers. Successful collection prefix checks allocate zero bytes even for a million
-  elements.
+- **Breaking:** Removed `AssertrCondition`, `ConditionAssertions`, `IterableConditionAssertions`, and their `is`,
+  `has`, `are`, `have`, and fluent `be` methods. Use `matches` with a matcher or `predicate`.
+- **Breaking:** Equality, ordering, and collection, iterator, and map value comparisons use standard `PartialEq` and
+  `PartialOrd` with owned or borrowed operands selected by `BorrowFor` from the `borrow-for` crate, re-exported as
+  `assertr::borrow_for`. Ordinary values and references work automatically. String literals remain usable for equality
+  with `String` subjects, elements, and map values without allocation. Arrays compare with vectors, and vectors compare
+  with slice subjects. Custom operand wrappers opt in by declaring their borrowed view. Range containment accepts owned
+  or borrowed operands with owned, borrowed, or unbounded range subjects. This replaces `AssertrPartialEq` and the
+  public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`. Other cross-type comparisons use an
+  explicit borrowed view implementation, a predicate, or a custom expectation.
+- **Breaking:** Bulk value, key, and entry methods accept finite slice-backed `AsRef` lists instead of iterators. This
+  affects `contains_all`, `into_iter_contains_all`, `contains_keys`, `contains_exactly_entries`, and
+  `contains_exactly_entries_satisfying`, including their fluent aliases, which lose their iterator generic parameter.
+  Collect generators explicitly with `.collect::<Vec<_>>()`.
 - **Breaking:** Removed the published `MapKeyQuery` extension API. Bulk map-key operands and keyed matchers use
-  `BorrowFor<K>::View` with the stored key as context, plus `Borrow<View>`. Custom renderers must render the selected
-  query view, which also supplies diagnostic type metadata and matcher paths, instead of the operand wrapper.
-  Native `MapLookup` requirements and single-key `&Q` calls are preserved. Slice operands now work with vector keys.
+  `BorrowFor<K>::View` with the stored key as context, plus `Borrow<View>`. Custom renderers render the selected query
+  view instead of the operand wrapper. Native `MapLookup` requirements and single-key `&Q` calls are preserved. Slice
+  operands now work with vector keys.
+- **Breaking:** Map entry methods take the key query first in turbofish order: `contains_entry::<Q, E>`,
+  `does_not_contain_entry::<Q, E>`, and `contains_entry_satisfying::<Q, A>`.
 - **Breaking:** Removed `AssertrEq`, its generated companion types and helper attributes, and the `derive` feature.
   Use `matches(partial!(...))` with `features = ["partial"]`.
-- **Breaking:** `assertr-macros` 0.5.0 replaces `assertr-derive` as the procedural macro crate.
-  Direct users must update their dependency and replace `assertr_derive::` paths with `assertr_macros::`.
+- **Breaking:** `assertr-macros` 0.5.0 replaces `assertr-derive` as the procedural macro crate. Direct users must
+  update their dependency and replace `assertr_derive::` paths with `assertr_macros::`. Use `assertr::partial!` for
+  structural matching.
+- **Breaking:** `#[fluent_aliases]` no longer wraps generated aliases in `#[cfg(feature = "fluent")]`. Trait authors
+  make aliases optional with `#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]`. `#[fluent_alias(..)]`
+  reports compile errors for names that are not string literals or identifiers, keyword names become raw identifiers,
+  and generated aliases link to their original method instead of repeating its documentation.
 - **Breaking:** Collection, iterator, and map `*_matching` methods and fluent aliases accept matchers instead of bare
   predicates. Wrap closures with `predicate`, predicate arrays with `predicate_list`, and keyed matcher lists with
   `entries_are!` or `entry_matchers`.
@@ -98,98 +96,121 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `StableOrder` collections, or assert an owned iterator explicitly.
 - **Breaking:** Custom `Collection` and `Map` implementations must move `length` to `HasLength`, replace collection
   `STYLE` and `TYPE_NAME` with `PRESENTATION: CollectionPresentation`, and replace map `TYPE_NAME` with
-  `RENDERING_ORDER: RenderingOrder`, using the types in `renderer`.
-- **Breaking:** Custom set implementations and bounds must rename `Set` to `SetLookup`.
-- **Breaking:** Collection assertions on `HashSet<T, S>` now require `S: BuildHasher`. Add this bound to generic helpers.
-- **Breaking:** `HasLength` covers `str` and `[T]` directly and forwards through blanket `&T` and `&mut T` implementations.
-  Downstream types implementing it for both a value and its references must remove their reference implementations.
-- **Breaking:** `capture`, `verify`, and `verify_owned` return `AssertionFailures` instead of a vector.
-  Use `into_vec()` where a vector is required.
+  `RENDERING_ORDER: RenderingOrder`, using the types in `renderer`. Custom set implementations and bounds must rename
+  `Set` to `SetLookup`. `Collection`, `StableOrder`, `RandomAccess`, `SetLookup`, `Map`, and `MapLookup` gain blanket
+  `&mut C` implementations, which conflict with downstream implementations for `&mut` types.
+- **Breaking:** `HasLength` covers `str` and `[T]` directly and forwards through blanket `&T` and `&mut T`
+  implementations. Downstream types implementing it for both a value and its references must remove their reference
+  implementations. Length and element assertions on `HashSet` and `HashMap` no longer require `S: BuildHasher`.
+- **Breaking:** Assertion traits share one generic shape: subject parameters, then the mode where a signature needs it,
+  then a renderer `R` defaulting to `DebugRenderer`. Unused lifetimes are gone. This changes `OptionAssertions<T, M, R>`,
+  `ResultAssertions<T, E, M, R>`, `PollAssertions<T, M, R>`, `BoxAssertions<R>`, `PanicValueAssertions<R>`,
+  `HttpHeaderValueAssertions<M, R>`, `RootcauseDynamicReportAssertions<M, R>`,
+  `RootcauseDynamicReportRefAssertions<M, R>`, and `ProgramAssertions<'a, R>`, whose `exists` returns `Self`.
+  `NumAssertions<T, R>`, `StrAssertions<S, R>`, `LengthAssertions<T, R>`, `PathAssertions<P, R>`, and
+  `ProgramExtractAssertions<'t, 'a, R>` replace their associated `Subject` and `Renderer` types with parameters.
+  Generic bounds naming these traits must be updated, for example to `NumAssertions<T, MyRenderer>`.
+- **Breaking:** `capture`, `verify`, and `verify_owned` return `AssertionFailures` instead of a vector. Use
+  `into_vec()` where a vector is required.
 - **Breaking:** `AssertionFailure` replaces `description` and `details` with structured values, relations, facts,
-  nested failures, typed child paths and constraints, type metadata, and `FailureKind` tags.
-  Child locations use `PathSegment` for equality, identity, and matcher evidence, with compact rendered map keys.
-  Facts describe additional evidence without special treatment of their labels.
-  Read the fields or accessors directly, or use `Display` and `ToHumanReadableText` for text.
-- **Breaking:** Custom leaf assertions must replace `fail`, `fail_with_details`, and `failure::Failure` with
-  `self.failure(kind)`, structured evidence, and `raise()`, using `Fact::labelled` or `Fact::note` for additional facts.
-- **Breaking:** Custom diagnostic code must replace `render_value`, `render_values`, `Renderable`, and `RenderableValues`
-  with adapters from `AssertThat::render()`, such as `value`, `values`, and `borrowed_values`.
+  nested failures, typed child paths and constraints, type metadata, and `FailureKind` tags. Read the fields or
+  accessors directly, or use `Display` and `ToHumanReadableText` for text.
+- **Breaking:** Custom leaf assertions implement `Expectation` and `ExpectationDiagnostics` instead of using `fail`,
+  `fail_with_details`, and `failure::Failure`. Execution adapters that cannot be expressed as an expectation build
+  failures with `self.failure(kind)`, structured evidence, and `raise()`.
+- **Breaking:** Custom diagnostic code must replace `render_value`, `render_values`, `Renderable`, and
+  `RenderableValues` with adapters from `AssertThat::render()`, such as `value`, `values`, and `borrowed_values`.
   Replace `CollectionStyle` with `renderer::GroupStyle`.
+- **Breaking:** Diagnostic operands now use the active renderer, including strings, paths, numeric evidence,
+  integration values, and original errors. Custom renderers must implement the method-level `ValueRenderer` bounds,
+  and generic callers must supply `R` in formatting, exact-size iterator, reqwest response, and rootcause
+  report-reference assertion trait bounds.
 - **Breaking:** `as_json()` and `as_toml()` return owned `Result` subjects that preserve serialization errors, and the
   `json()` and `toml()` adapters are removed. Replace string chains with `.as_json().get_ok()` in panic mode or
-  `.as_json().is_ok_satisfying(...)` in capture mode, and apply the same migration to TOML.
-- **Breaking:** Import `BoxExtractAssertions` or `PanicValueExtractAssertions` for `has_type` and `has_type_ref`,
-  or use the prelude.
+  `.as_json().is_ok_satisfying(...)` in capture mode, and likewise for TOML.
+- **Breaking:** Import `BoxExtractAssertions` or `PanicValueExtractAssertions` for `has_type` and `has_type_ref`, or
+  use the prelude.
 - **Breaking:** Replace `ProgramAssertionsRequiringPanicMode::exists_and` and its fluent alias with
   `ProgramExtractAssertions::get_resolved_path`.
 - **Breaking:** Range `contains_element` and `does_not_contain_element` consume and return their assertion chain.
   Chain successive checks or start a new chain instead of reusing a moved one.
-- Failure reports use a consistent layout for values, relations, messages, facts, and nested failures.
-  Exhausted prefix and positional exact matcher scans describe the first missing expectation and the required length.
-  Update diagnostic text snapshots.
-- Hash collection diagnostics sort values and per-element evidence by rendered text before applying item limits.
-  Positional diagnostics preserve iteration order, order-free diagnostics omit traversal indexes, and length
-  diagnostics use short Rust type names. Sorted value, map, and entry-list adapters bound temporary entry retention
-  by the item limit while preserving stable full-sort output and rendering every inspected leaf once per conversion.
-- Unordered matching evaluates each actual/expected pair at most once and retains evidence for missing expectations
-  and unexpected elements. Surplus occurrences are explained through the occupied expectations they satisfy.
-  Failure evidence is sampled per occurrence and expectation slot, then routed after assignment. Completion sends
-  newly evaluated rejections directly to their final groups. Finite samples can remain underfilled when assignment
-  excludes retained candidates, with exact omission counts. Unlimited budgets preserve complete evidence. Comparison
-  work and total memory remain unbounded by the rendering budget.
-- **Breaking:** Tokio watch `has_changed` and `has_not_changed` move to `TokioWatchReceiverAssertions`, supporting
-  panic and capture modes without renderer or `Clone` bounds. Replace imports of the removed
-  `TokioWatchReceiverExtractAssertions` with `TokioWatchReceiverAssertions`.
+- **Breaking:** Tokio watch `has_changed` and `has_not_changed` move to `TokioWatchReceiverAssertions`, supporting panic
+  and capture modes without renderer or `Clone` bounds. Replace imports of the removed
+  `TokioWatchReceiverExtractAssertions`.
 - **Breaking:** Memory assertions move from `assertions::std::mem` to `assertions::core::mem` and work without `std`.
-  Update explicit module imports and import `MemAssertions` from the core or crate-wide prelude instead of the
-  standard-library prelude. `matchers::memory::NeedsDrop` also works without optional features.
-- Positive collection, stable-order, and iterator `*_satisfying` assertions no longer require element renderers.
-  Map callback assertions require key renderers only. Callbacks can inspect opaque subjects using just the renderers
-  needed by their inner assertions and any count or key evidence.
-
-### Fixed
-
-- **Breaking:** Path `does_not_exist` and its fluent alias `not_exist` pass only when filesystem inspection confirms
-  absence. Unlike 0.7.1, inspection errors fail with the original I/O error as a rendered fact. These methods now require
-  `ValueRenderer<std::io::Error>` in addition to the path renderer. Add that capability to custom renderers and generic
-  caller bounds. The default `DebugRenderer` already supports it.
-- **Breaking:** `AssertThat` now inherits unwind-safety requirements from its subject and renderer.
-  Callers using `catch_unwind` with non-unwind-safe state must review that state before explicitly using `AssertUnwindSafe`.
+  Import `MemAssertions` from the core or crate-wide prelude.
+- **Breaking:** HTTP header values lose their own `is_empty` and `is_not_empty`. The same calls now resolve to
+  `LengthAssertions` through the prelude. `is_sensitive` and `is_insensitive` require `ValueRenderer<HeaderValue>`
+  instead of `ValueRenderer<bool> + Clone` and report the header value.
+- **Breaking:** The `http` feature enables `std`. `serde-json`, `serde-toml`, and `serde` no longer enable `std` and
+  work on embedded `no_std` targets with `alloc`.
+- **Breaking:** `jiff` is built without its default features. Enable jiff's time-zone database features in your own
+  dependency if your tests look up time zones by name.
 - **Breaking:** `NumAssertions::is_close_to` uses rounded absolute floating-point distance through
-  `assertions::num::NumericDistance`, retaining overflow-safe integer comparisons without requiring `Clone`.
-  Add this bound to generic callers and implement `checked_distance` for custom numeric types.
+  `assertions::num::NumericDistance`, retaining overflow-safe integer comparisons without requiring `Clone`. Generic
+  callers need this bound, and custom numeric types implement `checked_distance`.
+- **Breaking:** `SignedDurationAssertions::is_close_to` takes `BorrowFor<SignedDuration>` operands instead of concrete
+  `SignedDuration` parameters, so untyped `.into()` or `Default::default()` arguments no longer infer. It compares exact
+  inclusive nanosecond distances without arithmetic panics at extreme values and fails explicitly for a negative
+  allowed deviation.
+- **Breaking:** `AssertThat` inherits unwind-safety requirements from its subject and renderer. Callers using
+  `catch_unwind` with non-unwind-safe state must review that state before explicitly using `AssertUnwindSafe`.
 - **Breaking:** Debug and Display comparisons preserve quotes and escapes exactly, including rootcause current-context
   Debug comparisons. Use `has_debug_string("42")` for preformatted numeric expectations and include Debug's surrounding
   quotes when expecting string output.
-- **Breaking:** Diagnostic operands now use the active renderer, including strings, paths, numeric evidence, integration
-  values, and original errors. Custom renderer callers must add the method-level `ValueRenderer` bounds and supply `R`
-  in formatting, exact-size iterator, reqwest response, and rootcause report-reference assertion trait bounds.
-- `Actual::map` accepts `FnOnce` callbacks, allowing captured values to move into the mapped subject.
+- Failure reports use one layout for values, relations, messages, facts, and nested failures, with child paths such as
+  `At [2]:`. Update diagnostic text snapshots. Notable changes: disjunctions report one nested group ("does not match
+  any alternative"), exhausted scans describe the first missing expectation and the required length, length rejections
+  decided by an exact `size_hint` report the reported and expected lengths without consuming input, and length
+  diagnostics use short Rust type names.
+- Hash collection diagnostics sort values and per-element evidence by rendered text before applying item limits and
+  mark multi-item output as sorted. Positional diagnostics preserve iteration order, and order-free diagnostics omit
+  traversal indexes.
+- Unordered matching evaluates each actual/expected pair at most once and reports missing expectations, unexpected
+  elements, and surplus occurrences of satisfied expectations. Iterator `contains_exactly_in_any_order` reports like the
+  collection assertion. Iterator `contains_matching` and `contains_contiguous_matching` retain the first rejected
+  candidates within the rendering budget.
+- Positive collection, stable-order, and iterator `*_satisfying` assertions no longer require element renderers. Map
+  callback assertions require key renderers only.
+- `with_conditional_detail_message` accepts `FnOnce` closures.
+
+### Fixed
+
+- **Breaking:** Path existence checks pass only when filesystem inspection confirms the result. `exists` and
+  `does_not_exist` treat a missing path, including one below a non-directory ancestor, as absent and fail with the
+  original I/O error for any other inspection error. `is_a_file`, `is_a_directory`, and `is_a_symlink` no longer
+  report inspection errors as a missing path. These methods require `ValueRenderer<std::io::Error>`, which the default
+  `DebugRenderer` provides.
+- `has_length` and `into_iter_has_length` no longer trust an agreeing exact `size_hint`. They verify it by reading at
+  most one element beyond the expected length.
+- `ends_with` and `ends_with_elements` align a subject shorter than the expected suffix at its end, reporting the
+  length and only genuine mismatches.
+- Exact keyed matching reports a length failure when duplicate queries match every entry of a shorter map.
+- `Actual::map` accepts `FnOnce` callbacks.
 - Streaming iterator assertions retain the owning iterator through diagnostic rendering and release it before failure
-  handling, preserving resources needed to interpret yielded items without repeating observations or consuming extra elements.
-  Equality failures retain indexed mismatches and structured omission counts. Matcher failures report consumption
-  and selected candidate evidence. Unordered equality rejects unequal buffered lengths before comparing operands
-  and avoids diagnostic assignment storage for equal-length checks.
-- Reqwest header diagnostics preserve sensitivity metadata for custom renderers and escape non-ASCII bytes by default.
-  The default renderer reveals sensitive contents, and custom renderers can opt in through `SensitiveValuePolicy::Reveal`.
-- **Breaking:** Jiff signed-duration tolerance compares exact inclusive nanosecond distances without arithmetic
-  panics at extreme values, including in capture mode.
+  handling, without repeating observations or consuming extra elements.
+- Reqwest header diagnostics preserve sensitivity metadata for custom renderers and escape non-ASCII bytes. The default
+  renderer reveals sensitive contents, and custom renderers can opt in through `SensitiveValuePolicy::Reveal`.
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 - Tokio `RwLock` state assertions retain acquired guards while rendering failures, preventing lock reacquisition races.
 - Rootcause current-context type mismatches, range `is_outside_of_range`, and standard and Tokio lock `is_free` aliases
-  report the caller's assertion location.
-- Range diagnostics preserve excluded lower bounds using explicit bound tuples.
+  report the caller's assertion location. Owned rootcause report assertions include the `Expression:` line and no
+  longer require a `Clone` renderer.
+- Range diagnostics preserve excluded lower bounds.
+- `capture` on a derived chain lists local detail messages, including those added in the callback, before inherited
+  messages.
 - `fluent_aliases` supports async assertion methods by awaiting the delegated call.
-- `fluent_expressions` preserves callback types for user-defined `verify` and `verify_owned` methods, including
-  `Fn`, `FnMut`, `FnOnce`, and concrete function-pointer parameters. Function items and callback variables retain
-  automatic expression capture for Assertr verification. Unrelated callback inputs remain unchanged even when
-  `#[track_caller]` forwards the outer location into a nested verification.
+- `fluent_expressions` no longer rewrites `verify` and `verify_owned` callback arguments, so user-defined methods with
+  `Fn`, `FnMut`, `FnOnce`, function-pointer, or macro-generated callbacks compile unchanged. A user-defined
+  `#[track_caller]` `verify` whose result contains an inner Assertr verification's failures attaches the outer receiver
+  expression to them.
 
 ### Removed
 
 - **Breaking:** Removed deprecated `contains_exactly_matching_in_any_order`, `contain_exactly_matching_in_any_order`,
   and `into_iter_iterator_is_empty`. Use `contains_exactly_in_any_order_matching`, its fluent alias, and
   `into_iter_is_empty` respectively.
+- `indoc` is no longer a dependency of `assertr`.
 
 ## [0.7.1] - 2026-09-02
 

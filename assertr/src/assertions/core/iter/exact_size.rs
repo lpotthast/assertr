@@ -4,7 +4,7 @@ use crate::{
     failure::{Fact, FailureBuilder, FailureKind},
 };
 
-/// Checks the remaining iterator length without advancing it.
+/// Requires [`ExactSizeIterator::len`] to equal an expected count, without advancing the iterator.
 pub struct HasRemainingCount(usize);
 impl HasRemainingCount {
     /// Requires exactly this many remaining items.
@@ -55,21 +55,18 @@ where
         let render = context.render();
         let failure = match rejected {
             None => failure.relation("has remaining count"),
-            Some((actual, rejection)) => {
-                let _ = actual;
-                failure
-                    .relation("does not have the expected remaining count")
-                    .fact(Fact::labelled(
-                        "Actual remaining count",
-                        render.value(&rejection),
-                    ))
-            }
+            Some((_, rejection)) => failure
+                .relation("does not have the expected remaining count")
+                .fact(Fact::labelled(
+                    "Actual remaining count",
+                    render.value(&rejection),
+                )),
         };
         failure.expected(render.value(&self.0))
     }
 }
 
-/// Checks the remaining iterator length without advancing it.
+/// Requires [`ExactSizeIterator::len`] to be zero, without advancing the iterator.
 pub struct HasNoRemainingElements;
 
 impl<I: ExactSizeIterator, R> Expectation<I, R> for HasNoRemainingElements {
@@ -116,7 +113,7 @@ where
     }
 }
 
-/// Checks the remaining iterator length without advancing it.
+/// Requires [`ExactSizeIterator::len`] to be nonzero, without advancing the iterator.
 pub struct HasRemainingElements;
 
 impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingElements {

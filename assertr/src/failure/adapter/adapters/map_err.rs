@@ -7,12 +7,21 @@ use super::super::Adapter;
 /// Construct it with [`AdapterExt::map_err`](crate::failure::adapter::AdapterExt::map_err). The
 /// mapper runs on each error from the wrapped adapter, on the calling thread. It does not run
 /// during construction or on success. Both the adapter and mapper may borrow local data.
-#[derive(Debug)]
 #[must_use]
 pub struct MapErr<A, F, Input: ?Sized> {
     input: core::marker::PhantomData<fn(&Input)>,
     adapter: A,
     mapper: F,
+}
+
+/// Shows the wrapped adapter. The mapper is usually a closure without a `Debug` implementation, so
+/// it is omitted.
+impl<A: core::fmt::Debug, F, Input: ?Sized> core::fmt::Debug for MapErr<A, F, Input> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("MapErr")
+            .field("adapter", &self.adapter)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<A: Clone, F: Clone, Input: ?Sized> Clone for MapErr<A, F, Input> {
@@ -93,6 +102,16 @@ mod tests {
         assert_that!(adapter.adapt("")).is_equal_to(Err(Rejected));
         assert_that!(adapter.adapt("")).is_equal_to(Err(Rejected));
         assert_that!(calls.get()).is_equal_to(2);
+    }
+
+    #[test]
+    fn debug_shows_the_adapter_without_requiring_a_debug_mapper() {
+        #[derive(Debug)]
+        struct Named;
+
+        let adapter = MapErr::<_, _, str>::new(Named, |error: Empty| error);
+
+        assert_that!(alloc::format!("{adapter:?}")).is_equal_to("MapErr { adapter: Named, .. }");
     }
 
     #[test]

@@ -1,5 +1,8 @@
 use crate::borrow_for::BorrowFor;
-use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, assertions::iterator, mode::Capture};
+use crate::{
+    AssertThat, DebugRenderer, Mode, ValueRenderer, actual::Actual, assertions::iterator,
+    mode::Capture,
+};
 
 /// Terminal assertions for an owned iterator.
 ///
@@ -35,14 +38,21 @@ use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, assertions::iterato
 /// contiguous subsequences succeed without advancing the iterator.
 ///
 /// Exact positional assertions read at most `expected.len() + 1` elements. Exact unordered
-/// assertions buffer at most that many elements. Failure diagnostics retain only the last 16
-/// consumed elements, regardless of how long the scan ran. Matchers evaluate `&T`, and
-/// `_satisfying` closures receive a capture-mode assertion borrowing each candidate element.
+/// assertions buffer at most that many elements. An exact [`Iterator::size_hint`] can reject a
+/// length mismatch before consuming anything, but never establishes success on its own.
+///
+/// Equality diagnostics preview at most the last 16 consumed elements, regardless of how long the
+/// scan ran. Unordered equality instead reports the buffered elements like
+/// [`CollectionAssertions::contains_exactly_in_any_order`](crate::assertions::collection::CollectionAssertions::contains_exactly_in_any_order).
+/// Matcher and `_satisfying` diagnostics retain evidence from the first rejected candidates that
+/// fit the [rendering budget](crate::RenderingBudget). Later rejections are only counted. Matchers
+/// evaluate `&T`, and `_satisfying` closures receive a capture-mode assertion borrowing each
+/// candidate element.
 ///
 /// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait IteratorAssertions<'t, T, M: Mode, R> {
+pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// Asserts that the iterator contains an element equal to `expected`.
     fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
     where
@@ -529,7 +539,6 @@ fn take_iterator<'t, 'u, T, I, M: Mode, R>(
 where
     I: Iterator<Item = T>,
     't: 'u,
-    R: ValueRenderer<usize>,
 {
     this.track_assertion();
     take_iterator_after_tracking(this)
@@ -712,7 +721,7 @@ mod tests {
                 does not contain a matching element
 
                 Details:
-                  - Consumed: 3
+                  - Consumed elements: 3
                 Nested failures:
                   - At [0]:
                     does not satisfy the constraint
@@ -753,7 +762,7 @@ mod tests {
                 does not contain a matching element
 
                 Details:
-                  - Consumed: custom(2)
+                  - Consumed elements: custom(2)
                 Nested failures:
                   - At [0]:
                     Expected: custom(9)
@@ -766,7 +775,7 @@ mod tests {
                 -------- assertr --------
             "});
 
-                    assert_custom_fact(element.actual(), "Consumed", 2);
+                    assert_custom_fact(element.actual(), "Consumed elements", 2);
                 },
             ]);
         }
@@ -915,7 +924,7 @@ mod tests {
                 contains an unexpected matching element
 
                 Details:
-                  - Consumed: 2
+                  - Consumed elements: 2
                 Nested failures:
                   - At [1]:
                     Actual: 2
@@ -1031,7 +1040,7 @@ mod tests {
                 does not match the required position
 
                 Details:
-                  - Consumed: 2
+                  - Consumed elements: 2
                 Nested failures:
                   - At [1]:
                     does not satisfy the constraint
@@ -1213,10 +1222,10 @@ mod tests {
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
 
-                does not end with matching positions
+                does not end with matching elements
 
                 Details:
-                  - Consumed: 3
+                  - Consumed elements: 3
                 Nested failures:
                   - At [2]:
                     does not satisfy the constraint
@@ -1371,11 +1380,21 @@ mod tests {
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
 
-                does not contain matching contiguous positions
+                does not contain matching contiguous elements
 
                 Details:
-                  - Consumed: 3
+                  - Consumed elements: 3
                 Nested failures:
+                  - At [0]:
+                    does not satisfy the constraint
+
+                    Constraint:
+                        satisfies the predicate
+                  - At [1]:
+                    does not satisfy the constraint
+
+                    Constraint:
+                        satisfies the predicate
                   - At [2]:
                     does not satisfy the constraint
 
@@ -1470,8 +1489,6 @@ mod tests {
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`
 
-                    Actual: []
-
                     does not contain exactly
 
                     Expected: [
@@ -1480,7 +1497,6 @@ mod tests {
                     ]
 
                     Details:
-                      - Consumed elements: 0
                       - Reported length: 3
                       - Expected length: 2
                     -------- assertr --------
@@ -1544,13 +1560,37 @@ mod tests {
                 does not match the required position
 
                 Details:
-                  - Consumed: 2
+                  - Consumed elements: 2
                 Nested failures:
                   - At [1]:
                     does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn panics_when_an_extra_element_follows() {
+            assert_that_panic_by(|| {
+                assert_that_owned!([1, 2, 3].into_iter().filter(|_| true))
+                    .with_location(false)
+                    .contains_exactly_matching(crate::expectation::predicate_list([
+                        |it: &i32| *it == 1,
+                        |it: &i32| *it == 2,
+                    ]));
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2, 3].into_iter().filter(|_| true)`
+
+                has an extra element
+
+                Details:
+                  - Consumed elements: 3
+                  - Extra element at index: 2
                 -------- assertr --------
             "});
         }
@@ -1595,33 +1635,6 @@ mod tests {
 
         use indoc::formatdoc;
 
-        #[derive(Debug)]
-        struct Actual(u8);
-
-        #[derive(Debug)]
-        struct Expected(u8);
-
-        #[derive(Debug)]
-        enum WildcardExpected {
-            Any,
-            Value(u8),
-        }
-
-        impl PartialEq<Expected> for Actual {
-            fn eq(&self, other: &Expected) -> bool {
-                self.0 == other.0
-            }
-        }
-
-        impl PartialEq<WildcardExpected> for Actual {
-            fn eq(&self, other: &WildcardExpected) -> bool {
-                match other {
-                    WildcardExpected::Any => true,
-                    WildcardExpected::Value(expected) => self.0 == *expected,
-                }
-            }
-        }
-
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
@@ -1645,21 +1658,37 @@ mod tests {
         }
 
         #[test]
-        fn custom_heterogeneous_comparisons_use_predicates() {
-            assert_that_owned!([Actual(1), Actual(2)].into_iter())
-                .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
-                    |it: &Actual| it.eq(&Expected(2)),
-                    |it: &Actual| it.eq(&Expected(1)),
-                ]));
-        }
+        fn reports_the_collection_differences_and_the_consumption_of_a_longer_input() {
+            assert_that_panic_by(|| {
+                assert_that_owned!((1..).filter(|_| true))
+                    .with_location(false)
+                    .contains_exactly_in_any_order([2, 1]);
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `(1..).filter(|_| true)`
 
-        #[test]
-        fn supports_non_equivalence_predicates() {
-            assert_that_owned!([Actual(2), Actual(1)].into_iter())
-                .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
-                    |it: &Actual| it.eq(&WildcardExpected::Any),
-                    |it: &Actual| it.eq(&WildcardExpected::Value(2)),
-                ]));
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    does not contain exactly in any order
+
+                    Expected: [
+                        2,
+                        1,
+                    ]
+
+                    Details:
+                      - Elements not expected: [
+                            3,
+                        ]
+                      - Consumed elements: 3
+                    -------- assertr --------
+                "});
         }
 
         #[test]
@@ -1689,7 +1718,12 @@ mod tests {
                     ]
 
                     Details:
-                      - Consumed elements: 3
+                      - Elements not found: [
+                            9,
+                        ]
+                      - Elements not expected: [
+                            3,
+                        ]
                     -------- assertr --------
                 "});
         }
@@ -1708,8 +1742,6 @@ mod tests {
                 -------- assertr --------
                 Expression: `[1, 2].into_iter()`
 
-                Actual: []
-
                 does not contain exactly in any order
 
                 Expected: [
@@ -1717,7 +1749,6 @@ mod tests {
                 ]
 
                 Details:
-                  - Consumed elements: custom(0)
                   - Reported length: custom(2)
                   - Expected length: custom(1)
                 -------- assertr --------
@@ -1732,6 +1763,28 @@ mod tests {
     mod contains_exactly_in_any_order_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        /// An item without `PartialEq`, matched by predicates over its field.
+        #[derive(Debug)]
+        struct Opaque(u8);
+
+        #[test]
+        fn matches_items_without_equality_through_predicates() {
+            assert_that_owned!([Opaque(1), Opaque(2)].into_iter())
+                .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                    |it: &Opaque| it.0 == 2,
+                    |it: &Opaque| it.0 == 1,
+                ]));
+        }
+
+        #[test]
+        fn assigns_overlapping_predicates_one_to_one() {
+            assert_that_owned!([Opaque(2), Opaque(1)].into_iter())
+                .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                    |_: &Opaque| true,
+                    |it: &Opaque| it.0 == 2,
+                ]));
+        }
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -1789,7 +1842,7 @@ mod tests {
                 does not match exactly in any order
 
                 Details:
-                  - Consumed: 3
+                  - Consumed elements: 3
                 Nested failures:
                   - is missing an element matching this expectation
 

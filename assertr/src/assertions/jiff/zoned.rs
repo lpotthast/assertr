@@ -1,12 +1,14 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
-use crate::{AssertThat, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, ValueRenderer};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use jiff::Zoned;
 use jiff::tz::TimeZone;
 
-/// Compares the observed time zone with the expected zone or name.
+/// Compares the observed time-zone rules with an expected [`TimeZone`].
+///
+/// The expected operand selects a `TimeZone` view through [`BorrowFor`].
 pub struct IsInTimeZone<E>(E);
 impl<E, R> Expectation<Zoned, R> for IsInTimeZone<E>
 where
@@ -62,13 +64,15 @@ where
     }
 }
 impl<E> IsInTimeZone<E> {
-    /// Expects this time zone or name.
+    /// Expects the time-zone rules of this time zone.
     #[must_use]
     pub const fn new(expected: E) -> Self {
         Self(expected)
     }
 }
-/// Compares the observed time zone with the expected zone or name.
+/// Compares the observed time zone's IANA name with an expected name.
+///
+/// A time zone without an IANA name, such as a fixed offset, never matches.
 pub struct IsInTimeZoneNamed<E>(E);
 impl<E, R> Expectation<Zoned, R> for IsInTimeZoneNamed<E>
 where
@@ -124,7 +128,7 @@ where
     }
 }
 impl<E> IsInTimeZoneNamed<E> {
-    /// Expects this time zone or name.
+    /// Expects a time zone with this IANA name.
     #[must_use]
     pub const fn new(expected: E) -> Self {
         Self(expected)
@@ -134,7 +138,7 @@ impl<E> IsInTimeZoneNamed<E> {
 /// Assertions for [`Zoned`] date-times.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ZonedAssertions<R = crate::DebugRenderer> {
+pub trait ZonedAssertions<R = DebugRenderer> {
     /// Asserts that the subject uses the same time-zone rules as `expected`.
     fn is_in_time_zone<E: BorrowFor<TimeZone, View = TimeZone>>(self, expected: E) -> Self
     where

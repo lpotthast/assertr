@@ -22,11 +22,9 @@ fn panic_and_failure_locations_point_to_the_assertion_call() {
         let _ = sender.send(location);
     }));
 
-    let outcome = catch_unwind(|| {
-        assert_that!(1)
-            .with_panic_presentation(RecordFailure(failure_sender))
-            .is_equal_to(2);
-    });
+    let assertion = assert_that!(1).with_panic_presentation(RecordFailure(failure_sender));
+    // `line!()` shares the line of the failing call, so the expectation follows edits above.
+    let (expected_line, outcome) = (line!(), catch_unwind(|| drop(assertion.is_equal_to(2))));
     set_hook(previous_hook);
 
     assert_that!(outcome)
@@ -43,8 +41,8 @@ fn panic_and_failure_locations_point_to_the_assertion_call() {
     // native location pointed to the `panic!` inside `raise`. Checking only the structured failure
     // would miss this regression. Both locations must point to the assertion above.
     assert_that!(file).is_equal_to(file!());
-    assert_that!(line).is_equal_to(28);
-    assert_that!(column).is_equal_to(14); // The start of `is_equal_to` above.
+    assert_that!(line).is_equal_to(expected_line);
+    assert_that!(column).is_equal_to(77); // The start of `is_equal_to` above.
 
     let failure = failure_receiver
         .try_recv()

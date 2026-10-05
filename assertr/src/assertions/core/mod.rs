@@ -66,13 +66,9 @@ pub mod prelude {
     pub use super::char::CharAssertions;
     pub use super::debug::DebugAssertions;
     pub use super::display::DisplayAssertions;
+    #[cfg(feature = "std")]
+    pub use super::r#fn::{AsyncFnOnceAssertions, FnOnceAssertions};
     pub use super::identity::IdentityAssertions;
-    // All inner fn's are already std-gated, so we remove this otherwise noise-generating export.
-    #[cfg(feature = "std")]
-    pub use super::r#fn::AsyncFnOnceAssertions;
-    // All inner fn's are already std-gated, so we remove this otherwise noise-generating export.
-    #[cfg(feature = "std")]
-    pub use super::r#fn::FnOnceAssertions;
     pub use super::iter::{
         ExactSizeIteratorAssertions, IntoIteratorAssertions, IteratorAssertions,
     };

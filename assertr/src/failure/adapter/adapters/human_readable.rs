@@ -266,9 +266,6 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write) -> fmt::Result {
         write_expression(w, expression)?;
         w.write_str("`\n")?;
     }
-    if failure.subject_name.is_some() || failure.expression.is_some() {
-        w.write_str("\n")?;
-    }
 
     let description = body(
         failure.actual.as_ref(),
@@ -277,15 +274,6 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write) -> fmt::Result {
         failure.unexpected.as_ref(),
     );
     let has_body = !description.is_empty() || failure.constraint.is_some();
-    w.write_str(&description)?;
-    if let Some(constraint) = &failure.constraint {
-        if !description.is_empty() {
-            w.write_str("\n")?;
-        }
-        w.write_str("Constraint:\n")?;
-        write_report(constraint, &mut Indented::at_line_start(w))?;
-    }
-
     let omission_note = (failure.omitted_children > 0).then(|| {
         Fact::note(crate::renderer::omission(
             failure.omitted_children,
@@ -299,6 +287,22 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write) -> fmt::Result {
         .collect::<Vec<_>>();
     let has_blocks =
         !failure.messages.is_empty() || !facts.is_empty() || !failure.children.is_empty();
+
+    // Separate the subject header only from content that follows it.
+    let has_header = failure.subject_name.is_some() || failure.expression.is_some();
+    if has_header && (has_body || has_blocks) {
+        w.write_str("\n")?;
+    }
+
+    w.write_str(&description)?;
+    if let Some(constraint) = &failure.constraint {
+        if !description.is_empty() {
+            w.write_str("\n")?;
+        }
+        w.write_str("Constraint:\n")?;
+        write_report(constraint, &mut Indented::at_line_start(w))?;
+    }
+
     if has_body && has_blocks {
         w.write_str("\n")?;
     }
@@ -560,6 +564,45 @@ mod tests {
                       - has a valid identifier
                 -------- assertr --------
             "}),
+            );
+        }
+    }
+
+    mod header_separator {
+        use super::*;
+        use crate::failure::{FailureBuilder, FailureKind};
+
+        #[test]
+        fn is_omitted_when_nothing_follows_the_header() {
+            let mut failure = FailureBuilder::detached::<i32>(FailureKind::Other).build();
+            failure.subject_name = Some("answer".into());
+            failure.expression = Some("value");
+
+            assert_that!(ToHumanReadableText.render(&failure).as_str()).is_equal_to(
+                indoc::indoc! {"
+                -------- assertr --------
+                Subject: answer
+                Expression: `value`
+                -------- assertr --------
+            "},
+            );
+        }
+
+        #[test]
+        fn separates_the_header_from_a_following_block() {
+            let mut failure = FailureBuilder::detached::<i32>(FailureKind::Other).build();
+            failure.expression = Some("value");
+            failure.messages.push("context".into());
+
+            assert_that!(ToHumanReadableText.render(&failure).as_str()).is_equal_to(
+                indoc::indoc! {"
+                -------- assertr --------
+                Expression: `value`
+
+                Messages:
+                  - context
+                -------- assertr --------
+            "},
             );
         }
     }

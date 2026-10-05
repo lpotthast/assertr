@@ -1,702 +1,341 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, Mode, ValueRenderer,
-    failure::{FailureBuilder, FailureKind},
-    renderer::IntoRendered,
+    AssertThat, DebugRenderer, ExpectationDiagnostics, Mode, ValueRenderer, renderer::IntoRendered,
 };
 
-/// Checks that a string is empty or contains only Unicode whitespace.
-pub struct IsBlank;
-
-impl<T: ?Sized, R> Expectation<T, R> for IsBlank
-where
-    T: AsRef<str>,
-{
-    type Success<'a>
-        = ()
-    where
-        T: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        T: 'a;
-
-    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if actual.as_ref().split_whitespace().next().is_none() {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsBlank
-where
-    R: ValueRenderer<T>,
-    T: AsRef<str>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&T, ())>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is blank"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is not blank"),
-        }
-    }
-}
-
-/// Checks that a string contains a character without the Unicode whitespace property.
-pub struct IsNotBlank;
-
-impl<T: ?Sized, R> Expectation<T, R> for IsNotBlank
-where
-    T: AsRef<str>,
-{
-    type Success<'a>
-        = ()
-    where
-        T: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        T: 'a;
-
-    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if actual.as_ref().split_whitespace().next().is_some() {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsNotBlank
-where
-    R: ValueRenderer<T>,
-    T: AsRef<str>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&T, ())>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is not blank"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is unexpectedly blank"),
-        }
-    }
-}
-
-/// Checks that a string is empty or contains only ASCII whitespace.
-pub struct IsBlankAscii;
-
-impl<T: ?Sized, R> Expectation<T, R> for IsBlankAscii
-where
-    T: AsRef<str>,
-{
-    type Success<'a>
-        = ()
-    where
-        T: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        T: 'a;
-
-    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if actual.as_ref().split_ascii_whitespace().next().is_none() {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsBlankAscii
-where
-    R: ValueRenderer<T>,
-    T: AsRef<str>,
-{
-    const KIND: FailureKind = FailureKind::Other;
-
-    fn explain<Target>(
-        &self,
-        rejected: Option<(&T, ())>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is ASCII blank"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is not ASCII blank"),
-        }
-    }
-}
-
-/// Compares string views under ASCII case folding.
-/// Matching renders the string view. Ordinary methods retain the original subject's renderer.
-pub struct EqualToIgnoringAsciiCase<E>(E);
-
-impl<E> EqualToIgnoringAsciiCase<E> {
-    /// Owns the expected operand, which may itself be a borrowed string.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R> Expectation<T, R> for EqualToIgnoringAsciiCase<E> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = (&'a str, &'a str)
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let actual = actual.as_ref();
-        let expected = self.0.as_ref();
-        if actual.eq_ignore_ascii_case(expected) {
-            Ok(())
-        } else {
-            Err((actual, expected))
-        }
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for EqualToIgnoringAsciiCase<E>
-{
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("is equal to ignoring ASCII case"),
-                self.0.as_ref(),
-            ),
-            Some((_, (actual, expected))) => (
-                failure
-                    .actual_or_else(|| render.value(actual).into_rendered())
-                    .fact(Fact::note("Values differ even when ignoring ASCII case.")),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
-}
-
-/// Checks for an expected substring through [`AsRef<str>`].
-/// Matching renders the string view. Ordinary methods retain the original subject's renderer.
-pub struct Contains<E>(E);
-
-impl<E> Contains<E> {
-    /// Owns the expected operand, which may itself be a borrowed string.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R> Expectation<T, R> for Contains<E> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = (&'a str, &'a str)
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let actual = actual.as_ref();
-        let expected = self.0.as_ref();
-        if actual.contains(expected) {
-            Ok(())
-        } else {
-            Err((actual, expected))
-        }
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for Contains<E>
-{
-    const KIND: FailureKind = FailureKind::Membership;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (failure.relation("contains"), self.0.as_ref()),
-            Some((_, (actual, expected))) => (
-                failure
-                    .actual_or_else(|| render.value(actual).into_rendered())
-                    .relation("does not contain"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
-}
-
-/// Rejects strings containing an unexpected substring.
-/// Matching renders the string view. Ordinary methods retain the original subject's renderer.
-pub struct DoesNotContain<E>(E);
-
-impl<E> DoesNotContain<E> {
-    /// Owns the expected operand, which may itself be a borrowed string.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R> Expectation<T, R> for DoesNotContain<E> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = (&'a str, &'a str)
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let actual = actual.as_ref();
-        let expected = self.0.as_ref();
-        if actual.contains(expected) {
-            Err((actual, expected))
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for DoesNotContain<E>
-{
-    const KIND: FailureKind = FailureKind::Membership;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (failure.relation("does not contain"), self.0.as_ref()),
-            Some((_, (actual, expected))) => (
-                failure
-                    .actual_or_else(|| render.value(actual).into_rendered())
-                    .relation("contains"),
-                expected,
-            ),
-        };
-        failure.unexpected(render.value(expected))
-    }
-}
-
-/// Rejects strings starting with an unexpected prefix.
-/// Matching renders the string view. Ordinary methods retain the original subject's renderer.
-pub struct DoesNotStartWith<E>(E);
-
-impl<E> DoesNotStartWith<E> {
-    /// Owns the expected operand, which may itself be a borrowed string.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R> Expectation<T, R> for DoesNotStartWith<E> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = (&'a str, &'a str)
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let actual = actual.as_ref();
-        let expected = self.0.as_ref();
-        if actual.starts_with(expected) {
-            Err((actual, expected))
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for DoesNotStartWith<E>
-{
-    const KIND: FailureKind = FailureKind::Membership;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (failure.relation("does not start with"), self.0.as_ref()),
-            Some((_, (actual, expected))) => (
-                failure
-                    .actual_or_else(|| render.value(actual).into_rendered())
-                    .relation("starts with"),
-                expected,
-            ),
-        };
-        failure.unexpected(render.value(expected))
-    }
-}
-
-/// Checks for an expected string suffix through [`AsRef<str>`].
-/// Matching renders the string view. Ordinary methods retain the original subject's renderer.
-pub struct EndsWith<E>(E);
-
-impl<E> EndsWith<E> {
-    /// Owns the expected operand, which may itself be a borrowed string.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R> Expectation<T, R> for EndsWith<E> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = (&'a str, &'a str)
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let actual = actual.as_ref();
-        let expected = self.0.as_ref();
-        if actual.ends_with(expected) {
-            Ok(())
-        } else {
-            Err((actual, expected))
-        }
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for EndsWith<E>
-{
-    const KIND: FailureKind = FailureKind::Membership;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (failure.relation("ends with"), self.0.as_ref()),
-            Some((_, (actual, expected))) => (
-                failure
-                    .actual_or_else(|| render.value(actual).into_rendered())
-                    .relation("does not end with"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
-}
-
-/// Rejects strings ending with an unexpected suffix.
-/// Matching renders the string view. Ordinary methods retain the original subject's renderer.
-pub struct DoesNotEndWith<E>(E);
-
-impl<E> DoesNotEndWith<E> {
-    /// Owns the expected operand, which may itself be a borrowed string.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R> Expectation<T, R> for DoesNotEndWith<E> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = (&'a str, &'a str)
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let actual = actual.as_ref();
-        let expected = self.0.as_ref();
-        if actual.ends_with(expected) {
-            Err((actual, expected))
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for DoesNotEndWith<E>
-{
-    const KIND: FailureKind = FailureKind::Membership;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (failure.relation("does not end with"), self.0.as_ref()),
-            Some((_, (actual, expected))) => (
-                failure
-                    .actual_or_else(|| render.value(actual).into_rendered())
-                    .relation("ends with"),
-                expected,
-            ),
-        };
-        failure.unexpected(render.value(expected))
-    }
-}
-
-/// A reusable string prefix assertion accepting [`AsRef<str>`] subjects and expected operands.
+/// Defines a string expectation evaluated on the subject's [`AsRef<str>`] view.
 ///
-/// Construct with [`new`](Self::new) and execute through an assertion chain or a supplied
-/// [`AssertionContext`]. [`StrAssertions::starts_with`] executes this same definition on an
-/// assertion chain. Matching renders the subject's string view. The ordinary method supplies its
-/// original subject for rendering, preserving that subject's type and custom renderer.
-///
-/// ```
-/// use assertr::prelude::*;
-/// use assertr::assertions::core::string::StartsWith;
-///
-/// let prefix = StartsWith::new(String::from("hel"));
-/// assert_that!("hello").matches(&prefix);
-/// ```
-pub struct StartsWith<E>(E);
+/// A property (`pub struct IsBlank;`) checks the view alone. An operand expectation
+/// (`pub struct Contains<E>;`) owns an [`AsRef<str>`] operand and compares both views. `role`
+/// selects whether diagnostics report the operand as the expected or unexpected value. Rejections
+/// retain the views, and failures render the view only when no caller supplied the actual value.
+macro_rules! str_expectation {
+    (
+        $(#[$attr:meta])*
+        pub struct $name:ident;
+        kind $kind:ident;
+        check |$actual:ident| $check:expr;
+        relations $relation:literal, $negated:literal;
+    ) => {
+        $(#[$attr])*
+        pub struct $name;
 
-/// Matches a string prefix through [`AsRef<str>`].
-///
-/// This is a convenience constructor for [`StartsWith::new`].
-pub fn starts_with<E: AsRef<str>>(expected: E) -> StartsWith<E> {
-    StartsWith::new(expected)
-}
+        impl<T: AsRef<str> + ?Sized, R> $crate::Expectation<T, R> for $name {
+            type Success<'a>
+                = ()
+            where
+                T: 'a;
+            type Rejection<'a>
+                = &'a str
+            where
+                T: 'a;
 
-impl<E> StartsWith<E> {
-    /// Owns an expected prefix, which can itself be a borrowed string.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R> Expectation<T, R> for StartsWith<E> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = (&'a str, &'a str)
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let actual = actual.as_ref();
-        let expected = self.0.as_ref();
-        if actual.starts_with(expected) {
-            Ok(())
-        } else {
-            Err((actual, expected))
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a T,
+                _: &$crate::AssertionContext<'_, R>,
+            ) -> Result<(), &'a str> {
+                let $actual = actual.as_ref();
+                if $check { Ok(()) } else { Err($actual) }
+            }
         }
-    }
+
+        impl<T: AsRef<str> + ?Sized, R: ValueRenderer<str>> ExpectationDiagnostics<T, R> for $name {
+            const KIND: $crate::failure::FailureKind = $crate::failure::FailureKind::$kind;
+
+            fn explain<'a, Target>(
+                &'a self,
+                rejected: Option<(&'a T, &'a str)>,
+                failure: $crate::failure::FailureBuilder<Target>,
+                context: &$crate::AssertionContext<'_, R>,
+            ) -> $crate::failure::FailureBuilder<Target> {
+                match rejected {
+                    None => failure.relation($relation),
+                    Some((_, actual)) => failure
+                        .actual_or_else(|| context.render().value(actual).into_rendered())
+                        .relation($negated),
+                }
+            }
+        }
+    };
+    (
+        $(#[$attr:meta])*
+        pub struct $name:ident<E>;
+        kind $kind:ident;
+        check |$actual:ident, $operand:ident| $check:expr;
+        relations $relation:literal, $negated:literal;
+        role $role:ident;
+    ) => {
+        $(#[$attr])*
+        pub struct $name<E>(E);
+
+        impl<E> $name<E> {
+            #[doc = concat!(
+                "Owns the ", stringify!($role), " operand, which may itself be a borrowed string."
+            )]
+            #[must_use]
+            pub const fn new($role: E) -> Self {
+                Self($role)
+            }
+        }
+
+        impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R> $crate::Expectation<T, R> for $name<E> {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                T: 'a;
+            type Rejection<'a>
+                = (&'a str, &'a str)
+            where
+                Self: 'a,
+                T: 'a;
+
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a T,
+                _: &$crate::AssertionContext<'_, R>,
+            ) -> Result<(), Self::Rejection<'a>> {
+                let $actual = actual.as_ref();
+                let $operand = self.0.as_ref();
+                if $check { Ok(()) } else { Err(($actual, $operand)) }
+            }
+        }
+
+        impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R: ValueRenderer<str>>
+            ExpectationDiagnostics<T, R> for $name<E>
+        {
+            const KIND: $crate::failure::FailureKind = $crate::failure::FailureKind::$kind;
+
+            fn explain<'a, Target>(
+                &'a self,
+                rejected: Option<(&'a T, Self::Rejection<'a>)>,
+                failure: $crate::failure::FailureBuilder<Target>,
+                context: &$crate::AssertionContext<'_, R>,
+            ) -> $crate::failure::FailureBuilder<Target> {
+                let render = context.render();
+                let (failure, operand) = match rejected {
+                    None => (failure.relation($relation), self.0.as_ref()),
+                    Some((_, (actual, operand))) => (
+                        failure
+                            .actual_or_else(|| render.value(actual).into_rendered())
+                            .relation($negated),
+                        operand,
+                    ),
+                };
+                failure.$role(render.value(operand))
+            }
+        }
+    };
 }
 
-impl<T: AsRef<str> + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for StartsWith<E>
-{
-    const KIND: FailureKind = FailureKind::Membership;
+str_expectation! {
+    /// Checks that a string is empty or contains only Unicode whitespace.
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct IsBlank;
+    kind Predicate;
+    check |actual| actual.split_whitespace().next().is_none();
+    relations "is blank", "is not blank";
+}
 
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (failure.relation("starts with"), self.0.as_ref()),
-            Some((_, (actual, expected))) => (
-                failure
-                    .actual_or_else(|| render.value(actual).into_rendered())
-                    .relation("does not start with"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
+str_expectation! {
+    /// Checks that a string contains a character without the Unicode whitespace property.
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct IsNotBlank;
+    kind Predicate;
+    check |actual| actual.split_whitespace().next().is_some();
+    relations "is not blank", "is unexpectedly blank";
+}
+
+str_expectation! {
+    /// Checks that a string is empty or contains only ASCII whitespace.
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct IsBlankAscii;
+    kind Predicate;
+    check |actual| actual.split_ascii_whitespace().next().is_none();
+    relations "is ASCII blank", "is not ASCII blank";
+}
+
+str_expectation! {
+    /// Compares string views under ASCII case folding.
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct EqualToIgnoringAsciiCase<E>;
+    kind Equality;
+    check |actual, expected| actual.eq_ignore_ascii_case(expected);
+    relations "is equal to ignoring ASCII case", "is not equal to ignoring ASCII case";
+    role expected;
+}
+
+str_expectation! {
+    /// Checks for an expected substring through [`AsRef<str>`].
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct Contains<E>;
+    kind Membership;
+    check |actual, expected| actual.contains(expected);
+    relations "contains", "does not contain";
+    role expected;
+}
+
+str_expectation! {
+    /// Rejects strings containing an unexpected substring.
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct DoesNotContain<E>;
+    kind Membership;
+    check |actual, unexpected| !actual.contains(unexpected);
+    relations "does not contain", "contains";
+    role unexpected;
+}
+
+str_expectation! {
+    /// A reusable string prefix assertion accepting [`AsRef<str>`] subjects and expected operands.
+    ///
+    /// Construct with [`new`](Self::new) and execute through an assertion chain or a supplied
+    /// [`AssertionContext`](crate::AssertionContext). [`StrAssertions::starts_with`] executes this
+    /// same definition on an assertion chain. Matching renders the subject's string view. The
+    /// ordinary method supplies its original subject for rendering, preserving that subject's type
+    /// and custom renderer.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use assertr::assertions::core::string::StartsWith;
+    ///
+    /// let prefix = StartsWith::new(String::from("hel"));
+    /// assert_that!("hello").matches(&prefix);
+    /// ```
+    pub struct StartsWith<E>;
+    kind Membership;
+    check |actual, expected| actual.starts_with(expected);
+    relations "starts with", "does not start with";
+    role expected;
+}
+
+str_expectation! {
+    /// Rejects strings starting with an unexpected prefix.
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct DoesNotStartWith<E>;
+    kind Membership;
+    check |actual, unexpected| !actual.starts_with(unexpected);
+    relations "does not start with", "starts with";
+    role unexpected;
+}
+
+str_expectation! {
+    /// Checks for an expected string suffix through [`AsRef<str>`].
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct EndsWith<E>;
+    kind Membership;
+    check |actual, expected| actual.ends_with(expected);
+    relations "ends with", "does not end with";
+    role expected;
+}
+
+str_expectation! {
+    /// Rejects strings ending with an unexpected suffix.
+    /// Matching renders the string view. Ordinary methods retain the original subject's renderer.
+    pub struct DoesNotEndWith<E>;
+    kind Membership;
+    check |actual, unexpected| !actual.ends_with(unexpected);
+    relations "does not end with", "ends with";
+    role unexpected;
 }
 
 /// String-specific assertions.
 ///
 /// Blanket-implemented for every subject that is `AsRef<str>`, so `&str`, `String`, `&String`,
 /// `Box<str>`, and `Cow<str>` all share one implementation and one set of failure messages.
+/// Failures render the original subject `S` and string operands as `str`.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait StrAssertions {
-    /// The renderer carried by the assertion chain.
-    type Renderer;
-
-    /// The string-like assertion subject rendered in failure messages.
-    type Subject: AsRef<str>;
-
+pub trait StrAssertions<S, R = DebugRenderer> {
     /// Asserts that the subject is empty or contains only Unicode `White_Space` characters.
     fn is_blank(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject contains at least one character without the Unicode `White_Space`
     /// property.
     fn is_not_blank(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject is empty or contains only ASCII whitespace.
     fn is_blank_ascii(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject and `expected` are equal under ASCII case folding.
     fn is_equal_to_ignoring_ascii_case(self, expected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject contains `expected` as a substring.
     fn contains(self, expected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject does not contain `unexpected` as a substring.
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject starts with `expected`.
     fn starts_with(self, expected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject does not start with `unexpected`.
     fn does_not_start_with(self, unexpected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject ends with `expected`.
     fn ends_with(self, expected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 
     /// Asserts that the subject does not end with `unexpected`.
     fn does_not_end_with(self, unexpected: impl AsRef<str>) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<str>;
+        R: ValueRenderer<S> + ValueRenderer<str>;
 }
 
-impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
-    type Renderer = R;
-    type Subject = S;
-
+impl<S: AsRef<str>, M: Mode, R> AssertThat<'_, S, M, R> {
+    /// Applies a string expectation while rendering the original subject, not its string view.
+    ///
+    /// This tracks once through `apply_assertion_with_failure` and preserves the caller location.
     #[track_caller]
-    fn is_blank(self) -> Self
+    fn apply_str_expectation<D: ExpectationDiagnostics<S, R>>(self, definition: D) -> Self
     where
         R: ValueRenderer<S>,
     {
-        self.apply_assertion(IsBlank)
+        self.apply_assertion_with_failure(definition, |assertion, failure| {
+            failure.actual(assertion.render().value(assertion.actual()))
+        })
+    }
+}
+
+impl<S: AsRef<str>, M: Mode, R> StrAssertions<S, R> for AssertThat<'_, S, M, R> {
+    #[track_caller]
+    fn is_blank(self) -> Self
+    where
+        R: ValueRenderer<S> + ValueRenderer<str>,
+    {
+        self.apply_str_expectation(IsBlank)
     }
 
     #[track_caller]
     fn is_not_blank(self) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion(IsNotBlank)
+        self.apply_str_expectation(IsNotBlank)
     }
 
     #[track_caller]
     fn is_blank_ascii(self) -> Self
     where
-        R: ValueRenderer<S>,
+        R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion(IsBlankAscii)
+        self.apply_str_expectation(IsBlankAscii)
     }
 
     #[track_caller]
@@ -704,10 +343,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion_with_failure(
-            EqualToIgnoringAsciiCase::new(expected),
-            |assertion, failure| failure.actual(assertion.render().value(assertion.actual())),
-        )
+        self.apply_str_expectation(EqualToIgnoringAsciiCase::new(expected))
     }
 
     #[track_caller]
@@ -715,9 +351,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion_with_failure(Contains::new(expected), |assertion, failure| {
-            failure.actual(assertion.render().value(assertion.actual()))
-        })
+        self.apply_str_expectation(Contains::new(expected))
     }
 
     #[track_caller]
@@ -725,9 +359,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion_with_failure(DoesNotContain::new(unexpected), |assertion, failure| {
-            failure.actual(assertion.render().value(assertion.actual()))
-        })
+        self.apply_str_expectation(DoesNotContain::new(unexpected))
     }
 
     #[track_caller]
@@ -735,9 +367,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion_with_failure(StartsWith::new(expected), |assertion, failure| {
-            failure.actual(assertion.render().value(assertion.actual()))
-        })
+        self.apply_str_expectation(StartsWith::new(expected))
     }
 
     #[track_caller]
@@ -745,10 +375,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion_with_failure(
-            DoesNotStartWith::new(unexpected),
-            |assertion, failure| failure.actual(assertion.render().value(assertion.actual())),
-        )
+        self.apply_str_expectation(DoesNotStartWith::new(unexpected))
     }
 
     #[track_caller]
@@ -756,9 +383,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion_with_failure(EndsWith::new(expected), |assertion, failure| {
-            failure.actual(assertion.render().value(assertion.actual()))
-        })
+        self.apply_str_expectation(EndsWith::new(expected))
     }
 
     #[track_caller]
@@ -766,9 +391,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<S> + ValueRenderer<str>,
     {
-        self.apply_assertion_with_failure(DoesNotEndWith::new(unexpected), |assertion, failure| {
-            failure.actual(assertion.render().value(assertion.actual()))
-        })
+        self.apply_str_expectation(DoesNotEndWith::new(unexpected))
     }
 }
 
@@ -866,7 +489,8 @@ mod tests {
         #[test]
         fn trait_is_implemented_without_renderer_support() {
             assert_trait_impl!(
-                AssertThat<'static, &'static str, Panic, NoRenderer> => StrAssertions
+                AssertThat<'static, &'static str, Panic, NoRenderer>
+                    => StrAssertions<&'static str, NoRenderer>
             );
             assert_trait_impl!(StartsWith<&'static str> => Expectation<str, NoRenderer>);
 
@@ -1057,12 +681,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `subject`
 
+                Actual: custom("private-value")
+
+                is not equal to ignoring ASCII case
+
                 Expected: custom("other-value")
-
-                  Actual: custom("private-value")
-
-                Details:
-                  - Values differ even when ignoring ASCII case.
                 -------- assertr --------
             "#});
 
@@ -1080,12 +703,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `subject`
 
+                Actual: <redacted>
+
+                is not equal to ignoring ASCII case
+
                 Expected: <redacted>
-
-                  Actual: <redacted>
-
-                Details:
-                  - Values differ even when ignoring ASCII case.
                 -------- assertr --------
             "});
 
@@ -1112,12 +734,11 @@ mod tests {
                 -------- assertr --------
                 Expression: `"foo"`
 
+                Actual: "foo"
+
+                is not equal to ignoring ASCII case
+
                 Expected: "bar"
-
-                  Actual: "foo"
-
-                Details:
-                  - Values differ even when ignoring ASCII case.
                 -------- assertr --------
             "#});
         }
@@ -1373,9 +994,9 @@ mod tests {
 
         #[test]
         fn accepts_unsized_strings() {
-            use crate::assertions::core::string::starts_with;
+            use crate::assertions::core::string::StartsWith;
 
-            let matcher = starts_with("hel");
+            let matcher = StartsWith::new("hel");
             let mut context = AssertionContext::default();
 
             assert_that!(context.evaluate("hello", &matcher)).is_true();
@@ -1383,7 +1004,7 @@ mod tests {
 
         #[test]
         fn matcher_renders_retained_string_views_without_subject_renderer_bounds() {
-            use crate::{assertions::core::string::starts_with, test_support::rendered_text};
+            use crate::{assertions::core::string::StartsWith, test_support::rendered_text};
             use core::{cell::Cell, fmt};
 
             struct Text<'a>(&'a str, Cell<usize>);
@@ -1405,7 +1026,7 @@ mod tests {
             let expected = Text("bye", Cell::new(0));
             let failures = assert_that!(actual)
                 .with_renderer(StrRenderer)
-                .capture(|it| it.matches(starts_with(&expected)));
+                .capture(|it| it.matches(StartsWith::new(&expected)));
             assert_that!(actual.1.get()).is_equal_to(1);
             assert_that!(expected.1.get()).is_equal_to(1);
             assert_that!(failures).has_length(1);

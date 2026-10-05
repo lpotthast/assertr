@@ -1,0 +1,11 @@
+error: expected the alias name as a string literal, as in `#[fluent_alias("be_ready")]`
+ --> tests/fluent_aliases/01-reject-non-string-alias.rs:3:20
+  |
+3 |     #[fluent_alias(be_set)]
+  |                    ^^^^^^
+
+error: expected the alias name as a string literal, as in `#[fluent_alias("be_ready")]`
+ --> tests/fluent_aliases/01-reject-non-string-alias.rs:6:36
+  |
+6 |     #[cfg_attr(all(), fluent_alias(be_done))]
+  |                                    ^^^^^^^

@@ -25,6 +25,11 @@ pub use imp::{IsDisjointFrom, IsSubsetOf, IsSupersetOf};
 /// membership according to the same equivalence relation that enforces that uniqueness.
 /// [`SetAssertions`] require this capability. This implementor-facing trait is not re-exported from
 /// the prelude.
+#[diagnostic::on_unimplemented(
+    message = "the collection has no native set membership lookup",
+    label = "no set-lookup capability",
+    note = "set relations such as `is_subset_of` require `SetLookup`, which declares unique elements and native membership queries; element assertions such as `contains` need only `Collection`"
+)]
 pub trait SetLookup: Collection {
     /// Whether `element` is a member, using the set's own lookup, such as hashing or ordering,
     /// rather than a linear scan over [`Collection::elements`].
@@ -33,7 +38,7 @@ pub trait SetLookup: Collection {
 
 impl<T> Collection for BTreeSet<T> {
     type Item = T;
-    const PRESENTATION: CollectionPresentation = CollectionPresentation::set().with_type_hint();
+    const PRESENTATION: CollectionPresentation = CollectionPresentation::set().show_type_hint(true);
 
     fn elements(&self) -> impl Iterator<Item = &T> {
         self.iter()
@@ -47,10 +52,10 @@ impl<T: Ord> SetLookup for BTreeSet<T> {
 }
 
 #[cfg(feature = "std")]
-impl<T, S: core::hash::BuildHasher> Collection for std::collections::HashSet<T, S> {
+impl<T, S> Collection for std::collections::HashSet<T, S> {
     type Item = T;
     const PRESENTATION: CollectionPresentation = CollectionPresentation::set()
-        .with_type_hint()
+        .show_type_hint(true)
         .with_order(RenderingOrder::SortByRenderedText);
 
     fn elements(&self) -> impl Iterator<Item = &T> {
@@ -72,6 +77,16 @@ where
 /// Makes shared-reference subjects sets in their own right, mirroring the `Collection` impl for
 /// `&C`.
 impl<S> SetLookup for &S
+where
+    S: SetLookup + ?Sized,
+{
+    fn contains_element(&self, element: &S::Item) -> bool {
+        S::contains_element(self, element)
+    }
+}
+
+/// Makes mutable-reference subjects sets, mirroring the shared-reference implementation.
+impl<S> SetLookup for &mut S
 where
     S: SetLookup + ?Sized,
 {
@@ -189,6 +204,32 @@ mod tests {
                     .contains("Actual: BTreeSet {");
             },
         ]);
+    }
+
+    #[test]
+    fn mutable_reference_adapter_follows_the_set_contract() {
+        let mut set = BTreeSet::from([1, 2, 3]);
+
+        assert_set_contract(&&mut set, &[1, 2, 3]);
+        assert_that_owned!(&mut set)
+            .contains(2)
+            .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
+            .is_disjoint_from(BTreeSet::from([9]));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn element_assertions_on_a_hash_set_need_no_hasher_bound() {
+        use std::collections::HashSet;
+
+        fn helper<S>(set: &HashSet<i32, S>) {
+            assert_that!(set)
+                .contains(1)
+                .does_not_contain(4)
+                .has_length(3);
+        }
+
+        helper(&HashSet::from([1, 2, 3]));
     }
 
     #[cfg(feature = "std")]

@@ -2,234 +2,133 @@
 id: expectation-execution
 depends_on: [ failure-processing ]
 sources:
-  - assertr/Cargo.toml
-  - assertr/src/lib.rs
-  - assertr/src/assertions/core/partial_eq.rs
-  - assertr/src/assertions/core/partial_ord.rs
-  - assertr/src/assertions/core/range.rs
-  - assertr/src/assertions/num/mod.rs
-  - assertr/src/assertions/collection/value.rs
-  - assertr/src/assertions/map/imp.rs
   - assertr/src/expectation/mod.rs
   - assertr/src/expectation/context.rs
   - assertr/src/assert_that/execution.rs
-  - assertr/src/assert_that/capture.rs
+  - assertr/src/tracking.rs
   - assertr/src/assertions/matcher.rs
   - assertr/src/assertions/collection/elements_are.rs
-  - assertr/src/assertions/collection/each.rs
-  - assertr/src/expectation/satisfying.rs
   - assertr/tests/custom_assertions.rs
-  - assertr/tests/bulk_allocations.rs
 ---
 
 # Expectation execution
 
 [Architecture overview](README.md)
 
-Ordinary assertions and composition execute the same `Expectation` and `ExpectationDiagnostics` contracts. The chain
-owns tracking, failure handling, and continuation. Definitions live beside their assertion family. Generic composition
-lives in `expectation`. `matchers` catalogs public definitions and constructors, with subject namespaces for colliding
-names. A matcher is an expectation used in composition.
+Both ordinary assertions and composed matchers use `Expectation` to check a value and `ExpectationDiagnostics` to explain
+a failure. The executor tracks the assertion and handles the completed failure. Expected values follow the
+[operand access rules](comparison-operands.md), while [matcher composition](matcher-composition.md) determines which
+nested checks run.
 
 ## Evaluation and explanation
 
-The [traits](../assertr/src/expectation/mod.rs) define these implementor obligations:
+Neither `evaluate` nor `explain` tracks assertions or raises failures. Implement them as follows:
 
-Neither hook tracks or raises. Explanation returns the supplied structured builder. The chain executor raises it,
-while a child context builds and retains evidence for the enclosing assertion.
+| Hook or associated item | Responsibility |
+|---|---|
+| `Expectation<T, R>::evaluate` | Return `Result<Success<'a>, Rejection<'a>>` for the supplied subject. |
+| `Success<'a>` | Retain a successful observation for continuation, such as a payload or guard. Use `()` when unnecessary. |
+| `Rejection<'a>` | Retain the failed observation needed for explanation. May borrow the subject or definition. |
+| `ExpectationDiagnostics<T, R>::explain` | Populate and return the supplied `FailureBuilder<Target>`. |
+| `KIND` | Use the same `FailureKind` for rejection and missing-subject diagnostics. |
+| `FLATTEN` | Permit composition to merge children into its receiving context. Composition then shows only the children and their omission count, not the definition's own relation, operands, or facts. Probes never explain. Ordinary execution still retains the enclosing failure. |
 
-| Contract                                | Responsibility                                                                                                                                                                                |
-|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Expectation<T, R>::evaluate`           | Return `Result<Success<'a>, Rejection<'a>>` for the supplied subject. Do not add an assertion count or raise a failure on the enclosing chain.                                                |
-| `Success<'a>`                           | Retain a successful observation needed for continuation, such as a borrowed payload or acquired guard. Use `()` when no witness is needed.                                                    |
-| `Rejection<'a>`                         | Retain what explanation needs from the failed observation. It may borrow the subject or definition.                                                                                           |
-| `ExpectationDiagnostics<T, R>::explain` | Populate the supplied `FailureBuilder`. Explain an original rejection or describe an unmet expectation with no subject. Do not repeat observations. Repeatable expected data may be accessed again. |
-| `KIND`                                  | Classify both forms of explanation with the same `FailureKind`.                                                                                                                               |
-| `FLATTEN`                               | Declare that composition can merge child failures directly, applying the current context's path to their relative paths. Ordinary execution still retains the enclosing failure.              |
-
-Rust permits observations to borrow the subject or definition for the declared lifetime. It does not enforce the
-semantic obligation to retain the original observation. Keep converted views, errors, counts, or guards whenever
-reconstructing them would repeat work or observe a different state. Both traits forward through references without
-cloning. Negative definitions own their checks, relations, and unexpected operands.
-
-Leaf diagnostic bounds belong on `ExpectationDiagnostics`. Composites that explain children during evaluation also need
-their children's diagnostic capabilities. Runtime evidence suppression cannot remove those compile-time bounds.
+Retain converted views, errors, counts, or guards whenever obtaining them again would repeat an observation. Explanation
+must not repeat comparisons, searches, lookups, callbacks, consumption, or other observations. It may
+[read bulk expected data again](comparison-operands.md#reading-expected-data-again), subject to the consistency rules.
+Rust's lifetimes allow borrowing but cannot enforce these requirements. Both traits forward through references without
+cloning. See [diagnostic rendering](diagnostic-rendering.md#capabilities-and-structure) for renderer bounds.
 
 ### Present rejection versus missing subject
 
-The same equality expectation for 3 has two explanation inputs:
+| Explanation input | Meaning | Equality with 3 |
+|---|---|---|
+| `Some((actual, rejection))` | Explain the original rejection. | Actual 2, expected 3. |
+| `None` | Describe an unmet expectation without inventing or evaluating a subject. This is not a successful result. | Expected 3 and its requirement. |
 
-| Situation                                     | Execution                                                       | Explanation input           | Evidence                                                 |
-|-----------------------------------------------|-----------------------------------------------------------------|-----------------------------|----------------------------------------------------------|
-| A present element is 2                        | Evaluate it and retain the rejection.                           | `Some((actual, rejection))` | Actual 2 and expected 3.                                 |
-| An expected element has no actual counterpart | Describe the expectation without evaluating a fabricated value. | `None`                      | Expected 3 with the relation describing the requirement. |
-
-`None` never means successful evaluation. A missing-subject description can preserve field or variant paths without
-running a predicate or callback. The structural regression
-[
-`preserves_sequence_length_metadata_and_budget_in_nested_failures`](../assertr/src/assertions/collection/elements_are.rs)
-pins length-mismatch descriptions, paths, and bounded evidence.
-
-## Comparison operands
-
-Ordinary value assertions and their reusable definitions use `E: BorrowFor<A>` to select the expected value's
-borrowed type, `E::View`. `A` is the declared subject, collection or iterator item, map key or value, or range bound type.
-There is no separately inferred comparison target. A matcher can select different views for different subject types.
-The independent `borrow-for` crate owns standard selections, custom-wrapper opt-in, and the relationship to `Borrow`.
-Assertr [re-exports the dependency](../assertr/src/lib.rs) and enables its `alloc` feature. Standard selections include
-`T` and `&T` expectations for `T`, literals for `String`, and array/vector views.
-The public [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-equality) demonstrates reusable borrowed
-operands and a custom wrapper. The regressions
-[`borrows_once_after_tracking_and_retains_failure_evidence`](../assertr/src/assertions/core/partial_eq.rs) and
-[`unsized_view_is_borrowed_once_after_tracking_and_rendered_on_both_rejections`](../assertr/src/assertions/core/partial_eq.rs)
-pin tracking before conversion and reuse of the selected view during explanation.
-
-Equality requires `A: PartialEq<E::View>`. Negation negates `PartialEq::eq`, even when `ne` is overridden.
-Ordering requires `A: PartialOrd<E::View>` and rejects incomparable results. Range containment retains symmetric
-ordering requirements. Selection does not grant these capabilities. In particular, string ordering may require
-explicit `str` views, as documented in [PartialOrdAssertions](../assertr/src/assertions/core/partial_ord.rs).
-Numeric tolerance, signed-duration tolerance, and time-zone checks require `View = A`. Expected values and deviations
-borrow independently. Signed-duration tolerance borrows expected value before deviation and retains both references
-with a flag that is true for an invalid negative deviation. Its generic operands can require explicit types for
-previously inferred `.into()` and `Default::default()` targets.
-
-Standard ranges with borrowed, sized bounds have inherent containment methods selecting the native `RangeBounds<B>`
-implementation for the pointee type. This avoids inferring between `RangeBounds<B>` and `RangeBounds<&B>` when the
-expected element is also borrowed. Unbounded `..` selects the operand's own type. These methods and their fluent
-aliases delegate to `RangeBoundAssertions` with an explicit bound type, preserving its tracking and expectation
-execution. Custom ranges still use the generic `RangeBounds` extension directly. Fully qualified trait calls can
-select `B` explicitly.
-
-Reusable `ContainsElement<B, E>` and `DoesNotContainElement<B, E>` definitions offer two constructors. `new` fixes
-`B` to the operand's type, so borrowed endpoints and unbounded ranges infer without annotations, including in
-composition. Passing a reference selects that reference type and requires its renderer. `borrowing` selects a bound
-type explicitly, as in `ContainsElement::<String>::borrowing(&value)`, and retains the supplied operand for evaluation
-through `BorrowFor<B>`. This also permits pointee-only renderers for borrowed bounds. Direct containment methods
-execute these borrowing definitions with their selected `B`. Both constructors store without borrowing or cloning,
-and every direct call and matcher uses the same expectation evaluation and diagnostics.
-
-Definitions store supplied values without cloning or accessing their views. Scalar evaluation borrows each operand
-once after assertion tracking and retains the selected view on rejection. Renderers support the actual type, selected
-view, and structural leaves such as keys or indexes. Wrappers need no renderer.
-
-Scalar definitions support unsized subjects such as `str` and slices when evaluated directly. Assertion-chain storage
-and entry normalization are unchanged. Reference-valued subjects, fields, and items keep their declared types. Use
-`dereferenced` to match pointees. Other comparison policies can use explicit views, predicates, or custom expectations.
-Empty generic expected lists may require an explicit element type. Single native key queries, set relations, identity,
-string/path views, and `RangeBounds` operands keep their own contracts.
-
-### Repeatable bulk expected data
-
-Bulk value, key, and entry lists use finite, slice-backed `AsRef` storage. Arrays, slices, vectors, and compatible
-wrappers reuse their storage. Collect generators explicitly before the assertion, such as
-`.contains_all(generator.collect::<Vec<_>>())`. Borrowed lists use the stored element type's `BorrowFor` selection,
-so a list of custom wrappers needs no additional selection for references to those wrappers.
-
-During evaluation and explanation, repeated slice access must return the same logical list, and repeated operand
-borrowing must describe the same comparison value. Access counts and interleaving with comparisons are unspecified.
-Library-controlled access occurs after assertion tracking. Stateful preparation belongs before the assertion, or in a
-custom expectation that retains its observation. Scalar borrowing and matcher, callback, guard, and identity contracts
-remain unchanged.
-
-Bulk rejections retain only failed observations, such as mismatches, missing values, lengths, and lookup results.
-Explanation reads expected data from the stored definition through budgeted rendering adapters. It never repeats
-comparisons, searches, callbacks, or iterator consumption. Prefix, suffix, ordered exact, collection membership, and
-map key checks allocate no expected-view buffer. Successful prefix checks over a million elements allocate zero bytes.
-Other algorithms retain their required actual-element, membership, window, or assignment storage.
-The separate [allocation integration executable](../assertr/tests/bulk_allocations.rs) measures these boundaries
-with a thread-local counting allocator, including optimized million-element checks and budgeted failure rendering.
-
-Bulk map keys and keyed matchers use the stored key type as the `BorrowFor` context, separately requiring
-[`MapLookup<View>`](collection-semantics.md#exact-comparisons-and-keyed-maps). `contains_keys` retains only missing
-queries. Exact-entry equality resolves each key followed by its expected value, performs native lookup, and compares
-when present. Each expected occurrence performs one lookup. Missing queries and unequal values retain their selected
-views, while stored-key coverage preserves duplicate-query handling. Explanation never repeats lookup or comparison.
-`Entry` resolves its query once for lookup and path construction. Its rejection keeps stored-key identity and owned
-child evidence, which explanation attaches directly without borrowing the query again.
-
-A later evaluation of a reusable definition resolves its operands anew. Missing-subject descriptions access only
-expected data and perform no lookup, comparison, or callback execution. Expected-data access counts are unspecified,
-and rendering budgets can limit which expected operands are borrowed for diagnostics. Observation counts and truth
-remain independent of rendering budgets, except for documented probe suppression of diagnostic assignment.
+Descriptions can retain field and variant paths without running predicates or callbacks. A negative expectation must
+provide its own relation and unexpected operands. A generic negation could not derive the correct evidence from the
+positive check.
 
 ## Chain execution
 
-The [executor](../assertr/src/assert_that/execution.rs) constructs an `AssertionContext` from the chain's renderer,
-budget, and location policy. These are executor guarantees for each call:
+The executor constructs `AssertionContext` from the chain's renderer, budget, and location policy.
 
-- `apply_assertion` tracks once and calls the definition's `evaluate` once. It explains and raises a rejection, or drops
-  a success, then returns the original chain. `matches` delegates without an extra count or failure wrapper.
-- `test_assertion` tracks and executes the same check, returning `Some(success)` for a projection or callback. Rejection
-  raises through the active mode and returns `None` in capture mode. The caller controls a returned success's lifetime.
+| Entry | Behavior |
+|---|---|
+| `apply_assertion` | Track and evaluate once. On failure, explain and raise the rejection. On success, drop the success value. Return the original chain. `matches` delegates without another count or failure wrapper. |
+| `test_assertion` | Run the same steps, but return `Some(success)` on success. Raise a rejection and return `None` in capture mode. The caller decides how long to retain the success value. |
+| Private methods used after tracking | Accept an adapter's observation and caller location, or `FnOnce` hooks for observation and explanation. Handle the failure without tracking again. |
 
-Delegating methods preserve `#[track_caller]` and do not track again. Execution adapters that invoke user conversions,
-consume iterators, or await I/O own those steps and their tracking boundary. They pass retained observations and the
-original caller location to the shared executor. Its private `FnOnce` entry point also accepts consuming observation
-steps directly and shares context construction, failure construction, and mode routing with reusable expectations.
-The executor transfers each rejection to explanation. The hook must retain resources until their diagnostic values have
-been rendered and release temporary guards before returning the builder. The executor then raises that builder. It
-does not control an implementor's resource handling inside the hook. The regressions
-[`ordinary_and_matcher_execution_retain_borrowed_rejection_without_retesting`](../assertr/src/assert_that/execution.rs)
-and [`rejection_renders_the_original_guard_then_releases_it_before_continuation`](../assertr/src/assert_that/execution.rs)
-pin observation reuse and guard release on these paths. Those [observation boundaries](observation-boundaries.md) do
-not make consuming or asynchronous operations reusable public matchers.
+Chain methods preserve `#[track_caller]`. A method that only delegates to a tracked assertion must not track again.
+Argument expressions run before method entry. Tracking comes before library-controlled conversions and evaluation,
+even on success. Without tracking, capture appears empty. Tracking twice inflates the count.
+[Execution adapters](observation-boundaries.md#execution-adapters) track before the operation they perform.
+
+The executor supplies an [attached builder](failure-processing.md#builder-completion) and raises the failure after
+explanation returns. An explanation retaining a guard must render its values and release it before returning.
+The executor cannot enforce resource handling inside custom hooks. Regression:
+[`rejection_renders_the_original_guard_then_releases_it_before_continuation`](../assertr/src/assert_that/execution.rs).
 
 ## Counts and evaluation scope
 
-An assertion count measures tracked attempts, not evaluations or diagnostic nodes. In capture mode:
+Counts measure tracked attempts, not candidate evaluations or diagnostic nodes.
 
-| Operation                                         | Count on enclosing chain  | Evaluation and failures                                                                                       |
-|---------------------------------------------------|---------------------------|---------------------------------------------------------------------------------------------------------------|
-| One `matches(all_of(...))` call                   | 1                         | Several branches evaluate. Rejection raises one enclosing failure with bounded children.                      |
-| One `matches(each(...))` call                    | 1                         | Every collection element is evaluated. Rejection raises one enclosing failure with bounded children.          |
-| One `matches(satisfying(...))` call               | 1                         | The callback tracks its checks on an isolated capture root. Their failures become enclosing matcher evidence. |
-| A method composed entirely of ordinary assertions | Sum of delegated attempts | The wrapper does not track again.                                                                             |
-| Mapping or derivation alone                       | 0                         | Creates a continuation or child without asserting.                                                            |
+| Operation | Enclosing count |
+|---|---|
+| One matcher call, including composite or `satisfying` | 1. Nested [callback capture](matcher-composition.md#assertion-callbacks) is isolated. |
+| Wrapper delegating to ordinary assertions | Sum of delegated attempts. |
+| Mapping or derivation alone | 0. |
 
-The executor's once-per-call guarantee does not mean once per matcher value or once per entire collection. Composition
-can evaluate a reusable definition against several subjects. Unordered structural matching separately guarantees
-[at most one evaluation per candidate pair](matcher-composition.md#exact-unordered-assignment).
+A single matcher can be evaluated against several subjects, with one evaluation per executor call.
+[Unordered assignment](matcher-composition.md#exact-unordered-assignment) specifies how often candidate pairs are checked.
 
 ## Child scopes and evidence
 
-`AssertionContext` has no public constructor. Definitions execute through a chain or a context supplied to another
-definition. The context borrows rendering settings and owns paths and child evidence. `isolated` creates a child scope
-without cloning the renderer.
+`AssertionContext` has no public constructor. Definitions receive it from the executor or an enclosing definition.
+It borrows rendering settings and stores paths and child failures within the diagnostic budget.
 
-`AssertionContext::evaluate` consumes or drops a child's observation before returning its boolean result. Built-in
-composites call it before evaluating a sibling and retain owned `Evidence`: child failures and omission counts, with no
-borrowed subjects or guards. This prevents a retained guard from remaining acquired during a sibling's evaluation. It
-does not undo user effects or isolate the subject from concurrent changes. Full paths participate in evidence ordering
-and truncation. `Evidence::explain` removes the originating context's path prefix when attaching children to an
-enclosing failure. Descendants retain their own relative paths. Flattening applies the receiving context's prefix once
-when merging children. This also preserves genuine repeated field names. The regression
-[`grouped_evidence_has_relative_paths_without_losing_repeated_field_names`](../assertr/src/expectation/context.rs)
-checks both an enclosing group and a nested field with the same name.
+| Operation | Behavior |
+|---|---|
+| `isolated` | Start a separate group of evidence with inherited settings, path, and item allowance. Do not clone the renderer. Dropping the scope discards its evidence. |
+| `evaluate` | Evaluate the check and immediately explain a rejection if diagnostics are enabled and the budget permits it. Drop the observed success or rejection before returning the boolean result. |
+| `scoped` | Add one relative path segment for the operation, then append that scope's evidence once. |
+| `record` | Retain an existing failure under the current path and item allowance. |
+| `outcome` | Record a boolean rejection, constructing its constraint description only if needed. |
+| `into_evidence` | Return owned failures and omission counts without borrowing subjects, definitions, or guards. |
 
-### Guarded rejection trace
+Built-in completion discards evidence on success. On rejection, it adds a lazy fallback only if neither retained nor
+omitted evidence exists. Each matcher family decides how to traverse its input and describe that fallback. Empty evidence
+does not imply success. Private recording and completion helpers implement these rules
+in [context.rs](../assertr/src/expectation/context.rs).
 
-| Stage                            | Retained state                                                                                           |
-|----------------------------------|----------------------------------------------------------------------------------------------------------|
-| Evaluate a borrowed cell or lock | Rejection owns the acquired guard and the original observation.                                          |
-| Explain the rejection            | Render the guarded value into an owned `AssertionFailure`. Release the guard before explanation returns. |
-| Retain child evidence            | Keep the rendered failure, without the guard or original subject borrow.                                 |
-| Evaluate the next sibling        | Acquire independently. Earlier evidence still describes the earlier observation.                         |
+[Paths](failure-processing.md#paths) participate in evidence ordering before truncation. `Evidence::explain` removes the
+originating context's prefix once. Descendants remain relative to the enclosing subject. Flattening applies the receiving
+prefix once, preserving repeated field names when they refer to distinct nested fields. Regression:
+[`grouped_evidence_has_relative_paths_without_losing_repeated_field_names`](../assertr/src/expectation/context.rs).
 
-The downstream regression
-[`diagnostics_use_the_retained_observation_and_release_its_guard`](../assertr/tests/custom_assertions.rs)
-changes the cell after failure construction and verifies that evidence still contains the earlier value.
-[`scoped_paths_participate_in_sorting_before_truncation`](../assertr/src/expectation/context.rs)
-pins path ordering before budget retention.
+Before evaluating the next sibling, a child check finishes its observation, explains or discards it, and retains only
+owned evidence. That evidence describes what the child saw at the time. Assertr does not roll back side effects or
+isolate checks from concurrent changes.
 
 ## Budgets and probes
 
-Implementors must derive pass/fail from the check, independently of the evidence budget or probe flag. This is a trait
-obligation. Rust cannot prevent a downstream definition from branching incorrectly on diagnostic settings. The context
-records truth separately from evidence, so omitting children cannot turn a recorded rejection into success.
+Changing the diagnostic budget or enabling a probe must not change whether a check passes. Implementors must preserve
+this rule by keeping the result separate from the evidence. [Rendering budgets](diagnostic-rendering.md#bounded-retention)
+limit the values and groups retained for diagnostics.
 
-`probe` executes with evidence retention disabled. Built-in diagnostics are suppressed, but predicates and assertion
-callbacks can still render or mutate state. A zero item budget limits repeated groups, including child evidence. It is
-not a probe and does not suppress an ordinary root leaf's explanation. The regression
-[`zero_budget_preserves_truth_without_rendering_leaves`](../assertr/src/assertions/collection/elements_are.rs)
-pins this distinction for composition. [Rendering budgets](diagnostic-rendering.md#bounded-retention) define retention
-limits, and [assertion callbacks](matcher-composition.md#assertion-callbacks) define isolated capture behavior.
+| Setting | Effect on child evidence |
+|---|---|
+| Preserve iteration | Child scopes share the remaining slots. Once the group is full, later rejections add to the omission count without constructing optional evidence. |
+| Sort by rendered text | A later candidate can replace retained evidence even after the group fills. Child scopes keep the group's item allowance. Sort complete child reports, including paths, and break ties by encounter order. |
+| Nested ordering | A sorted scope passes its ordering to descendants. A nested subject that normally preserves iteration order still uses the inherited sorting. |
+| Zero item budget | Omit repeated child failures, but still explain ordinary leaf failures at the root. |
+| `probe` | Evaluate without retaining built-in diagnostics or omission counts. Do not explain the root failure. |
+
+Use `is_diagnostic()` to decide whether to build optional child evidence. It can return false because the budget is zero
+or full, as well as during a probe. [Assertion callbacks](matcher-composition.md#assertion-callbacks) run their own capture,
+so a probe does not suppress their diagnostics or side effects.
+
+Transferred child omissions, later truncation, and omissions inside retained failures are accounted for separately.
+Regressions: `scoped_paths_participate_in_sorting_before_truncation` and
+`retains_remaining_capacity_and_suppresses_rendering_in_probes` in [context.rs](../assertr/src/expectation/context.rs).

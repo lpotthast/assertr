@@ -7,13 +7,10 @@ sources:
   - assertr/src/renderer/rendered.rs
   - assertr/src/renderer/budget.rs
   - assertr/src/renderer/mod.rs
-  - assertr/src/crate_docs.md
-  - assertr/tests/custom_assertions.rs
-  - assertr-no-std-tests/src/lib.rs
-  - assertr/src/assertions/core/debug.rs
-  - assertr/src/assertions/core/display.rs
-  - assertr/src/assertions/rootcause/report.rs
+  - assertr/src/util/selection.rs
+  - assertr/src/assertions/map/entry.rs
   - assertr/src/assertions/reqwest/response.rs
+  - assertr/src/crate_docs.md
   - assertr/tests/custom_assertions.rs
   - assertr-no-std-tests/src/lib.rs
 ---
@@ -22,103 +19,99 @@ sources:
 
 [Architecture overview](README.md)
 
-[`ValueRenderer<T>`](../assertr/src/renderer/value.rs) formats a diagnostic leaf. Assertr builds structural syntax and
-failure layout around leaves. `DebugRenderer` is the default, but subjects need no `Debug` implementation when a custom
-renderer supplies the required capabilities.
+`ValueRenderer<T>` formats one diagnostic value, called a leaf. Assertr combines leaves into collections, maps, and
+other structures, then [lays out the failure report](failure-processing.md#report-grammar). `DebugRenderer` is the
+default. Custom renderers can handle subjects that do not implement `Debug`. A shared reference `&R` renders like `R`,
+so `with_renderer(&renderer)` satisfies the `Clone` bound of derived assertions when the renderer itself is not `Clone`.
 
 ## Capabilities and structure
 
-An assertion needs only the leaf-rendering implementations its diagnostics use. Structural collection checks render
-items, and map checks render keys and values separately. An opaque assertion, such as direct equality, can treat the
-whole subject as one leaf. Method-level bounds let Rust reject a missing rendering capability without hiding unrelated
-assertions. Keeping those bounds off blanket trait implementations is an assertion-author obligation.
-Value comparisons render the actual type and the selected `BorrowFor::View`, plus structural leaves.
-The [operand contract](expectation-execution.md#comparison-operands) retains that view through explanation, so operand
-wrappers need no renderer and are not borrowed again to build their diagnostic.
+Keep assertion-trait implementations independent of renderers. Put `ValueRenderer` and `Clone` bounds on individual
+methods in both trait and impl. Put leaf renderer bounds on `ExpectationDiagnostics`. Evaluation also needs those bounds
+when it constructs child diagnostics or paths. Disabling diagnostics at runtime does not remove compile-time bounds.
 
-Bulk map expected keys, missing-key facts, mismatch locations, and keyed matcher paths render the selected query
-view used for native lookup. Actual maps and unexpected keys render stored key types. Exact-entry equality also
-renders the selected expected-value view and counts. This can change diagnostic text and type metadata when an old
-operand wrapper rendered differently. Custom renderers migrate to the query view, without a wrapper renderer.
-`Entry` requires query rendering and the nested matcher's capabilities. Exact keyed matching additionally requires
-stored-key rendering for unexpected keys. These composites construct paths during evaluation and therefore retain
-those diagnostic bounds. Signed-duration tolerance renders only `SignedDuration`, independently of operand wrappers.
+| Operation | Rendering capabilities |
+|---|---|
+| Opaque assertions, including direct equality | May render the entire subject as one leaf. |
+| Structural collections and maps | Items, or keys and values separately. |
+| Value comparison | Actual type, selected `BorrowFor::View`, required structural leaves. |
+| Bulk map queries and keyed matcher paths | Selected query view. Actual maps and unexpected keys use stored key types. Exact-entry equality also renders expected-value views and counts. |
+| `Entry` | Query view and nested matcher capabilities. Exact keyed matching also needs stored keys. Paths are built during evaluation, so those bounds remain. |
+| Callback wrappers | Delegated checks' capabilities. Positive collection membership needs no element renderer. Exact/positional collection checks and iterator scans also render counts. |
+| Negative membership | Element renderers to identify unexpected matches. |
 
-Callback wrappers require only the rendering capabilities used by their delegated checks and callback assertions,
-plus `Clone` to carry the active renderer into child chains. Positive collection membership callbacks can inspect opaque
-elements without any leaf renderer. Exact and positional collection checks and iterator scans additionally render
-counts. Map entry callbacks render query keys, and exact keyed callbacks also render unexpected stored keys.
-Negative membership checks retain element renderers because their failures identify unexpectedly matching elements.
-The public [minimal renderer examples](../assertr/src/renderer/mod.rs) exercise a callback with no renderer and an exact
-comparison with only `ValueRenderer<usize>`. The downstream regressions
-[`collection_callbacks_need_only_the_renderers_their_failures_use`](../assertr/tests/custom_assertions.rs) and
-[`stable_order_callbacks_need_only_a_count_renderer`](../assertr/tests/custom_assertions.rs) pin those bounds.
+[Operand selection](comparison-operands.md#borrowed-views) determines which view needs a renderer. The operand wrapper
+itself needs none. Map entry callbacks use the same key bounds as keyed matchers. These tests check that only the required
+renderers are needed:
+`collection_callbacks_need_only_the_renderers_their_failures_use` and
+`stable_order_callbacks_need_only_a_count_renderer` in [custom_assertions.rs](../assertr/tests/custom_assertions.rs).
 
-[`RenderingContext`](../assertr/src/renderer/context.rs), obtained through `AssertThat::render()` or
-`AssertionContext::render()`, supplies rendering adapters for values, collections, maps, and fields. These build owned
-[`Rendered`](../assertr/src/renderer/rendered.rs) trees containing leaf text, structural children, type metadata, layout
-settings, and omission counts. Failure adapters can inspect or print them without rendering original values again.
-The public [structural evidence examples](../assertr/src/crate_docs.md#structural-evidence) populate supplied builders in
-expectation explanation, using leaf-only renderers for collections, maps, and wrappers. They delegate tracking and
-raising to `apply_assertion`. Rendering adapters construct values and never grant execution responsibilities.
-Mapping moves the renderer and derivation clones it, as described
-in [assertion lifecycle](assertion-lifecycle.md#projections-and-continuation).
+Obtain `RenderingContext` through `context.render()` in expectations or `self.render()` in execution adapters. Its
+adapters build owned `Rendered` trees containing leaf text, children, type metadata, layout, and omissions. Failure adapters inspect
+these trees without rerendering original values. See [structural evidence examples](../assertr/src/crate_docs.md#structural-evidence).
 
-`CollectionPresentation` chooses collection syntax, type-hint visibility, and `RenderingOrder`.
-`PreserveIteration` retains traversal order. `SortByRenderedText` orders formatted evidence for deterministic reports.
-Built-in sequences and tree collections preserve iteration. Hash collections and heaps sort diagnostic text. These
-settings grant no [behavioral capability](collection-semantics.md#capability-model).
+### Rendering adapters
 
-The supported downstream surface uses `collection` and `borrowed_collection` for collection subjects with their
-presentation metadata, `stable_collection` and `stable_borrowed_collection` for positional diagnostics, and `map`
-for map subjects. The stable adapters require `StableOrder` and always preserve iteration order. `values` and
-`borrowed_values` create synthetic groups with an optional `with_order(RenderingOrder)` setting. `entry_list`
-creates synthetic key/value tuples with an explicit `RenderingOrder`. Synthetic groups retain child types
-without claiming an outer Rust type.
+| Adapter | Structure and ordering |
+|---|---|
+| `collection`, `borrowed_collection` | Collection subject with `CollectionPresentation` metadata. |
+| `stable_collection`, `stable_borrowed_collection` | Require `StableOrder`, always preserve iteration. |
+| `map` | Map subject with key/value leaves. |
+| `values`, `borrowed_values` | Synthetic groups, optional `with_order(RenderingOrder)`. Child types only, no outer Rust type. |
+| `entry_list` | Synthetic key/value tuples with explicit order. |
+| `variant`, `struct_field`, `unavailable_struct_field` | One-field wrappers preserving the owner's canonical type separately from field type. Unavailable fields have structural placeholders and no inferred type. |
 
-`variant`, `struct_field`, and `unavailable_struct_field` cover one-field wrappers. They retain the owner's
-canonical type independently of the field type. An unavailable field has a structural placeholder and no
-inferred type. Wrapper names and placeholders are structural text, outside the leaf budget.
+`CollectionPresentation` selects syntax, type-hint visibility through `show_type_hint(bool)`, and `RenderingOrder`. It
+does not enable assertion methods. `PreserveIteration` follows traversal. `SortByRenderedText` sorts formatted evidence
+and marks it "(sorted for rendering)" when at least two items, counting omitted ones, were considered. Built-in
+sequences and tree collections preserve iteration. Hash collections and heaps sort.
 
-Adapters have public names in `renderer` and inaccessible fields. Construction is lazy and renderer-independent.
-Formatting and conversion to `Rendered` require only the displayed leaf renderers. Each formatting traverses
-the borrowed source again, while an owned tree can be reused without rerendering. Metadata construction,
-rendering implementation traits, and sorting algorithms remain private.
+Adapters have public names and private fields. Constructing one does not traverse values or require a renderer.
+Formatting it, or converting it into an owned tree with `IntoRendered::into_rendered` or the compact
+`into_rendered_compact`, requires renderers for the displayed leaves. Each formatting traverses the borrowed source
+again. An owned tree can be reused without another traversal. Wrapper names and placeholders are structural text outside
+the leaf budget. A renderer returning `fmt::Error` does not cause a panic. The leaf keeps the text written before the
+error, followed by a `<renderer error>` marker. Metadata construction, internal rendering traits, and sorting remain
+private.
 
 ## Bounded retention
 
-[`RenderingBudget`](../assertr/src/renderer/budget.rs) defaults to 256 items per repeated group and 4,096 characters per
-leaf. Limits apply independently, so they bound neither total report size nor comparison work. `unlimited()` removes
-both limits. Omitted item and character counts remain in the rendered data.
+| `RenderingBudget` setting | Scope |
+|---|---|
+| Default 256 items | Each repeated group independently, including nested groups. |
+| Default 4,096 characters | Each leaf independently. An opaque subject is one leaf. |
+| `unlimited()` | Remove both limits. |
 
-The budget controls retained evidence. Expectation implementors must keep pass/fail independent of that budget, and the
-executor records truth separately from retained children. An assertion may inspect more items, and sorted diagnostics
-may render more candidates before selecting retained entries. Derived chains and nested expectation contexts inherit the
-budget.
-`RenderingContext::budget()` exposes a copy of both limits for custom evidence collectors. Changing that copy
-does not update the chain. Collectors determine truth independently, account for omitted children, and consult
-`AssertionContext::is_diagnostic()` when retaining optional expectation evidence. The budget bounds retained
-output, not traversal work or peak sorting memory.
-[Probes](expectation-execution.md#budgets-and-probes) suppress built-in diagnostics, while
-[streaming scans](collection-semantics.md#borrowed-traversal-versus-terminal-streams) also impose a preview limit.
+Omission counts remain structured data. Limits do not bound total report size, traversal work, or process memory.
+`RenderingContext::budget()` returns a copy. Custom collectors must account for omitted values. See
+[expectation execution](expectation-execution.md#budgets-and-probes) for how budgets and probes affect child failures.
 
-## Formatted-value comparison
+### Sorted retention
 
-Formatting assertions compare complete generated text before diagnostic truncation. `has_debug_string` compares `Debug`
-output with preformatted text verbatim. `has_debug_value` formats both operands with `Debug`. `has_display_value` uses
-`Display` for both. Their rejections retain the generated text, so explanation does not format operands again.
+For finite limit `k`, sorted value, map, and entry-list adapters retain at most `k` entries plus the incoming candidate:
 
-On mismatch, `ValueRenderer<str>` and the budget control the retained evidence. They do not determine equality. Probes
-still format because formatting is the check. Rootcause current-context formatting assertions use the report's formatter
-hook with the same separation between comparison and diagnostic rendering.
+- Produce the same retained entries as a stable full sort using the truncated leaf text and chosen compact or pretty
+  format. Encounter order breaks ties.
+- Rank maps by key text, then value text. Rank synthetic entries by tuple text.
+- Render each inspected leaf once per conversion, including values of losing map entries.
+- A nonzero limit still requires inspecting every candidate. A zero limit neither advances the iterator nor renders
+  values. An unlimited budget collects and sorts everything.
+- Grow storage incrementally without reserving `k` upfront. Complexity and selector mechanics are documented
+  [beside the implementation](../assertr/src/util/selection.rs).
+
+These rules apply to rendered values. [Expectation contexts](expectation-execution.md#budgets-and-probes) select child
+failures, and unordered assignment also [samples candidate failures](matcher-composition.md#bounded-candidate-evidence).
 
 ## Sensitive HTTP header evidence
 
-Reqwest response `has_header_value` and `does_not_have_header` consult `ValueRenderer::sensitive_value_policy` when
-rendering header evidence. `Preserve`, the default for custom renderers, passes the original value and sensitivity flag.
-It does not itself redact. `Reveal`, selected by `DebugRenderer`, clears the flag on a diagnostic clone of a sensitive
-header. The original stays unchanged.
+Reqwest `has_header_value` and `does_not_have_header` consult `ValueRenderer::sensitive_value_policy` only for failing
+header evidence:
 
-Header comparisons use raw bytes, including non-UTF-8 bytes. Passing checks do not query the policy. Generic rendering,
-such as direct equality on `HeaderValue`, receives the original value without consulting this policy. The budget applies
+| Policy | Renderer input |
+|---|---|
+| `Preserve` (custom-renderer default) | Original value and sensitivity flag. Does not itself redact. |
+| `Reveal` (`DebugRenderer`) | Diagnostic clone with sensitivity cleared. Original unchanged. |
+
+Comparisons use raw bytes, including non-UTF-8 values. Passing checks do not query the policy. Generic rendering,
+including direct `HeaderValue` equality, receives the original value without consulting the policy. The budget applies
 after rendering.

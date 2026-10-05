@@ -56,7 +56,8 @@ pub(crate) fn match_bipartite(
     expected_len: usize,
     mut matches: impl FnMut(usize, usize) -> bool,
 ) -> BipartiteMatchResult {
-    let expected_to_actual = assign(actual_len, expected_len, &mut matches);
+    let expected_to_actual = assign(actual_len, expected_len, &mut matches, false)
+        .expect("assignment without early exit always completes");
 
     let mut matched_actual = vec![false; actual_len];
     for actual_index in expected_to_actual.iter().flatten() {
@@ -83,22 +84,25 @@ pub(crate) fn match_bipartite(
 }
 
 /// Checks exact assignment without materializing diagnostic pairs or unmatched indexes.
+///
+/// Unequal lengths need no comparisons. With equal lengths, the first actual value that cannot be
+/// assigned proves that no exact assignment exists, so later values are not compared.
 pub(crate) fn matches_exactly(
     actual_len: usize,
     expected_len: usize,
     matches: impl FnMut(usize, usize) -> bool,
 ) -> bool {
-    actual_len == expected_len
-        && assign(actual_len, expected_len, matches)
-            .iter()
-            .all(Option::is_some)
+    actual_len == expected_len && assign(actual_len, expected_len, matches, true).is_some()
 }
 
+/// Assigns every actual value in order. With `stop_on_unassigned`, returns `None` as soon as one
+/// value cannot be assigned. Augmenting paths never unassign a value, so the result is final.
 fn assign(
     actual_len: usize,
     expected_len: usize,
     mut matches: impl FnMut(usize, usize) -> bool,
-) -> Vec<Option<usize>> {
+    stop_on_unassigned: bool,
+) -> Option<Vec<Option<usize>>> {
     let mut expected_to_actual = vec![None; expected_len];
     let mut visited_expected = vec![false; expected_len];
     let mut path = Vec::new();
@@ -113,10 +117,12 @@ fn assign(
         );
         if assigned {
             visited_expected.fill(false);
+        } else if stop_on_unassigned {
+            return None;
         }
     }
 
-    expected_to_actual
+    Some(expected_to_actual)
 }
 
 /// Assigns `root_actual` to a slot, shifting earlier assignments along an alternating path when
@@ -215,14 +221,34 @@ mod tests {
                             relation(a, e)
                         });
                         assert_that!(accepted).is_equal_to(detailed.is_exact());
-                        if actual == expected {
+                        if actual != expected {
+                            assert_that!(boolean_calls).is_empty();
+                        } else if accepted {
                             assert_that!(boolean_calls).is_equal_to(detailed_calls);
                         } else {
-                            assert_that!(boolean_calls).is_empty();
+                            // Rejection stops early with the same leading comparisons.
+                            assert_that!(detailed_calls).starts_with(&boolean_calls);
                         }
                     }
                 }
             }
+        }
+    }
+
+    mod matches_exactly_early_exit {
+        use crate::{prelude::*, util::matching::matches_exactly};
+        use alloc::vec::Vec;
+
+        #[test]
+        fn stops_at_the_first_unassignable_actual_value() {
+            let mut comparisons = Vec::new();
+            let accepted = matches_exactly(3, 3, |actual, expected| {
+                comparisons.push((actual, expected));
+                actual != 0
+            });
+
+            assert_that!(accepted).is_false();
+            assert_that!(comparisons).contains_exactly([(0, 0), (0, 1), (0, 2)]);
         }
     }
 

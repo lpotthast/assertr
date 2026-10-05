@@ -1,5 +1,6 @@
+use crate::assertions::std::mutex::{explain_acquired_lock, explain_held_lock};
 use crate::failure::FailureKind;
-use crate::{AssertThat, Mode, ValueRenderer};
+use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use tokio::sync::Mutex;
 
@@ -35,12 +36,14 @@ where
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        let render = context.render();
         match rejected {
             None => failure.relation("is locked"),
-            Some((actual, guard)) => failure
-                .actual(render.struct_field(actual, "Mutex", "data", &*guard))
-                .relation("is not locked"),
+            Some((actual, guard)) => {
+                let failure = explain_acquired_lock(actual, "Mutex", &*guard, failure, context);
+                // Release before raising or observing the next composed assertion.
+                drop(guard);
+                failure
+            }
         }
     }
 }
@@ -73,12 +76,9 @@ impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotLocked {
         failure: FailureBuilder<Target>,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        let render = context.render();
         match rejected {
             None => failure.relation("is not locked"),
-            Some((actual, ())) => failure
-                .actual(render.unavailable_struct_field(actual, "Mutex", "data", "<locked>"))
-                .relation("is unexpectedly locked"),
+            Some((actual, ())) => explain_held_lock(actual, "Mutex", failure, context),
         }
     }
 }
@@ -133,9 +133,9 @@ fn explain_value<T, R: ValueRenderer<T>, Target>(
     let render = context.render();
     match rejected {
         None => failure.relation("contains a value that satisfies the assertions"),
-        Some((actual, ValueRejection::Locked)) => failure
-            .actual(render.unavailable_struct_field(actual, "Mutex", "data", "<locked>"))
-            .relation("is unexpectedly locked"),
+        Some((actual, ValueRejection::Locked)) => {
+            explain_held_lock(actual, "Mutex", failure, context)
+        }
         Some((actual, ValueRejection::Rejected(guard, evidence))) => evidence.explain(
             failure
                 .actual(render.struct_field(actual, "Mutex", "data", &*guard))
@@ -185,7 +185,7 @@ where
 /// Non-blocking assertions for Tokio's [`Mutex`] type.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait TokioMutexAssertions<T, R> {
+pub trait TokioMutexAssertions<T, R = DebugRenderer> {
     /// Asserts that `try_lock` cannot acquire the mutex.
     fn is_locked(self) -> Self
     where
@@ -233,13 +233,18 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
         A: for<'a> FnOnce(AssertThat<'a, T, crate::mode::Capture, R>),
         R: ValueRenderer<T> + Clone,
     {
-        let assertions = core::cell::Cell::new(Some(assertions));
-        self.apply_assertion(HasValueSatisfying::new(
-            |it: AssertThat<'_, T, crate::mode::Capture, R>| {
-                let callback = assertions.take().expect("callback runs once");
-                callback(it);
+        // The one-use callback runs through the one-use executor instead of the reusable
+        // `HasValueSatisfying` expectation, which requires `Fn`.
+        self.track_assertion();
+        self.test_once_after_tracking(
+            FailureKind::Predicate,
+            core::panic::Location::caller(),
+            |context| evaluate_value(self.actual(), assertions, context),
+            |rejection, failure, context| {
+                explain_value(Some((self.actual(), rejection)), failure, context)
             },
-        ))
+        );
+        self
     }
 }
 

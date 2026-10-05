@@ -1,5 +1,6 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 use alloc::{format, string::String};
@@ -140,7 +141,7 @@ impl<T: Debug + ?Sized, E: Debug, R: ValueRenderer<str>> ExpectationDiagnostics<
 /// Assertions for values implementing [`Debug`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait DebugAssertions<R = crate::DebugRenderer> {
+pub trait DebugAssertions<R = DebugRenderer> {
     /// Asserts that the subject has the expected `Debug` representation.
     ///
     /// Compares the complete representation exactly, including quotes and escape sequences.

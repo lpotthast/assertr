@@ -21,7 +21,7 @@ impl<T, R> Expectation<Type<T>, R> for NeedsDrop {
 }
 
 impl<T, R> ExpectationDiagnostics<Type<T>, R> for NeedsDrop {
-    const KIND: FailureKind = FailureKind::Other;
+    const KIND: FailureKind = FailureKind::Predicate;
     fn explain<Target>(
         &self,
         rejected: Option<(&Type<T>, ())>,
@@ -127,7 +127,7 @@ mod tests {
             assert_that!(failures).has_length(2);
             for failure in &failures {
                 assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not need drop"));
-                assert_that!(failure.kind).is_equal_to(crate::FailureKind::Other);
+                assert_that!(failure.kind).is_equal_to(crate::FailureKind::Predicate);
             }
         }
 

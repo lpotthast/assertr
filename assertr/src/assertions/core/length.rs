@@ -1,6 +1,7 @@
 use crate::assertions::HasLength;
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
     failure::{Fact, FailureBuilder, FailureKind},
 };
 
@@ -158,36 +159,31 @@ where
 
 /// Assertions for subjects implementing [`HasLength`].
 ///
+/// Failures render the whole subject, so these methods require a renderer for the subject type
+/// itself. This also applies to collections and maps, whose element assertions need only element,
+/// key, or value rendering support.
+///
 /// [`HasLength`]: crate::assertions::HasLength
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait LengthAssertions {
-    /// The assertion subject whose length is checked and whose failures are rendered.
-    type Subject: HasLength;
-
-    /// The renderer carried by the assertion chain.
-    type Renderer;
-
+pub trait LengthAssertions<T: HasLength, R = DebugRenderer> {
     /// Asserts that the subject has length zero.
     fn is_empty(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<T>;
 
     /// Asserts that the subject has nonzero length.
     fn is_not_empty(self) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject>;
+        R: ValueRenderer<T>;
 
     /// Asserts that the subject has exactly `expected` elements or bytes.
     fn has_length(self, expected: usize) -> Self
     where
-        Self::Renderer: ValueRenderer<Self::Subject> + ValueRenderer<usize>;
+        R: ValueRenderer<T> + ValueRenderer<usize>;
 }
 
-impl<T: HasLength, M: Mode, R> LengthAssertions for AssertThat<'_, T, M, R> {
-    type Renderer = R;
-    type Subject = T;
-
+impl<T: HasLength, M: Mode, R> LengthAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_empty(self) -> Self
     where
@@ -222,7 +218,7 @@ mod tests {
         #[test]
         fn trait_is_implemented_without_renderer_support() {
             assert_trait_impl!(
-                AssertThat<'static, Vec<u8>, Panic, NoRenderer> => LengthAssertions
+                AssertThat<'static, Vec<u8>, Panic, NoRenderer> => LengthAssertions<Vec<u8>, NoRenderer>
             );
         }
     }

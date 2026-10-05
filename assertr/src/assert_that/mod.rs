@@ -9,14 +9,17 @@ mod rendering;
 pub(crate) use capture::collect_assertions;
 
 use alloc::vec::Vec;
-use core::{cell::RefCell, marker::PhantomData, panic::AssertUnwindSafe};
+use core::{
+    cell::{Cell, RefCell},
+    marker::PhantomData,
+    panic::AssertUnwindSafe,
+};
 
 use crate::{
     AssertThat, AssertionFailures, ChainRecords, ChainState, Expression,
     actual::Actual,
     mode::{Capture, Mode, Panic},
     renderer::{DebugRenderer, RenderingBudget},
-    tracking::NumberOfAssertions,
 };
 
 impl<'t> ChainRecords<'t> {
@@ -24,8 +27,9 @@ impl<'t> ChainRecords<'t> {
         Self {
             parent,
             detail_messages: AssertUnwindSafe(RefCell::new(Vec::new())),
-            number_of_assertions: AssertUnwindSafe(RefCell::new(NumberOfAssertions::new())),
+            number_of_assertions: AssertUnwindSafe(Cell::new(0)),
             failures: AssertUnwindSafe(RefCell::new(AssertionFailures::new())),
+            inherited_messages: Vec::new(),
         }
     }
 }

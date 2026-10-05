@@ -1,8 +1,9 @@
 //! Matcher execution over bounded, single-pass iterator scans.
 
 use super::{
-    AssertThat, AssertionContext, Borrow, ExpectationDiagnostics, Mode, PREVIEW_CAPACITY,
-    PhantomData, PositionReporting, Scan, Tail, Vec, VecDeque, exact_size_hint, execute,
+    AssertThat, AssertionContext, Borrow, ExpectationDiagnostics, Items, KnownLength, LengthBound,
+    Mode, PhantomData, PositionReporting, Scan, WindowPlacement, buffer_exactly, execute,
+    scan_windows,
 };
 use crate::{
     Fact, ValueRenderer,
@@ -18,7 +19,7 @@ fn explain_scan<Target, R: ValueRenderer<usize>>(
     consumed: usize,
 ) -> FailureBuilder<Target> {
     evidence.explain(failure.relation(relation).fact(Fact::labelled(
-        "Consumed",
+        "Consumed elements",
         context.render().value(&consumed),
     )))
 }
@@ -42,36 +43,24 @@ where
         iterator: &mut I,
         context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
-        let mut retained: VecDeque<Evidence> = VecDeque::new();
+        // Candidates share one scope. Once its budget is full, later rejections are only counted,
+        // so rendering stays bounded even when a late candidate succeeds.
+        let mut candidates = context.isolated();
         let mut consumed = 0;
-        let mut discarded = 0;
         for item in iterator {
-            let mut child = context.isolated();
-            let accepted = if let Some(index) = self.positions.index(consumed) {
-                child.scoped(PathSegment::Index(index), |child| {
-                    child.evaluate(item.borrow(), self.expected)
-                })
-            } else {
-                child.evaluate(item.borrow(), self.expected)
+            let accepted = match self.positions.index(consumed) {
+                Some(index) => candidates.scoped(PathSegment::Index(index), |candidate| {
+                    candidate.evaluate(item.borrow(), self.expected)
+                }),
+                None => candidates.evaluate(item.borrow(), self.expected),
             };
             consumed += 1;
             if accepted {
                 return Ok(());
             }
-            if retained.len() == PREVIEW_CAPACITY
-                && let Some(old) = retained.pop_front()
-            {
-                discarded += old.children.len() + old.omitted;
-            }
-            retained.push_back(child.into_evidence());
         }
-        let mut child = context.isolated();
-        child.omitted = discarded;
-        for evidence in retained {
-            child.append(evidence);
-        }
-        child
-            .finish(false, |child| child.describe(self.expected))
+        candidates
+            .finish(false, |candidates| candidates.describe(self.expected))
             .map_err(|evidence| (evidence, consumed))
     }
 
@@ -93,13 +82,13 @@ where
     }
 }
 
-struct ContainsNoMatching<'e, T, P> {
+struct DoesNotContainMatching<'e, T, P> {
     expected: &'e P,
     item: PhantomData<fn() -> T>,
     positions: PositionReporting,
 }
 
-impl<T, P, I, R> Scan<I, R> for ContainsNoMatching<'_, T, P>
+impl<T, P, I, R> Scan<I, R> for DoesNotContainMatching<'_, T, P>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -153,10 +142,8 @@ where
 }
 
 enum SequenceRejection {
-    KnownLength {
-        actual: usize,
-        expected: usize,
-    },
+    /// An exact size hint ruled out the expected length before consuming anything.
+    Reported(KnownLength),
     Missing {
         evidence: Evidence,
         consumed: usize,
@@ -192,16 +179,15 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         let expected_length = self.expected.len();
-        let mut child = context.isolated();
-        if let Some(actual) = exact_size_hint(&iterator)
-            && ((self.exact && actual != expected_length)
-                || (!self.exact && actual < expected_length))
-        {
-            return Err(SequenceRejection::KnownLength {
-                actual,
-                expected: expected_length,
-            });
+        let bound = if self.exact {
+            LengthBound::Exact
+        } else {
+            LengthBound::AtLeast
+        };
+        if let Some(known) = KnownLength::mismatch(iterator, expected_length, bound) {
+            return Err(SequenceRejection::Reported(known));
         }
+        let mut child = context.isolated();
         for index in 0..expected_length {
             let Some(item) = iterator.next() else {
                 child.scoped(PathSegment::Index(index), |child| {
@@ -240,10 +226,10 @@ where
     ) -> FailureBuilder<Target> {
         let render = context.render();
         match rejection {
-            SequenceRejection::KnownLength { actual, expected } => failure
-                .relation("does not have the required sequence length")
-                .fact(Fact::labelled("Reported length", render.value(&actual)))
-                .fact(Fact::labelled("Expected length", render.value(&expected))),
+            SequenceRejection::Reported(known) => known.facts(
+                failure.relation("does not have the required sequence length"),
+                render,
+            ),
             SequenceRejection::Missing {
                 evidence,
                 consumed,
@@ -264,7 +250,9 @@ where
                 consumed,
             ),
             SequenceRejection::Extra { evidence, consumed } => {
-                explain_scan(failure, context, evidence, "has an extra element", consumed)
+                explain_scan(failure, context, evidence, "has an extra element", consumed).fact(
+                    Fact::labelled("Extra element at index", self.expected.len()),
+                )
             }
         }
     }
@@ -283,49 +271,41 @@ where
     L: MatcherList<T, R>,
     R: ValueRenderer<usize>,
 {
-    type Rejection = (Evidence, usize, usize);
+    type Rejection = (Evidence, usize);
     fn observe(
         &self,
         iterator: &mut I,
         context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         let expected_length = self.expected.len();
-        if expected_length == 0 {
-            return Ok(());
-        }
-        let mut window = Tail::new(expected_length);
-        let mut final_window = Evidence::default();
-        let evaluate_window = |window: &VecDeque<I::Item>, consumed: usize| {
-            let mut child = context.isolated();
-            let mut matched = true;
-            for (slot, item) in window.iter().enumerate() {
-                matched &= child.scoped(
-                    PathSegment::Index(consumed - expected_length + slot),
-                    |child| self.expected.evaluate_at(slot, item.borrow(), child),
-                );
-            }
-            if matched {
-                Ok(())
-            } else {
-                Err(child.into_evidence())
-            }
+        // Windows share one scope like candidates do, retaining the first rejections in budget.
+        let mut windows = context.isolated();
+        let placement = if self.suffix {
+            WindowPlacement::End
+        } else {
+            WindowPlacement::Anywhere
         };
-        for item in iterator {
-            window.push(item);
-            if !self.suffix && window.items.len() == expected_length {
-                match evaluate_window(&window.items, window.consumed) {
-                    Ok(()) => return Ok(()),
-                    Err(evidence) => final_window = evidence,
+        let scanned = scan_windows(
+            iterator,
+            expected_length,
+            expected_length,
+            placement,
+            |window, first_index| {
+                let mut candidate = windows.isolated();
+                let mut matched = true;
+                for (slot, item) in window.enumerate() {
+                    matched &= candidate
+                        .scoped(PathSegment::Index(first_index + slot), |candidate| {
+                            self.expected.evaluate_at(slot, item.borrow(), candidate)
+                        });
                 }
-            }
-        }
-        if self.suffix && window.items.len() == expected_length {
-            match evaluate_window(&window.items, window.consumed) {
-                Ok(()) => return Ok(()),
-                Err(evidence) => final_window = evidence,
-            }
-        }
-        Err((final_window, window.consumed, expected_length))
+                if !matched {
+                    windows.append(candidate.into_evidence());
+                }
+                matched
+            },
+        );
+        scanned.map_err(|tail| (windows.into_evidence(), tail.consumed))
     }
 
     const KIND: FailureKind = FailureKind::Matching;
@@ -336,19 +316,20 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let relation = if self.suffix {
-            "ends with these positions"
+            "ends with these elements"
         } else {
-            "contains these contiguous positions"
+            "contains these elements contiguously"
         };
-        let (evidence, consumed, expected) = rejection;
+        let (evidence, consumed) = rejection;
+        let expected = self.expected.len();
         let failure = explain_scan(
             failure,
             context,
             evidence,
             if self.suffix {
-                "does not end with matching positions"
+                "does not end with matching elements"
             } else {
-                "does not contain matching contiguous positions"
+                "does not contain matching contiguous elements"
             },
             consumed,
         );
@@ -374,30 +355,13 @@ where
     }
 }
 
-struct Items<'a, T, I> {
-    items: &'a [I],
-    view: PhantomData<T>,
-}
-
-impl<T, I> crate::assertions::HasLength for Items<'_, T, I> {
-    fn length(&self) -> usize {
-        self.items.len()
-    }
-}
-
-impl<T, I: Borrow<T>> crate::assertions::collection::Collection for Items<'_, T, I> {
-    type Item = T;
-    const PRESENTATION: crate::renderer::CollectionPresentation =
-        crate::renderer::CollectionPresentation::list();
-
-    fn elements(&self) -> impl Iterator<Item = &T> {
-        self.items.iter().map(Borrow::borrow)
-    }
-}
-
 enum UnorderedRejection {
-    KnownLength { actual: usize, expected: usize },
-    Mismatch { evidence: Evidence, consumed: usize },
+    /// An exact size hint ruled out the expected length before consuming anything.
+    Reported(KnownLength),
+    Mismatch {
+        evidence: Evidence,
+        consumed: usize,
+    },
 }
 
 struct ElementsAreInAnyOrder<'e, T, L> {
@@ -418,22 +382,9 @@ where
         iterator: &mut I,
         context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
-        let expected_length = self.expected.len();
-        if let Some(actual) = exact_size_hint(&iterator)
-            && actual != expected_length
-        {
-            return Err(UnorderedRejection::KnownLength {
-                actual,
-                expected: expected_length,
-            });
-        }
-        let items = iterator
-            .take(expected_length.saturating_add(1))
-            .collect::<Vec<_>>();
-        let actual = Items {
-            items: &items,
-            view: PhantomData::<T>,
-        };
+        let items =
+            buffer_exactly(iterator, self.expected.len()).map_err(UnorderedRejection::Reported)?;
+        let actual = Items::<T, _>::new(&items);
         let mut child = context.isolated();
         if child.evaluate(
             &actual,
@@ -456,16 +407,10 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         match rejection {
-            UnorderedRejection::KnownLength { actual, expected } => failure
-                .relation("does not have the required number of elements")
-                .fact(Fact::labelled(
-                    "Reported length",
-                    context.render().value(&actual),
-                ))
-                .fact(Fact::labelled(
-                    "Expected length",
-                    context.render().value(&expected),
-                )),
+            UnorderedRejection::Reported(known) => known.facts(
+                failure.relation("does not have the required number of elements"),
+                context.render(),
+            ),
             UnorderedRejection::Mismatch { evidence, consumed } => explain_scan(
                 failure,
                 context,
@@ -515,7 +460,7 @@ pub(crate) fn no_membership<S, T, P, I, M: Mode, R>(
     execute(
         this,
         iterator,
-        &ContainsNoMatching::<T, P> {
+        &DoesNotContainMatching::<T, P> {
             expected,
             item: PhantomData,
             positions,
@@ -607,45 +552,86 @@ mod tests {
         use crate::{failure::PathSegment, matchers::eq};
 
         #[test]
-        fn membership_completion_counts_only_rejected_candidates_or_the_empty_fallback() {
+        fn membership_retains_the_first_rejected_candidates_or_the_empty_fallback() {
             for count in [0, 1, 2, 3, 20] {
                 for budget in [0, 1, 32] {
                     let failures = assert_that_owned!(0..count)
                         .with_rendering_budget(RenderingBudget::default().with_max_items(budget))
                         .capture(|it| it.contains_matching(eq(99)));
-                    let retained = count.clamp(1, 16).min(budget);
+                    let retained = count.max(1).min(budget);
                     assert_that!(failures).has_length(1);
                     assert_that!(failures[0].children).has_length(retained);
                     assert_that!(failures[0].omitted_children).is_equal_to(count.max(1) - retained);
-                    assert_that!(ToHumanReadableText.render(&failures[0]).as_str())
-                        .does_not_contain("Preview starts at");
+                    if count > 0 {
+                        for (index, child) in failures[0].children.iter().enumerate() {
+                            assert_that!(child.path).contains_exactly([PathSegment::Index(index)]);
+                        }
+                    }
                 }
             }
         }
 
         #[test]
-        fn contiguous_retains_the_final_window_and_keeps_evaluating_after_budget_exhaustion() {
+        fn contiguous_retains_the_first_rejected_windows_and_keeps_evaluating_after_budget_exhaustion()
+         {
             let failures = assert_that_owned!(0..30)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(1))
                 .capture(|it| it.contains_contiguous_matching([eq(99), eq(99)]));
             assert_that!(failures[0].children).has_length(1);
-            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(28)]);
-            assert_that!(failures[0].omitted_children).is_equal_to(1);
+            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(0)]);
+            // 29 windows reject both of their positions.
+            assert_that!(failures[0].omitted_children).is_equal_to(57);
             assert_that_owned!(0..)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(0))
                 .contains_contiguous_matching([eq(20), eq(21)]);
         }
 
         #[test]
-        fn membership_limits_rejections_after_selecting_the_preview() {
+        fn membership_retains_the_first_rejections_within_the_budget() {
             let failures = assert_that_owned!(0..20)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(1))
                 .with_location(false)
                 .capture(|it| it.contains_matching(eq(99)));
 
             assert_that!(failures[0].children).has_length(1);
-            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(4)]);
+            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(0)]);
             assert_that!(failures[0].omitted_children).is_equal_to(19);
+        }
+
+        #[test]
+        fn rejected_candidates_render_within_the_budget_when_a_later_candidate_matches() {
+            use core::fmt;
+
+            struct Counting<'a>(&'a Cell<usize>);
+            impl ValueRenderer<i32> for Counting<'_> {
+                fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    self.0.set(self.0.get() + 1);
+                    write!(f, "{value}")
+                }
+            }
+            impl ValueRenderer<usize> for Counting<'_> {
+                fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    self.0.set(self.0.get() + 1);
+                    write!(f, "{value}")
+                }
+            }
+
+            for budget in [0, 1, 4] {
+                let renders = Cell::new(0);
+                assert_that_owned!(0..10_000)
+                    .with_renderer(Counting(&renders))
+                    .with_rendering_budget(RenderingBudget::default().with_max_items(budget))
+                    .contains_matching(eq(9_999));
+                // Each retained equality rejection renders its expected and actual value.
+                assert_that!(renders.get()).is_equal_to(2 * budget);
+
+                let renders = Cell::new(0);
+                assert_that_owned!(0..10_000)
+                    .with_renderer(Counting(&renders))
+                    .with_rendering_budget(RenderingBudget::default().with_max_items(budget))
+                    .contains_contiguous_matching([eq(9_998), eq(9_999)]);
+                assert_that!(renders.get()).is_equal_to(2 * budget);
+            }
         }
 
         #[test]
@@ -695,7 +681,7 @@ mod tests {
                     item: core::marker::PhantomData,
                     suffix,
                 };
-                let (_, consumed, _) =
+                let (_, consumed) =
                     super::super::Scan::observe(&scan, &mut iterator, &AssertionContext::default())
                         .err()
                         .unwrap();
@@ -755,7 +741,7 @@ mod tests {
     }
 
     fn assert_truncated_lengths(failure: &AssertionFailure) {
-        for label in ["Consumed", "Expected length"] {
+        for label in ["Consumed elements", "Expected length"] {
             let fact = failure
                 .facts()
                 .iter()
@@ -879,7 +865,7 @@ mod tests {
                     });
                 assert_that!(failures).has_length(1);
                 let failure = &failures[0];
-                assert_custom_fact(failure, "Consumed", consumed);
+                assert_custom_fact(failure, "Consumed elements", consumed);
                 assert_custom_fact(failure, "Expected length", 2);
                 if operation < 2 {
                     assert_that!(failure.relation())
@@ -895,9 +881,9 @@ mod tests {
                 } else {
                     let constraint = failure.constraint().unwrap();
                     assert_that!(constraint.relation()).is_equal_to(Some(if operation == 2 {
-                        "ends with these positions"
+                        "ends with these elements"
                     } else {
-                        "contains these contiguous positions"
+                        "contains these elements contiguously"
                     }));
                     assert_that!(constraint.children).has_length(2);
                     for (child, value) in constraint.children.iter().zip([1_i32, 987_654]) {

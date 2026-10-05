@@ -4,158 +4,117 @@ depends_on: [ expectation-execution ]
 sources:
   - assertr/src/assert_that/execution.rs
   - assertr/src/crate_docs.md
+  - assertr/src/assertions/alloc/panic_value.rs
   - assertr/src/assertions/core/fn.rs
   - assertr/src/assertions/core/pattern.rs
   - assertr/src/entry/panic.rs
-  - assertr/src/assertions/iterator/mod.rs
-  - assertr/src/assertions/iterator/tests.rs
   - assertr/src/assertions/std/mutex.rs
   - assertr/src/assertions/std/path.rs
   - assertr/src/assertions/tokio/mutex.rs
   - assertr/src/assertions/tokio/rw_lock.rs
   - assertr/src/assertions/tokio/watch.rs
-  - assertr/src/assertions/program.rs
   - assertr/src/assertions/reqwest/response.rs
-  - assertr/src/assertions/rootcause/report.rs
-  - assertr/src/assertions/alloc/boxed.rs
-  - assertr/src/assertions/alloc/panic_value.rs
-  - assertr/src/conversion.rs
 ---
 
-# Observation and consumption boundaries
+# Observation boundaries
 
 [Architecture overview](README.md)
 
-An execution adapter connects an operation to the shared expectation executor. It owns invocation, polling, traversal,
-or ownership transfer and supplies the resulting observation for evaluation and explanation. It is distinct from a
-failure `Adapter` and from a rendering adapter. Internal observation types and their definitions stay private.
+Some assertions invoke user code, acquire guards, inspect external state, or consume input. Their diagnostics must
+describe what the assertion observed without performing the operation again. Iterator scans are covered in
+[iterator execution](iterator-execution.md). [Assertion lifecycle](assertion-lifecycle.md#continuation-availability)
+explains which operations require ownership or panic mode.
 
-The private `test_once_after_tracking` executor accepts an `FnOnce` observation and an `FnOnce` explanation. The adapter
-tracks before invoking user code and supplies its captured caller location. The executor constructs the context and
-failure builder, then routes a rejection through the active mode. Reusable expectations use this same execution path
-without changing their borrowed `evaluate` protocol. Consuming scans and ordinary pattern guards do not implement a
-reusable expectation by hiding a one-use value in interior mutable storage.
+## Execution adapters
 
-Ordinary pattern assertions consume their guard closure once. Its temporary captures are released when observation
-returns, before rendering the subject or continuing the chain. Reusable pattern matchers still require `Fn` guards.
+Execution adapters invoke functions, poll futures, or consume input before handing the result to the
+[shared executor](expectation-execution.md#chain-execution). They track the assertion at the times described below and
+preserve its caller location. Internal observation types stay private.
+Reusable expectation hooks remain synchronous. Do not hide one-use values in interior mutability to simulate reusability.
 
-## Retaining checks versus extraction
+Built-in adapters use executor methods that skip tracking. Downstream adapters cannot access those private methods.
+If an operation cannot use public expectation execution, its adapter tracks explicitly and completes an attached
+[failure builder](failure-processing.md#builder-completion), rendering through `self.render()`.
 
-A retaining check can support both modes. An extraction that cannot produce the promised subject after rejection
-requires panic mode. Rust enforces the method's mode bounds. Consuming a borrowed `Actual` instead fails at runtime as
-misuse. Success follows the ordinary [mapping or derivation rules](assertion-lifecycle.md#projections-and-continuation).
-
-For example, [program existence](../assertr/src/assertions/program.rs) retains its subject, while resolved-path
-extraction returns an owned `PathBuf`. [Erased boxes](../assertr/src/assertions/alloc/boxed.rs),
-[panic payloads](../assertr/src/assertions/alloc/panic_value.rs), and
-[rootcause contexts](../assertr/src/assertions/rootcause/report.rs) similarly separate retaining type checks from
-extraction. An owned payload can transfer ownership. A borrowed payload remains borrowed.
-
-[JSON/TOML conversion](../assertr/src/conversion.rs) serializes the borrowed subject once and maps to an owned
-`Result<String, Error>` in either mode. It counts no assertion. Errors remain `Err` for result assertions. This is a
-transformation whose continuation exists even when serialization fails.
+Ordinary pattern assertions consume their guard closure once and release temporary captures before rendering or
+continuation. Reusable pattern matchers require `Fn` guards.
 
 ## Invocation and polling
 
-[Function assertions](../assertr/src/assertions/core/fn.rs) require ownership and panic mode. `panics` catches
-invocation and dropping a produced output. `does_not_panic` returns the output, so its later drop is outside the catch
-boundary. Async variants also catch poll panics and never repoll a panicked future. `panics_async` also observes output
-drop.
+Function assertions require ownership and panic mode:
 
-Tracking and caller capture have operation-specific timing:
+| Assertion | Caught operations |
+|---|---|
+| `panics` | Catch panics while invoking the function or dropping its output. |
+| `does_not_panic` | Catch panics while invoking the function. A later panic from dropping the returned output is not caught. |
+| Async variants | Also catch panics while polling. Never poll a panicked future again. `panics_async` also catches panics from dropping the output. |
 
-| Execution adapter              | Caller location                                | Assertion count and effects                                                                  |
-|--------------------------------|------------------------------------------------|----------------------------------------------------------------------------------------------|
-| Synchronous function assertion | Captured at the call.                          | Tracks before invoking the function.                                                         |
-| Async function assertion       | Captured when the method is called.            | Tracks and invokes the function when the returned future is first polled.                    |
-| Reqwest body extraction        | Captured at the call and carried across await. | Tracks and rejects borrowed ownership before returning a future. Reading occurs when polled. |
+### Tracking and caller timing
 
-Retained invocation results reach the shared executor before output or panic-payload transfer. Explanation cannot invoke
-or poll the function again. Localized `AssertUnwindSafe` permits mutable captures without restoring their state. The
-resulting `PanicValue` contains `Box<dyn Any>` and has neither unwind-safety trait. These exemptions do not change the
-[chain's unwind-safety bounds](assertion-lifecycle.md#unwind-safety). Cancellation of pending operations has no recovery
-guarantee.
+| Adapter | Caller captured | Tracking and operation |
+|---|---|---|
+| Synchronous function assertion | At method call. | Track before invocation. |
+| Async function assertion | At method call. | Track and invoke on first poll. |
+| Reqwest body extraction | At method call, retained across await. | Track and reject borrowed responses before returning the future. Read the body when polled. |
 
-`Expectation::evaluate` and `ExpectationDiagnostics::explain` are synchronous. Async function and response methods
-are execution adapters, not async expectation hooks. Await them in the calling task. Chains contain non-thread-safe
-state and cannot cross a `Send` boundary, as explained in [lifecycle](assertion-lifecycle.md#projections-and-continuation).
-The public [async limitations guide](../assertr/src/crate_docs.md#async-limitations) includes a working awaited call
-and compile-fail examples for synchronous capture and a future carrying a chain across an await.
+The executor receives the retained result before the output or panic payload is transferred. Explanation never invokes
+the function or polls the future again. Localized `AssertUnwindSafe` permits mutable captures without restoring state.
+`PanicValue` contains `Box<dyn Any + Send>` and has neither unwind-safety trait. These exemptions do not change
+[chain bounds](assertion-lifecycle.md#unwind-safety). Cancelling a pending operation does not guarantee recovery of its
+input or state.
 
-[`invocation_is_lazy_and_panicked_futures_are_never_repolled`](../assertr/src/assertions/core/fn.rs) pins first-poll
-tracking, one invocation, and no polling after a panic. The async assertion methods' `caller_location_is_as_expected`
-tests pin the captured call site across await. These checks do not establish cancellation safety.
+Async assertions are adapters awaited in the calling task, under the chain's
+[async constraints](assertion-lifecycle.md#async-constraints).
+The [function tests](../assertr/src/assertions/core/fn.rs), including
+`invocation_is_lazy_and_panicked_futures_are_never_repolled` and caller-location pins, verify timing, not cancellation safety.
 
 ## Filesystem existence observations
 
-[Path absence checks](../assertr/src/assertions/std/path.rs) inspect `Path::try_exists` once. `Ok(false)`
-establishes absence and passes `does_not_exist` or `DoesNotExist`. `Ok(true)` rejects with evidence that the path
-unexpectedly exists. An inspection error also rejects, with a relation stating that existence could not be determined
-and the original I/O error rendered as a labelled fact. Explanation consumes the retained observation without inspecting
-the filesystem again. The public rejection type is opaque, with private variants distinguishing the two failure cases.
+`exists`, `does_not_exist`, and their expectations `Exists` and `DoesNotExist` call `Path::try_exists` once. A
+`NotFound` or `NotADirectory` error confirms absence, because the latter means that an ancestor is not a directory.
 
-Evaluation requires no renderer capability. The ordinary method and diagnostic implementation require both the path
-subject's renderer and `ValueRenderer<std::io::Error>`, so custom rendering and the leaf budget apply to error evidence.
-The `does_not_exist::observations` tests pin the three outcomes directly. Invalid-path tests exercise filesystem
-inspection errors without depending on permissions or the process's privileges.
+| Observation | `exists` | `does_not_exist` |
+|---|---|---|
+| `Ok(true)` | Pass. | Reject with unexpected existence. |
+| `Ok(false)`, `NotFound`, or `NotADirectory` | Reject as absent. | Pass. |
+| Any other `Err(error)` | Reject because existence is undetermined. Retain the original error as an `I/O error` fact. | Same as `exists`. |
+
+`IsAFile`, `IsADirectory`, and `IsASymlink` read metadata once, following symbolic links except for `IsASymlink`. They
+retain the observed entry kind or the metadata error. `NotFound` and `NotADirectory` report the path as absent. Any
+other error reports an inspection failure with an `I/O error` fact.
+
+The public rejection types `ExistenceRejection` and `EntryKindRejection` have private representations. Explanation never
+inspects the filesystem again. Evaluation needs no renderer. Diagnostics require the path-subject renderer and
+`ValueRenderer<std::io::Error>`, honoring leaf budgets. [Path tests](../assertr/src/assertions/std/path.rs) pin every
+outcome. Invalid-path cases avoid privilege-dependent permission failures.
 
 ## Guarded observations
 
-Execution must keep a guard long enough to render the observed value and release it before raising or evaluating a
-sibling. The [guarded rejection trace](expectation-execution.md#guarded-rejection-trace) explains the handoff to owned
-evidence. Successful observations returned by `test_assertion` instead remain under their caller's control.
+When diagnostics need a guarded value, these adapters keep the guard alive until that value has been rendered. They
+follow the shared [observation lifetime rules](expectation-execution.md#child-scopes-and-evidence), but differ in how they
+acquire guards:
 
-[Standard mutex checks](../assertr/src/assertions/std/mutex.rs) use `try_lock`. Success and an acquirable poisoned guard
-mean unlocked. `WouldBlock` means locked. Poison state has separate assertions. A failing `is_locked` renders through
-the acquired guard, then releases it so the assertion's raised panic does not itself poison the mutex.
+| Subject | Observation contract |
+|---|---|
+| Standard mutex | `try_lock` success, including acquisition of a poisoned guard, means unlocked. `WouldBlock` means locked. Poison checks are separate. A failing `is_locked` renders through the guard, then releases it before raising to avoid poisoning the mutex. |
+| Tokio mutex callback | Try immediate acquisition. If the lock is held, reject without invoking the callback. Otherwise, run the callback in nested capture. The one-use `has_value_satisfying` method accepts `FnOnce` and runs through the one-use executor after tracking. `HasValueSatisfying` remains the reusable `Fn` form. |
+| Tokio RwLock | Try a write lock, then a read lock if needed. Write success means unlocked. Read-only success means read-locked. Neither succeeding means write-locked. Values that cannot be acquired are shown as unavailable. |
+| Watch receiver | Borrow the current value without marking it seen. `has_changed` and `has_not_changed` observe once, preserve the value and seen state, reject a closed channel, and continue on the receiver in capture mode. |
 
-[Tokio mutex value callbacks](../assertr/src/assertions/tokio/mutex.rs) run nested capture only after immediate
-acquisition. Contention fails the check without invoking the callback.
-[Tokio RwLock checks](../assertr/src/assertions/tokio/rw_lock.rs) try write acquisition, then read acquisition if
-needed. Write success means unlocked, read-only success means read-locked, and both failing means write-locked. Queued
-waiters, reader limits, and concurrent changes affect these observations. They are not synchronized guard counts.
-Without acquisition, diagnostics mark the value unavailable.
-
-[Watch receiver checks](../assertr/src/assertions/tokio/watch.rs) borrow the current value without marking it seen.
-`has_changed` and `has_not_changed` belong to `TokioWatchReceiverAssertions` and support panic and capture modes.
-Their execution observes `has_changed` once, leaves the value and seen state unchanged, and treats channel closure as
-failure. Capture mode records a rejection and continues on the receiver.
+These RwLock checks report what could be acquired at that moment. Queued waiters, reader limits, and concurrent changes
+can affect the result, so it does not establish how many guards are held.
 
 ## Awaiting and consuming a response
 
-[Reqwest body extraction](../assertr/src/assertions/reqwest/response.rs) consumes an owned response in panic mode. Read
-failures retain the URL and read error. JSON decoding follows a successful text read. Decode failures retain that text,
-URL, expected type, and original parser error. Successful continuations carry no temporary error details. Reading and
-JSON decoding together count as one `get_json` assertion. Partial consumption has no response-recovery guarantee.
+Reqwest body extraction consumes an owned response in panic mode:
 
-Header extraction only checks presence and continues on a clone of the first header value. Header evidence follows the
-[renderer sensitivity policy](diagnostic-rendering.md#sensitive-http-header-evidence). The regression
-[`panics_synchronously_when_the_response_is_only_borrowed`](../assertr/src/assertions/reqwest/response.rs)
-pins the ownership check before a body-extraction future is returned.
+| Outcome | Retained failure evidence |
+|---|---|
+| Body-read failure | URL and original read error. |
+| JSON-decode failure after successful text read | Text, URL, expected type, original parser error. |
+| Success | No temporary error details on continuation. |
 
-## Traversal
-
-Streaming execution owns one iterator for one scan. Retained observations explain decisions without repeating `next`
-or `size_hint`. Expected list access occurs after tracking and before scanning. Bulk operands are borrowed as
-comparisons reach them and may be borrowed again for explanation under the
-[repeatable expected-data contract](expectation-execution.md#repeatable-bulk-expected-data). On rejection, the streaming
-`execute` adapter keeps the iterator alive until `Scan::explain` returns. Every private `Scan` observes through `&mut I`.
-The execution adapter returns the owning iterator with rejection evidence, renders that evidence into owned diagnostic
-values, and drops the iterator before failure routing.
-This also applies when scanning exits before exhaustion or the iterator owns a guard. Successful scans drop their
-iterator before returning. Neither the iterator nor its items require `Clone` or repeatable traversal.
-
-Named [streaming regressions](../assertr/src/assertions/iterator/tests.rs) pin these boundaries:
-
-- `direct::scans_keep_resources_until_rendering_and_preserve_stopping_points` covers membership, positional, and
-  unordered scans, including equality and matcher paths, early exits, exhaustion, and `next`/`size_hint` counts.
-- `borrowed::membership_and_unordered_adapters_retain_the_owning_iterator` and
-  `borrowed::contains_all_stops_on_success_or_exhaustion` cover borrowed traversal.
-- `borrowed::cardinality_keeps_resources_through_explanation_without_repeating_observations` covers cardinality.
-- `release::panic_routing_releases_the_iterator_before_presentation_without_poisoning` checks guard release before
-  panic presentation.
-
-These iterator ownership guarantees do not apply to every observation. Ordinary pattern assertions release temporary
-guard-closure captures before rendering, as described above.
-[Collection and iterator semantics](collection-semantics.md#borrowed-traversal-versus-terminal-streams) owns stopping
-conditions, preview limits, and the distinction between borrowed traversal and terminal consumption.
+Reading and decoding count as one `get_json` assertion. A partially consumed response cannot be recovered.
+Header extraction checks presence and continues on a clone of the first value. Header diagnostics follow the
+[sensitivity policy](diagnostic-rendering.md#sensitive-http-header-evidence).
+Regression: [`panics_synchronously_when_the_response_is_only_borrowed`](../assertr/src/assertions/reqwest/response.rs).

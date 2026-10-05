@@ -13,7 +13,7 @@ pub(crate) mod sealed {
 ///
 /// Implementations are sealed. Use `matchers!`, tuples of up to twelve matchers, arrays, slices, or
 /// vectors. Lists store expectations without boxes or renderer type parameters.
-pub trait MatcherList<A: ?Sized, R>: sealed::Sealed {
+pub trait MatcherList<A: ?Sized, R = crate::DebugRenderer>: sealed::Sealed {
     /// Number of constraints.
     fn len(&self) -> usize;
 

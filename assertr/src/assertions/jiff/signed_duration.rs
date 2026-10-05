@@ -2,7 +2,7 @@ use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
 use crate::{
-    AssertThat, ValueRenderer,
+    AssertThat, DebugRenderer, ValueRenderer,
     renderer::{IntoRendered, Rendered},
 };
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
@@ -15,139 +15,8 @@ fn compact(value: impl IntoRendered) -> Rendered {
     rendered
 }
 
-/// Checks whether a `SignedDuration` is zero.
-pub struct IsZero;
-impl<R> Expectation<SignedDuration, R> for IsZero {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        SignedDuration: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        SignedDuration: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a SignedDuration,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.is_zero() { Ok(()) } else { Err(()) }
-    }
-}
-impl<R> ExpectationDiagnostics<SignedDuration, R> for IsZero
-where
-    R: ValueRenderer<SignedDuration>,
-{
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a SignedDuration, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure
-                .relation("is zero")
-                .expected(compact(render.value(&SignedDuration::ZERO))),
-            Some((actual, ())) => failure
-                .actual(compact(render.value(actual)))
-                .expected(compact(render.value(&SignedDuration::ZERO))),
-        }
-    }
-}
-/// Checks whether a `SignedDuration` is negative.
-pub struct IsNegative;
-impl<R> Expectation<SignedDuration, R> for IsNegative {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        SignedDuration: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        SignedDuration: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a SignedDuration,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.is_negative() {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-}
-impl<R> ExpectationDiagnostics<SignedDuration, R> for IsNegative
-where
-    R: ValueRenderer<SignedDuration>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a SignedDuration, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is negative"),
-            Some((actual, ())) => failure
-                .actual(compact(render.value(actual)))
-                .relation("is not negative"),
-        }
-    }
-}
-/// Checks whether a `SignedDuration` is positive.
-pub struct IsPositive;
-impl<R> Expectation<SignedDuration, R> for IsPositive {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        SignedDuration: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        SignedDuration: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a SignedDuration,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.is_positive() {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-}
-impl<R> ExpectationDiagnostics<SignedDuration, R> for IsPositive
-where
-    R: ValueRenderer<SignedDuration>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a SignedDuration, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is positive"),
-            Some((actual, ())) => failure
-                .actual(compact(render.value(actual)))
-                .relation("is not positive"),
-        }
-    }
-}
+sign_expectations!(subject: SignedDuration, zero: SignedDuration::ZERO, present: compact);
+
 /// Compares exact nanosecond distance within a non-negative inclusive deviation.
 ///
 /// Expected value and deviation independently select `SignedDuration` views through [`BorrowFor`].
@@ -268,7 +137,7 @@ impl<E, D> IsCloseTo<E, D> {
 /// Assertions for [`SignedDuration`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait SignedDurationAssertions<R = crate::DebugRenderer> {
+pub trait SignedDurationAssertions<R = DebugRenderer> {
     /// Asserts that the duration is zero.
     fn is_zero(self) -> Self
     where
@@ -293,9 +162,9 @@ pub trait SignedDurationAssertions<R = crate::DebugRenderer> {
     /// Both operands can independently be owned, borrowed, or custom [`BorrowFor`] wrappers with
     /// `View = SignedDuration`. The renderer only needs to support that selected duration view.
     ///
-    /// Explicitly typed calls remain valid. Unlike the former concrete parameters, these generic
-    /// parameters cannot determine the target of some `.into()` or `Default::default()` calls.
-    /// Use `SignedDuration::default()` or otherwise state the intended type.
+    /// Because both parameters are generic, they cannot determine the target type of an untyped
+    /// `.into()` or `Default::default()` call. Write `SignedDuration::default()` or otherwise state
+    /// the intended type.
     ///
     /// ```
     /// use assertr::prelude::*;

@@ -4,30 +4,41 @@ use std::collections::BTreeSet;
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{ToTokens, quote};
-use syn::{FnArg, GenericParam, Pat, TraitItemFn};
+use syn::{FnArg, GenericParam, Meta, Pat, TraitItemFn, ext::IdentExt};
 
-/// Clones a trait method and turns it into a feature-gated delegating alias.
+/// Returns `name` as a method identifier, using a raw identifier for keywords.
 ///
-/// The original method's attributes are copied. The alias receives `track_caller` when the original
-/// did not already have it and a `Self: Sized` bound, then forwards every original generic and
-/// value argument and awaits async methods.
-pub(super) fn generate_alias(original: &TraitItemFn, alias_name: &str) -> TraitItemFn {
-    let mut alias = original.clone();
-    alias.sig.ident = if alias_name == "match" {
-        Ident::new_raw(alias_name, Span::call_site())
-    } else {
-        Ident::new(alias_name, Span::call_site())
-    };
+/// Returns `None` when `name` is not a single valid identifier.
+pub(super) fn alias_ident(name: &str, span: Span) -> Option<Ident> {
+    let mut ident = syn::parse_str::<Ident>(name)
+        .or_else(|_| syn::parse_str::<Ident>(&format!("r#{name}")))
+        .ok()?;
+    if ident.unraw() != name.trim_start_matches("r#") {
+        return None;
+    }
+    ident.set_span(span);
+    Some(ident)
+}
 
-    alias
-        .attrs
-        .insert(0, syn::parse_quote! { #[cfg(feature = "fluent")] });
+/// Clones a trait method and turns it into a delegating alias.
+///
+/// The alias is documented as an alias of the original method instead of repeating its
+/// documentation. Other attributes of the original method are copied. The alias receives
+/// `track_caller` when the original did not already have it and a `Self: Sized` bound, then
+/// forwards every original generic and value argument and awaits async methods.
+pub(super) fn generate_alias(original: &TraitItemFn, alias_name: Ident) -> TraitItemFn {
+    let mut alias = original.clone();
+    alias.sig.ident = alias_name;
+
+    // Keep `#[doc(hidden)]` and similar list forms, but replace the documentation text.
+    alias.attrs.retain(|attribute| {
+        !(attribute.path().is_ident("doc") && matches!(attribute.meta, Meta::NameValue(_)))
+    });
     let original_name = &original.sig.ident;
     let documentation = format!("Fluent alias for [`{original_name}`](Self::{original_name}).");
     alias
         .attrs
-        .insert(1, syn::parse_quote! { #[doc = #documentation] });
-    alias.attrs.insert(2, syn::parse_quote! { #[doc = ""] });
+        .insert(0, syn::parse_quote! { #[doc = #documentation] });
     if !alias
         .attrs
         .iter()
@@ -148,7 +159,11 @@ mod tests {
     use std::fmt::Debug;
     use syn::{Attribute, TraitItemFn, parse_quote};
 
-    use super::generate_alias;
+    use super::{alias_ident, generate_alias};
+
+    fn ident(name: &str) -> proc_macro2::Ident {
+        alias_ident(name, proc_macro2::Span::call_site()).expect("valid alias")
+    }
 
     fn attributes_tokens(attributes: &[Attribute]) -> String {
         quote! { #(#attributes)* }.to_string()
@@ -166,7 +181,7 @@ mod tests {
         let original: TraitItemFn = parse_quote! {
             fn is_ready(self) -> Self;
         };
-        let alias = generate_alias(&original, "be_ready");
+        let alias = generate_alias(&original, ident("be_ready"));
         assert_that!(
             alias
                 .attrs
@@ -178,9 +193,14 @@ mod tests {
     }
 
     #[test]
-    fn prepends_alias_documentation_and_preserves_original_method_attributes() {
+    fn replaces_documentation_and_preserves_other_original_method_attributes() {
         let original: TraitItemFn = parse_quote! {
             /// Returns whether the subject is ready.
+            ///
+            /// ```
+            /// assert!(true);
+            /// ```
+            #[doc(hidden)]
             #[must_use = "the assertion result must be used"]
             #[deprecated(since = "1.2.3", note = "use `is_prepared` instead")]
             #[cfg(any(unix, windows))]
@@ -190,21 +210,16 @@ mod tests {
             fn is_ready(self, expected: bool) -> Self;
         };
 
-        let alias = generate_alias(&original, "be_ready");
+        let alias = generate_alias(&original, ident("be_ready"));
 
         assert_equal(
             &alias.attrs[0],
-            &parse_quote! { #[cfg(feature = "fluent")] },
-        );
-        assert_equal(
-            &alias.attrs[1],
             &parse_quote! {
                 #[doc = "Fluent alias for [`is_ready`](Self::is_ready)."]
             },
         );
-        assert_equal(&alias.attrs[2], &parse_quote! { #[doc = ""] });
-        assert_that!(attributes_tokens(&alias.attrs[3..]))
-            .is_equal_to(attributes_tokens(&original.attrs));
+        assert_that!(attributes_tokens(&alias.attrs[1..]))
+            .is_equal_to(attributes_tokens(&original.attrs[5..]));
         assert_that!(
             alias
                 .attrs
@@ -229,7 +244,7 @@ mod tests {
             }
         };
 
-        let alias = generate_alias(&original, "be_expected");
+        let alias = generate_alias(&original, ident("be_expected"));
 
         assert_equal(
             &alias.sig.inputs,
@@ -265,7 +280,7 @@ mod tests {
             }
         };
 
-        let alias = generate_alias(&original, "borrow_as");
+        let alias = generate_alias(&original, ident("borrow_as"));
 
         assert_equal(
             &alias.default,
@@ -281,20 +296,33 @@ mod tests {
             fn is_ready(self) -> Self;
         };
 
-        let alias = generate_alias(&original, "be_ready");
+        let alias = generate_alias(&original, ident("be_ready"));
 
         assert_equal(
-            &alias.attrs[1],
+            &alias.attrs[0],
             &parse_quote! {
                 #[doc = "Fluent alias for [`is_ready`](Self::is_ready)."]
             },
         );
     }
-    #[test]
-    fn generates_a_raw_match_alias() {
-        let original: TraitItemFn = parse_quote! {fn matches<E>(self,expected:E)->Self;};
-        let alias = generate_alias(&original, "match");
-        assert_that!(alias.sig.ident.to_string()).is_equal_to("r#match");
-        let _: TraitItemFn = syn::parse2(quote!(#alias)).expect("raw alias is valid Rust");
+
+    mod alias_identifiers {
+        use super::*;
+
+        #[test]
+        fn uses_raw_identifiers_for_keywords() {
+            let original: TraitItemFn = parse_quote! { fn matches<E>(self, expected: E) -> Self; };
+            let alias = generate_alias(&original, ident("match"));
+            assert_that!(alias.sig.ident.to_string()).is_equal_to("r#match");
+            let _: TraitItemFn = syn::parse2(quote!(#alias)).expect("raw alias is valid Rust");
+            assert_that!(ident("r#type").to_string()).is_equal_to("r#type");
+        }
+
+        #[test]
+        fn rejects_names_that_are_not_one_identifier() {
+            for name in ["", "be ready", " be_ready", "be-ready", "1st", "r#"] {
+                assert_that!(alias_ident(name, proc_macro2::Span::call_site())).is_none();
+            }
+        }
     }
 }

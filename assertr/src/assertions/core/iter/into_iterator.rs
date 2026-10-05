@@ -1,6 +1,6 @@
 use crate::borrow_for::BorrowFor;
 use crate::{
-    AssertThat, ExpectationDiagnostics, Mode, ValueRenderer, assertions::iterator,
+    AssertThat, DebugRenderer, ExpectationDiagnostics, Mode, ValueRenderer, assertions::iterator,
     expectation::MatcherList, mode::Capture,
 };
 
@@ -17,7 +17,7 @@ use crate::{
 /// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait IntoIteratorAssertions<T, R> {
+pub trait IntoIteratorAssertions<T, R = DebugRenderer> {
     /// Asserts that a borrowed traversal contains an element equal to `expected`.
     fn into_iter_contains<E>(self, expected: E) -> Self
     where
@@ -249,11 +249,7 @@ where
         R: ValueRenderer<T> + ValueRenderer<usize>,
     {
         self.track_assertion();
-        iterator::assert_is_empty::<_, T, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            iterator::PositionReporting::Unavailable,
-        );
+        iterator::assert_is_empty::<_, T, _, _, _>(&self, self.actual().into_iter());
         self
     }
     #[track_caller]
@@ -476,7 +472,7 @@ mod tests {
                 does not contain a matching element
 
                 Details:
-                  - Consumed: 3
+                  - Consumed elements: 3
                 Nested failures:
                   - does not satisfy the constraint
 
@@ -642,7 +638,7 @@ mod tests {
                 contains an unexpected matching element
 
                 Details:
-                  - Consumed: 2
+                  - Consumed elements: 2
                 Nested failures:
                   - Actual: 2
 
@@ -689,18 +685,6 @@ mod tests {
 
         use indoc::formatdoc;
 
-        #[derive(Debug)]
-        struct Actual(u8);
-
-        #[derive(Debug)]
-        struct Expected(u8);
-
-        impl PartialEq<Expected> for Actual {
-            fn eq(&self, other: &Expected) -> bool {
-                self.0 == other.0
-            }
-        }
-
         #[test]
         #[cfg(feature = "fluent")]
         fn fluent_alias_is_as_expected() {
@@ -720,17 +704,6 @@ mod tests {
         #[test]
         fn succeeds_when_elements_match_in_another_order() {
             assert_that!(vec![2, 1, 1]).into_iter_contains_exactly_in_any_order([1, 2, 1]);
-        }
-
-        #[test]
-        fn custom_heterogeneous_comparisons_use_predicates() {
-            assert_that!(vec![Actual(1), Actual(2)])
-                .into_iter_contains_exactly_in_any_order_matching(
-                    crate::expectation::predicate_list([
-                        |it: &Actual| it.eq(&Expected(2)),
-                        |it: &Actual| it.eq(&Expected(1)),
-                    ]),
-                );
         }
 
         #[test]
@@ -760,7 +733,12 @@ mod tests {
                     ]
 
                     Details:
-                      - Consumed elements: 3
+                      - Elements not found: [
+                            9,
+                        ]
+                      - Elements not expected: [
+                            3,
+                        ]
                     -------- assertr --------
                 "});
         }
@@ -769,6 +747,21 @@ mod tests {
     mod into_iter_contains_exactly_in_any_order_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        fn matches_items_without_equality_through_predicates() {
+            /// An item without `PartialEq`, matched by predicates over its field.
+            #[derive(Debug)]
+            struct Opaque(u8);
+
+            assert_that!(vec![Opaque(1), Opaque(2)])
+                .into_iter_contains_exactly_in_any_order_matching(
+                    crate::expectation::predicate_list([
+                        |it: &Opaque| it.0 == 2,
+                        |it: &Opaque| it.0 == 1,
+                    ]),
+                );
+        }
 
         #[test]
         #[cfg(feature = "fluent")]
@@ -839,7 +832,7 @@ mod tests {
                 does not match exactly in any order
 
                 Details:
-                  - Consumed: 3
+                  - Consumed elements: 3
                 Nested failures:
                   - is missing an element matching this expectation
 
@@ -1025,15 +1018,12 @@ mod tests {
                     -------- assertr --------
                     Expression: `vec![1, 2, 3]`
 
-                    Actual: []
-
                     does not have the expected length
 
                     Expected: 2
 
                     Details:
-                      - Consumed elements: 0
-                      - Actual length: 3
+                      - Reported length: 3
                     -------- assertr --------
                 "});
         }

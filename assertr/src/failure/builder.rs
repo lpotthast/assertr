@@ -8,63 +8,50 @@
 use alloc::{borrow::Cow, boxed::Box, string::String, vec::Vec};
 use core::panic::Location;
 
-use super::{AssertionFailure, Fact, FailureKind, Fallible, PathSegment};
+use super::{
+    AssertionFailure, Fact, FailureKind, PathSegment, panic_presentation::PanicPresentation,
+};
 use crate::{
-    AssertThat,
-    details::WithDetail,
+    AssertThat, ChainRecords, Expression,
     mode::Mode,
     renderer::{IntoRendered, Rendered},
 };
 
-/// The chain a failure is raised on, seen through the pieces the builder needs from it.
-pub(crate) trait FailureSink: Fallible + WithDetail {
-    /// Whether failures are collected for later inspection (`true`) or raise an immediate panic
-    /// (`false`).
-    fn captures(&self) -> bool;
-
-    /// Whether the source location of the assertion should be included in assertion failures. This
-    /// pinpoints the location in user's code that failed. Typically turned off for internal assertr
-    /// unit tests, to avoid frequent failure message churn.
-    fn include_location(&self) -> bool;
-
-    /// User provided descriptive name of the thing assertions are made on.
-    fn subject_name(&self) -> Option<String>;
-
-    /// Rust expression written inside an `assert_that!(...)` or fluent `.must(...)` call.
-    /// Typically, captured automatically by macro code.
-    fn expression(&self) -> Option<&'static str>;
-
-    /// A context-specific adapter that produces panic text.
-    fn panic_presentation(&self) -> Option<&super::panic_presentation::PanicPresentation>;
-}
-
-impl<T, M: Mode, R> FailureSink for AssertThat<'_, T, M, R> {
-    fn captures(&self) -> bool {
-        M::CAPTURES
-    }
-
-    fn include_location(&self) -> bool {
-        self.state.include_location
-    }
-
-    fn subject_name(&self) -> Option<String> {
-        self.state.subject_name.clone()
-    }
-
-    fn expression(&self) -> Option<&'static str> {
-        self.state.expression.get()
-    }
-
-    fn panic_presentation(&self) -> Option<&super::panic_presentation::PanicPresentation> {
-        self.state.panic_presentation.as_deref()
-    }
-}
-
 /// The target of a builder started by [`AssertThat::failure`]: the failure is raised on that chain
 /// by [`FailureBuilder::raise`].
 pub struct Attached<'c> {
-    sink: &'c dyn FailureSink,
+    /// The records of the chain the failure is raised on. Failures are stored on their root.
+    records: &'c ChainRecords<'c>,
+    /// Whether failures are collected for later inspection (`true`) or raise an immediate panic.
+    captures: bool,
+    /// Whether the failure records the caller location.
+    include_location: bool,
+    /// The user-provided name of the subject.
+    subject_name: Option<&'c str>,
+    /// The source expression of the subject, possibly still pending fluent attachment.
+    expression: Expression,
+    /// A context-specific adapter that produces panic text.
+    panic_presentation: Option<&'c PanicPresentation>,
+    /// Where the failing assertion was invoked.
     location: &'static Location<'static>,
+}
+
+impl<'c> Attached<'c> {
+    fn new<T, M: Mode, R>(
+        assertion: &'c AssertThat<'_, T, M, R>,
+        location: &'static Location<'static>,
+    ) -> Self {
+        let state = &assertion.state;
+        Self {
+            records: &state.records,
+            captures: M::CAPTURES,
+            include_location: state.include_location,
+            subject_name: state.subject_name.as_deref(),
+            expression: state.expression,
+            panic_presentation: state.panic_presentation.as_deref(),
+            location,
+        }
+    }
 }
 
 /// The target of a builder started by [`FailureBuilder::detached`]: the failure is returned by
@@ -73,11 +60,16 @@ pub struct Detached;
 
 /// Builds one [`AssertionFailure`].
 ///
-/// Obtain a builder through [`AssertThat::failure`] inside a leaf assertion, fill in the rendered
-/// values, the relation, facts, and children, and finish with [`raise`](Self::raise). Every value
-/// shown by a failure is passed as an adapter obtained from [`AssertThat::render`], so the chain's
-/// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`](crate::RenderingBudget) apply.
-/// See [custom assertions](crate#custom-assertions) for a complete example.
+/// Leaf assertions receive a builder in
+/// [`ExpectationDiagnostics::explain`](crate::ExpectationDiagnostics::explain), fill in the
+/// rendered values, the relation, facts, and children, and return it. The chain executor raises
+/// it. Execution adapters, which own an operation the expectation protocol cannot express, obtain
+/// a builder through [`AssertThat::failure`] instead and finish with [`raise`](Self::raise).
+///
+/// Every value shown by a failure is passed as an adapter obtained from
+/// [`AssertionContext::render`](crate::AssertionContext::render) or [`AssertThat::render`], so the
+/// chain's [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`](crate::RenderingBudget)
+/// apply. See [custom assertions](crate#custom-assertions) for a complete example.
 ///
 /// [`FailureBuilder::detached`] starts a failure that is not raised but returned by
 /// [`build`](Self::build), for the nested failures a parent attaches through [`child`](Self::child)
@@ -89,13 +81,16 @@ pub struct FailureBuilder<T> {
 }
 
 impl<'c> FailureBuilder<Attached<'c>> {
-    pub(crate) fn attached(
-        sink: &'c dyn FailureSink,
-        subject_type_name: &'static str,
+    pub(crate) fn attached<T, M: Mode, R>(
+        assertion: &'c AssertThat<'_, T, M, R>,
         location: &'static Location<'static>,
         kind: FailureKind,
     ) -> Self {
-        Self::new(Attached { sink, location }, subject_type_name, kind)
+        Self::new(
+            Attached::new(assertion, location),
+            core::any::type_name::<T>(),
+            kind,
+        )
     }
 
     /// Records the failure in capture mode and panics with its rendered form otherwise.
@@ -105,21 +100,34 @@ impl<'c> FailureBuilder<Attached<'c>> {
     /// Panics with the formatted failure message when not in capture mode.
     #[track_caller]
     pub fn raise(self) {
-        let Attached { sink, location } = self.target;
-        let location = if sink.include_location() {
-            Some(location)
-        } else {
-            None
-        };
+        let Attached {
+            records,
+            captures,
+            include_location,
+            subject_name,
+            expression,
+            panic_presentation,
+            location,
+        } = self.target;
+        let location = include_location.then_some(location);
         let mut messages = Vec::new();
-        sink.collect_messages(&mut messages);
+        records.collect_messages(&mut messages);
 
-        let failure = self.into_failure(location, sink.subject_name(), sink.expression(), messages);
+        let failure = self.into_failure(
+            location,
+            subject_name.map(String::from),
+            expression.get(),
+            messages,
+        );
 
-        if sink.captures() {
-            sink.store_failure(failure);
+        if captures {
+            records.store_failure(
+                failure,
+                #[cfg(feature = "fluent")]
+                expression.pending_fluent(),
+            );
         } else {
-            let text = super::panic_presentation::render(&failure, sink.panic_presentation());
+            let text = super::panic_presentation::render(&failure, panic_presentation);
             panic!("{text}");
         }
     }
@@ -177,9 +185,12 @@ impl<T> FailureBuilder<T> {
         self
     }
 
-    /// Records the number of omitted children without losing the truth result.
+    /// Adds `count` to the number of diagnostic children omitted by the rendering budget.
+    ///
+    /// Like [`children`](Self::children), this accumulates: each call adds to the count recorded
+    /// so far, so several evidence sources can each report the children they left out.
     pub fn omitted_children(mut self, count: usize) -> Self {
-        self.failure.omitted_children = count;
+        self.failure.omitted_children += count;
         self
     }
 
@@ -376,6 +387,21 @@ mod tests {
                 omitted_characters: 5,
             });
             assert_that!(renders.get()).is_equal_to(1);
+        }
+    }
+
+    mod omitted_children {
+        use super::*;
+
+        #[test]
+        fn accumulates_across_calls() {
+            let failure = FailureBuilder::detached::<()>(FailureKind::Other)
+                .omitted_children(2)
+                .omitted_children(0)
+                .omitted_children(3)
+                .build();
+
+            assert_that!(failure.omitted_children).is_equal_to(5);
         }
     }
 

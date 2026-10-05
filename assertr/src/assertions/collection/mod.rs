@@ -18,6 +18,7 @@ mod each;
 mod elements_are;
 mod elements_are_in_any_order;
 mod identity;
+pub(crate) mod matching;
 mod random_access;
 mod stable_order;
 mod value;
@@ -37,9 +38,9 @@ pub use elements_are::{
 };
 pub use elements_are_in_any_order::{ElementsAreInAnyOrder, elements_are_in_any_order};
 
-pub use assertions::{
-    CollectionAssertions, ContainsMatching, ContainsNoMatching, contains_matching,
-    contains_no_matching,
+pub use assertions::CollectionAssertions;
+pub use matching::{
+    ContainsMatching, DoesNotContainMatching, contains_matching, does_not_contain_matching,
 };
 pub use value::{
     Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
@@ -61,8 +62,8 @@ pub use stable_order::{
 /// A collection whose elements can be inspected repeatedly by reference.
 ///
 /// Implementing this trait makes [`CollectionAssertions`] available. Its [`HasLength`] supertrait
-/// also provides `is_empty` and `has_length`. This implementor-facing trait is not re-exported from
-/// the prelude.
+/// also provides `is_empty`, `is_not_empty`, and `has_length`. This implementor-facing trait is not
+/// re-exported from the prelude.
 ///
 /// Indexed assertions and indexed diagnostics require [`StableOrder`]. Bags and sets have no
 /// indexes in assertr's model; their iteration offsets are never exposed as element positions. A
@@ -77,8 +78,10 @@ pub use stable_order::{
 ///
 /// Use an order-free assertion such as `contains_exactly_in_any_order` instead.
 ///
-/// Assertr renders the collection structure. A custom [`ValueRenderer`](crate::ValueRenderer) needs
-/// to render only [`Item`](Collection::Item).
+/// Assertr renders the collection structure, so a custom [`ValueRenderer`](crate::ValueRenderer)
+/// needs to render only [`Item`](Collection::Item) for element assertions. The length assertions
+/// provided through [`HasLength`] render the whole subject and therefore require a renderer for the
+/// collection type itself.
 pub trait Collection: HasLength {
     /// The collection's element type.
     type Item;
@@ -147,6 +150,11 @@ pub trait StableOrder: Collection {}
 /// fn requires_random_access<C: RandomAccess>() {}
 /// requires_random_access::<LinkedList<i32>>();
 /// ```
+#[diagnostic::on_unimplemented(
+    message = "the collection does not support constant-time access by position",
+    label = "no random-access capability",
+    note = "indexed extraction such as `get_at` requires `RandomAccess`; traversal-based sequence assertions need only `StableOrder`"
+)]
 pub trait RandomAccess: StableOrder {
     /// Returns the element at `index`, or `None` when `index` is out of bounds.
     fn element_at(&self, index: usize) -> Option<&Self::Item>;
@@ -236,7 +244,7 @@ impl<T> StableOrder for LinkedList<T> {}
 impl<T> Collection for BinaryHeap<T> {
     type Item = T;
     const PRESENTATION: CollectionPresentation = CollectionPresentation::list()
-        .with_type_hint()
+        .show_type_hint(true)
         .with_order(RenderingOrder::SortByRenderedText);
 
     fn elements(&self) -> impl Iterator<Item = &T> {
@@ -261,6 +269,31 @@ where
 impl<C> StableOrder for &C where C: StableOrder + ?Sized {}
 
 impl<C> RandomAccess for &C
+where
+    C: RandomAccess + ?Sized,
+{
+    fn element_at(&self, index: usize) -> Option<&Self::Item> {
+        C::element_at(self, index)
+    }
+}
+
+/// Makes mutable-reference subjects such as `AssertThat<&mut Vec<T>>` collections, mirroring the
+/// shared-reference implementation.
+impl<C> Collection for &mut C
+where
+    C: Collection + ?Sized,
+{
+    type Item = C::Item;
+    const PRESENTATION: CollectionPresentation = C::PRESENTATION;
+
+    fn elements(&self) -> impl Iterator<Item = &C::Item> {
+        C::elements(self)
+    }
+}
+
+impl<C> StableOrder for &mut C where C: StableOrder + ?Sized {}
+
+impl<C> RandomAccess for &mut C
 where
     C: RandomAccess + ?Sized,
 {
@@ -386,6 +419,52 @@ mod tests {
             |deque| {
                 deque.contains(2).contains_exactly([1, 2, 3]);
             },
+        );
+    }
+
+    #[test]
+    fn mutable_reference_adapters_forward_collection_and_sequence_contracts() {
+        let mut vec = vec![1, 2, 3];
+        let mut deque = split_deque([1, 2, 3]);
+        let mut list = [1, 2, 3].into_iter().collect::<LinkedList<_>>();
+
+        assert_collection_contract(&&mut vec, &[1, 2, 3]);
+        assert_random_access_contract(&&mut vec, &[1, 2, 3]);
+        assert_random_access_contract(&&mut deque, &[1, 2, 3]);
+        assert_collection_contract(&&mut list, &[1, 2, 3]);
+
+        assert_that_owned!(&mut vec)
+            .contains(1)
+            .starts_with([1, 2])
+            .contains_exactly_in_any_order([3, 2, 1])
+            .has_length(3);
+        assert_that_owned!(&mut list).ends_with([2, 3]);
+        assert_that_owned!(&mut vec).get_at(2).is_equal_to(3);
+    }
+
+    #[test]
+    fn mutable_reference_subjects_implement_every_family_without_renderer_support() {
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        assert_trait_impl!(
+            AssertThat<'static, &'static mut Vec<i32>, Panic, NoRenderer>
+                => CollectionAssertions<i32, NoRenderer>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, &'static mut Vec<i32>, Panic, NoRenderer>
+                => StableOrderAssertions<i32, NoRenderer>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, &'static mut Vec<i32>, Panic, NoRenderer>
+                => RandomAccessExtractAssertions<'static, i32, NoRenderer>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, &'static mut alloc::collections::BTreeSet<i32>, Panic, NoRenderer>
+                => SetAssertions<i32, NoRenderer>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, &'static mut alloc::collections::BTreeMap<i32, i32>, Panic, NoRenderer>
+                => MapAssertions<i32, i32, NoRenderer>
         );
     }
 

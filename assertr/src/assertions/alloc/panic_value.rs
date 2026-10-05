@@ -1,13 +1,12 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, PanicValue,
-    actual::Actual,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, PanicValue,
+    assertions::support::project_checked,
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
 };
-use alloc::boxed::Box;
 use core::any::Any;
 
-use super::boxed::{IsOfType, downcast, explain_type_mismatch};
+use super::boxed::{IsOfType, explain_type};
 
 impl<E: 'static, R> Expectation<PanicValue, R> for IsOfType<E> {
     type Success<'a> = &'a E;
@@ -22,36 +21,31 @@ impl<E: 'static, R> Expectation<PanicValue, R> for IsOfType<E> {
 }
 
 impl<E: 'static, R> ExpectationDiagnostics<PanicValue, R> for IsOfType<E> {
-    const KIND: FailureKind = FailureKind::Panic;
+    const KIND: FailureKind = FailureKind::Variant;
     fn explain<'a, Target>(
         &'a self,
         rejected: Option<(&'a PanicValue, &'a dyn Any)>,
         failure: FailureBuilder<Target>,
         _context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure
-                .relation("is of the expected type")
-                .expected(core::any::type_name::<E>()),
-            Some((_, any)) => explain_type_mismatch::<E, _>(any, failure, ERASED_TYPE_NOTE),
-        }
+        explain_type::<E, _>(rejected.map(|(_, any)| any), failure, ERASED_TYPE_NOTE)
     }
 }
 
 /// Explains the erased type name reported for a panic payload that is neither a `&str` nor a
 /// `String`.
-const ERASED_TYPE_NOTE: &str = "The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.";
+const ERASED_TYPE_NOTE: &str = "The panic value can only be captured as Box<dyn Any + Send>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.";
 
 /// Type checks for `PanicValue` subjects in panic and capture mode.
 /// Use [`PanicValueExtractAssertions::has_type`] to continue with the downcast payload.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PanicValueAssertions<'t, R = crate::DebugRenderer> {
+pub trait PanicValueAssertions<R = DebugRenderer> {
     /// Asserts that the payload has type `E`, preserving the original subject.
     fn is_of_type<E: 'static>(self) -> Self;
 }
 
-impl<'t, M: Mode, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, M, R> {
+impl<M: Mode, R> PanicValueAssertions<R> for AssertThat<'_, PanicValue, M, R> {
     #[track_caller]
     fn is_of_type<E: 'static>(self) -> Self {
         self.apply_assertion(IsOfType::<E>::new())
@@ -63,7 +57,7 @@ impl<'t, M: Mode, R> PanicValueAssertions<'t, R> for AssertThat<'t, PanicValue, 
 /// These methods are available only in panic mode because a failed downcast cannot produce the
 /// requested subject type.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PanicValueExtractAssertions<'t, R = crate::DebugRenderer> {
+pub trait PanicValueExtractAssertions<'t, R = DebugRenderer> {
     /// Asserts that the panic payload has type `E` and returns an assertion over that value.
     ///
     /// An owned subject produces an `AssertThat<E>` owning `E`. A borrowed subject produces an
@@ -79,16 +73,13 @@ pub trait PanicValueExtractAssertions<'t, R = crate::DebugRenderer> {
 impl<'t, R> PanicValueExtractAssertions<'t, R> for AssertThat<'t, PanicValue, Panic, R> {
     #[track_caller]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
-        let boxed = self
-            .apply_assertion_with_failure(IsOfType::<E>::new(), |_, failure| {
-                // Extraction has historically reported the boxed payload as its subject type.
-                failure.subject_type::<Box<dyn Any>>()
-            })
-            .map::<Box<dyn Any>>(|actual| match actual {
-                Actual::Borrowed(value) => Actual::Borrowed(&value.0),
-                Actual::Owned(value) => Actual::Owned(value.0),
-            });
-        downcast(boxed)
+        self.apply_assertion(IsOfType::<E>::new()).map(|actual| {
+            project_checked(
+                actual,
+                |value| value.0.downcast::<E>().ok().map(|value| *value),
+                |value| value.0.downcast_ref::<E>(),
+            )
+        })
     }
 
     #[track_caller]
@@ -134,7 +125,7 @@ mod tests {
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
                         .derive(|value| &value.kind)
-                        .is_equal_to(crate::FailureKind::Panic);
+                        .is_equal_to(crate::FailureKind::Variant);
                 },
             ]);
         }
@@ -165,8 +156,8 @@ mod tests {
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
-            assert_trait_impl!(AssertThat<'static, crate::PanicValue, Capture, NoRenderer> => PanicValueAssertions<'static, NoRenderer>);
-            assert_trait_impl!(AssertThat<'static, crate::PanicValue, Panic, NoRenderer> => PanicValueAssertions<'static, NoRenderer>);
+            assert_trait_impl!(AssertThat<'static, crate::PanicValue, Capture, NoRenderer> => PanicValueAssertions<NoRenderer>);
+            assert_trait_impl!(AssertThat<'static, crate::PanicValue, Panic, NoRenderer> => PanicValueAssertions<NoRenderer>);
 
             assert_trait_impl!(
                 AssertThat<'static, crate::PanicValue, Panic, NoRenderer>
@@ -196,12 +187,9 @@ mod tests {
         }
 
         #[test]
-        fn preserves_the_boxed_subject_metadata_for_panic_presentation() {
+        fn reports_the_panic_value_subject_like_is_of_type() {
             use crate::failure::adapter::{Adapter, HumanReadableText};
-            use core::{
-                any::{Any, type_name},
-                convert::Infallible,
-            };
+            use core::{any::type_name, convert::Infallible};
 
             struct SubjectType;
             impl Adapter<AssertionFailure> for SubjectType {
@@ -211,18 +199,23 @@ mod tests {
                     &self,
                     failure: &AssertionFailure,
                 ) -> Result<HumanReadableText, Infallible> {
-                    assert_that!(failure.kind).is_equal_to(crate::FailureKind::Panic);
+                    assert_that!(failure.kind).is_equal_to(crate::FailureKind::Variant);
                     Ok(HumanReadableText::new(failure.subject_type_name))
                 }
             }
-            let actual = PanicValue(Box::new("text"));
-            assert_that_panic_by(|| {
-                assert_that!(actual)
-                    .with_panic_presentation(SubjectType)
-                    .has_type::<u32>();
-            })
-            .has_type::<String>()
-            .is_equal_to(type_name::<Box<dyn Any>>());
+            for extract in [true, false] {
+                let actual = PanicValue(Box::new("text"));
+                assert_that_panic_by(|| {
+                    let assertion = assert_that!(actual).with_panic_presentation(SubjectType);
+                    if extract {
+                        let _ = assertion.has_type::<u32>();
+                    } else {
+                        assertion.is_of_type::<u32>();
+                    }
+                })
+                .has_type::<String>()
+                .is_equal_to(type_name::<PanicValue>());
+            }
         }
 
         #[test]
@@ -353,7 +346,7 @@ mod tests {
                 Expected: u32
 
                 Details:
-                  - The panic value can only be captured as Box<dyn Any>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
+                  - The panic value can only be captured as Box<dyn Any + Send>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
                 -------- assertr --------
             "});
         }

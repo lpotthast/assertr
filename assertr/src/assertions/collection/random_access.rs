@@ -2,7 +2,8 @@
 
 use super::RandomAccess;
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Fact,
+    ValueRenderer,
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
 };
@@ -75,7 +76,7 @@ where
 /// assert_that!(LinkedList::from([1, 2, 3])).get_at(1);
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait RandomAccessExtractAssertions<'t, T, R> {
+pub trait RandomAccessExtractAssertions<'t, T, R = DebugRenderer> {
     /// Asserts that `index` is in bounds, then returns an assertion over that element.
     fn get_at(&'t self, index: usize) -> AssertThat<'t, T, Panic, R>
     where

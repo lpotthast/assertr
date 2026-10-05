@@ -9,42 +9,55 @@ use crate::{
 impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// Returns this chain's diagnostic rendering context.
     ///
-    /// Custom assertion implementations use [`RenderingContext::value`],
-    /// [`RenderingContext::collection`], [`RenderingContext::map`], and the context's other
-    /// structural adapters instead of formatting diagnostic values directly. This honors both the
-    /// active [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. A rendered value
-    /// always retains type metadata. Customize its hint through
+    /// Execution adapters use [`RenderingContext::value`], [`RenderingContext::collection`],
+    /// [`RenderingContext::map`], and the context's other structural adapters instead of
+    /// formatting diagnostic values directly. This honors both the active
+    /// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. A rendered value always
+    /// retains type metadata. Customize its hint through
     /// [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) and its text visibility
     /// through [`Typed::show_type_hint`](crate::renderer::Typed::show_type_hint).
     ///
+    /// Reusable leaf checks implement [`ExpectationDiagnostics`](crate::ExpectationDiagnostics)
+    /// and obtain the same context through
+    /// [`AssertionContext::render`](crate::AssertionContext::render) instead. See
+    /// [custom assertions](crate#custom-assertions).
+    ///
+    /// An execution adapter owns an operation the expectation protocol cannot express, such as
+    /// invoking the subject. It tracks before that operation and builds any failure itself:
+    ///
     /// ```
     /// use assertr::prelude::*;
-    /// use assertr::failure::FailureKind;
+    /// use assertr::{Fact, failure::FailureKind};
     ///
-    /// trait EvenAssertions<R = DebugRenderer> {
-    ///     fn is_even(self) -> Self
+    /// trait ProducerAssertions<R = DebugRenderer> {
+    ///     fn produces_an_even_number(self) -> Self
     ///     where
     ///         R: ValueRenderer<u32>;
     /// }
     ///
-    /// impl<M: Mode, R> EvenAssertions<R> for AssertThat<'_, u32, M, R> {
+    /// impl<F: Fn() -> u32, M: Mode, R> ProducerAssertions<R> for AssertThat<'_, F, M, R> {
     ///     #[track_caller]
-    ///     fn is_even(self) -> Self
+    ///     fn produces_an_even_number(self) -> Self
     ///     where
     ///         R: ValueRenderer<u32>,
     ///     {
+    ///         // Track before invoking user code, whether the assertion passes or fails.
     ///         self.track_assertion();
-    ///         if self.actual() % 2 != 0 {
+    ///         let produced = (self.actual())();
+    ///         if produced % 2 != 0 {
     ///             self.failure(FailureKind::Predicate)
-    ///                 .actual(self.render().value(self.actual()))
-    ///                 .relation("is not even")
+    ///                 .relation("does not produce an even number")
+    ///                 .fact(Fact::labelled("Produced", self.render().value(&produced)))
     ///                 .raise();
     ///         }
     ///         self
     ///     }
     /// }
     ///
-    /// assert_that!(4).is_even();
+    /// assert_that!(|| 4).produces_an_even_number();
+    ///
+    /// let failures = assert_that!(|| 3).capture(|it| it.produces_an_even_number());
+    /// assert_that!(ToHumanReadableText.render(&failures[0])).contains("Produced: 3");
     /// ```
     #[must_use]
     pub const fn render(&self) -> RenderingContext<'_, R> {

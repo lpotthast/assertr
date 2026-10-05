@@ -95,13 +95,24 @@ impl<'r, R> AssertionContext<'r, R> {
         matched: bool,
         fallback: impl FnOnce(&Self) -> AssertionFailure,
     ) -> Result<(), Evidence> {
-        if matched {
-            return Ok(());
+        if self.complete(matched, fallback) {
+            Ok(())
+        } else {
+            Err(self.into_evidence())
         }
-        if !self.has_evidence() {
+    }
+
+    /// Applies [`Self::finish`]'s fallback rule within a scope that stays open, returning
+    /// `matched`.
+    pub(crate) fn complete(
+        &mut self,
+        matched: bool,
+        fallback: impl FnOnce(&Self) -> AssertionFailure,
+    ) -> bool {
+        if !matched && !self.has_evidence() {
             self.outcome(false, fallback);
         }
-        Err(self.into_evidence())
+        matched
     }
 
     /// Whether this scope has retained or omitted failure evidence.
@@ -119,8 +130,8 @@ impl<'r, R> AssertionContext<'r, R> {
         let matched = result.is_ok();
         if let Err(rejection) = result {
             // Transparent groups have already applied their budgets and rendered their children.
-            // Even a zero-capacity group must transfer its omitted count.
-            if D::FLATTEN || self.is_diagnostic() {
+            // Even a zero-capacity group must transfer its omitted count. Probes never explain.
+            if self.diagnostic && (D::FLATTEN || self.is_diagnostic()) {
                 let failure = FailureBuilder::detached::<A>(D::KIND);
                 let failure = definition
                     .explain(Some((actual, rejection)), failure, self)
@@ -199,6 +210,11 @@ impl<'r, R> AssertionContext<'r, R> {
     }
 
     /// Records a leaf constraint when it rejects the subject.
+    ///
+    /// `description` must describe the unmet constraint as if no subject existed, for example
+    /// through [`ExpectationDiagnostics::explain`] with `None`. The recorded failure wraps it as
+    /// the constraint of a "does not satisfy the constraint" failure. The closure runs only when
+    /// this scope can retain the failure.
     pub fn outcome(
         &mut self,
         matched: bool,
@@ -621,6 +637,59 @@ mod tests {
 
     mod probe {
         use super::*;
+        use crate::{
+            expectation::{Evidence, all_of},
+            failure::{FailureBuilder, FailureKind},
+        };
+
+        struct Flat<'a>(&'a Cell<usize>);
+
+        impl Expectation<i32> for Flat<'_> {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a;
+            type Rejection<'a>
+                = Evidence
+            where
+                Self: 'a;
+
+            fn evaluate(&self, _: &i32, context: &AssertionContext<'_>) -> Result<(), Evidence> {
+                Err(context.isolated().into_evidence())
+            }
+        }
+
+        impl ExpectationDiagnostics<i32> for Flat<'_> {
+            const KIND: FailureKind = FailureKind::Matching;
+            const FLATTEN: bool = true;
+
+            fn explain<'a, Target>(
+                &'a self,
+                _: Option<(&'a i32, Evidence)>,
+                failure: FailureBuilder<Target>,
+                _: &AssertionContext<'_>,
+            ) -> FailureBuilder<Target> {
+                self.0.set(self.0.get() + 1);
+                failure
+            }
+        }
+
+        #[test]
+        fn does_not_explain_flattening_definitions() {
+            let explanations = Cell::new(0);
+            let context = AssertionContext::default();
+
+            assert_that!(context.probe(&1, &all_of((Flat(&explanations),)))).is_false();
+            assert_that!(explanations.get()).is_equal_to(0);
+            assert_that!(context.probe(&[1], &matchers::each(all_of((Flat(&explanations),)))))
+                .is_false();
+            assert_that!(explanations.get()).is_equal_to(0);
+
+            let mut context = AssertionContext::default();
+            assert_that!(context.evaluate(&1, &all_of((Flat(&explanations),)))).is_false();
+            // The rejection, then the conjunction's fallback description of its empty evidence.
+            assert_that!(explanations.get()).is_equal_to(2);
+        }
 
         #[test]
         fn evaluates_once_without_retaining_evidence() {

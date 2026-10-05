@@ -45,6 +45,9 @@
 //! [`SetLookup`](set::SetLookup) for set relations, or [`Map`](map::Map) with
 //! [`MapLookup`](map::MapLookup) for map assertions.
 
+#[macro_use]
+mod support;
+
 pub mod alloc;
 pub mod collection;
 pub mod core;

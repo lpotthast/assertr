@@ -59,6 +59,8 @@ check-no-std:
     cargo check -p assertr-no-std-tests --features partial --target thumbv8m.main-none-eabihf
     cargo check -p assertr --lib --no-default-features --target thumbv8m.main-none-eabihf
     cargo check -p assertr --lib --no-default-features --features num,libm --target thumbv8m.main-none-eabihf
+    cargo check -p assertr --lib --no-default-features --features fluent,rootcause,partial --target thumbv8m.main-none-eabihf
+    cargo check -p assertr --lib --no-default-features --features serde-json,serde-toml --target thumbv8m.main-none-eabihf
 
 # Lint the code.
 clippy:

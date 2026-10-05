@@ -1,5 +1,6 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 use alloc::{format, string::String};
@@ -74,7 +75,7 @@ impl<T: Display + ?Sized, E: Display, R: ValueRenderer<str>> ExpectationDiagnost
 /// Assertions over a subject's [`Display`] representation.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait DisplayAssertions<R = crate::DebugRenderer> {
+pub trait DisplayAssertions<R = DebugRenderer> {
     /// Asserts that the subject and `expected` have the same `Display` representation.
     ///
     /// Compares the complete representation exactly, including quotes and escape sequences.

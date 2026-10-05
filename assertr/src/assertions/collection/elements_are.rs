@@ -38,7 +38,8 @@ pub fn starts_with_elements<L>(list: L) -> ElementsAre<L> {
     }
 }
 
-/// Matches the final positions.
+/// Matches the final positions. Constraints align with the subject's end, so a shorter subject
+/// reports the leading constraints as missing.
 pub fn ends_with_elements<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
@@ -70,7 +71,6 @@ where
         Self: 'a,
         C: 'a;
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
-        let context = settings.isolated();
         let actual_length = actual.length();
         let expected_length = self.list.len();
         let mut elements = actual.elements();
@@ -80,6 +80,12 @@ where
         } else {
             Vec::new()
         };
+        // A suffix aligns from the right. Leading slots of a longer suffix precede the subject.
+        let unaligned = if matches!(self.position, Position::Suffix) {
+            expected_length.saturating_sub(actual_length)
+        } else {
+            0
+        };
         let starts = match self.position {
             Position::Exact | Position::Prefix => 0..1,
             Position::Suffix => {
@@ -88,50 +94,49 @@ where
             }
             Position::Contiguous => 0..actual_length.saturating_sub(expected_length) + 1,
         };
-        let mut alternatives = context.isolated();
+        let length_matches = if matches!(self.position, Position::Exact) {
+            actual_length == expected_length
+        } else {
+            actual_length >= expected_length
+        };
+        let mut alternatives = settings.isolated();
         for start in starts {
             let mut window = alternatives.isolated();
-            let mut matched = actual_length >= expected_length;
-            if matches!(self.position, Position::Exact) {
-                matched &= actual_length == expected_length;
-            }
+            let mut matched = length_matches;
             let mut window_elements = elements.by_ref().skip(start);
             for index in 0..expected_length {
+                if index < unaligned {
+                    window.outcome(false, |context| self.list.describe_at(index, context));
+                    continue;
+                }
+                let position = start + index - unaligned;
                 let item = if matches!(self.position, Position::Contiguous) {
-                    buffered.get(start + index).copied()
+                    buffered.get(position).copied()
                 } else {
                     window_elements.next()
                 };
-                if let Some(item) = item {
-                    matched &= window.scoped(PathSegment::Index(start + index), |context| {
-                        self.list.evaluate_at(index, item, context)
-                    });
-                } else {
-                    window.scoped(PathSegment::Index(start + index), |context| {
+                window.scoped(PathSegment::Index(position), |context| {
+                    if let Some(item) = item {
+                        matched &= self.list.evaluate_at(index, item, context);
+                    } else {
                         context.outcome(false, |context| self.list.describe_at(index, context));
-                    });
-                }
+                    }
+                });
             }
-            if actual_length < expected_length
-                || (matches!(self.position, Position::Exact) && actual_length != expected_length)
-            {
-                if window.is_diagnostic() {
-                    window.record(
-                        FailureBuilder::detached::<C>(FailureKind::Matching)
-                            .relation("does not have the required sequence")
-                            .fact(Fact::labelled(
-                                "actual length",
-                                window.render().value(&actual_length).into_rendered(),
-                            ))
-                            .fact(Fact::labelled(
-                                "expected length",
-                                window.render().value(&expected_length).into_rendered(),
-                            ))
-                            .build(),
-                    );
-                } else {
-                    window.outcome(false, |context| context.describe::<C, _>(self));
-                }
+            if !length_matches {
+                window.record_with(|window| {
+                    FailureBuilder::detached::<C>(FailureKind::Matching)
+                        .relation("does not have the required sequence")
+                        .fact(Fact::labelled(
+                            "Actual length",
+                            window.render().value(&actual_length).into_rendered(),
+                        ))
+                        .fact(Fact::labelled(
+                            "Expected length",
+                            window.render().value(&expected_length).into_rendered(),
+                        ))
+                        .build()
+                });
             }
             if matched {
                 return Ok(());
@@ -158,10 +163,10 @@ where
             None => context.describe_list::<C::Item, _, _>(
                 &self.list,
                 failure.relation(match self.position {
-                    Position::Exact => "has exactly these positions",
-                    Position::Prefix => "starts with these positions",
-                    Position::Suffix => "ends with these positions",
-                    Position::Contiguous => "contains these contiguous positions",
+                    Position::Exact => "has exactly these elements in order",
+                    Position::Prefix => "starts with these elements",
+                    Position::Suffix => "ends with these elements",
+                    Position::Contiguous => "contains these elements contiguously",
                 }),
             ),
             Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
@@ -236,6 +241,68 @@ mod tests {
                 assert_that!(failures.is_empty()).is_equal_to(accepted);
             }
         }
+    }
+
+    #[test]
+    fn short_suffixes_align_from_the_right() {
+        use crate::assertions::collection::ends_with_elements;
+        let failures = assert_that!([2, 3])
+            .with_location(false)
+            .capture(|it| it.matches(ends_with_elements([eq(1), eq(2), eq(3)])));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
+            -------- assertr --------
+            Expression: `[2, 3]`
+
+            does not match
+
+            Nested failures:
+              - does not satisfy the constraint
+
+                Constraint:
+                    is equal to
+
+                    Expected: 1
+              - does not have the required sequence
+
+                Details:
+                  - Actual length: 2
+                  - Expected length: 3
+            -------- assertr --------
+        "});
+    }
+
+    #[test]
+    fn short_suffixes_report_aligned_mismatches_at_their_actual_positions() {
+        use crate::assertions::collection::ends_with_elements;
+        let failures = assert_that!([2, 4])
+            .with_location(false)
+            .capture(|it| it.matches(ends_with_elements([eq(1), eq(2), eq(3)])));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
+            -------- assertr --------
+            Expression: `[2, 4]`
+
+            does not match
+
+            Nested failures:
+              - does not satisfy the constraint
+
+                Constraint:
+                    is equal to
+
+                    Expected: 1
+              - At [1]:
+                Expected: 3
+
+                  Actual: 4
+              - does not have the required sequence
+
+                Details:
+                  - Actual length: 2
+                  - Expected length: 3
+            -------- assertr --------
+        "});
     }
 
     #[test]
@@ -362,8 +429,8 @@ mod tests {
               - does not have the required sequence
 
                 Details:
-                  - actual length: cus... 6 more characters ...
-                  - expected length: cus... 6 more characters ...
+                  - Actual length: cus... 6 more characters ...
+                  - Expected length: cus... 6 more characters ...
             -------- assertr --------
         "});
                 },

@@ -1,50 +1,30 @@
 use super::{
-    AssertThat, AssertionContext, Borrow, FailureBuilder, FailureKind, GroupStyle, Mode,
-    PREVIEW_CAPACITY, PhantomData, Preview, Scan, ValueRenderer, Vec, exact_size_hint, execute,
+    AssertThat, AssertionContext, Borrow, ExpectationDiagnostics, FailureBuilder, FailureKind,
+    GroupStyle, Items, KnownLength, Mode, PhantomData, Scan, ValueRenderer, buffer_exactly,
+    execute,
 };
-use crate::borrow_for::{BorrowFor, borrow_for};
-use crate::{Fact, util::matching::matches_exactly};
+use alloc::boxed::Box;
 
-struct Captured<Item> {
-    items: Vec<Item>,
-    known_length: Option<usize>,
+use crate::{
+    AssertionFailure, Expectation, Fact,
+    assertions::collection::ContainsExactlyInAnyOrder as CollectionContainsExactlyInAnyOrder,
+    borrow_for::BorrowFor,
+};
+
+/// Why unordered equality rejected its input.
+enum UnorderedRejection {
+    /// An exact size hint ruled out the expected length before consuming anything.
+    Reported(KnownLength),
+    /// The collection report over the buffered elements. `consumed` is set when the buffer filled
+    /// up, because further input may remain unread.
+    Compared {
+        report: Box<AssertionFailure>,
+        consumed: Option<usize>,
+    },
 }
 
-fn capture_unordered<I: Iterator>(iterator: &mut I, expected_len: usize) -> Captured<I::Item> {
-    if let Some(actual) = exact_size_hint(&iterator)
-        && actual != expected_len
-    {
-        return Captured {
-            items: Vec::new(),
-            known_length: Some(actual),
-        };
-    }
-    let mut items = Vec::new();
-    for _ in 0..=expected_len {
-        if let Some(item) = iterator.next() {
-            items.push(item);
-        } else {
-            break;
-        }
-    }
-    Captured {
-        items,
-        known_length: None,
-    }
-}
-
-fn bounded_preview<Item>(mut captured: Captured<Item>) -> Preview<Item> {
-    let consumed = captured.items.len();
-    if captured.items.len() > PREVIEW_CAPACITY {
-        let remove = captured.items.len() - PREVIEW_CAPACITY;
-        captured.items.drain(..remove);
-    }
-    Preview {
-        items: captured.items.into(),
-        consumed,
-    }
-}
-
+/// Buffers the input, then delegates to the collection expectation, so both report the same
+/// unmatched elements.
 struct ContainsExactlyInAnyOrder<'e, T, E> {
     expected: &'e [E],
     item: PhantomData<fn() -> T>,
@@ -58,20 +38,34 @@ where
     E: BorrowFor<T>,
     R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
-    type Rejection = Captured<I::Item>;
+    type Rejection = UnorderedRejection;
     fn observe(
         &self,
         iterator: &mut I,
-        _context: &AssertionContext<'_, R>,
+        context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
-        let captured = capture_unordered(iterator, self.expected.len());
-        let exact = captured.known_length.is_none()
-            && matches_exactly(captured.items.len(), self.expected.len(), |a, e| {
-                captured.items[a]
-                    .borrow()
-                    .eq(borrow_for::<T, _>(&self.expected[e]))
-            });
-        if exact { Ok(()) } else { Err(captured) }
+        let items =
+            buffer_exactly(iterator, self.expected.len()).map_err(UnorderedRejection::Reported)?;
+        let actual = Items::<T, _>::new(&items);
+        let expectation = CollectionContainsExactlyInAnyOrder::<E, _>::new(self.expected);
+        // The rejection borrows the buffered items, so it is explained before they are released.
+        let rejection = match expectation.evaluate(&actual, context) {
+            Ok(()) => return Ok(()),
+            Err(rejection) => rejection,
+        };
+        let report = Box::new(
+            expectation
+                .explain(
+                    Some((&actual, rejection)),
+                    FailureBuilder::detached::<I>(FailureKind::Equality),
+                    context,
+                )
+                .build(),
+        );
+        Err(UnorderedRejection::Compared {
+            report,
+            consumed: (items.len() > self.expected.len()).then_some(items.len()),
+        })
     }
 
     const KIND: FailureKind = FailureKind::Equality;
@@ -82,25 +76,60 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder<Target> {
         let render = context.render();
-        let expected = render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List);
-        let captured = rejection;
-        let known_length = captured.known_length;
-        let preview = bounded_preview(captured);
-        let failure = failure
-            .actual(preview.rendered::<T, _>(render))
-            .relation("does not contain exactly in any order")
-            .expected(expected);
-        let failure = preview.facts(failure, render, None);
-        match known_length {
-            Some(actual) => failure
-                .fact(Fact::labelled("Reported length", render.value(&actual)))
-                .fact(Fact::labelled(
-                    "Expected length",
-                    render.value(&self.expected.len()),
-                )),
-            None => failure,
+        match rejection {
+            UnorderedRejection::Reported(known) => known.facts(
+                failure
+                    .relation("does not contain exactly in any order")
+                    .expected(
+                        render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List),
+                    ),
+                render,
+            ),
+            UnorderedRejection::Compared { report, consumed } => {
+                let failure = adopt(failure, *report);
+                match consumed {
+                    Some(consumed) => {
+                        failure.fact(Fact::labelled("Consumed elements", render.value(&consumed)))
+                    }
+                    None => failure,
+                }
+            }
         }
     }
+}
+
+/// Moves the diagnostic fields of a detached report into the root failure.
+fn adopt<Target>(
+    failure: FailureBuilder<Target>,
+    report: AssertionFailure,
+) -> FailureBuilder<Target> {
+    let AssertionFailure {
+        actual,
+        relation,
+        expected,
+        unexpected,
+        facts,
+        children,
+        omitted_children,
+        ..
+    } = report;
+    let mut failure = failure
+        .facts(facts)
+        .children(children)
+        .omitted_children(omitted_children);
+    if let Some(actual) = actual {
+        failure = failure.actual(actual);
+    }
+    if let Some(relation) = relation {
+        failure = failure.relation(relation);
+    }
+    if let Some(expected) = expected {
+        failure = failure.expected(expected);
+    }
+    if let Some(unexpected) = unexpected {
+        failure = failure.unexpected(unexpected);
+    }
+    failure
 }
 
 #[track_caller]
@@ -131,30 +160,14 @@ mod tests {
     use crate::prelude::*;
     use core::cell::Cell;
 
-    #[derive(Debug)]
-    struct Compared<'a>(&'a Cell<usize>);
-    impl BorrowFor<Compared<'_>> for i32 {
-        type View = i32;
-    }
-    impl PartialEq<i32> for Compared<'_> {
-        fn eq(&self, _: &i32) -> bool {
-            self.0.set(self.0.get() + 1);
-            true
-        }
-    }
-
     #[test]
-    fn unequal_buffered_lengths_skip_comparisons_and_keep_the_consumption_limit() {
+    fn buffers_at_most_one_element_beyond_the_expected_length() {
         for length in [0, 1, 3, 100] {
-            let comparisons = Cell::new(0);
             let consumed = Cell::new(0);
             let mut iterator = (0..length)
-                .map(|_| {
-                    consumed.set(consumed.get() + 1);
-                    Compared(&comparisons)
-                })
+                .inspect(|_| consumed.set(consumed.get() + 1))
                 .filter(|_| true);
-            let scan = ContainsExactlyInAnyOrder::<Compared<'_>, i32> {
+            let scan = ContainsExactlyInAnyOrder::<i32, i32> {
                 expected: &[1, 2],
                 item: PhantomData,
             };
@@ -163,7 +176,6 @@ mod tests {
                     .is_err()
             )
             .is_true();
-            assert_that!(comparisons.get()).is_equal_to(0);
             assert_that!(consumed.get()).is_equal_to(length.min(3));
         }
     }

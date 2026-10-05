@@ -1,13 +1,10 @@
-use alloc::{string::String, vec::Vec};
-use core::{cell::RefCell, marker::PhantomData, panic::AssertUnwindSafe};
+use core::{cell::Cell, marker::PhantomData, panic::AssertUnwindSafe};
 
 use crate::{
     AssertThat, AssertionFailures, ChainRecords, ChainState,
     actual::Actual,
-    details::WithDetail,
     mode::{Capture, Panic},
     renderer::RenderingContext,
-    tracking::NumberOfAssertions,
 };
 
 /// Runs a callback on an isolated capture chain with the supplied rendering and location settings.
@@ -31,20 +28,28 @@ where
     assertions(sink.derive(|value| value));
     assert!(
         sink.state.records.assertion_count() != 0,
-        "The closure passed to satisfying performed no assertions!"
+        "the assertion callback performed no assertions"
     );
     sink.state.records.failures.take()
 }
 
 impl<'t, R> ChainState<'t, Panic, R> {
-    fn into_capturing(self, messages: Vec<String>) -> ChainState<'t, Capture, R> {
+    fn into_capturing(self) -> ChainState<'t, Capture, R> {
+        // Sever the parent link: `capture` scopes failure collection to this chain, so failures
+        // must not propagate to (and get lost in) a panic-mode ancestor. Ancestor detail messages
+        // are preserved as inherited messages, which keep following every local message.
+        let mut inherited_messages = self.records.inherited_messages;
+        if let Some(parent) = self.records.parent {
+            parent.collect_messages(&mut inherited_messages);
+        }
         ChainState {
             records: ChainRecords {
                 parent: None,
-                detail_messages: AssertUnwindSafe(RefCell::new(messages)),
+                detail_messages: self.records.detail_messages,
                 // Validate work performed by the capture closure, not preceding panic-mode work.
-                number_of_assertions: AssertUnwindSafe(RefCell::new(NumberOfAssertions::new())),
+                number_of_assertions: AssertUnwindSafe(Cell::new(0)),
                 failures: self.records.failures,
+                inherited_messages,
             },
             subject_name: self.subject_name,
             expression: self.expression,
@@ -113,16 +118,10 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     }
 
     fn into_capturing(self) -> AssertThat<'t, T, Capture, R> {
-        // Sever the parent link: `capture` scopes failure collection to this chain, so failures
-        // must not propagate to (and get lost in) a panic-mode ancestor. Ancestor detail messages
-        // are preserved by flattening them into this chain.
-        let mut messages = Vec::new();
-        self.collect_messages(&mut messages);
-
         let AssertThat { actual, state } = self;
         AssertThat {
             actual,
-            state: state.into_capturing(messages),
+            state: state.into_capturing(),
         }
     }
 }
@@ -165,6 +164,30 @@ mod tests {
                     .contains("root detail");
             }; 2],
         );
+    }
+
+    mod detail_messages {
+        use super::*;
+
+        #[test]
+        fn capture_on_a_derived_chain_keeps_local_messages_before_ancestor_messages() {
+            let root = assert_that!(5).with_detail_message("parent");
+            let child = root.derive(|it| it).with_detail_message("child-1");
+            let failures = child.capture(|it| it.with_detail_message("child-2").is_equal_to(6));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].messages()).contains_exactly(["child-1", "child-2", "parent"]);
+        }
+
+        #[test]
+        fn capture_on_a_root_chain_keeps_insertion_order() {
+            let failures = assert_that!(5)
+                .with_detail_message("first")
+                .capture(|it| it.with_detail_message("second").is_equal_to(6));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].messages()).contains_exactly(["first", "second"]);
+        }
     }
 
     #[test]

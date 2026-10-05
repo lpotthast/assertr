@@ -6,8 +6,6 @@ use ::alloc::{
     vec::Vec,
 };
 use ::core::ops::{Range, RangeInclusive};
-#[cfg(feature = "std")]
-use ::std::hash::BuildHasher;
 
 /// A value whose finite length can be inspected by
 /// [`LengthAssertions`](crate::assertions::core::length::LengthAssertions).
@@ -39,19 +37,11 @@ impl HasLength for str {
     fn length(&self) -> usize {
         str::len(self)
     }
-
-    fn is_empty(&self) -> bool {
-        str::is_empty(self)
-    }
 }
 
 impl HasLength for String {
     fn length(&self) -> usize {
         String::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        String::is_empty(self)
     }
 }
 
@@ -59,19 +49,11 @@ impl HasLength for Box<str> {
     fn length(&self) -> usize {
         str::len(self)
     }
-
-    fn is_empty(&self) -> bool {
-        str::is_empty(self)
-    }
 }
 
 impl HasLength for Cow<'_, str> {
     fn length(&self) -> usize {
         str::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        str::is_empty(self)
     }
 }
 
@@ -79,19 +61,11 @@ impl<T> HasLength for [T] {
     fn length(&self) -> usize {
         self.len()
     }
-
-    fn is_empty(&self) -> bool {
-        <[T]>::is_empty(self)
-    }
 }
 
 impl<T, const S: usize> HasLength for [T; S] {
     fn length(&self) -> usize {
         self.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        S == 0
     }
 }
 
@@ -99,19 +73,11 @@ impl<T> HasLength for Vec<T> {
     fn length(&self) -> usize {
         Vec::len(self)
     }
-
-    fn is_empty(&self) -> bool {
-        Vec::is_empty(self)
-    }
 }
 
 impl<T> HasLength for VecDeque<T> {
     fn length(&self) -> usize {
         VecDeque::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        VecDeque::is_empty(self)
     }
 }
 
@@ -119,19 +85,11 @@ impl<K, V> HasLength for BTreeMap<K, V> {
     fn length(&self) -> usize {
         BTreeMap::len(self)
     }
-
-    fn is_empty(&self) -> bool {
-        BTreeMap::is_empty(self)
-    }
 }
 
 impl<T> HasLength for BTreeSet<T> {
     fn length(&self) -> usize {
         BTreeSet::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        BTreeSet::is_empty(self)
     }
 }
 
@@ -139,41 +97,25 @@ impl<T> HasLength for LinkedList<T> {
     fn length(&self) -> usize {
         LinkedList::len(self)
     }
-
-    fn is_empty(&self) -> bool {
-        LinkedList::is_empty(self)
-    }
 }
 
 impl<T> HasLength for BinaryHeap<T> {
     fn length(&self) -> usize {
         BinaryHeap::len(self)
     }
-
-    fn is_empty(&self) -> bool {
-        BinaryHeap::is_empty(self)
-    }
 }
 
 #[cfg(feature = "std")]
-impl<K, V, S: BuildHasher> HasLength for std::collections::HashMap<K, V, S> {
+impl<K, V, S> HasLength for std::collections::HashMap<K, V, S> {
     fn length(&self) -> usize {
         std::collections::HashMap::len(self)
     }
-
-    fn is_empty(&self) -> bool {
-        std::collections::HashMap::is_empty(self)
-    }
 }
 
 #[cfg(feature = "std")]
-impl<V, S: BuildHasher> HasLength for std::collections::HashSet<V, S> {
+impl<V, S> HasLength for std::collections::HashSet<V, S> {
     fn length(&self) -> usize {
         std::collections::HashSet::len(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        std::collections::HashSet::is_empty(self)
     }
 }
 

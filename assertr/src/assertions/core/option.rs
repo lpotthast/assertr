@@ -1,7 +1,10 @@
-use crate::{AssertThat, Mode, ValueRenderer, actual::Actual, failure::FailureKind, mode::Panic};
-use core::option::Option;
-
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use crate::{
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
+    assertions::support::project_checked,
+    failure::{FailureBuilder, FailureKind},
+    mode::Panic,
+};
 
 /// Checks for `Some` and returns a borrowed value on success.
 /// The same definition supports checks, extraction, and callbacks on an assertion chain.
@@ -86,7 +89,7 @@ impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Option<T>, R> for IsNone {
 
 /// Panic-mode extraction from `Option` subjects.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait OptionExtractAssertions<'t, T, R> {
+pub trait OptionExtractAssertions<'t, T, R = DebugRenderer> {
     /// Asserts that the subject is `Some`, then returns an assertion over its value.
     ///
     /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
@@ -100,17 +103,15 @@ pub trait OptionExtractAssertions<'t, T, R> {
 impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, Panic, R> {
     #[track_caller]
     fn get_some(self) -> AssertThat<'t, T, Panic, R> {
-        self.apply_assertion(IsSome).map(|actual| match actual {
-            Actual::Owned(o) => Actual::Owned(o.unwrap()),
-            Actual::Borrowed(b) => Actual::Borrowed(b.as_ref().unwrap()),
-        })
+        self.apply_assertion(IsSome)
+            .map(|actual| project_checked(actual, |it| it, Option::as_ref))
     }
 }
 
 /// Non-extracting assertions for `Option` subjects.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait OptionAssertions<'t, T, M: Mode, R> {
+pub trait OptionAssertions<T, M: Mode, R = DebugRenderer> {
     /// Asserts that the subject is `Some`.
     ///
     /// Non-extracting: the subject stays the full `Option`, so further assertions can be chained in
@@ -135,7 +136,7 @@ pub trait OptionAssertions<'t, T, M: Mode, R> {
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>);
 }
 
-impl<'t, T, M: Mode, R> OptionAssertions<'t, T, M, R> for AssertThat<'t, Option<T>, M, R> {
+impl<T, M: Mode, R> OptionAssertions<T, M, R> for AssertThat<'_, Option<T>, M, R> {
     #[track_caller]
     fn is_some(self) -> Self {
         self.apply_assertion(IsSome)
@@ -176,7 +177,7 @@ mod tests {
         fn traits_are_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, Option<i32>, Panic, NoRenderer>
-                    => OptionAssertions<'static, i32, Panic, NoRenderer>
+                    => OptionAssertions<i32, Panic, NoRenderer>
             );
             assert_trait_impl!(
                 AssertThat<'static, Option<i32>, Panic, NoRenderer>

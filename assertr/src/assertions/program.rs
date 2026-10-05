@@ -1,7 +1,7 @@
 //! Assertions for resolving executable programs.
 
 use crate::mode::{Mode, Panic};
-use crate::{Actual, AssertThat, Fact, ValueRenderer, failure::FailureKind};
+use crate::{Actual, AssertThat, DebugRenderer, Fact, ValueRenderer, failure::FailureKind};
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use alloc::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -44,7 +44,7 @@ where
             None => failure.relation("can be resolved"),
             Some((actual, error)) => failure
                 .actual(render.value(actual))
-                .relation("was not found")
+                .relation("cannot be resolved")
                 .fact(Fact::labelled("Reason", render.value(&error))),
         }
     }
@@ -101,32 +101,30 @@ impl AsRef<OsStr> for Program<'_> {
 }
 
 /// Non-extracting assertions for [`Program`] subjects.
+#[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ProgramAssertions<'t, 'a, M: Mode, R = crate::DebugRenderer> {
+pub trait ProgramAssertions<'a, R = DebugRenderer> {
     /// Asserts that [`which::which`] resolves the program.
-    fn exists(self) -> AssertThat<'t, Program<'a>, M, R>
+    fn exists(self) -> Self
     where
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>;
 }
 
 /// Panic-mode assertions that project a [`Program`] to its resolved path.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ProgramExtractAssertions<'t, R = crate::DebugRenderer> {
-    /// The program subject rendered in failure diagnostics.
-    type Subject;
-
+pub trait ProgramExtractAssertions<'t, 'a, R = DebugRenderer> {
     /// Asserts that [`which::which`] resolves the program, then returns an assertion over the
     /// resulting [`PathBuf`].
     ///
     /// This projection is available only in [`Panic`] mode because failure cannot produce a path.
     fn get_resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
     where
-        R: ValueRenderer<Self::Subject> + ValueRenderer<which::Error>;
+        R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>;
 }
 
-impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Program<'a>, M, R> {
+impl<'a, M: Mode, R> ProgramAssertions<'a, R> for AssertThat<'_, Program<'a>, M, R> {
     #[track_caller]
-    fn exists(self) -> AssertThat<'t, Program<'a>, M, R>
+    fn exists(self) -> Self
     where
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
@@ -134,9 +132,7 @@ impl<'a, 't, M: Mode, R> ProgramAssertions<'t, 'a, M, R> for AssertThat<'t, Prog
     }
 }
 
-impl<'a, 't, R> ProgramExtractAssertions<'t, R> for AssertThat<'t, Program<'a>, Panic, R> {
-    type Subject = Program<'a>;
-
+impl<'t, 'a, R> ProgramExtractAssertions<'t, 'a, R> for AssertThat<'t, Program<'a>, Panic, R> {
     #[track_caller]
     fn get_resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
     where
@@ -160,11 +156,11 @@ mod tests {
         fn traits_are_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, Program<'static>, Panic, NoRenderer>
-                    => ProgramAssertions<'static, 'static, Panic, NoRenderer>
+                    => ProgramAssertions<'static, NoRenderer>
             );
             assert_trait_impl!(
                 AssertThat<'static, Program<'static>, Panic, NoRenderer>
-                    => ProgramExtractAssertions<'static, NoRenderer>
+                    => ProgramExtractAssertions<'static, 'static, NoRenderer>
             );
         }
 
@@ -277,7 +273,7 @@ mod tests {
 
                 Actual: custom(Program("assertr-private-missing-executable-987"))
 
-                was not found
+                cannot be resolved
 
                 Details:
                   - Reason: custom(CannotFindBinaryPath)
@@ -302,7 +298,7 @@ mod tests {
 
                 Actual: <redacted>
 
-                was not found
+                cannot be resolved
 
                 Details:
                   - Reason: <redacted>
@@ -344,7 +340,7 @@ mod tests {
                         "someNonexistentProgram",
                     )
 
-                    was not found
+                    cannot be resolved
 
                     Details:
                       - Reason: CannotFindBinaryPath
@@ -405,7 +401,7 @@ mod tests {
 
                 Actual: custom(Program("assertr-private-missing-executable-987"))
 
-                was not found
+                cannot be resolved
 
                 Details:
                   - Reason: custom(CannotFindBinaryPath)
@@ -424,7 +420,7 @@ mod tests {
 
                 Actual: <redacted>
 
-                was not found
+                cannot be resolved
 
                 Details:
                   - Reason: <redacted>

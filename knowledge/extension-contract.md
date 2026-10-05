@@ -1,6 +1,6 @@
 ---
 id: extension-contract
-depends_on: [ expectation-execution, collection-semantics ]
+depends_on: [ ]
 sources:
   - assertr/src/crate_docs.md
   - assertr/src/assertions/mod.rs
@@ -15,68 +15,34 @@ sources:
 
 [Architecture overview](README.md)
 
-An extension participates in the chain's execution, failure, and rendering contracts. The
-[custom assertion guide](../assertr/src/crate_docs.md#custom-assertions) contains complete examples.
+Choose an extension point based on what you need to change. The
+[custom assertion guide](../assertr/src/crate_docs.md#custom-assertions) provides worked implementations.
 
 ## Choosing an extension
 
-| Need                                                  | Extension point                                                                                |
-|-------------------------------------------------------|------------------------------------------------------------------------------------------------|
-| Existing operations on a custom subject               | Implement the appropriate [behavioral capabilities](collection-semantics.md#capability-model). |
-| Reusable check in ordinary assertions and composition | Implement [Expectation and ExpectationDiagnostics](expectation-execution.md).                  |
-| New chain methods                                     | Define a domain assertion trait for `AssertThat`, delegating reusable checks to expectations.  |
-| Different diagnostics                                 | Implement `ValueRenderer` for leaves or a failure `Adapter` for completed failures.            |
+| Need | Extension point |
+|---|---|
+| Existing operations on a custom subject | Implement [behavioral capabilities](collection-semantics.md#capability-model). |
+| A check usable on its own or in a matcher | Implement [evaluation and explanation](expectation-execution.md#evaluation-and-explanation). |
+| New chain method | Extend a capability family first. Use a type-specific trait only for type-specific behavior. Select a [public executor entry](expectation-execution.md#chain-execution). |
+| Invocation, polling, or consumption | Use an [execution adapter](observation-boundaries.md#execution-adapters). |
+| New subject or extraction | Choose [mapping, derivation, and continuation mode](assertion-lifecycle.md#projections-and-continuation). |
+| A wrapper for expected values | Implement [borrowed-view selection](comparison-operands.md#borrowed-views). |
+| Different formatting for diagnostic values | Implement a [leaf renderer](diagnostic-rendering.md#capabilities-and-structure). |
+| Different report or output target | Implement a [failure adapter](failure-processing.md#presentation-and-fallback). |
 
-Extend a capability-based family before adding a type-specific trait. `assertr::prelude::*` imports enabled assertion
-traits for method discovery. Built-in `*Assertions` traits are not downstream implementation interfaces, so adding a
-method is compatible by project policy. Removing or incompatibly changing one is breaking. Other public exports follow
-normal SemVer rules. Macro-only plumbing belongs in the unsupported `__private` module.
+## Testing extensions
 
-## Implementing an assertion
+Test behavior beside the generic implementation. Use downstream fixtures to verify that an extension can be written
+using only public APIs.
 
-A retaining check normally takes and returns `Self`, implemented for `AssertThat<'_, Subject, M, R>` with `M: Mode`.
-Keep the impl independent of renderer capabilities. Put `ValueRenderer` and `Clone` bounds on individual methods in both
-trait and impl.
+| What to check | Existing coverage |
+|---|---|
+| Trait availability independent of renderer | `trait_is_implemented_without_renderer_support` in [custom_assertions.rs](../assertr/tests/custom_assertions.rs). |
+| Method bounds | `callback_renderer_bounds` calls methods on opaque subjects with only required leaf renderers. Trait-implementation checks alone cannot establish method availability. |
+| Custom rendering | `structural_rendering` uses public structural adapters and reads a copy of the budget from outside the crate. |
+| Platform support | The existing [no-std fixture](../assertr-no-std-tests/src/lib.rs) exercises downstream callbacks and rendering. See [validation coverage](platform-compatibility.md#validation-coverage) for the configurations tested. |
 
-Mark chain methods `#[track_caller]`. Delegate reusable checks to `apply_assertion` or `test_assertion`, which record
-the attempt before evaluation, whether the check passes or fails. Do not also call `track_assertion`. Methods composed
-entirely of tracked assertions likewise delegate tracking. Argument expressions have already been evaluated before the
-method starts. Missing tracking makes a passing capture look empty. Double tracking inflates the count.
-
-Implement a leaf's decision in `Expectation::evaluate` and its diagnostics in `ExpectationDiagnostics::explain`.
-Populate the supplied builder's [structured fields](failure-processing.md#structured-construction-and-ownership),
-rendering values through `context.render()` and its rendering adapters. The chain executor raises through the attached
-failure builder. Neither hook tracks or raises, and explanation never repeats the observation. Composing methods
-delegate to existing tracked assertions. Do not assemble a failure body manually.
-
-An [execution adapter](observation-boundaries.md) owns invocation, consumption, or polling around the check. It tracks
-explicitly before that operation and preserves the caller location. Built-in adapters use private executor entry points
-that skip tracking. Those entry points are unavailable downstream. A downstream adapter that must execute outside the
-public expectation protocol tracks and raises through `AssertThat::failure` using the same structured fields and
-`self.render()`. This is an execution responsibility, never an expectation hook or a separate diagnostic format.
-
-Preserve the active renderer when changing subjects.
-Choose [mapping or derivation](assertion-lifecycle.md#projections-and-continuation)
-according to whether the method continues the existing chain or creates a child. Require panic mode when failed
-extraction cannot return the promised subject. Explicit negative assertions own their evidence and relation.
-
-## Verification and contribution rules
-
-Keep behavior and diagnostics beside the owning family to test its generic contract across built-in subjects. Use
-existing downstream and no-std fixtures to verify that public capabilities are sufficient outside the crate. The
-regression [`trait_is_implemented_without_renderer_support`](../assertr/tests/custom_assertions.rs) demonstrates that an
-unavailable leaf renderer must not hide the assertion trait.
-Trait-implementation checks alone do not establish method availability. The `callback_renderer_bounds` tests in that
-fixture call methods on opaque subjects with renderers limited to the leaves their diagnostics use. The no-std fixture
-also compiles and runs these callback boundaries.
-
-The `structural_rendering` tests in these same fixtures exercise the
-[supported rendering adapters](diagnostic-rendering.md#capabilities-and-structure) from outside the runtime crate.
-They cover collection presentation, positional and borrowed views, maps and synthetic entries, one-field wrappers,
-and budget access with leaf-only renderers. Custom collectors use the copied budget for retention while preserving
-truth and accounting for omitted evidence. Detailed adapter behavior remains covered beside the renderer implementation.
-
-[AGENTS.md](../AGENTS.md#adding-assertions) owns exact test placement, caller-location and fluent-alias pins, naming,
-attributes, documentation, and release-note rules.
-The [alias naming implementation](../assertr-macros/src/fluent_aliases/naming.rs)
-owns generated spellings. Change those rules at their source, rather than maintaining a second checklist here.
+[AGENTS.md](../AGENTS.md) specifies naming, attributes, caller-location and fluent-alias tests, test placement,
+documentation, SemVer, and release procedures. Generated aliases follow the
+[naming rules](../assertr-macros/src/fluent_aliases/naming.rs).

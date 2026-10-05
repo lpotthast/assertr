@@ -1,6 +1,7 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
     failure::{FailureBuilder, FailureKind},
     renderer::RenderingContext,
 };
@@ -344,7 +345,7 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagn
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 #[allow(clippy::return_self_not_must_use)]
-pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = crate::DebugRenderer> {
+pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = DebugRenderer> {
     /// Asserts that the range contains `expected`.
     fn contains_element<E: BorrowFor<B>>(self, expected: E) -> Self
     where
@@ -365,7 +366,7 @@ pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = crate::DebugRendere
 /// Ranges are displayed as described in [`RangeBoundAssertions`].
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait RangeAssertions<B, R = crate::DebugRenderer> {
+pub trait RangeAssertions<B, R = DebugRenderer> {
     /// Asserts that the subject is within `expected`.
     fn is_in_range(self, expected: impl RangeBounds<B>) -> Self
     where

@@ -6,6 +6,10 @@ use crate::{
 };
 
 /// A disjunction of constraints.
+///
+/// A rejection stays one nested failure, so it remains distinguishable from the flattened
+/// children of an enclosing conjunction. Each retained child carries a zero-based `branch` fact,
+/// because one alternative can contribute several failures and sorted scopes can reorder them.
 pub struct AnyOf<L>(L);
 
 /// Stops at the first matching branch. An empty disjunction fails.
@@ -54,7 +58,6 @@ where
     R: crate::ValueRenderer<usize>,
 {
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
     fn explain<Target>(
         &self,
         rejected: Option<(&A, Evidence)>,
@@ -64,7 +67,9 @@ where
         match rejected {
             None => context
                 .describe_list::<A, _, _>(&self.0, failure.relation("satisfies any constraint")),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+            Some((_, evidence)) => {
+                evidence.explain(failure.relation("does not match any alternative"))
+            }
         }
     }
 }
@@ -99,6 +104,82 @@ mod tests {
             .capture(|it| it.matches(any_of((predicate(|_: &i32| false),))));
         let branch = &failures[0].children[0].facts[0].value;
         assert_that!(rendered_text(branch)).is_equal_to("<r... 8 more characters ...");
+    }
+
+    #[test]
+    fn stays_nested_within_a_conjunction() {
+        use crate::expectation::all_of;
+        let failures = assert_that!(3)
+            .with_location(false)
+            .capture(|it| it.matches(all_of((any_of((equal_to(1), equal_to(2))), equal_to(5)))));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
+            -------- assertr --------
+            Expression: `3`
+
+            does not match
+
+            Nested failures:
+              - does not match any alternative
+
+                Nested failures:
+                  - Expected: 1
+
+                      Actual: 3
+
+                    Details:
+                      - branch: 0
+                  - Expected: 2
+
+                      Actual: 3
+
+                    Details:
+                      - branch: 1
+              - Expected: 5
+
+                  Actual: 3
+            -------- assertr --------
+        "});
+    }
+
+    #[test]
+    fn nested_disjunctions_keep_their_own_branch_numbers() {
+        let failures = assert_that!(3)
+            .with_location(false)
+            .capture(|it| it.matches(any_of((any_of((equal_to(1), equal_to(2))), equal_to(5)))));
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
+            -------- assertr --------
+            Expression: `3`
+
+            does not match any alternative
+
+            Nested failures:
+              - does not match any alternative
+
+                Details:
+                  - branch: 0
+                Nested failures:
+                  - Expected: 1
+
+                      Actual: 3
+
+                    Details:
+                      - branch: 0
+                  - Expected: 2
+
+                      Actual: 3
+
+                    Details:
+                      - branch: 1
+              - Expected: 5
+
+                  Actual: 3
+
+                Details:
+                  - branch: 1
+            -------- assertr --------
+        "});
     }
 
     #[test]

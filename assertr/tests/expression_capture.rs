@@ -232,9 +232,12 @@ fn fluent_attribute_does_not_attach_to_aggregates_from_other_calls() {
     run();
 }
 
+/// Pins the documented limitation: the attribute identifies failures by their entry location, so
+/// a tracked user-defined `verify` that forwards its call site to an inner verification lets those
+/// failures receive the outer receiver expression.
 #[cfg(feature = "fluent")]
 #[test]
-fn fluent_attribute_does_not_attach_to_unrelated_tracked_verification() {
+fn fluent_attribute_attaches_to_tracked_verification_at_the_same_call_site() {
     struct User(i32);
     impl User {
         #[track_caller]
@@ -250,25 +253,11 @@ fn fluent_attribute_does_not_attach_to_unrelated_tracked_verification() {
 
     #[assertr::fluent_expressions]
     fn run() {
-        fn double(value: i32) -> i32 {
-            value * 2
-        }
-
         let failures = User(21).verify(|value| value * 2);
-        assert_that!(failures[0].expression).is_none();
-        let callback: fn(i32) -> i32 = |value| value * 2;
-        let failures = User(21).verify(callback);
-        assert_that!(failures[0].expression).is_none();
-        let failures = User(21).verify(double);
-        assert_that!(failures[0].expression).is_none();
-
+        assert_that!(failures[0].expression).is_equal_to(Some("User(21)"));
         let offset = Box::new(21);
         let failures = User(21).verify_owned(move |value| value + *offset);
-        assert_that!(failures[0].expression).is_none();
-        let offset = Box::new(21);
-        let callback = move |value| value + *offset;
-        let failures = User(21).verify_owned(callback);
-        assert_that!(failures[0].expression).is_none();
+        assert_that!(failures[0].expression).is_equal_to(Some("User(21)"));
     }
 
     run();
@@ -306,6 +295,92 @@ fn fluent_attribute_preserves_callback_blocks() {
 
 #[cfg(feature = "fluent")]
 #[assertr::fluent_expressions]
+mod macro_callbacks {
+    use super::*;
+
+    macro_rules! checks {
+        () => {
+            |it| it.is_equal_to(1)
+        };
+    }
+
+    #[test]
+    fn capture_the_receiver_expression() {
+        let failures = 2.verify(checks!());
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].expression).is_equal_to(Some("2"));
+
+        let failures = 2.verify_owned(checks!());
+        assert_that!(failures).has_length(1);
+        assert_that!(failures[0].expression).is_equal_to(Some("2"));
+    }
+
+    #[test]
+    fn preserve_explicit_expressions() {
+        macro_rules! explicit_checks {
+            () => {
+                |it| it.with_expression("explicit").is_equal_to(1)
+            };
+        }
+
+        let borrowed = 2.verify(explicit_checks!());
+        let owned = 2.verify_owned(explicit_checks!());
+        for failures in [borrowed, owned] {
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].expression).is_equal_to(Some("explicit"));
+        }
+    }
+
+    #[test]
+    fn preserve_evaluation_order_and_evaluate_callbacks_once() {
+        use core::cell::RefCell;
+
+        fn receiver(events: &RefCell<Vec<&'static str>>) -> i32 {
+            events.borrow_mut().push("receiver");
+            2
+        }
+
+        macro_rules! recorded_checks {
+            ($events:ident) => {{
+                $events.borrow_mut().push("callback");
+                |it| {
+                    $events.borrow_mut().push("call");
+                    it.is_equal_to(1)
+                }
+            }};
+        }
+
+        let events = RefCell::new(Vec::new());
+        let borrowed = receiver(&events).verify(recorded_checks!(events));
+        let owned = receiver(&events).verify_owned(recorded_checks!(events));
+        for failures in [borrowed, owned] {
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].expression).is_equal_to(Some("receiver(&events)"));
+        }
+        assert_that!(events.into_inner()).contains_exactly([
+            "receiver", "callback", "call", "receiver", "callback", "call",
+        ]);
+    }
+
+    #[test]
+    fn capture_nested_entries_independently() {
+        let failures = 2.verify({
+            let nested = 3.verify(|it| it.is_equal_to(1));
+            assert_that!(nested[0].expression).is_equal_to(Some("3"));
+            checks!()
+        });
+        assert_that!(failures[0].expression).is_equal_to(Some("2"));
+
+        let failures = 2.verify_owned({
+            3.must().is_equal_to(3);
+            |it| it.is_equal_to(1)
+        });
+        assert_that!(failures[0].expression).is_equal_to(Some("2"));
+    }
+}
+
+#[cfg(feature = "fluent")]
+#[assertr::fluent_expressions]
 #[test]
 fn fluent_attribute_preserves_assertion_caller_locations() {
     macro_rules! fail_at_caller {
@@ -318,8 +393,10 @@ fn fluent_attribute_preserves_assertion_caller_locations() {
     let mut expected = None;
     let failures = 42.verify(|it| fail_at_caller!(it, expected));
     assert_that!(failures[0].location).is_equal_to(expected);
+    assert_that!(failures[0].expression).is_equal_to(Some("42"));
     let failures = 42.verify_owned(|it| fail_at_caller!(it, expected));
     assert_that!(failures[0].location).is_equal_to(expected);
+    assert_that!(failures[0].expression).is_equal_to(Some("42"));
 }
 
 #[cfg(feature = "fluent")]

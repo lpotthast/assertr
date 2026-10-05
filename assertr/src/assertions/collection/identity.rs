@@ -6,7 +6,7 @@ use crate::{
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::{GroupStyle, IntoRendered, Rendered, RenderingOrder},
     util::{
-        matching::match_bipartite,
+        matching::{match_bipartite, matches_exactly},
         selection::{Keyed, Smallest},
     },
 };
@@ -114,6 +114,7 @@ pub struct ExactIdentityRejection<'a, U: ?Sized> {
 }
 
 /// Retained target assignment from an unordered identity rejection.
+/// Diagnostic assignment is omitted during probes.
 pub struct UnorderedIdentityRejection<'a, U: ?Sized> {
     expected: &'a [&'a U],
     observed: Vec<&'a U>,
@@ -122,7 +123,8 @@ pub struct UnorderedIdentityRejection<'a, U: ?Sized> {
     same_address: bool,
 }
 
-/// Checks borrowed-target collection identity without equality or target rendering capabilities.
+/// Checks that some collection element borrows the same instance as the expected target, without
+/// equality or target rendering capabilities.
 pub struct ContainsSameInstanceAs<'e, U: ?Sized>(&'e U);
 impl<'e, U: ?Sized> ContainsSameInstanceAs<'e, U> {
     /// Borrows the expected target, including pointer metadata for unsized targets.
@@ -205,7 +207,8 @@ where
     }
 }
 
-/// Checks borrowed-target collection identity without equality or target rendering capabilities.
+/// Checks that no collection element borrows the same instance as the expected target, without
+/// equality or target rendering capabilities.
 pub struct DoesNotContainSameInstanceAs<'e, U: ?Sized>(&'e U);
 impl<'e, U: ?Sized> DoesNotContainSameInstanceAs<'e, U> {
     /// Borrows the expected target, including pointer metadata for unsized targets.
@@ -400,18 +403,17 @@ where
                     if same_address {
                         failure = failure.fact(Fact::note(METADATA_NOTE));
                     }
-                    if rendering.max_items() == 0 {
-                        failure = failure.omitted(1, "unmatched element");
-                    } else {
-                        failure = failure.child(
-                            FailureBuilder::detached::<U>(FailureKind::Equality)
-                                .actual(rendering.value(element))
-                                .relation("is not the same instance as")
-                                .expected(rendering.value(expected))
-                                .path([PathSegment::Index(index)])
-                                .build(),
-                        );
-                    }
+                    let mut child = context.isolated();
+                    child.record_with(|context| {
+                        let rendering = context.render().identities();
+                        FailureBuilder::detached::<U>(FailureKind::Equality)
+                            .actual(rendering.value(element))
+                            .relation("is not the same instance as")
+                            .expected(rendering.value(expected))
+                            .path([PathSegment::Index(index)])
+                            .build()
+                    });
+                    failure = child.into_evidence().explain(failure);
                 }
                 failure
             }
@@ -456,29 +458,38 @@ where
     fn evaluate<'a>(
         &'a self,
         actual: &'a C,
-        _: &AssertionContext<'_, R>,
+        context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let expected = self.expected.as_ref();
-        let elements = actual
-            .elements()
-            .map(<C::Item as Borrow<U>>::borrow)
-            .collect::<Vec<_>>();
+        let targets = || actual.elements().map(<C::Item as Borrow<U>>::borrow);
+        if context.is_probe() {
+            let exact = actual.length() == expected.len() && {
+                let elements = targets().collect::<Vec<_>>();
+                matches_exactly(elements.len(), expected.len(), |a, e| {
+                    ptr::eq(elements[a], expected[e])
+                })
+            };
+            return if exact {
+                Ok(())
+            } else {
+                Err(UnorderedIdentityRejection {
+                    expected,
+                    observed: Vec::new(),
+                    missing: Vec::new(),
+                    unexpected: Vec::new(),
+                    same_address: false,
+                })
+            };
+        }
+        let elements = targets().collect::<Vec<_>>();
         let matched = match_bipartite(elements.len(), expected.len(), |a, e| {
             ptr::eq(elements[a], expected[e])
         });
         if matched.is_exact() {
             return Ok(());
         }
-        let missing = matched
-            .unmatched_expected
-            .iter()
-            .map(|index| expected[*index])
-            .collect::<Vec<_>>();
-        let unexpected = matched
-            .unmatched_actual
-            .iter()
-            .map(|index| elements[*index])
-            .collect::<Vec<_>>();
+        let (unexpected, missing) =
+            super::value::unmatched_occurrences(&matched, &elements, |index| expected[index]);
         let same_address = unexpected.iter().any(|actual| {
             missing
                 .iter()
@@ -1280,6 +1291,9 @@ mod tests {
                             actual.derive_owned(items).is_empty();
                         });
                     failure.derive(|failure| &failure.children).is_empty();
+                    failure
+                        .derive(|failure| &failure.omitted_children)
+                        .is_equal_to(usize::from(!unordered));
                     let facts = failure.derive(|failure| &failure.facts);
                     if unordered {
                         facts.contains_exactly_satisfying(
@@ -1288,7 +1302,7 @@ mod tests {
                             }; 2],
                         );
                     } else {
-                        facts.contains_exactly([Fact::note("... 1 more unmatched element ...")]);
+                        facts.is_empty();
                     }
                 }
             }));

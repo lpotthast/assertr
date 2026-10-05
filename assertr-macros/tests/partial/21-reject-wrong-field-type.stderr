@@ -19,9 +19,9 @@ error[E0277]: the trait bound `&str: BorrowFor<i32>` is not satisfied
   = note: required for `EqualTo<&str>` to implement `ExpectationDiagnostics<i32>`
   = note: 1 redundant requirement hidden
   = note: required for `assertr::__private::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>` to implement `ExpectationDiagnostics<Point>`
-  = note: required for `assertr::__private::Cons<assertr::__private::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>` to implement `MatcherList<Point, DebugRenderer>`
+  = note: required for `assertr::__private::Cons<assertr::__private::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>` to implement `MatcherList<Point>`
   = note: 1 redundant requirement hidden
-  = note: required for `assertr::__private::PartialMatch<Point, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:42: 8:75}, assertr::__private::Cons<assertr::__private::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<Point>`
+  = note: required for `assertr::__private::PartialMatch<Point, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:51: 8:56}, assertr::__private::Cons<assertr::__private::field::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>>` to implement `ExpectationDiagnostics<Point>`
 note: required by a bound in `matches`
  --> $WORKSPACE/assertr/src/assertions/matcher.rs
   |

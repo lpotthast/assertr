@@ -96,6 +96,26 @@ impl Rendered {
     pub const fn type_name(&self) -> Option<&'static str> {
         self.type_name
     }
+
+    /// Returns how the type is named when its hint is shown.
+    #[must_use]
+    pub const fn hint(&self) -> TypeHint {
+        self.hint
+    }
+
+    /// Returns whether text reports prefix the body with the type hint.
+    ///
+    /// The hint is only printed when a [`type_name`](Self::type_name) is also present.
+    #[must_use]
+    pub const fn shows_type_hint(&self) -> bool {
+        self.shows_type_hint
+    }
+
+    /// Returns whether this node keeps compact structural layout when embedded in pretty output.
+    #[must_use]
+    pub const fn is_compact(&self) -> bool {
+        self.compact
+    }
 }
 
 /// The structural body of a [`Rendered`] diagnostic value.
@@ -103,6 +123,7 @@ impl Rendered {
 #[non_exhaustive]
 pub enum RenderedBody {
     /// Text produced by a value renderer, or verbatim diagnostic text.
+    #[non_exhaustive]
     Text {
         /// The retained text, without an omission marker.
         text: String,
@@ -111,6 +132,7 @@ pub enum RenderedBody {
     },
 
     /// Elements rendered with list or set syntax.
+    #[non_exhaustive]
     Group {
         /// The delimiters used for the group.
         style: GroupStyle,
@@ -123,6 +145,7 @@ pub enum RenderedBody {
     },
 
     /// Key/value entries rendered with map syntax.
+    #[non_exhaustive]
     Map {
         /// The retained entries.
         entries: Vec<(Rendered, Rendered)>,
@@ -133,6 +156,7 @@ pub enum RenderedBody {
     },
 
     /// Key/value entries rendered as a synthetic list of tuples.
+    #[non_exhaustive]
     EntryList {
         /// The retained entries.
         entries: Vec<(Rendered, Rendered)>,
@@ -143,12 +167,14 @@ pub enum RenderedBody {
     },
 
     /// A tuple. This is used by synthetic entry lists so both the key and value remain nodes.
+    #[non_exhaustive]
     Tuple {
         /// The tuple's items.
         items: Vec<Rendered>,
     },
 
     /// A one-field tuple variant, such as `Some(value)` or `Err(error)`.
+    #[non_exhaustive]
     Variant {
         /// The variant name.
         name: &'static str,
@@ -157,6 +183,7 @@ pub enum RenderedBody {
     },
 
     /// A named struct with rendered fields.
+    #[non_exhaustive]
     Struct {
         /// The struct name.
         name: &'static str,
@@ -179,8 +206,15 @@ pub trait IntoRendered {
     /// Renders the value once, using pretty leaf formatting where the renderer distinguishes it.
     fn into_rendered(self) -> Rendered;
 
-    /// Internal compact-leaf counterpart used by specialized rendering adapters.
-    #[doc(hidden)]
+    /// Renders the value once, using compact leaf formatting and compact structural layout.
+    ///
+    /// Use this for evidence embedded inline in surrounding text, where multi-line pretty output
+    /// would break the layout. Assertr renders map keys in
+    /// [`PathSegment::Key`](crate::failure::PathSegment::Key) path segments this way, for example
+    /// `entry["key"]`. The leaf renderer receives a formatter with `f.alternate() == false`.
+    ///
+    /// The default implementation forwards to [`into_rendered`](Self::into_rendered), which suits
+    /// verbatim conversions that have no separate compact form.
     fn into_rendered_compact(self) -> Rendered
     where
         Self: Sized,
@@ -267,10 +301,9 @@ impl Debug for Printed<'_> {
         if rendered.compact && f.alternate() {
             return f.write_str(&rendered.text(false));
         }
-        if rendered.shows_type_hint {
-            let type_name = rendered
-                .type_name
-                .expect("only typed rendered values can show a type hint");
+        if rendered.shows_type_hint
+            && let Some(type_name) = rendered.type_name
+        {
             match rendered.hint {
                 TypeHint::Full => write!(f, "{type_name} ")?,
                 TypeHint::Short => write!(f, "{} ", short_rust_type_name(type_name))?,
@@ -300,7 +333,7 @@ impl Debug for Printed<'_> {
                     }
                     GroupStyle::Set => f.debug_set().entries(items.iter().map(Printed)).finish()?,
                 }
-                write_suffix(f, *omitted, "element", *sorted)?;
+                write_suffix(f, items.len(), *omitted, "element", *sorted)?;
             }
             RenderedBody::Map {
                 entries,
@@ -314,7 +347,7 @@ impl Debug for Printed<'_> {
                             .map(|(key, value)| (Printed(key), Printed(value))),
                     )
                     .finish()?;
-                write_suffix(f, *omitted, "entry", *sorted)?;
+                write_suffix(f, entries.len(), *omitted, "entry", *sorted)?;
             }
             RenderedBody::EntryList {
                 entries,
@@ -328,7 +361,7 @@ impl Debug for Printed<'_> {
                             .map(|(key, value)| PrintedTuple([key, value])),
                     )
                     .finish()?;
-                write_suffix(f, *omitted, "entry", *sorted)?;
+                write_suffix(f, entries.len(), *omitted, "entry", *sorted)?;
             }
             RenderedBody::Tuple { items } => {
                 let mut tuple = f.debug_tuple("");
@@ -372,8 +405,13 @@ pub(super) fn tuple_text(key: &Rendered, value: &Rendered, pretty: bool) -> Stri
     }
 }
 
+/// Writes the omission and sorting markers following a group or map body.
+///
+/// Sorting is only reported when at least two items were considered, counting omitted ones,
+/// because a single item has no order that sorting could have changed.
 fn write_suffix(
     f: &mut fmt::Formatter<'_>,
+    retained: usize,
     omitted: usize,
     noun: &str,
     sorted: bool,
@@ -381,7 +419,7 @@ fn write_suffix(
     if omitted != 0 {
         write!(f, " ({})", omission(omitted, noun))?;
     }
-    if sorted {
+    if sorted && retained.saturating_add(omitted) > 1 {
         f.write_str(" (sorted for rendering)")?;
     }
     Ok(())
@@ -390,5 +428,115 @@ fn write_suffix(
 impl IntoRendered for Rendered {
     fn into_rendered(self) -> Self {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::{string::String, vec, vec::Vec};
+
+    use crate::prelude::*;
+
+    use super::{GroupStyle, Rendered, RenderedBody, TypeHint};
+
+    fn leaf(text: &str) -> Rendered {
+        Rendered::verbatim(String::from(text))
+    }
+
+    fn untyped(body: RenderedBody) -> Rendered {
+        let mut rendered = leaf("");
+        rendered.body = body;
+        rendered
+    }
+
+    mod accessors {
+        use super::*;
+
+        #[test]
+        fn expose_every_field() {
+            let rendered = Rendered::typed(
+                RenderedBody::Placeholder("<locked>"),
+                "alloc::vec::Vec<i32>",
+                TypeHint::Full,
+                true,
+            );
+
+            assert_that!(rendered.body()).is_equal_to(RenderedBody::Placeholder("<locked>"));
+            assert_that!(rendered.type_name()).is_equal_to(Some("alloc::vec::Vec<i32>"));
+            assert_that!(rendered.hint()).is_equal_to(TypeHint::Full);
+            assert_that!(rendered.shows_type_hint()).is_true();
+            assert_that!(rendered.is_compact()).is_false();
+        }
+    }
+
+    mod type_hint {
+        use super::*;
+
+        #[test]
+        fn is_shown_for_typed_values() {
+            let rendered = Rendered::typed(
+                RenderedBody::Placeholder("<locked>"),
+                "i32",
+                TypeHint::Short,
+                true,
+            );
+
+            assert_that!(rendered.text(false)).is_equal_to("i32 <locked>");
+        }
+
+        #[test]
+        fn is_skipped_without_a_type_name() {
+            let mut rendered = leaf("text");
+            rendered.shows_type_hint = true;
+
+            assert_that!(rendered.text(false)).is_equal_to("text");
+            assert_that!(rendered.text(true)).is_equal_to("text");
+        }
+    }
+
+    mod sorted_suffix {
+        use super::*;
+
+        fn group(items: Vec<Rendered>, omitted: usize) -> Rendered {
+            untyped(RenderedBody::Group {
+                style: GroupStyle::Set,
+                items,
+                omitted,
+                sorted: true,
+            })
+        }
+
+        fn map(entries: Vec<(Rendered, Rendered)>, omitted: usize) -> Rendered {
+            untyped(RenderedBody::Map {
+                entries,
+                omitted,
+                sorted: true,
+            })
+        }
+
+        #[test]
+        fn is_omitted_for_a_single_element() {
+            assert_that!(group(vec![leaf("1")], 0).text(false)).is_equal_to("{1}");
+            assert_that!(group(Vec::new(), 0).text(false)).is_equal_to("{}");
+        }
+
+        #[test]
+        fn is_omitted_for_a_single_entry() {
+            assert_that!(map(vec![(leaf("1"), leaf("2"))], 0).text(false)).is_equal_to("{1: 2}");
+        }
+
+        #[test]
+        fn is_shown_for_multiple_retained_elements() {
+            assert_that!(group(vec![leaf("1"), leaf("2")], 0).text(false))
+                .is_equal_to("{1, 2} (sorted for rendering)");
+        }
+
+        #[test]
+        fn counts_omitted_elements() {
+            assert_that!(group(vec![leaf("1")], 1).text(false))
+                .is_equal_to("{1} (... 1 more element ...) (sorted for rendering)");
+            assert_that!(map(Vec::new(), 2).text(false))
+                .is_equal_to("{} (... 2 more entries ...) (sorted for rendering)");
+        }
     }
 }

@@ -95,8 +95,8 @@ The default features are `std` and `num`. Everything else is opt-in:
 | `libm`                                                     | Floating-point classifications for `num` assertions without `std`.                  |
 | `fluent`                                                   | Fluent assertion entry points and aliases (`42.must().be_positive()`).              |
 | `partial`                                                  | The `partial!` macro for structural matching. Runtime matchers need no feature.     |
-| `serde-json`                                               | `as_json()` serializes to a JSON `Result` subject.                                               |
-| `serde-toml`                                               | `as_toml()` serializes to a TOML `Result` subject.                                               |
+| `serde-json`                                               | `as_json()` serializes to a JSON `Result` subject.                                  |
+| `serde-toml`                                               | `as_toml()` serializes to a TOML `Result` subject.                                  |
 | `serde`                                                    | Combined `serde-json` and `serde-toml`.                                             |
 | `program`                                                  | Assertions that resolve an executable name or path.                                 |
 | `http`, `jiff`, `reqwest`, `rootcause`, `tokio`            | Assertions for the types of the crate of the same name.                             |
@@ -104,11 +104,10 @@ The default features are `std` and `num`. Everything else is opt-in:
 
 ### no_std
 
-Disable the default features. `partial`, `fluent`, `num`, `libm`, and `rootcause` support
-embedded `no_std` targets. The `http` feature leaves Assertr in `no_std` mode but currently
-requires a hosted target through its dependencies. Every other feature enables `std`. Add `libm`
-next to `num` if numeric assertions need floating-point classifications. `libm` does not enable
-`num` by itself.
+Disable the default features. `partial`, `fluent`, `num`, `libm`, `rootcause`, `serde-json`, and
+`serde-toml` support embedded `no_std` targets with `alloc`. Every other feature enables `std`.
+Add `libm` next to `num` if numeric assertions need floating-point classifications. `libm` does
+not enable `num` by itself.
 
 ## Quick start
 
@@ -208,11 +207,9 @@ An expectation defines a check. A matcher is an expectation used in composition.
 same implementation. Runtime matchers need no optional feature. The `partial` feature enables
 `partial!` for selecting struct and enum fields.
 
-Custom chain methods delegate reusable checks to `apply_assertion` or `test_assertion`, which
-track and execute the assertion. Expectation hooks never track or raise. Evaluation retains
-the observation, explanation populates the supplied structured builder, and the chain executor
-raises the completed failure. Execution adapters that own invocation, consumption, or polling
-track explicitly at their operation's boundary.
+Custom expectations work the same way and can back your own chainable assertion methods. See
+[custom assertions](https://docs.rs/assertr/latest/assertr/#custom-assertions) for a complete
+example.
 
 ## Guides
 

@@ -174,7 +174,7 @@ mod tests {
             assert_that!(1).matches(satisfying(|_| {}));
         })
         .has_type::<&str>()
-        .is_equal_to("The closure passed to satisfying performed no assertions!");
+        .is_equal_to("the assertion callback performed no assertions");
     }
 
     #[test]

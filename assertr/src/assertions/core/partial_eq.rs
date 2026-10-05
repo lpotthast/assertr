@@ -1,7 +1,8 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
+    ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -21,7 +22,8 @@ pub struct EqualTo<E>(E);
 /// Matches through the actual value's ordinary `PartialEq` implementation.
 ///
 /// This is a convenience constructor for [`EqualTo::new`].
-pub fn equal_to<E>(expected: E) -> EqualTo<E> {
+#[must_use]
+pub const fn equal_to<E>(expected: E) -> EqualTo<E> {
     EqualTo::new(expected)
 }
 
@@ -216,7 +218,7 @@ where
 /// ```
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait PartialEqAssertions<T, R> {
+pub trait PartialEqAssertions<T, R = DebugRenderer> {
     /// Asserts that the subject equals the value borrowed from `expected`.
     fn is_equal_to<E>(self, expected: E) -> Self
     where

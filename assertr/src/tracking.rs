@@ -1,33 +1,21 @@
 use crate::{AssertThat, ChainRecords, prelude::Mode};
 
-/// Counts the assertions performed on an assertion chain.
-///
-/// [`AssertThat::capture`] uses the count to reject capture closures that perform no assertions. In
-/// panic mode, unused assertion contexts are caught at compile time instead, by the `#[must_use]`
-/// annotations on the entry points.
-pub(crate) struct NumberOfAssertions(pub(crate) usize);
-
-impl NumberOfAssertions {
-    pub(crate) const fn new() -> Self {
-        Self(0)
-    }
-}
-
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Records that one assertion was performed on this chain.
     ///
-    /// Every leaf must track before checking or invoking user code, whether it passes or fails.
-    /// [`AssertThat::apply_assertion`] and [`AssertThat::test_assertion`] do this automatically.
-    /// Methods delegating to them or to other tracked assertions must not track again.
-    /// [`AssertThat::capture`] and the fluent `verify` use the count to reject a closure
-    /// that performed no assertions at all, so an assertion that forgets to track makes a passing
-    /// capture closure panic as if it had been empty.
+    /// Every assertion is tracked exactly once, before checking or invoking user code, whether it
+    /// passes or fails. Reusable leaf checks implement [`Expectation`](crate::Expectation) and
+    /// [`ExpectationDiagnostics`](crate::ExpectationDiagnostics) and delegate to
+    /// [`AssertThat::apply_assertion`] or [`AssertThat::test_assertion`], which track for them, as
+    /// the example below does. Methods delegating to these or to other tracked assertions must not
+    /// track again. [`AssertThat::capture`] and the fluent `verify` use the count to reject a
+    /// closure that performed no assertions at all, so an assertion that forgets to track makes a
+    /// passing capture closure panic as if it had been empty.
     ///
-    /// Prefer implementing [`Expectation`](crate::Expectation) and
-    /// [`ExpectationDiagnostics`](crate::ExpectationDiagnostics) for custom leaves, keeping
-    /// tracking in the executor. This method remains available for manual execution adapters,
-    /// which must also build and raise their failures through [`AssertThat::failure`]. See
-    /// [custom assertions](crate#custom-assertions) for a complete reusable definition.
+    /// Call this method directly only in an execution adapter, which owns an invocation,
+    /// consumption, or polling step that the borrowed expectation protocol cannot express. Such an
+    /// adapter tracks before its operation and builds any failure through [`AssertThat::failure`].
+    /// See [custom assertions](crate#custom-assertions) for a complete reusable definition.
     ///
     /// ```
     /// use assertr::prelude::*;
@@ -55,11 +43,12 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
 
 impl ChainRecords<'_> {
     pub(crate) fn assertion_count(&self) -> usize {
-        self.number_of_assertions.0.borrow().0
+        self.number_of_assertions.get()
     }
 
     fn track_assertion(&self) {
-        self.number_of_assertions.0.borrow_mut().0 += 1;
+        self.number_of_assertions
+            .set(self.number_of_assertions.get() + 1);
 
         // Propagate to the parent, so that assertions made on a derived assertion also count for
         // the chain it was derived from.

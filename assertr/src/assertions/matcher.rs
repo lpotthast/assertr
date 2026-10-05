@@ -1,29 +1,38 @@
 //! Assertions using expected-side matchers.
 //!
-//! Apply a `partial!` expectation to a subject with [`MatcherAssertions::matches`]. The
-//! [partial matching guide](mod@crate::matchers) explains selected fields, nested structures, and
-//! using existing assertion methods within a field through [`crate::expectation::satisfying`].
+//! [`MatcherAssertions::matches`] applies any reusable expectation to a subject, such as
+//! [`eq`](crate::matchers::eq), a composition like [`all_of`](crate::matchers::all_of), or a
+//! collection policy like [`elements_are!`](crate::elements_are). The
+//! [matcher catalog](mod@crate::matchers) lists the built-in expectations. With the `partial`
+//! feature, `partial!` also checks selected fields of structs and enums.
 
 use crate::{AssertThat, DebugRenderer, ExpectationDiagnostics, Mode};
 
 /// Assertions against reusable expected-side constraints.
 ///
-/// Use `partial!` to describe selected fields and nested values. Its built-in field matchers
-/// cover a selective set of constraints. [`crate::expectation::satisfying`] brings existing
-/// assertion methods into an expectation when another check is needed. See the
-/// [partial matching guide](mod@crate::matchers) for examples and feature requirements.
+/// Matchers are ordinary expectations, so the same definition works for direct assertions,
+/// `*_matching` methods, and nested composition. [`crate::expectation::satisfying`] brings
+/// existing assertion methods into an expectation when no built-in matcher fits. See the
+/// [matcher catalog](mod@crate::matchers) for examples and feature requirements.
+///
+/// ```
+/// use assertr::{matchers::{all_of, eq, ge, lt}, prelude::*};
+///
+/// assert_that!(42).matches(all_of((ge(18), lt(65))));
+/// assert_that!([1, 2]).matches(elements_are![eq(1), ge(2)]);
+/// ```
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait MatcherAssertions<T, R = DebugRenderer> {
     /// Asserts that the subject satisfies a matcher.
     ///
     /// Delegates to [`AssertThat::apply_assertion`], retaining the expectation's failure kind and
-    /// fields. For example, `matches(equal_to(2))` reports the equality failure directly.
+    /// fields. For example, `matches(eq(2))` reports the equality failure directly, and
+    /// `.matches(partial!(User { name: eq("Alice"), .. }))` checks only the selected field.
     ///
-    /// For example, `.matches(partial!(User { name: eq("Alice"), .. }))` checks only the selected
-    /// field. Pass `&matcher` to reuse an expectation. Both this method and `partial!` fields
-    /// require explicit matchers. Use [`eq`](crate::matchers::eq) for an equality matcher.
-    /// For an ordinary equality assertion, use
+    /// Pass `&matcher` to reuse an expectation. Both this method and `partial!` fields require
+    /// explicit matchers. Use [`eq`](crate::matchers::eq) for an equality matcher. For an ordinary
+    /// equality assertion, use
     /// [`is_equal_to`](crate::assertions::core::partial_eq::PartialEqAssertions::is_equal_to).
     #[track_caller]
     fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self;
@@ -47,7 +56,7 @@ mod tests {
         #[cfg(feature = "fluent")]
         #[test]
         fn fluent_alias_is_as_expected() {
-            1.must().r#match(equal_to(1));
+            1.must().match_expectation(equal_to(1));
         }
 
         #[test]

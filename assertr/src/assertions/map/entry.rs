@@ -171,12 +171,33 @@ impl<K, M> Entry<K, M> {
         M: ExpectationDiagnostics<Mp::Value, R>,
         R: ValueRenderer<K::View>,
     {
-        match self.evaluate(actual, context) {
-            Ok(key) => (true, Some(key)),
-            Err(EntryRejection { key, evidence }) => {
-                context.append(evidence);
-                (false, key)
-            }
+        record_entry(&self.key, &self.matcher, actual, context)
+    }
+}
+
+// Evaluates one keyed operand and commits its scoped children, returning truth and the stored key.
+// A present key is returned even when its value rejects, so exact checks never look it up again.
+pub(super) fn record_entry<'a, Mp, StoredKey, K, M, R>(
+    key: &'a K,
+    matcher: &M,
+    actual: &'a Mp,
+    context: &mut AssertionContext<'_, R>,
+) -> (bool, Option<&'a Mp::Key>)
+where
+    Mp: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
+    K: BorrowFor<StoredKey>,
+    M: ExpectationDiagnostics<Mp::Value, R>,
+    R: ValueRenderer<K::View>,
+{
+    let query = borrow_for::<StoredKey, _>(key);
+    let result = evaluate_entry(actual, query, matcher, context, |render| {
+        PathSegment::Key(render.value(query).into_rendered_compact())
+    });
+    match result {
+        Ok(key) => (true, Some(key)),
+        Err(EntryRejection { key, evidence }) => {
+            context.append(evidence);
+            (false, key)
         }
     }
 }

@@ -111,7 +111,7 @@ pub trait MapLookup<Q: ?Sized>: Map {
     fn get_key_value(&self, key: &Q) -> Option<(&Self::Key, &Self::Value)>;
 }
 
-impl<K: Ord, V> Map for BTreeMap<K, V> {
+impl<K, V> Map for BTreeMap<K, V> {
     type Key = K;
     type Value = V;
     const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
@@ -132,11 +132,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<K, V, S> Map for std::collections::HashMap<K, V, S>
-where
-    K: core::hash::Hash + Eq,
-    S: core::hash::BuildHasher,
-{
+impl<K, V, S> Map for std::collections::HashMap<K, V, S> {
     type Key = K;
     type Value = V;
     const RENDERING_ORDER: RenderingOrder = RenderingOrder::SortByRenderedText;
@@ -174,6 +170,30 @@ where
 }
 
 impl<M, Q> MapLookup<Q> for &M
+where
+    M: MapLookup<Q> + ?Sized,
+    Q: ?Sized,
+{
+    fn get_key_value(&self, key: &Q) -> Option<(&M::Key, &M::Value)> {
+        M::get_key_value(self, key)
+    }
+}
+
+/// Makes mutable-reference subjects maps, mirroring the shared-reference implementation.
+impl<M> Map for &mut M
+where
+    M: Map + ?Sized,
+{
+    type Key = M::Key;
+    type Value = M::Value;
+    const RENDERING_ORDER: RenderingOrder = M::RENDERING_ORDER;
+
+    fn entries(&self) -> impl Iterator<Item = (&M::Key, &M::Value)> {
+        M::entries(self)
+    }
+}
+
+impl<M, Q> MapLookup<Q> for &mut M
 where
     M: MapLookup<Q> + ?Sized,
     Q: ?Sized,
@@ -283,6 +303,41 @@ mod tests {
             .collect::<Vec<_>>();
         entries.sort_unstable();
         assert_that!(entries).contains_exactly([("alpha", 1), ("beta", 2)]);
+    }
+
+    #[test]
+    fn mutable_reference_adapter_follows_the_map_contract() {
+        let mut map = BTreeMap::from([(String::from("alpha"), 1), (String::from("beta"), 2)]);
+
+        assert_map_contract(&&mut map, false);
+        assert_that_owned!(&mut map)
+            .contains_key("alpha")
+            .contains_value(2)
+            .contains_entry("beta", 2)
+            .contains_exactly_entries([("alpha", 1), ("beta", 2)]);
+    }
+
+    #[test]
+    fn iteration_based_assertions_need_no_lookup_bounds_on_the_key() {
+        #[derive(Debug)]
+        struct Opaque;
+
+        // A `BTreeMap` cannot be filled without `Ord`, but it can still be inspected.
+        assert_that!(BTreeMap::<Opaque, i32>::new())
+            .does_not_contain_value(1)
+            .is_empty();
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn iteration_based_assertions_on_a_hash_map_need_no_hasher_bound() {
+        use std::collections::HashMap;
+
+        fn helper<S>(map: &HashMap<&str, i32, S>) {
+            assert_that!(map).contains_value(1).has_length(1);
+        }
+
+        helper(&HashMap::from([("a", 1)]));
     }
 
     #[test]
