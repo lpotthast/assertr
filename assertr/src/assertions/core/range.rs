@@ -16,6 +16,21 @@ use core::ops::{
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
 pub struct ContainsElement<B, E = B>(E, PhantomData<fn() -> B>);
 
+impl<B, E: Clone> Clone for ContainsElement<B, E> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone(), PhantomData)
+    }
+}
+
+impl<B, E: core::fmt::Debug> core::fmt::Debug for ContainsElement<B, E> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("ContainsElement")
+            .field(&self.0)
+            .finish()
+    }
+}
+
 impl<B> ContainsElement<B> {
     /// Owns the expected operand, using its type as the range bound type.
     ///
@@ -119,6 +134,21 @@ where
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
 pub struct DoesNotContainElement<B, E = B>(E, PhantomData<fn() -> B>);
 
+impl<B, E: Clone> Clone for DoesNotContainElement<B, E> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone(), PhantomData)
+    }
+}
+
+impl<B, E: core::fmt::Debug> core::fmt::Debug for DoesNotContainElement<B, E> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("DoesNotContainElement")
+            .field(&self.0)
+            .finish()
+    }
+}
+
 impl<B> DoesNotContainElement<B> {
     /// Owns the unexpected operand, using its type as the range bound type.
     ///
@@ -219,6 +249,7 @@ where
 
 /// Checks whether a value is in range.
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
+#[derive(Debug, Clone)]
 pub struct IsInRange<Range>(Range);
 
 impl<Range> IsInRange<Range> {
@@ -272,6 +303,7 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagn
 
 /// Checks whether a value is not in range.
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
+#[derive(Debug, Clone)]
 pub struct IsNotInRange<Range>(Range);
 
 impl<Range> IsNotInRange<Range> {

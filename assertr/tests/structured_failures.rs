@@ -556,7 +556,7 @@ mod fields {
         let child = &failures[0].children[0];
 
         assert_that!(child.kind).is_equal_to(FailureKind::Matching);
-        assert_that!(child.actual).is_none();
+        assert_that!(text_opt(child.actual.as_ref())).is_equal_to(Some("2"));
         assert_that!(child.constraint.as_ref().unwrap().relation.as_deref())
             .is_equal_to(Some("satisfies the predicate"));
         assert_that!(child.relation.as_deref())

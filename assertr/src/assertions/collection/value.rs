@@ -12,16 +12,19 @@ use alloc::vec::Vec;
 use core::marker::PhantomData;
 
 /// Retained missing values from a membership rejection.
+#[derive(Debug)]
 pub struct MissingElementsRejection<'a, E: ?Sized> {
     missing: Vec<&'a E>,
 }
 
 /// Retained length and first mismatch from a prefix or suffix rejection.
+#[derive(Debug)]
 pub struct PositionalRejection<'a, A: ?Sized, E: ?Sized> {
     length: usize,
     mismatch: Option<ElementMismatch<'a, A, E>>,
 }
 
+#[derive(Debug)]
 struct ElementMismatch<'a, A: ?Sized, E: ?Sized> {
     index: usize,
     actual: &'a A,
@@ -50,6 +53,7 @@ pub(super) fn unmatched_occurrences<'a, A: ?Sized, E: ?Sized>(
 
 /// Retained unmatched occurrences from an exact collection rejection.
 /// Diagnostic assignment is omitted during probes.
+#[derive(Debug)]
 pub struct ExactElementsRejection<'a, A: ?Sized, E: ?Sized> {
     unexpected: Vec<&'a A>,
     missing: Vec<&'a E>,
@@ -58,6 +62,7 @@ pub struct ExactElementsRejection<'a, A: ?Sized, E: ?Sized> {
 
 /// Checks collection membership with the actual element’s `PartialEq` implementation and a borrowed
 /// item operand.
+#[derive(Debug, Clone)]
 pub struct Contains<E>(E);
 
 impl<E> Contains<E> {
@@ -131,6 +136,7 @@ where
 
 /// Checks that no collection element equals a borrowed item operand, using the actual element’s
 /// `PartialEq` implementation.
+#[derive(Debug, Clone)]
 pub struct DoesNotContain<E>(E);
 
 impl<E> DoesNotContain<E> {
@@ -207,6 +213,7 @@ pub struct ContainsAll<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
+expected_operands_traits!(ContainsAll<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsAll<E, B> {
     /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
     /// without accessing its views.
@@ -397,6 +404,7 @@ pub struct StartsWith<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
+expected_operands_traits!(StartsWith<E, B>, operand);
 impl<E, B: AsRef<[E]>> StartsWith<E, B> {
     /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
     /// without accessing its views.
@@ -462,6 +470,7 @@ pub struct EndsWith<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
+expected_operands_traits!(EndsWith<E, B>, operand);
 impl<E, B: AsRef<[E]>> EndsWith<E, B> {
     /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
     /// without accessing its views.
@@ -524,6 +533,7 @@ pub struct ContainsContiguous<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
+expected_operands_traits!(ContainsContiguous<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsContiguous<E, B> {
     /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
     /// without accessing its views.
@@ -608,6 +618,7 @@ pub struct ContainsExactly<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
+expected_operands_traits!(ContainsExactly<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsExactly<E, B> {
     /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
     /// without accessing its views.
@@ -706,16 +717,16 @@ where
                 let mut failure = failure
                     .actual(render.stable_collection(actual))
                     .relation("does not contain exactly");
-                if !unexpected.is_empty() {
-                    failure = failure.fact(Fact::labelled(
-                        "Elements not expected",
-                        render.borrowed_values::<C::Item, _>(&unexpected, GroupStyle::List),
-                    ));
-                }
                 if !missing.is_empty() {
                     failure = failure.fact(Fact::labelled(
                         "Elements not found",
                         render.borrowed_values::<E::View, _>(&missing, GroupStyle::List),
+                    ));
+                }
+                if !unexpected.is_empty() {
+                    failure = failure.fact(Fact::labelled(
+                        "Elements not expected",
+                        render.borrowed_values::<C::Item, _>(&unexpected, GroupStyle::List),
                     ));
                 }
                 if only_order_differs {
@@ -733,6 +744,7 @@ pub struct ContainsExactlyInAnyOrder<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
+expected_operands_traits!(ContainsExactlyInAnyOrder<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsExactlyInAnyOrder<E, B> {
     /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
     /// without accessing its views.

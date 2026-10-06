@@ -6,6 +6,24 @@ use crate::{
 /// Requires the subject and expected reference to have equal full pointers, without rendering their
 /// contents.
 pub struct IsSameInstanceAs<'e, T: ?Sized>(&'e T);
+
+impl<T: ?Sized> Clone for IsSameInstanceAs<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: ?Sized> Copy for IsSameInstanceAs<'_, T> {}
+
+/// Shows the expected target's address, because identity never inspects its contents.
+impl<T: ?Sized> core::fmt::Debug for IsSameInstanceAs<'_, T> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("IsSameInstanceAs")
+            .field(&core::ptr::from_ref(self.0))
+            .finish()
+    }
+}
 impl<'e, T: ?Sized> IsSameInstanceAs<'e, T> {
     /// Borrows the reference whose full pointer is compared with the subject's pointer.
     #[must_use]
@@ -62,6 +80,24 @@ impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsSameInstanceAs<'_, T> {
 /// Checks that the subject is not the same instance as the expected reference, without comparing
 /// or rendering its contents.
 pub struct IsNotSameInstanceAs<'e, T: ?Sized>(&'e T);
+
+impl<T: ?Sized> Clone for IsNotSameInstanceAs<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: ?Sized> Copy for IsNotSameInstanceAs<'_, T> {}
+
+/// Shows the expected target's address, because identity never inspects its contents.
+impl<T: ?Sized> core::fmt::Debug for IsNotSameInstanceAs<'_, T> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("IsNotSameInstanceAs")
+            .field(&core::ptr::from_ref(self.0))
+            .finish()
+    }
+}
 impl<'e, T: ?Sized> IsNotSameInstanceAs<'e, T> {
     /// Borrows the reference whose full pointer is compared with the subject's pointer.
     #[must_use]

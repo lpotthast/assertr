@@ -4,6 +4,7 @@ use crate::{
 };
 
 /// Checks the conservative [`core::mem::needs_drop`] property of a represented type.
+#[derive(Debug, Clone, Copy)]
 pub struct NeedsDrop;
 
 impl<T, R> Expectation<Type<T>, R> for NeedsDrop {

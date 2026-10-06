@@ -7,6 +7,7 @@ use core::fmt::Display;
 use rootcause::markers::Dynamic;
 
 /// Compares the observed direct child count.
+#[derive(Debug, Clone, Copy)]
 pub struct HasChildCount(usize);
 impl HasChildCount {
     /// Expects this count.
@@ -17,6 +18,7 @@ impl HasChildCount {
 }
 
 /// Compares the observed direct attachment count.
+#[derive(Debug, Clone, Copy)]
 pub struct HasAttachmentCount(usize);
 impl HasAttachmentCount {
     /// Expects this count.
@@ -27,6 +29,7 @@ impl HasAttachmentCount {
 }
 
 /// Compares the rootcause-formatted current context display value once.
+#[derive(Debug, Clone)]
 pub struct HasCurrentContextDisplayValue<E>(E);
 impl<E> HasCurrentContextDisplayValue<E> {
     /// Expects this formatted current context.
@@ -37,6 +40,7 @@ impl<E> HasCurrentContextDisplayValue<E> {
 }
 
 /// Compares the rootcause-formatted current context debug string once.
+#[derive(Debug, Clone)]
 pub struct HasCurrentContextDebugString<E>(E);
 impl<E> HasCurrentContextDebugString<E> {
     /// Expects this formatted current context.
@@ -60,6 +64,7 @@ impl<E> Default for HasCurrentContextType<E> {
         Self::new()
     }
 }
+type_selection_traits!(HasCurrentContextType);
 
 /// Implements the report expectations for one report subject type.
 ///
@@ -420,6 +425,7 @@ impl<E> Default for HasCurrentContext<E> {
         Self::new()
     }
 }
+type_selection_traits!(HasCurrentContext);
 
 fn explain_context_type<E, Target>(
     actual: Option<&'static str>,

@@ -8,6 +8,7 @@ use crate::{
 
 /// Checks for `Ok` and returns a borrowed value on success.
 /// Checks, extraction, and ordinary callbacks execute this same definition.
+#[derive(Debug, Clone, Copy)]
 pub struct IsOk;
 
 impl<T, E, R> Expectation<Result<T, E>, R> for IsOk {
@@ -54,6 +55,7 @@ impl<T, E, R: ValueRenderer<E>> ExpectationDiagnostics<Result<T, E>, R> for IsOk
 
 /// Checks for `Err` and returns a borrowed error on success.
 /// Checks, extraction, and ordinary callbacks execute this same definition.
+#[derive(Debug, Clone, Copy)]
 pub struct IsErr;
 
 impl<T, E, R> Expectation<Result<T, E>, R> for IsErr {

@@ -8,6 +8,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
 /// Resolves an executable program once, returning its path or lookup error.
+#[derive(Debug, Clone, Copy)]
 pub struct Exists;
 impl<'p, R> Expectation<Program<'p>, R> for Exists {
     type Success<'a>

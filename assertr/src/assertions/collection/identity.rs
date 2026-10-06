@@ -123,9 +123,39 @@ pub struct UnorderedIdentityRejection<'a, U: ?Sized> {
     same_address: bool,
 }
 
+/// Debug-formats target references as their addresses.
+struct Addresses<'a, U: ?Sized>(&'a [&'a U]);
+
+impl<U: ?Sized> core::fmt::Debug for Addresses<'_, U> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_list()
+            .entries(self.0.iter().map(|target| ptr::from_ref(*target)))
+            .finish()
+    }
+}
+
 /// Checks that some collection element borrows the same instance as the expected target, without
 /// equality or target rendering capabilities.
 pub struct ContainsSameInstanceAs<'e, U: ?Sized>(&'e U);
+
+impl<U: ?Sized> Clone for ContainsSameInstanceAs<'_, U> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<U: ?Sized> Copy for ContainsSameInstanceAs<'_, U> {}
+
+/// Shows the expected target's address, because identity never inspects its contents.
+impl<U: ?Sized> core::fmt::Debug for ContainsSameInstanceAs<'_, U> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("ContainsSameInstanceAs")
+            .field(&ptr::from_ref(self.0))
+            .finish()
+    }
+}
 impl<'e, U: ?Sized> ContainsSameInstanceAs<'e, U> {
     /// Borrows the expected target, including pointer metadata for unsized targets.
     #[must_use]
@@ -210,6 +240,24 @@ where
 /// Checks that no collection element borrows the same instance as the expected target, without
 /// equality or target rendering capabilities.
 pub struct DoesNotContainSameInstanceAs<'e, U: ?Sized>(&'e U);
+
+impl<U: ?Sized> Clone for DoesNotContainSameInstanceAs<'_, U> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<U: ?Sized> Copy for DoesNotContainSameInstanceAs<'_, U> {}
+
+/// Shows the expected target's address, because identity never inspects its contents.
+impl<U: ?Sized> core::fmt::Debug for DoesNotContainSameInstanceAs<'_, U> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("DoesNotContainSameInstanceAs")
+            .field(&ptr::from_ref(self.0))
+            .finish()
+    }
+}
 impl<'e, U: ?Sized> DoesNotContainSameInstanceAs<'e, U> {
     /// Borrows the expected target, including pointer metadata for unsized targets.
     #[must_use]
@@ -284,6 +332,27 @@ where
 pub struct ContainsExactlySameInstances<'e, U: ?Sized + 'e, B = Vec<&'e U>> {
     expected: B,
     target: PhantomData<&'e U>,
+}
+
+impl<'e, U: ?Sized + 'e, B: Clone> Clone for ContainsExactlySameInstances<'e, U, B> {
+    fn clone(&self) -> Self {
+        Self {
+            expected: self.expected.clone(),
+            target: PhantomData,
+        }
+    }
+}
+
+/// Shows the expected targets' addresses, because identity never inspects their contents.
+impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> core::fmt::Debug
+    for ContainsExactlySameInstances<'e, U, B>
+{
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("ContainsExactlySameInstances")
+            .field("expected", &Addresses(self.expected.as_ref()))
+            .finish()
+    }
 }
 impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> ContainsExactlySameInstances<'e, U, B> {
     /// Stores expected target references without converting their storage yet.
@@ -426,6 +495,27 @@ where
 pub struct ContainsExactlySameInstancesInAnyOrder<'e, U: ?Sized + 'e, B = Vec<&'e U>> {
     expected: B,
     target: PhantomData<&'e U>,
+}
+
+impl<'e, U: ?Sized + 'e, B: Clone> Clone for ContainsExactlySameInstancesInAnyOrder<'e, U, B> {
+    fn clone(&self) -> Self {
+        Self {
+            expected: self.expected.clone(),
+            target: PhantomData,
+        }
+    }
+}
+
+/// Shows the expected targets' addresses, because identity never inspects their contents.
+impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> core::fmt::Debug
+    for ContainsExactlySameInstancesInAnyOrder<'e, U, B>
+{
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("ContainsExactlySameInstancesInAnyOrder")
+            .field("expected", &Addresses(self.expected.as_ref()))
+            .finish()
+    }
 }
 impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> ContainsExactlySameInstancesInAnyOrder<'e, U, B> {
     /// Stores expected target references without converting their storage yet.

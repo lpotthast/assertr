@@ -17,6 +17,7 @@ use crate::{
 /// let expected = EqualTo::new("hello");
 /// assert_that!("hello").matches(&expected);
 /// ```
+#[derive(Debug, Clone)]
 pub struct EqualTo<E>(E);
 
 /// Matches through the actual value's ordinary `PartialEq` implementation.
@@ -55,6 +56,7 @@ impl<E> EqualTo<E> {
 ///
 /// assert_that!(3).matches(NotEqualTo::new(4));
 /// ```
+#[derive(Debug, Clone)]
 pub struct NotEqualTo<E>(E);
 
 impl<E> NotEqualTo<E> {

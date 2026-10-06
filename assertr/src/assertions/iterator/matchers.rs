@@ -251,7 +251,7 @@ where
             ),
             SequenceRejection::Extra { evidence, consumed } => {
                 explain_scan(failure, context, evidence, "has an extra element", consumed).fact(
-                    Fact::labelled("Extra element at index", self.expected.len()),
+                    Fact::labelled("Extra element at index", render.value(&self.expected.len())),
                 )
             }
         }
@@ -278,7 +278,9 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         let expected_length = self.expected.len();
-        // Windows share one scope like candidates do, retaining the first rejections in budget.
+        // Windows share one scope like candidates do. A rejected contiguous window takes one slot
+        // as a group, so evidence of overlapping windows does not interleave. Windows beyond the
+        // budget are still evaluated, but only counted as omitted.
         let mut windows = context.isolated();
         let placement = if self.suffix {
             WindowPlacement::End
@@ -300,7 +302,23 @@ where
                         });
                 }
                 if !matched {
-                    windows.append(candidate.into_evidence());
+                    let evidence = candidate.into_evidence();
+                    if self.suffix {
+                        windows.append(evidence);
+                    } else {
+                        windows.record_with(|windows| {
+                            evidence
+                                .explain(
+                                    FailureBuilder::detached::<I>(FailureKind::Matching)
+                                        .relation("does not match in this window")
+                                        .fact(Fact::labelled(
+                                            "Window start",
+                                            windows.render().value(&first_index),
+                                        )),
+                                )
+                                .build()
+                        });
+                    }
                 }
                 matched
             },
@@ -329,7 +347,7 @@ where
             if self.suffix {
                 "does not end with matching elements"
             } else {
-                "does not contain matching contiguous elements"
+                "does not contain these elements contiguously"
             },
             consumed,
         );
@@ -577,10 +595,14 @@ mod tests {
             let failures = assert_that_owned!(0..30)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(1))
                 .capture(|it| it.contains_contiguous_matching([eq(99), eq(99)]));
+            // The first of 29 rejected windows is retained as one group. The others are counted.
             assert_that!(failures[0].children).has_length(1);
-            assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(0)]);
-            // 29 windows reject both of their positions.
-            assert_that!(failures[0].omitted_children).is_equal_to(57);
+            let window = &failures[0].children[0];
+            assert_that!(window.path).is_empty();
+            assert_that!(window.children).has_length(1);
+            assert_that!(window.children[0].path).contains_exactly([PathSegment::Index(0)]);
+            assert_that!(window.omitted_children).is_equal_to(1);
+            assert_that!(failures[0].omitted_children).is_equal_to(28);
             assert_that_owned!(0..)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(0))
                 .contains_contiguous_matching([eq(20), eq(21)]);
@@ -616,7 +638,8 @@ mod tests {
                 }
             }
 
-            for budget in [0, 1, 4] {
+            // Each retained window group also renders its start.
+            for (budget, window_renders) in [(0, 0), (1, 3), (4, 18)] {
                 let renders = Cell::new(0);
                 assert_that_owned!(0..10_000)
                     .with_renderer(Counting(&renders))
@@ -630,7 +653,7 @@ mod tests {
                     .with_renderer(Counting(&renders))
                     .with_rendering_budget(RenderingBudget::default().with_max_items(budget))
                     .contains_contiguous_matching([eq(9_998), eq(9_999)]);
-                assert_that!(renders.get()).is_equal_to(2 * budget);
+                assert_that!(renders.get()).is_equal_to(window_renders);
             }
         }
 
@@ -644,6 +667,75 @@ mod tests {
             assert_that!(failures[0].children).has_length(1);
             assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(0)]);
             assert_that!(failures[0].omitted_children).is_equal_to(2);
+        }
+    }
+
+    mod contiguous {
+        use crate::{matchers::eq, prelude::*, test_support::FailureReportAssertions};
+
+        #[test]
+        fn groups_the_evidence_of_each_rejected_window() {
+            let failures = assert_that_owned!([1, 3, 1, 4].into_iter())
+                .with_location(false)
+                .capture(|it| it.contains_contiguous_matching(matchers![eq(1), eq(2)]));
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure.has_text_report(indoc::indoc! {r"
+                    -------- assertr --------
+                    Expression: `[1, 3, 1, 4].into_iter()`
+
+                    does not contain these elements contiguously
+
+                    Details:
+                      - Consumed elements: 4
+                    Nested failures:
+                      - does not match in this window
+
+                        Details:
+                          - Window start: 0
+                        Nested failures:
+                          - At [1]:
+                            Expected: 2
+
+                              Actual: 3
+                      - does not match in this window
+
+                        Details:
+                          - Window start: 1
+                        Nested failures:
+                          - At [1]:
+                            Expected: 1
+
+                              Actual: 3
+                          - At [2]:
+                            Expected: 2
+
+                              Actual: 1
+                      - does not match in this window
+
+                        Details:
+                          - Window start: 2
+                        Nested failures:
+                          - At [3]:
+                            Expected: 2
+
+                              Actual: 4
+                    -------- assertr --------
+                    "});
+                },
+            ]);
+        }
+
+        #[test]
+        fn renders_window_starts_through_the_active_renderer() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
+
+            let failures = assert_that_owned!([1, 3].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .capture(|it| it.contains_contiguous_matching([eq(1), eq(2)]));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].children).has_length(1);
+            assert_custom_fact(&failures[0].children[0], "Window start", 0);
         }
     }
 

@@ -259,8 +259,9 @@ impl<T> FailureBuilder<T> {
         self
     }
 
-    /// Attaches a note stating how many `noun`s the rendering budget left out of the facts or
-    /// children, when `omitted` is nonzero. `noun` is singular and pluralized as needed.
+    /// Attaches a note stating how many `noun`s the rendering budget left out of the facts, when
+    /// `omitted` is nonzero. `noun` is singular and pluralized as needed. Report omitted nested
+    /// failures with [`Self::omitted_children`] instead, which the report already describes.
     pub fn omitted(self, omitted: usize, noun: &str) -> Self {
         if omitted == 0 {
             self

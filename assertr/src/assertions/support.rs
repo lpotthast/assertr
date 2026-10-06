@@ -35,6 +35,7 @@ macro_rules! property_expectation {
         $($diagnostics:tt)+
     ) => {
         $($attr)*
+        #[derive(Debug, Clone, Copy)]
         pub struct $name;
 
         impl<$($param,)? R> $crate::Expectation<$subject, R> for $name
@@ -95,6 +96,58 @@ macro_rules! property_expectation {
         };
         failure.expected(render.value(&$expected))
     }};
+}
+
+/// Implements `Clone`, `Copy`, and `Debug` for an expectation that only selects a type `E` through
+/// `PhantomData<fn() -> E>`. The selected type needs none of these traits. `Debug` names it.
+macro_rules! type_selection_traits {
+    ($name:ident) => {
+        impl<E> ::core::clone::Clone for $name<E> {
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+        impl<E> ::core::marker::Copy for $name<E> {}
+        impl<E> ::core::fmt::Debug for $name<E> {
+            fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                write!(
+                    formatter,
+                    "{}<{}>",
+                    stringify!($name),
+                    ::core::any::type_name::<E>()
+                )
+            }
+        }
+    };
+}
+
+/// Implements `Clone` and `Debug` for an expectation storing its operands as `expected: B` beside
+/// a phantom operand marker. Only the stored operands `B` need these traits.
+macro_rules! expected_operands_traits {
+    ($name:ident<$($param:ident),+>, $marker:ident) => {
+        impl<$($param),+> ::core::clone::Clone for $name<$($param),+>
+        where
+            B: ::core::clone::Clone,
+        {
+            fn clone(&self) -> Self {
+                Self {
+                    expected: self.expected.clone(),
+                    $marker: ::core::marker::PhantomData,
+                }
+            }
+        }
+        impl<$($param),+> ::core::fmt::Debug for $name<$($param),+>
+        where
+            B: ::core::fmt::Debug,
+        {
+            fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                formatter
+                    .debug_struct(stringify!($name))
+                    .field("expected", &self.expected)
+                    .finish()
+            }
+        }
+    };
 }
 
 /// Projects a subject whose shape a preceding expectation has already confirmed.

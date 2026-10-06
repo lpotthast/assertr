@@ -4,6 +4,7 @@ use crate::{
 };
 
 /// An unconstrained wildcard.
+#[derive(Debug, Clone, Copy)]
 pub struct Anything;
 
 /// Always matches, without renderer requirements.

@@ -11,6 +11,8 @@ fn fluent_expressions() {
     t.pass("tests/fluent_expressions/01-renamed-dependency.rs");
     t.compile_fail("tests/fluent_expressions/02-user-must.rs");
     t.pass("tests/fluent_expressions/03-callback-types.rs");
+    t.pass("tests/fluent_expressions/04-facade-runtime-path.rs");
+    t.compile_fail("tests/fluent_expressions/05-reject-invalid-arguments.rs");
 }
 
 mod partial {

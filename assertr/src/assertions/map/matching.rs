@@ -16,9 +16,19 @@ const MATCHING_VALUE: MatchingItem = MatchingItem {
 
 /// Checks the value at one native key query with a reusable expectation and retains the original
 /// child evidence, located at the key.
+#[derive(Debug)]
 pub struct ContainsEntryMatching<'e, Q: ?Sized, E> {
     key: &'e Q,
     expected: E,
+}
+
+impl<Q: ?Sized, E: Clone> Clone for ContainsEntryMatching<'_, Q, E> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key,
+            expected: self.expected.clone(),
+        }
+    }
 }
 impl<'e, Q: ?Sized, E> ContainsEntryMatching<'e, Q, E> {
     /// Borrows a native key query and stores its value expectation.
@@ -85,6 +95,7 @@ where
 ///
 /// Evaluation stops at the first match. On rejection, it retains every value's child evidence,
 /// ordered and limited like the map's rendered entries. An empty map rejects the expectation.
+#[derive(Debug, Clone)]
 pub struct ContainsValueMatching<E>(E);
 
 impl<E> ContainsValueMatching<E> {
@@ -129,7 +140,6 @@ where
     E: ExpectationDiagnostics<Mp::Value, R>,
 {
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
 
     fn explain<'a, Target>(
         &'a self,

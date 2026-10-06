@@ -9,6 +9,7 @@ use core::fmt::Display;
 /// Compares the complete `Display` representation with the expected value's representation.
 /// Formatting determines truth even when diagnostic rendering is disabled or budgeted.
 /// Rejections retain the formatted operands so explanation never formats them again.
+#[derive(Debug, Clone)]
 pub struct HasDisplayValue<E>(E);
 
 impl<E> HasDisplayValue<E> {

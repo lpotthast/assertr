@@ -29,6 +29,7 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use reqwest::header::HeaderValue;
 
 /// Compares the observed response status code.
+#[derive(Debug, Clone, Copy)]
 pub struct HasStatusCode(reqwest::StatusCode);
 impl<R> Expectation<reqwest::Response, R> for HasStatusCode {
     type Success<'a>
@@ -95,6 +96,7 @@ macro_rules! status_class_expectation {
         $class:literal $(,)?
     ) => {
         $(#[$meta])*
+        #[derive(Debug, Clone, Copy)]
         pub struct $name;
         impl<R> Expectation<reqwest::Response, R> for $name {
             type Success<'a>
@@ -193,6 +195,7 @@ status_class_expectation!(
 /// Checks that the response contains a header, returning its first value.
 ///
 /// Rejection retains the looked-up name. Diagnostics list the present header names.
+#[derive(Debug, Clone)]
 pub struct HasHeader<E>(E);
 impl<E, R> Expectation<reqwest::Response, R> for HasHeader<E>
 where
@@ -255,6 +258,7 @@ impl<E> HasHeader<E> {
 /// Checks that the response does not contain a header.
 ///
 /// Rejection retains the looked-up name and the header's first value.
+#[derive(Debug, Clone)]
 pub struct DoesNotHaveHeader<E>(E);
 impl<E, R> Expectation<reqwest::Response, R> for DoesNotHaveHeader<E>
 where
@@ -316,6 +320,7 @@ impl<E> DoesNotHaveHeader<E> {
     }
 }
 /// Compares the first header value with the expected raw UTF-8 bytes.
+#[derive(Debug, Clone)]
 pub struct HasHeaderValue<N, E> {
     name: N,
     expected: E,

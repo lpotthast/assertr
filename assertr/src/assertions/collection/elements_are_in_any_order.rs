@@ -55,6 +55,7 @@ fn evaluate_pair(
 }
 
 /// Exact one-to-one order-free matching, preserving multiplicity.
+#[derive(Debug, Clone)]
 pub struct ElementsAreInAnyOrder<L>(L);
 
 /// Matches every actual element to one distinct expectation using maximum bipartite matching.
@@ -229,7 +230,7 @@ fn record_unexpected<
                     FailureBuilder::detached::<C>(FailureKind::Matching)
                         .relation("has unexpected elements")
                         .fact(Fact::labelled(
-                            "unexpected count",
+                            "Unexpected count",
                             context
                                 .render()
                                 .value(&result.unmatched_actual.len())
@@ -257,7 +258,7 @@ fn record_missing<
     context.record_with(|context| {
         let failure = FailureBuilder::detached::<C>(FailureKind::Matching)
             .fact(Fact::labelled(
-                "at slot",
+                "At slot",
                 context.render().value(&slot).into_rendered(),
             ))
             .relation("is missing an element matching this expectation")
@@ -307,7 +308,7 @@ where
                 .relation("has an extra occurrence matching an already satisfied expectation")
                 .constraint(list.describe_at(first, context))
                 .fact(Fact::labelled(
-                    "at slot",
+                    "At slot",
                     context.render().value(&first).into_rendered(),
                 ))
                 .build();
@@ -317,7 +318,7 @@ where
             constraints.record_with(|constraints| {
                 FailureBuilder::detached::<A>(FailureKind::Matching)
                     .fact(Fact::labelled(
-                        "at slot",
+                        "At slot",
                         constraints.render().value(&slot).into_rendered(),
                     ))
                     .constraint(list.describe_at(slot, constraints))
@@ -402,7 +403,7 @@ mod tests {
                   - has unexpected elements
 
                     Details:
-                      - unexpected count: 2
+                      - Unexpected count: 2
                     Nested failures:
                       - Expected: 1
 
@@ -415,7 +416,7 @@ mod tests {
                             Expected: 1
 
                         Details:
-                          - at slot: 0
+                          - At slot: 0
                 -------- assertr --------
             "});
         }
@@ -442,7 +443,7 @@ mod tests {
                         Expected: 99
 
                     Details:
-                      - at slot: 2
+                      - At slot: 2
                     Nested failures:
                       - Expected: 99
 
@@ -765,8 +766,8 @@ mod tests {
                 .with_renderer(CountRenderer)
                 .capture(|it| {
                     it.matches(elements_are_in_any_order![
-                        predicate(|_: &Element| true),
-                        predicate(|_: &Element| false)
+                        crate::test_support::opaque_predicate(|_: &Element| true),
+                        crate::test_support::opaque_predicate(|_: &Element| false)
                     ])
                 });
             let missing = &failures[0].children[0];
@@ -777,7 +778,7 @@ mod tests {
             for surplus in &unexpected.children {
                 assert_that!(surplus.children).is_empty();
                 assert_that!(rendered_text(&surplus.facts[0].value)).is_equal_to("count(0)");
-                assert_that!(surplus.facts[0].label.as_ref()).is_equal_to("at slot");
+                assert_that!(surplus.facts[0].label.as_ref()).is_equal_to("At slot");
                 assert_that!(
                     surplus
                         .constraint
@@ -787,7 +788,7 @@ mod tests {
                         .as_deref()
                         .unwrap()
                 )
-                .is_equal_to("satisfies the predicate");
+                .is_equal_to("satisfies the opaque predicate");
             }
         }
 

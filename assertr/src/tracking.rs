@@ -26,7 +26,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ///     fn is_even(self) -> Self;
     /// }
     ///
-    /// impl<M: Mode, R> EvenAssertions for AssertThat<'_, u32, M, R> {
+    /// impl<M: Mode, R: ValueRenderer<u32>> EvenAssertions for AssertThat<'_, u32, M, R> {
     ///     #[track_caller]
     ///     fn is_even(self) -> Self {
     ///         self.apply_assertion(predicate(|value: &u32| value % 2 == 0)

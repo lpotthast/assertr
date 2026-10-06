@@ -33,7 +33,8 @@ pub(super) fn automatic_alias(name: &str) -> Option<String> {
             .map(|alias| format!("{namespace}{alias}"));
     }
 
-    // `match` is a keyword, so `matches` reads as "must be matching".
+    // `match` is a keyword and `be_matching` belongs to `is_matching`, so `matches` gets the
+    // explicit `match_expectation`.
     let exact = match name {
         "matches" => Some("match_expectation"),
         "contains" => Some("contain"),

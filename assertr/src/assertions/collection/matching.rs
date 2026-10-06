@@ -104,6 +104,7 @@ impl MatchingItem {
 /// let expected = ContainsMatching::new(equal_to(2));
 /// assert_that!([1, 2, 3]).matches(&expected);
 /// ```
+#[derive(Debug, Clone)]
 pub struct ContainsMatching<M>(M);
 
 /// Matches collections containing at least one matching element.
@@ -151,7 +152,6 @@ where
     M: ExpectationDiagnostics<C::Item, R>,
 {
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
 
     fn explain<Target>(
         &self,
@@ -183,6 +183,7 @@ where
 /// let unexpected = DoesNotContainMatching::new(equal_to(4));
 /// assert_that!([1, 2, 3]).matches(&unexpected);
 /// ```
+#[derive(Debug, Clone)]
 pub struct DoesNotContainMatching<M>(M);
 
 /// Matches collections in which no element matches.
@@ -286,7 +287,7 @@ mod tests {
         fn is_implemented_without_renderer_support() {
             assert_trait_impl!(
                 crate::assertions::collection::ContainsMatching<
-                    crate::expectation::Predicate<fn(&i32) -> bool>
+                    crate::test_support::OpaquePredicate<fn(&i32) -> bool>
                 > => Expectation<[i32], NoRenderer>
             );
         }
@@ -294,6 +295,56 @@ mod tests {
         #[test]
         fn bounded_evidence_is_independent_of_iteration_order() {
             assert_bounded_order(&contains_matching(equal_to(9)));
+        }
+
+        #[test]
+        fn stays_one_nested_group_inside_compositions() {
+            use crate::{expectation::predicate, test_support::FailureReportAssertions};
+
+            let failures = assert_that!(vec![vec![2, 3], vec![4]])
+                .with_location(false)
+                .capture(|it| {
+                    it.matches(matchers::each(contains_matching(predicate(|it: &i32| {
+                        *it == 1
+                    }))))
+                });
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure.has_text_report(indoc::indoc! {r"
+                    -------- assertr --------
+                    Expression: `vec![vec![2, 3], vec![4]]`
+
+                    does not match
+
+                    Nested failures:
+                      - does not contain a matching element
+
+                        Nested failures:
+                          - Actual: 2
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+                          - Actual: 3
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+                      - does not contain a matching element
+
+                        Nested failures:
+                          - Actual: 4
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+                    -------- assertr --------
+                    "});
+                },
+            ]);
         }
 
         #[test]

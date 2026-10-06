@@ -9,6 +9,7 @@ use jiff::tz::TimeZone;
 /// Compares the observed time-zone rules with an expected [`TimeZone`].
 ///
 /// The expected operand selects a `TimeZone` view through [`BorrowFor`].
+#[derive(Debug, Clone)]
 pub struct IsInTimeZone<E>(E);
 impl<E, R> Expectation<Zoned, R> for IsInTimeZone<E>
 where
@@ -73,6 +74,7 @@ impl<E> IsInTimeZone<E> {
 /// Compares the observed time zone's IANA name with an expected name.
 ///
 /// A time zone without an IANA name, such as a fixed offset, never matches.
+#[derive(Debug, Clone)]
 pub struct IsInTimeZoneNamed<E>(E);
 impl<E, R> Expectation<Zoned, R> for IsInTimeZoneNamed<E>
 where

@@ -405,7 +405,7 @@ mod tests {
         use super::*;
         use crate::failure::adapter::HumanReadableText;
         use crate::{
-            assertions::{collection::contains_matching, core::partial_eq::equal_to},
+            assertions::{collection::each, core::partial_eq::equal_to},
             expectation::all_of,
             failure::PathSegment,
             renderer::{IntoRendered, RenderingOrder},
@@ -520,10 +520,7 @@ mod tests {
             let mut context =
                 AssertionContext::new(&DebugRenderer, RenderingBudget::default().with_max_items(1))
                     .isolated_for_order(RenderingOrder::SortByRenderedText);
-            let matcher = all_of((
-                contains_matching(equal_to(9)),
-                contains_matching(equal_to(8)),
-            ));
+            let matcher = all_of((each(equal_to(9)), each(equal_to(8))));
 
             let result = context.scoped(PathSegment::Field("items"), |context| {
                 context.evaluate(&[3, 2, 1], &matcher)
@@ -560,8 +557,7 @@ mod tests {
         fn scoped_paths_participate_in_sorting_before_truncation() {
             use alloc::collections::BTreeSet;
             let actual = BTreeSet::from([[1]]);
-            let matcher =
-                contains_matching(all_of((equal_to([9]), crate::elements_are![equal_to(9)])));
+            let matcher = each(all_of((equal_to([9]), crate::elements_are![equal_to(9)])));
             let paths = [
                 alloc::vec![PathSegment::Field("items")],
                 alloc::vec![PathSegment::Field("items"), PathSegment::Index(0)],
@@ -610,7 +606,7 @@ mod tests {
                     )
                     .isolated_for_order(order);
                     context.evaluate(&0, &equal_to(9));
-                    let matcher = contains_matching(equal_to(9));
+                    let matcher = each(equal_to(9));
                     assert_that!(context.evaluate(&[1, 2, 3], &matcher)).is_false();
 
                     let retained = limit.min(4);

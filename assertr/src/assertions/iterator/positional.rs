@@ -17,8 +17,9 @@ enum SequenceFailure {
 impl SequenceFailure {
     fn decisive_index(&self) -> Option<usize> {
         match self {
-            Self::Criterion { index, .. } | Self::Extra { index } => Some(*index),
-            Self::Exhausted => None,
+            Self::Criterion { index, .. } => Some(*index),
+            // The extra element's own fact already names its index.
+            Self::Extra { .. } | Self::Exhausted => None,
         }
     }
 }
@@ -125,9 +126,10 @@ where
         let failure = preview.facts(failure, render, outcome.decisive_index());
         match outcome {
             SequenceFailure::Exhausted => failure,
-            SequenceFailure::Extra { index } => {
-                failure.fact(Fact::labelled("Extra element at index", index))
-            }
+            SequenceFailure::Extra { index } => failure.fact(Fact::labelled(
+                "Extra element at index",
+                render.value(&index),
+            )),
             SequenceFailure::Criterion { evidence, .. } => evidence.explain(failure),
         }
     }
@@ -636,6 +638,27 @@ mod tests {
                 },
             ]);
         }
+    }
+
+    #[test]
+    fn positional_facts_render_indexes_through_the_active_renderer() {
+        let capture = |expected: &'static [i32]| {
+            assert_that_owned!([1, 2, 3].into_iter().filter(|_| true))
+                .with_renderer(CustomValueRenderer)
+                .capture(|it| it.contains_exactly(expected))
+        };
+
+        let extra = capture(&[1, 2]);
+        assert_custom_fact(&extra[0], "Extra element at index", 2);
+        let labels = extra[0]
+            .facts
+            .iter()
+            .map(|fact| fact.label.as_ref())
+            .collect::<Vec<_>>();
+        assert_that!(labels).contains_exactly(["Consumed elements", "Extra element at index"]);
+
+        let mismatch = capture(&[1, 9, 3]);
+        assert_custom_fact(&mismatch[0], "Decisive index", 1);
     }
 
     #[derive(Debug)]

@@ -9,6 +9,7 @@ use core::fmt::Debug;
 /// Compares the complete `Debug` representation with verbatim expected text.
 /// Formatting determines truth even when diagnostic rendering is disabled or budgeted.
 /// Rejections retain the formatted operands so explanation never formats them again.
+#[derive(Debug, Clone)]
 pub struct HasDebugString<E>(E);
 
 impl<E> HasDebugString<E> {
@@ -75,6 +76,7 @@ impl<T: Debug + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnos
 /// Compares the complete `Debug` representation with the expected value's representation.
 /// Formatting determines truth even when diagnostic rendering is disabled or budgeted.
 /// Rejections retain the formatted operands so explanation never formats them again.
+#[derive(Debug, Clone)]
 pub struct HasDebugValue<E>(E);
 
 impl<E> HasDebugValue<E> {

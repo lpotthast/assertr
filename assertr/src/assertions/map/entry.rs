@@ -13,12 +13,14 @@ use crate::{
 /// key type as context. Evaluation borrows that view once for native lookup and the matcher path.
 /// Only the view and nested matcher need rendering capabilities. See [`super::MapAssertions`]
 /// for custom operand registration and lookup requirements.
+#[derive(Debug, Clone)]
 pub struct Entry<K, M> {
     key: K,
     matcher: M,
 }
 
 /// The original stored key and scoped value evidence from a rejected entry expectation.
+#[derive(Debug)]
 pub struct EntryRejection<'a, K: ?Sized> {
     key: Option<&'a K>,
     pub(super) evidence: Evidence,

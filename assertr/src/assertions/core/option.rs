@@ -8,6 +8,7 @@ use crate::{
 
 /// Checks for `Some` and returns a borrowed value on success.
 /// The same definition supports checks, extraction, and callbacks on an assertion chain.
+#[derive(Debug, Clone, Copy)]
 pub struct IsSome;
 
 impl<T, R> Expectation<Option<T>, R> for IsSome {
@@ -46,6 +47,7 @@ impl<T, R> ExpectationDiagnostics<Option<T>, R> for IsSome {
 }
 
 /// Checks for `None`, retaining the unexpected contained value on rejection.
+#[derive(Debug, Clone, Copy)]
 pub struct IsNone;
 
 impl<T, R> Expectation<Option<T>, R> for IsNone {

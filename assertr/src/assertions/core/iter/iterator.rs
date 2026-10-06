@@ -128,6 +128,9 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
         't: 'u;
 
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
+    ///
+    /// A rejection retains one group per rejected window within the rendering budget. Each group
+    /// carries a `Window start` fact with the window's zero-based starting index.
     fn contains_contiguous_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
         P: crate::expectation::MatcherList<T, R>,
@@ -135,6 +138,9 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
         R: ValueRenderer<usize>;
 
     /// Asserts that a contiguous subsequence satisfies `assertions` in order.
+    ///
+    /// Rejections are grouped per window like
+    /// [`contains_contiguous_matching`](Self::contains_contiguous_matching).
     fn contains_contiguous_satisfying<'u, A>(
         self,
         assertions: impl AsRef<[A]>,
@@ -724,16 +730,22 @@ mod tests {
                   - Consumed elements: 3
                 Nested failures:
                   - At [0]:
+                    Actual: 1
+
                     does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
                   - At [1]:
+                    Actual: 2
+
                     does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
                   - At [2]:
+                    Actual: 3
+
                     does not satisfy the constraint
 
                     Constraint:
@@ -1043,6 +1055,8 @@ mod tests {
                   - Consumed elements: 2
                 Nested failures:
                   - At [1]:
+                    Actual: 2
+
                     does not satisfy the constraint
 
                     Constraint:
@@ -1228,6 +1242,8 @@ mod tests {
                   - Consumed elements: 3
                 Nested failures:
                   - At [2]:
+                    Actual: 3
+
                     does not satisfy the constraint
 
                     Constraint:
@@ -1380,26 +1396,42 @@ mod tests {
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
 
-                does not contain matching contiguous elements
+                does not contain these elements contiguously
 
                 Details:
                   - Consumed elements: 3
                 Nested failures:
-                  - At [0]:
-                    does not satisfy the constraint
+                  - does not match in this window
 
-                    Constraint:
-                        satisfies the predicate
-                  - At [1]:
-                    does not satisfy the constraint
+                    Details:
+                      - Window start: 0
+                    Nested failures:
+                      - At [0]:
+                        Actual: 1
 
-                    Constraint:
-                        satisfies the predicate
-                  - At [2]:
-                    does not satisfy the constraint
+                        does not satisfy the constraint
 
-                    Constraint:
-                        satisfies the predicate
+                        Constraint:
+                            satisfies the predicate
+                      - At [1]:
+                        Actual: 2
+
+                        does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
+                  - does not match in this window
+
+                    Details:
+                      - Window start: 1
+                    Nested failures:
+                      - At [2]:
+                        Actual: 3
+
+                        does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
                 -------- assertr --------
             "});
         }
@@ -1563,6 +1595,8 @@ mod tests {
                   - Consumed elements: 2
                 Nested failures:
                   - At [1]:
+                    Actual: 2
+
                     does not satisfy the constraint
 
                     Constraint:
@@ -1850,30 +1884,40 @@ mod tests {
                         satisfies the predicate
 
                     Details:
-                      - at slot: 2
+                      - At slot: 2
                     Nested failures:
-                      - does not satisfy the constraint
+                      - Actual: 1
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
-                      - does not satisfy the constraint
+                      - Actual: 2
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
-                      - does not satisfy the constraint
+                      - Actual: 3
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
                   - has unexpected elements
 
                     Details:
-                      - unexpected count: 1
+                      - Unexpected count: 1
                     Nested failures:
-                      - does not satisfy the constraint
+                      - Actual: 3
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
-                      - does not satisfy the constraint
+                      - Actual: 3
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate

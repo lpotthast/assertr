@@ -4,6 +4,7 @@ use crate::prelude::*;
 use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 
 /// Compares the current watch value without marking it seen.
+#[derive(Debug, Clone)]
 pub struct HasCurrentValue<E>(E);
 impl<T, E, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasCurrentValue<E>
 where
@@ -66,6 +67,7 @@ impl<E> HasCurrentValue<E> {
     }
 }
 /// Checks whether the receiver has changed, rejecting closed channels.
+#[derive(Debug, Clone, Copy)]
 pub struct HasChanged;
 impl<T, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasChanged {
     type Success<'a>
@@ -109,6 +111,7 @@ impl<T, R> ExpectationDiagnostics<tokio::sync::watch::Receiver<T>, R> for HasCha
     }
 }
 /// Checks whether the receiver has not changed, rejecting closed channels.
+#[derive(Debug, Clone, Copy)]
 pub struct HasNotChanged;
 impl<T, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasNotChanged {
     type Success<'a>

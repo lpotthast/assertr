@@ -29,9 +29,11 @@ impl<E> Default for IsOfType<E> {
     }
 }
 
+type_selection_traits!(IsOfType);
+
 /// Explains the erased type name reported for a box whose payload is neither a `&str` nor a
 /// `String`.
-const ERASED_TYPE_NOTE: &str = "The concrete type of a boxed `dyn Any` is erased and shown as `dyn Any`. Only `&str` and `String` values can be named. Check which type was boxed.";
+const ERASED_TYPE_NOTE: &str = "The concrete type of a boxed `dyn Any` is erased. Only `&str` and `String` values can be named. Check which type was boxed.";
 
 /// Type checks for boxed `Any` values in panic and capture mode.
 ///
@@ -386,7 +388,7 @@ mod tests {
                 Expected: u32
 
                 Details:
-                  - The concrete type of a boxed `dyn Any` is erased and shown as `dyn Any`. Only `&str` and `String` values can be named. Check which type was boxed.
+                  - The concrete type of a boxed `dyn Any` is erased. Only `&str` and `String` values can be named. Check which type was boxed.
                 -------- assertr --------
             "});
         }
@@ -413,7 +415,7 @@ mod tests {
                 Expected: u32
 
                 Details:
-                  - The concrete type of a boxed `dyn Any` is erased and shown as `dyn Any`. Only `&str` and `String` values can be named. Check which type was boxed.
+                  - The concrete type of a boxed `dyn Any` is erased. Only `&str` and `String` values can be named. Check which type was boxed.
                 -------- assertr --------
             "});
         }
@@ -515,7 +517,7 @@ mod tests {
                 Expected: u32
 
                 Details:
-                  - The concrete type of a boxed `dyn Any` is erased and shown as `dyn Any`. Only `&str` and `String` values can be named. Check which type was boxed.
+                  - The concrete type of a boxed `dyn Any` is erased. Only `&str` and `String` values can be named. Check which type was boxed.
                 -------- assertr --------
             "});
         }

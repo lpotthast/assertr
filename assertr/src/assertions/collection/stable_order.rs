@@ -303,6 +303,7 @@ where
 }
 
 /// Requires that a stable-order collection has a first element, returning its borrowed element.
+#[derive(Debug, Clone, Copy)]
 pub struct HasFirst;
 
 impl<C: StableOrder + ?Sized, R> Expectation<C, R> for HasFirst {
@@ -356,6 +357,7 @@ where
 }
 
 /// Requires that a stable-order collection has a last element, returning its borrowed element.
+#[derive(Debug, Clone, Copy)]
 pub struct HasLast;
 
 impl<C: StableOrder + ?Sized, R> Expectation<C, R> for HasLast {
@@ -410,6 +412,7 @@ where
 
 /// Requires that a stable-order collection contains exactly one element, returning its borrowed
 /// element.
+#[derive(Debug, Clone, Copy)]
 pub struct HasSingle;
 
 impl<C: StableOrder + ?Sized, R> Expectation<C, R> for HasSingle {
@@ -943,6 +946,8 @@ mod tests {
 
                 Nested failures:
                   - At [1]:
+                    Actual: 3
+
                     does not satisfy the constraint
 
                     Constraint:
@@ -1107,6 +1112,8 @@ mod tests {
 
                 Nested failures:
                   - At [2]:
+                    Actual: 4
+
                     does not satisfy the constraint
 
                     Constraint:
@@ -1221,19 +1228,33 @@ mod tests {
                 -------- assertr --------
                 Expression: `[1, 2, 3]`
 
-                does not match
+                does not contain these elements contiguously
 
                 Nested failures:
-                  - At [1]:
-                    does not satisfy the constraint
+                  - does not match in this window
 
-                    Constraint:
-                        satisfies the predicate
-                  - At [1]:
-                    does not satisfy the constraint
+                    Details:
+                      - Window start: 0
+                    Nested failures:
+                      - At [1]:
+                        Actual: 2
 
-                    Constraint:
-                        satisfies the predicate
+                        does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
+                  - does not match in this window
+
+                    Details:
+                      - Window start: 1
+                    Nested failures:
+                      - At [1]:
+                        Actual: 2
+
+                        does not satisfy the constraint
+
+                        Constraint:
+                            satisfies the predicate
                 -------- assertr --------
             "});
         }
@@ -1333,11 +1354,11 @@ mod tests {
                     ]
 
                     Details:
-                      - Elements not expected: [
-                            1,
-                        ]
                       - Elements not found: [
                             4,
+                        ]
+                      - Elements not expected: [
+                            1,
                         ]
                     -------- assertr --------
                 "});
@@ -1458,11 +1479,11 @@ mod tests {
                     ]
 
                     Details:
-                      - Elements not expected: [
-                            1,
-                        ]
                       - Elements not found: [
                             2,
+                        ]
+                      - Elements not expected: [
+                            1,
                         ]
                     -------- assertr --------
                 "});
@@ -1529,11 +1550,15 @@ mod tests {
 
                 Nested failures:
                   - At [1]:
+                    Actual: 2
+
                     does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
                   - At [2]:
+                    Actual: 3
+
                     does not satisfy the constraint
 
                     Constraint:

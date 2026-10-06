@@ -6,6 +6,7 @@ use crate::{
 use core::cell::RefCell;
 
 /// Observes whether a cell is borrowed, retaining an acquired borrow on rejection.
+#[derive(Debug, Clone, Copy)]
 pub struct IsBorrowed;
 
 impl<T, R> Expectation<RefCell<T>, R> for IsBorrowed {
@@ -53,6 +54,7 @@ where
 }
 
 /// Observes whether a cell is mutably borrowed, retaining an acquired borrow on rejection.
+#[derive(Debug, Clone, Copy)]
 pub struct IsMutablyBorrowed;
 
 impl<T, R> Expectation<RefCell<T>, R> for IsMutablyBorrowed {
@@ -100,6 +102,7 @@ where
 }
 
 /// Acquires a shared borrow if the cell has no active mutable borrow.
+#[derive(Debug, Clone, Copy)]
 pub struct IsNotMutablyBorrowed;
 impl<T, R> Expectation<RefCell<T>, R> for IsNotMutablyBorrowed {
     type Success<'a>
@@ -185,11 +188,7 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
 mod tests {
     mod observations {
         use super::super::{IsBorrowed, IsMutablyBorrowed, IsNotMutablyBorrowed};
-        use crate::{
-            matchers::{all_of, predicate},
-            prelude::*,
-            test_support::NoRenderer,
-        };
+        use crate::{matchers::all_of, prelude::*, test_support::NoRenderer};
         use core::cell::RefCell;
 
         #[test]
@@ -202,7 +201,9 @@ mod tests {
                 .with_renderer(NoRenderer)
                 .matches(all_of((
                     IsNotMutablyBorrowed,
-                    predicate(|cell: &RefCell<i32>| cell.try_borrow_mut().is_ok()),
+                    crate::test_support::opaque_predicate(|cell: &RefCell<i32>| {
+                        cell.try_borrow_mut().is_ok()
+                    }),
                 )));
         }
     }

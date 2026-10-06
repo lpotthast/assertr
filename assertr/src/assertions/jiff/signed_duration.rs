@@ -36,6 +36,7 @@ sign_expectations!(subject: SignedDuration, zero: SignedDuration::ZERO, present:
 /// let reusable = IsCloseTo::new(&expected, deviation);
 /// assert_that!(SignedDuration::from_secs(4)).matches(&reusable);
 /// ```
+#[derive(Debug, Clone)]
 pub struct IsCloseTo<E = SignedDuration, D = E> {
     expected: E,
     allowed_deviation: D,

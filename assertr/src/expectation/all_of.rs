@@ -6,6 +6,7 @@ use crate::{
 };
 
 /// A conjunction of constraints.
+#[derive(Debug, Clone)]
 pub struct AllOf<L>(L);
 
 /// Evaluates all constraints. An empty conjunction succeeds.

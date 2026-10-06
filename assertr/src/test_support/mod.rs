@@ -22,6 +22,45 @@ pub(crate) use rendering::{
     assert_custom_value, assert_redacted, rendered_text,
 };
 
+/// A boolean matcher whose diagnostics render nothing, for renderer-independence fixtures.
+///
+/// Unlike [`crate::matchers::predicate`], it never renders a rejected subject.
+pub(crate) struct OpaquePredicate<F>(F);
+
+pub(crate) fn opaque_predicate<A: ?Sized, F: Fn(&A) -> bool>(callback: F) -> OpaquePredicate<F> {
+    OpaquePredicate(callback)
+}
+
+impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::Expectation<A, R> for OpaquePredicate<F> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        A: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        A: 'a;
+    fn evaluate(&self, actual: &A, _: &crate::AssertionContext<'_, R>) -> Result<(), ()> {
+        if (self.0)(actual) { Ok(()) } else { Err(()) }
+    }
+}
+impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::ExpectationDiagnostics<A, R> for OpaquePredicate<F> {
+    const KIND: crate::failure::FailureKind = crate::failure::FailureKind::Matching;
+    fn explain<Target>(
+        &self,
+        rejected: Option<(&A, ())>,
+        failure: crate::failure::FailureBuilder<Target>,
+        _: &crate::AssertionContext<'_, R>,
+    ) -> crate::failure::FailureBuilder<Target> {
+        match rejected {
+            None => failure.relation("satisfies the opaque predicate"),
+            Some(_) => failure.relation("does not satisfy the opaque predicate"),
+        }
+    }
+}
+
 /// Calls the observer whenever a user operand is resolved.
 pub(crate) struct BorrowSpy<T, F> {
     pub(crate) value: T,

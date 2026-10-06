@@ -52,7 +52,7 @@ infinite input can finish only if it can decide the result without reaching the 
 | Matcher window | As many items as the pattern has positions. |
 | Prefix, exact, or suffix equality failure | Indexed child failures, subject to the item budget. Successful pairs add none. The actual-value preview has a separate budget. |
 | Matcher membership | Evidence from the first rejected candidates within the budget. Later rejections are only counted as omitted. |
-| Contiguous matcher failure | Evidence from the first rejected windows within the budget. A position can appear once per window that rejected it. |
+| Contiguous matcher failure | One "does not match in this window" group with a `Window start` fact per rejected window, for the first rejected windows within the budget. Each group takes one slot. Later windows are still evaluated once and counted as omitted. A position can appear once per window that rejected it. |
 
 Windows hold the items needed to perform a check, so diagnostic limits do not reduce them. Storage grows as input
 arrives without reserving the pattern length upfront. Equality previews trim existing storage. Unordered equality

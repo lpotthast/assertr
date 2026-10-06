@@ -9,6 +9,7 @@ use crate::{
 };
 
 /// Checks constant-time indexed access and returns the borrowed element when present.
+#[derive(Debug, Clone, Copy)]
 pub struct HasElementAt(usize);
 impl HasElementAt {
     /// Requires an element at this zero-based index.

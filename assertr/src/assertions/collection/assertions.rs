@@ -473,15 +473,21 @@ mod tests {
                 does not contain a matching element
 
                 Nested failures:
-                  - does not satisfy the constraint
+                  - Actual: 1
+
+                    does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
-                  - does not satisfy the constraint
+                  - Actual: 2
+
+                    does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
-                  - does not satisfy the constraint
+                  - Actual: 3
+
+                    does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
@@ -966,9 +972,11 @@ mod tests {
                         satisfies the predicate
 
                     Details:
-                      - at slot: 1
+                      - At slot: 1
                     Nested failures:
-                      - does not satisfy the constraint
+                      - Actual: 1
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
@@ -1004,30 +1012,40 @@ mod tests {
                         satisfies the predicate
 
                     Details:
-                      - at slot: 2
+                      - At slot: 2
                     Nested failures:
-                      - does not satisfy the constraint
+                      - Actual: 1
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
-                      - does not satisfy the constraint
+                      - Actual: 2
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
-                      - does not satisfy the constraint
+                      - Actual: 3
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
                   - has unexpected elements
 
                     Details:
-                      - unexpected count: 1
+                      - Unexpected count: 1
                     Nested failures:
-                      - does not satisfy the constraint
+                      - Actual: 1
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
-                      - does not satisfy the constraint
+                      - Actual: 1
+
+                        does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate

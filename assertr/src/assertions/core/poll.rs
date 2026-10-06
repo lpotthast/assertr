@@ -9,6 +9,7 @@ use core::task::Poll;
 
 /// Checks for `Ready` and returns the borrowed value on success.
 /// Checks, extraction, and ordinary callbacks execute this same definition.
+#[derive(Debug, Clone, Copy)]
 pub struct IsReady;
 
 impl<T, R> Expectation<Poll<T>, R> for IsReady {
@@ -51,6 +52,7 @@ impl<T, R> ExpectationDiagnostics<Poll<T>, R> for IsReady {
 }
 
 /// Checks for `Pending`, retaining the unexpected ready value on rejection.
+#[derive(Debug, Clone, Copy)]
 pub struct IsPending;
 
 impl<T, R> Expectation<Poll<T>, R> for IsPending {

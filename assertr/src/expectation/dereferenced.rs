@@ -5,6 +5,7 @@ use crate::{
 use core::ops::Deref;
 
 /// Explicitly dereferences an actual value before matching. No actual values are moved.
+#[derive(Debug, Clone)]
 pub struct Dereferenced<M>(M);
 
 /// Adapts a matcher for subjects implementing [`Deref`], such as references, boxes, reference

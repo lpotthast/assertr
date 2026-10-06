@@ -34,7 +34,7 @@ impl<E: 'static, R> ExpectationDiagnostics<PanicValue, R> for IsOfType<E> {
 
 /// Explains the erased type name reported for a panic payload that is neither a `&str` nor a
 /// `String`.
-const ERASED_TYPE_NOTE: &str = "The panic value can only be captured as Box<dyn Any + Send>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.";
+const ERASED_TYPE_NOTE: &str = "The panic value can only be captured as Box<dyn Any + Send>, meaning that the concrete type was erased. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.";
 
 /// Type checks for `PanicValue` subjects in panic and capture mode.
 /// Use [`PanicValueExtractAssertions::has_type`] to continue with the downcast payload.
@@ -346,7 +346,7 @@ mod tests {
                 Expected: u32
 
                 Details:
-                  - The panic value can only be captured as Box<dyn Any + Send>, meaning that the concrete type was erased. It will be shown as `dyn Any`. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
+                  - The panic value can only be captured as Box<dyn Any + Send>, meaning that the concrete type was erased. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
                 -------- assertr --------
             "});
         }

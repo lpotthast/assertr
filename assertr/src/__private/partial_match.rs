@@ -104,7 +104,9 @@ where
 mod tests {
     use super::partial_match;
     use crate::{
-        expectation::predicate, failure::PathSegment, prelude::*, test_support::NoRenderer,
+        failure::PathSegment,
+        prelude::*,
+        test_support::{NoRenderer, opaque_predicate},
     };
     use core::cell::Cell;
 
@@ -169,7 +171,7 @@ mod tests {
         let calls = Cell::new(0);
         let matcher = partial_match(
             Option::is_some,
-            (predicate(|_: &Option<i32>| {
+            (opaque_predicate(|_: &Option<i32>| {
                 calls.set(calls.get() + 1);
                 true
             }),),

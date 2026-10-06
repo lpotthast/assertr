@@ -20,6 +20,7 @@ macro_rules! ordering_expectation {
         rejection $rejection:literal;
     ) => {
         $(#[$struct_doc])*
+        #[derive(Debug, Clone)]
         pub struct $name<E> {
             expected: E,
         }

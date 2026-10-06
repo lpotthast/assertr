@@ -83,7 +83,7 @@ assert_that!(vec).has_length(3).contains(2);
 
 ```toml
 [dependencies]
-assertr = "0.7.1"
+assertr = "0.8.0"
 ```
 
 The default features are `std` and `num`. Everything else is opt-in:
@@ -104,8 +104,9 @@ The default features are `std` and `num`. Everything else is opt-in:
 
 ### no_std
 
-Disable the default features. `partial`, `fluent`, `num`, `libm`, `rootcause`, `serde-json`, and
-`serde-toml` support embedded `no_std` targets with `alloc`. Every other feature enables `std`.
+Disable the default features. `partial`, `fluent`, `num`, `libm`, `rootcause`, `serde`,
+`serde-json`, and `serde-toml` support embedded `no_std` targets with `alloc`. Every other
+feature enables `std`.
 Add `libm` next to `num` if numeric assertions need floating-point classifications. `libm` does
 not enable `num` by itself.
 
@@ -252,8 +253,16 @@ named directly.
 
 ## MSRV
 
-The minimum supported Rust version is `1.89.0` for both crates. Version history is recorded in
-the changelog.
+Current MSRV:
+
+- `assertr`: `1.89.0`
+- `assertr-macros`: `1.89.0`
+
+Previous MSRV values:
+
+- As of `0.1.0`, the MSRV was `1.76.0`
+- As of `0.2.0`, the MSRV was `1.85.0`
+- As of `0.4.0`, the MSRV was `1.89.0`
 
 ## Contributing
 

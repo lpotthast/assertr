@@ -7,7 +7,16 @@ use crate::{
 };
 
 /// A matcher that checks a value with existing assertion methods. Construct it with [`satisfying`].
+///
+/// It is `Clone` when the callback is. `Debug` omits the callback.
+#[derive(Clone)]
 pub struct Satisfying<F>(F);
+
+impl<F> core::fmt::Debug for Satisfying<F> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.debug_struct("Satisfying").finish_non_exhaustive()
+    }
+}
 
 /// Uses existing assertion methods as a matcher, including within a `partial!` field expectation.
 ///

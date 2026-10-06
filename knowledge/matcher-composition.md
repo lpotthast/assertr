@@ -31,6 +31,12 @@ A matcher is an expectation used as part of another check. `assertr::matchers` p
 such as `string`, `collection`, and `map`. The prelude exposes the module, not constructor names.
 [Rustdoc](../assertr/src/matchers.rs) shows the syntax and usage examples.
 
+Public expectation types implement `Debug` and `Clone`, bounded on their operands and nested matchers. They are also
+`Copy` when they hold no data, only concrete copyable data, or only borrowed targets. Callback definitions (`Predicate`,
+`Satisfying`, `Pattern`, `HasValueSatisfying`) are `Clone` when their callback is and omit it from `Debug`. Identity definitions show addresses and type selections such as `IsOfType` name the
+type, so neither bounds its target. Lists built by `matchers!`, `elements_are!`, and `entries_are!` use private nodes
+without these traits. Arrays, slices, vectors, and tuples of matchers keep them.
+
 ## Evaluation and failure evidence
 
 Each composite matcher decides which checks run, in what order, and how to describe a failure when no child evidence is
@@ -40,17 +46,18 @@ and failure handling.
 | Matcher family | Evaluation | Empty subject/list |
 |---|---|---|
 | `all_of` | Evaluate every branch. | Accept. |
-| `any_of` | Stop at first success. If all fail, report one nested failure ("does not match any alternative") whose children carry zero-based `branch` facts. | Reject. |
+| `any_of` | Stop at first success. If all fail, report one nested failure ("does not match any alternative") whose children carry zero-based `Branch` facts. | Reject. |
 | `each` | Evaluate every element without positional meaning. | Accept. |
-| `contains_matching` | Stop at first matching element. | Reject. |
+| `contains_matching` | Stop at first matching element. A rejection stays one nested failure ("does not contain a matching element"), also when composed. | Reject. |
 | `does_not_contain_matching` | Probe every element and identify unexpected matches. | Accept. |
-| Positional collection matchers | Evaluate all available positions in each candidate window. Contiguous search stops at the first successful window. | Empty criteria accept except exact matching against nonempty input. |
-| `predicate` | Call `Fn(&T) -> bool`. `described_as` supplies the relation. There is no typed rejection error, and no subject renderer is required. | Not applicable. |
+| Positional collection matchers | Evaluate all available positions in each candidate window. Contiguous search stops at the first successful window. A rejected search reports "does not contain these elements contiguously" with one "does not match in this window" group per retained window, each carrying a `Window start` fact. | Empty criteria accept except exact matching against nonempty input. |
+| `predicate` | Call `Fn(&T) -> bool`. `described_as` supplies the relation. There is no typed rejection error. Evaluation needs no renderer. Explaining a rejection renders the subject, so diagnostics require `R: ValueRenderer<T>`. | Not applicable. |
 
 Candidate windows share the enclosing [evidence allowance](expectation-execution.md#budgets-and-probes). Failures from
 earlier windows are discarded if a later window succeeds. Missing positions are described without evaluation. Suffix
 constraints align from the subject's end. Constraints that precede a shorter subject are described without an index
 path. [Iterator matchers](iterator-execution.md#retention-and-diagnostics) retain evidence according to the scan.
+Iterator contiguous searches report the same per-window groups.
 
 ## Matcher lists
 
@@ -99,7 +106,7 @@ zero item allowances skip this extra work. Probes also reject unequal lengths wi
 occurrence that cannot be assigned.
 
 Each missing slot is reported with its constraint and candidate failures. An extra occurrence that satisfies an already
-matched expectation is surplus, not a rejected candidate. `at slot` identifies a zero-based expected position, never an
+matched expectation is surplus, not a rejected candidate. `At slot` identifies a zero-based expected position, never an
 actual collection index.
 
 ### Bounded candidate evidence

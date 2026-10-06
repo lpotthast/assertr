@@ -5,6 +5,7 @@ use crate::{
 };
 
 /// Requires [`ExactSizeIterator::len`] to equal an expected count, without advancing the iterator.
+#[derive(Debug, Clone, Copy)]
 pub struct HasRemainingCount(usize);
 impl HasRemainingCount {
     /// Requires exactly this many remaining items.
@@ -67,6 +68,7 @@ where
 }
 
 /// Requires [`ExactSizeIterator::len`] to be zero, without advancing the iterator.
+#[derive(Debug, Clone, Copy)]
 pub struct HasNoRemainingElements;
 
 impl<I: ExactSizeIterator, R> Expectation<I, R> for HasNoRemainingElements {
@@ -114,6 +116,7 @@ where
 }
 
 /// Requires [`ExactSizeIterator::len`] to be nonzero, without advancing the iterator.
+#[derive(Debug, Clone, Copy)]
 pub struct HasRemainingElements;
 
 impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingElements {

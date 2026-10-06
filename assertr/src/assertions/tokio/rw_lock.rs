@@ -48,6 +48,7 @@ impl<T> LockObservation<'_, T> {
 macro_rules! lock_state_expectation {
     ($(#[$meta:meta])* $name:ident, $state:pat, $met:literal, $unmet:literal) => {
         $(#[$meta])*
+        #[derive(Debug, Clone, Copy)]
         pub struct $name;
         impl<T, R> Expectation<RwLock<T>, R> for $name {
             type Success<'a>

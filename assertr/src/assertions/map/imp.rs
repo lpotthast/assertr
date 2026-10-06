@@ -47,7 +47,16 @@ impl<K> FoundEntries<K> {
 }
 
 /// Checks key presence through native borrowed lookup, without imposing key equality bounds.
+#[derive(Debug)]
 pub struct ContainsKey<'e, Q: ?Sized>(&'e Q);
+
+impl<Q: ?Sized> Clone for ContainsKey<'_, Q> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<Q: ?Sized> Copy for ContainsKey<'_, Q> {}
 impl<'e, Q: ?Sized> ContainsKey<'e, Q> {
     /// Borrows a query for the map's native lookup.
     #[must_use]
@@ -104,7 +113,16 @@ where
 }
 
 /// Checks key absence through native borrowed lookup, without imposing key equality bounds.
+#[derive(Debug)]
 pub struct DoesNotContainKey<'e, Q: ?Sized>(&'e Q);
+
+impl<Q: ?Sized> Clone for DoesNotContainKey<'_, Q> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<Q: ?Sized> Copy for DoesNotContainKey<'_, Q> {}
 impl<'e, Q: ?Sized> DoesNotContainKey<'e, Q> {
     /// Borrows a query for the map's native lookup.
     #[must_use]
@@ -162,6 +180,7 @@ where
 
 /// Checks map value membership using a borrowed view for the declared value type, without key
 /// lookup.
+#[derive(Debug, Clone)]
 pub struct ContainsValue<E>(E);
 
 impl<E> ContainsValue<E> {
@@ -235,6 +254,7 @@ where
 
 /// Checks that no map value equals a borrowed view for the declared value type, without key
 /// lookup.
+#[derive(Debug, Clone)]
 pub struct DoesNotContainValue<E>(E);
 
 impl<E> DoesNotContainValue<E> {
@@ -307,9 +327,19 @@ where
 }
 
 /// Checks a map entry with one native lookup and one expected-value borrow.
+#[derive(Debug)]
 pub struct ContainsEntry<'e, Q: ?Sized, E> {
     key: &'e Q,
     value: E,
+}
+
+impl<Q: ?Sized, E: Clone> Clone for ContainsEntry<'_, Q, E> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key,
+            value: self.value.clone(),
+        }
+    }
 }
 impl<'e, Q: ?Sized, E> ContainsEntry<'e, Q, E> {
     /// Borrows the query and owns the expected value.
@@ -403,9 +433,19 @@ where
 
 /// Checks that a key is absent or maps to a different value, with one native lookup and one
 /// unexpected-value borrow.
+#[derive(Debug)]
 pub struct DoesNotContainEntry<'e, Q: ?Sized, E> {
     key: &'e Q,
     value: E,
+}
+
+impl<Q: ?Sized, E: Clone> Clone for DoesNotContainEntry<'_, Q, E> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key,
+            value: self.value.clone(),
+        }
+    }
 }
 impl<'e, Q: ?Sized, E> DoesNotContainEntry<'e, Q, E> {
     /// Borrows the query and owns the expected value.
@@ -483,6 +523,7 @@ where
 }
 
 /// Retained missing query references from a membership rejection.
+#[derive(Debug)]
 pub struct MissingKeysRejection<'a, Q: ?Sized> {
     missing: Vec<&'a Q>,
 }
@@ -492,6 +533,7 @@ pub struct ContainsKeys<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
+expected_operands_traits!(ContainsKeys<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsKeys<E, B> {
     /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
     /// without accessing its views.
@@ -579,6 +621,7 @@ where
 /// The fields remain private so diagnostics consume the original observations without repeating
 /// lookup or value comparison. Missing and mismatched keys are selected query views, while
 /// unexpected entries retain their stored keys and values.
+#[derive(Debug)]
 pub struct ExactEntriesRejection<'a, K, V, EK: ?Sized, EV: ?Sized> {
     length: usize,
     missing: Vec<&'a EK>,
@@ -592,6 +635,7 @@ pub struct ContainsExactlyEntries<EK, EV, B = Vec<(EK, EV)>> {
     expected: B,
     operands: PhantomData<fn() -> (EK, EV)>,
 }
+expected_operands_traits!(ContainsExactlyEntries<EK, EV, B>, operands);
 impl<EK, EV, B: AsRef<[(EK, EV)]>> ContainsExactlyEntries<EK, EV, B> {
     /// Stores [repeatable expected entries](crate#bulk-expected-data) without accessing their
     /// views.

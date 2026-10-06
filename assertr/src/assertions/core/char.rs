@@ -5,6 +5,7 @@ use crate::{
 };
 
 /// Compares characters under ASCII case folding.
+#[derive(Debug, Clone, Copy)]
 pub struct EqualToIgnoringAsciiCase(char);
 
 impl EqualToIgnoringAsciiCase {

@@ -8,8 +8,9 @@ use crate::{
 /// A disjunction of constraints.
 ///
 /// A rejection stays one nested failure, so it remains distinguishable from the flattened
-/// children of an enclosing conjunction. Each retained child carries a zero-based `branch` fact,
+/// children of an enclosing conjunction. Each retained child carries a zero-based `Branch` fact,
 /// because one alternative can contribute several failures and sorted scopes can reorder them.
+#[derive(Debug, Clone)]
 pub struct AnyOf<L>(L);
 
 /// Stops at the first matching branch. An empty disjunction fails.
@@ -42,7 +43,7 @@ where
             for failure in &mut evidence.children {
                 failure
                     .facts
-                    .push(Fact::labelled("branch", render.value(&index)));
+                    .push(Fact::labelled("Branch", render.value(&index)));
             }
             if matched {
                 return Ok(());
@@ -128,13 +129,13 @@ mod tests {
                       Actual: 3
 
                     Details:
-                      - branch: 0
+                      - Branch: 0
                   - Expected: 2
 
                       Actual: 3
 
                     Details:
-                      - branch: 1
+                      - Branch: 1
               - Expected: 5
 
                   Actual: 3
@@ -158,26 +159,26 @@ mod tests {
               - does not match any alternative
 
                 Details:
-                  - branch: 0
+                  - Branch: 0
                 Nested failures:
                   - Expected: 1
 
                       Actual: 3
 
                     Details:
-                      - branch: 0
+                      - Branch: 0
                   - Expected: 2
 
                       Actual: 3
 
                     Details:
-                      - branch: 1
+                      - Branch: 1
               - Expected: 5
 
                   Actual: 3
 
                 Details:
-                  - branch: 1
+                  - Branch: 1
             -------- assertr --------
         "});
     }

@@ -314,8 +314,9 @@ fn set_and_map_assertions_compile_without_std() {
         it.is_equal_to(1);
     }
 
+    // Evaluation needs no renderer when the element matcher needs none for its diagnostics.
     struct NoRenderer;
-    let matcher = predicate(is_one);
+    let matcher = matchers::anything();
     let expected = ContainsMatching::new(&matcher);
     with_context(NoRenderer, |context| {
         assert_that!(expected.evaluate([1, 2].as_slice(), context).is_ok()).is_true();

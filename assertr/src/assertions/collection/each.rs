@@ -6,6 +6,7 @@ use crate::{
 };
 
 /// Applies one constraint to every element of an order-free collection.
+#[derive(Debug, Clone)]
 pub struct Each<M>(M);
 
 /// Every element must match. Empty collections succeed. No positional capability is implied.

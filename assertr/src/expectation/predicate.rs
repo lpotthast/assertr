@@ -1,16 +1,32 @@
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics,
+    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 use alloc::borrow::Cow;
+use core::fmt;
 
 /// A boolean closure with an optional diagnostic description.
+///
+/// It is `Clone` when the closure is. `Debug` shows the description without the closure.
+#[derive(Clone)]
 pub struct Predicate<F> {
     callback: F,
     description: Cow<'static, str>,
 }
 
-/// Adapts a reusable boolean closure. The subject needs no renderer.
+impl<F> fmt::Debug for Predicate<F> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Predicate")
+            .field("description", &self.description)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Adapts a reusable boolean closure.
+///
+/// Evaluation needs no renderer. Diagnostics render a rejected subject, so explaining a failure
+/// requires the active renderer to support the subject type.
 pub fn predicate<A: ?Sized, F>(callback: F) -> Predicate<F>
 where
     F: Fn(&A) -> bool,
@@ -55,6 +71,7 @@ where
 impl<A: ?Sized, R, F> ExpectationDiagnostics<A, R> for Predicate<F>
 where
     F: Fn(&A) -> bool,
+    R: ValueRenderer<A>,
 {
     const KIND: FailureKind = FailureKind::Matching;
     fn explain<Target>(
@@ -65,7 +82,8 @@ where
     ) -> FailureBuilder<Target> {
         match rejected {
             None => failure.relation(self.description.clone()),
-            Some((_, ())) => failure
+            Some((actual, ())) => failure
+                .actual(context.render().value(actual))
                 .relation("does not satisfy the constraint")
                 .constraint(context.describe(&self)),
         }
@@ -76,6 +94,22 @@ where
 mod tests {
     use super::predicate;
     use crate::prelude::*;
+
+    #[test]
+    fn renders_the_rejected_subject_through_the_active_renderer() {
+        use crate::test_support::{CustomValueRenderer, assert_custom_value};
+
+        let failures = assert_that!([1, 7])
+            .with_renderer(CustomValueRenderer)
+            .capture(|it| it.matches(matchers::each(predicate(|x: &i32| *x < 5))));
+        assert_that!(failures[0].children).has_length(1);
+        let child = &failures[0].children[0];
+        assert_custom_value(child.actual.as_ref().unwrap(), &7);
+        assert_that!(child.relation.as_deref())
+            .is_equal_to(Some("does not satisfy the constraint"));
+        assert_that!(child.constraint.as_ref().unwrap().relation.as_deref())
+            .is_equal_to(Some("satisfies the predicate"));
+    }
 
     #[test]
     fn propagates_user_panics() {

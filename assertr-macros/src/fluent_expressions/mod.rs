@@ -1,12 +1,62 @@
 use proc_macro_crate::{FoundCrate, crate_name};
-use proc_macro2::{Span, TokenStream};
-use quote::quote;
+use proc_macro2::{Span, TokenStream, TokenTree};
+use quote::{ToTokens, quote};
 use syn::{
-    Expr, Ident, Item,
+    Expr, Ident, Item, LitStr, Path, Token,
+    parse::{Parse, ParseStream},
     visit_mut::{self, VisitMut},
 };
 
-pub(crate) fn fluent_expressions_impl(mut item: Item) -> syn::Result<TokenStream> {
+/// Arguments of `#[fluent_expressions(...)]`.
+#[derive(Default)]
+pub(crate) struct Arguments {
+    /// Runtime path given as `crate = path`, for example through a facade crate.
+    runtime: Option<Path>,
+}
+
+impl Parse for Arguments {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
+        let mut arguments = Self::default();
+        while !input.is_empty() {
+            if input.peek(Token![crate]) {
+                let keyword = input.parse::<Token![crate]>()?;
+                input.parse::<Token![=]>()?;
+                if input.peek(LitStr) {
+                    return Err(input.error(
+                        "expected an unquoted path such as `my_facade::assertr`, not a string literal",
+                    ));
+                }
+                let path = Path::parse_mod_style(input)?;
+                if arguments.runtime.is_some() {
+                    return Err(syn::Error::new(
+                        keyword.span,
+                        "duplicate fluent_expressions argument `crate`",
+                    ));
+                }
+                arguments.runtime = Some(path);
+            } else {
+                let token = input.parse::<TokenTree>()?;
+                let message = match &token {
+                    TokenTree::Ident(name) => format!(
+                        "unknown fluent_expressions argument `{name}`, expected `crate = <path>`"
+                    ),
+                    _ => String::from("expected fluent_expressions argument `crate = <path>`"),
+                };
+                return Err(syn::Error::new(token.span(), message));
+            }
+            if input.is_empty() {
+                break;
+            }
+            input.parse::<Token![,]>()?;
+        }
+        Ok(arguments)
+    }
+}
+
+pub(crate) fn fluent_expressions_impl(
+    arguments: Arguments,
+    mut item: Item,
+) -> syn::Result<TokenStream> {
     match &item {
         Item::Fn(_) => {}
         Item::Mod(module) if module.content.is_some() => {}
@@ -25,7 +75,9 @@ pub(crate) fn fluent_expressions_impl(mut item: Item) -> syn::Result<TokenStream
     }
 
     FluentExpressions {
-        assertr: assertr_path(),
+        assertr: arguments
+            .runtime
+            .map_or_else(assertr_path, |path| path.to_token_stream()),
     }
     .visit_item_mut(&mut item);
     Ok(quote!(#item))
@@ -130,10 +182,7 @@ fn receiver_tokens(receiver: &Expr) -> TokenStream {
     let mut previous_was_word = false;
 
     for token in fallback.clone() {
-        let is_word = matches!(
-            token,
-            proc_macro2::TokenTree::Ident(_) | proc_macro2::TokenTree::Literal(_)
-        );
+        let is_word = matches!(token, TokenTree::Ident(_) | TokenTree::Literal(_));
         if previous_was_word && is_word {
             source.push(' ');
         }
@@ -160,7 +209,8 @@ mod tests {
             mod tests;
         ))
         .expect("valid module");
-        let error = fluent_expressions_impl(item).expect_err("module must be inline");
+        let error =
+            fluent_expressions_impl(Arguments::default(), item).expect_err("module must be inline");
         assert_that!(error.to_string()).is_equal_to("fluent_expressions requires an inline module");
     }
 
@@ -170,8 +220,86 @@ mod tests {
             struct Tests;
         ))
         .expect("valid struct");
-        let error = fluent_expressions_impl(item).expect_err("struct is not supported");
+        let error = fluent_expressions_impl(Arguments::default(), item)
+            .expect_err("struct is not supported");
         assert_that!(error.to_string())
             .is_equal_to("fluent_expressions can only be applied to a function or inline module");
+    }
+
+    mod arguments {
+        use super::*;
+
+        fn parse(tokens: TokenStream) -> syn::Result<Arguments> {
+            syn::parse2(tokens)
+        }
+
+        fn runtime(tokens: TokenStream) -> Option<String> {
+            parse(tokens)
+                .expect("valid arguments")
+                .runtime
+                .map(|path| path.to_token_stream().to_string())
+        }
+
+        fn error(tokens: TokenStream) -> String {
+            match parse(tokens) {
+                Ok(_) => panic!("arguments must be rejected"),
+                Err(error) => error.to_string(),
+            }
+        }
+
+        #[test]
+        fn accepts_no_arguments() {
+            assert_that!(runtime(quote!())).is_none();
+        }
+
+        #[test]
+        fn accepts_a_runtime_path() {
+            assert_that!(runtime(quote!(crate = my_facade::assertr)))
+                .is_equal_to(Some(String::from("my_facade :: assertr")));
+            assert_that!(runtime(quote!(crate = ::my_facade::assertr,)))
+                .is_equal_to(Some(String::from(":: my_facade :: assertr")));
+            assert_that!(runtime(quote!(crate = crate::support::assertr)))
+                .is_equal_to(Some(String::from("crate :: support :: assertr")));
+        }
+
+        #[test]
+        fn uses_the_given_runtime_path_in_generated_code() {
+            let item = syn::parse2(quote!(
+                fn check() {
+                    let _ = 1.verify(|it| it);
+                }
+            ))
+            .expect("valid function");
+            let arguments = parse(quote!(crate = my_facade::assertr)).expect("valid arguments");
+            let expanded = fluent_expressions_impl(arguments, item)
+                .expect("function is supported")
+                .to_string();
+            assert_that!(expanded)
+                .contains("my_facade :: assertr :: __private :: fluent_expressions :: finish");
+        }
+
+        #[test]
+        fn rejects_unknown_arguments() {
+            assert_that!(error(quote!(krate = my_facade::assertr))).is_equal_to(
+                "unknown fluent_expressions argument `krate`, expected `crate = <path>`",
+            );
+            assert_that!(error(quote!("my_facade::assertr")))
+                .is_equal_to("expected fluent_expressions argument `crate = <path>`");
+        }
+
+        #[test]
+        fn rejects_duplicate_runtime_paths() {
+            assert_that!(error(quote!(crate = a::assertr, crate = b::assertr)))
+                .is_equal_to("duplicate fluent_expressions argument `crate`");
+        }
+
+        #[test]
+        fn rejects_quoted_and_missing_paths() {
+            assert_that!(error(quote!(crate = "my_facade::assertr"))).is_equal_to(
+                "expected an unquoted path such as `my_facade::assertr`, not a string literal",
+            );
+            assert_that!(error(quote!(crate))).is_equal_to("expected `=`");
+            assert_that!(error(quote!(crate = my_facade::assertr<T>))).is_equal_to("expected `,`");
+        }
     }
 }

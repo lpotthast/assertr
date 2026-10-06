@@ -118,7 +118,7 @@ impl<Item> Preview<Item> {
         ));
         let failure = self.omission(failure);
         match decisive_index {
-            Some(index) => failure.fact(Fact::labelled("Decisive index", index)),
+            Some(index) => failure.fact(Fact::labelled("Decisive index", rendering.value(&index))),
             None => failure,
         }
     }

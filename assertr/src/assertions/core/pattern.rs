@@ -5,9 +5,20 @@ use crate::{AssertionContext, Expectation, ExpectationDiagnostics};
 /// A Rust pattern together with the predicate and source text needed to assert that it matches.
 ///
 /// Create patterns with [`pattern!`](crate::pattern) rather than constructing this type directly.
+/// It is `Clone` when the predicate is. `Debug` shows the pattern's source text.
+#[derive(Clone)]
 pub struct Pattern<P> {
     description: &'static str,
     predicate: P,
+}
+
+impl<P> core::fmt::Debug for Pattern<P> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("Pattern")
+            .field("pattern", &self.description)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<P> Pattern<P> {
@@ -122,7 +133,17 @@ fn explain_pattern_rejection<T: ?Sized, Target, R: ValueRenderer<T>>(
 /// use assertr::{matchers::DoesNotMatchPattern, prelude::*};
 /// assert_that!(Some(3)).matches(DoesNotMatchPattern::new(pattern!(None)));
 /// ```
+#[derive(Clone)]
 pub struct DoesNotMatchPattern<P>(Pattern<P>);
+
+impl<P> core::fmt::Debug for DoesNotMatchPattern<P> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("DoesNotMatchPattern")
+            .field(&self.0)
+            .finish()
+    }
+}
 
 impl<P> DoesNotMatchPattern<P> {
     /// Owns the pattern that the subject must not match.

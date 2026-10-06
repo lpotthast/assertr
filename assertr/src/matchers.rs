@@ -16,6 +16,12 @@
 //! expected operands. Convenience functions construct the same types: `ge(18)` constructs
 //! [`GreaterOrEqual`]. Pass a reference to reuse a definition without cloning it.
 //!
+//! Built-in expectations implement `Debug` and `Clone` when their operands and nested matchers
+//! do. Definitions holding no data, only concrete copyable data, or only borrowed targets, such as
+//! [`IsSome`], [`HasLengthOf`], or [`IsSameInstanceAs`], are also `Copy`. Callback definitions such
+//! as [`Predicate`] and [`Pattern`] are `Clone` when their callback is and omit it from `Debug`.
+//! Identity definitions show addresses instead of target contents.
+//!
 //! ```rust
 //! use assertr::{matchers::{all_of, HasLengthOf, IsSome, string}, prelude::*};
 //!
@@ -440,4 +446,95 @@ pub mod tokio_rw_lock {
 pub mod watch {
     #[doc(inline)]
     pub use crate::assertions::tokio::watch::{HasChanged, HasCurrentValue, HasNotChanged};
+}
+
+#[cfg(test)]
+mod tests {
+    mod common_traits {
+        use crate::{matchers::*, prelude::*};
+        use alloc::{format, string::String};
+        use core::fmt::Debug;
+
+        fn debug_and_clone<T: Debug + Clone>(value: &T) -> String {
+            format!("{:?}", value.clone())
+        }
+
+        fn copy<T: Copy>(_: &T) {}
+
+        fn some_pattern() -> Pattern<impl Fn(&Option<i32>) -> bool + Clone> {
+            pattern!(Some(_))
+        }
+
+        #[test]
+        fn data_free_and_copyable_expectations_are_copy() {
+            copy(&IsSome);
+            copy(&HasLengthOf::new(3));
+            copy(&IsTrue);
+            copy(&string::IsBlank);
+            copy(&IsOfType::<String>::new());
+            copy(&IsSameInstanceAs::new("shared"));
+            copy(&map::ContainsKey::new("key"));
+            copy(&anything());
+        }
+
+        #[test]
+        fn value_expectations_derive_debug_and_clone() {
+            assert_that!(debug_and_clone(&IsSome)).is_equal_to("IsSome");
+            assert_that!(debug_and_clone(&IsTrue)).is_equal_to("IsTrue");
+            assert_that!(debug_and_clone(&string::IsBlank)).is_equal_to("IsBlank");
+            assert_that!(debug_and_clone(&string::Contains::new("needle")))
+                .is_equal_to(r#"Contains("needle")"#);
+            assert_that!(debug_and_clone(&ge(18))).is_equal_to("GreaterOrEqual { expected: 18 }");
+            assert_that!(debug_and_clone(&HasLengthOf::new(3))).is_equal_to("HasLengthOf(3)");
+            assert_that!(debug_and_clone(&collection::ContainsExactly::new([1, 2])))
+                .is_equal_to("ContainsExactly { expected: [1, 2] }");
+            assert_that!(debug_and_clone(&range::ContainsElement::new(2)))
+                .is_equal_to("ContainsElement(2)");
+            assert_that!(debug_and_clone(&IsOfType::<String>::new()))
+                .is_equal_to("IsOfType<alloc::string::String>");
+        }
+
+        #[test]
+        fn compositions_derive_debug_and_clone_from_their_parts() {
+            assert_that!(debug_and_clone(&all_of((eq(1), ge(0)))))
+                .is_equal_to("AllOf((EqualTo(1), GreaterOrEqual { expected: 0 }))");
+            assert_that!(debug_and_clone(&any_of([eq(1), eq(2)])))
+                .is_equal_to("AnyOf([EqualTo(1), EqualTo(2)])");
+            assert_that!(debug_and_clone(&each(IsSome))).is_equal_to("Each(IsSome)");
+            assert_that!(debug_and_clone(&dereferenced(eq(1))))
+                .is_equal_to("Dereferenced(EqualTo(1))");
+            assert_that!(debug_and_clone(&elements_are([eq(1)])))
+                .is_equal_to("ElementsAre { list: [EqualTo(1)], position: Exact }");
+            assert_that!(debug_and_clone(&entries_are([entry("a", eq(1))])))
+                .is_equal_to(r#"EntriesAre([Entry { key: "a", matcher: EqualTo(1) }])"#);
+        }
+
+        #[test]
+        fn callback_expectations_clone_with_their_callbacks_and_omit_them_from_debug() {
+            let positive = predicate(|value: &i32| *value > 0).described_as("is positive");
+            assert_that!(debug_and_clone(&positive))
+                .is_equal_to(r#"Predicate { description: "is positive", .. }"#);
+            assert_that!(1).matches(positive.clone());
+
+            let callback = satisfying(|it: AssertThat<'_, i32, Capture>| {
+                it.is_equal_to(1);
+            });
+            assert_that!(debug_and_clone(&callback)).is_equal_to("Satisfying { .. }");
+
+            let some = some_pattern();
+            assert_that!(Some(1)).matches(some.clone());
+            assert_that!(debug_and_clone(&some))
+                .is_equal_to(r#"Pattern { pattern: "Some(_)", .. }"#);
+            assert_that!(debug_and_clone(&DoesNotMatchPattern::new(some)))
+                .is_equal_to(r#"DoesNotMatchPattern(Pattern { pattern: "Some(_)", .. })"#);
+        }
+
+        #[test]
+        fn identity_expectations_show_addresses_without_rendering_targets() {
+            struct Opaque;
+            let target = Opaque;
+            let expected = format!("IsSameInstanceAs({:?})", core::ptr::from_ref(&target));
+            assert_that!(debug_and_clone(&IsSameInstanceAs::new(&target))).is_equal_to(expected);
+        }
+    }
 }

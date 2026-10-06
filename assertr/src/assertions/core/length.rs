@@ -6,6 +6,7 @@ use crate::{
 };
 
 /// Checks whether a subject implementing [`HasLength`] is empty.
+#[derive(Debug, Clone, Copy)]
 pub struct IsEmpty;
 
 impl<T: HasLength + ?Sized, R> Expectation<T, R> for IsEmpty {
@@ -52,6 +53,7 @@ where
 }
 
 /// Checks whether a subject implementing [`HasLength`] is not empty.
+#[derive(Debug, Clone, Copy)]
 pub struct IsNotEmpty;
 
 impl<T: HasLength + ?Sized, R> Expectation<T, R> for IsNotEmpty {
@@ -98,6 +100,7 @@ where
 }
 
 /// Checks a finite length and retains the observed count on rejection.
+#[derive(Debug, Clone, Copy)]
 pub struct HasLengthOf(usize);
 impl HasLengthOf {
     /// Requires exactly this many elements or bytes according to the subject's native length.

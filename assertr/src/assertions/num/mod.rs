@@ -93,6 +93,7 @@ property_expectation! {
 
 /// Checks distance from an expected value with an inclusive, non-negative deviation.
 /// Uses [`NumericDistance`] without requiring `Clone` or floating-point math features.
+#[derive(Debug, Clone)]
 pub struct IsCloseTo<E, D = E> {
     expected: E,
     allowed_deviation: D,

@@ -10,6 +10,9 @@ use std::{ffi::OsStr, io, path::Path};
 /// [`io::ErrorKind::NotADirectory`] error, which means that an ancestor is not a directory,
 /// confirm absence. Any other I/O error is retained as evidence that existence could not be
 /// determined.
+///
+/// [`Path::try_exists`] follows symbolic links, so a dangling symlink counts as absent.
+#[derive(Debug, Clone, Copy)]
 pub struct Exists;
 impl<P: Deref<Target = Path>, R> Expectation<P, R> for Exists {
     type Success<'a>
@@ -54,6 +57,9 @@ where
 /// A [`Path::try_exists`] result of `Ok(false)` and an [`io::ErrorKind::NotADirectory`] error,
 /// which means that an ancestor is not a directory, confirm absence. Any other I/O error is
 /// retained as evidence that existence could not be determined.
+///
+/// [`Path::try_exists`] follows symbolic links, so a dangling symlink counts as absent.
+#[derive(Debug, Clone, Copy)]
 pub struct DoesNotExist;
 
 /// Retained evidence that [`Exists`] or [`DoesNotExist`] could not establish its expected state.
@@ -61,10 +67,12 @@ pub struct DoesNotExist;
 /// The evidence distinguishes a confirmed existence or absence from an inspection error. Its
 /// representation is private and is consumed by the diagnostic implementations without
 /// inspecting again.
+#[derive(Debug)]
 pub struct ExistenceRejection {
     reason: ExistenceRejectionReason,
 }
 
+#[derive(Debug)]
 enum ExistenceRejectionReason {
     Exists,
     Absent,
@@ -152,6 +160,7 @@ where
 }
 
 /// Checks whether a path has a root component.
+#[derive(Debug, Clone, Copy)]
 pub struct HasARoot;
 impl<P: Deref<Target = Path>, R> Expectation<P, R> for HasARoot {
     type Success<'a>
@@ -199,6 +208,7 @@ where
 }
 
 /// Checks whether a path is relative.
+#[derive(Debug, Clone, Copy)]
 pub struct IsRelative;
 impl<P: Deref<Target = Path>, R> Expectation<P, R> for IsRelative {
     type Success<'a>
@@ -250,10 +260,12 @@ where
 /// The evidence describes the observed entry kind, a confirmed absence, or the I/O error that
 /// prevented inspecting the path. Its representation is private and is consumed by the
 /// diagnostic implementations without inspecting again.
+#[derive(Debug)]
 pub struct EntryKindRejection {
     observation: EntryKindObservation,
 }
 
+#[derive(Debug)]
 enum EntryKindObservation {
     Directory,
     File,
@@ -314,6 +326,7 @@ macro_rules! entry_kind_expectation {
         relations: $met:literal, $unmet:literal, $inspection_failed:literal $(,)?
     ) => {
         $(#[$meta])*
+        #[derive(Debug, Clone, Copy)]
         pub struct $name;
         impl<P: Deref<Target = Path>, R> Expectation<P, R> for $name {
             type Success<'a>
@@ -444,6 +457,7 @@ where
 macro_rules! component_expectation {
     ($(#[$meta:meta])* $name:ident, $accessor:ident, $component:literal) => {
         $(#[$meta])*
+        #[derive(Debug, Clone)]
         pub struct $name<E>(E);
         impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for $name<E>
         where
@@ -526,6 +540,7 @@ component_expectation!(
 );
 
 /// Checks whether a path starts with the expected whole components.
+#[derive(Debug, Clone)]
 pub struct StartsWith<E>(E);
 impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for StartsWith<E>
 where
@@ -591,6 +606,7 @@ impl<E> StartsWith<E> {
 }
 
 /// Checks whether a path ends with the expected whole components.
+#[derive(Debug, Clone)]
 pub struct EndsWith<E>(E);
 impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for EndsWith<E>
 where
@@ -667,6 +683,8 @@ pub trait PathAssertions<P: Deref<Target = Path>, R = DebugRenderer> {
     /// Passes only when [`Path::try_exists`] returns `Ok(true)`. A missing path, including one
     /// below an ancestor that is not a directory, fails as absent. Any other I/O error while
     /// checking existence is reported as an assertion failure, retaining the error as a fact.
+    ///
+    /// [`Path::try_exists`] follows symbolic links, so a dangling symlink counts as absent.
     fn exists(self) -> Self
     where
         R: ValueRenderer<P> + ValueRenderer<io::Error>;
@@ -677,6 +695,8 @@ pub trait PathAssertions<P: Deref<Target = Path>, R = DebugRenderer> {
     /// [`io::ErrorKind::NotADirectory`] error, which confirms that an ancestor is not a
     /// directory. An existing path or any other I/O error while checking existence is reported as
     /// an assertion failure, retaining the error as a fact.
+    ///
+    /// [`Path::try_exists`] follows symbolic links, so a dangling symlink counts as absent.
     fn does_not_exist(self) -> Self
     where
         R: ValueRenderer<P> + ValueRenderer<io::Error>;

@@ -17,6 +17,7 @@ macro_rules! str_expectation {
         relations $relation:literal, $negated:literal;
     ) => {
         $(#[$attr])*
+        #[derive(Debug, Clone, Copy)]
         pub struct $name;
 
         impl<T: AsRef<str> + ?Sized, R> $crate::Expectation<T, R> for $name {
@@ -66,6 +67,7 @@ macro_rules! str_expectation {
         role $role:ident;
     ) => {
         $(#[$attr])*
+        #[derive(Debug, Clone)]
         pub struct $name<E>(E);
 
         impl<E> $name<E> {

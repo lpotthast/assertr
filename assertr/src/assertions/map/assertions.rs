@@ -442,7 +442,67 @@ mod tests {
         fn requires_neither_key_nor_value_rendering() {
             assert_that!(BTreeMap::from([("a", 1)]))
                 .with_renderer(crate::test_support::NoRenderer)
-                .contains_value_matching(predicate(|x: &i32| *x == 1));
+                .contains_value_matching(crate::test_support::opaque_predicate(|x: &i32| *x == 1));
+        }
+
+        #[test]
+        fn stays_one_nested_group_inside_compositions() {
+            use crate::{
+                assertions::map::ContainsValueMatching, matchers::all_of,
+                test_support::FailureReportAssertions,
+            };
+
+            let failures = assert_that!(BTreeMap::from([("a", 2), ("b", 3)]))
+                .with_location(false)
+                .capture(|it| {
+                    it.matches(all_of((
+                        ContainsValueMatching::new(predicate(|x: &i32| *x == 1)),
+                        ContainsValueMatching::new(predicate(|x: &i32| *x == 4)),
+                    )))
+                });
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure.has_text_report(indoc::indoc! {r#"
+                    -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 2), ("b", 3)])`
+
+                    does not match
+
+                    Nested failures:
+                      - does not contain a matching value
+
+                        Nested failures:
+                          - Actual: 2
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+                          - Actual: 3
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+                      - does not contain a matching value
+
+                        Nested failures:
+                          - Actual: 2
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+                          - Actual: 3
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+                    -------- assertr --------
+                    "#});
+                },
+            ]);
         }
 
         #[test]
@@ -1478,6 +1538,8 @@ mod tests {
 
                 Nested failures:
                   - At ["a"]:
+                    Actual: 1
+
                     does not satisfy the constraint
 
                     Constraint:

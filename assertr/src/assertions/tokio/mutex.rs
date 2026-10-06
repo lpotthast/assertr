@@ -5,6 +5,7 @@ use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::Fail
 use tokio::sync::Mutex;
 
 /// Observes a locked Tokio mutex, retaining any acquired guard on rejection.
+#[derive(Debug, Clone, Copy)]
 pub struct IsLocked;
 impl<T, R> Expectation<Mutex<T>, R> for IsLocked {
     type Success<'a>
@@ -48,6 +49,7 @@ where
     }
 }
 /// Acquires an available Tokio mutex and returns its guard.
+#[derive(Debug, Clone, Copy)]
 pub struct IsNotLocked;
 impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
     type Success<'a>
@@ -85,7 +87,18 @@ impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotLocked {
 
 /// Acquires a mutex and checks its value with a reusable assertion callback.
 /// The callback runs in capture mode only after successful acquisition.
+///
+/// It is `Clone` when the callback is. `Debug` omits the callback.
+#[derive(Clone)]
 pub struct HasValueSatisfying<F>(F);
+
+impl<F> core::fmt::Debug for HasValueSatisfying<F> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("HasValueSatisfying")
+            .finish_non_exhaustive()
+    }
+}
 
 impl<F> HasValueSatisfying<F> {
     /// Owns a reusable callback whose failures become children of one mutex failure.

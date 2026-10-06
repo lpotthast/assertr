@@ -8,6 +8,7 @@ use std::ffi::OsStr;
 use std::process::Command;
 
 /// Checks command arguments and retains their observed views on rejection.
+#[derive(Debug, Clone)]
 pub struct HasArg<E>(E);
 impl<E, R> Expectation<Command, R> for HasArg<E>
 where

@@ -7,6 +7,7 @@ use alloc::borrow::ToOwned;
 use alloc::string::String;
 
 /// Checks printable ASCII and horizontal tabs, returning the accepted header string.
+#[derive(Debug, Clone, Copy)]
 pub struct IsAscii;
 impl<R> Expectation<http::HeaderValue, R> for IsAscii {
     type Success<'a>
@@ -52,6 +53,7 @@ where
 macro_rules! sensitivity_expectation {
     ($(#[$meta:meta])* $name:ident, sensitive: $sensitive:literal, $met:literal, $unmet:literal) => {
         $(#[$meta])*
+        #[derive(Debug, Clone, Copy)]
         pub struct $name;
         impl<R> Expectation<http::HeaderValue, R> for $name {
             type Success<'a>

@@ -1,0 +1,17 @@
+error: unknown fluent_expressions argument `krate`, expected `crate = <path>`
+ --> tests/fluent_expressions/05-reject-invalid-arguments.rs:1:39
+  |
+1 | #[renamed_assertr::fluent_expressions(krate = renamed_assertr)]
+  |                                       ^^^^^
+
+error: expected an unquoted path such as `my_facade::assertr`, not a string literal
+ --> tests/fluent_expressions/05-reject-invalid-arguments.rs:4:47
+  |
+4 | #[renamed_assertr::fluent_expressions(crate = "renamed_assertr")]
+  |                                               ^^^^^^^^^^^^^^^^^
+
+error: duplicate fluent_expressions argument `crate`
+ --> tests/fluent_expressions/05-reject-invalid-arguments.rs:7:64
+  |
+7 | #[renamed_assertr::fluent_expressions(crate = renamed_assertr, crate = renamed_assertr)]
+  |                                                                ^^^^^

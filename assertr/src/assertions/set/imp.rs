@@ -31,6 +31,7 @@ fn set_type_name<S: ?Sized>() -> &'static str {
 }
 
 /// Checks that a set is a subset of another set using native lookup.
+#[derive(Debug, Clone)]
 pub struct IsSubsetOf<O>(O);
 
 impl<O> IsSubsetOf<O> {
@@ -105,6 +106,7 @@ where
 }
 
 /// Checks that a set is a superset of another set using native lookup.
+#[derive(Debug, Clone)]
 pub struct IsSupersetOf<O>(O);
 
 impl<O> IsSupersetOf<O> {
@@ -180,6 +182,7 @@ where
 }
 
 /// Checks that a set is disjoint from another set using native lookup.
+#[derive(Debug, Clone)]
 pub struct IsDisjointFrom<O>(O);
 
 impl<O> IsDisjointFrom<O> {

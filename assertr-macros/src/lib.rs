@@ -107,19 +107,30 @@ pub fn fluent_aliases(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Limitation: a user-defined `#[track_caller]` `verify` or `verify_owned` method that returns the
 /// failures of an inner Assertr verification reports them at its own call site. Those failures
 /// therefore receive the outer receiver expression.
+///
+/// # Runtime path
+///
+/// Generated code refers to `assertr`'s runtime support. By default, the attribute finds the
+/// `assertr` dependency in the calling crate's manifest, including under a renamed dependency key.
+/// A crate that reaches `assertr` only through a re-export, such as a facade crate declaring
+/// `pub use assertr;`, names the re-exported path with the `crate` argument:
+///
+/// ```ignore
+/// #[my_facade::assertr::fluent_expressions(crate = ::my_facade::assertr)]
+/// #[test]
+/// fn reports_the_receiver() {
+///     response.status().must().be_equal_to(200);
+/// }
+/// ```
+///
+/// The path is unquoted and resolves where the annotated calls appear, so prefer an absolute path
+/// such as `::my_facade::assertr` or `crate::support::assertr`. Unknown or repeated arguments are
+/// rejected.
 #[proc_macro_attribute]
 pub fn fluent_expressions(attr: TokenStream, item: TokenStream) -> TokenStream {
-    if !attr.is_empty() {
-        return syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "fluent_expressions does not accept arguments",
-        )
-        .into_compile_error()
-        .into();
-    }
-
+    let arguments = parse_macro_input!(attr as fluent_expressions::Arguments);
     let item = parse_macro_input!(item as Item);
-    fluent_expressions::fluent_expressions_impl(item)
+    fluent_expressions::fluent_expressions_impl(arguments, item)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

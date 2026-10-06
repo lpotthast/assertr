@@ -8,7 +8,7 @@ use crate::{
 use alloc::vec::Vec;
 
 /// Positional policy for a matcher sequence.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum Position {
     Exact,
     Prefix,
@@ -17,6 +17,7 @@ enum Position {
 }
 
 /// A sequence constraint requiring stable element order.
+#[derive(Debug, Clone)]
 pub struct ElementsAre<L> {
     list: L,
     position: Position,
@@ -48,6 +49,9 @@ pub fn ends_with_elements<L>(list: L) -> ElementsAre<L> {
 }
 
 /// Matches a contiguous window.
+///
+/// A rejection retains one group per rejected candidate window. Each group carries a `Window start`
+/// fact with the window's zero-based starting index.
 pub fn contains_contiguous_elements<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
@@ -141,7 +145,25 @@ where
             if matched {
                 return Ok(());
             }
-            alternatives.append(window.into_evidence());
+            let evidence = window.into_evidence();
+            if matches!(self.position, Position::Contiguous) {
+                // Each rejected window stays one group, so its evidence does not interleave with
+                // the evidence of overlapping windows.
+                alternatives.record_with(|alternatives| {
+                    evidence
+                        .explain(
+                            FailureBuilder::detached::<C>(FailureKind::Matching)
+                                .relation("does not match in this window")
+                                .fact(Fact::labelled(
+                                    "Window start",
+                                    alternatives.render().value(&start).into_rendered(),
+                                )),
+                        )
+                        .build()
+                });
+            } else {
+                alternatives.append(evidence);
+            }
         }
         Err(alternatives.into_evidence())
     }
@@ -169,7 +191,10 @@ where
                     Position::Contiguous => "contains these elements contiguously",
                 }),
             ),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+            Some((_, evidence)) => evidence.explain(failure.relation(match self.position {
+                Position::Contiguous => "does not contain these elements contiguously",
+                Position::Exact | Position::Prefix | Position::Suffix => "does not match",
+            })),
         }
     }
 }
@@ -391,15 +416,73 @@ mod tests {
                     .with_rendering_budget(RenderingBudget::default().with_max_items(1))
                     .capture(|it| it.matches(contains_contiguous_elements([eq(9)])));
                 assert_that!(comparisons.get()).is_equal_to(20);
-                assert_that!(renders.get()).is_equal_to(2);
+                // Only the first window is retained. It renders its start, actual, and expected.
+                assert_that!(renders.get()).is_equal_to(3);
                 assert_that!(failures.len()).is_equal_to(usize::from(!later_success));
                 if !later_success {
                     assert_that!(failures[0].children).has_length(1);
-                    assert_that!(failures[0].children[0].path)
-                        .contains_exactly([PathSegment::Index(0)]);
+                    let window = &failures[0].children[0];
+                    assert_that!(window.path).is_empty();
+                    assert_that!(window.children).has_length(1);
+                    assert_that!(window.children[0].path).contains_exactly([PathSegment::Index(0)]);
                     assert_that!(failures[0].omitted_children).is_equal_to(19);
                 }
             }
+        }
+    }
+
+    mod contiguous {
+        use crate::{matchers::eq, prelude::*, test_support::FailureReportAssertions};
+
+        #[test]
+        fn groups_the_evidence_of_each_rejected_window() {
+            let failures = assert_that!(vec![1, 3, 1, 4])
+                .with_location(false)
+                .capture(|it| it.contains_contiguous_matching(matchers![eq(1), eq(2)]));
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure.has_text_report(indoc::indoc! {r"
+                    -------- assertr --------
+                    Expression: `vec![1, 3, 1, 4]`
+
+                    does not contain these elements contiguously
+
+                    Nested failures:
+                      - does not match in this window
+
+                        Details:
+                          - Window start: 0
+                        Nested failures:
+                          - At [1]:
+                            Expected: 2
+
+                              Actual: 3
+                      - does not match in this window
+
+                        Details:
+                          - Window start: 1
+                        Nested failures:
+                          - At [1]:
+                            Expected: 1
+
+                              Actual: 3
+                          - At [2]:
+                            Expected: 2
+
+                              Actual: 1
+                      - does not match in this window
+
+                        Details:
+                          - Window start: 2
+                        Nested failures:
+                          - At [3]:
+                            Expected: 2
+
+                              Actual: 4
+                    -------- assertr --------
+                    "});
+                },
+            ]);
         }
     }
 

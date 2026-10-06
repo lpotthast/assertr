@@ -7,20 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-06
+
 ### Added
 
-- Reusable expectations. An `Expectation` evaluates a subject once and an `ExpectationDiagnostics` explains a
-  rejection or describes an unmet expectation through the structured failure builder. Apply one to a chain with
-  `matches` (fluent alias `match_expectation`), `apply_assertion`, or `test_assertion`, which also returns the successful
-  observation. Every built-in assertion family is backed by public expectations that compose the same way as custom
-  definitions.
-- The `matchers` catalog re-exports every public expectation, with common checks at its root and subject namespaces
-  for family-specific names. Combine them with `all_of`, `any_of`, `anything`, `predicate`, `predicate_list`,
-  `satisfying` (assertion callbacks), `dereferenced` (any `Deref` subject), `each`, `elements_are!`,
-  `elements_are_in_any_order!`, `entries_are!`, and `pattern!`. Use `eq` (an alias for `equal_to`), `lt`, `gt`, `le`,
-  and `ge` for comparisons. Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a pattern
-  negatively. Matcher lists and keyed value expectations require explicit matchers, and keyed lists accept arrays,
-  slices, vectors, and heterogeneous `entries_are!` lists. All of this works without optional features or `std`.
+- Reusable expectations. An `Expectation` evaluates a subject once and an `ExpectationDiagnostics` explains a rejection
+  or describes an unmet expectation through the structured failure builder. Apply one to a chain with `matches` (fluent
+  alias `match_expectation`), `apply_assertion`, or `test_assertion`, which also returns the successful observation.
+  Every built-in assertion family is backed by public expectations that compose the same way as custom definitions.
+- The `matchers` catalog re-exports every public expectation, with common checks at its root and subject namespaces for
+  family-specific names. Combine them with `all_of`, `any_of`, `anything`, `predicate`, `predicate_list`, `satisfying`
+  (assertion callbacks), `dereferenced` (any `Deref` subject), `each`, `elements_are!`, `elements_are_in_any_order!`,
+  `entries_are!`, `matchers!` (heterogeneous matcher lists), and `pattern!`. Use `eq` (an alias for `equal_to`), `lt`,
+  `gt`, `le`, and `ge` for comparisons. Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a
+  pattern negatively. Matcher lists and keyed value expectations require explicit matchers, and keyed lists accept
+  arrays, slices, vectors, and heterogeneous `entries_are!` lists. All of this works without optional features or `std`.
 - `partial!` matches selected struct or enum fields without derives or attributes on domain types and renders only the
   selected leaves. Each selected field requires an explicit matcher, such as `eq(value)` or a nested `partial!`.
   Qualified constructor paths work with the optional `variant` prefix. It also works through facade crates that
@@ -37,8 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the subject and work in panic and capture mode.
 - `is_close_to` supports `core::num::Wrapping`. The `NumericDistance` documentation explains how to check foreign
   numeric types.
-- HTTP header values implement `HasLength`, so `is_empty`, `is_not_empty`, and `has_length` count bytes. New
-  `matchers::header_value::{IsSensitive, IsInsensitive}`.
+- New `matchers::header_value::{IsSensitive, IsInsensitive}` expectations.
+- `ValueRenderer::sensitive_value_policy` and `SensitiveValuePolicy` let custom renderers reveal sensitive HTTP header
+  contents. Reqwest header diagnostics preserve sensitivity metadata for custom renderers and escape non-ASCII bytes.
+  The default renderer reveals sensitive contents.
 - `RenderingBudget` limits diagnostics to 256 items per group and 4,096 characters per rendered leaf by default.
   Configure it with `with_max_items` and `with_max_leaf_characters`, apply it with `with_rendering_budget`, or disable
   both limits with `RenderingBudget::unlimited()`. Reports state how many items or nested failures were omitted.
@@ -53,9 +56,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `RenderingContext` provides public adapters for collections, maps, synthetic key/value lists, and one-field variants
   and structs, including inaccessible fields. Adapters apply the active leaf renderer and budget. `Typed` adapters
   retain Rust type metadata with configurable hints. Synthetic evidence selects ordering through `RenderingOrder`.
-- `&R` implements `ValueRenderer<T>` whenever `R` does, so `with_renderer(&renderer)` works with derived assertions for
-  renderers that are not `Clone`.
 - docs.rs shows the features required by feature-gated items.
+- Public expectation types implement `Debug` and `Clone`, bounded on their operands and nested matchers, and `Copy`
+  when they hold no data, only concrete copyable data, or only borrowed targets. Callback definitions such as
+  `Predicate`, `Satisfying`, and `Pattern` are `Clone` when their callback is and omit it from `Debug`. Identity
+  definitions show addresses. Rejection types such as `ExistenceRejection`, `EntryKindRejection`,
+  `MissingElementsRejection`, and `EntryRejection` implement `Debug`.
+- `#[fluent_expressions(crate = <path>)]` names a re-exported runtime, so expression capture works in crates that
+  reach `assertr` only through a facade crate:
+  `#[my_facade::assertr::fluent_expressions(crate = ::my_facade::assertr)]`. Without the argument, the attribute still
+  finds the possibly renamed `assertr` dependency.
 
 ### Changed
 
@@ -67,8 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   with `String` subjects, elements, and map values without allocation. Arrays compare with vectors, and vectors compare
   with slice subjects. Custom operand wrappers opt in by declaring their borrowed view. Range containment accepts owned
   or borrowed operands with owned, borrowed, or unbounded range subjects. This replaces `AssertrPartialEq` and the
-  public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`. Other cross-type comparisons use an
-  explicit borrowed view implementation, a predicate, or a custom expectation.
+  public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and `Differences`. Replace the former root and prelude
+  `eq(value)` with `matchers::eq(value)`, and `any()` with `matchers::anything()` or `..` in `partial!`. Other
+  cross-type comparisons use an explicit borrowed view implementation, a predicate, or a custom expectation.
+  `NumAssertions::is_close_to`, `ZonedAssertions::is_in_time_zone`, and
+  `TokioWatchReceiverAssertions::has_current_value` take `BorrowFor` operands too, so untyped `.into()` arguments may
+  need a type annotation.
 - **Breaking:** Bulk value, key, and entry methods accept finite slice-backed `AsRef` lists instead of iterators. This
   affects `contains_all`, `into_iter_contains_all`, `contains_keys`, `contains_exactly_entries`, and
   `contains_exactly_entries_satisfying`, including their fluent aliases, which lose their iterator generic parameter.
@@ -78,7 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   view instead of the operand wrapper. Native `MapLookup` requirements and single-key `&Q` calls are preserved. Slice
   operands now work with vector keys.
 - **Breaking:** Map entry methods take the key query first in turbofish order: `contains_entry::<Q, E>`,
-  `does_not_contain_entry::<Q, E>`, and `contains_entry_satisfying::<Q, A>`.
+  `does_not_contain_entry::<Q, E>`, and `contains_entry_satisfying::<Q, A>`. The value parameter `E` of
+  `contains_entry` and `does_not_contain_entry` is now the operand type instead of the borrowed value target.
 - **Breaking:** Removed `AssertrEq`, its generated companion types and helper attributes, and the `derive` feature.
   Use `matches(partial!(...))` with `features = ["partial"]`.
 - **Breaking:** `assertr-macros` 0.5.0 replaces `assertr-derive` as the procedural macro crate. Direct users must
@@ -89,27 +104,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   reports compile errors for names that are not string literals or identifiers, keyword names become raw identifiers,
   and generated aliases link to their original method instead of repeating its documentation.
 - **Breaking:** Collection, iterator, and map `*_matching` methods and fluent aliases accept matchers instead of bare
-  predicates. Wrap closures with `predicate`, predicate arrays with `predicate_list`, and keyed matcher lists with
-  `entries_are!` or `entry_matchers`.
+  predicates. Wrap closures with `matchers::predicate`, predicate arrays with `matchers::predicate_list`, and keyed
+  matcher lists with `entries_are!` or `matchers::entry_matchers`. Predicate rejections render the rejected subject, so
+  their diagnostics require a renderer for it.
 - **Breaking:** `StableOrder` and `StableOrderAssertions` replace `Sequence` and `SequenceAssertions` and own positional
-  prefix, suffix, contiguous, and exact comparisons. Replace positional `into_iter_*` calls with these assertions on
-  `StableOrder` collections, or assert an owned iterator explicitly.
+  prefix, suffix, contiguous, and exact comparisons. Removed `into_iter_starts_with`, `into_iter_ends_with`,
+  `into_iter_contains_contiguous`, and `into_iter_contains_exactly`, including their `_matching` and `_satisfying`
+  variants and fluent aliases. Call `starts_with`, `ends_with`, `contains_contiguous`, or `contains_exactly` on
+  `StableOrder` collections, or assert an owned iterator with `assert_that_owned!(x.into_iter())`.
 - **Breaking:** Custom `Collection` and `Map` implementations must move `length` to `HasLength`, replace collection
   `STYLE` and `TYPE_NAME` with `PRESENTATION: CollectionPresentation`, and replace map `TYPE_NAME` with
   `RENDERING_ORDER: RenderingOrder`, using the types in `renderer`. Custom set implementations and bounds must rename
   `Set` to `SetLookup`. `Collection`, `StableOrder`, `RandomAccess`, `SetLookup`, `Map`, and `MapLookup` gain blanket
   `&mut C` implementations, which conflict with downstream implementations for `&mut` types.
+- **Breaking:** `&R` implements `ValueRenderer<T>` whenever `R` does, so `with_renderer(&renderer)` works with derived
+  assertions for renderers that are not `Clone`. Renderers implementing `ValueRenderer` for both a type and its
+  references must remove the reference implementations.
 - **Breaking:** `HasLength` covers `str` and `[T]` directly and forwards through blanket `&T` and `&mut T`
   implementations. Downstream types implementing it for both a value and its references must remove their reference
   implementations. Length and element assertions on `HashSet` and `HashMap` no longer require `S: BuildHasher`.
 - **Breaking:** Assertion traits share one generic shape: subject parameters, then the mode where a signature needs it,
-  then a renderer `R` defaulting to `DebugRenderer`. Unused lifetimes are gone. This changes `OptionAssertions<T, M, R>`,
-  `ResultAssertions<T, E, M, R>`, `PollAssertions<T, M, R>`, `BoxAssertions<R>`, `PanicValueAssertions<R>`,
-  `HttpHeaderValueAssertions<M, R>`, `RootcauseDynamicReportAssertions<M, R>`,
-  `RootcauseDynamicReportRefAssertions<M, R>`, and `ProgramAssertions<'a, R>`, whose `exists` returns `Self`.
-  `NumAssertions<T, R>`, `StrAssertions<S, R>`, `LengthAssertions<T, R>`, `PathAssertions<P, R>`, and
-  `ProgramExtractAssertions<'t, 'a, R>` replace their associated `Subject` and `Renderer` types with parameters.
-  Generic bounds naming these traits must be updated, for example to `NumAssertions<T, MyRenderer>`.
+  then a renderer `R` defaulting to `DebugRenderer`. Unused lifetimes are gone. This changes `OptionAssertions<T, M,
+  R>`, `ResultAssertions<T, E, M, R>`, `PollAssertions<T, M, R>`, `BoxAssertions<R>`, `PanicValueAssertions<R>`,
+  `HttpHeaderValueAssertions<M, R>`, `RootcauseDynamicReportAssertions<M, R>`, `RootcauseDynamicReportRefAssertions<M,
+  R>`, and `ProgramAssertions<'a, R>`. `NumAssertions<T, R>`, `StrAssertions<S, R>`, `LengthAssertions<T, R>`, and
+  `PathAssertions<P, R>` replace their associated `Subject` and `Renderer` types with parameters. Generic bounds naming
+  these traits must be updated, for example to `NumAssertions<T, MyRenderer>`.
 - **Breaking:** `capture`, `verify`, and `verify_owned` return `AssertionFailures` instead of a vector. Use
   `into_vec()` where a vector is required.
 - **Breaking:** `AssertionFailure` replaces `description` and `details` with structured values, relations, facts,
@@ -130,7 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `.as_json().is_ok_satisfying(...)` in capture mode, and likewise for TOML.
 - **Breaking:** Import `BoxExtractAssertions` or `PanicValueExtractAssertions` for `has_type` and `has_type_ref`, or
   use the prelude.
-- **Breaking:** Replace `ProgramAssertionsRequiringPanicMode::exists_and` and its fluent alias with
+- **Breaking:** Replace `ProgramAssertionsRequiringPanicMode` and its `exists_and` method and fluent alias with
   `ProgramExtractAssertions::get_resolved_path`.
 - **Breaking:** Range `contains_element` and `does_not_contain_element` consume and return their assertion chain.
   Chain successive checks or start a new chain instead of reusing a moved one.
@@ -139,9 +159,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `TokioWatchReceiverExtractAssertions`.
 - **Breaking:** Memory assertions move from `assertions::std::mem` to `assertions::core::mem` and work without `std`.
   Import `MemAssertions` from the core or crate-wide prelude.
-- **Breaking:** HTTP header values lose their own `is_empty` and `is_not_empty`. The same calls now resolve to
-  `LengthAssertions` through the prelude. `is_sensitive` and `is_insensitive` require `ValueRenderer<HeaderValue>`
-  instead of `ValueRenderer<bool> + Clone` and report the header value.
+- **Breaking:** HTTP header values lose their own `is_empty` and `is_not_empty`. `HeaderValue` implements `HasLength`,
+  so the same calls and `has_length` resolve to `LengthAssertions` through the prelude and count bytes. `is_sensitive`
+  and `is_insensitive` require `ValueRenderer<HeaderValue>` instead of `ValueRenderer<bool> + Clone` and report the
+  header value.
 - **Breaking:** The `http` feature enables `std`. `serde-json`, `serde-toml`, and `serde` no longer enable `std` and
   work on embedded `no_std` targets with `alloc`.
 - **Breaking:** `jiff` is built without its default features. Enable jiff's time-zone database features in your own
@@ -159,13 +180,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Debug comparisons. Use `has_debug_string("42")` for preformatted numeric expectations and include Debug's surrounding
   quotes when expecting string output.
 - Failure reports use one layout for values, relations, messages, facts, and nested failures, with child paths such as
-  `At [2]:`. Update diagnostic text snapshots. Notable changes: disjunctions report one nested group ("does not match
-  any alternative"), exhausted scans describe the first missing expectation and the required length, length rejections
-  decided by an exact `size_hint` report the reported and expected lengths without consuming input, and length
-  diagnostics use short Rust type names.
-- Hash collection diagnostics sort values and per-element evidence by rendered text before applying item limits and
-  mark multi-item output as sorted. Positional diagnostics preserve iteration order, and order-free diagnostics omit
-  traversal indexes.
+  `At [2]:`. Update diagnostic text snapshots. Notable changes: disjunctions and existential matchers such as
+  `contains_matching` report one nested group ("does not match any alternative", "does not contain a matching element"),
+  contiguous matcher searches over collections and iterators report "does not contain these elements contiguously" and
+  group evidence per rejected window with a `Window start` fact, exhausted scans describe the first missing expectation
+  and the required length, length rejections decided by an exact `size_hint` report the reported and expected lengths
+  without consuming input, and length diagnostics use short Rust type names.
+- Element, set, and map diagnostics for hash collections sort values and per-element evidence by rendered text before
+  applying item limits and mark multi-item output as sorted. Positional diagnostics preserve iteration order, and
+  order-free diagnostics omit traversal indexes.
 - Unordered matching evaluates each actual/expected pair at most once and reports missing expectations, unexpected
   elements, and surplus occurrences of satisfied expectations. Iterator `contains_exactly_in_any_order` reports like the
   collection assertion. Iterator `contains_matching` and `contains_contiguous_matching` retain the first rejected
@@ -181,16 +204,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   original I/O error for any other inspection error. `is_a_file`, `is_a_directory`, and `is_a_symlink` no longer
   report inspection errors as a missing path. These methods require `ValueRenderer<std::io::Error>`, which the default
   `DebugRenderer` provides.
-- `has_length` and `into_iter_has_length` no longer trust an agreeing exact `size_hint`. They verify it by reading at
+- `into_iter_has_length` no longer trusts an agreeing exact `size_hint`. They verify it by reading at
   most one element beyond the expected length.
-- `ends_with` and `ends_with_elements` align a subject shorter than the expected suffix at its end, reporting the
-  length and only genuine mismatches.
-- Exact keyed matching reports a length failure when duplicate queries match every entry of a shorter map.
 - `Actual::map` accepts `FnOnce` callbacks.
-- Streaming iterator assertions retain the owning iterator through diagnostic rendering and release it before failure
-  handling, without repeating observations or consuming extra elements.
-- Reqwest header diagnostics preserve sensitivity metadata for custom renderers and escape non-ASCII bytes. The default
-  renderer reveals sensitive contents, and custom renderers can opt in through `SensitiveValuePolicy::Reveal`.
 - Set relation diagnostics distinguish underlying Rust types even when custom sets share a display name or omit one.
 - Tokio `RwLock` state assertions retain acquired guards while rendering failures, preventing lock reacquisition races.
 - Rootcause current-context type mismatches, range `is_outside_of_range`, and standard and Tokio lock `is_free` aliases
@@ -693,7 +709,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.8.0...HEAD
+
+[0.8.0]: https://github.com/lpotthast/assertr/compare/v0.7.1...v0.8.0
 
 [0.7.1]: https://github.com/lpotthast/assertr/compare/v0.7.0...v0.7.1
 

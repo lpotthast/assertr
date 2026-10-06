@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// Exact keyed matching. Duplicate queries cannot replace a missing distinct entry.
+#[derive(Debug, Clone)]
 pub struct EntriesAre<L>(L);
 
 /// Applies an exact keyed matcher list. Use arrays, slices, or vectors of [`Entry`](super::Entry)

@@ -6,6 +6,7 @@
 macro_rules! sign_expectations {
     (subject: $subject:ident, zero: $zero:expr $(, present: $present:path)? $(,)?) => {
         #[doc = concat!("Checks whether a `", stringify!($subject), "` is zero.")]
+        #[derive(Debug, Clone, Copy)]
         pub struct IsZero;
         impl<R> Expectation<$subject, R> for IsZero {
             type Success<'a>
@@ -55,6 +56,7 @@ macro_rules! sign_expectations {
     };
     (@sign $subject:ident, $name:ident, $predicate:ident, $sign:literal $(, $present:path)?) => {
         #[doc = concat!("Checks whether a `", stringify!($subject), "` is ", $sign, ".")]
+        #[derive(Debug, Clone, Copy)]
         pub struct $name;
         impl<R> Expectation<$subject, R> for $name {
             type Success<'a>

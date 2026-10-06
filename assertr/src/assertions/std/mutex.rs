@@ -5,6 +5,7 @@ use std::sync::MutexGuard;
 use std::sync::{Mutex, TryLockError};
 
 /// Checks whether a mutex is poisoned.
+#[derive(Debug, Clone, Copy)]
 pub struct IsPoisoned;
 impl<T, R> Expectation<Mutex<T>, R> for IsPoisoned {
     type Success<'a>
@@ -46,6 +47,7 @@ impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsPoisoned {
 }
 
 /// Checks whether a mutex is not poisoned.
+#[derive(Debug, Clone, Copy)]
 pub struct IsNotPoisoned;
 impl<T, R> Expectation<Mutex<T>, R> for IsNotPoisoned {
     type Success<'a>
@@ -137,6 +139,7 @@ fn with_poison_note<Target>(
 }
 
 /// Observes whether a mutex is locked, retaining an acquired guard when the check rejects.
+#[derive(Debug, Clone, Copy)]
 pub struct IsLocked;
 
 /// An acquired guard and the observed poison state from a rejected lock expectation.
@@ -196,6 +199,7 @@ impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Mutex<T>, R> for IsLocked {
 
 /// Observes whether a mutex can be acquired, returning the acquired guard on success.
 /// Poisoned acquisition also counts as unlocked, matching [`MutexAssertions::is_not_locked`].
+#[derive(Debug, Clone, Copy)]
 pub struct IsNotLocked;
 
 impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
