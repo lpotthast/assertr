@@ -15,6 +15,7 @@ install-tools:
     cargo +stable install cargo-msrv --locked
     cargo +stable install cargo-sort --locked
     cargo +stable install cargo-rdme --version 2.2.2 --locked
+    cargo rdme install-rust-toolchain-for-intralinks
 
 # Find the minimum supported rust version.
 msrv:

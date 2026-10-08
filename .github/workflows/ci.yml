@@ -97,6 +97,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo +stable install cargo-rdme --version 2.2.2 --locked
+      - run: cargo rdme install-rust-toolchain-for-intralinks
       - run: cargo rdme --check
       - run: cargo doc --workspace --exclude assertr-no-std-tests --all-features --no-deps --release --locked
 
