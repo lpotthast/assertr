@@ -74,8 +74,7 @@ use crate::{
 ///   only when one is given explicitly.
 ///
 /// This trait is re-exported by [`crate::prelude`]. Import the prelude and use method syntax rather
-/// than implementing this trait downstream. See the fluent entry-point guide above for reference
-/// normalization, ownership, and alias naming.
+/// than implementing this trait downstream.
 #[cfg(feature = "fluent")]
 pub trait IntoAssertContext<'t> {
     /// The subject type assertion methods are resolved against.

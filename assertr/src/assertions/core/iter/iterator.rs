@@ -58,7 +58,7 @@ use crate::{
 /// evaluate `&T`, and `_satisfying` closures receive a capture-mode assertion borrowing each
 /// candidate element.
 ///
-/// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
+/// Bulk value lists use [repeatable expected data](crate#expected-lists).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
@@ -776,6 +776,7 @@ mod tests {
 
                     Constraint:
                         satisfies the predicate
+
                   - At [1]:
                     Actual: 2
 
@@ -783,6 +784,7 @@ mod tests {
 
                     Constraint:
                         satisfies the predicate
+
                   - At [2]:
                     Actual: 3
 
@@ -1248,6 +1250,7 @@ mod tests {
 
                         Constraint:
                             satisfies the predicate
+
                       - At [1]:
                         Actual: 2
 
@@ -1255,6 +1258,7 @@ mod tests {
 
                         Constraint:
                             satisfies the predicate
+
                   - does not match in this window
 
                     Details:
@@ -1620,18 +1624,21 @@ mod tests {
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 2
 
                         does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 3
 
                         does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
+
                   - has unexpected elements
 
                     Details:
@@ -1643,6 +1650,7 @@ mod tests {
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 3
 
                         does not satisfy the constraint

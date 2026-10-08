@@ -35,7 +35,7 @@ use crate::{
 /// requires_stable_order(assert_that!(BTreeSet::from([1, 2, 3])));
 /// ```
 ///
-/// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
+/// Bulk value lists use [repeatable expected data](crate#expected-lists).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait StableOrderAssertions<T, R = DebugRenderer> {
@@ -1358,6 +1358,7 @@ mod tests {
 
                     Constraint:
                         satisfies the predicate
+
                   - At [2]:
                     Actual: 3
 

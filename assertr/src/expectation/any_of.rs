@@ -127,12 +127,14 @@ mod tests {
 
                     Details:
                       - Branch: 0
+
                   - Expected: 2
 
                       Actual: 3
 
                     Details:
                       - Branch: 1
+
               - Expected: 5
 
                   Actual: 3
@@ -167,12 +169,14 @@ mod tests {
 
                     Details:
                       - Branch: 0
+
                   - Expected: 2
 
                       Actual: 3
 
                     Details:
                       - Branch: 1
+
               - Expected: 5
 
                   Actual: 3

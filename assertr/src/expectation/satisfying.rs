@@ -145,6 +145,7 @@ mod tests {
               - Expected: 2
 
                   Actual: 1
+
               - Expected: 3
 
                   Actual: 2

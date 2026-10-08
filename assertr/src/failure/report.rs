@@ -24,7 +24,8 @@
 //!
 //! The body is followed by the chain's `Messages:`, the failure's `Details:` (its facts), and its
 //! `Nested failures:` (its children), each child indented one level and introduced by the
-//! typed path it was raised for, when present.
+//! typed path it was raised for, when present. When any child report spans several lines, an
+//! empty line separates the children.
 
 use alloc::{format, string::String, vec::Vec};
 use core::fmt::{self, Display, Write};
@@ -199,32 +200,52 @@ fn write_entries<E: Display>(
     Ok(())
 }
 
+/// Writes the `Nested failures:` list. Like a loose Markdown list, an empty line separates the
+/// items when any of them spans several lines, so each child report reads as its own block.
 fn write_children(w: &mut dyn Write, children: &[AssertionFailure]) -> fmt::Result {
     if children.is_empty() {
         return Ok(());
     }
 
+    let items = children
+        .iter()
+        .map(child_item)
+        .collect::<Result<Vec<_>, _>>()?;
+    let loose = items
+        .iter()
+        .any(|item| item.trim_end_matches('\n').contains('\n'));
+
     writeln!(w, "Nested failures:")?;
-    for child in children {
-        w.write_str("  - ")?;
-        if child.path.is_empty() {
-            write_report(child, &mut Indented::continuing(w))?;
-        } else {
-            w.write_str("At ")?;
-            for segment in &child.path {
-                match segment {
-                    PathSegment::Field(name) => write!(w, ".{name}")?,
-                    PathSegment::TupleIndex(index) => write!(w, ".{index}")?,
-                    PathSegment::Variant(name) => write!(w, "::{name}")?,
-                    PathSegment::Index(index) => write!(w, "[{index}]")?,
-                    PathSegment::Key(key) => write!(w, "[{key}]")?,
-                }
-            }
-            w.write_str(":\n")?;
-            write_report(child, &mut Indented::at_line_start(w))?;
+    for (index, item) in items.iter().enumerate() {
+        if loose && index != 0 {
+            w.write_str("\n")?;
         }
+        w.write_str(item)?;
     }
     Ok(())
+}
+
+/// One `Nested failures:` item: the bullet, the child's path heading when present, and its
+/// indented report.
+fn child_item(child: &AssertionFailure) -> Result<String, fmt::Error> {
+    let mut item = String::from("  - ");
+    if child.path.is_empty() {
+        write_report(child, &mut Indented::continuing(&mut item))?;
+    } else {
+        item.push_str("At ");
+        for segment in &child.path {
+            match segment {
+                PathSegment::Field(name) => write!(item, ".{name}")?,
+                PathSegment::TupleIndex(index) => write!(item, ".{index}")?,
+                PathSegment::Variant(name) => write!(item, "::{name}")?,
+                PathSegment::Index(index) => write!(item, "[{index}]")?,
+                PathSegment::Key(key) => write!(item, "[{key}]")?,
+            }
+        }
+        item.push_str(":\n");
+        write_report(child, &mut Indented::at_line_start(&mut item))?;
+    }
+    Ok(item)
 }
 
 const MAX_EXPRESSION_CHARS: usize = 100;
@@ -373,6 +394,73 @@ mod tests {
                     does not match
                 -------- assertr --------
             "#});
+        }
+    }
+
+    mod nested_failure_items {
+        use super::*;
+        use crate::failure::{FailureBuilder, FailureKind, PathSegment};
+
+        #[test]
+        fn are_separated_by_empty_lines_when_any_item_spans_several_lines() {
+            let root = FailureBuilder::new::<()>(FailureKind::Matching)
+                .relation("does not match")
+                .child(
+                    FailureBuilder::new::<&str>(FailureKind::Equality)
+                        .path([PathSegment::Field("name")])
+                        .actual("\"Bob\"")
+                        .expected("\"Ada\"")
+                        .build(),
+                )
+                .child(
+                    FailureBuilder::new::<u32>(FailureKind::Predicate)
+                        .path([PathSegment::Field("active")])
+                        .relation("is not active")
+                        .build(),
+                )
+                .build();
+
+            assert_that!(root.to_string()).is_equal_to(indoc::indoc! {r#"
+                -------- assertr --------
+                does not match
+
+                Nested failures:
+                  - At .name:
+                    Expected: "Ada"
+
+                      Actual: "Bob"
+
+                  - At .active:
+                    is not active
+                -------- assertr --------
+            "#});
+        }
+
+        #[test]
+        fn stay_compact_when_every_item_fits_on_one_line() {
+            let root = FailureBuilder::new::<()>(FailureKind::Matching)
+                .relation("does not match")
+                .child(
+                    FailureBuilder::new::<u32>(FailureKind::Predicate)
+                        .relation("is not even")
+                        .build(),
+                )
+                .child(
+                    FailureBuilder::new::<u32>(FailureKind::Predicate)
+                        .relation("is not positive")
+                        .build(),
+                )
+                .build();
+
+            assert_that!(root.to_string()).is_equal_to(indoc::indoc! {"
+                -------- assertr --------
+                does not match
+
+                Nested failures:
+                  - is not even
+                  - is not positive
+                -------- assertr --------
+            "});
         }
     }
 

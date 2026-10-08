@@ -52,11 +52,11 @@ use crate::{
 /// # Custom operands
 ///
 /// A custom bulk operand implements `BorrowFor<K>` and [`Borrow<View>`](core::borrow::Borrow), as
-/// described in [borrowed equality](crate#borrowed-equality). Custom renderers render `View`, and
-/// the subject needs a `MapLookup` implementation for it. The changelog describes migrating from
-/// the former `MapKeyQuery` trait.
+/// described in [borrowed equality](crate#borrowed-expected-values). Custom renderers render
+/// `View`, and the subject needs a `MapLookup` implementation for it. The changelog describes
+/// migrating from the former `MapKeyQuery` trait.
 ///
-/// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
+/// Bulk value lists use [repeatable expected data](crate#expected-lists).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait MapAssertions<K, V, R = DebugRenderer> {
@@ -1293,12 +1293,14 @@ mod tests {
 
                             Constraint:
                                 satisfies the predicate
+
                           - Actual: 3
 
                             does not satisfy the constraint
 
                             Constraint:
                                 satisfies the predicate
+
                       - does not contain a matching value
 
                         Nested failures:
@@ -1308,6 +1310,7 @@ mod tests {
 
                             Constraint:
                                 satisfies the predicate
+
                           - Actual: 3
 
                             does not satisfy the constraint

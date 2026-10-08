@@ -274,6 +274,7 @@ mod tests {
                       - Expected: 1
 
                           Actual: 99
+
                       - has an extra occurrence matching an already satisfied expectation
 
                         Constraint:
@@ -314,6 +315,7 @@ mod tests {
                       - Expected: 99
 
                           Actual: 1
+
                       - Expected: 99
 
                           Actual: 2

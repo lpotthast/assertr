@@ -438,7 +438,7 @@ pub struct ContainsKeys<E, B = Vec<E>> {
 }
 expected_operands_traits!(ContainsKeys<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsKeys<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
+    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
     /// without accessing its views.
     #[must_use]
     pub const fn new(expected: B) -> Self {
@@ -536,7 +536,7 @@ pub struct ContainsExactlyEntries<EK, EV, B = Vec<(EK, EV)>> {
 }
 expected_operands_traits!(ContainsExactlyEntries<EK, EV, B>, operands);
 impl<EK, EV, B: AsRef<[(EK, EV)]>> ContainsExactlyEntries<EK, EV, B> {
-    /// Stores [repeatable expected entries](crate#bulk-expected-data) without accessing their
+    /// Stores [repeatable expected entries](crate#expected-lists) without accessing their
     /// views.
     #[must_use]
     pub const fn new(expected: B) -> Self {

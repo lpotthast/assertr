@@ -216,7 +216,7 @@ pub struct ContainsAll<E, B = Vec<E>> {
 }
 expected_operands_traits!(ContainsAll<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsAll<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
+    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
     /// without accessing its views.
     #[must_use]
     pub const fn new(expected: B) -> Self {
@@ -400,7 +400,7 @@ pub struct StartsWith<E, B = Vec<E>> {
 }
 expected_operands_traits!(StartsWith<E, B>, operand);
 impl<E, B: AsRef<[E]>> StartsWith<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
+    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
     /// without accessing its views.
     #[must_use]
     pub const fn new(expected: B) -> Self {
@@ -465,7 +465,7 @@ pub struct EndsWith<E, B = Vec<E>> {
 }
 expected_operands_traits!(EndsWith<E, B>, operand);
 impl<E, B: AsRef<[E]>> EndsWith<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
+    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
     /// without accessing its views.
     #[must_use]
     pub const fn new(expected: B) -> Self {
@@ -527,7 +527,7 @@ pub struct ContainsContiguous<E, B = Vec<E>> {
 }
 expected_operands_traits!(ContainsContiguous<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsContiguous<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
+    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
     /// without accessing its views.
     #[must_use]
     pub const fn new(expected: B) -> Self {
@@ -607,7 +607,7 @@ pub struct ContainsExactly<E, B = Vec<E>> {
 }
 expected_operands_traits!(ContainsExactly<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsExactly<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
+    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
     /// without accessing its views.
     #[must_use]
     pub const fn new(expected: B) -> Self {
@@ -723,7 +723,7 @@ pub struct ContainsExactlyInAnyOrder<E, B = Vec<E>> {
 }
 expected_operands_traits!(ContainsExactlyInAnyOrder<E, B>, operand);
 impl<E, B: AsRef<[E]>> ContainsExactlyInAnyOrder<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#bulk-expected-data)
+    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
     /// without accessing its views.
     #[must_use]
     pub const fn new(expected: B) -> Self {

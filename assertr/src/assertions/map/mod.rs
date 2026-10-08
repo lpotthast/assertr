@@ -48,7 +48,7 @@ pub trait Map: HasLength {
 
     /// Whether diagnostics preserve iteration order or sort entries by rendered text.
     ///
-    /// This affects presentation only; it does not change matching or lookup behavior.
+    /// This affects presentation only. It does not change matching or lookup behavior.
     const RENDERING_ORDER: RenderingOrder;
 
     /// The entries of this map.

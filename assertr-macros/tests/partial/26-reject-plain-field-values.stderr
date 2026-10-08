@@ -1,11 +1,13 @@
-error[E0277]: the trait bound `{integer}: Expectation<i32>` is not satisfied
+error[E0277]: `{integer}` is not an expectation for `i32`
   --> tests/partial/26-reject-plain-field-values.rs:11:46
    |
 11 |     assert_that!(Named { value: 1 }).matches(partial!(Named { value: 1 }));
-   |                                      ------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Expectation<i32>` is not implemented for `{integer}`
+   |                                      ------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot check `i32` with `{integer}`
    |                                      |
    |                                      required by a bound introduced by this call
    |
+   = help: the trait `Expectation<i32>` is not implemented for `{integer}`
+   = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
    = help: the following other types implement trait `Expectation<T, R>`:
              `&D` implements `Expectation<T, R>`
              `AllOf<L>` implements `Expectation<A, R>`
@@ -26,14 +28,16 @@ note: required by a bound in `matches`
    |     fn matches<E: Expectation<T, R>>(self, expected: E) -> Self;
    |                   ^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
 
-error[E0277]: the trait bound `{integer}: Expectation<i32>` is not satisfied
+error[E0277]: `{integer}` is not an expectation for `i32`
   --> tests/partial/26-reject-plain-field-values.rs:12:36
    |
 12 |     assert_that!(Tuple(1)).matches(partial!(Tuple(1)));
-   |                            ------- ^^^^^^^^^^^^^^^^^^ the trait `Expectation<i32>` is not implemented for `{integer}`
+   |                            ------- ^^^^^^^^^^^^^^^^^^ cannot check `i32` with `{integer}`
    |                            |
    |                            required by a bound introduced by this call
    |
+   = help: the trait `Expectation<i32>` is not implemented for `{integer}`
+   = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
    = help: the following other types implement trait `Expectation<T, R>`:
              `&D` implements `Expectation<T, R>`
              `AllOf<L>` implements `Expectation<A, R>`

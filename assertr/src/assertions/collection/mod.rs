@@ -79,7 +79,7 @@ pub(crate) enum Placement {
 /// re-exported from the prelude.
 ///
 /// Indexed assertions and indexed diagnostics require [`StableOrder`]. Bags and sets have no
-/// indexes in assertr's model; their iteration offsets are never exposed as element positions. A
+/// indexes in assertr's model. Their iteration offsets are never exposed as element positions. A
 /// set therefore cannot call an order-sensitive assertion:
 ///
 /// ```compile_fail,E0277
@@ -117,7 +117,7 @@ pub trait Collection: HasLength {
 /// This capability unlocks order-sensitive assertions and index-bearing diagnostics. It does not
 /// promise efficient access to an arbitrary position. [`LinkedList`] therefore has stable order
 /// even though it does not implement [`RandomAccess`]. "Stable" means that order is part of the
-/// collection's value semantics; deterministic iteration alone does not qualify, so a
+/// collection's value semantics. Deterministic iteration alone does not qualify, so a
 /// [`alloc::collections::BTreeSet`] does not implement this trait.
 ///
 /// Presentation metadata cannot grant this capability:

@@ -264,6 +264,7 @@ mod tests {
                     is equal to
 
                     Expected: 1
+
               - does not have the required sequence
 
                 Details:
@@ -293,10 +294,12 @@ mod tests {
                     is equal to
 
                     Expected: 1
+
               - At [1]:
                 Expected: 3
 
                   Actual: 4
+
               - does not have the required sequence
 
                 Details:
@@ -433,6 +436,7 @@ mod tests {
                             Expected: 2
 
                               Actual: 3
+
                       - does not match in this window
 
                         Details:
@@ -442,10 +446,12 @@ mod tests {
                             Expected: 1
 
                               Actual: 3
+
                           - At [2]:
                             Expected: 2
 
                               Actual: 1
+
                       - does not match in this window
 
                         Details:

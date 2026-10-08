@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `gt`, `le`, and `ge` for comparisons. Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a
   pattern negatively. Matcher lists and keyed value expectations require explicit matchers. `matchers![..]` builds
   heterogeneous lists, including keyed `matchers![entry(..), ..]` lists. Arrays, slices, and vectors hold one matcher
-  type. All of this works without optional features or `std`.
+  type. Passing a plain value where a matcher is expected produces a compile error that suggests `eq(value)`. All of
+  this works without optional features or `std`.
 - Domain checks need no trait implementation: `predicate(..).described_as(..).rejected_as(..)` names a boolean check
   and its rejection, and `matchers::field` applies a matcher to one field and reports evidence at that field. Return
   them from a function as `impl Expectation`. Full implementations can keep the default `Expectation::KIND`
@@ -193,7 +194,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Debug comparisons. Use `has_debug_string("42")` for preformatted numeric expectations and include Debug's surrounding
   quotes when expecting string output.
 - Failure reports use one layout for values, relations, messages, facts, and nested failures, with child paths such as
-  `At [2]:`. Update diagnostic text snapshots. Notable changes: disjunctions and existential matchers such as
+  `At [2]:`. An empty line separates nested failures when any of them spans several lines. Update diagnostic text
+  snapshots. Notable changes: disjunctions and existential matchers such as
   `contains_matching` report one nested group ("does not match any alternative", "does not contain a matching element"),
   contiguous matcher searches over collections and iterators report "does not contain these elements contiguously" and
   group evidence per rejected window with a `Window start` fact, exhausted scans describe the first missing expectation

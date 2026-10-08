@@ -1,6 +1,16 @@
 //! The two assertion modes: fail immediately, or collect failures.
 //!
-//! [`Mode`] is sealed. [`Panic`] and [`Capture`] are its only implementations.
+//! A chain's mode decides what happens when one of its assertions fails. In [`Panic`] mode, the
+//! default, the first failure panics with its report. In [`Capture`] mode, failures are collected
+//! and returned by [`AssertThat::capture`](crate::AssertThat::capture). Child chains share the mode
+//! of their root.
+//!
+//! Assertions that extract a value, such as `get_some` or `get_ok`, exist only in panic mode. After
+//! a failure there is no value to continue with. In capture mode, use the `*_satisfying` variants,
+//! such as `is_some_satisfying`, instead.
+//!
+//! Write custom assertions generic over `M: Mode` to support both modes. [`Mode`] is sealed, so
+//! [`Panic`] and [`Capture`] are its only implementations.
 
 mod sealed {
     pub trait Sealed {}

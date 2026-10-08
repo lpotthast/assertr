@@ -76,7 +76,8 @@ not select a format:
 | Omitted children | Detail note from structured omission count. |
 
 Caller, subject, and expression metadata precede the body. Children indent one level per depth and use
-[typed path headings](#paths). Assertions supply structured fields rather than report text.
+[typed path headings](#paths). Like a loose Markdown list, an empty line separates the `Nested failures` items when any
+of them spans several lines. A list of one-line items stays compact. Assertions supply structured fields rather than report text.
 `Debug` prints the same report. `AssertionFailures` displays its failures separated by an empty line. Exact formatting
 tests live in [report.rs](../assertr/src/failure/report.rs).
 

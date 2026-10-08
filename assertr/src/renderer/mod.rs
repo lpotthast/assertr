@@ -1,8 +1,8 @@
-//! Customize how values appear in assertion failures.
+//! Control how values appear in failure reports.
 //!
-//! Assertions use [`DebugRenderer`] by default. To display a type that has no `Debug`
-//! implementation, or to choose a different representation for it, install a formatter with
-//! [`AssertThat::with_debug_format`](crate::AssertThat::with_debug_format):
+//! By default, values are shown through their `Debug` implementation by [`DebugRenderer`]. To show
+//! a type that has no `Debug` implementation, or to show it differently, give the chain a
+//! formatting closure with [`AssertThat::with_debug_format`](crate::AssertThat::with_debug_format):
 //!
 //! ```
 //! use assertr::prelude::*;
@@ -18,39 +18,30 @@
 //! assert_that!(report).contains("user #7").contains("user #9");
 //! ```
 //!
-//! The closure renders the subject's type only. If assertions also display collection elements,
-//! map keys, or projections of other types, implement [`ValueRenderer<T>`](ValueRenderer) for each
-//! displayed type on one renderer and install it with
-//! [`AssertThat::with_renderer`](crate::AssertThat::with_renderer). That method includes a reusable
-//! renderer example. Every `derive*` and `satisfies*` projection, and every assertion composed from
-//! them such as `is_some_satisfying`, requires `R: Clone`, because each child chain receives its
-//! own renderer. Installing a reference, as in `with_renderer(&renderer)`, satisfies this for any
-//! renderer. Consuming mappings (`map` and `map_owned`), Result extraction, and serialization
-//! conversions preserve the renderer without cloning it.
+//! The closure handles the subject's type only. When a report also shows other types, such as
+//! collection elements or map keys, write a renderer type. Implement
+//! [`ValueRenderer<T>`](ValueRenderer) on it once for every type it should show, and install it
+//! with [`AssertThat::with_renderer`](crate::AssertThat::with_renderer).
 //!
-//! ## Values and structure
+//! Assertions that start a child chain, such as `derive`, `satisfies`, or `is_some_satisfying`,
+//! give the child its own copy of the renderer, so they need `R: Clone`. Installing a reference, as
+//! in `with_renderer(&renderer)`, works for any renderer.
 //!
-//! Assertr owns collection, map, and wrapper syntax. Structural assertions ask the renderer for
-//! the leaf values they display. Generic assertions such as `is_equal_to` and `has_length` treat
-//! the subject as a whole and need a renderer for that whole type. Each assertion's method bounds
-//! state which implementations it needs. See [`ValueRenderer`] for details and pretty-printing.
+//! ## What needs a renderer
 //!
-//! The resulting [`Rendered`] tree retains leaf text, structure, type information, and omission
-//! counts in the [`AssertionFailure`](crate::AssertionFailure). The failure's `Display`
-//! implementation prints these trees as the default report, and custom code can inspect them
-//! directly. Use [`with_panic_presentation`](crate::AssertThat::with_panic_presentation) to change
-//! panic report layout. Value renderers apply before either capture or panic handling.
+//! You only render leaves. assertr writes the brackets, commas, and field names around them. An
+//! assertion on a `Vec<T>` element therefore needs `ValueRenderer<T>`, and a map assertion needs
+//! renderers for the key and value types. Assertions that look at the subject as a whole, such as
+//! `is_equal_to` and `has_length`, need a renderer for the whole type. The bounds on each method
+//! say exactly what it needs.
 //!
-//! Lengths, counts, user-supplied expected indices, and errors are evidence too. Methods displaying
-//! numeric evidence require `ValueRenderer<usize>`. Errors retain their original type, including
-//! expectation rejections. The default renderer requires `Debug`, while a custom renderer may
-//! support errors implementing neither `Debug` nor `Display`. There is no fallback renderer for
-//! evidence.
+//! Counts and lengths are values too. Assertions that report them need `ValueRenderer<usize>`.
+//! Errors keep their own type, so a custom renderer can show errors that implement neither `Debug`
+//! nor `Display`. There is no fallback. If a method needs a renderer that is missing, it does not
+//! compile.
 //!
-//! ## Minimal renderer capabilities
-//!
-//! A callback that only checks an `Option` variant needs no payload renderer. Positive collection
-//! membership adds no leaf requirement of its own:
+//! A check that never shows a value needs no renderer for it. Here, neither `Secret` nor the array
+//! can be rendered, and the assertion still compiles:
 //!
 //! ```
 //! use assertr::prelude::*;
@@ -64,8 +55,7 @@
 //!     .contains_satisfying(|it| { it.is_some(); });
 //! ```
 //!
-//! An exact callback comparison also reports counts. Implement just `ValueRenderer<usize>` to
-//! retain that evidence, even when neither the collection nor its items can be rendered:
+//! Add only the renderers whose evidence you want. This renderer shows counts and nothing else:
 //!
 //! ```
 //! use assertr::prelude::*;
@@ -89,59 +79,63 @@
 //! assert_that!(failures[0].to_string()).contains("count(2)");
 //! ```
 //!
-//! `Clone` carries the renderer into callback child chains. Passing a check does not remove its
-//! method's diagnostic bounds. A direct equality check on `Secret` would still require a
-//! renderer for `Secret` as well as its comparison capability.
+//! ## Limit the size of reports
 //!
-//! ## Structural metadata
+//! A [`RenderingBudget`] caps how many items of a collection are shown and how long each value may
+//! be. It shortens the report but never changes whether an assertion passes. Set it with
+//! [`AssertThat::with_rendering_budget`](crate::AssertThat::with_rendering_budget). Child chains
+//! inherit it. By default, a report shows up to 256 items per group and 4,096 characters per value.
+//! Use [`RenderingBudget::unlimited`] when you need everything.
 //!
-//! Structural positions and diagnostic paths, matcher branch and expected-slot identifiers,
-//! omission summaries, type names, status-class labels such as `2xx`, and explicit diagnostic prose
-//! are formatted by Assertr. [`Rendered`] conversions from strings, formatting arguments, and
-//! primitives are verbatim and bypass the renderer and budget. Use them only for structural text
-//! or caller-authored prose. Pass evidence through a [`RenderingContext`], including notes.
+//! Values left out by the budget are gone. Neither captured failures nor a custom panic
+//! presentation can recover them.
 //!
-//! ## Limit diagnostic output
+//! ## Rendered values
 //!
-//! [`RenderingBudget`] bounds retained items and leaf characters without changing whether an
-//! assertion passes. Configure it through
-//! [`AssertThat::with_rendering_budget`](crate::AssertThat::with_rendering_budget), which includes
-//! an example. Derived assertions inherit the budget. Captured failures and panic presentations
-//! receive the bounded tree, so they cannot recover omitted values. Use
-//! [`RenderingBudget::unlimited`] when complete diagnostics are needed.
+//! Rendering produces a [`Rendered`] tree that keeps the text of each leaf, the structure around
+//! it, type information, and how many items were left out.
+//! [`AssertionFailure`](crate::AssertionFailure) stores these trees, so code that processes
+//! failures can inspect them without parsing text. To change the layout of panic messages, use
+//! [`with_panic_presentation`](crate::AssertThat::with_panic_presentation).
+//!
+//! assertr writes some text itself: field names and positions in failure paths, omission notes,
+//! type names, labels such as `2xx`, and prose passed in by the assertion author. Map keys in
+//! paths, counts, lengths, and `any_of` branch numbers are values and go through the renderer.
+//! Converting a string, format arguments, or a primitive into [`Rendered`] produces such verbatim
+//! text, which bypasses the renderer and the budget. Use these conversions only for that kind of
+//! text. Render values through a [`RenderingContext`].
 //!
 //! ## Render values in custom assertions
 //!
-//! Custom assertion implementations use [`AssertThat::render`](crate::AssertThat::render) to apply
-//! the chain's renderer and budget. Expectation definitions obtain the same [`RenderingContext`]
-//! through [`AssertionContext::render`](crate::AssertionContext::render). Pass the returned
-//! [`Rendered`] trees to the failure builder or [`Fact`](crate::Fact) constructors:
+//! A custom assertion gets a [`RenderingContext`] from
+//! [`AssertThat::render`](crate::AssertThat::render), or from
+//! [`AssertionContext::render`](crate::AssertionContext::render) inside an expectation. It applies
+//! the chain's renderer and budget. Pass its results to the failure builder or to
+//! [`Fact`](crate::Fact) constructors:
 //!
-//! | Evidence | Method |
+//! | To show | Use |
 //! | --- | --- |
-//! | One leaf | [`value`](RenderingContext::value) |
-//! | Collection with its presentation and type | [`collection`](RenderingContext::collection) |
-//! | Collection with meaningful positions | [`stable_collection`](RenderingContext::stable_collection) |
-//! | Map with its ordering policy and type | [`map`](RenderingContext::map) |
-//! | Synthetic list | [`borrowed_values`](RenderingContext::borrowed_values) |
-//! | Synthetic key/value tuples | [`entry_list`](RenderingContext::entry_list) |
-//! | One-field tuple variant or named struct | [`variant`](RenderingContext::variant), [`struct_field`](RenderingContext::struct_field) |
-//! | Inaccessible struct field | [`unavailable_struct_field`](RenderingContext::unavailable_struct_field) |
+//! | One value | [`value`](RenderingContext::value) |
+//! | A collection, presented as usual | [`collection`](RenderingContext::collection) |
+//! | A collection where positions matter | [`stable_collection`](RenderingContext::stable_collection) |
+//! | A map | [`map`](RenderingContext::map) |
+//! | A list built for the report | [`borrowed_values`](RenderingContext::borrowed_values) |
+//! | Key and value pairs built for the report | [`entry_list`](RenderingContext::entry_list) |
+//! | A value inside an enum variant or struct | [`variant`](RenderingContext::variant), [`struct_field`](RenderingContext::struct_field) |
+//! | A struct field that cannot be accessed | [`unavailable_struct_field`](RenderingContext::unavailable_struct_field) |
 //!
-//! Synthetic groups have no outer Rust type. Select their diagnostic order with an explicit
-//! [`RenderingOrder`] argument. Collection methods follow [`CollectionPresentation`]. Positional
-//! rendering requires [`StableOrder`](crate::assertions::collection::StableOrder) and always
-//! preserves iteration order. Use [`RenderingContext::compact`] to render leaves in their compact
-//! form.
+//! Lists built for the report have no Rust type of their own, so you choose their
+//! [`RenderingOrder`]. Collections follow their [`CollectionPresentation`]. `stable_collection`
+//! requires [`StableOrder`](crate::assertions::collection::StableOrder) and keeps iteration order.
+//! [`RenderingContext::compact`] renders values in their single-line form.
 //!
-//! Each method requires only the displayed leaf renderers, renders every leaf once, and applies
-//! the budget. Sorted groups order rendered text before retaining the requested number of items.
-//! The budget limits retained output, not traversal work or peak memory.
+//! Every method needs renderers only for the leaves it shows and applies the budget. Sorted lists
+//! are sorted by their rendered text before the budget drops items. The budget limits the output,
+//! not the work of walking the value.
 //!
-//! [`RenderingContext::budget`] returns a copy of the active limits for custom evidence collectors.
-//! Keep assertion truth independent of retention and record omitted evidence in the failure
-//! builder. The [custom assertions guide](crate#structural-evidence) demonstrates collection,
-//! map, and wrapper diagnostics without constructing metadata or rendering syntax by hand.
+//! If you collect evidence yourself, read the limits from [`RenderingContext::budget`]. Decide the
+//! result of the check before applying them, and record what you left out on the failure builder.
+//! The [structural evidence guide](crate#structural-evidence) shows a complete example.
 
 mod budget;
 mod context;

@@ -20,9 +20,9 @@ pub struct PanicValue(pub(crate) Box<dyn Any + Send>);
 /// Invokes `fun`, asserts that the call or dropping its output panics, and returns an assertion
 /// over the panic payload.
 ///
-/// This has the same assertion behavior as `assert_that_owned!(fun).panics()`. Because this entry
-/// point is a function, it cannot capture the caller's source expression; use the macro form when
-/// that expression metadata is wanted.
+/// This behaves like `assert_that_owned!(fun).panics()`. Being a function, it cannot record the
+/// caller's source expression for the report. Use `assert_that_owned!(fun).panics().await` when
+/// you want it.
 #[track_caller]
 #[must_use]
 #[cfg(feature = "std")]
@@ -37,8 +37,8 @@ pub fn assert_that_panic_by<'t, R>(
 /// Invokes `fun`, asserts that the call, polling its future, or dropping its output panics, and
 /// returns an assertion over the panic payload.
 ///
-/// Because this entry point is a function, it cannot capture the caller's source expression; use
-/// `assert_that_owned!(fun).panics_async().await` when that expression metadata is wanted.
+/// Being a function, it cannot record the caller's source expression for the report. Use
+/// `assert_that_owned!(fun).panics_async().await` when you want it.
 #[track_caller]
 #[must_use = "futures do nothing unless awaited or polled"]
 #[cfg(feature = "std")]

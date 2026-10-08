@@ -1,18 +1,19 @@
-//! Contracts for authoring expectations and executing their composition.
+//! The [`Expectation`] trait and the building blocks for combining expectations.
 //!
-//! To use built-in checks, start with the [`matchers`](mod@crate::matchers) catalog. It re-exports
-//! every public expectation and groups subject-specific names into namespaces. This module owns
-//! the implementation contract and composition machinery. A matcher is an expectation used in
-//! composition, not a separate trait or implementation.
+//! To use built-in checks, start with the [`matchers`](mod@crate::matchers) catalog, which
+//! re-exports every public expectation. This module is for writing your own and for the machinery
+//! that combines them. A matcher is just an expectation used in composition.
 //!
-//! [`Expectation`] evaluates a subject once and retains its successful observation or rejection.
-//! [`Expectation::explain`] uses the common [`FailureBuilder`] for both a rejected observation
-//! and an unmet expectation with no subject, such as a missing collection element. The chain
-//! tracks assertions, preserves continuation state, and raises the resulting failures.
+//! An [`Expectation`] inspects a subject once in [`Expectation::evaluate`] and keeps what it
+//! observed, either a successful value or the reason for rejection. On failure,
+//! [`Expectation::explain`] turns that rejection into a report through a [`FailureBuilder`]. It is
+//! also called without a subject when the subject is missing entirely, such as an expected element
+//! that a collection lacks. The chain counts assertions and raises failures. The expectation does
+//! neither.
 //!
-//! Definitions can be constructed independently. Execution requires an [`AssertionContext`]
-//! supplied by the library. Implementations receive that context to evaluate their children and
-//! render diagnostic values under the enclosing chain's settings.
+//! Expectations are plain values that can be built anywhere. Running one requires an
+//! [`AssertionContext`], which assertr supplies. Implementations use it to run child expectations
+//! and to render values with the chain's settings.
 //!
 //! ```
 //! use assertr::{matchers::{EqualTo, each}, prelude::*};
@@ -21,6 +22,8 @@
 //! assert_that!(3).apply_assertion(&expected);
 //! assert_that!([3, 3]).matches(each(&expected));
 //! ```
+//!
+//! The [custom assertions guide](crate#custom-assertions) walks through a complete implementation.
 
 use crate::{
     AssertionFailure, DebugRenderer,
@@ -96,6 +99,11 @@ impl Evidence {
 /// whether to continue with a success or explain a rejection. Compositions explain child
 /// rejections immediately and retain owned [`Evidence`], releasing each child's observation
 /// before evaluating its siblings.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not an expectation for `{T}`",
+    label = "cannot check `{T}` with `{Self}`",
+    note = "to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`"
+)]
 pub trait Expectation<T: ?Sized, R = DebugRenderer> {
     /// The original successful observation. Use `()` when no witness is needed.
     type Success<'a>

@@ -1,26 +1,22 @@
-//! Reusable expectations for direct assertions, collection elements, and structural matching.
+//! Reusable checks for whole values, collection elements, and struct fields.
 //!
-//! An **expectation** defines a check and its diagnostics. A **matcher** is an expectation used
-//! with [`matches`](crate::assertions::matcher::MatcherAssertions::matches), a `*_matching`
-//! method, or composition. Both uses execute the same [`Expectation`] trait. There is no separate
-//! matcher trait or registration step.
+//! A matcher is a check stored in a value. Pass it to
+//! [`matches`](crate::assertions::matcher::MatcherAssertions::matches), to a `*_matching` assertion
+//! such as `contains_matching`, or to another matcher. Every matcher implements [`Expectation`],
+//! the same trait behind the ordinary assertion methods. So "expectation" and "matcher" name the
+//! same thing, and there is no separate trait to implement or register.
 //!
-//! This module is the catalog of all public built-in expectations. General comparisons, lengths,
-//! variants, and composition helpers are available directly. Subject families have namespaces to
-//! distinguish names such as [`string::Contains`] and [`collection::Contains`]. Existing short
-//! constructors, including [`eq`], [`equal_to`], and [`ge`], are available directly.
+//! This module lists every built-in matcher. The most common ones, such as [`eq`], [`ge`], and
+//! [`IsSome`], are available directly. Subject-specific matchers live in namespaces such as
+//! [`string`] and [`collection`], which keeps names like [`string::Contains`] and
+//! [`collection::Contains`] apart.
 //!
 //! ## Build and reuse a check
 //!
-//! Use a unit value such as [`IsSome`] for a parameterless check, or `Type::new(...)` to supply
-//! expected operands. Convenience functions construct the same types: `ge(18)` constructs
-//! [`GreaterOrEqual`]. Pass a reference to reuse a definition without cloning it.
-//!
-//! Built-in expectations implement `Debug` and `Clone` when their operands and nested matchers
-//! do. Definitions holding no data, only concrete copyable data, or only borrowed targets, such as
-//! [`IsSome`], [`HasLengthOf`], or [`IsSameInstanceAs`], are also `Copy`. Callback definitions such
-//! as [`Predicate`] and [`Pattern`] are `Clone` when their callback is and omit it from `Debug`.
-//! Identity definitions show addresses instead of target contents.
+//! Unit values such as [`IsSome`] need no arguments. Others take their expected values in
+//! `Type::new(..)`, and short functions build the same types: `ge(18)` is
+//! [`GreaterOrEqual::new(18)`](GreaterOrEqual::new). Pass `&matcher` to use one definition several
+//! times:
 //!
 //! ```rust
 //! use assertr::{matchers::{all_of, HasLengthOf, IsSome, string}, prelude::*};
@@ -31,14 +27,15 @@
 //! assert_that!([None, Some(42)]).contains_matching(IsSome);
 //! ```
 //!
-//! [`all_of`] requires every branch to pass and reports each failing branch directly.
-//! [`any_of`] stops at the first passing branch. When every alternative fails, it reports one
-//! nested group whose failures carry a zero-based `Branch` fact.
-//! Explicit negative definitions, such as [`NotEqualTo`], [`IsNone`], and
-//! [`DoesNotMatchPattern`], own their checks and diagnostic evidence. There is no generic `not`.
-//! See [`MatcherList`] for arrays and the [`matchers!`](crate::matchers!) list macro.
+//! [`all_of`] requires every matcher to pass and reports each one that fails. [`any_of`] passes as
+//! soon as one matcher passes. If none does, it reports all of them, numbered by a zero-based
+//! `Branch` fact. Use [`matchers!`](crate::matchers!) to list matchers of different types, or an
+//! array for matchers of one type (see [`MatcherList`]).
 //!
-//! A matcher checks the original subject. It does not change the chain's subject type:
+//! There is no generic `not`. Negated checks such as [`NotEqualTo`], [`IsNone`], and
+//! [`DoesNotMatchPattern`] are separate matchers with their own failure reports.
+//!
+//! `matches` keeps the chain's subject. Use an extracting assertion to continue with the content:
 //!
 //! ```rust
 //! use assertr::{matchers::IsSome, prelude::*};
@@ -46,76 +43,38 @@
 //! assert_that!(Some(42)).matches(IsSome).get_some().is_equal_to(42);
 //! ```
 //!
-//! `matches(IsSome)` checks presence. `get_some()` extracts the payload. Custom projection
-//! methods can use [`AssertThat::test_assertion`](crate::AssertThat::test_assertion) to obtain a
-//! definition's successful observation. Composition drops successful observations before checking
-//! another branch, which also releases acquired guards.
+//! Matchers implement `Debug` and `Clone` when their contents do. Matchers without generic
+//! contents, such as [`IsSome`] and [`HasLengthOf`], and identity matchers such as
+//! [`IsSameInstanceAs`] are also `Copy`. Matchers holding a closure, such as [`Predicate`] and
+//! [`Pattern`], leave it out of their `Debug` output, and identity matchers show addresses.
 //!
-//! ## Find an expectation
+//! ## Find a matcher
 //!
-//! | Subject or check | Import from this module |
+//! | Subject or check | Matchers |
 //! |---|---|
-//! | Equality and ordering | [`EqualTo`], [`NotEqualTo`], [`LessThan`], [`GreaterThan`], [`LessOrEqual`], [`GreaterOrEqual`] |
-//! | Boolean, variant, and type checks | [`IsTrue`], [`IsFalse`], [`IsSome`], [`IsNone`], [`IsOk`], [`IsErr`], [`IsReady`], [`IsPending`], [`IsOfType`] |
+//! | Equality and ordering | [`eq`], [`EqualTo`], [`NotEqualTo`], [`lt`], [`le`], [`gt`], [`ge`], and their types |
+//! | Booleans, variants, and types | [`IsTrue`], [`IsFalse`], [`IsSome`], [`IsNone`], [`IsOk`], [`IsErr`], [`IsReady`], [`IsPending`], [`IsOfType`] |
 //! | Length, formatting, and identity | [`HasLengthOf`], [`IsEmpty`], [`IsNotEmpty`], [`HasDebugString`], [`HasDebugValue`], [`HasDisplayValue`], [`IsSameInstanceAs`], [`IsNotSameInstanceAs`] |
 //! | Characters and strings | [`character`], [`string`] |
 //! | Elements, maps, and sets | [`collection`], [`map`], [`set`] |
-//! | Ranges, cell borrows, and remaining iterator counts | [`range`], [`cell`], [`iterator`] |
-//! | Numeric properties and tolerances | `numeric` with `num`. Floating-point classifications also need `std` or `libm`. |
-//! | Drop requirements | [`memory`] |
-//! | Paths, commands, and mutexes | `path`, `command`, `mutex` with `std` |
-//! | HTTP headers and responses | `header_value` with `http`, `response` with `reqwest` |
-//! | Jiff values | `signed_duration`, `span`, `zoned` with `jiff` |
-//! | Executable lookup and reports | `program` with `program`, `report` with `rootcause` |
-//! | Tokio locks and channels | `tokio_mutex`, `tokio_rw_lock`, `watch` with `tokio` |
+//! | Ranges, `RefCell` borrows, and iterators | [`range`], [`cell`], [`iterator`] |
+//! | Drop behavior | [`memory`] |
+//! | Numbers (`num`) | `numeric`. Floating-point checks also need `std` or `libm`. |
+//! | Paths, commands, and mutexes (`std`) | `path`, `command`, `mutex` |
+//! | HTTP (`http`, `reqwest`) | `header_value`, `response` |
+//! | Jiff (`jiff`) | `signed_duration`, `span`, `zoned` |
+//! | Programs and reports (`program`, `rootcause`) | `program`, `report` |
+//! | Tokio (`tokio`) | `tokio_mutex`, `tokio_rw_lock`, `watch` |
+//! | Combining checks | [`all_of`], [`any_of`], [`each`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`anything`] |
 //!
-//! Each type documents its constructor, supported subjects, and diagnostic bounds. The catalog
-//! re-exports the original types. Their paths under [`assertions`](crate::assertions) continue to
-//! work. Start with explicit imports, or use `matchers::*` alongside `prelude::*` to browse the
-//! catalog with autocomplete.
-//!
-//! Map [`entry`] operands select their query view through
-//! [`BorrowFor`](crate::borrow_for::BorrowFor), using the stored key type as context. Native
-//! [`MapLookup`](crate::assertions::map::MapLookup) separately determines whether that view can
-//! query the map. Query paths render the selected view. For example, vector keys accept slices:
-//!
-//! ```
-//! use assertr::{matchers::{entry, eq}, prelude::*};
-//! use std::collections::BTreeMap;
-//! let query = &[1_u8, 2][..];
-//! assert_that!(BTreeMap::from([(vec![1_u8, 2], 3)]))
-//!     .matches(entries_are![(query, eq(3))]).matches(entry(query, eq(3)));
-//! ```
-//!
-//! ## Execution and features
-//!
-//! Runtime expectations and collection/map macros need no optional feature and support `no_std`
-//! with `alloc`. The `partial` feature enables only the
-//! [`partial!`](mod@crate::matchers#structural-syntax) procedural macro. Integration expectations
-//! have the same feature requirements as their ordinary assertion methods.
-//!
-//! Equality and ordering accept owned or borrowed values through
-//! [`crate::borrow_for::BorrowFor`]. For example, `eq("hello")` matches both `String` and `&str`.
-//! Reference-valued fields and iterator items keep their declared types. Use [`dereferenced`] to
-//! compare the target of a reference, box, `String`, or other `Deref` value.
-//!
-//! Matching borrows the subject. Available checks depend on its capabilities and the active
-//! renderer. Renderer bounds apply to diagnostic leaves, and the rendering budget limits evidence
-//! without changing whether the check passes. Reusable does not mean side-effect free: predicates,
-//! callbacks, and lock observations can affect state. Composition can evaluate an expectation
-//! against several subjects or candidate pairs. Explanation uses the original rejection and does
-//! not repeat the check. User panics propagate.
-//!
-//! Ordinary methods that consume a function or iterator, or await a response body, own those
-//! execution steps. They also use the `Expectation` trait internally, with private adapters that
-//! are not reusable public matchers. `matches(...)` does not invoke an owned `FnOnce` or await I/O.
-//! Use the corresponding ordinary assertion for those operations. [`satisfying`] adapts reusable
-//! capture-mode assertion callbacks, including custom assertion methods, into composition.
+//! Each matcher's page lists the subjects it supports and what it needs to render a failure. The
+//! matchers are re-exports, so their original paths under [`assertions`](crate::assertions) work
+//! too. Import `matchers::*` next to `prelude::*` if you want to browse them with autocomplete.
 //!
 //! ## Structural syntax
 //!
-//! Use `partial!` to check selected fields of a struct or enum. The production type needs no
-//! derives or attributes:
+//! With the `partial` feature, `partial!` checks selected fields of a struct or enum. The type
+//! needs no derives or attributes:
 //!
 //! ```rust
 //! # #[cfg(feature = "partial")]
@@ -145,21 +104,41 @@
 //! # }
 //! ```
 //!
-//! [`eq`] is a short alias for [`equal_to`] and uses `PartialEq`, so the `String` name can match
-//! a string literal. Fields use explicit matchers, nested `partial!` expectations, or
-//! [`satisfying`] to run ordinary and custom assertion methods. A `satisfying` callback runs in
-//! capture mode and returns `()`, so end its final assertion with a semicolon. Every assertion must
-//! pass. Empty callbacks panic.
+//! Each listed field takes a matcher. Plain values are not accepted, so write `eq(value)` for
+//! equality. `eq` uses `PartialEq`, which lets the `String` field match a string literal. A field
+//! can also hold a nested `partial!`, or [`satisfying`] to run ordinary assertion methods:
 //!
-//! `..` excludes the remaining fields from comparison and diagnostics. Only selected fields need
-//! comparison or rendering support. Without `..`, every field must be listed. Private fields
-//! follow ordinary Rust visibility rules.
+//! ```rust
+//! # #[cfg(feature = "partial")]
+//! # {
+//! use assertr::{matchers::*, prelude::*};
 //!
-//! Structs and enum variants support named, tuple, and unit syntax. In tuples, `_` skips one
-//! field and a final `..` skips the rest. The `variant` prefix includes the enum variant in
-//! diagnostic paths. Constructor paths may be qualified with `crate`, `self`, `super`, `Self`,
-//! or a leading `::`. After `variant`, a leading `::` starts the constructor's absolute path.
-//! Use `r#variant::Type` for an unmarked path beginning with a module named `variant`:
+//! struct User {
+//!     name: String,
+//!     age: u32,
+//! }
+//! let user = User { name: "Alice".into(), age: 30 };
+//!
+//! assert_that!(user).matches(partial!(User {
+//!     age: satisfying(|age| {
+//!         age.is_greater_or_equal_to(18).is_less_than(65);
+//!     }),
+//!     ..
+//! }));
+//! # }
+//! ```
+//!
+//! The `satisfying` closure runs in capture mode and returns `()`, so end its last assertion with a
+//! semicolon. All of its assertions must pass, and it must run at least one.
+//!
+//! `..` skips the remaining fields. Skipped fields need no `PartialEq` or `Debug`, which is why
+//! `secret` above needs neither. Without `..`, every field must be listed. Private fields follow
+//! the usual visibility rules.
+//!
+//! Tuple structs and enum variants work too. In tuples, `_` skips one field and a final `..` skips
+//! the rest. Prefix an enum constructor with `variant` to include the variant name in failure
+//! paths. Constructor paths can start with `crate`, `self`, `super`, `Self`, or `::`. To use an
+//! unmarked path that starts with a module named `variant`, write `r#variant::Type`:
 //!
 //! ```rust
 //! # #[cfg(feature = "partial")]
@@ -173,21 +152,18 @@
 //! # }
 //! ```
 //!
-//! Macro entries require explicit matchers, evaluated once in source order when the matcher is
-//! built. Use [`eq(value)`](eq) or [`equal_to(value)`](equal_to) for equality, including inside
-//! macros. An expression implementing the `Expectation` trait is always used as a matcher,
-//! even if it also supports equality. The same rule applies to `.matches(eq(42))`.
+//! Field matchers are built once, in source order, when the `partial!` expression is evaluated.
 //!
 //! ## Collection policies
 //!
-//! Choose how elements or entries should match:
+//! Choose how the elements or entries must match:
 //!
-//! | Matcher | Requirement |
+//! | Matcher | Passes when |
 //! |---|---|
-//! | [`each(matcher)`](each) | Every element matches. Empty collections pass. |
-//! | [`elements_are!`](crate::elements_are) | Exactly these elements, in this order. Requires [`StableOrder`](crate::assertions::collection::StableOrder). |
-//! | [`elements_are_in_any_order!`](crate::elements_are_in_any_order) | Exactly these elements in any order, preserving duplicate counts. |
-//! | [`entries_are!`](crate::entries_are) | Exactly these keys, each with a matching value. Uses native map lookup. |
+//! | [`each(matcher)`](each) | Every element matches. An empty collection passes. |
+//! | [`elements_are!`](crate::elements_are) | The elements match these matchers one to one, in order. Requires [`StableOrder`](crate::assertions::collection::StableOrder). |
+//! | [`elements_are_in_any_order!`](crate::elements_are_in_any_order) | The elements match these matchers one to one, in any order. |
+//! | [`entries_are!`](crate::entries_are) | The map has exactly these keys, and each value matches its matcher. |
 //!
 //! ```rust
 //! use assertr::{matchers::*, prelude::*};
@@ -200,27 +176,56 @@
 //!     .matches(entries_are![("Ada", ge(18)), ("Grace", eq(85))]);
 //! ```
 //!
-//! These matchers also work as fields inside `partial!`, and their entries can contain nested
-//! `partial!` expectations. Unordered matching gives each expectation a distinct element, even
-//! when constraints overlap. B-tree collections work with `alloc`. Hash collections require `std`.
-//! In `entries_are!`, keys remain lookup operands and values require matchers.
+//! In unordered matching, each matcher claims a different element, even when several matchers would
+//! accept the same one. These policies also work as fields in `partial!`, and their entries can
+//! contain `partial!`. B-tree collections work with `alloc`. Hash collections need `std`.
 //!
-//! ## Custom expectations and diagnostics
+//! Map keys are looked up, not matched, so they are plain values. Like other expected values, they
+//! can be borrowed forms of the stored key. A `Vec<u8>` key can be looked up with a slice:
 //!
-//! Use [`predicate`] for a boolean check, such as `predicate(|n: &i32| n % 2 == 0)`.
-//! [`pattern!`](crate::pattern) matches Rust patterns. [`satisfying`] combines
-//! existing assertion methods and documents callback bounds and type annotations.
+//! ```
+//! use assertr::{matchers::{entry, eq}, prelude::*};
+//! use std::collections::BTreeMap;
 //!
-//! For a reusable check with a typed rejection and custom diagnostics, implement [`Expectation`].
-//! Ordinary assertions and matcher composition execute the same
-//! definitions. See [`expectation`](crate::expectation) for the evaluation and diagnostic
-//! contracts.
+//! let query = &[1_u8, 2][..];
+//! assert_that!(BTreeMap::from([(vec![1_u8, 2], 3)]))
+//!     .matches(entries_are![(query, eq(3))])
+//!     .matches(entry(query, eq(3)));
+//! ```
 //!
-//! Failures identify selected fields, positions, and keys through
+//! ## Behavior
+//!
+//! Matchers need no optional feature and work in `no_std` with `alloc`, except `partial!` and the
+//! integration matchers, which need the same features as their assertion methods.
+//!
+//! Equality and ordering accept the expected value owned or borrowed, so `eq("hello")` matches both
+//! a `String` and a `&str`. A subject that is a reference keeps its type. Use [`dereferenced`] to
+//! match what a reference, `Box`, `String`, or other `Deref` type points to.
+//!
+//! Matching borrows the subject. A rendering budget shortens the report but never changes the
+//! result. Matchers can have side effects, since predicates, callbacks, and lock checks run user
+//! code or touch state. A composite matcher may run a child matcher against several elements. A
+//! failure report is built from what the check observed, without running it again. Panics in user
+//! code are not caught.
+//!
+//! Assertions that call a closure, drain an iterator, or await a response body consume the subject.
+//! `matches` only borrows, so it cannot do that. Use the corresponding assertion method instead.
+//!
+//! ## Custom matchers
+//!
+//! [`predicate`] turns a boolean closure into a matcher, as in `predicate(|n: &i32| n % 2 == 0)`.
+//! [`pattern!`](crate::pattern) matches a Rust pattern. [`satisfying`] runs assertion methods,
+//! including your own, and explains the type annotations its closure needs. [`field`] applies a
+//! matcher to one field.
+//!
+//! For a check with its own failure report, implement [`Expectation`]. The
+//! [custom assertions guide](crate#custom-assertions) walks through all options, and the
+//! [`expectation`](crate::expectation) module describes the contract.
+//!
+//! Failures name the field, position, or key that failed in
 //! [`AssertionFailure::path`](crate::AssertionFailure::path). Use
-//! [`capture`](crate::AssertThat::capture) to inspect them and the [rendering
-//! guide](crate::renderer) to configure diagnostic values. Reference-valued subjects may need
-//! [`dereferenced`].
+//! [`capture`](crate::AssertThat::capture) to inspect them, and see the [rendering
+//! guide](crate::renderer) to change how values are shown.
 
 pub use crate::{
     assertions::{

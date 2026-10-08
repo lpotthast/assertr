@@ -32,15 +32,15 @@ subject, item, key, value, or range-bound type. Assertr does not infer a separat
 therefore select different views when used with different subject types.
 
 The `borrow-for` crate defines the standard selections and lets custom wrappers provide their own. Assertr re-exports it as
-`assertr::borrow_for`. The [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-equality) covers supported views
+`assertr::borrow_for`. The [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-expected-values) covers supported views
 and wrapper implementations.
 
-| Check | Required comparison |
-|---|---|
-| Equality | `A: PartialEq<E::View>`. Negation negates `eq`, even if `ne` is overridden. |
-| Ordering | `A: PartialOrd<E::View>`. Incomparable results reject. String ordering may need explicit `str` views. |
-| Range containment | Symmetric ordering bounds and [bound selection](#range-bound-selection). |
-| Numeric tolerance, signed-duration tolerance, time-zone checks | `View = A`. Tolerance operands borrow independently. |
+| Check                                                          | Required comparison                                                                                   |
+|----------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
+| Equality                                                       | `A: PartialEq<E::View>`. Negation negates `eq`, even if `ne` is overridden.                           |
+| Ordering                                                       | `A: PartialOrd<E::View>`. Incomparable results reject. String ordering may need explicit `str` views. |
+| Range containment                                              | Symmetric ordering bounds and [bound selection](#range-bound-selection).                              |
+| Numeric tolerance, signed-duration tolerance, time-zone checks | `View = A`. Tolerance operands borrow independently.                                                  |
 
 Scalar expectations can evaluate unsized `str` and slices directly. Subjects, fields, and items that are references keep
 their declared types. Use `dereferenced` to check the value behind a reference, box, `String`, or other `Deref` value.
@@ -52,12 +52,12 @@ Chain storage follows [entry normalization](assertion-lifecycle.md#entry-subject
 Constructors store operands without cloning or accessing views. Library-controlled access begins after
 [assertion tracking](expectation-execution.md#chain-execution).
 
-| Input | Evaluation and explanation |
-|---|---|
-| Scalar operand | Borrow once per evaluation. Retain the selected view on rejection. Explanation reuses it. Later evaluations borrow anew. |
+| Input              | Evaluation and explanation                                                                                                                          |
+|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Scalar operand     | Borrow once per evaluation. Retain the selected view on rejection. Explanation reuses it. Later evaluations borrow anew.                            |
 | Tolerance operands | Borrow expected value and deviation independently. Signed duration borrows in that order and retains both views plus a flag for negative deviation. |
-| Bulk expected list | The list and its operand views may be read again under the consistency rules below. |
-| Missing subject | Access expected data to describe the requirement, without comparison, lookup, or callback execution. |
+| Bulk expected list | The list and its operand views may be read again under the consistency rules below.                                                                 |
+| Missing subject    | Access expected data to describe the requirement, without comparison, lookup, or callback execution.                                                |
 
 ### Reading expected data again
 
@@ -87,9 +87,9 @@ the referenced value. This avoids ambiguity with `RangeBounds<&B>`. The unbounde
 Methods and aliases delegate to `RangeBoundAssertions` with an explicit `B`. Custom ranges use that generic trait, and
 fully qualified calls can select `B` explicitly.
 
-| Reusable containment constructor | Selection |
-|---|---|
-| `ContainsElement::new`, `DoesNotContainElement::new` | Fix `B` to operand type. A reference operand selects a reference type. |
+| Reusable containment constructor                                           | Selection                                                                                      |
+|----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| `ContainsElement::new`, `DoesNotContainElement::new`                       | Fix `B` to operand type. A reference operand selects a reference type.                         |
 | `ContainsElement::<B>::borrowing`, `DoesNotContainElement::<B>::borrowing` | Select `B` explicitly and borrow through `BorrowFor<B>`. Direct methods use these definitions. |
 
 Renderer requirements follow the selected view, as specified by
@@ -98,11 +98,11 @@ See [range rustdoc](../assertr/src/assertions/core/range.rs) for inference examp
 
 ## Formatted-value comparison
 
-| Assertion | Text compared |
-|---|---|
-| `has_debug_string` | Actual `Debug` output against expected preformatted text verbatim. |
-| `has_debug_value` | Both operands' `Debug` output. |
-| `has_display_value` | Both operands' `Display` output. |
+| Assertion           | Text compared                                                      |
+|---------------------|--------------------------------------------------------------------|
+| `has_debug_string`  | Actual `Debug` output against expected preformatted text verbatim. |
+| `has_debug_value`   | Both operands' `Debug` output.                                     |
+| `has_display_value` | Both operands' `Display` output.                                   |
 
 These checks compare the complete generated text before diagnostic limits truncate it. On rejection, they retain that
 text and render it through `ValueRenderer<str>` without formatting the operands again. Probes still format the operands

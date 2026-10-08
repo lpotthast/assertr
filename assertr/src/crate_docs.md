@@ -1,31 +1,81 @@
-## Core model
+## Core concepts
 
-An [`AssertThat<T>`](AssertThat) holds an owned or borrowed [`Actual<T>`](Actual). Methods are
-selected by `T`, independent of ownership. Borrowing entry points normalize sized references to
-their pointee. Owned references and unsized targets remain reference-typed subjects.
+### Subjects and ownership
 
-[`AssertThat::derive`] creates a child assertion for a borrowed field. Project first, then chain
-assertions on the child. The parent remains usable for other field checks, and child failures
-propagate to the root. Use [`AssertThat::derive_owned`] for computed values and
-[`AssertThat::derive_async`] for asynchronous projections. The [`AssertThat::satisfies`] family
-asserts on a child in a closure and returns the original chain. Its variants cover borrowed,
-owned, and unsized projections.
+An [`AssertThat<T>`](AssertThat) chain holds the subject, the value under test. The subject's type
+`T` decides which assertions are available. Whether the chain owns or borrows the value makes no
+difference to that.
 
-Panic mode stops at the first failure. Capture mode collects structured [`AssertionFailure`]
-values within [`AssertThat::capture`] or the fluent `verify` entry points. A failure carries its
-structured rendered [`actual`](AssertionFailure::actual) and
+`assert_that!(value)` borrows. `assert_that!(&value)` is equivalent for sized values, and both
+produce `AssertThat<Value>`. Unsized targets such as `str` and `[T]` stay references, so
+`assert_that!("text")` produces `AssertThat<&str>`. `assert_that_owned!(value)` takes ownership,
+which only the assertions that consume their subject need.
+
+### Child chains
+
+[`AssertThat::derive`] starts a child chain on a field of the subject. The parent stays usable,
+and a failure on the child counts as a failure of the parent. Use [`AssertThat::derive_owned`] for
+computed values and [`AssertThat::derive_async`] when the projection must be awaited.
+
+The [`AssertThat::satisfies`] family does the same inside a closure and then returns the parent.
+This keeps a single chain going:
+
+```
+use assertr::prelude::*;
+
+let person = (String::from("Ada"), 36);
+assert_that!(person)
+    .satisfies(|p| &p.0, |name| {
+        name.starts_with("A");
+    })
+    .satisfies(|p| &p.1, |age| {
+        age.is_greater_or_equal_to(18);
+    });
+```
+
+Children inherit the parent's renderer, rendering budget, detail messages, location setting, and
+panic presentation. They start without a subject name or source expression.
+
+### Panic mode and capture mode
+
+Every chain runs in one of two [modes](mode). In panic mode, the default, the first failing
+assertion panics with its report. In capture mode, failures are collected as
+[`AssertionFailure`] values. Enter capture mode with [`AssertThat::capture`], or with `verify(..)`
+when the `fluent` feature is enabled.
+
+A failure stores its parts as data: the rendered [`actual`](AssertionFailure::actual) and
 [`expected`](AssertionFailure::expected) values, the [`relation`](AssertionFailure::relation)
-between them, further [`facts`](AssertionFailure::facts), nested
-[`children`](AssertionFailure::children), and a [`kind`](AssertionFailure::kind) as data. Its
-`Display` implementation produces the human-readable report. Capture mode stores failures without
-invoking presentation. Panic mode uses the context's
-[panic presentation](AssertThat::with_panic_presentation) to produce the panic text, defaulting to
-that report.
+between them, extra [`facts`](AssertionFailure::facts), nested
+[`children`](AssertionFailure::children), and its [`kind`](AssertionFailure::kind). Its `Display`
+implementation produces the report. In panic mode, the report becomes the panic message unless you
+replace it with [`AssertThat::with_panic_presentation`]. See [`failure`] for details.
 
-## Borrowed equality
+### Adding context to failures
 
-Pass a reference to reuse an expected value without cloning it. An equality definition also
-retains its operand and can be borrowed by several assertions:
+Name the subject or add messages that appear in every later failure of the chain:
+
+```
+use assertr::prelude::*;
+
+let failures = assert_that!(vec![3, 1, 2])
+    .with_subject_name("ids")
+    .with_detail_message("ids must be returned in order")
+    .capture(|ids| ids.contains_exactly([1, 2, 3]));
+assert_that!(failures[0].to_string())
+    .contains("Subject: ids")
+    .contains("ids must be returned in order");
+```
+
+[`AssertThat::with_location`] turns off the file and line in reports, which helps when a test
+compares a whole report.
+
+## Comparing values
+
+### Borrowed expected values
+
+Comparisons accept the expected value owned or by reference. Passing a reference lets you reuse a
+value that does not implement `Clone`. A matcher such as [`matchers::eq`] can also hold a reference
+and be used several times:
 
 ```
 use assertr::{matchers::eq, prelude::*};
@@ -36,73 +86,65 @@ struct Token(u32); // No Clone implementation.
 let actual = Token(7);
 let expected = Token(7);
 assert_that!(actual).is_equal_to(&expected);
+
 let equal = eq(&expected);
 assert_that!(actual).matches(&equal);
 assert_that!([Token(7)]).contains_matching(&equal);
-assert_that!(expected.0).is_equal_to(7);
 ```
 
-[`BorrowFor`](crate::borrow_for::BorrowFor) selects the expected view for the declared actual
-type. A custom wrapper implements `Borrow<View>` and opts in with `BorrowFor<Actual>`. Equality
-then requires `Actual: PartialEq<View>`. Diagnostics render the actual and the selected view,
-so this wrapper needs neither `Debug` nor `Clone`:
+The [`BorrowFor`](crate::borrow_for::BorrowFor) trait decides which borrowed form an expected
+value compares as. That is why `"Ada"` works as the expected value for a `String`. Your own
+wrapper types can opt in. Implement `Borrow<View>` and `BorrowFor<Actual>` with `View` as the
+comparison type, and the subject type must implement `PartialEq<View>`. Reports show the view, so
+the wrapper needs neither `Debug` nor `Clone`:
 
 ```
 use assertr::{borrow_for::BorrowFor, matchers::eq, prelude::*};
 use core::borrow::Borrow;
 
 struct ExpectedName(String);
+
 impl Borrow<str> for ExpectedName {
-    fn borrow(&self) -> &str { &self.0 }
+    fn borrow(&self) -> &str {
+        &self.0
+    }
 }
+
 impl BorrowFor<String> for ExpectedName {
     type View = str;
 }
 
 let expected = eq(ExpectedName(String::from("Ada")));
 assert_that!(String::from("Ada")).matches(&expected);
-let failures = assert_that!(String::from("Grace")).capture(|it| it.matches(&expected));
-assert_that!(failures[0].to_string())
-    .contains("Grace").contains("Ada");
 ```
 
-The scalar constructor stores the operand. Evaluation selects its view once, and rejection retains
-that reference for explanation. Missing-subject descriptions select the view without comparing.
-Reference-valued subjects keep their declared type. See
-[`PartialEqAssertions`](assertions::core::partial_eq::PartialEqAssertions) for explicit pointee
-matching and cross-type comparison limits.
+References as subjects keep their type. See
+[`PartialEqAssertions`](assertions::core::partial_eq::PartialEqAssertions) for comparing through
+references and for cross-type comparisons.
 
-## Bulk expected data
+### Expected lists
 
-Bulk value, key, and entry assertions accept finite, slice-backed expected lists through
-`AsRef`. Arrays, slices, vectors, and compatible wrappers reuse their existing storage.
-Generators require explicit preparation:
+Assertions such as `contains_all` and `contains_exactly` take their expected items as a list that
+can be viewed as a slice. Arrays, slices, and vectors all work without copying. Collect an
+iterator into a `Vec` first:
 
 ```
 use assertr::prelude::*;
-let expected = (1..=3).collect::<Vec<_>>();
-assert_that!([1, 2, 3, 4]).contains_all(&expected);
-assert_that!([1, 2, 3]).contains_all((1..=3).collect::<Vec<_>>());
+
+assert_that!([1, 2, 3, 4]).contains_all([1, 2]);
+assert_that!([1, 2, 3, 4]).contains_all((1..=3).collect::<Vec<_>>());
 ```
 
-Borrowed lists of custom operands use the stored element type's `BorrowFor` implementation.
-They need no extra implementation for references to that wrapper. Bulk expected data must be
-repeatable: repeated slice access returns the same logical list, and repeated operand borrowing
-describes the same comparison value throughout evaluation and explanation. Access counts and
-interleaving with comparisons are unspecified. Constructors store inputs without accessing
-views, and library-controlled access occurs after assertion tracking.
+Lists of custom wrapper values compare through the wrapper's `BorrowFor` implementation, so they
+need nothing extra. The list may be read more than once, for example once to compare and once to
+build the report. It must return the same items every time. Prepare data with side effects before
+the assertion.
 
-Prepare stateful data before the assertion, or use a custom expectation retaining its observation.
-Explanation may access expected data again through budgeted rendering, but never repeats
-comparisons, searches, lookups, callbacks, or iterator consumption. Rejections retain the failed
-observations instead of complete expected-view buffers. Scalar borrowing and matcher, callback,
-guard, and identity contracts remain unchanged.
+## Async code
 
-## Async limitations
-
-Await asynchronous operations before applying synchronous expectations, or use an async
-projection such as [`AssertThat::derive_async`]. With `std`, async function assertions consume
-an owned closure in panic mode. The caller supplies the runtime and awaits the returned future:
+Await the value first and assert on the result, or use an async projection such as
+[`AssertThat::derive_async`]. With `std`, async closures can be checked for panics. The test
+provides the runtime and awaits the returned future:
 
 ```
 # #[cfg(feature = "std")]
@@ -113,29 +155,20 @@ use assertr::prelude::*;
 assert_that_owned!(async || 7_u32)
     .does_not_panic_async().await
     .is_equal_to(7);
+assert_that_owned!(async || panic!("boom"))
+    .panics_async().await
+    .has_type::<&str>()
+    .is_equal_to("boom");
 # });
 # }
 ```
 
-Async function assertions capture the caller when called, then track and invoke the closure
-on the first poll. Cancellation does not restore consumed inputs or user state. `panics_async`
-catches invocation, polling, and output-drop panics. `does_not_panic_async` returns the output,
-so its later drop is outside the caught boundary. Reqwest body extraction has a different
-boundary: it checks ownership and tracks before returning the future, then reads when polled.
+`panics_async` catches panics while calling the closure, polling its future, and dropping the
+output. `does_not_panic_async` returns the output, so a panic while dropping it later is not
+caught.
 
-[`Expectation::evaluate`] and [`Expectation::explain`] are synchronous hooks.
-[`AssertThat::capture`] likewise expects a synchronous callback returning the chain:
-
-```compile_fail,E0308
-use assertr::prelude::*;
-
-let failures = assert_that!(7).capture(|it| async move {
-    it.is_equal_to(7)
-});
-```
-
-Chains are neither `Send` nor `Sync`. A future keeping a chain across an await cannot be sent
-between threads, even if its subject and renderer are thread-safe:
+Expectations and [`AssertThat::capture`] callbacks are synchronous. Chains are also neither `Send`
+nor `Sync`, so a future that holds a chain across an `.await` cannot move between threads:
 
 ```compile_fail,E0277
 use assertr::prelude::*;
@@ -149,33 +182,32 @@ requires_send(async {
 });
 ```
 
-When a task API requires `Send`, await the input first, then construct and complete the chain
-without carrying it across another await. A runtime that supports local futures can instead
-keep the chain in the same task across suspension.
+When a task must be `Send`, await the input first, then build and finish the chain without another
+`.await` in between.
 
 ## Custom assertions
 
-Add a method such as `.is_adult()` when a domain check appears throughout your tests. For a
-single check on a field, start with [`AssertThat::derive`]. To describe selected fields and
-nested values together, use [`partial!`](mod@matchers#structural-syntax). Its field expectations
-can use existing assertion methods through [`matchers::satisfying`], including your custom ones.
+Before writing new code, check whether existing tools cover the case:
 
-Existing assertion families also work with custom types that implement their capabilities.
-For example, [`HasLength`](assertions::HasLength) provides length assertions and
-[`Collection`](assertions::collection::Collection) provides order-free element assertions. See
-the [assertion families](assertions) before introducing a separate trait.
+- For one check on a field, use [`AssertThat::derive`].
+- For several fields and nested values, use [`partial!`](mod@matchers#structural-syntax).
+- For your own collection or map type, implement the matching capability, such as
+  [`HasLength`](assertions::HasLength) or [`Collection`](assertions::collection::Collection). The
+  existing assertions then work on it. See the [assertion families](assertions).
 
-### Reusable checks without a trait implementation
+When a domain check shows up throughout your tests, give it a name. There are three ways, from
+least to most effort.
 
-Most domain checks need no trait implementation. Build them from existing matchers and return
-them from a function as `impl Expectation`:
+### Reusable checks from existing matchers
 
-- [`matchers::predicate`] adapts a boolean closure. Name the check with
-  [`described_as`](matchers::Predicate::described_as) and its rejection with
+A function returning `impl Expectation` needs no trait implementation. Build it from:
+
+- [`matchers::field`] to apply a matcher to one field. Failures point at that field.
+- [`matchers::predicate`] to turn a boolean closure into a check. Name the check with
+  [`described_as`](matchers::Predicate::described_as) and the failure with
   [`rejected_as`](matchers::Predicate::rejected_as).
-- [`matchers::field`] applies a matcher to one field and reports its evidence at that field.
-- [`matchers::satisfying`] adapts assertion callbacks, including your own assertion methods.
-- [`matchers::all_of`], [`matchers::any_of`], and [`partial!`](mod@matchers#structural-syntax)
+- [`matchers::satisfying`] to use assertion methods, including your own, as a check.
+- [`matchers::all_of`], [`matchers::any_of`], and [`partial!`](mod@matchers#structural-syntax) to
   combine checks.
 
 ```
@@ -213,23 +245,22 @@ assert_that!(failures).has_length(2);
 assert_that!(failures[0].to_string()).contains("At .age:");
 ```
 
-### Define a chainable method
+[`AssertThat::apply_assertion`] runs any expectation as a step in a chain. The same values work
+with `.matches(..)`, `contains_matching(..)`, and as fields in `partial!`.
 
-Define your own assertion trait and implement it for `AssertThat<'_, YourType, M, R>`. Use
-`M: Mode` so the same implementation works in panic and capture mode. Keep `R` unconstrained on
-the impl, and put renderer and `Clone` bounds on each method that needs them, in both the trait
-and impl. This keeps one method's rendering needs from hiding the entire trait. A default of
-`R = DebugRenderer` lets callers name the trait without specifying a renderer.
+### A chainable method
 
-For a chainable check, take and return `Self`. Mark the method `#[track_caller]` so failures
-report its caller's location. Implement it in one of two ways:
+To write `.is_adult()` directly on a chain, define a trait and implement it for
+`AssertThat<'_, YourType, M, R>`:
 
-- **Composition:** Delegate to existing assertions through [`AssertThat::satisfies`] and
-  friends. Delegated assertions handle tracking, diagnostics, and capture mode. Do not call
-  [`AssertThat::track_assertion`] again in a method that only delegates.
-- **Expectation:** Pass a reusable check to [`AssertThat::apply_assertion`]. This tracks once,
-  evaluates, and raises any explained rejection. The same check also works with `.matches(...)`
-  and nested composition.
+- Make the impl generic over `M: Mode` so the method works in panic and capture mode.
+- Leave `R` unbounded on the impl. Put renderer and `Clone` bounds on each method instead, in both
+  the trait and the impl. Otherwise one method's needs would hide the whole trait. A default of
+  `R = DebugRenderer` lets callers name the trait without a renderer.
+- Take and return `Self`, and mark the method `#[track_caller]` so failures point at the caller.
+
+The body either delegates to existing assertions or applies an expectation. Both handle failure
+reporting and capture mode for you:
 
 ```
 use assertr::prelude::*;
@@ -258,6 +289,7 @@ impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
     where
         R: Clone + ValueRenderer<u32>,
     {
+        // Delegate to an existing assertion on a child chain.
         self.satisfies(|person| &person.age, |age| {
             age.is_greater_or_equal_to(18);
         })
@@ -268,6 +300,7 @@ impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
     where
         R: ValueRenderer<String>,
     {
+        // Apply a reusable expectation.
         self.apply_assertion(matchers::field(
             "name",
             |person: &Person| &person.name,
@@ -283,55 +316,32 @@ let failures = assert_that!(Person { name: "".into(), age: 16 })
 assert_that!(failures).has_length(2);
 ```
 
-An execution adapter owns invocation, consumption, or polling that cannot use the borrowed
-expectation protocol. It tracks explicitly before its operation and preserves the caller
-location. Built-in adapters then use private executor entry points that skip tracking.
-Downstream adapters cannot call those private entry points. If an adapter must construct a
-failure directly, start it with [`AssertThat::failure`], fill in the same structured fields
-through [`AssertThat::render`], and pass it to [`AssertThat::raise`]. Keep that responsibility
-outside expectation hooks.
+A method that only delegates must not call [`AssertThat::track_assertion`] itself. The delegated
+assertions already count.
+
+Some methods must do something an expectation cannot, such as calling the subject or awaiting it.
+Such a method calls [`AssertThat::track_assertion`] before doing the work, builds a failure with
+[`AssertThat::failure`], and reports it with [`AssertThat::raise`]. [`AssertThat::render`] shows a
+complete example.
+
+Assertr's own `*Assertions` traits are public for method discovery only. Do not implement them for
+your types. See [API stability](#api-stability).
 
 ### Implement an expectation
 
-Implement [`Expectation`] when a check must retain what it observed, such as a converted value,
-an error, or a guard, or when it reports custom evidence.
+Implement [`Expectation`] when a check needs its own failure report, or when it produces a value
+worth keeping, such as a parsed number, an error, or a lock guard. An implementation has two parts:
 
-[`Expectation::evaluate`] borrows the subject and returns its original successful observation
-or rejection. Use `()` when no additional observation is needed. It must not track or raise.
-Retain observations such as converted operands, errors, or guards when checking again would
-repeat an observation or observe different state. Repeatable [bulk expected data](#bulk-expected-data)
-may instead be accessed again during explanation.
+- [`Expectation::evaluate`] inspects the subject and returns `Ok` with the observed value, or `Err`
+  with the reason for rejection. Use `()` when there is nothing to keep.
+- [`Expectation::explain`] fills in a [`FailureBuilder`](failure::FailureBuilder). It receives the
+  subject and the rejection from `evaluate`, or `None` when there was no subject, for example a
+  missing collection element. It must not evaluate again.
 
-[`Expectation::explain`] receives a builder and either `Some((actual, rejection))` or `None`.
-The latter describes an unmet expectation with no subject, such as a missing element. Never
-evaluate again during explanation. `KIND` defaults to [`FailureKind::Predicate`]. Override it
-when another [`FailureKind`] fits better. Explanation must not track or raise. Keep observations
-alive until the evidence needing them has been rendered, and release temporary guards before
-returning the builder.
+Neither part tracks or raises. The chain does that. Set `KIND` when a [`FailureKind`] fits better
+than the default [`FailureKind::Predicate`].
 
-Supply the [`actual`](failure::FailureBuilder::actual) value, a lowercase
-[`relation`](failure::FailureBuilder::relation) sentence without embedded values or a trailing
-period, and any [`expected`](failure::FailureBuilder::expected) or
-[`unexpected`](failure::FailureBuilder::unexpected) value.
-[`relations`](failure::FailureBuilder::relations) sets the relation and the rendered subject in
-one call for the common case. Add evidence through [`fact`](failure::FailureBuilder::fact) or
-[`facts`](failure::FailureBuilder::facts), constructing [`Fact::labelled`] values or
-[`Fact::note`] values as appropriate. Add nested [`children`](failure::FailureBuilder::children)
-for further evidence. Return the populated builder. The chain executor raises the completed
-failure through the active mode. Child contexts instead build and retain it as evidence for the
-enclosing assertion.
-
-Render diagnostic values through [`AssertionContext::render`]. Its
-[`value`](renderer::RenderingContext::value) and [structural methods](#structural-evidence) apply
-the active renderer and rendering budget. Pass the rendered values to the value setters or `Fact`
-constructors. This preserves structured values and type metadata for consumers of
-[failures](failure) and lets Assertr produce a consistent report. Errors, lengths, counts, and
-expected indices are typed evidence too. Render notes with
-`.fact(Fact::note(context.render().value(&error)))`. Verbatim notes and primitive conversions are
-reserved for structural metadata and caller-authored prose. See the [rendering guide](renderer)
-for customization.
-
-This expectation retains the parsed port on success and the parse error on rejection:
+This expectation keeps the parsed port on success and the parse error on rejection:
 
 ```
 use assertr::prelude::*;
@@ -378,74 +388,62 @@ let failures = assert_that!(String::from("http"))
 assert_that!(failures[0].to_string()).contains("is not a port");
 ```
 
-Assertr's own `*Assertions` traits are public for method discovery only. Implementing them for
-other types is not supported. See [API stability](#api-stability).
+[`AssertThat::test_assertion`] returns the observed value instead of continuing the chain. In
+capture mode, it returns `None` after recording a failure.
+
+When filling the builder:
+
+- Set the [`actual`](failure::FailureBuilder::actual) value and a
+  [`relation`](failure::FailureBuilder::relation), then an
+  [`expected`](failure::FailureBuilder::expected) or
+  [`unexpected`](failure::FailureBuilder::unexpected) value if there is one.
+  [`relations`](failure::FailureBuilder::relations) sets the subject and the relation in one call.
+- Write relations as lowercase phrases without values or a final period, such as
+  `"does not end with"`.
+- Add further evidence with [`fact`](failure::FailureBuilder::fact) using [`Fact::labelled`] or
+  [`Fact::note`], and nested failures with [`children`](failure::FailureBuilder::children).
+- Render every value through [`AssertionContext::render`]. This applies the user's renderer and
+  rendering budget and keeps type information in the failure. Do not format values with `Debug`
+  yourself.
+
+Do not write the report text yourself. Assertr builds the report from these fields, so custom
+assertions look like built-in ones.
 
 ### Structural evidence
 
-Use [`collection`](renderer::RenderingContext::collection) for a collection's own presentation
-and canonical type. Positional evidence uses
-[`stable_collection`](renderer::RenderingContext::stable_collection). It requires
-[`StableOrder`](assertions::collection::StableOrder) and preserves iteration order even if the
-ordinary collection presentation sorts diagnostic text.
+The [rendering context](renderer::RenderingContext) renders whole collections, maps, and wrappers
+while you provide renderers only for their leaves. Use
+[`collection`](renderer::RenderingContext::collection) for a collection in its usual presentation,
+[`stable_collection`](renderer::RenderingContext::stable_collection) when positions matter,
+[`map`](renderer::RenderingContext::map) for maps, and
+[`variant`](renderer::RenderingContext::variant) or
+[`struct_field`](renderer::RenderingContext::struct_field) for a value inside a wrapper. The
+[rendering guide](renderer#render-values-in-custom-assertions) lists all methods.
 
-[`map`](renderer::RenderingContext::map) renders keys and values separately and follows the map's
-[`RENDERING_ORDER`](assertions::map::Map::RENDERING_ORDER). Wrappers such as
-[`variant`](renderer::RenderingContext::variant) and
-[`struct_field`](renderer::RenderingContext::struct_field) retain the owner's type and wrap a
-single rendered leaf. [`unavailable_struct_field`](renderer::RenderingContext::unavailable_struct_field)
-records a structural placeholder without requiring a field renderer or inventing a field type.
-
-These expectations populate the supplied builder for each kind of subject. Their renderer
-bounds cover only leaves, so the collection, map, and `Option` need no `Debug` implementation.
-`apply_assertion` owns tracking and raising for each call:
+Because only leaves need renderers, this map expectation works even though neither the map nor
+`Token` implements `Debug`:
 
 ```
 # extern crate alloc;
 use alloc::collections::BTreeMap;
 use assertr::{prelude::*, AssertionContext, Expectation, FailureKind};
-use assertr::assertions::{collection::Collection, map::Map};
+use assertr::assertions::map::Map;
 use assertr::failure::FailureBuilder;
 
-struct EmptyCollection;
-impl<C: Collection, R: ValueRenderer<C::Item>> Expectation<C, R> for EmptyCollection {
-    type Success<'a> = () where C: 'a;
-    type Rejection<'a> = () where C: 'a;
+struct IsEmptyMap;
 
-    fn evaluate(&self, actual: &C, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if actual.length() == 0 { Ok(()) } else { Err(()) }
-    }
-
-    const KIND: FailureKind = FailureKind::Length;
-
-    fn explain(
-        &self,
-        rejected: Option<(&C, ())>,
-        failure: FailureBuilder,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder {
-        match rejected {
-            Some((actual, ())) => failure
-                .actual(context.render().collection(actual))
-                .relation("is not empty"),
-            None => failure.relation("is empty"),
-        }
-    }
-}
-
-struct EmptyMap;
-impl<T: Map, R> Expectation<T, R> for EmptyMap
+impl<T: Map, R> Expectation<T, R> for IsEmptyMap
 where
     R: ValueRenderer<T::Key> + ValueRenderer<T::Value>,
 {
     type Success<'a> = () where T: 'a;
     type Rejection<'a> = () where T: 'a;
 
+    const KIND: FailureKind = FailureKind::Length;
+
     fn evaluate(&self, actual: &T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         if actual.length() == 0 { Ok(()) } else { Err(()) }
     }
-
-    const KIND: FailureKind = FailureKind::Length;
 
     fn explain(
         &self,
@@ -462,73 +460,36 @@ where
     }
 }
 
-struct NoValue;
-impl<T, R: ValueRenderer<T>> Expectation<Option<T>, R> for NoValue {
-    type Success<'a> = () where T: 'a;
-    type Rejection<'a> = &'a T where T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Option<T>,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), &'a T> {
-        match actual { None => Ok(()), Some(value) => Err(value) }
-    }
-
-    const KIND: FailureKind = FailureKind::Variant;
-
-    fn explain<'a>(
-        &'a self,
-        rejected: Option<(&'a Option<T>, &'a T)>,
-        failure: FailureBuilder,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder {
-        match rejected {
-            Some((actual, value)) => failure
-                .actual(context.render().variant(actual, "Some", value))
-                .relation("is not none"),
-            None => failure.relation("is none"),
-        }
-    }
-}
-
 struct Token(u32);
+
+// One renderer supplies both leaf types: `u32` keys and `Token` values.
 struct TokenRenderer;
+
 impl ValueRenderer<Token> for TokenRenderer {
     fn fmt(&self, value: &Token, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "token({})", value.0)
     }
 }
 
-// Keys and values can have different types. Supply each leaf capability on the same renderer.
 impl ValueRenderer<u32> for TokenRenderer {
     fn fmt(&self, value: &u32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "key({value})")
     }
 }
-let collection = assert_that!([Token(7)]).with_renderer(TokenRenderer)
-    .capture(|it| it.apply_assertion(EmptyCollection));
-let map = assert_that!(BTreeMap::from([(1_u32, Token(7))]))
-    .with_renderer(TokenRenderer).capture(|it| it.apply_assertion(EmptyMap));
-let wrapper = assert_that!(Some(Token(7))).with_renderer(TokenRenderer)
-    .capture(|it| it.apply_assertion(NoValue));
-assert_that!(collection).has_length(1);
-assert_that!(map).has_length(1);
-assert_that!(wrapper).has_length(1);
-assert_that!(collection[0].to_string()).contains("token(7)");
-assert_that!(map[0].to_string()).contains("key(1): token(7)");
-assert_that!(wrapper[0].to_string()).contains("Some(").contains("token(7)");
+
+let failures = assert_that!(BTreeMap::from([(1_u32, Token(7))]))
+    .with_renderer(TokenRenderer)
+    .capture(|it| it.apply_assertion(IsEmptyMap));
+assert_that!(failures[0].to_string()).contains("key(1): token(7)");
 ```
 
-For synthetic evidence, use [`borrowed_values`](renderer::RenderingContext::borrowed_values) or
-[`entry_list`](renderer::RenderingContext::entry_list). These render an explicit item view, such as
-`String` items through `ValueRenderer<str>`, and retain child types without claiming an outer
-subject type. Choose their [`RenderingOrder`](renderer::RenderingOrder) explicitly. Sorted
-rendering orders the budgeted leaf text before applying the item limit.
+For lists that do not exist as a value, such as the missing items of a comparison, use
+[`borrowed_values`](renderer::RenderingContext::borrowed_values) or
+[`entry_list`](renderer::RenderingContext::entry_list) and choose a
+[`RenderingOrder`](renderer::RenderingOrder).
 
-[`RenderingContext::budget`](renderer::RenderingContext::budget) returns a copy of the active
-limits. A custom collector can retain at most `budget().max_items()` children and use
-[`FailureBuilder::omitted_children`](failure::FailureBuilder::omitted_children) for the rest.
-Evaluate the complete assertion result independently of those limits, including when the item
-limit is zero. Inside an expectation, also respect [`AssertionContext::is_diagnostic`] when
-collecting optional evidence. Prefer its child-evaluation helpers when composing expectations.
+If you collect evidence yourself, keep at most
+[`budget().max_items()`](renderer::RenderingContext::budget) entries and record the rest with
+[`FailureBuilder::omitted_children`](failure::FailureBuilder::omitted_children). The budget limits
+the report, never the result of the check. Inside an expectation, skip optional evidence when
+[`AssertionContext::is_diagnostic`] is false.

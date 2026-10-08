@@ -301,12 +301,14 @@ mod tests {
 
                             Constraint:
                                 satisfies the predicate
+
                           - Actual: 3
 
                             does not satisfy the constraint
 
                             Constraint:
                                 satisfies the predicate
+
                       - does not contain a matching element
 
                         Nested failures:

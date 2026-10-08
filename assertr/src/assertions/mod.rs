@@ -1,49 +1,47 @@
-//! The assertion traits, organized by the value family they apply to.
+//! The assertion traits, grouped by the kind of value they apply to.
 //!
 //! # Finding assertions
 //!
-//! Import [`crate::prelude`] and use IDE autocomplete to see the assertions available for the
-//! current subject. For browsing, start with the family that owns the subject:
+//! Import [`crate::prelude`] and let autocomplete show what is available for the current subject.
+//! To browse, start with the family that fits the subject:
 //!
-//! - [General-purpose values, wrappers, ranges, and iterators](core)
-//! - [Collections and stable order](collection)
+//! - [General values, `Option`, `Result`, ranges, strings, and iterators](core)
+//! - [Collections such as slices, arrays, and `Vec`](collection)
 //! - [Sets](set)
 //! - [Maps](map)
-//! - [Heap-backed values and panic payloads](alloc)
+//! - [Boxed `Any` values and panic payloads](alloc)
 //!
-//! The optional `num`, `std`, `http`, `jiff`, `program`, `reqwest`, `rootcause`, and `tokio`
-//! integration modules appear in the module list below when their corresponding Cargo feature is
-//! enabled. Each assertion trait page is the authoritative list of its methods, signatures, and
-//! required bounds. Rustdoc search can also find a method directly by name.
+//! Modules for `num`, `std`, `http`, `jiff`, `program`, `reqwest`, `rootcause`, and `tokio` appear
+//! below when their feature is enabled. Each trait page lists its methods with their exact bounds.
+//! Rustdoc search also finds a method by name.
 //!
-//! Ordinary methods execute [`Expectation`](crate::Expectation) definitions owned by these
-//! families.
-//! To use a check with `.matches(...)`, element matching, or structural composition, browse the
-//! complete public [`matchers`](mod@crate::matchers) catalog. It re-exports these definitions and
-//! groups colliding names into subject namespaces.
+//! The assertion methods are built from [`Expectation`](crate::Expectation) values. To use one of
+//! these checks with `.matches(..)`, on collection elements, or inside `partial!`, find it in the
+//! [`matchers`](mod@crate::matchers) catalog.
+//!
+//! # Using the families with your own types
+//!
+//! The families work through capability traits. Implement the one that fits your type and its
+//! assertions become available:
+//!
+//! | Implement | To get |
+//! |---|---|
+//! | [`HasLength`] | Length assertions such as `has_length` and `is_empty` |
+//! | [`Collection`](collection::Collection) | Element assertions that ignore order, such as `contains` |
+//! | [`StableOrder`](collection::StableOrder) | Assertions on order and positions, such as `contains_exactly` |
+//! | [`SetLookup`](set::SetLookup) | Set relations such as `is_subset_of` |
+//! | [`Map`](map::Map) and [`MapLookup`](map::MapLookup) | Map assertions such as `contains_key` |
 //!
 //! # Assertion traits
 //!
-//! The `*Assertions` traits are public so their methods participate in Rust's method resolution,
-//! not as downstream implementation interfaces. Adding a method to one of them is a compatible
-//! change. For a custom type, define a separate assertion trait instead (see
-//! [custom assertion guide](crate#custom-assertions)).
+//! The `*Assertions` traits are public so their methods are in scope, not for you to implement.
+//! Adding a method to one of them is not a breaking change. For your own types, define a separate
+//! trait (see the [custom assertions guide](crate#custom-assertions)).
 //!
-//! # Renderer capabilities
-//!
-//! An assertion trait is implemented independently of the active renderer's capabilities. Each
-//! method requires only the [`ValueRenderer`](crate::ValueRenderer) implementations its own failure
-//! path uses. Consequently, a renderer that cannot format one value does not hide an entire
-//! assertion family, and projections preserve the active renderer until a later method needs a
-//! specific rendering capability. See
-//! [`ValueRenderer`](crate::ValueRenderer#capability-bounds-belong-to-methods) for the design
-//! rationale.
-//!
-//! To extend an existing family to a custom type, implement [`HasLength`] for length assertions,
-//! [`Collection`](collection::Collection) for order-free element assertions,
-//! [`StableOrder`](collection::StableOrder) for ordered collection assertions,
-//! [`SetLookup`](set::SetLookup) for set relations, or [`Map`](map::Map) with
-//! [`MapLookup`](map::MapLookup) for map assertions.
+//! Every assertion trait is implemented for every renderer. Each method requires only the
+//! [`ValueRenderer`](crate::ValueRenderer) implementations its own failure report needs. A renderer
+//! that cannot show one type therefore does not hide a whole family. See
+//! [`ValueRenderer`](crate::ValueRenderer#capability-bounds-belong-to-methods) for the reasoning.
 
 #[macro_use]
 mod support;

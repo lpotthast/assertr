@@ -20,7 +20,7 @@ use crate::{
 /// drops before failure handling or continuation. No iterator observation is repeated for
 /// diagnostics.
 ///
-/// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
+/// Bulk value lists use [repeatable expected data](crate#expected-lists).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait IntoIteratorAssertions<T, R = DebugRenderer> {
@@ -467,12 +467,14 @@ mod tests {
 
                     Constraint:
                         satisfies the predicate
+
                   - Actual: 2
 
                     does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
+
                   - Actual: 3
 
                     does not satisfy the constraint
@@ -712,18 +714,21 @@ mod tests {
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 2
 
                         does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 3
 
                         does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
+
                   - has unexpected elements
 
                     Details:
@@ -735,6 +740,7 @@ mod tests {
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 3
 
                         does not satisfy the constraint

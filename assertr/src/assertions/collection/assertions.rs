@@ -28,7 +28,7 @@ use crate::{AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer, mode::C
 /// [`IntoIteratorAssertions`](crate::assertions::core::iter::IntoIteratorAssertions). Its methods
 /// carry the `into_iter_` prefix.
 ///
-/// Bulk value lists use [repeatable expected data](crate#bulk-expected-data).
+/// Bulk value lists use [repeatable expected data](crate#expected-lists).
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait CollectionAssertions<T, R = DebugRenderer> {
@@ -489,12 +489,14 @@ mod tests {
 
                     Constraint:
                         satisfies the predicate
+
                   - Actual: 2
 
                     does not satisfy the constraint
 
                     Constraint:
                         satisfies the predicate
+
                   - Actual: 3
 
                     does not satisfy the constraint
@@ -624,6 +626,7 @@ mod tests {
                         is greater than or equal to
 
                         Expected: 5
+
                   - Actual: 12
 
                     matches the unwanted constraint
@@ -961,18 +964,21 @@ mod tests {
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 2
 
                         does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 3
 
                         does not satisfy the constraint
 
                         Constraint:
                             satisfies the predicate
+
                   - has unexpected elements
 
                     Details:
@@ -984,6 +990,7 @@ mod tests {
 
                         Constraint:
                             satisfies the predicate
+
                       - Actual: 1
 
                         does not satisfy the constraint

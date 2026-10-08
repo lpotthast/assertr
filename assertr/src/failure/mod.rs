@@ -1,30 +1,11 @@
-//! Structured assertion failures and the builder that raises them.
+//! Structured assertion failures and the builder that creates them.
 //!
-//! [`AssertionFailure`] is what capture mode hands back and what panic mode renders. Its fields
-//! carry every part of a failure as data: the rendered [`actual`](AssertionFailure::actual) and
-//! [`expected`](AssertionFailure::expected) values, the [`relation`](AssertionFailure::relation)
-//! between them, additional [`facts`](AssertionFailure::facts), and nested
-//! [`children`](AssertionFailure::children). Custom presentations consume these fields directly,
-//! so no machine-readable use needs to parse the human-readable text report.
-//!
-//! ## From assertion to report
-//!
-//! 1. **Construction:** A rejected [`Expectation`](crate::Expectation) explains itself through
-//!    [`Expectation::explain`](crate::Expectation::explain), populating the [`FailureBuilder`]
-//!    supplied by the chain executor. Execution adapters that cannot use the expectation protocol
-//!    start a builder with [`AssertThat::failure`] instead. Diagnostic values are rendered through
-//!    the chain's [renderer and budget](crate::renderer) into owned [`Rendered`] trees.
-//! 2. **Handling:** [`AssertThat::capture`] stores failures and returns them to the caller. Panic
-//!    mode stops at the first failure and panics with its report, produced by the [panic
-//!    presentation](AssertThat::with_panic_presentation).
-//! 3. **Presentation:** The `Display` implementation of [`AssertionFailure`] produces the default
-//!    human-readable report. Custom code can read the structured fields to produce any other
-//!    representation. Capture mode leaves this step to the caller.
-//!
-//! Presentation receives rendered evidence, not the original Rust values. It can inspect
-//! structure, type metadata, and omission counts without parsing a report or rendering leaves
-//! again. For examples, start with [capturing failures](AssertThat::capture). To create failures
-//! in your own methods, see [custom assertions](crate#custom-assertions).
+//! An [`AssertionFailure`] is what capture mode returns and what panic mode turns into a panic
+//! message. It stores every part of the failure as data: the rendered
+//! [`actual`](AssertionFailure::actual) and [`expected`](AssertionFailure::expected) values, the
+//! [`relation`](AssertionFailure::relation) between them, additional
+//! [`facts`](AssertionFailure::facts), and nested [`children`](AssertionFailure::children). Code
+//! that processes failures reads these fields and never has to parse the report text.
 //!
 //! ```
 //! use assertr::prelude::*;
@@ -34,6 +15,24 @@
 //! assert_that!(&reports[0]).contains("is not less than");
 //! assert_that!(&reports[1]).contains("Expected: 43");
 //! ```
+//!
+//! ## From assertion to report
+//!
+//! 1. **Building:** A failing [`Expectation`](crate::Expectation) describes itself in
+//!    [`Expectation::explain`](crate::Expectation::explain) by filling in a [`FailureBuilder`].
+//!    Assertions that cannot use an expectation start a builder with [`AssertThat::failure`]
+//!    instead. Values are rendered into [`Rendered`] trees through the chain's [renderer and
+//!    budget](crate::renderer).
+//! 2. **Handling:** In capture mode, [`AssertThat::capture`] collects the failures and returns
+//!    them. In panic mode, the first failure panics with the text produced by the [panic
+//!    presentation](AssertThat::with_panic_presentation).
+//! 3. **Presentation:** The `Display` implementation of [`AssertionFailure`] produces the default
+//!    report, which is also the default panic text. Your own code can build any other format from
+//!    the fields.
+//!
+//! A presentation receives rendered values, not the original Rust values. It can inspect their
+//! structure, types, and omission counts without rendering anything again. To create failures in
+//! your own assertions, see [custom assertions](crate#custom-assertions).
 
 mod builder;
 mod failures;

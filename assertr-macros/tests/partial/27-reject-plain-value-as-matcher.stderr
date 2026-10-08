@@ -1,11 +1,13 @@
-error[E0277]: the trait bound `{integer}: Expectation<{integer}>` is not satisfied
+error[E0277]: `{integer}` is not an expectation for `{integer}`
  --> tests/partial/27-reject-plain-value-as-matcher.rs:5:29
   |
 5 |     assert_that!(1).matches(1);
-  |                     ------- ^ the trait `Expectation<{integer}>` is not implemented for `{integer}`
+  |                     ------- ^ cannot check `{integer}` with `{integer}`
   |                     |
   |                     required by a bound introduced by this call
   |
+  = help: the trait `Expectation<{integer}>` is not implemented for `{integer}`
+  = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
   = help: the following other types implement trait `Expectation<T, R>`:
             `&D` implements `Expectation<T, R>`
             `AllOf<L>` implements `Expectation<A, R>`
