@@ -1,7 +1,9 @@
 //! Execution of reusable expectations and one-use observations on assertion chains.
 
 use crate::{
-    AssertThat, AssertionContext, Expectation, Mode,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
 };
@@ -13,28 +15,43 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         AssertionContext::from_rendering(self.render(), self.state.include_location)
     }
 
-    /// Asserts a reusable expectation and continues with the original subject and settings.
+    /// Asserts that the subject satisfies an expectation, then continues with the same subject.
     ///
-    /// The expectation is evaluated once. Rejections are explained and raised through the chain's
-    /// active failure mode. Successful observations are dropped before returning the chain.
+    /// Any [matcher](mod@crate::matchers) works: a single check like [`eq`](crate::matchers::eq),
+    /// a combination like [`all_of`](crate::matchers::all_of), a collection policy like
+    /// [`elements_are!`](crate::elements_are), or a custom [`Expectation`]. The expectation is
+    /// evaluated once and its failure is reported as is. Pass `&expected` to reuse it.
     ///
     /// ```
-    /// use assertr::{matchers::EqualTo, prelude::*};
-    /// assert_that!(3).apply_assertion(EqualTo::new(3)).is_greater_than(2);
+    /// use assertr::{matchers::{all_of, eq, ge, lt}, prelude::*};
+    ///
+    /// assert_that!(42).matches(all_of(matchers![ge(18), lt(65)]));
+    /// assert_that!([1, 2]).matches(elements_are![eq(1), ge(2)]);
     /// ```
+    ///
+    /// Plain values are not matchers. Write `matches(eq(2))`, or use
+    /// [`is_equal_to`](crate::assertions::PartialEqAssertions::is_equal_to).
     #[track_caller]
     #[allow(clippy::return_self_not_must_use)]
-    pub fn apply_assertion<D: Expectation<T, R>>(self, definition: D) -> Self {
-        drop(self.test_assertion(&definition));
+    pub fn matches<D: Expectation<T, R>>(self, expected: D) -> Self {
+        drop(self.test_assertion(&expected));
         self
+    }
+
+    /// Fluent alias of [`AssertThat::matches`].
+    #[cfg(feature = "fluent")]
+    #[track_caller]
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn match_expectation<D: Expectation<T, R>>(self, expected: D) -> Self {
+        self.matches(expected)
     }
 
     /// Asserts a reusable expectation, returning its successful observation for a projection or
     /// callback. A rejected expectation raises its explained failure and returns `None` in capture
     /// mode. Evaluation and explanation share the original observation.
     ///
-    /// This tracks one assertion, just like [`apply_assertion`](Self::apply_assertion). A method
-    /// that delegates here must use `#[track_caller]` and must not track the assertion again.
+    /// This tracks one assertion, just like [`matches`](Self::matches). A method that delegates
+    /// here must use `#[track_caller]` and must not track the assertion again.
     #[track_caller]
     pub fn test_assertion<'a, D: Expectation<T, R>>(
         &'a self,
@@ -117,11 +134,77 @@ impl<T, R> AssertThat<'_, T, Panic, R> {
 mod tests {
     use super::*;
     use crate::{
-        Expectation, RenderingBudget,
+        expectation::Expectation,
         failure::{FailureBuilder, FailureKind},
         prelude::*,
+        renderer::RenderingBudget,
     };
     use core::cell::Cell;
+
+    #[cfg(feature = "fluent")]
+    mod matches_fluent_aliases {
+        use crate::matchers::eq;
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            1.must().match_expectation(eq(1));
+        }
+    }
+
+    mod matches {
+        use crate::{matchers::*, prelude::*};
+        use indoc::indoc;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1), matches(eq(2)));
+        }
+
+        #[test]
+        fn does_not_require_a_renderer() {
+            assert_that!(())
+                .with_renderer(crate::test_support::NoRenderer)
+                .matches(anything());
+        }
+
+        #[test]
+        fn tracks_once_and_keeps_capture_assertions_isolated() {
+            let subject = assert_that!(1).with_renderer(DebugRenderer);
+            let subject = subject.matches(satisfying(|it| {
+                it.is_equal_to(1).is_less_than(2);
+            }));
+
+            assert_that!(subject.state.records.assertion_count()).is_equal_to(1);
+        }
+
+        #[test]
+        fn uses_the_equality_failure_directly() {
+            let failures = assert_that!(1)
+                .with_location(false)
+                .capture(|it| it.matches(eq(2)));
+
+            assert_that!(failures).contains_exactly_satisfying([
+                |element: AssertThat<AssertionFailure, Capture>| {
+                    element
+                        .derive(|value| &value.kind)
+                        .is_equal_to(crate::failure::FailureKind::Equality);
+                    element.derive(|value| &value.children).is_empty();
+                    element
+                        .derive_owned(ToString::to_string)
+                        .is_equal_to(indoc! {r"
+                -------- assertr --------
+                Expression: `1`
+
+                Expected: 2
+
+                  Actual: 1
+                -------- assertr --------
+            "});
+                },
+            ]);
+        }
+    }
 
     mod one_use {
         use super::*;
@@ -237,7 +320,7 @@ mod tests {
     #[test]
     #[cfg(feature = "std")]
     fn tracks_before_evaluation_can_panic() {
-        use crate::expectation::predicate;
+        use crate::matchers::predicate;
 
         let failures = assert_that!(1).capture(|it| {
             let child = it.derive(|value| value);
@@ -263,23 +346,14 @@ mod tests {
             .with_location(false)
             .with_subject_name("subject")
             .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(2))
-            .capture(|it| it.apply_assertion(&definition));
+            .capture(|it| it.matches(&definition));
         assert_that!(calls.get()).is_equal_to(1);
         assert_that!(failures).has_length(1);
         assert_that!(failures[0].kind).is_equal_to(FailureKind::Other);
         assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("subject"));
         assert_that!(failures[0].expression).is_equal_to(Some("actual"));
         assert_that!(failures[0].location).is_none();
-
-        let matcher_failures = assert_that!(actual)
-            .with_location(false)
-            .with_subject_name("subject")
-            .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(2))
-            .capture(|it| it.matches(&definition));
-        assert_that!(calls.get()).is_equal_to(2);
-        assert_that!(matcher_failures).has_length(1);
-        assert_that!(matcher_failures[0]).is_equal_to(failures[0].clone());
-        assert_that!(matcher_failures[0].children).is_empty();
+        assert_that!(failures[0].children).is_empty();
 
         for rendered in [&failures[0].actual, &failures[0].expected] {
             let crate::renderer::RenderedBody::Text {

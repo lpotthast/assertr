@@ -71,7 +71,7 @@ fit.
   in both the trait and impl. Put renderer bounds of an `Expectation` on its impl. Preserve the active renderer in
   projections and extractions. Add a `NoRenderer` compile-time regression for a new assertion trait or capability
   boundary.
-- Mark assertion methods `#[track_caller]`. Delegate reusable checks to `apply_assertion` or `test_assertion`, which
+- Mark assertion methods `#[track_caller]`. Delegate reusable checks to `matches` or `test_assertion`, which
   track once. Methods delegating to tracked assertions must not track again. Execution adapters track explicitly before
   the operation they own and preserve the caller location. Built-in adapters then use the private executor entry points
   that skip tracking. See [observation boundaries](knowledge/observation-boundaries.md) for async timing.

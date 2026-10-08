@@ -11,13 +11,15 @@
 //! integrations meet on the same `HeaderValue`.
 
 use crate::{
-    AssertThat, DebugRenderer, ValueRenderer,
+    AssertThat,
     actual::Actual,
     failure::{Fact, FailureKind},
     mode::{Mode, Panic},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
     renderer::{Rendered, RenderingContext, RenderingOrder},
 };
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use core::panic::Location;
 use reqwest::header::HeaderValue;
@@ -433,7 +435,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        self.apply_assertion(HasStatusCode::new(expected))
+        self.matches(HasStatusCode::new(expected))
     }
 
     #[track_caller]
@@ -441,7 +443,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        self.apply_assertion(IsInformational)
+        self.matches(IsInformational)
     }
 
     #[track_caller]
@@ -449,7 +451,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        self.apply_assertion(IsSuccess)
+        self.matches(IsSuccess)
     }
 
     #[track_caller]
@@ -457,7 +459,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        self.apply_assertion(IsRedirection)
+        self.matches(IsRedirection)
     }
 
     #[track_caller]
@@ -465,7 +467,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        self.apply_assertion(IsClientError)
+        self.matches(IsClientError)
     }
 
     #[track_caller]
@@ -473,7 +475,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
-        self.apply_assertion(IsServerError)
+        self.matches(IsServerError)
     }
 
     #[track_caller]
@@ -481,7 +483,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(HasHeader::new(name))
+        self.matches(HasHeader::new(name))
     }
 
     #[track_caller]
@@ -489,7 +491,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<HeaderValue> + ValueRenderer<str>,
     {
-        self.apply_assertion(DoesNotHaveHeader::new(name))
+        self.matches(DoesNotHaveHeader::new(name))
     }
 
     #[track_caller]
@@ -497,7 +499,7 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
     where
         R: ValueRenderer<HeaderValue> + ValueRenderer<str>,
     {
-        self.apply_assertion(HasHeaderValue::new(name, expected))
+        self.matches(HasHeaderValue::new(name, expected))
     }
 }
 

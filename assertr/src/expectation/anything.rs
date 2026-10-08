@@ -1,5 +1,6 @@
 use crate::{
-    AssertionContext, Expectation,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
 };
 

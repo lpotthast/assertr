@@ -8,11 +8,16 @@
 
 use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, AssertionFailure, Expectation, Fact, ValueRenderer,
     assertions::collection::Collection,
-    expectation::{Evidence, MatcherList},
+    expectation::AssertionContext,
+    expectation::Evidence,
+    expectation::Expectation,
+    failure::AssertionFailure,
+    failure::Fact,
     failure::{FailureBuilder, FailureKind},
+    matchers::MatcherList,
     renderer::RenderingOrder,
+    renderer::ValueRenderer,
     util::matching::{BipartiteMatchResult, assign_exactly},
 };
 use alloc::{collections::BTreeMap, vec::Vec};
@@ -205,11 +210,11 @@ where
 
 /// Exact unordered matcher list with explicit expectations and duplicate preservation.
 ///
-/// Use [`eq`](crate::matchers::eq) or [`equal_to`](crate::matchers::equal_to) for equality.
+/// Use [`eq`](crate::matchers::eq) or [`eq`](crate::matchers::eq) for equality.
 #[macro_export]
 macro_rules! elements_are_in_any_order {
     ($($value:expr),* $(,)?) => {
-        $crate::assertions::collection::elements_are_in_any_order($crate::matchers![$($value),*])
+        $crate::matchers::elements_are_in_any_order($crate::matchers![$($value),*])
     };
 }
 
@@ -251,7 +256,7 @@ mod tests {
 
     mod evaluate {
         use super::*;
-        use crate::expectation::{predicate, satisfying};
+        use crate::matchers::{predicate, satisfying};
         use core::cell::{Cell, RefCell};
         use indoc::indoc;
 
@@ -374,7 +379,8 @@ mod tests {
         mod description_fidelity {
             use super::*;
             use crate::{
-                Expectation, Fact,
+                expectation::Expectation,
+                failure::Fact,
                 failure::{FailureBuilder, FailureKind},
             };
 
@@ -487,17 +493,11 @@ mod tests {
 
         #[test]
         fn candidate_failures_preserve_field_rejection_paths() {
-            use crate::{
-                __private::field, assertions::core::partial_eq::equal_to, failure::PathSegment,
-            };
+            use crate::{__private::field, assertions::core::partial_eq::eq, failure::PathSegment};
             struct Row {
                 id: i32,
             }
-            let matcher = field(
-                |row: &Row| Some(&row.id),
-                equal_to(99),
-                PathSegment::Field("id"),
-            );
+            let matcher = field(|row: &Row| Some(&row.id), eq(99), PathSegment::Field("id"));
             let failures = assert_that!([Row { id: 1 }, Row { id: 2 }])
                 .with_location(false)
                 .capture(|it| it.matches(elements_are_in_any_order![matcher]));
@@ -512,7 +512,7 @@ mod tests {
 
         #[test]
         fn candidate_failures_count_all_omitted_rejections() {
-            use crate::{expectation::all_of, test_support::UnorderedSet};
+            use crate::{matchers::all_of, test_support::UnorderedSet};
             let matcher = elements_are_in_any_order![all_of(matchers![
                 eq(99),
                 predicate(|value: &i32| *value != 2)
@@ -805,8 +805,8 @@ mod tests {
         fn matrix_matchers<'a, const M: usize>(
             matrix: &'a [[bool; M]],
             calls: &'a RefCell<Vec<(usize, usize)>>,
-        ) -> impl crate::expectation::MatcherList<usize, DebugRenderer> + 'a {
-            use crate::expectation::{all_of, predicate};
+        ) -> impl matchers::MatcherList<usize, DebugRenderer> + 'a {
+            use crate::matchers::{all_of, predicate};
             (0..M)
                 .map(|slot| {
                     all_of(matchers![
@@ -868,7 +868,7 @@ mod tests {
 
         #[test]
         fn surplus_search_does_not_complete_unvisited_pairs_or_render() {
-            use crate::{assertions::core::partial_eq::equal_to, expectation::predicate};
+            use crate::{assertions::core::partial_eq::eq, matchers::predicate};
             use core::cell::RefCell;
             struct NeverRender;
             impl<T: ?Sized> ValueRenderer<T> for NeverRender {
@@ -885,8 +885,7 @@ mod tests {
             assert_that!(context.probe(&[0, 1, 2], &matcher)).is_false();
             // Unequal lengths decide a probe before any comparison.
             assert_that!(*calls.borrow()).is_equal_to([0, 0, 0]);
-            assert_that!(context.probe(&[1, 1, 99], &elements_are_in_any_order![equal_to(1)]))
-                .is_false();
+            assert_that!(context.probe(&[1, 1, 99], &elements_are_in_any_order![eq(1)])).is_false();
             let evidence = context.into_evidence();
             assert_that!(evidence.omitted).is_equal_to(0);
             assert_that!(evidence.children).is_empty();
@@ -894,7 +893,7 @@ mod tests {
 
         #[test]
         fn stops_at_the_first_unassignable_occurrence() {
-            use crate::expectation::predicate_list;
+            use crate::matchers::predicate_list;
             use core::cell::Cell;
             let calls = Cell::new(0);
             let counted = |expected: usize| {

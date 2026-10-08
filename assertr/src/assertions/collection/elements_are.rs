@@ -1,9 +1,12 @@
 use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation, Fact,
     assertions::collection::{Placement, StableOrder},
-    expectation::{Evidence, MatcherList, context::unsatisfied},
+    expectation::AssertionContext,
+    expectation::Expectation,
+    expectation::{Evidence, context::unsatisfied},
+    failure::Fact,
     failure::{FailureBuilder, FailureKind, PathSegment},
+    matchers::MatcherList,
 };
 use alloc::vec::Vec;
 
@@ -52,7 +55,7 @@ pub fn contains_contiguous_elements<L>(list: L) -> ElementsAre<L> {
 
 impl<C: StableOrder + ?Sized, R, L> Expectation<C, R> for ElementsAre<L>
 where
-    R: crate::ValueRenderer<usize>,
+    R: crate::renderer::ValueRenderer<usize>,
     L: MatcherList<C::Item, R>,
 {
     composite_items!(C);
@@ -178,11 +181,11 @@ where
 
 /// Exact positional matcher list with explicit expectations.
 ///
-/// Use [`eq`](crate::matchers::eq) or [`equal_to`](crate::matchers::equal_to) for equality.
+/// Use [`eq`](crate::matchers::eq) or [`eq`](crate::matchers::eq) for equality.
 #[macro_export]
 macro_rules! elements_are {
     ($($value:expr),* $(,)?) => {
-        $crate::assertions::collection::elements_are($crate::matchers![$($value),*])
+        $crate::matchers::elements_are($crate::matchers![$($value),*])
     };
 }
 
@@ -471,9 +474,7 @@ mod tests {
 
     mod evaluate {
         use super::*;
-        use crate::{
-            expectation::all_of, renderer::RenderedBody, test_support::CustomValueRenderer,
-        };
+        use crate::{matchers::all_of, renderer::RenderedBody, test_support::CustomValueRenderer};
         #[test]
         fn preserves_sequence_length_metadata_and_budget_in_nested_failures() {
             use indoc::formatdoc;
@@ -504,7 +505,7 @@ mod tests {
 
             let child = &failures[0].children[0];
             assert_that!(child.facts).contains_exactly_satisfying(
-                [|fact: AssertThat<crate::Fact, Capture>| {
+                [|fact: AssertThat<crate::failure::Fact, Capture>| {
                     fact.derive(|fact| &fact.value.type_name)
                         .is_some_satisfying(|name| {
                             name.is_equal_to("usize");
@@ -554,7 +555,7 @@ mod tests {
 
     mod probe {
         use super::*;
-        use crate::AssertionContext;
+        use crate::expectation::AssertionContext;
         #[test]
         fn length_mismatches_do_not_render_numeric_evidence() {
             struct NeverRender;

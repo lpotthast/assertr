@@ -1,5 +1,5 @@
 use crate::{
-    AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
     assertions::{
         collection::Placement,
         iterator::{
@@ -9,8 +9,12 @@ use crate::{
         },
     },
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{MatcherList, lists::SatisfyingList, satisfying},
+    expectation::Expectation,
+    expectation::lists::SatisfyingList,
+    matchers::{MatcherList, satisfying},
     mode::Capture,
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 
 /// Terminal assertions for an owned iterator.
@@ -52,11 +56,11 @@ use crate::{
 ///
 /// Equality diagnostics preview at most the last 16 consumed elements, regardless of how long the
 /// scan ran. Unordered equality instead reports the buffered elements like
-/// [`CollectionAssertions::contains_exactly_in_any_order`](crate::assertions::collection::CollectionAssertions::contains_exactly_in_any_order).
+/// [`CollectionAssertions::contains_exactly_in_any_order`](crate::assertions::CollectionAssertions::contains_exactly_in_any_order).
 /// Matcher and `_satisfying` diagnostics retain evidence from the first rejected candidates that
-/// fit the [rendering budget](crate::RenderingBudget). Later rejections are only counted. Matchers
-/// evaluate `&T`, and `_satisfying` closures receive a capture-mode assertion borrowing each
-/// candidate element.
+/// fit the [rendering budget](crate::renderer::RenderingBudget). Later rejections are only counted.
+/// Matchers evaluate `&T`, and `_satisfying` closures receive a capture-mode assertion borrowing
+/// each candidate element.
 ///
 /// Bulk value lists use [repeatable expected data](crate#expected-lists).
 #[allow(clippy::return_self_not_must_use)]
@@ -748,7 +752,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                contains_matching(crate::expectation::predicate(|it: &i32| *it > 7))
+                contains_matching(matchers::predicate(|it: &i32| *it > 7))
             );
         }
 
@@ -757,7 +761,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .contains_matching(crate::expectation::predicate(|it: &i32| *it > 7));
+                    .contains_matching(matchers::predicate(|it: &i32| *it > 7));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -890,7 +894,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                does_not_contain_matching(crate::expectation::predicate(|it: &i32| *it % 2 == 0))
+                does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0))
             );
         }
 
@@ -899,9 +903,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .does_not_contain_matching(crate::expectation::predicate(|it: &i32| {
-                        *it % 2 == 0
-                    }));
+                    .does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -966,7 +968,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                starts_with_matching(crate::expectation::predicate_list([is_one, is_nine]))
+                starts_with_matching(matchers::predicate_list([is_one, is_nine]))
             );
         }
 
@@ -983,7 +985,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .starts_with_matching(crate::expectation::predicate_list([is_one, is_nine]));
+                    .starts_with_matching(matchers::predicate_list([is_one, is_nine]));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -1086,7 +1088,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                ends_with_matching(crate::expectation::predicate_list([is_two, is_nine]))
+                ends_with_matching(matchers::predicate_list([is_two, is_nine]))
             );
         }
 
@@ -1103,7 +1105,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .ends_with_matching(crate::expectation::predicate_list([is_two, is_nine]));
+                    .ends_with_matching(matchers::predicate_list([is_two, is_nine]));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -1205,9 +1207,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                contains_contiguous_matching(crate::expectation::predicate_list(
-                    [is_two, is_nine,]
-                ))
+                contains_contiguous_matching(matchers::predicate_list([is_two, is_nine,]))
             );
         }
 
@@ -1224,9 +1224,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .contains_contiguous_matching(crate::expectation::predicate_list([
-                        is_two, is_nine,
-                    ]));
+                    .contains_contiguous_matching(matchers::predicate_list([is_two, is_nine]));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -1360,9 +1358,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                contains_exactly_matching(crate::expectation::predicate_list([
-                    is_one, is_nine, is_three,
-                ]))
+                contains_exactly_matching(matchers::predicate_list([is_one, is_nine, is_three,]))
             );
         }
 
@@ -1383,7 +1379,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .contains_exactly_matching(crate::expectation::predicate_list([
+                    .contains_exactly_matching(matchers::predicate_list([
                         is_one, is_nine, is_three,
                     ]));
             })
@@ -1413,7 +1409,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that_owned!([1, 2, 3].into_iter().filter(|_| true))
                     .with_location(false)
-                    .contains_exactly_matching(crate::expectation::predicate_list([
+                    .contains_exactly_matching(matchers::predicate_list([
                         |it: &i32| *it == 1,
                         |it: &i32| *it == 2,
                     ]));
@@ -1555,7 +1551,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                contains_exactly_in_any_order_matching(matchers::predicate_list([
                     is_one, is_two, is_nine,
                 ]))
             );
@@ -1564,7 +1560,7 @@ mod tests {
         #[test]
         fn matches_items_without_equality_through_predicates() {
             assert_that_owned!([Opaque(1), Opaque(2)].into_iter())
-                .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                .contains_exactly_in_any_order_matching(matchers::predicate_list([
                     |it: &Opaque| it.0 == 2,
                     |it: &Opaque| it.0 == 1,
                 ]));
@@ -1573,7 +1569,7 @@ mod tests {
         #[test]
         fn assigns_overlapping_predicates_one_to_one() {
             assert_that_owned!([Opaque(2), Opaque(1)].into_iter())
-                .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                .contains_exactly_in_any_order_matching(matchers::predicate_list([
                     |_: &Opaque| true,
                     |it: &Opaque| it.0 == 2,
                 ]));
@@ -1596,7 +1592,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                    .contains_exactly_in_any_order_matching(matchers::predicate_list([
                         is_one, is_two, is_nine,
                     ]));
             })

@@ -1,9 +1,13 @@
 use super::partial_eq::operand_expectation;
 use crate::borrow_for::BorrowFor;
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
+    renderer::DebugRenderer,
     renderer::RenderingContext,
+    renderer::ValueRenderer,
 };
 use alloc::{
     format,
@@ -324,7 +328,7 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
         E::View: PartialOrd<B>,
         R: ValueRenderer<B> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(ContainsElement::<B>::borrowing(expected))
+        self.matches(ContainsElement::<B>::borrowing(expected))
     }
 
     #[track_caller]
@@ -334,7 +338,7 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
         E::View: PartialOrd<B>,
         R: ValueRenderer<B> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(DoesNotContainElement::<B>::borrowing(expected))
+        self.matches(DoesNotContainElement::<B>::borrowing(expected))
     }
 }
 
@@ -397,7 +401,7 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
-        self.apply_assertion(IsInRange::new(expected))
+        self.matches(IsInRange::new(expected))
     }
 
     #[track_caller]
@@ -406,7 +410,7 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
-        self.apply_assertion(IsNotInRange::new(expected))
+        self.matches(IsNotInRange::new(expected))
     }
 }
 

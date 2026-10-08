@@ -8,8 +8,8 @@
 //!   failure formatting and capture-mode behavior come from the assertions delegated to.
 //! - **Reusable checks without an implementation** - build an `Expectation` from `predicate`,
 //!   `field`, and the other matchers, and return it as `impl Expectation`.
-//! - **Leaf assertions** - implement `Expectation`, then delegate to `apply_assertion` or
-//!   `test_assertion`, which track, evaluate, and raise the explained failure.
+//! - **Leaf assertions** - implement `Expectation`, then delegate to `matches` or `test_assertion`,
+//!   which track, evaluate, and raise the explained failure.
 //! - **Execution adapters** - for an operation the expectation protocol cannot express, call
 //!   `track_assertion()` first, then raise a failure through the `failure(kind)` builder when the
 //!   check does not hold.
@@ -31,7 +31,7 @@ fn text_opt(value: Option<&assertr::renderer::Rendered>) -> Option<&str> {
 
 #[cfg(feature = "tokio")]
 mod watch_trait_imports {
-    use assertr::assertions::tokio::watch::TokioWatchReceiverAssertions;
+    use assertr::assertions::TokioWatchReceiverAssertions;
     use assertr::{
         assert_that,
         prelude::{BoolAssertions, LengthAssertions},
@@ -43,7 +43,7 @@ mod watch_trait_imports {
 
     #[test]
     fn canonical_trait_supports_generic_and_qualified_calls_in_both_modes() {
-        use assertr::assertions::tokio::prelude::TokioWatchReceiverAssertions as PreludeAssertions;
+        use assertr::prelude::TokioWatchReceiverAssertions as PreludeAssertions;
 
         struct NoRenderer;
         let (_sender, mut receiver) = tokio::sync::watch::channel(7);
@@ -238,7 +238,7 @@ mod composed {
 }
 
 mod reusable_without_impl {
-    use assertr::AssertionContext;
+    use assertr::expectation::AssertionContext;
     use assertr::matchers::{field, ge, predicate};
     use assertr::prelude::*;
 
@@ -269,7 +269,7 @@ mod reusable_without_impl {
             age: 36,
         };
         assert_that!(&ada)
-            .apply_assertion(is_adult())
+            .matches(is_adult())
             .matches(has_capitalized_name());
         assert_that!([ada]).contains_matching(matchers::all_of(matchers![
             is_adult(),
@@ -283,10 +283,9 @@ mod reusable_without_impl {
             name: "ada".into(),
             age: 16,
         };
-        let failures = assert_that!(minor).with_location(false).capture(|it| {
-            it.apply_assertion(is_adult())
-                .apply_assertion(has_capitalized_name())
-        });
+        let failures = assert_that!(minor)
+            .with_location(false)
+            .capture(|it| it.matches(is_adult()).matches(has_capitalized_name()));
 
         assert_that!(failures).has_length(2);
         assert_that!(failures[1].to_string()).is_equal_to(indoc::indoc! {r#"
@@ -336,9 +335,9 @@ mod reusable_without_impl {
 
     #[test]
     fn a_minimal_implementation_uses_the_default_kind_and_relations() {
-        assert_that!(4_u32).apply_assertion(IsEven);
+        assert_that!(4_u32).matches(IsEven);
         let failures = assert_that!(3_u32).capture(|it| it.matches(IsEven));
-        assert_that!(failures[0].kind).is_equal_to(assertr::FailureKind::Predicate);
+        assert_that!(failures[0].kind).is_equal_to(assertr::failure::FailureKind::Predicate);
         assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is odd"));
     }
 }
@@ -346,7 +345,7 @@ mod reusable_without_impl {
 mod leaf {
     use super::Person;
     use assertr::prelude::*;
-    use assertr::{Fact, FailureKind};
+    use assertr::{failure::Fact, failure::FailureKind};
     use core::fmt;
     use indoc::formatdoc;
 
@@ -662,7 +661,7 @@ mod generic_num_traits_bounds {
 
     use num_traits::{Num, One, Signed, Zero};
 
-    use assertr::assertions::num::NumericDistance;
+    use assertr::assertions::NumericDistance;
     use assertr::prelude::*;
 
     #[derive(Debug, PartialEq, PartialOrd)]
@@ -833,7 +832,7 @@ mod generic_num_traits_bounds {
 
 mod callback_renderer_bounds {
     use assertr::{
-        assertions::{HasLength, collection::Collection},
+        assertions::{Collection, HasLength},
         prelude::*,
         renderer::CollectionPresentation,
     };
@@ -998,8 +997,9 @@ mod matcher_authoring {
     };
 
     use assertr::{
-        AssertionContext, Fact,
+        expectation::AssertionContext,
         expectation::Evidence,
+        failure::Fact,
         failure::{FailureBuilder, FailureKind},
         matchers::{all_of, each},
         prelude::*,
@@ -1149,8 +1149,8 @@ mod matcher_authoring {
             let definition = HasText(&expected);
             let actual = RefCell::new(String::from("observed"));
             let failures = assert_that!(actual)
-                .apply_assertion(HasText("observed"))
-                .capture(|it| it.apply_assertion(&definition).matches(&definition));
+                .matches(HasText("observed"))
+                .capture(|it| it.matches(&definition).matches(&definition));
             assert_that!(failures).has_length(2);
             *actual.borrow_mut() = String::from("changed");
             for failure in &failures {
@@ -1194,7 +1194,7 @@ mod matcher_authoring {
             let actual = RefCell::new(String::from("observed"));
             let matcher = Twice(HasText("expected"));
             let failures =
-                assert_that!(actual).capture(|it| it.apply_assertion(&matcher).matches(&matcher));
+                assert_that!(actual).capture(|it| it.matches(&matcher).matches(&matcher));
             assert_that!(failures).has_length(2);
             *actual.borrow_mut() = String::from("released");
             for failure in &failures {
@@ -1238,7 +1238,7 @@ mod matcher_authoring {
             let failures = assert_that!(Subject(42))
                 .with_renderer(ErrorRenderer)
                 .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
-                .capture(|it| it.apply_assertion(&definition).matches(&definition));
+                .capture(|it| it.matches(&definition).matches(&definition));
 
             assert_that!(definition.observations.get()).is_equal_to(2);
             assert_that!(failures).has_length(2);
@@ -1297,8 +1297,9 @@ mod matcher_authoring {
 
 mod structural_rendering {
     use assertr::{
-        AssertionContext, FailureKind,
-        assertions::collection::Collection,
+        assertions::Collection,
+        expectation::AssertionContext,
+        failure::FailureKind,
         failure::{FailureBuilder, PathSegment},
         prelude::*,
         renderer::{CollectionPresentation, RenderedBody},
@@ -1424,7 +1425,7 @@ mod structural_rendering {
         let failures = assert_that!(Token("a"))
             .with_renderer(LeafRenderer)
             .with_rendering_budget(budget)
-            .capture(|it| it.apply_assertion(ForwardEvidence(budget)));
+            .capture(|it| it.matches(ForwardEvidence(budget)));
         assert_that!(failures).has_length(1);
         assert_that!(failures[0].children).has_length(1);
         assert_that!(failures[0].omitted_children).is_equal_to(2);

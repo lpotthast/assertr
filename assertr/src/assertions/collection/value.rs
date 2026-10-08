@@ -3,8 +3,10 @@
 use super::{Collection, Placement, StableOrder};
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
-    AssertionContext, Expectation, ValueRenderer,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
+    renderer::ValueRenderer,
     renderer::{RenderingContext, RenderingOrder},
     util::matching::{assign_exactly, match_bipartite},
 };
@@ -1013,8 +1015,8 @@ mod tests {
     mod contains_contiguous {
         use super::super::ContainsContiguous;
         use crate::{
-            AssertionContext,
             assertions::{HasLength, collection::Collection},
+            expectation::AssertionContext,
             prelude::*,
             renderer::CollectionPresentation,
         };
@@ -1055,7 +1057,7 @@ mod tests {
 
     mod contains_exactly_in_any_order {
         use super::super::ContainsExactlyInAnyOrder;
-        use crate::{AssertionContext, prelude::*};
+        use crate::{expectation::AssertionContext, prelude::*};
         use core::cell::Cell;
 
         #[derive(Debug)]
@@ -1099,7 +1101,7 @@ mod tests {
 
     mod contains_exactly {
         use super::super::ContainsExactly;
-        use crate::{AssertionContext, prelude::*};
+        use crate::{expectation::AssertionContext, prelude::*};
         use core::cell::Cell;
 
         #[derive(Debug)]

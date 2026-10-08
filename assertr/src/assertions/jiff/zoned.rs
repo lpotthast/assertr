@@ -1,8 +1,8 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::failure::{Fact, FailureKind};
 use crate::mode::Mode;
-use crate::{AssertThat, DebugRenderer, ValueRenderer};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{AssertThat, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use jiff::Zoned;
 use jiff::tz::TimeZone;
 
@@ -165,7 +165,7 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
     where
         R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>,
     {
-        self.apply_assertion(IsInTimeZone::new(expected))
+        self.matches(IsInTimeZone::new(expected))
     }
 
     #[track_caller]
@@ -173,7 +173,7 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
     where
         R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>,
     {
-        self.apply_assertion(IsInTimeZoneNamed::new(expected))
+        self.matches(IsInTimeZoneNamed::new(expected))
     }
 }
 

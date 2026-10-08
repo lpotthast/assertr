@@ -1,8 +1,12 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ValueRenderer,
+    AssertThat,
     assertions::support::{explain_variant, project_checked},
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 use core::task::Poll;
 
@@ -125,7 +129,7 @@ pub trait PollAssertions<T, M: Mode, R = DebugRenderer> {
 impl<T, M: Mode, R> PollAssertions<T, M, R> for AssertThat<'_, Poll<T>, M, R> {
     #[track_caller]
     fn is_ready(self) -> Self {
-        self.apply_assertion(IsReady)
+        self.matches(IsReady)
     }
 
     #[track_caller]
@@ -133,7 +137,7 @@ impl<T, M: Mode, R> PollAssertions<T, M, R> for AssertThat<'_, Poll<T>, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsPending)
+        self.matches(IsPending)
     }
 
     #[track_caller]
@@ -163,14 +167,14 @@ pub trait PollExtractAssertions<'t, T, R = DebugRenderer> {
 impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic, R> {
     #[track_caller]
     fn get_ready(self) -> AssertThat<'t, T, Panic, R> {
-        self.apply_assertion(IsReady)
+        self.matches(IsReady)
             .map(|actual| project_checked(actual, ready, ready_ref))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{FailureKind, prelude::*};
+    use crate::{failure::FailureKind, prelude::*};
     use core::task::Poll;
     use indoc::formatdoc;
 

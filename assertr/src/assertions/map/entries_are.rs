@@ -1,10 +1,12 @@
 use super::entry::key_segment;
 use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation, ValueRenderer,
     assertions::map::{EntryMatcherList, FoundEntries, Map},
+    expectation::AssertionContext,
     expectation::Evidence,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind},
+    renderer::ValueRenderer,
 };
 
 /// Exact keyed matching. Duplicate queries cannot replace a missing distinct entry.
@@ -100,7 +102,7 @@ where
 /// Exact keyed matching with explicit value expectations.
 ///
 /// Keys are lookup operands. Use [`eq`](crate::matchers::eq) or
-/// [`equal_to`](crate::matchers::equal_to) for value equality.
+/// [`eq`](crate::matchers::eq) for value equality.
 #[macro_export]
 macro_rules! entries_are {
     (@list) => {
@@ -108,12 +110,12 @@ macro_rules! entries_are {
     };
     (@list ($key:expr, $value:expr) $(, ($tail_key:expr, $tail_value:expr))* $(,)?) => {
         $crate::__private::Cons(
-            $crate::assertions::map::entry($key, $value),
+            $crate::matchers::entry($key, $value),
             $crate::entries_are!(@list $(($tail_key, $tail_value)),*)
         )
     };
     ($(($key:expr, $value:expr)),* $(,)?) => {
-        $crate::assertions::map::entries_are($crate::entries_are!(@list $(($key, $value)),*))
+        $crate::matchers::entries_are($crate::entries_are!(@list $(($key, $value)),*))
     };
 }
 

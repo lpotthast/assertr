@@ -94,9 +94,9 @@
 //!
 //! Rendering produces a [`Rendered`] tree that keeps the text of each leaf, the structure around
 //! it, type information, and how many items were left out.
-//! [`AssertionFailure`](crate::AssertionFailure) stores these trees, so code that processes
-//! failures can inspect them without parsing text. To change the layout of panic messages, use
-//! [`with_panic_presentation`](crate::AssertThat::with_panic_presentation).
+//! [`AssertionFailure`](crate::failure::AssertionFailure) stores these trees, so code that
+//! processes failures can inspect them without parsing text. To change the layout of panic
+//! messages, use [`with_panic_presentation`](crate::AssertThat::with_panic_presentation).
 //!
 //! assertr writes some text itself: field names and positions in failure paths, omission notes,
 //! type names, labels such as `2xx`, and prose passed in by the assertion author. Map keys in
@@ -109,9 +109,9 @@
 //!
 //! A custom assertion gets a [`RenderingContext`] from
 //! [`AssertThat::render`](crate::AssertThat::render), or from
-//! [`AssertionContext::render`](crate::AssertionContext::render) inside an expectation. It applies
-//! the chain's renderer and budget. Pass its results to the failure builder or to
-//! [`Fact`](crate::Fact) constructors:
+//! [`AssertionContext::render`](crate::expectation::AssertionContext::render) inside an
+//! expectation. It applies the chain's renderer and budget. Pass its results to the failure builder
+//! or to [`Fact`](crate::failure::Fact) constructors:
 //!
 //! | To show | Use |
 //! | --- | --- |
@@ -126,7 +126,7 @@
 //!
 //! Lists built for the report have no Rust type of their own, so you choose their
 //! [`RenderingOrder`]. Collections follow their [`CollectionPresentation`]. `stable_collection`
-//! requires [`StableOrder`](crate::assertions::collection::StableOrder) and keeps iteration order.
+//! requires [`StableOrder`](crate::assertions::StableOrder) and keeps iteration order.
 //! [`RenderingContext::compact`] renders values in their single-line form.
 //!
 //! Every method needs renderers only for the leaves it shows and applies the budget. Sorted lists

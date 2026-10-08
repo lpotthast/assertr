@@ -1,10 +1,11 @@
 //! Reusable checks for whole values, collection elements, and struct fields.
 //!
 //! A matcher is a check stored in a value. Pass it to
-//! [`matches`](crate::assertions::matcher::MatcherAssertions::matches), to a `*_matching` assertion
-//! such as `contains_matching`, or to another matcher. Every matcher implements [`Expectation`],
-//! the same trait behind the ordinary assertion methods. So "expectation" and "matcher" name the
-//! same thing, and there is no separate trait to implement or register.
+//! [`matches`](crate::AssertThat::matches), to a `*_matching` assertion
+//! such as `contains_matching`, or to another matcher. Every matcher implements
+//! [`Expectation`](crate::expectation::Expectation), the same trait behind the ordinary assertion
+//! methods. So "expectation" and "matcher" name the same thing, and there is no separate trait to
+//! implement or register.
 //!
 //! This module lists every built-in matcher. The most common ones, such as [`eq`], [`ge`], and
 //! [`IsSome`], are available directly. Subject-specific matchers live in namespaces such as
@@ -161,7 +162,7 @@
 //! | Matcher | Passes when |
 //! |---|---|
 //! | [`each(matcher)`](each) | Every element matches. An empty collection passes. |
-//! | [`elements_are!`](crate::elements_are) | The elements match these matchers one to one, in order. Requires [`StableOrder`](crate::assertions::collection::StableOrder). |
+//! | [`elements_are!`](crate::elements_are) | The elements match these matchers one to one, in order. Requires [`StableOrder`](crate::assertions::StableOrder). |
 //! | [`elements_are_in_any_order!`](crate::elements_are_in_any_order) | The elements match these matchers one to one, in any order. |
 //! | [`entries_are!`](crate::entries_are) | The map has exactly these keys, and each value matches its matcher. |
 //!
@@ -218,33 +219,39 @@
 //! including your own, and explains the type annotations its closure needs. [`field`] applies a
 //! matcher to one field.
 //!
-//! For a check with its own failure report, implement [`Expectation`]. The
-//! [custom assertions guide](crate#custom-assertions) walks through all options, and the
+//! For a check with its own failure report, implement
+//! [`Expectation`](crate::expectation::Expectation). The [custom assertions
+//! guide](crate#custom-assertions) walks through all options, and the
 //! [`expectation`](crate::expectation) module describes the contract.
 //!
 //! Failures name the field, position, or key that failed in
-//! [`AssertionFailure::path`](crate::AssertionFailure::path). Use
+//! [`AssertionFailure::path`](crate::failure::AssertionFailure::path). Use
 //! [`capture`](crate::AssertThat::capture) to inspect them, and see the [rendering
 //! guide](crate::renderer) to change how values are shown.
 
 pub use crate::{
     assertions::{
         collection::{
-            Each, ElementsAre, ElementsAreInAnyOrder, contains_contiguous_elements,
-            contains_matching, does_not_contain_matching, each, elements_are,
-            elements_are_in_any_order, ends_with_elements, starts_with_elements,
+            ContainsMatching, DoesNotContainMatching, Each, ElementsAre, ElementsAreInAnyOrder,
+            contains_contiguous_elements, contains_matching, does_not_contain_matching, each,
+            elements_are, elements_are_in_any_order, ends_with_elements, starts_with_elements,
         },
         core::{
-            partial_eq::{EqualTo, NotEqualTo, eq, equal_to},
+            partial_eq::{EqualTo, NotEqualTo, eq},
             partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
         },
         distance::IsCloseTo,
         map::{EntriesAre, Entry, EntryMatcherList, entries_are, entry, entry_matchers},
     },
     expectation::{
-        AllOf, AnyOf, Anything, Dereferenced, Expectation, Field, MatcherList, Predicate,
-        Satisfying, all_of, any_of, anything, dereferenced, field, predicate, predicate_list,
-        satisfying,
+        all_of::{AllOf, all_of},
+        any_of::{AnyOf, any_of},
+        anything::{Anything, anything},
+        dereferenced::{Dereferenced, dereferenced},
+        field::{Field, field},
+        lists::{MatcherList, predicate_list},
+        predicate::{Predicate, predicate},
+        satisfying::{Satisfying, satisfying},
     },
 };
 
@@ -287,12 +294,9 @@ pub mod collection {
     #[doc(inline)]
     pub use crate::assertions::collection::{
         Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
-        ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder, ContainsMatching,
-        ContainsSameInstanceAs, DoesNotContain, DoesNotContainMatching,
-        DoesNotContainSameInstanceAs, Each, ElementsAre, ElementsAreInAnyOrder, EndsWith,
-        HasElementAt, HasFirst, HasLast, HasSingle, StartsWith, contains_contiguous_elements,
-        contains_matching, does_not_contain_matching, each, elements_are,
-        elements_are_in_any_order, ends_with_elements, starts_with_elements,
+        ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder,
+        ContainsSameInstanceAs, DoesNotContain, DoesNotContainSameInstanceAs, EndsWith,
+        HasElementAt, HasFirst, HasLast, HasSingle, StartsWith,
     };
 }
 
@@ -302,8 +306,7 @@ pub mod map {
     pub use crate::assertions::map::{
         ContainsEntry, ContainsEntryMatching, ContainsExactlyEntries, ContainsKey, ContainsKeys,
         ContainsValue, ContainsValueMatching, DoesNotContainEntry, DoesNotContainKey,
-        DoesNotContainValue, EntriesAre, Entry, EntryMatcherList, entries_are, entry,
-        entry_matchers,
+        DoesNotContainValue,
     };
 }
 
@@ -340,12 +343,12 @@ pub mod iterator {
 /// Numeric properties and tolerance expectations. Requires `num`.
 #[cfg(feature = "num")]
 pub mod numeric {
-    #[doc(inline)]
-    pub use crate::assertions::num::{IsCloseTo, IsNegative, IsOne, IsPositive, IsZero};
     /// Floating-point classifications also require `std` or `libm`.
     #[cfg(any(feature = "std", feature = "libm"))]
     #[doc(inline)]
     pub use crate::assertions::num::{IsFinite, IsInfinite, IsNan, IsNormal, IsSubnormal};
+    #[doc(inline)]
+    pub use crate::assertions::num::{IsNegative, IsOne, IsPositive, IsZero};
 }
 
 /// Command argument expectations. Requires `std`.
@@ -389,7 +392,7 @@ pub mod header_value {
 #[cfg(feature = "jiff")]
 pub mod signed_duration {
     #[doc(inline)]
-    pub use crate::assertions::jiff::signed_duration::{IsCloseTo, IsNegative, IsPositive, IsZero};
+    pub use crate::assertions::jiff::signed_duration::{IsNegative, IsPositive, IsZero};
 }
 
 /// Span sign and zero expectations. Requires `jiff`.

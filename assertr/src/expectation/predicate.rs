@@ -1,6 +1,8 @@
 use crate::{
-    AssertionContext, Expectation, ValueRenderer,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
+    renderer::ValueRenderer,
 };
 use alloc::borrow::Cow;
 use core::fmt;
@@ -41,7 +43,7 @@ impl<F> fmt::Debug for Predicate<F> {
 ///         .rejected_as("is odd")
 /// }
 ///
-/// assert_that!(4).apply_assertion(is_even());
+/// assert_that!(4).matches(is_even());
 /// let failures = assert_that!(3).with_location(false).capture(|it| it.matches(is_even()));
 /// assert_that!(failures[0].to_string()).contains("Actual: 3\n\nis odd");
 /// ```

@@ -1,10 +1,12 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
-    AssertionContext, Expectation, ValueRenderer,
     assertions::map::{Map, MapLookup},
+    expectation::AssertionContext,
+    expectation::Expectation,
     expectation::{Evidence, context::unsatisfied},
     failure::{FailureBuilder, FailureKind, PathSegment},
     renderer::RenderingContext,
+    renderer::ValueRenderer,
 };
 
 /// A value matcher under one native map key query.
@@ -181,9 +183,9 @@ where
 mod tests {
     use super::entry;
     use crate::{
-        assertions::core::partial_eq::equal_to,
-        expectation::anything,
+        assertions::core::partial_eq::eq,
         failure::{FailureKind, PathSegment},
+        matchers::anything,
         prelude::*,
     };
     use alloc::{collections::BTreeMap, string::String};
@@ -192,8 +194,8 @@ mod tests {
     fn accepts_borrowed_key_queries() {
         let actual = BTreeMap::from([(String::from("a"), 1), (String::from("b"), 2)]);
 
-        assert_that!(actual).matches(entry("a", equal_to(1)));
-        let failures = assert_that!(actual).capture(|it| it.matches(entry("a", equal_to(2))));
+        assert_that!(actual).matches(entry("a", eq(1)));
+        let failures = assert_that!(actual).capture(|it| it.matches(entry("a", eq(2))));
         assert_that!(failures).has_length(1);
         let failures = assert_that!(actual).capture(|it| it.matches(entry("missing", anything())));
         assert_that!(failures).has_length(1);
@@ -201,8 +203,8 @@ mod tests {
 
     #[test]
     fn scopes_value_failures_to_the_queried_key() {
-        let failures = assert_that!(BTreeMap::from([("a", 1)]))
-            .capture(|it| it.matches(entry("a", equal_to(2))));
+        let failures =
+            assert_that!(BTreeMap::from([("a", 1)])).capture(|it| it.matches(entry("a", eq(2))));
 
         assert_that!(failures).contains_exactly_satisfying([
             |item: AssertThat<AssertionFailure, Capture>| {

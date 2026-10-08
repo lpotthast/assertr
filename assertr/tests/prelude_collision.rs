@@ -5,7 +5,7 @@ use assertr::prelude::*;
 
 #[test]
 fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
-    use assertr::assertions::collection::{Collection as AssertrCollection, StableOrder};
+    use assertr::assertions::{Collection as AssertrCollection, StableOrder};
     use assertr::renderer::CollectionPresentation;
     use core::borrow::Borrow;
 
@@ -105,9 +105,7 @@ fn the_collection_assertions_work_without_the_collection_trait_in_scope() {
 #[test]
 fn a_custom_collection_gets_every_collection_assertion() {
     use assertr::assertions::HasLength;
-    use assertr::assertions::collection::{
-        Collection as AssertrCollection, RandomAccess, StableOrder,
-    };
+    use assertr::assertions::{Collection as AssertrCollection, RandomAccess, StableOrder};
     use assertr::renderer::CollectionPresentation;
 
     /// A downstream collection type, implementing only the extension traits.
@@ -176,8 +174,8 @@ fn a_custom_collection_gets_every_collection_assertion() {
 
 #[test]
 fn a_custom_bag_gets_only_order_free_collection_assertions() {
+    use assertr::assertions::Collection as AssertrCollection;
     use assertr::assertions::HasLength;
-    use assertr::assertions::collection::Collection as AssertrCollection;
     use assertr::renderer::{CollectionPresentation, RenderingOrder};
 
     #[derive(Debug)]
@@ -235,9 +233,9 @@ fn bare_set_and_map_names_stay_usable_next_to_a_second_glob_imported_prelude() {
 
 #[test]
 fn a_custom_set_gets_every_set_and_collection_assertion() {
+    use assertr::assertions::Collection as AssertrCollection;
     use assertr::assertions::HasLength;
-    use assertr::assertions::collection::Collection as AssertrCollection;
-    use assertr::assertions::set::SetLookup;
+    use assertr::assertions::SetLookup;
     use assertr::renderer::CollectionPresentation;
 
     /// A downstream set type, implementing only the extension traits.
@@ -317,7 +315,7 @@ fn a_custom_map_gets_every_map_assertion() {
     use std::collections::BTreeMap;
 
     use assertr::assertions::HasLength;
-    use assertr::assertions::map::{Map as AssertrMap, MapLookup as AssertrMapLookup};
+    use assertr::assertions::{Map as AssertrMap, MapLookup as AssertrMapLookup};
     use assertr::renderer::RenderingOrder;
 
     /// A downstream map type, implementing only the extension traits.
@@ -393,7 +391,7 @@ mod matcher_names {
     mod foreign_prelude {
         pub struct ConstraintDescription;
         pub struct Matcher;
-        pub fn equal_to() -> bool {
+        pub fn eq() -> bool {
             true
         }
         pub fn anything() -> bool {
@@ -405,8 +403,8 @@ mod matcher_names {
         use assertr::prelude::*;
         use foreign_prelude::*;
         let _ = (ConstraintDescription, Matcher);
-        assert_that!(equal_to() && anything()).is_true();
-        assert_that!(1).matches(matchers::equal_to(1));
+        assert_that!(eq() && anything()).is_true();
+        assert_that!(1).matches(matchers::eq(1));
     }
 }
 

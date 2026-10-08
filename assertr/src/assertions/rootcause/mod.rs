@@ -26,10 +26,3 @@ impl<T> HasLength for ReportAttachments<T> {
         ReportAttachments::is_empty(self)
     }
 }
-
-/// Rootcause assertion traits.
-pub mod prelude {
-    pub use super::report::RootcauseDynamicReportAssertions;
-    pub use super::report::RootcauseDynamicReportExtractAssertions;
-    pub use super::report::RootcauseReportAssertions;
-}

@@ -3,10 +3,12 @@
 use super::Collection;
 use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation, ValueRenderer,
+    expectation::AssertionContext,
     expectation::Evidence,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
     renderer::RenderingOrder,
+    renderer::ValueRenderer,
 };
 
 /// Relations describing a search for one matching item, such as a collection element or map value.
@@ -99,10 +101,10 @@ impl MatchingItem {
 ///
 /// ```
 /// use assertr::prelude::*;
-/// use assertr::assertions::collection::ContainsMatching;
-/// use assertr::matchers::equal_to;
+/// use assertr::matchers::ContainsMatching;
+/// use assertr::matchers::eq;
 ///
-/// let expected = ContainsMatching::new(equal_to(2));
+/// let expected = ContainsMatching::new(eq(2));
 /// assert_that!([1, 2, 3]).matches(&expected);
 /// ```
 #[derive(Debug, Clone)]
@@ -173,10 +175,10 @@ where
 ///
 /// ```
 /// use assertr::prelude::*;
-/// use assertr::assertions::collection::DoesNotContainMatching;
-/// use assertr::matchers::equal_to;
+/// use assertr::matchers::DoesNotContainMatching;
+/// use assertr::matchers::eq;
 ///
-/// let unexpected = DoesNotContainMatching::new(equal_to(4));
+/// let unexpected = DoesNotContainMatching::new(eq(4));
 /// assert_that!([1, 2, 3]).matches(&unexpected);
 /// ```
 #[derive(Debug, Clone)]
@@ -245,11 +247,9 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: Expectation<C::Item, 
 mod tests {
     mod contains_matching {
         use crate::{
-            assertions::{collection::contains_matching, core::partial_eq::equal_to},
-            expectation::{
-                all_of,
-                test_support::{assert_bounded_order, bounded_failures},
-            },
+            assertions::{collection::contains_matching, core::partial_eq::eq},
+            expectation::test_support::{assert_bounded_order, bounded_failures},
+            matchers::all_of,
             prelude::*,
             test_support::UnorderedSet,
         };
@@ -269,12 +269,12 @@ mod tests {
 
         #[test]
         fn bounded_evidence_is_independent_of_iteration_order() {
-            assert_bounded_order(&contains_matching(equal_to(9)));
+            assert_bounded_order(&contains_matching(eq(9)));
         }
 
         #[test]
         fn stays_one_nested_group_inside_compositions() {
-            use crate::{expectation::predicate, test_support::FailureReportAssertions};
+            use crate::{matchers::predicate, test_support::FailureReportAssertions};
 
             let failures = assert_that!(vec![vec![2, 3], vec![4]])
                 .with_location(false)
@@ -326,7 +326,7 @@ mod tests {
 
         #[test]
         fn sorts_nested_branches_before_limiting_them() {
-            let matcher = contains_matching(all_of(matchers![equal_to(9), equal_to(0)]));
+            let matcher = contains_matching(all_of(matchers![eq(9), eq(0)]));
             let failures = bounded_failures(&[3, 2, 1], &matcher, 1);
 
             assert_that!(failures[0].children).contains_exactly_satisfying([
@@ -347,7 +347,7 @@ mod tests {
                 let failures = assert_that!(UnorderedSet(vec![1, 2, 3]))
                     .with_renderer(ReverseRenderer(&renders))
                     .with_rendering_budget(RenderingBudget::default().with_max_items(limit))
-                    .capture(|it| it.matches(contains_matching(equal_to(9))));
+                    .capture(|it| it.matches(contains_matching(eq(9))));
 
                 assert_that!(renders.get()).is_equal_to(if limit == 0 { 0 } else { 6 });
                 assert_that!(failures).contains_exactly_satisfying([
@@ -380,7 +380,7 @@ mod tests {
 
     mod does_not_contain_matching {
         use crate::{
-            assertions::{collection::does_not_contain_matching, core::partial_eq::equal_to},
+            assertions::{collection::does_not_contain_matching, core::partial_eq::eq},
             prelude::*,
         };
 
@@ -389,7 +389,7 @@ mod tests {
             for limit in [0, 1, usize::MAX] {
                 let failures = assert_that!([1, 2, 1])
                     .with_rendering_budget(RenderingBudget::default().with_max_items(limit))
-                    .capture(|it| it.matches(does_not_contain_matching(equal_to(1))));
+                    .capture(|it| it.matches(does_not_contain_matching(eq(1))));
 
                 assert_that!(failures).has_length(1);
                 let retained = limit.min(2);
@@ -401,9 +401,8 @@ mod tests {
         #[test]
         fn probes_record_no_evidence() {
             let context = AssertionContext::default();
-            assert_that!(context.probe(&[1, 2], &does_not_contain_matching(equal_to(1))))
-                .is_false();
-            assert_that!(context.probe(&[1, 2], &does_not_contain_matching(equal_to(3)))).is_true();
+            assert_that!(context.probe(&[1, 2], &does_not_contain_matching(eq(1)))).is_false();
+            assert_that!(context.probe(&[1, 2], &does_not_contain_matching(eq(3)))).is_true();
         }
     }
 }

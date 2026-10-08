@@ -2,8 +2,8 @@ use crate::assertions::HasLength;
 use crate::failure::FailureKind;
 use crate::mode::{Mode, Panic};
 use crate::renderer::{Rendered, RenderingContext};
-use crate::{AssertThat, DebugRenderer, ValueRenderer};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{AssertThat, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 
@@ -77,7 +77,7 @@ property_expectation! {
 }
 
 /// The header value's length in bytes, enabling
-/// [`LengthAssertions`](crate::assertions::core::length::LengthAssertions).
+/// [`LengthAssertions`](crate::assertions::LengthAssertions).
 impl HasLength for http::HeaderValue {
     fn length(&self) -> usize {
         self.len()
@@ -94,7 +94,7 @@ impl HasLength for http::HeaderValue {
 /// failures expose the value being asserted. The rendering budget still applies.
 ///
 /// Length assertions such as `is_empty`, `is_not_empty`, and `has_length` come from
-/// [`LengthAssertions`](crate::assertions::core::length::LengthAssertions) and count bytes.
+/// [`LengthAssertions`](crate::assertions::LengthAssertions) and count bytes.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait HttpHeaderValueAssertions<M: Mode, R = DebugRenderer> {
@@ -137,7 +137,7 @@ impl<M: Mode, R> HttpHeaderValueAssertions<M, R>
     where
         R: ValueRenderer<http::HeaderValue>,
     {
-        self.apply_assertion(IsSensitive)
+        self.matches(IsSensitive)
     }
 
     #[track_caller]
@@ -145,7 +145,7 @@ impl<M: Mode, R> HttpHeaderValueAssertions<M, R>
     where
         R: ValueRenderer<http::HeaderValue>,
     {
-        self.apply_assertion(IsInsensitive)
+        self.matches(IsInsensitive)
     }
 
     #[track_caller]
@@ -153,7 +153,7 @@ impl<M: Mode, R> HttpHeaderValueAssertions<M, R>
     where
         R: ValueRenderer<http::header::HeaderValue>,
     {
-        self.apply_assertion(IsAscii)
+        self.matches(IsAscii)
     }
 
     #[track_caller]

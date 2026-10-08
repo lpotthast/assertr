@@ -2,8 +2,10 @@
 
 use super::SetLookup;
 use crate::{
-    AssertionContext, Expectation, ValueRenderer,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind},
+    renderer::ValueRenderer,
 };
 use alloc::vec::Vec;
 

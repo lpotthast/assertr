@@ -1,7 +1,8 @@
-use super::MatcherList;
+use super::lists::MatcherList;
 use crate::{
-    AssertionContext, Expectation,
+    expectation::AssertionContext,
     expectation::Evidence,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind},
 };
 
@@ -21,7 +22,7 @@ pub fn any_of<L>(matchers: L) -> AnyOf<L> {
 impl<A: ?Sized, R, L> Expectation<A, R> for AnyOf<L>
 where
     L: MatcherList<A, R>,
-    R: crate::ValueRenderer<usize>,
+    R: crate::renderer::ValueRenderer<usize>,
 {
     type Success<'a>
         = ()
@@ -73,7 +74,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::any_of;
-    use crate::{assertions::core::partial_eq::equal_to, expectation::predicate, prelude::*};
+    use crate::{assertions::core::partial_eq::eq, matchers::predicate, prelude::*};
     use core::cell::Cell;
 
     #[test]
@@ -83,8 +84,7 @@ mod tests {
             calls.set(calls.get() + 1);
             *actual == 2
         });
-        let failures =
-            assert_that!(2).capture(|it| it.matches(any_of(matchers![matcher, equal_to(3)])));
+        let failures = assert_that!(2).capture(|it| it.matches(any_of(matchers![matcher, eq(3)])));
 
         assert_that!(failures).is_empty();
         assert_that!(calls.get()).is_equal_to(1);
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn branch_numbers_use_the_active_renderer_and_budget() {
-        use crate::{RenderingBudget, test_support::SentinelRenderer};
+        use crate::{renderer::RenderingBudget, test_support::SentinelRenderer};
         let failures = assert_that!(0)
             .with_renderer(SentinelRenderer)
             .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(2))
@@ -103,13 +103,10 @@ mod tests {
 
     #[test]
     fn stays_nested_within_a_conjunction() {
-        use crate::expectation::all_of;
-        let failures = assert_that!(3).with_location(false).capture(|it| {
-            it.matches(all_of(matchers![
-                any_of(matchers![equal_to(1), equal_to(2)]),
-                equal_to(5)
-            ]))
-        });
+        use crate::matchers::all_of;
+        let failures = assert_that!(3)
+            .with_location(false)
+            .capture(|it| it.matches(all_of(matchers![any_of(matchers![eq(1), eq(2)]), eq(5)])));
         assert_that!(failures).has_length(1);
         assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
             -------- assertr --------
@@ -144,12 +141,9 @@ mod tests {
 
     #[test]
     fn nested_disjunctions_keep_their_own_branch_numbers() {
-        let failures = assert_that!(3).with_location(false).capture(|it| {
-            it.matches(any_of(matchers![
-                any_of(matchers![equal_to(1), equal_to(2)]),
-                equal_to(5)
-            ]))
-        });
+        let failures = assert_that!(3)
+            .with_location(false)
+            .capture(|it| it.matches(any_of(matchers![any_of(matchers![eq(1), eq(2)]), eq(5)])));
         assert_that!(failures).has_length(1);
         assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
             -------- assertr --------

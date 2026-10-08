@@ -11,30 +11,29 @@ pub(crate) use alloc::{
     vec::Vec,
 };
 
-#[cfg(feature = "std")]
-pub use crate::assert_that_panic_by;
-#[cfg(feature = "std")]
-pub use crate::assert_that_panic_by_async;
-#[cfg(feature = "http")]
-pub use crate::assertions::http::prelude::*;
-#[cfg(feature = "jiff")]
-pub use crate::assertions::jiff::prelude::*;
 #[cfg(feature = "num")]
-pub use crate::assertions::num::NumAssertions;
-#[cfg(feature = "program")]
-pub use crate::assertions::program::Program;
-#[cfg(feature = "program")]
-pub use crate::assertions::program::ProgramAssertions;
-#[cfg(feature = "program")]
-pub use crate::assertions::program::ProgramExtractAssertions;
-#[cfg(feature = "reqwest")]
-pub use crate::assertions::reqwest::prelude::*;
-#[cfg(feature = "rootcause")]
-pub use crate::assertions::rootcause::prelude::*;
+pub use crate::assertions::NumAssertions;
 #[cfg(feature = "std")]
-pub use crate::assertions::std::prelude::*;
+pub use crate::assertions::{
+    AsyncFnOnceAssertions, CommandAssertions, FnOnceAssertions, MutexAssertions, PathAssertions,
+};
+#[cfg(feature = "http")]
+pub use crate::assertions::{HttpHeaderValueAssertions, HttpHeaderValueExtractAssertions};
+#[cfg(feature = "program")]
+pub use crate::assertions::{Program, ProgramAssertions, ProgramExtractAssertions};
+#[cfg(feature = "reqwest")]
+pub use crate::assertions::{ReqwestResponseAssertions, ReqwestResponseExtractAssertions};
+#[cfg(feature = "rootcause")]
+pub use crate::assertions::{
+    RootcauseDynamicReportAssertions, RootcauseDynamicReportExtractAssertions,
+    RootcauseReportAssertions,
+};
+#[cfg(feature = "jiff")]
+pub use crate::assertions::{SignedDurationAssertions, SpanAssertions, ZonedAssertions};
 #[cfg(feature = "tokio")]
-pub use crate::assertions::tokio::prelude::*;
+pub use crate::assertions::{
+    TokioMutexAssertions, TokioRwLockAssertions, TokioWatchReceiverAssertions,
+};
 #[cfg(feature = "partial")]
 pub use crate::partial;
 #[cfg(test)]
@@ -44,16 +43,14 @@ pub(crate) use crate::test_support::assert_caller_location;
 pub use crate::{
     assert_that, assert_that_owned, assert_that_type,
     assertions::{
-        HasLength,
-        alloc::prelude::*,
-        collection::{
-            CollectionAssertions, RandomAccessExtractAssertions, StableOrderAssertions,
-            StableOrderExtractAssertions,
-        },
-        core::prelude::*,
-        map::MapAssertions,
-        matcher::MatcherAssertions,
-        set::SetAssertions,
+        BoolAssertions, BoxAssertions, BoxExtractAssertions, CharAssertions, CollectionAssertions,
+        DebugAssertions, DisplayAssertions, ExactSizeIteratorAssertions, HasLength,
+        IdentityAssertions, IntoIteratorAssertions, IteratorAssertions, LengthAssertions,
+        MapAssertions, MemAssertions, OptionAssertions, OptionExtractAssertions,
+        PartialEqAssertions, PartialOrdAssertions, PatternAssertions, PollAssertions,
+        PollExtractAssertions, RandomAccessExtractAssertions, RangeAssertions,
+        RangeBoundAssertions, RefCellAssertions, ResultAssertions, ResultExtractAssertions,
+        SetAssertions, StableOrderAssertions, StableOrderExtractAssertions, StrAssertions,
     },
     elements_are, elements_are_in_any_order, entries_are,
     expectation::Expectation,
@@ -61,14 +58,17 @@ pub use crate::{
     mode::{Capture, Mode, Panic},
     pattern,
 };
-// Without the `std` feature, unit tests use a private helper backed by the hosted test harness.
-#[cfg(all(test, not(feature = "std")))]
+// Unit tests capture panics through a private helper backed by the hosted test harness, so they
+// also run without the `std` feature.
+#[cfg(test)]
 pub(crate) use crate::test_support::assert_that_panic_by;
 pub use crate::{
-    AssertThat, AssertionFailure, AssertionFailures, DebugRenderer, RenderingBudget, ValueRenderer,
+    AssertThat,
+    failure::{AssertionFailure, AssertionFailures},
+    renderer::{DebugRenderer, RenderingBudget, ValueRenderer},
 };
 #[cfg(feature = "fluent")]
 pub use crate::{IntoAssertContext, IntoOwnedAssertContext};
 
 #[cfg(test)]
-pub(crate) use crate::AssertionContext;
+pub(crate) use crate::expectation::AssertionContext;

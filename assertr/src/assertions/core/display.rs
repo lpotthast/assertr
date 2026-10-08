@@ -1,7 +1,11 @@
 use super::debug::{compare_text, explain_text};
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 use alloc::{format, string::String};
 use core::fmt::Display;
@@ -76,7 +80,7 @@ impl<T: Display, M: Mode, R> DisplayAssertions<R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(HasDisplayValue::new(expected))
+        self.matches(HasDisplayValue::new(expected))
     }
 }
 
@@ -117,7 +121,7 @@ mod tests {
         #[test]
         fn formats_each_operand_once_in_ordinary_matching_and_probe_execution() {
             use super::super::HasDisplayValue;
-            use crate::{AssertionContext, Expectation};
+            use crate::{expectation::AssertionContext, expectation::Expectation};
             use core::{cell::Cell, fmt};
 
             struct Value<'a>(&'a Cell<usize>, &'a str);

@@ -1,7 +1,8 @@
-use super::MatcherList;
+use super::lists::MatcherList;
 use crate::{
-    AssertionContext, Expectation,
+    expectation::AssertionContext,
     expectation::Evidence,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -47,13 +48,13 @@ where
 mod tests {
     use super::all_of;
     use crate::{
-        assertions::core::{partial_eq::equal_to, partial_ord::ge},
+        assertions::core::{partial_eq::eq, partial_ord::ge},
         prelude::*,
     };
 
     #[test]
     fn composes_constraints() {
-        assert_that!(2).matches(all_of(matchers![ge(1), equal_to(2)]));
+        assert_that!(2).matches(all_of(matchers![ge(1), eq(2)]));
     }
 
     #[test]

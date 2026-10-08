@@ -1,7 +1,7 @@
 //! Allocation regressions live in their own executable so the library can forbid unsafe code.
 
 use assertr::{
-    assertions::{collection, map},
+    matchers::{collection, map},
     prelude::*,
 };
 use std::{
@@ -213,7 +213,7 @@ fn callback_list_adapters_allocate_no_wrapper_vector() {
     }; 32];
     let matchers = callbacks
         .iter()
-        .map(assertr::expectation::satisfying)
+        .map(matchers::satisfying)
         .collect::<Vec<_>>();
     let values = [1_u64; 32];
     macro_rules! compare {

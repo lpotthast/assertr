@@ -246,7 +246,7 @@
 //!
 //! Many assertions apply to any type with the right capabilities. Your own types get `is_equal_to`
 //! from `PartialEq`, `is_greater_than` from `PartialOrd`, and collection assertions by implementing
-//! [`Collection`](crate::assertions::collection::Collection).
+//! [`Collection`](https://docs.rs/assertr/latest/assertr/assertions/trait.Collection.html).
 //!
 //! ## Guides
 //!
@@ -341,7 +341,9 @@ use core::{
     marker::PhantomData,
     panic::AssertUnwindSafe,
 };
+use failure::AssertionFailures;
 use mode::Mode;
+use renderer::{DebugRenderer, RenderingBudget};
 
 /// Borrowed view selection for assertion operands.
 pub use ::borrow_for;
@@ -351,16 +353,11 @@ pub use assertr_macros::fluent_expressions;
 #[cfg(feature = "fluent")]
 pub use entry::{IntoAssertContext, IntoOwnedAssertContext};
 pub use entry::{PanicValue, Type, assert_that_type};
-#[cfg(feature = "std")]
-pub use entry::{assert_that_panic_by, assert_that_panic_by_async};
-pub use expectation::{AssertionContext, Expectation};
-pub use failure::{AssertionFailure, AssertionFailures, Fact, FailureKind};
-pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
 
 /// Constructs a partial matcher without annotating the production type.
 ///
 /// Requires the `partial` feature. Pass the result to
-/// [`.matches(...)`](crate::assertions::matcher::MatcherAssertions::matches) or a collection
+/// [`.matches(...)`](crate::AssertThat::matches) or a collection
 /// assertion such as `.contains_matching(...)`.
 ///
 /// ```
@@ -376,7 +373,7 @@ pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer
 /// ```
 ///
 /// List the fields that matter to the test and use `..` to ignore the rest. Every selected field
-/// requires a matcher. Use [`matchers::eq(value)`](crate::matchers::eq) or `equal_to(value)` for
+/// requires a matcher. Use [`matchers::eq(value)`](crate::matchers::eq) for
 /// `PartialEq` equality, another `partial!` for nested fields, or
 /// [`matchers::satisfying`](crate::matchers::satisfying) to check a field with existing assertion
 /// methods.
@@ -510,7 +507,7 @@ macro_rules! partial {
 ///
 /// ```compile_fail,E0277
 /// use std::panic::catch_unwind;
-/// use assertr::{assert_that, DebugRenderer};
+/// use assertr::{assert_that, renderer::DebugRenderer};
 ///
 /// let mut renderer = DebugRenderer;
 /// let context = assert_that!(1).with_renderer(&mut renderer);

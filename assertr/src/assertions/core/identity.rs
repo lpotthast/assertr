@@ -1,5 +1,7 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, Mode,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -108,8 +110,8 @@ identity_expectation!(
 /// reference type as the subject. For `AssertThat<&T>`, `expected` is `&&T` and the assertion
 /// compares the storage of the reference itself. No additional dereferencing occurs. For
 /// collections, the identity methods on
-/// [`CollectionAssertions`](crate::assertions::collection::CollectionAssertions) and
-/// [`StableOrderAssertions`](crate::assertions::collection::StableOrderAssertions) compare each
+/// [`CollectionAssertions`](crate::assertions::CollectionAssertions) and
+/// [`StableOrderAssertions`](crate::assertions::StableOrderAssertions) compare each
 /// element's borrowed target instead.
 ///
 /// ```
@@ -135,12 +137,12 @@ pub trait IdentityAssertions<T> {
 impl<T, M: Mode, R> IdentityAssertions<T> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_same_instance_as(self, expected: &T) -> Self {
-        self.apply_assertion(IsSameInstanceAs::new(expected))
+        self.matches(IsSameInstanceAs::new(expected))
     }
 
     #[track_caller]
     fn is_not_same_instance_as(self, expected: &T) -> Self {
-        self.apply_assertion(IsNotSameInstanceAs::new(expected))
+        self.matches(IsNotSameInstanceAs::new(expected))
     }
 }
 
@@ -159,7 +161,7 @@ mod tests {
     }
 
     use crate::{
-        FailureKind,
+        failure::FailureKind,
         prelude::*,
         renderer::RenderedBody,
         test_support::{NoRenderer, assert_trait_impl},

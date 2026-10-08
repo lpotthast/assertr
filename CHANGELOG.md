@@ -13,12 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Reusable expectations. An `Expectation` evaluates a subject once and explains a rejection or describes an unmet
   expectation through the structured failure builder. Apply one to a chain with `matches` (fluent alias
-  `match_expectation`), `apply_assertion`, or `test_assertion`, which also returns the successful observation. Every
+  `match_expectation`), or with `test_assertion`, which also returns the successful observation. Every
   built-in assertion family is backed by public expectations that compose the same way as custom definitions.
 - The `matchers` catalog re-exports every public expectation, with common checks at its root and subject namespaces for
   family-specific names. Combine them with `all_of`, `any_of`, `anything`, `predicate`, `predicate_list`, `satisfying`
   (assertion callbacks), `dereferenced` (any `Deref` subject), `each`, `elements_are!`, `elements_are_in_any_order!`,
-  `entries_are!`, `matchers!` (heterogeneous matcher lists), and `pattern!`. Use `eq` (an alias for `equal_to`), `lt`,
+  `entries_are!`, `matchers!` (heterogeneous matcher lists), and `pattern!`. Use `eq`, `lt`,
   `gt`, `le`, and `ge` for comparisons. Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a
   pattern negatively. Matcher lists and keyed value expectations require explicit matchers. `matchers![..]` builds
   heterogeneous lists, including keyed `matchers![entry(..), ..]` lists. Arrays, slices, and vectors hold one matcher
@@ -242,6 +242,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and `into_iter_iterator_is_empty`. Use `contains_exactly_in_any_order_matching`, its fluent alias, and
   `into_iter_is_empty` respectively.
 - **Breaking:** Removed `Actual::map`. Match on the `Actual` variants instead.
+- **Breaking:** Removed `AssertThat::and()`, which returned the chain unchanged. Chain the next assertion directly.
+- **Breaking:** Removed `assert_that_panic_by` and `assert_that_panic_by_async`. Use
+  `assert_that_owned!(f).panics()` and `assert_that_owned!(f).panics_async().await`, which also record the source
+  expression.
 - `indoc` is no longer a dependency of `assertr`.
 
 ## [0.7.1] - 2026-09-02

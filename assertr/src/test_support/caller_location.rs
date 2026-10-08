@@ -1,7 +1,7 @@
 //! Exact assertion call-site checks without fixed source coordinates.
 
 use crate::{
-    AssertionFailure,
+    failure::AssertionFailure,
     prelude::{PartialEqAssertions, ResultAssertions, assert_that},
 };
 use alloc::{

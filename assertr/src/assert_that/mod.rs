@@ -14,8 +14,9 @@ use core::{
 };
 
 use crate::{
-    AssertThat, AssertionFailures, ChainRecords, ChainState, Expression,
+    AssertThat, ChainRecords, ChainState, Expression,
     actual::Actual,
+    failure::AssertionFailures,
     mode::{Mode, Panic},
     renderer::{DebugRenderer, RenderingBudget},
 };
@@ -99,7 +100,7 @@ impl<'t, T> AssertThat<'t, T, crate::mode::Capture> {
     }
 }
 
-/* Fluent connect */
+/* Subject access */
 
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Borrows the current assertion subject.
@@ -107,20 +108,6 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Custom assertion implementations use this to inspect the value being asserted.
     pub fn actual(&self) -> &T {
         self.actual.borrowed()
-    }
-
-    /// Returns the chain unchanged, allowing an optional `and()` between assertions.
-    ///
-    /// ```
-    /// use assertr::prelude::*;
-    ///
-    /// assert_that!(42).is_greater_than(0).and().is_less_than(100);
-    /// assert_that!(42).is_greater_than(0).is_less_than(100);
-    /// ```
-    #[inline]
-    #[must_use]
-    pub fn and(self) -> Self {
-        self
     }
 }
 
@@ -351,10 +338,11 @@ mod tests {
         #[cfg(feature = "std")]
         async fn async_panic_assertions_still_accept_mutably_captured_state() {
             let mut value = 0;
-            assert_that_panic_by_async(|| async {
+            assert_that_owned!(async || {
                 value = 1;
                 panic!("async closure panic");
             })
+            .panics_async()
             .await
             .has_type::<&str>()
             .is_equal_to("async closure panic");

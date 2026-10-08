@@ -1,7 +1,7 @@
 //! Renderers and structured evidence checks shared by diagnostic tests.
 
 use crate::prelude::*;
-use crate::{AssertionFailure, ValueRenderer, renderer::Rendered};
+use crate::{failure::AssertionFailure, renderer::Rendered, renderer::ValueRenderer};
 use core::fmt;
 
 pub(crate) struct NoRenderer;

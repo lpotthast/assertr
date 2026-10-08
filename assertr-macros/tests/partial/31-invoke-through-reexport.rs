@@ -4,7 +4,7 @@ mod facade {
     pub use renamed_assertr as assertr;
 }
 
-use facade::assertr::{assert_that, matchers::eq, prelude::MatcherAssertions};
+use facade::assertr::{assert_that, matchers::eq};
 
 struct User {
     name: &'static str,

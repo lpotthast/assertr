@@ -1,6 +1,9 @@
 use crate::renderer::Rendered;
-use crate::{AssertThat, DebugRenderer, Fact, Mode, ValueRenderer, failure::FailureKind};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{
+    AssertThat, Mode, failure::Fact, failure::FailureKind, renderer::DebugRenderer,
+    renderer::ValueRenderer,
+};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use std::fs::FileType;
 use std::ops::Deref;
 use std::{ffi::OsStr, io, path::Path};
@@ -520,7 +523,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
-        self.apply_assertion(Exists)
+        self.matches(Exists)
     }
 
     #[track_caller]
@@ -528,7 +531,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
-        self.apply_assertion(DoesNotExist)
+        self.matches(DoesNotExist)
     }
 
     #[track_caller]
@@ -536,7 +539,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
-        self.apply_assertion(IsAFile)
+        self.matches(IsAFile)
     }
 
     #[track_caller]
@@ -544,7 +547,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
-        self.apply_assertion(IsADirectory)
+        self.matches(IsADirectory)
     }
 
     #[track_caller]
@@ -552,7 +555,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<io::Error>,
     {
-        self.apply_assertion(IsASymlink)
+        self.matches(IsASymlink)
     }
 
     #[track_caller]
@@ -560,7 +563,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P>,
     {
-        self.apply_assertion(HasARoot)
+        self.matches(HasARoot)
     }
 
     #[track_caller]
@@ -568,7 +571,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P>,
     {
-        self.apply_assertion(IsRelative)
+        self.matches(IsRelative)
     }
 
     #[track_caller]
@@ -576,7 +579,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
-        self.apply_assertion(HasFileName::new(expected))
+        self.matches(HasFileName::new(expected))
     }
 
     #[track_caller]
@@ -584,7 +587,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
-        self.apply_assertion(HasFileStem::new(expected))
+        self.matches(HasFileStem::new(expected))
     }
 
     #[track_caller]
@@ -592,7 +595,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<OsStr>,
     {
-        self.apply_assertion(HasExtension::new(expected))
+        self.matches(HasExtension::new(expected))
     }
 
     #[track_caller]
@@ -600,7 +603,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<Path>,
     {
-        self.apply_assertion(StartsWith::new(expected))
+        self.matches(StartsWith::new(expected))
     }
 
     #[track_caller]
@@ -608,7 +611,7 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     where
         R: ValueRenderer<P> + ValueRenderer<Path>,
     {
-        self.apply_assertion(EndsWith::new(expected))
+        self.matches(EndsWith::new(expected))
     }
 }
 

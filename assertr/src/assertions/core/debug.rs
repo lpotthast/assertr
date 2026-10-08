@@ -1,6 +1,10 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 use alloc::{format, string::String};
 use core::fmt::Debug;
@@ -167,7 +171,7 @@ impl<T: Debug, M: Mode, R> DebugAssertions<R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(HasDebugString::new(expected))
+        self.matches(HasDebugString::new(expected))
     }
 
     #[track_caller]
@@ -175,7 +179,7 @@ impl<T: Debug, M: Mode, R> DebugAssertions<R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(HasDebugValue::new(expected))
+        self.matches(HasDebugValue::new(expected))
     }
 }
 
@@ -313,7 +317,7 @@ mod tests {
         #[test]
         fn formats_each_operand_once_in_ordinary_matching_and_probe_execution() {
             use super::super::HasDebugValue;
-            use crate::{AssertionContext, Expectation};
+            use crate::{expectation::AssertionContext, expectation::Expectation};
             use core::{cell::Cell, fmt};
 
             struct Value<'a>(&'a Cell<usize>, &'a str);

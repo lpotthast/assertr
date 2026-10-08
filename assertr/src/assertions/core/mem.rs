@@ -1,5 +1,8 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, Fact, Mode, Type,
+    AssertThat, Mode, Type,
+    expectation::AssertionContext,
+    expectation::Expectation,
+    failure::Fact,
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -57,7 +60,7 @@ pub trait MemAssertions {
 impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
     #[track_caller]
     fn needs_drop(self) -> Self {
-        self.apply_assertion(NeedsDrop)
+        self.matches(NeedsDrop)
     }
 }
 
@@ -130,7 +133,7 @@ mod tests {
             assert_that!(failures).has_length(2);
             for failure in &failures {
                 assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not need drop"));
-                assert_that!(failure.kind).is_equal_to(crate::FailureKind::Predicate);
+                assert_that!(failure.kind).is_equal_to(crate::failure::FailureKind::Predicate);
             }
         }
 

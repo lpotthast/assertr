@@ -59,32 +59,3 @@ pub mod ref_cell;
 pub mod result;
 /// Assertions for string-like subjects.
 pub mod string;
-
-/// General-purpose assertion traits.
-pub mod prelude {
-    pub use super::bool::BoolAssertions;
-    pub use super::char::CharAssertions;
-    pub use super::debug::DebugAssertions;
-    pub use super::display::DisplayAssertions;
-    #[cfg(feature = "std")]
-    pub use super::r#fn::{AsyncFnOnceAssertions, FnOnceAssertions};
-    pub use super::identity::IdentityAssertions;
-    pub use super::iter::{
-        ExactSizeIteratorAssertions, IntoIteratorAssertions, IteratorAssertions,
-    };
-    pub use super::length::LengthAssertions;
-    pub use super::mem::MemAssertions;
-    pub use super::option::OptionAssertions;
-    pub use super::option::OptionExtractAssertions;
-    pub use super::partial_eq::PartialEqAssertions;
-    pub use super::partial_ord::PartialOrdAssertions;
-    pub use super::pattern::PatternAssertions;
-    pub use super::poll::PollAssertions;
-    pub use super::poll::PollExtractAssertions;
-    pub use super::range::RangeAssertions;
-    pub use super::range::RangeBoundAssertions;
-    pub use super::ref_cell::RefCellAssertions;
-    pub use super::result::ResultAssertions;
-    pub use super::result::ResultExtractAssertions;
-    pub use super::string::StrAssertions;
-}

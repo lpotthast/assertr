@@ -2,11 +2,17 @@ use super::entry::{explain_entry, record_entry};
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     __private::{Cons, Nil},
-    AssertThat, AssertionContext, AssertionFailure, DebugRenderer, Expectation, ValueRenderer,
+    AssertThat,
     assertions::map::{Entry, Map, MapLookup, entry},
-    expectation::{MatcherList, lists::sealed as list_sealed, satisfying},
+    expectation::AssertionContext,
+    expectation::Expectation,
+    expectation::lists::sealed as list_sealed,
+    failure::AssertionFailure,
     failure::{FailureBuilder, FailureKind},
+    matchers::{MatcherList, satisfying},
     mode::Capture,
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 use alloc::vec::Vec;
 use core::marker::PhantomData;

@@ -1,8 +1,12 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ValueRenderer,
+    AssertThat,
     assertions::support::{explain_variant, project_checked},
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 
 /// Checks for `Ok` and returns a borrowed value on success.
@@ -120,7 +124,7 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     where
         R: ValueRenderer<E>,
     {
-        self.apply_assertion(IsOk)
+        self.matches(IsOk)
             .map(|actual| project_checked(actual, Result::ok, |it| it.as_ref().ok()))
     }
 
@@ -129,7 +133,7 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsErr)
+        self.matches(IsErr)
             .map(|actual| project_checked(actual, Result::err, |it| it.as_ref().err()))
     }
 }
@@ -179,7 +183,7 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
     where
         R: ValueRenderer<E>,
     {
-        self.apply_assertion(IsOk)
+        self.matches(IsOk)
     }
 
     #[track_caller]
@@ -187,7 +191,7 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsErr)
+        self.matches(IsErr)
     }
 
     #[track_caller]
@@ -213,7 +217,7 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
 
 #[cfg(test)]
 mod tests {
-    use crate::{FailureKind, prelude::*};
+    use crate::{failure::FailureKind, prelude::*};
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {

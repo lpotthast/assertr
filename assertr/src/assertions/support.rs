@@ -53,7 +53,7 @@ macro_rules! property_expectation {
     ) => {
         property_expectation!(
             @impl [$($attr)*] $name [$($param)*]
-                [$($bounds)* R: $crate::ValueRenderer<$subject>,] $subject; $kind; |$actual| $check;
+                [$($bounds)* R: $crate::renderer::ValueRenderer<$subject>,] $subject; $kind; |$actual| $check;
             |rejected, failure, context| property_expectation!(
                 @explain rejected, failure, context; $($diagnostics)+
             )
@@ -68,7 +68,7 @@ macro_rules! property_expectation {
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
 
-        impl<$($param,)* R> $crate::Expectation<$subject, R> for $name
+        impl<$($param,)* R> $crate::expectation::Expectation<$subject, R> for $name
         where
             $($bounds)*
         {
@@ -86,7 +86,7 @@ macro_rules! property_expectation {
             fn evaluate<'a>(
                 &'a self,
                 $actual: &'a $subject,
-                _: &$crate::AssertionContext<'_, R>,
+                _: &$crate::expectation::AssertionContext<'_, R>,
             ) -> Result<(), ()> {
                 if $check { Ok(()) } else { Err(()) }
             }
@@ -97,7 +97,7 @@ macro_rules! property_expectation {
                 &self,
                 $rejected: Option<(&$subject, ())>,
                 $failure: $crate::failure::FailureBuilder,
-                $context: &$crate::AssertionContext<'_, R>,
+                $context: &$crate::expectation::AssertionContext<'_, R>,
             ) -> $crate::failure::FailureBuilder {
                 $explain
             }

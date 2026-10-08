@@ -1,7 +1,8 @@
 use core::{cell::Cell, marker::PhantomData, panic::AssertUnwindSafe};
 
 use crate::{
-    AssertThat, AssertionFailures, ChainRecords, ChainState,
+    AssertThat, ChainRecords, ChainState,
+    failure::AssertionFailures,
     mode::{Capture, Panic},
 };
 
@@ -36,7 +37,7 @@ impl<'t, R> ChainState<'t, Panic, R> {
 
 impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     /// Runs the given assertions in capture mode and returns the collected failures as structured
-    /// [`crate::AssertionFailure`] values. An empty result means every assertion passed.
+    /// [`crate::failure::AssertionFailure`] values. An empty result means every assertion passed.
     ///
     /// Use this when a test or validation step should report several failed checks together. The
     /// closure receives this chain in capture mode and must return it, or a mapped continuation,
@@ -51,19 +52,19 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     ///
     /// assert_that!(failures).contains_exactly_satisfying([
     ///     |failure: AssertThat<AssertionFailure, Capture>| {
-    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::FailureKind::Ordering);
+    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::failure::FailureKind::Ordering);
     ///         failure.derive_owned(|failure| failure.to_string())
     ///             .contains("is not less than");
     ///     },
     ///     |failure: AssertThat<AssertionFailure, Capture>| {
-    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::FailureKind::Equality);
+    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::failure::FailureKind::Equality);
     ///     },
     /// ]);
     /// ```
     ///
-    /// Each [`crate::AssertionFailure`] exposes its values, relation, facts, and nested failures as
-    /// data. Inspect those fields directly. Its `Display` implementation produces the default
-    /// report. Capture mode never invokes the chain's
+    /// Each [`crate::failure::AssertionFailure`] exposes its values, relation, facts, and nested
+    /// failures as data. Inspect those fields directly. Its `Display` implementation produces
+    /// the default report. Capture mode never invokes the chain's
     /// [panic presentation](Self::with_panic_presentation).
     ///
     /// Assertions on [projections](Self::derive) within the closure contribute their failures

@@ -8,7 +8,7 @@
 //! - Values become owned rendered trees when failures are built. Adapters decide how to use those
 //!   trees at the panic boundary or after capture.
 
-use assertr::{Fact, FailureKind, prelude::*, renderer::Rendered};
+use assertr::{failure::Fact, failure::FailureKind, prelude::*, renderer::Rendered};
 
 fn text(value: &Rendered) -> &str {
     match &value.body {
@@ -131,7 +131,8 @@ fn a_panic_inside_the_capture_closure_propagates_without_a_double_panic() {
 mod fields {
     use super::{text, text_opt};
     use assertr::{
-        Fact, FailureKind,
+        failure::Fact,
+        failure::FailureKind,
         prelude::*,
         renderer::{Rendered, RenderedBody},
     };
@@ -254,14 +255,14 @@ mod matcher_metadata {
     fn matcher_paths_and_constraints_preserve_metadata() {
         use assertr::{
             failure::PathSegment,
-            matchers::{all_of, equal_to, predicate},
+            matchers::{all_of, eq, predicate},
         };
         let failures = assert_that!([1])
             .with_subject_name("rows")
             .with_detail_message("request context")
             .capture(|it| {
                 it.matches(elements_are![all_of(matchers![
-                    equal_to(2),
+                    eq(2),
                     predicate(|_: &i32| false)
                 ])])
             });

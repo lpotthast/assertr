@@ -1,8 +1,8 @@
 use crate::failure::FailureKind;
 use crate::mode::Mode;
 use crate::renderer::RenderingOrder;
-use crate::{AssertThat, DebugRenderer, ValueRenderer};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{AssertThat, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use alloc::vec::Vec;
 use std::ffi::OsStr;
 use std::process::Command;
@@ -85,7 +85,7 @@ impl<M: Mode, R> CommandAssertions<R> for AssertThat<'_, Command, M, R> {
     where
         R: ValueRenderer<OsStr>,
     {
-        self.apply_assertion(HasArg::new(expected))
+        self.matches(HasArg::new(expected))
     }
 }
 

@@ -1,8 +1,9 @@
 use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation,
     assertions::collection::Collection,
+    expectation::AssertionContext,
     expectation::Evidence,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -49,11 +50,11 @@ where
 mod tests {
     use super::each;
     use crate::{
-        assertions::core::partial_eq::equal_to, expectation::test_support::assert_bounded_order,
+        assertions::core::partial_eq::eq, expectation::test_support::assert_bounded_order,
     };
 
     #[test]
     fn bounded_evidence_is_independent_of_iteration_order() {
-        assert_bounded_order(&each(equal_to(9)));
+        assert_bounded_order(&each(eq(9)));
     }
 }

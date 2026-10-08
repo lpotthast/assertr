@@ -12,13 +12,11 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
 
     /// Sets the source expression shown in the backticked `Expression:` field of failure messages.
     ///
-    /// [`assert_that!`](crate::assert_that) and [`assert_that_owned!`](crate::assert_that_owned)
-    /// set this automatically to the tokens used in the macro parenthesis.
-    ///
-    /// Derived child chains start a new diagnostic subject and do not inherit their parent
-    /// expression.
+    /// The entry macros and `#[fluent_expressions]` record it through
+    /// `__private::with_expression`. Derived child chains start a new diagnostic subject and do not
+    /// inherit their parent expression.
     #[must_use]
-    pub fn with_expression(mut self, expression: &'static str) -> Self {
+    pub(crate) fn with_expression(mut self, expression: &'static str) -> Self {
         self.state.expression = crate::Expression::Explicit(expression);
         self
     }
@@ -37,9 +35,9 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Selects the closure that produces this context's panic text.
     ///
     /// The default panic text is the failure's `Display` report. The closure receives the
-    /// already-built [`AssertionFailure`](crate::AssertionFailure) and returns the text displayed
-    /// by the panic. It can wrap the default report, which `failure.to_string()` produces, or build
-    /// any other representation from the failure's structured fields.
+    /// already-built [`AssertionFailure`](crate::failure::AssertionFailure) and returns the text
+    /// displayed by the panic. It can wrap the default report, which `failure.to_string()`
+    /// produces, or build any other representation from the failure's structured fields.
     ///
     /// The closure must be `'static`, so it cannot borrow stack-local data. Move data into it,
     /// clone owned values such as [`String`], or share owned data through [`Rc`]. This bound does
@@ -73,7 +71,9 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     #[must_use]
     pub fn with_panic_presentation(
         mut self,
-        presentation: impl Fn(&crate::AssertionFailure) -> String + core::panic::RefUnwindSafe + 'static,
+        presentation: impl Fn(&crate::failure::AssertionFailure) -> String
+        + core::panic::RefUnwindSafe
+        + 'static,
     ) -> Self {
         self.state.panic_presentation = Some(Rc::new(presentation));
         self

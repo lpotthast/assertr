@@ -44,14 +44,12 @@ pub use matching::{
 };
 pub use value::{
     Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
-    DoesNotContain, EndsWith, ExactElementsRejection, MissingElementsRejection,
-    PositionalRejection, StartsWith,
+    DoesNotContain, EndsWith, StartsWith,
 };
 
 pub use identity::{
     ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs,
-    DoesNotContainSameInstanceAs, ExactIdentityRejection, IdentityMembershipRejection,
-    UnorderedIdentityRejection,
+    DoesNotContainSameInstanceAs,
 };
 
 pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
@@ -91,10 +89,11 @@ pub(crate) enum Placement {
 ///
 /// Use an order-free assertion such as `contains_exactly_in_any_order` instead.
 ///
-/// Assertr renders the collection structure, so a custom [`ValueRenderer`](crate::ValueRenderer)
-/// needs to render only [`Item`](Collection::Item) for element assertions. The length assertions
-/// provided through [`HasLength`] render the whole subject and therefore require a renderer for the
-/// collection type itself.
+/// Assertr renders the collection structure, so a custom
+/// [`ValueRenderer`](crate::renderer::ValueRenderer) needs to render only
+/// [`Item`](Collection::Item) for element assertions. The length assertions provided through
+/// [`HasLength`] render the whole subject and therefore require a renderer for the collection type
+/// itself.
 pub trait Collection: HasLength {
     /// The collection's element type.
     type Item;
@@ -158,7 +157,7 @@ pub trait StableOrder: Collection {}
 ///
 /// ```compile_fail,E0277
 /// use std::collections::LinkedList;
-/// use assertr::assertions::collection::RandomAccess;
+/// use assertr::assertions::RandomAccess;
 ///
 /// fn requires_random_access<C: RandomAccess>() {}
 /// requires_random_access::<LinkedList<i32>>();

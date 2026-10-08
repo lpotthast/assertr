@@ -3,10 +3,11 @@ use super::{
     PositionReporting, RenderingOrder, Scan, Tail, ValueRenderer, Vec, consumed_fact,
 };
 use crate::{
-    Expectation, Fact,
     assertions::{HasLength, collection::Collection},
     borrow_for::{BorrowFor, borrow_for},
     expectation::Evidence,
+    expectation::Expectation,
+    failure::Fact,
     failure::PathSegment,
     renderer::CollectionPresentation,
 };

@@ -17,12 +17,12 @@ error[E0277]: the trait bound `&str: BorrowFor<i32>` is not satisfied
             `str` implements `BorrowFor<String>`
   = note: required for `EqualTo<&str>` to implement `Expectation<i32>`
   = note: 1 redundant requirement hidden
-  = note: required for `assertr::expectation::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>` to implement `Expectation<Point>`
-  = note: required for `assertr::__private::Cons<assertr::expectation::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>` to implement `MatcherList<Point>`
+  = note: required for `assertr::matchers::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>` to implement `Expectation<Point>`
+  = note: required for `assertr::__private::Cons<assertr::matchers::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>` to implement `MatcherList<Point>`
   = note: 1 redundant requirement hidden
-  = note: required for `assertr::__private::PartialMatch<Point, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:51: 8:56}, assertr::__private::Cons<assertr::expectation::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>>` to implement `Expectation<Point>`
-note: required by a bound in `matches`
- --> $WORKSPACE/assertr/src/assertions/matcher.rs
+  = note: required for `assertr::__private::PartialMatch<Point, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:51: 8:56}, assertr::__private::Cons<assertr::matchers::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>>` to implement `Expectation<Point>`
+note: required by a bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
+ --> $WORKSPACE/assertr/src/assert_that/execution.rs
   |
-  |     fn matches<E: Expectation<T, R>>(self, expected: E) -> Self;
-  |                   ^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+  |     pub fn matches<D: Expectation<T, R>>(self, expected: D) -> Self {
+  |                       ^^^^^^^^^^^^^^^^^ required by this bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`

@@ -1,8 +1,12 @@
 use crate::assertions::HasLength;
 use crate::renderer::{Rendered, RenderingContext};
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 
 // Emptiness failures show the subject type next to its value.
@@ -125,7 +129,7 @@ impl<T: HasLength, M: Mode, R> LengthAssertions<T, R> for AssertThat<'_, T, M, R
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsEmpty)
+        self.matches(IsEmpty)
     }
 
     #[track_caller]
@@ -133,7 +137,7 @@ impl<T: HasLength, M: Mode, R> LengthAssertions<T, R> for AssertThat<'_, T, M, R
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsNotEmpty)
+        self.matches(IsNotEmpty)
     }
 
     #[track_caller]
@@ -141,7 +145,7 @@ impl<T: HasLength, M: Mode, R> LengthAssertions<T, R> for AssertThat<'_, T, M, R
     where
         R: ValueRenderer<T> + ValueRenderer<usize>,
     {
-        self.apply_assertion(HasLengthOf::new(expected))
+        self.matches(HasLengthOf::new(expected))
     }
 }
 

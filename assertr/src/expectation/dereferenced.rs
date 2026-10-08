@@ -1,5 +1,6 @@
 use crate::{
-    AssertionContext, Expectation,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
 };
 use core::ops::Deref;
@@ -55,20 +56,20 @@ where
 #[cfg(test)]
 mod tests {
     use super::dereferenced;
-    use crate::{assertions::core::partial_eq::equal_to, prelude::*};
+    use crate::{assertions::core::partial_eq::eq, prelude::*};
     use alloc::{boxed::Box, rc::Rc, string::String};
 
     #[test]
     fn accepts_owned_references() {
-        assert_that_owned!(&42).matches(dereferenced(equal_to(42)));
+        assert_that_owned!(&42).matches(dereferenced(eq(42)));
     }
 
     #[test]
     fn accepts_smart_pointers() {
-        assert_that!(Box::new(42)).matches(dereferenced(equal_to(42)));
-        assert_that!(Rc::new(42)).matches(dereferenced(equal_to(42)));
+        assert_that!(Box::new(42)).matches(dereferenced(eq(42)));
+        assert_that!(Rc::new(42)).matches(dereferenced(eq(42)));
         let mut value = 42;
-        assert_that_owned!(&mut value).matches(dereferenced(equal_to(42)));
+        assert_that_owned!(&mut value).matches(dereferenced(eq(42)));
     }
 
     #[test]
@@ -80,9 +81,9 @@ mod tests {
     fn reports_the_inner_failure() {
         let failures = assert_that!(Box::new(1))
             .with_location(false)
-            .capture(|it| it.matches(dereferenced(equal_to(2))));
+            .capture(|it| it.matches(dereferenced(eq(2))));
         assert_that!(failures).has_length(1);
-        assert_that!(failures[0].kind).is_equal_to(crate::FailureKind::Equality);
+        assert_that!(failures[0].kind).is_equal_to(crate::failure::FailureKind::Equality);
         assert_that!(failures[0].subject_type_name).is_equal_to("alloc::boxed::Box<i32>");
     }
 }

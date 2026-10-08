@@ -1,6 +1,6 @@
 use crate::failure::FailureKind;
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer, mode::Panic};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{AssertThat, Mode, mode::Panic, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use alloc::{format, string::String};
 use core::any::{TypeId, type_name};
 use core::fmt::Display;
@@ -422,7 +422,7 @@ macro_rules! report_impls {
             where
                 R: ValueRenderer<usize>,
             {
-                self.apply_assertion(HasChildCount::new(expected))
+                self.matches(HasChildCount::new(expected))
             }
 
             #[track_caller]
@@ -430,12 +430,12 @@ macro_rules! report_impls {
             where
                 R: ValueRenderer<usize>,
             {
-                self.apply_assertion(HasAttachmentCount::new(expected))
+                self.matches(HasAttachmentCount::new(expected))
             }
 
             #[track_caller]
             fn has_current_context_type<E: 'static>(self) -> Self {
-                self.apply_assertion(HasCurrentContextType::<E>::new())
+                self.matches(HasCurrentContextType::<E>::new())
             }
 
             #[track_caller]
@@ -443,7 +443,7 @@ macro_rules! report_impls {
             where
                 R: ValueRenderer<str>,
             {
-                self.apply_assertion(HasCurrentContextDisplayValue::new(expected))
+                self.matches(HasCurrentContextDisplayValue::new(expected))
             }
 
             #[track_caller]
@@ -451,7 +451,7 @@ macro_rules! report_impls {
             where
                 R: ValueRenderer<str>,
             {
-                self.apply_assertion(HasCurrentContextDebugString::new(expected))
+                self.matches(HasCurrentContextDebugString::new(expected))
             }
         }
 

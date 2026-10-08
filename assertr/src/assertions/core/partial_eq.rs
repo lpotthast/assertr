@@ -1,9 +1,9 @@
 use crate::borrow_for::BorrowFor;
 
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
 
-/// Implements [`Expectation`](crate::Expectation) for a check of the subject against one stored
-/// operand.
+/// Implements [`Expectation`](crate::expectation::Expectation) for a check of the subject against
+/// one stored operand.
 ///
 /// The generics must name the renderer `R`. Evaluation borrows the operand stored in the `borrow`
 /// field once, selecting its view for the `for` type, and retains that view on rejection. `holds`
@@ -20,7 +20,7 @@ macro_rules! operand_expectation {
         actual |$render:ident, $rendered:ident| $render_actual:expr;
         $role:ident $relation:literal $(, $rejection:literal)?;
     ) => {
-        impl<$($generics)*> $crate::Expectation<$subject, R> for $name
+        impl<$($generics)*> $crate::expectation::Expectation<$subject, R> for $name
         where
             $($bounds)*
         {
@@ -38,7 +38,7 @@ macro_rules! operand_expectation {
             fn evaluate<'a>(
                 &'a self,
                 $actual: &'a $subject,
-                _: &$crate::AssertionContext<'_, R>,
+                _: &$crate::expectation::AssertionContext<'_, R>,
             ) -> Result<(), &'a $view> {
                 let $expected = $crate::borrow_for::borrow_for::<$target, _>(&self.$field);
                 operand_expectation!(@outcome $role, $holds, $expected)
@@ -50,7 +50,7 @@ macro_rules! operand_expectation {
                 &'a self,
                 rejected: Option<(&'a $subject, &'a $view)>,
                 failure: $crate::failure::FailureBuilder,
-                context: &$crate::AssertionContext<'_, R>,
+                context: &$crate::expectation::AssertionContext<'_, R>,
             ) -> $crate::failure::FailureBuilder {
                 let $render = context.render();
                 let (failure, operand) = match rejected {
@@ -83,7 +83,7 @@ pub(crate) use operand_expectation;
 ///
 /// ```
 /// use assertr::prelude::*;
-/// use assertr::assertions::core::partial_eq::EqualTo;
+/// use assertr::matchers::EqualTo;
 ///
 /// let expected = EqualTo::new("hello");
 /// assert_that!("hello").matches(&expected);
@@ -91,22 +91,19 @@ pub(crate) use operand_expectation;
 #[derive(Debug, Clone)]
 pub struct EqualTo<E>(E);
 
-/// Matches through the actual value's ordinary `PartialEq` implementation.
+/// Matches values equal to `expected` through the actual value's `PartialEq` implementation.
 ///
 /// This is a convenience constructor for [`EqualTo::new`].
-#[must_use]
-pub const fn equal_to<E>(expected: E) -> EqualTo<E> {
-    EqualTo::new(expected)
-}
-
-/// Short alias for [`equal_to`].
 ///
 /// ```
 /// use assertr::{matchers::eq, prelude::*};
 ///
 /// assert_that!([String::from("hello")]).matches(elements_are![eq("hello")]);
 /// ```
-pub use equal_to as eq;
+#[must_use]
+pub const fn eq<E>(expected: E) -> EqualTo<E> {
+    EqualTo::new(expected)
+}
 
 impl<E> EqualTo<E> {
     /// Owns an expected operand. Pass a reference to reuse an expected value.
@@ -123,7 +120,7 @@ impl<E> EqualTo<E> {
 ///
 /// ```
 /// use assertr::prelude::*;
-/// use assertr::assertions::core::partial_eq::NotEqualTo;
+/// use assertr::matchers::NotEqualTo;
 ///
 /// assert_that!(3).matches(NotEqualTo::new(4));
 /// ```
@@ -237,7 +234,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(EqualTo::new(expected))
+        self.matches(EqualTo::new(expected))
     }
 
     #[track_caller]
@@ -247,7 +244,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(NotEqualTo::new(expected))
+        self.matches(NotEqualTo::new(expected))
     }
 }
 
@@ -284,7 +281,7 @@ mod tests {
             let calls = RefCell::new(Vec::new());
             let failures = assert_that!(1)
                 .with_renderer(RecordingRenderer(&calls))
-                .capture(|it| it.apply_assertion(EqualTo::new(2)));
+                .capture(|it| it.matches(EqualTo::new(2)));
             assert_that!(failures).has_length(1);
             assert_that!(*calls.borrow()).contains_exactly([1, 2]);
             calls.borrow_mut().clear();

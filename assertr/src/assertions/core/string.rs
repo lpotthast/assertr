@@ -1,4 +1,6 @@
-use crate::{AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer};
+use crate::{
+    AssertThat, Mode, expectation::Expectation, renderer::DebugRenderer, renderer::ValueRenderer,
+};
 
 /// Defines a string expectation evaluated on the subject's [`AsRef<str>`] view.
 ///
@@ -33,7 +35,7 @@ macro_rules! str_expectation {
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a T,
-                _: &$crate::AssertionContext<'_, R>,
+                _: &$crate::expectation::AssertionContext<'_, R>,
             ) -> Result<(), &'a str> {
                 let $actual = actual.as_ref();
                 if $check { Ok(()) } else { Err($actual) }
@@ -45,7 +47,7 @@ macro_rules! str_expectation {
                 &'a self,
                 rejected: Option<(&'a T, &'a str)>,
                 failure: $crate::failure::FailureBuilder,
-                context: &$crate::AssertionContext<'_, R>,
+                context: &$crate::expectation::AssertionContext<'_, R>,
             ) -> $crate::failure::FailureBuilder {
                 let render = context.render();
                 failure.relations(
@@ -96,7 +98,7 @@ macro_rules! str_expectation {
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a T,
-                _: &$crate::AssertionContext<'_, R>,
+                _: &$crate::expectation::AssertionContext<'_, R>,
             ) -> Result<(), Self::Rejection<'a>> {
                 let $actual = actual.as_ref();
                 let $operand = self.0.as_ref();
@@ -109,7 +111,7 @@ macro_rules! str_expectation {
                 &'a self,
                 rejected: Option<(&'a T, Self::Rejection<'a>)>,
                 failure: $crate::failure::FailureBuilder,
-                context: &$crate::AssertionContext<'_, R>,
+                context: &$crate::expectation::AssertionContext<'_, R>,
             ) -> $crate::failure::FailureBuilder {
                 let render = context.render();
                 let operand = rejected.map_or_else(|| self.0.as_ref(), |(_, (_, operand))| operand);
@@ -181,12 +183,12 @@ str_expectation! {
     /// A reusable string prefix assertion accepting [`AsRef<str>`] subjects and expected operands.
     ///
     /// Construct with [`new`](Self::new) and execute through an assertion chain or a supplied
-    /// [`AssertionContext`](crate::AssertionContext). [`StrAssertions::starts_with`] executes this
+    /// [`AssertionContext`](crate::expectation::AssertionContext). [`StrAssertions::starts_with`] executes this
     /// same definition on an assertion chain.
     ///
     /// ```
     /// use assertr::prelude::*;
-    /// use assertr::assertions::core::string::StartsWith;
+    /// use assertr::matchers::string::StartsWith;
     ///
     /// let prefix = StartsWith::new(String::from("hel"));
     /// assert_that!("hello").matches(&prefix);
@@ -291,7 +293,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(IsBlank)
+        self.matches(IsBlank)
     }
 
     #[track_caller]
@@ -299,7 +301,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(IsNotBlank)
+        self.matches(IsNotBlank)
     }
 
     #[track_caller]
@@ -307,7 +309,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(IsBlankAscii)
+        self.matches(IsBlankAscii)
     }
 
     #[track_caller]
@@ -315,7 +317,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(EqualToIgnoringAsciiCase::new(expected))
+        self.matches(EqualToIgnoringAsciiCase::new(expected))
     }
 
     #[track_caller]
@@ -323,7 +325,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(Contains::new(expected))
+        self.matches(Contains::new(expected))
     }
 
     #[track_caller]
@@ -331,7 +333,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(DoesNotContain::new(unexpected))
+        self.matches(DoesNotContain::new(unexpected))
     }
 
     #[track_caller]
@@ -339,7 +341,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(StartsWith::new(expected))
+        self.matches(StartsWith::new(expected))
     }
 
     #[track_caller]
@@ -347,7 +349,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(DoesNotStartWith::new(unexpected))
+        self.matches(DoesNotStartWith::new(unexpected))
     }
 
     #[track_caller]
@@ -355,7 +357,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(EndsWith::new(expected))
+        self.matches(EndsWith::new(expected))
     }
 
     #[track_caller]
@@ -363,7 +365,7 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     where
         R: ValueRenderer<str>,
     {
-        self.apply_assertion(DoesNotEndWith::new(unexpected))
+        self.matches(DoesNotEndWith::new(unexpected))
     }
 }
 

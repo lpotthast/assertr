@@ -27,8 +27,7 @@ pub use assertions::MapAssertions;
 pub(crate) use imp::FoundEntries;
 pub use imp::{
     ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
-    DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue, ExactEntriesRejection,
-    MissingKeysRejection,
+    DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue,
 };
 pub use matching::{ContainsEntryMatching, ContainsValueMatching};
 
@@ -37,8 +36,8 @@ pub use matching::{ContainsEntryMatching, ContainsValueMatching};
 /// Implementing this trait makes iteration-based [`MapAssertions`] available. Implement
 /// [`MapLookup`] for key queries. The prelude does not re-export this implementor-facing trait.
 ///
-/// Assertr renders map syntax. A custom [`ValueRenderer`](crate::ValueRenderer) needs to render
-/// only [`Key`](Map::Key) and [`Value`](Map::Value).
+/// Assertr renders map syntax. A custom [`ValueRenderer`](crate::renderer::ValueRenderer) needs to
+/// render only [`Key`](Map::Key) and [`Value`](Map::Value).
 pub trait Map: HasLength {
     /// The map's key type.
     type Key;
@@ -76,7 +75,7 @@ pub trait Map: HasLength {
 /// use std::collections::BTreeMap;
 ///
 /// use assertr::assertions::HasLength;
-/// use assertr::assertions::map::{Map, MapLookup};
+/// use assertr::assertions::{Map, MapLookup};
 /// use assertr::renderer::RenderingOrder;
 ///
 /// struct Config(BTreeMap<String, i32>);
@@ -208,10 +207,10 @@ where
 pub(super) mod fixture {
     use super::{Map, MapLookup};
     use crate::{
-        ValueRenderer,
         assertions::HasLength,
         borrow_for::BorrowFor,
         renderer::RenderingOrder,
+        renderer::ValueRenderer,
         test_support::{StrOperand, StringRenderer},
     };
     use alloc::{string::String, vec::Vec};

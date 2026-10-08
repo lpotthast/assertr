@@ -1,6 +1,10 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 
 /// A Rust pattern together with the predicate and source text needed to assert that it matches.
@@ -196,7 +200,7 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
         P: Fn(&T) -> bool,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(pattern)
+        self.matches(pattern)
     }
 
     #[track_caller]
@@ -205,7 +209,7 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
         P: Fn(&T) -> bool,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(DoesNotMatchPattern::new(pattern))
+        self.matches(DoesNotMatchPattern::new(pattern))
     }
 }
 
@@ -235,7 +239,7 @@ mod tests {
     mod matcher {
         use core::cell::Cell;
 
-        use crate::FailureKind;
+        use crate::failure::FailureKind;
         use crate::matchers::{DoesNotMatchPattern, dereferenced, elements_are};
         use crate::prelude::*;
 

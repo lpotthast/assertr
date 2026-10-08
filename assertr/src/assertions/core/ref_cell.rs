@@ -1,6 +1,10 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 use core::cell::RefCell;
 
@@ -162,7 +166,7 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsBorrowed)
+        self.matches(IsBorrowed)
     }
 
     #[track_caller]
@@ -170,12 +174,12 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsMutablyBorrowed)
+        self.matches(IsMutablyBorrowed)
     }
 
     #[track_caller]
     fn is_not_mutably_borrowed(self) -> Self {
-        self.apply_assertion(IsNotMutablyBorrowed)
+        self.matches(IsNotMutablyBorrowed)
     }
 }
 

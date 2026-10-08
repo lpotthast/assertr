@@ -5,8 +5,11 @@ use super::{
     Collection, ContainsMatching, DoesNotContainMatching, elements_are_in_any_order, identity,
     value,
 };
-use crate::expectation::{lists::SatisfyingList, satisfying};
-use crate::{AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer, mode::Capture};
+use crate::{
+    AssertThat, Mode, expectation::Expectation, mode::Capture, renderer::DebugRenderer,
+    renderer::ValueRenderer,
+};
+use crate::{expectation::lists::SatisfyingList, matchers::satisfying};
 
 /// Assertions over the elements of a collection: slices, arrays, `Vec`, `VecDeque`, and every type
 /// implementing [`Collection`].
@@ -25,7 +28,7 @@ use crate::{AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer, mode::C
 /// and require no rendering support.
 ///
 /// For a type that supports borrowed traversal but does not implement [`Collection`], use
-/// [`IntoIteratorAssertions`](crate::assertions::core::iter::IntoIteratorAssertions). Its methods
+/// [`IntoIteratorAssertions`](crate::assertions::IntoIteratorAssertions). Its methods
 /// carry the `into_iter_` prefix.
 ///
 /// Bulk value lists use [repeatable expected data](crate#expected-lists).
@@ -149,7 +152,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     /// A maximum matching makes overlapping matchers order-independent.
     fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: crate::matchers::MatcherList<T, R>,
         R: ValueRenderer<usize>;
 
     /// Asserts one-to-one matching between subject elements and assertion closures, independent of
@@ -170,7 +173,7 @@ where
     where
         C::Item: Borrow<U>,
     {
-        self.apply_assertion(identity::ContainsSameInstanceAs::new(expected))
+        self.matches(identity::ContainsSameInstanceAs::new(expected))
     }
 
     #[track_caller]
@@ -178,7 +181,7 @@ where
     where
         C::Item: Borrow<U>,
     {
-        self.apply_assertion(identity::DoesNotContainSameInstanceAs::new(expected))
+        self.matches(identity::DoesNotContainSameInstanceAs::new(expected))
     }
 
     #[track_caller]
@@ -189,7 +192,7 @@ where
     where
         C::Item: Borrow<U>,
     {
-        self.apply_assertion(identity::ContainsExactlySameInstancesInAnyOrder::new(
+        self.matches(identity::ContainsExactlySameInstancesInAnyOrder::new(
             expected,
         ))
     }
@@ -201,7 +204,7 @@ where
         E: BorrowFor<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(value::Contains::new(expected))
+        self.matches(value::Contains::new(expected))
     }
 
     #[track_caller]
@@ -209,7 +212,7 @@ where
     where
         P: Expectation<C::Item, R>,
     {
-        self.apply_assertion(ContainsMatching::new(expected))
+        self.matches(ContainsMatching::new(expected))
     }
 
     #[track_caller]
@@ -228,7 +231,7 @@ where
         E: BorrowFor<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(value::ContainsAll::new(expected))
+        self.matches(value::ContainsAll::new(expected))
     }
 
     #[track_caller]
@@ -238,7 +241,7 @@ where
         E: BorrowFor<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(value::DoesNotContain::new(not_expected))
+        self.matches(value::DoesNotContain::new(not_expected))
     }
 
     #[track_caller]
@@ -247,7 +250,7 @@ where
         P: Expectation<C::Item, R>,
         R: ValueRenderer<C::Item>,
     {
-        self.apply_assertion(DoesNotContainMatching::new(expected))
+        self.matches(DoesNotContainMatching::new(expected))
     }
 
     #[track_caller]
@@ -266,16 +269,16 @@ where
         E: BorrowFor<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(value::ContainsExactlyInAnyOrder::new(expected))
+        self.matches(value::ContainsExactlyInAnyOrder::new(expected))
     }
 
     #[track_caller]
     fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
-        P: crate::expectation::MatcherList<C::Item, R>,
+        P: crate::matchers::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
-        self.apply_assertion(elements_are_in_any_order(expected))
+        self.matches(elements_are_in_any_order(expected))
     }
 
     #[track_caller]
@@ -284,7 +287,7 @@ where
         R: Clone + ValueRenderer<usize>,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
-        self.apply_assertion(elements_are_in_any_order(SatisfyingList::new(assertions)))
+        self.matches(elements_are_in_any_order(SatisfyingList::new(assertions)))
     }
 }
 
@@ -428,14 +431,14 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 2, 3].as_slice()),
-                contains_matching(crate::expectation::predicate(|it: &i32| *it > 7))
+                contains_matching(matchers::predicate(|it: &i32| *it > 7))
             );
         }
 
         #[test]
         fn succeeds_when_an_element_matches() {
             let calls = Cell::new(0);
-            assert_that!([1, 2, 3].as_slice()).contains_matching(crate::expectation::predicate(
+            assert_that!([1, 2, 3].as_slice()).contains_matching(matchers::predicate(
                 |it: &i32| {
                     calls.set(calls.get() + 1);
                     *it % 2 == 0
@@ -448,7 +451,7 @@ mod tests {
         fn empty_collection_retains_the_constraint_without_a_renderer() {
             let failures = assert_that!([] as [i32; 0])
                 .with_renderer(NoRenderer)
-                .capture(|it| it.contains_matching(crate::expectation::anything()));
+                .capture(|it| it.contains_matching(matchers::anything()));
 
             assert_that!(failures).has_length(1);
             assert_that!(failures[0].children).contains_exactly_satisfying([
@@ -473,7 +476,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_matching(crate::expectation::predicate(|it: &i32| *it > 7));
+                    .contains_matching(matchers::predicate(|it: &i32| *it > 7));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -593,14 +596,14 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 2, 3].as_slice()),
-                does_not_contain_matching(crate::expectation::predicate(|it: &i32| *it % 2 == 1))
+                does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 1))
             );
         }
 
         #[test]
         fn succeeds_when_no_element_matches() {
             assert_that!([1, 2, 3].as_slice())
-                .does_not_contain_matching(crate::expectation::predicate(|it: &i32| *it > 7));
+                .does_not_contain_matching(matchers::predicate(|it: &i32| *it > 7));
         }
 
         #[test]
@@ -734,7 +737,7 @@ mod tests {
                 }
             }
 
-            const KIND: crate::FailureKind = crate::FailureKind::Matching;
+            const KIND: crate::failure::FailureKind = crate::failure::FailureKind::Matching;
             fn explain(
                 &self,
                 rejected: Option<(&Actual, ())>,
@@ -764,7 +767,7 @@ mod tests {
         #[test]
         fn custom_heterogeneous_comparisons_use_predicates() {
             assert_that!([Actual(1), Actual(2)].as_slice()).contains_exactly_in_any_order_matching(
-                crate::expectation::predicate_list([
+                matchers::predicate_list([
                     |it: &Actual| it.eq(&Expected(2)),
                     |it: &Actual| it.eq(&Expected(1)),
                 ]),
@@ -784,7 +787,7 @@ mod tests {
             let actual = [DerivedActual { value: 2 }, DerivedActual { value: 1 }];
             assert_that!(actual.as_slice()).contains_exactly_in_any_order_matching(matchers![
                 partial!(DerivedActual {
-                    value: crate::expectation::anything()
+                    value: matchers::anything()
                 }),
                 partial!(DerivedActual {
                     value: matchers::eq(2)
@@ -849,16 +852,16 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1]),
-                contains_exactly_in_any_order_matching([
-                    crate::assertions::core::partial_eq::equal_to(2)
-                ])
+                contains_exactly_in_any_order_matching([crate::assertions::core::partial_eq::eq(
+                    2
+                )])
             );
         }
 
         #[test]
         fn succeeds_when_slices_match() {
             assert_that!([1, 2, 3].as_slice()).contains_exactly_in_any_order_matching(
-                crate::expectation::predicate_list(
+                matchers::predicate_list(
                     [
                         move |it: &i32| *it == 1,
                         move |it: &i32| *it == 2,
@@ -872,7 +875,7 @@ mod tests {
         #[test]
         fn succeeds_when_slices_match_in_different_order() {
             assert_that!([1, 2, 3].as_slice()).contains_exactly_in_any_order_matching(
-                crate::expectation::predicate_list(
+                matchers::predicate_list(
                     [
                         move |it: &i32| *it == 3,
                         move |it: &i32| *it == 1,
@@ -887,9 +890,8 @@ mod tests {
         fn succeeds_when_overlapping_predicates_have_an_exact_assignment() {
             let predicates: [fn(&i32) -> bool; 2] = [|it| *it <= 2, |it| *it == 1];
 
-            assert_that!([1, 2].as_slice()).contains_exactly_in_any_order_matching(
-                crate::expectation::predicate_list(predicates),
-            );
+            assert_that!([1, 2].as_slice())
+                .contains_exactly_in_any_order_matching(matchers::predicate_list(predicates));
         }
 
         #[test]
@@ -898,9 +900,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1].as_slice())
                     .with_location(false)
-                    .contains_exactly_in_any_order_matching(crate::expectation::predicate_list(
-                        predicates,
-                    ));
+                    .contains_exactly_in_any_order_matching(matchers::predicate_list(predicates));
             })
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r"
@@ -933,7 +933,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly_in_any_order_matching(crate::expectation::predicate_list(
+                    .contains_exactly_in_any_order_matching(matchers::predicate_list(
                         [
                             move |it: &i32| *it == 2,
                             move |it: &i32| *it == 3,
@@ -1004,11 +1004,11 @@ mod tests {
         #[test]
         fn unordered_evaluates_each_visited_pair_once() {
             let count = core::cell::Cell::new(0);
-            let first = crate::expectation::predicate(|a: &i32| {
+            let first = matchers::predicate(|a: &i32| {
                 count.set(count.get() + 1);
                 *a <= 2
             });
-            let second = crate::expectation::predicate(|a: &i32| {
+            let second = matchers::predicate(|a: &i32| {
                 count.set(count.get() + 1);
                 *a == 1
             });

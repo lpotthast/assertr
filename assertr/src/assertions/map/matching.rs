@@ -2,10 +2,12 @@
 
 use super::{EntryRejection, Map, MapLookup};
 use crate::{
-    AssertionContext, Expectation, ValueRenderer,
     assertions::collection::matching::MatchingItem,
+    expectation::AssertionContext,
     expectation::Evidence,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
+    renderer::ValueRenderer,
 };
 
 const MATCHING_VALUE: MatchingItem = MatchingItem {

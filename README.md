@@ -54,18 +54,18 @@ assertr = "0.8.0"
 
 Everything beyond `std` and `num` is opt-in:
 
-| Feature | Adds |
-|---|---|
-| `std` (default) | Assertions for `HashMap`, `HashSet`, `Path`, `Command`, `Mutex`, and panicking closures. |
-| `num` (default) | Numeric assertions such as `is_zero`, `is_positive`, `is_nan`, and `is_close_to`. |
-| `libm` | Floating-point checks like `is_nan` for `num` in `no_std` builds. Does not enable `num`. |
-| `partial` | The `partial!` macro for matching selected struct fields. |
-| `fluent` | The `value.must()` and `value.verify(..)` entry points with fluent method names. |
-| `serde-json`, `serde-toml` | `as_json()` and `as_toml()` to assert on a value's serialized form. |
-| `serde` | Both `serde-json` and `serde-toml`. |
-| `program` | Checks that a program name or path resolves to an executable, like `which`. |
-| `http`, `jiff`, `reqwest`, `rootcause`, `tokio` | Assertions for types of the crate with the same name. |
-| `full` | All of the above. |
+| Feature                                         | Adds                                                                                     |
+|-------------------------------------------------|------------------------------------------------------------------------------------------|
+| `std` (default)                                 | Assertions for `HashMap`, `HashSet`, `Path`, `Command`, `Mutex`, and panicking closures. |
+| `num` (default)                                 | Numeric assertions such as `is_zero`, `is_positive`, `is_nan`, and `is_close_to`.        |
+| `libm`                                          | Floating-point checks like `is_nan` for `num` in `no_std` builds. Does not enable `num`. |
+| `partial`                                       | The `partial!` macro for matching selected struct fields.                                |
+| `fluent`                                        | The `value.must()` and `value.verify(..)` entry points with fluent method names.         |
+| `serde-json`, `serde-toml`                      | `as_json()` and `as_toml()` to assert on a value's serialized form.                      |
+| `serde`                                         | Both `serde-json` and `serde-toml`.                                                      |
+| `program`                                       | Checks that a program name or path resolves to an executable, like `which`.              |
+| `http`, `jiff`, `reqwest`, `rootcause`, `tokio` | Assertions for types of the crate with the same name.                                    |
+| `full`                                          | All of the above.                                                                        |
 
 For `no_std`, disable the default features. `num`, `libm`, `partial`, `fluent`, `rootcause`, and
 the `serde` features work with `alloc` alone. All other features enable `std`.
@@ -236,7 +236,7 @@ require from the subject.
 
 Many assertions apply to any type with the right capabilities. Your own types get `is_equal_to`
 from `PartialEq`, `is_greater_than` from `PartialOrd`, and collection assertions by implementing
-[`Collection`](https://docs.rs/assertr/latest/assertr/assertions/collection/trait.Collection.html).
+[`Collection`](https://docs.rs/assertr/latest/assertr/assertions/trait.Collection.html).
 
 ## Guides
 

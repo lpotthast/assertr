@@ -27,9 +27,9 @@ use core::fmt;
 /// text with [`RenderingContext::value`](crate::renderer::RenderingContext::value) or the context's
 /// structural methods, such as
 /// [`RenderingContext::borrowed_values`](crate::renderer::RenderingContext::borrowed_values), so
-/// custom renderers and the chain's [`RenderingBudget`](crate::RenderingBudget) remain effective.
-/// Use [`Rendered::show_type_hint`](crate::renderer::Rendered::show_type_hint) to control whether
-/// text output shows a value's short type hint.
+/// custom renderers and the chain's [`RenderingBudget`](crate::renderer::RenderingBudget) remain
+/// effective. Use [`Rendered::show_type_hint`](crate::renderer::Rendered::show_type_hint) to
+/// control whether text output shows a value's short type hint.
 ///
 /// # Render leaf values, not structural wrappers
 ///
@@ -65,7 +65,7 @@ use core::fmt;
 ///
 /// ```
 /// use core::fmt;
-/// use assertr::ValueRenderer;
+/// use assertr::renderer::ValueRenderer;
 ///
 /// struct MyType { field: u32 }
 ///

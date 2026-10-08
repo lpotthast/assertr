@@ -1,10 +1,11 @@
 use crate::{AssertThat, PanicValue, actual::Actual, mode::Panic};
 use core::panic::AssertUnwindSafe;
 
-/// Captures a panic for unit tests while the library itself is built without its `std` feature.
+/// Captures a panic for unit tests, including builds without the library's `std` feature.
 ///
-/// The test harness is hosted and can therefore use `std`. This helper is crate-private and is
-/// never present in a production build.
+/// The public way to assert a panic is `assert_that_owned!(f).panics()`, which needs `std`. The
+/// test harness is hosted and can use `std` anyway. This helper is crate-private and never present
+/// in a production build.
 #[track_caller]
 pub(crate) fn assert_that_panic_by<'t, R>(
     fun: impl FnOnce() -> R + 't,

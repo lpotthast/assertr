@@ -1,10 +1,10 @@
 use super::{SetLookup, imp};
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
 
 /// The set relations: subset, superset, and disjointness.
 ///
 /// Other element assertions come from
-/// [`CollectionAssertions`](crate::assertions::collection::CollectionAssertions).
+/// [`CollectionAssertions`](crate::assertions::CollectionAssertions).
 ///
 /// Every relation accepts any other set type, so a `HashSet` can be compared against a `BTreeSet`,
 /// and against a `HashSet` with a different hasher.
@@ -41,7 +41,7 @@ where
         O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
-        self.apply_assertion(imp::IsSubsetOf::new(expected_superset))
+        self.matches(imp::IsSubsetOf::new(expected_superset))
     }
 
     #[track_caller]
@@ -50,7 +50,7 @@ where
         O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
-        self.apply_assertion(imp::IsSupersetOf::new(expected_subset))
+        self.matches(imp::IsSupersetOf::new(expected_subset))
     }
 
     #[track_caller]
@@ -59,7 +59,7 @@ where
         O: SetLookup<Item = S::Item>,
         R: ValueRenderer<S::Item>,
     {
-        self.apply_assertion(imp::IsDisjointFrom::new(other))
+        self.matches(imp::IsDisjointFrom::new(other))
     }
 }
 

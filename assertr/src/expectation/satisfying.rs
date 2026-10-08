@@ -1,6 +1,8 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation,
+    AssertThat,
+    expectation::AssertionContext,
     expectation::Evidence,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
     mode::Capture,
 };
@@ -67,9 +69,9 @@ impl<F> core::fmt::Debug for Satisfying<F> {
 /// assert_that!(vec!["reader", "editor"]).matches(&editor_roles);
 /// ```
 ///
-/// This annotation uses the default [`crate::DebugRenderer`]. Supply `AssertThat`'s fourth type
-/// parameter when using a custom renderer. The matcher can also be used as a `partial!` field
-/// expectation, for example `roles: &editor_roles`.
+/// This annotation uses the default [`crate::renderer::DebugRenderer`]. Supply `AssertThat`'s
+/// fourth type parameter when using a custom renderer. The matcher can also be used as a `partial!`
+/// field expectation, for example `roles: &editor_roles`.
 ///
 /// # Panics
 ///

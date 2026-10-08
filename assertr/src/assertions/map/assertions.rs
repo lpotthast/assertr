@@ -7,10 +7,8 @@ use super::{
     matching::{ContainsEntryMatching, ContainsValueMatching},
 };
 use crate::{
-    AssertThat, DebugRenderer, Mode, ValueRenderer,
-    assertions::map::EntryMatcherList,
-    expectation::{Expectation, satisfying},
-    mode::Capture,
+    AssertThat, Mode, assertions::map::EntryMatcherList, expectation::Expectation,
+    matchers::satisfying, mode::Capture, renderer::DebugRenderer, renderer::ValueRenderer,
 };
 
 /// Assertions over the keys, values, and entries of a map: `BTreeMap`, `HashMap`, and every type
@@ -214,7 +212,7 @@ where
         Mp: MapLookup<Q>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q>,
     {
-        self.apply_assertion(imp::ContainsKey::new(expected))
+        self.matches(imp::ContainsKey::new(expected))
     }
 
     #[track_caller]
@@ -224,7 +222,7 @@ where
         Mp: MapLookup<Q>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q>,
     {
-        self.apply_assertion(imp::DoesNotContainKey::new(not_expected))
+        self.matches(imp::DoesNotContainKey::new(not_expected))
     }
 
     #[track_caller]
@@ -234,7 +232,7 @@ where
         E: BorrowFor<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(imp::ContainsValue::new(expected))
+        self.matches(imp::ContainsValue::new(expected))
     }
 
     #[track_caller]
@@ -244,7 +242,7 @@ where
         E: BorrowFor<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(imp::DoesNotContainValue::new(not_expected))
+        self.matches(imp::DoesNotContainValue::new(not_expected))
     }
 
     #[track_caller]
@@ -256,7 +254,7 @@ where
         E: BorrowFor<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(imp::ContainsEntry::new(key, value))
+        self.matches(imp::ContainsEntry::new(key, value))
     }
 
     #[track_caller]
@@ -279,7 +277,7 @@ where
         E: BorrowFor<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(imp::DoesNotContainEntry::new(key, value))
+        self.matches(imp::DoesNotContainEntry::new(key, value))
     }
 
     #[track_caller]
@@ -289,7 +287,7 @@ where
         Mp: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(imp::ContainsKeys::new(expected))
+        self.matches(imp::ContainsKeys::new(expected))
     }
 
     #[track_caller]
@@ -305,7 +303,7 @@ where
             + ValueRenderer<EK::View>
             + ValueRenderer<EV::View>,
     {
-        self.apply_assertion(imp::ContainsExactlyEntries::new(expected))
+        self.matches(imp::ContainsExactlyEntries::new(expected))
     }
 
     #[track_caller]
@@ -314,7 +312,7 @@ where
         L: EntryMatcherList<Self::Map, R>,
         R: ValueRenderer<K> + ValueRenderer<usize>,
     {
-        self.apply_assertion(entries_are(expected))
+        self.matches(entries_are(expected))
     }
 
     #[track_caller]
@@ -325,7 +323,7 @@ where
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone,
     {
-        self.apply_assertion(entries_are(SatisfyingEntryList::new(assertions)))
+        self.matches(entries_are(SatisfyingEntryList::new(assertions)))
     }
 
     #[track_caller]
@@ -336,7 +334,7 @@ where
         E: Expectation<V, R>,
         R: ValueRenderer<Q>,
     {
-        self.apply_assertion(ContainsEntryMatching::new(key, expected))
+        self.matches(ContainsEntryMatching::new(key, expected))
     }
 
     #[track_caller]
@@ -344,7 +342,7 @@ where
     where
         E: Expectation<V, R>,
     {
-        self.apply_assertion(ContainsValueMatching::new(expected))
+        self.matches(ContainsValueMatching::new(expected))
     }
 }
 
@@ -456,7 +454,7 @@ mod tests {
             let failures = assert_that!(BTreeMap::from([("a", 1)]))
                 .with_renderer(NeverRender)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(0))
-                .capture(|it| it.contains_entry_matching("b", crate::expectation::anything()));
+                .capture(|it| it.contains_entry_matching("b", matchers::anything()));
             assert_that!(failures[0].omitted_children).is_equal_to(1);
         }
     }
@@ -1219,8 +1217,8 @@ mod tests {
                 .capture(|it| it.contains_exactly_entries_satisfying([(1, is_two), (3, is_two)]));
             let prepared = assert_that!(map).with_location(false).capture(|it| {
                 it.contains_exactly_entries_matching([
-                    matchers::entry(1, crate::expectation::satisfying(is_two)),
-                    matchers::entry(3, crate::expectation::satisfying(is_two)),
+                    matchers::entry(1, matchers::satisfying(is_two)),
+                    matchers::entry(3, matchers::satisfying(is_two)),
                 ])
             });
             assert_that!(adapted).has_length(1);
@@ -1230,20 +1228,20 @@ mod tests {
 
     mod contains_entry_matching {
         use super::*;
-        use crate::{assertions::core::partial_eq::equal_to, expectation::anything};
+        use crate::{assertions::core::partial_eq::eq, matchers::anything};
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(BTreeMap::from([("a", 1)])),
-                contains_entry_matching("a", equal_to(2))
+                contains_entry_matching("a", eq(2))
             );
         }
 
         #[test]
         fn preserves_borrowed_lookup_and_key_paths() {
             let map = BTreeMap::from([(String::from("a"), 1)]);
-            assert_that!(map).contains_entry_matching("a", equal_to(1));
+            assert_that!(map).contains_entry_matching("a", eq(1));
             let failures =
                 assert_that!(map).capture(|it| it.contains_entry_matching("b", anything()));
             assert_that!(&failures[0].children[0].path[0])
@@ -1253,13 +1251,13 @@ mod tests {
 
     mod contains_value_matching {
         use super::*;
-        use crate::expectation::predicate;
+        use crate::matchers::predicate;
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(BTreeMap::from([("a", 1)])),
-                contains_value_matching(crate::assertions::core::partial_eq::equal_to(2))
+                contains_value_matching(crate::assertions::core::partial_eq::eq(2))
             );
         }
 
@@ -1325,14 +1323,14 @@ mod tests {
 
         #[test]
         fn sorts_candidate_evidence_before_limiting_it() {
-            use crate::{assertions::core::partial_eq::equal_to, test_support::UnorderedMap};
+            use crate::{assertions::core::partial_eq::eq, test_support::UnorderedMap};
 
             let capture = |entries| {
                 let actual = UnorderedMap(entries);
                 assert_that!(actual)
                     .with_location(false)
                     .with_rendering_budget(RenderingBudget::default().with_max_items(1))
-                    .capture(|it| it.contains_value_matching(equal_to(9)))
+                    .capture(|it| it.contains_value_matching(eq(9)))
             };
             let expected = capture(vec![(1, 1), (2, 2), (3, 3)]);
             let actual = capture(vec![(3, 3), (2, 2), (1, 1)]);
@@ -1456,7 +1454,7 @@ mod tests {
                     Events, Inputs, ObservedMap, Query, Value, count, take_observations, value,
                 },
             },
-            expectation::{anything, satisfying},
+            matchers::{anything, satisfying},
             matchers::{entries_are, entry, eq},
             test_support::StringRenderer,
         };

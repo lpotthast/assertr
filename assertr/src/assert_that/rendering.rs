@@ -12,13 +12,13 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// Execution adapters use [`RenderingContext::value`], [`RenderingContext::collection`],
     /// [`RenderingContext::map`], and the context's other structural methods instead of
     /// formatting diagnostic values directly. This honors both the active
-    /// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. Rendered leaves retain
-    /// type metadata. Control the visibility of its type hint through
+    /// [`ValueRenderer`](crate::renderer::ValueRenderer) and [`RenderingBudget`]. Rendered leaves
+    /// retain type metadata. Control the visibility of its type hint through
     /// [`Rendered::show_type_hint`](crate::renderer::Rendered::show_type_hint).
     ///
-    /// Reusable leaf checks implement [`Expectation`](crate::Expectation)
+    /// Reusable leaf checks implement [`Expectation`](crate::expectation::Expectation)
     /// and obtain the same context through
-    /// [`AssertionContext::render`](crate::AssertionContext::render) instead. See
+    /// [`AssertionContext::render`](crate::expectation::AssertionContext::render) instead. See
     /// [custom assertions](crate#custom-assertions).
     ///
     /// An execution adapter owns an operation the expectation protocol cannot express, such as
@@ -26,7 +26,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// ```
     /// use assertr::prelude::*;
-    /// use assertr::{Fact, failure::FailureKind};
+    /// use assertr::{failure::Fact, failure::FailureKind};
     ///
     /// trait ProducerAssertions<R = DebugRenderer> {
     ///     fn produces_an_even_number(self) -> Self
@@ -108,7 +108,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// The closure renders `T` only. When a chain also has to render other types, for example the
     /// elements of a collection or an expected value of a different type, use a renderer that
-    /// implements [`crate::ValueRenderer`] for each of them and pass it to
+    /// implements [`crate::renderer::ValueRenderer`] for each of them and pass it to
     /// [`AssertThat::with_renderer`].
     #[must_use]
     pub fn with_debug_format<F>(self, renderer: F) -> AssertThat<'t, T, M, CustomRenderer<F>>
@@ -121,11 +121,11 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// Replaces the renderer used in failure messages.
     ///
     /// The renderer is type state on `AssertThat`, so every later assertion renders through `R2`.
-    /// Implement [`ValueRenderer<T>`](crate::ValueRenderer) for each value a failure displays.
-    /// Type-specific structural assertions compose leaf renderers into collection, iterator, map,
-    /// range, and wrapper syntax. Generic assertions such as `has_length` treat the whole subject
-    /// as opaque and require a renderer for it. Implement `Clone` when derived assertions such as
-    /// `satisfies` need a copy.
+    /// Implement [`ValueRenderer<T>`](crate::renderer::ValueRenderer) for each value a failure
+    /// displays. Type-specific structural assertions compose leaf renderers into collection,
+    /// iterator, map, range, and wrapper syntax. Generic assertions such as `has_length` treat
+    /// the whole subject as opaque and require a renderer for it. Implement `Clone` when
+    /// derived assertions such as `satisfies` need a copy.
     ///
     /// ```
     /// use core::fmt;
@@ -148,7 +148,8 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///     .is_equal_to(Secret(1));
     /// ```
     ///
-    /// See [`crate::ValueRenderer`] for the `Clone` requirement and for honoring pretty-printing.
+    /// See [`crate::renderer::ValueRenderer`] for the `Clone` requirement and for honoring
+    /// pretty-printing.
     #[must_use]
     pub fn with_renderer<R2>(self, renderer: R2) -> AssertThat<'t, T, M, R2> {
         let AssertThat { actual, state } = self;

@@ -1,13 +1,17 @@
 use crate::{
-    AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
     assertions::iterator::{
         Contains, ContainsAll, ContainsExactlyInAnyOrder, ContainsMatching, DoesNotContain,
         DoesNotContainMatching, ElementsAreInAnyOrder, IsEmpty, IsNotEmpty, LengthScan,
         PositionReporting::Unavailable, run,
     },
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{MatcherList, lists::SatisfyingList, satisfying},
+    expectation::Expectation,
+    expectation::lists::SatisfyingList,
+    matchers::{MatcherList, satisfying},
     mode::Capture,
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 
 /// Chainable assertions over a fresh borrowed iteration of a collection-like value.
@@ -34,7 +38,7 @@ pub trait IntoIteratorAssertions<T, R = DebugRenderer> {
     /// Asserts that every expected element is present during one borrowed traversal.
     ///
     /// Extra subject elements are allowed and duplicates are not counted, matching
-    /// [`CollectionAssertions::contains_all`](crate::assertions::collection::CollectionAssertions::contains_all).
+    /// [`CollectionAssertions::contains_all`](crate::assertions::CollectionAssertions::contains_all).
     /// The traversal stops when all expected elements have been found. It cannot complete on a
     /// non-terminating source if an expected element never occurs.
     fn into_iter_contains_all<E>(self, expected: impl AsRef<[E]>) -> Self
@@ -321,7 +325,7 @@ mod tests {
         #[test]
         fn matchers_render_elements_without_debug() {
             use crate::{
-                expectation::{anything, predicate},
+                matchers::{anything, predicate},
                 test_support::{NumericRenderer, SentinelRenderer},
             };
 
@@ -440,7 +444,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
-                into_iter_contains_matching(crate::expectation::predicate(|it: &i32| *it > 7))
+                into_iter_contains_matching(matchers::predicate(|it: &i32| *it > 7))
             );
         }
 
@@ -449,7 +453,7 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
-                    .into_iter_contains_matching(crate::expectation::predicate(|it: &i32| *it > 7));
+                    .into_iter_contains_matching(matchers::predicate(|it: &i32| *it > 7));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -571,7 +575,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
-                into_iter_does_not_contain_matching(crate::expectation::predicate(|it: &i32| {
+                into_iter_does_not_contain_matching(matchers::predicate(|it: &i32| {
                     *it % 2 == 0
                 }))
             );
@@ -582,9 +586,9 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
-                    .into_iter_does_not_contain_matching(crate::expectation::predicate(
-                        |it: &i32| *it % 2 == 0,
-                    ));
+                    .into_iter_does_not_contain_matching(matchers::predicate(|it: &i32| {
+                        *it % 2 == 0
+                    }));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
@@ -648,9 +652,9 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
-                into_iter_contains_exactly_in_any_order_matching(
-                    crate::expectation::predicate_list([is_one, is_two, is_nine,])
-                )
+                into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
+                    is_one, is_two, is_nine,
+                ]))
             );
         }
 
@@ -661,12 +665,10 @@ mod tests {
             struct Opaque(u8);
 
             assert_that!(vec![Opaque(1), Opaque(2)])
-                .into_iter_contains_exactly_in_any_order_matching(
-                    crate::expectation::predicate_list([
-                        |it: &Opaque| it.0 == 2,
-                        |it: &Opaque| it.0 == 1,
-                    ]),
-                );
+                .into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
+                    |it: &Opaque| it.0 == 2,
+                    |it: &Opaque| it.0 == 1,
+                ]));
         }
 
         fn is_one(value: &i32) -> bool {
@@ -686,9 +688,9 @@ mod tests {
             assert_that_panic_by(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
-                    .into_iter_contains_exactly_in_any_order_matching(
-                        crate::expectation::predicate_list([is_one, is_two, is_nine]),
-                    );
+                    .into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
+                        is_one, is_two, is_nine,
+                    ]));
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"

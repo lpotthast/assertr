@@ -1,8 +1,11 @@
 //! Assertions for resolving executable programs.
 
 use crate::mode::{Mode, Panic};
-use crate::{Actual, AssertThat, DebugRenderer, Fact, ValueRenderer, failure::FailureKind};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{
+    Actual, AssertThat, failure::Fact, failure::FailureKind, renderer::DebugRenderer,
+    renderer::ValueRenderer,
+};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use alloc::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
@@ -128,7 +131,7 @@ impl<'a, M: Mode, R> ProgramAssertions<'a, R> for AssertThat<'_, Program<'a>, M,
     where
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
-        self.apply_assertion(Exists)
+        self.matches(Exists)
     }
 }
 

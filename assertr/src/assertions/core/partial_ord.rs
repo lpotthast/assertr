@@ -2,7 +2,7 @@ use super::partial_eq::operand_expectation;
 use crate::borrow_for::BorrowFor;
 use core::cmp::Ordering;
 
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
 
 /// Generates one reusable ordering bound: the struct, its constructors, and its expectation.
 /// The bound accepts the listed [`Ordering`] results of `actual.partial_cmp(expected)`.
@@ -60,7 +60,7 @@ ordering_expectation! {
     ///
     /// ```
     /// use assertr::prelude::*;
-    /// use assertr::assertions::core::partial_ord::LessThan;
+    /// use assertr::matchers::LessThan;
     ///
     /// let maximum = LessThan::new(65);
     /// assert_that!(42).matches(&maximum);
@@ -81,7 +81,7 @@ ordering_expectation! {
     ///
     /// ```
     /// use assertr::prelude::*;
-    /// use assertr::assertions::core::partial_ord::GreaterThan;
+    /// use assertr::matchers::GreaterThan;
     ///
     /// let minimum = GreaterThan::new(18);
     /// assert_that!(42).matches(&minimum);
@@ -102,7 +102,7 @@ ordering_expectation! {
     ///
     /// ```
     /// use assertr::prelude::*;
-    /// use assertr::assertions::core::partial_ord::LessOrEqual;
+    /// use assertr::matchers::LessOrEqual;
     ///
     /// let maximum = LessOrEqual::new(65);
     /// assert_that!(42).matches(&maximum);
@@ -123,7 +123,7 @@ ordering_expectation! {
     ///
     /// ```
     /// use assertr::prelude::*;
-    /// use assertr::assertions::core::partial_ord::GreaterOrEqual;
+    /// use assertr::matchers::GreaterOrEqual;
     ///
     /// let minimum = GreaterOrEqual::new(18);
     /// assert_that!(42).matches(&minimum);
@@ -215,7 +215,7 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: PartialOrd<E::View>,
         E: BorrowFor<T>,
     {
-        self.apply_assertion(LessThan::new(expected))
+        self.matches(LessThan::new(expected))
     }
 
     #[track_caller]
@@ -225,7 +225,7 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: PartialOrd<E::View>,
         E: BorrowFor<T>,
     {
-        self.apply_assertion(GreaterThan::new(expected))
+        self.matches(GreaterThan::new(expected))
     }
 
     #[track_caller]
@@ -235,7 +235,7 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: PartialOrd<E::View>,
         E: BorrowFor<T>,
     {
-        self.apply_assertion(LessOrEqual::new(expected))
+        self.matches(LessOrEqual::new(expected))
     }
 
     #[track_caller]
@@ -245,7 +245,7 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: PartialOrd<E::View>,
         E: BorrowFor<T>,
     {
-        self.apply_assertion(GreaterOrEqual::new(expected))
+        self.matches(GreaterOrEqual::new(expected))
     }
 }
 

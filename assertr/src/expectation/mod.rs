@@ -19,15 +19,16 @@
 //! use assertr::{matchers::{EqualTo, each}, prelude::*};
 //!
 //! let expected = EqualTo::new(3);
-//! assert_that!(3).apply_assertion(&expected);
+//! assert_that!(3).matches(&expected);
 //! assert_that!([3, 3]).matches(each(&expected));
 //! ```
 //!
 //! The [custom assertions guide](crate#custom-assertions) walks through a complete implementation.
 
 use crate::{
-    AssertionFailure, DebugRenderer,
+    failure::AssertionFailure,
     failure::{FailureBuilder, FailureKind},
+    renderer::DebugRenderer,
 };
 use alloc::vec::Vec;
 
@@ -50,25 +51,16 @@ macro_rules! composite_items {
 }
 pub(crate) use composite_items;
 
-mod all_of;
-mod any_of;
-mod anything;
-mod dereferenced;
+pub(crate) mod all_of;
+pub(crate) mod any_of;
+pub(crate) mod anything;
+pub(crate) mod dereferenced;
 pub(crate) mod field;
 pub(crate) mod lists;
-mod predicate;
-mod satisfying;
+pub(crate) mod predicate;
+pub(crate) mod satisfying;
 #[cfg(test)]
 pub(crate) mod test_support;
-
-pub use all_of::{AllOf, all_of};
-pub use any_of::{AnyOf, any_of};
-pub use anything::{Anything, anything};
-pub use dereferenced::{Dereferenced, dereferenced};
-pub use field::{Field, field};
-pub use lists::{MatcherList, predicate_list};
-pub use predicate::{Predicate, predicate};
-pub use satisfying::{Satisfying, satisfying};
 
 pub(crate) mod context;
 pub use context::AssertionContext;

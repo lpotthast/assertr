@@ -1,7 +1,7 @@
 use crate::assertions::std::mutex::{explain_acquired_lock, explain_held_lock};
 use crate::failure::FailureKind;
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use tokio::sync::Mutex;
 
 /// Observes a locked Tokio mutex, retaining any acquired guard on rejection.
@@ -218,12 +218,12 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, M, R> for AssertThat<'_, Mutex<T>, M
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsLocked)
+        self.matches(IsLocked)
     }
 
     #[track_caller]
     fn is_not_locked(self) -> Self {
-        self.apply_assertion(IsNotLocked)
+        self.matches(IsNotLocked)
     }
 
     #[track_caller]
@@ -266,7 +266,9 @@ mod tests {
 
     mod observations {
         use super::super::{HasValueSatisfying, IsNotLocked};
-        use crate::{RenderingBudget, matchers::all_of, prelude::*, test_support::NoRenderer};
+        use crate::{
+            matchers::all_of, prelude::*, renderer::RenderingBudget, test_support::NoRenderer,
+        };
         use core::cell::Cell;
         use tokio::sync::Mutex;
 

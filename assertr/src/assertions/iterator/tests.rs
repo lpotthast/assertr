@@ -1,6 +1,6 @@
 //! Resource lifetime and consumption contracts shared by every streaming family.
 
-use crate::{AssertionFailures, matchers::eq, prelude::*};
+use crate::{failure::AssertionFailures, matchers::eq, prelude::*};
 use core::{
     cell::{Cell, RefCell, RefMut},
     fmt,
@@ -483,7 +483,7 @@ mod release {
                 };
                 let calls = Cell::new(0);
                 let candidate_guard = RefCell::new(());
-                let matcher = crate::expectation::predicate(|value: &i32| {
+                let matcher = matchers::predicate(|value: &i32| {
                     let _guard = candidate_guard.borrow_mut();
                     calls.set(calls.get() + 1);
                     *value == expected
@@ -758,7 +758,7 @@ mod tracking {
 }
 
 mod reporting {
-    use crate::{Fact, prelude::*};
+    use crate::{failure::Fact, prelude::*};
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -821,7 +821,7 @@ mod reporting {
                     .contains_exactly(["user context"]);
                 element
                     .derive_owned(|value| value.facts.as_slice())
-                    .does_not_contain_matching(crate::expectation::predicate(|it: &Fact| {
+                    .does_not_contain_matching(matchers::predicate(|it: &Fact| {
                         it.label == "Decisive index"
                     }));
             },
@@ -839,7 +839,7 @@ mod reporting {
                         )
                         .value(&3_usize),
                     ))
-                    .does_not_contain_matching(crate::expectation::predicate(|it: &Fact| {
+                    .does_not_contain_matching(matchers::predicate(|it: &Fact| {
                         it.label == "Decisive index"
                     }));
             },

@@ -1,6 +1,9 @@
 use crate::renderer::{Rendered, RenderingContext};
-use crate::{AssertThat, DebugRenderer, Fact, Mode, ValueRenderer, failure::FailureKind};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{
+    AssertThat, Mode, failure::Fact, failure::FailureKind, renderer::DebugRenderer,
+    renderer::ValueRenderer,
+};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use std::sync::MutexGuard;
 use std::sync::{Mutex, TryLockError};
 
@@ -210,22 +213,22 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsLocked)
+        self.matches(IsLocked)
     }
 
     #[track_caller]
     fn is_not_locked(self) -> Self {
-        self.apply_assertion(IsNotLocked)
+        self.matches(IsNotLocked)
     }
 
     #[track_caller]
     fn is_poisoned(self) -> Self {
-        self.apply_assertion(IsPoisoned)
+        self.matches(IsPoisoned)
     }
 
     #[track_caller]
     fn is_not_poisoned(self) -> Self {
-        self.apply_assertion(IsNotPoisoned)
+        self.matches(IsNotPoisoned)
     }
 }
 
@@ -286,7 +289,7 @@ mod tests {
         use super::*;
         use crate::{
             assertions::std::mutex::{IsLocked, IsNotLocked},
-            expectation::{all_of, any_of},
+            matchers::{all_of, any_of},
             test_support::NoRenderer,
         };
 

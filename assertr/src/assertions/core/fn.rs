@@ -1,9 +1,13 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, PanicValue, ValueRenderer,
+    AssertThat, PanicValue,
     actual::Actual,
     assertions::support::project_checked,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind},
     mode::Panic,
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 use alloc::{boxed::Box, string::String};
 use core::{
@@ -555,9 +559,10 @@ mod tests {
                         let pending = child.does_not_panic_async();
                         assert_that!(root.state.records.assertion_count()).is_equal_to(0);
                         assert_that!(invocations.get()).is_equal_to(0);
-                        assert_that_panic_by_async(async || {
+                        assert_that_owned!(async || {
                             pending.await;
                         })
+                        .panics_async()
                         .await
                         .has_type::<String>()
                         .contains("unexpectedly panicked");
@@ -571,7 +576,6 @@ mod tests {
         }
 
         mod panics {
-            use crate::assert_that_panic_by_async;
             use crate::prelude::*;
 
             #[test]
@@ -628,9 +632,10 @@ mod tests {
 
             #[tokio::test]
             async fn panics_when_no_panic_occurs() {
-                assert_that_panic_by_async(async || {
+                assert_that_owned!(async || {
                     assert_that_owned!(async || 42).panics_async().await
                 })
+                .panics_async()
                 .await
                 .has_type::<String>()
                 .contains("did not panic");
@@ -638,12 +643,13 @@ mod tests {
 
             #[tokio::test]
             async fn later_failure_does_not_report_that_the_function_did_not_panic() {
-                assert_that_panic_by_async(async || {
+                assert_that_owned!(async || {
                     assert_that_owned!(async || panic!("boom"))
                         .panics_async()
                         .await
                         .has_type::<String>();
                 })
+                .panics_async()
                 .await
                 .has_type::<String>()
                 .contains("is not of the expected type");
@@ -651,7 +657,6 @@ mod tests {
         }
 
         mod does_not_panic {
-            use crate::assert_that_panic_by_async;
             use crate::prelude::*;
 
             #[test]
@@ -671,21 +676,23 @@ mod tests {
                         }
                         std::panic::panic_any(message)
                     };
-                    assert_that_panic_by_async(async || {
+                    assert_that_owned!(async || {
                         assert_that_owned!(async || panic())
                             .with_renderer(CustomValueRenderer)
                             .does_not_panic_async()
                             .await;
                     })
+                    .panics_async()
                     .await
                     .has_type::<String>()
                     .contains(r#"Panic message: custom("private-async-panic-value")"#);
-                    assert_that_panic_by_async(async || {
+                    assert_that_owned!(async || {
                         assert_that_owned!(async || panic())
                             .with_renderer(RedactingRenderer)
                             .does_not_panic_async()
                             .await;
                     })
+                    .panics_async()
                     .await
                     .has_type::<String>()
                     .contains("Panic message: <redacted>");
@@ -710,12 +717,13 @@ mod tests {
 
             #[tokio::test]
             async fn later_failure_does_not_report_that_the_function_panicked() {
-                assert_that_panic_by_async(async || {
+                assert_that_owned!(async || {
                     assert_that_owned!(async || "actual")
                         .does_not_panic_async()
                         .await
                         .is_equal_to("expected");
                 })
+                .panics_async()
                 .await
                 .has_type::<String>()
                 .contains(r#"Expected: "expected""#);
@@ -723,11 +731,12 @@ mod tests {
 
             #[tokio::test]
             async fn fails_when_function_panics_before_returning_its_future() {
-                assert_that_panic_by_async(async || {
+                assert_that_owned!(async || {
                     assert_that_owned!(|| -> core::future::Ready<()> { panic!("before future") })
                         .does_not_panic_async()
                         .await
                 })
+                .panics_async()
                 .await
                 .has_type::<String>()
                 .contains(r#"Panic message: "before future""#);

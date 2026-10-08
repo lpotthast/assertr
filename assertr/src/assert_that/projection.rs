@@ -392,9 +392,9 @@ mod tests {
         });
 
         assert_that!(&failures[..])
-            .contains_exactly_matching(crate::expectation::predicate_list([
-                |it: &AssertionFailure| it.to_string().contains("Expected: 4"),
-            ]))
+            .contains_exactly_matching(matchers::predicate_list([|it: &AssertionFailure| {
+                it.to_string().contains("Expected: 4")
+            }]))
             .contains_exactly_satisfying([|it: AssertThat<AssertionFailure, Capture>| {
                 it.satisfies_owned(ToString::to_string, |description| {
                     description.contains("Expected: 4");
@@ -432,8 +432,8 @@ mod tests {
                 )
             });
 
-        assert_that!(&failures[..]).contains_exactly_matching(crate::expectation::predicate_list(
-            [|it: &AssertionFailure| it.to_string().contains("xyz")],
-        ));
+        assert_that!(&failures[..]).contains_exactly_matching(matchers::predicate_list([
+            |it: &AssertionFailure| it.to_string().contains("xyz"),
+        ]));
     }
 }

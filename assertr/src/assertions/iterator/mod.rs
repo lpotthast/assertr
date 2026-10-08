@@ -21,9 +21,11 @@ use core::borrow::Borrow;
 use core::{marker::PhantomData, panic::Location};
 
 use crate::{
-    AssertThat, AssertionContext, Mode, ValueRenderer,
+    AssertThat, Mode,
     assertions::{HasLength, collection::Collection},
+    expectation::AssertionContext,
     failure::{Fact, FailureBuilder, FailureKind},
+    renderer::ValueRenderer,
     renderer::{CollectionPresentation, Rendered, RenderingContext, RenderingOrder},
 };
 

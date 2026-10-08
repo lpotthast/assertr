@@ -1,6 +1,7 @@
 use crate::{
-    AssertThat, AssertionFailures,
+    AssertThat,
     actual::Actual,
+    failure::AssertionFailures,
     mode::{Capture, Panic},
 };
 
@@ -47,7 +48,7 @@ use crate::{
 /// # Capturing source expressions
 ///
 /// A method cannot observe the source text of its receiver. Plain fluent calls therefore leave
-/// [`crate::AssertionFailure::expression`] empty. Put
+/// [`crate::failure::AssertionFailure::expression`] empty. Put
 /// [`#[assertr::fluent_expressions]`](crate::fluent_expressions) on a test function or inline test
 /// module to capture fluent entry calls written directly in that scope. A macro invocation may be
 /// the receiver, but calls produced by expanding a macro are not visible to the attribute and
@@ -85,7 +86,7 @@ pub trait IntoAssertContext<'t> {
     fn must(self) -> AssertThat<'t, Self::Subject, Panic>;
 
     /// Borrows the pointee and runs the given assertions in capture mode: failures do not panic but
-    /// are collected and returned as structured [`crate::AssertionFailure`] values.
+    /// are collected and returned as structured [`crate::failure::AssertionFailure`] values.
     ///
     /// See [`AssertThat::capture`] for the capture-closure contract.
     #[track_caller]

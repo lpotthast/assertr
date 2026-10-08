@@ -1,8 +1,12 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
     assertions::support::{explain_variant, project_checked},
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 
 /// Checks for `Some` and returns a borrowed value on success.
@@ -98,7 +102,7 @@ pub trait OptionExtractAssertions<'t, T, R = DebugRenderer> {
 impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, Panic, R> {
     #[track_caller]
     fn get_some(self) -> AssertThat<'t, T, Panic, R> {
-        self.apply_assertion(IsSome)
+        self.matches(IsSome)
             .map(|actual| project_checked(actual, |it| it, Option::as_ref))
     }
 }
@@ -134,7 +138,7 @@ pub trait OptionAssertions<T, M: Mode, R = DebugRenderer> {
 impl<T, M: Mode, R> OptionAssertions<T, M, R> for AssertThat<'_, Option<T>, M, R> {
     #[track_caller]
     fn is_some(self) -> Self {
-        self.apply_assertion(IsSome)
+        self.matches(IsSome)
     }
 
     #[track_caller]
@@ -142,7 +146,7 @@ impl<T, M: Mode, R> OptionAssertions<T, M, R> for AssertThat<'_, Option<T>, M, R
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsNone)
+        self.matches(IsNone)
     }
 
     #[track_caller]
@@ -158,7 +162,7 @@ impl<T, M: Mode, R> OptionAssertions<T, M, R> for AssertThat<'_, Option<T>, M, R
 
 #[cfg(test)]
 mod tests {
-    use crate::{FailureKind, prelude::*};
+    use crate::{failure::FailureKind, prelude::*};
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {

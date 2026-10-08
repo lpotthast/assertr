@@ -8,7 +8,7 @@ use ::alloc::{
 use ::core::ops::{Range, RangeInclusive};
 
 /// A value whose finite length can be inspected by
-/// [`LengthAssertions`](crate::assertions::core::length::LengthAssertions).
+/// [`LengthAssertions`](crate::assertions::LengthAssertions).
 ///
 /// Implement it to make `is_empty`, `is_not_empty`, and `has_length` available on a custom type.
 /// Built-in implementations cover strings, collection families, and integer ranges.

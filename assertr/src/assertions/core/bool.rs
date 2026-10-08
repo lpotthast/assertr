@@ -1,4 +1,4 @@
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
 
 property_expectation! {
     /// Checks that a boolean is true.
@@ -37,7 +37,7 @@ impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
     where
         R: ValueRenderer<bool>,
     {
-        self.apply_assertion(IsTrue)
+        self.matches(IsTrue)
     }
 
     #[track_caller]
@@ -45,7 +45,7 @@ impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
     where
         R: ValueRenderer<bool>,
     {
-        self.apply_assertion(IsFalse)
+        self.matches(IsFalse)
     }
 }
 

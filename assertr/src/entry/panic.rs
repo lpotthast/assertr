@@ -1,92 +1,21 @@
 use alloc::boxed::Box;
 use core::any::Any;
-#[cfg(feature = "std")]
-use core::future::Future;
-
-#[cfg(feature = "std")]
-use crate::{AssertThat, actual::Actual, mode::Panic};
 
 /// A captured panic payload used as the subject of panic-value assertions.
 ///
-/// Only panic assertions create this subject, and they require the `std` feature:
-/// `assert_that_panic_by`, `assert_that_panic_by_async`, and the `panics` and `panics_async`
-/// function assertions. Without `std`, the type exists but no value of it can be produced. Its
+/// Only the `panics` and `panics_async` function assertions create this subject, and they require
+/// the `std` feature. Without `std`, the type exists but no value of it can be produced. Its
 /// payload is type-erased, like the `Box<dyn Any + Send>` returned by `std::panic::catch_unwind`.
-/// Use the [`BoxAssertions`](crate::assertions::alloc::boxed::BoxAssertions) and
-/// [`BoxExtractAssertions`](crate::assertions::alloc::boxed::BoxExtractAssertions) methods to
+/// Use the [`BoxAssertions`](crate::assertions::BoxAssertions) and
+/// [`BoxExtractAssertions`](crate::assertions::BoxExtractAssertions) methods to
 /// inspect it.
 pub struct PanicValue(pub(crate) Box<dyn Any + Send>);
 
-/// Invokes `fun`, asserts that the call or dropping its output panics, and returns an assertion
-/// over the panic payload.
-///
-/// This behaves like `assert_that_owned!(fun).panics()`. Being a function, it cannot record the
-/// caller's source expression for the report. Use `assert_that_owned!(fun).panics().await` when
-/// you want it.
-#[track_caller]
-#[must_use]
-#[cfg(feature = "std")]
-pub fn assert_that_panic_by<'t, R>(
-    fun: impl FnOnce() -> R + 't,
-) -> AssertThat<'t, PanicValue, Panic> {
-    use crate::prelude::FnOnceAssertions;
-
-    AssertThat::<_, Panic>::new(Actual::Owned(fun)).panics()
-}
-
-/// Invokes `fun`, asserts that the call, polling its future, or dropping its output panics, and
-/// returns an assertion over the panic payload.
-///
-/// Being a function, it cannot record the caller's source expression for the report. Use
-/// `assert_that_owned!(fun).panics_async().await` when you want it.
-#[track_caller]
-#[must_use = "futures do nothing unless awaited or polled"]
-#[cfg(feature = "std")]
-pub fn assert_that_panic_by_async<'t, F, Fut, R>(
-    fun: F,
-) -> impl Future<Output = AssertThat<'t, PanicValue, Panic>>
-where
-    F: FnOnce() -> Fut + 't,
-    Fut: Future<Output = R>,
-{
-    use crate::prelude::AsyncFnOnceAssertions;
-
-    AssertThat::<_, Panic>::new(Actual::Owned(fun)).panics_async()
-}
-
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
-    use crate::prelude::*;
-
     #[test]
     fn panic_value_keeps_the_payload_send() {
         fn assert_send<T: Send>() {}
         assert_send::<crate::PanicValue>();
-    }
-
-    #[cfg(feature = "std")]
-    #[tokio::test]
-    async fn assert_that_panic_by_async_failure_location_points_at_its_caller() {
-        let expected_line = line!() + 2;
-        let panic = assert_that_panic_by_async(async || {
-            let _ = assert_that_panic_by_async(async || {}).await;
-        })
-        .await;
-
-        panic
-            .has_type::<String>()
-            .contains(format!("Assertion failed at {}:{expected_line}:", file!()));
-    }
-
-    #[cfg(feature = "std")]
-    #[tokio::test]
-    async fn assert_that_panic_by_async_catches_a_panic_after_yielding() {
-        assert_that_panic_by_async(async || {
-            tokio::task::yield_now().await;
-            panic!("boom");
-        })
-        .await
-        .has_type::<&str>()
-        .is_equal_to("boom");
     }
 }

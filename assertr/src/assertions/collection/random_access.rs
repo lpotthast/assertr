@@ -2,9 +2,14 @@
 
 use super::RandomAccess;
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Fact, ValueRenderer,
+    AssertThat,
+    expectation::AssertionContext,
+    expectation::Expectation,
+    failure::Fact,
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 
 /// Checks constant-time indexed access and returns the borrowed element when present.

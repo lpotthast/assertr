@@ -1,11 +1,14 @@
 #[cfg(test)]
-use crate::RenderingBudget;
+use crate::renderer::RenderingBudget;
 use crate::{
-    AssertThat, AssertionFailure, DebugRenderer, Expectation,
+    AssertThat,
     actual::Actual,
     expectation::Evidence,
+    expectation::Expectation,
+    failure::AssertionFailure,
     failure::{FailureBuilder, FailureKind, PathSegment, report},
     mode::Capture,
+    renderer::DebugRenderer,
     renderer::{RenderingContext, RenderingOrder},
     util::selection::{Keyed, Smallest},
 };
@@ -15,7 +18,7 @@ use alloc::string::String;
 ///
 /// assertr passes a context to [`Expectation::evaluate`] and [`Expectation::explain`]. There is no
 /// public constructor. Run an expectation through an assertion chain, for example with
-/// [`AssertThat::apply_assertion`] or `.matches(..)`.
+/// [`AssertThat::matches`] or `.matches(..)`.
 ///
 /// # Checking a single value
 ///
@@ -49,7 +52,7 @@ use alloc::string::String;
 /// use assertr::failure::{FailureBuilder, PathSegment};
 /// use assertr::matchers::ge;
 /// use assertr::prelude::*;
-/// use assertr::{AssertionContext, Expectation, FailureKind};
+/// use assertr::{expectation::AssertionContext, expectation::Expectation, failure::FailureKind};
 ///
 /// struct Bounds {
 ///     start: u32,
@@ -88,11 +91,11 @@ use alloc::string::String;
 ///     }
 /// }
 ///
-/// assert_that!(Bounds { start: 1, end: 9 }).apply_assertion(BothBounds(ge(1)));
+/// assert_that!(Bounds { start: 1, end: 9 }).matches(BothBounds(ge(1)));
 ///
 /// let failures = assert_that!(Bounds { start: 0, end: 9 })
 ///     .with_location(false)
-///     .capture(|it| it.apply_assertion(BothBounds(ge(1))));
+///     .capture(|it| it.matches(BothBounds(ge(1))));
 /// assert_that!(failures[0].children).has_length(1);
 /// assert_that!(failures[0].to_string()).contains("At .start:");
 /// ```
@@ -101,7 +104,7 @@ use alloc::string::String;
 /// but it cannot undo those effects.
 ///
 /// ```compile_fail
-/// use assertr::{AssertionContext, DebugRenderer, RenderingBudget};
+/// use assertr::{expectation::AssertionContext, renderer::DebugRenderer, renderer::RenderingBudget};
 /// let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
 /// ```
 pub struct AssertionContext<'r, R = DebugRenderer> {
@@ -286,7 +289,7 @@ impl<'r, R> AssertionContext<'r, R> {
         failure: FailureBuilder,
     ) -> FailureBuilder
     where
-        L: crate::expectation::MatcherList<A, R>,
+        L: crate::matchers::MatcherList<A, R>,
     {
         let retained = list.len().min(self.rendering.max_items());
         failure
@@ -455,14 +458,15 @@ impl Default for AssertionContext<'static, DebugRenderer> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AssertionContext, expectation::predicate, prelude::*};
+    use crate::{expectation::AssertionContext, matchers::predicate, prelude::*};
     use core::cell::Cell;
 
     mod record {
         use super::*;
         use crate::{
-            DebugRenderer, RenderingBudget,
             failure::{FailureBuilder, FailureKind, PathSegment},
+            renderer::DebugRenderer,
+            renderer::RenderingBudget,
             renderer::RenderingOrder,
         };
 
@@ -530,9 +534,9 @@ mod tests {
     mod assertion_children {
         use super::*;
         use crate::{
-            assertions::{collection::each, core::partial_eq::equal_to},
-            expectation::all_of,
+            assertions::{collection::each, core::partial_eq::eq},
             failure::PathSegment,
+            matchers::all_of,
             renderer::RenderingOrder,
         };
         use core::fmt;
@@ -564,7 +568,7 @@ mod tests {
                 }
             }
 
-            const KIND: crate::FailureKind = crate::FailureKind::Matching;
+            const KIND: crate::failure::FailureKind = crate::failure::FailureKind::Matching;
 
             fn explain<'a>(
                 &'a self,
@@ -586,12 +590,12 @@ mod tests {
             use crate::__private::field;
             let mut context = AssertionContext::default();
             context.scoped(PathSegment::Field("value"), |context| {
-                assert_that!(context.evaluate(&1, &Group(equal_to(2)))).is_false();
+                assert_that!(context.evaluate(&1, &Group(eq(2)))).is_false();
                 assert_that!(context.evaluate(
                     &1,
                     &Group(field(
                         |value: &i32| Some(value),
-                        equal_to(2),
+                        eq(2),
                         PathSegment::Field("value"),
                     )),
                 ))
@@ -623,15 +627,17 @@ mod tests {
             let mut context = AssertionContext::default();
             context.scoped(PathSegment::Field("value"), |context| {
                 context.record(|_| {
-                    crate::failure::FailureBuilder::new::<i32>(crate::FailureKind::Matching)
-                        .child(
-                            crate::failure::FailureBuilder::new::<i32>(
-                                crate::FailureKind::Equality,
-                            )
-                            .path([PathSegment::Field("value")])
-                            .build(),
+                    crate::failure::FailureBuilder::new::<i32>(
+                        crate::failure::FailureKind::Matching,
+                    )
+                    .child(
+                        crate::failure::FailureBuilder::new::<i32>(
+                            crate::failure::FailureKind::Equality,
                         )
-                        .build()
+                        .path([PathSegment::Field("value")])
+                        .build(),
+                    )
+                    .build()
                 });
             });
             let failure = context.into_evidence().children.remove(0);
@@ -644,7 +650,7 @@ mod tests {
             let mut context =
                 AssertionContext::new(&DebugRenderer, RenderingBudget::default().with_max_items(1))
                     .isolated_for_order(RenderingOrder::SortByRenderedText);
-            let matcher = all_of(matchers![each(equal_to(9)), each(equal_to(8))]);
+            let matcher = all_of(matchers![each(eq(9)), each(eq(8))]);
 
             let result = context.scoped(PathSegment::Field("items"), |context| {
                 context.evaluate(&[3, 2, 1], &matcher)
@@ -671,10 +677,7 @@ mod tests {
         fn scoped_paths_participate_in_sorting_before_truncation() {
             use alloc::collections::BTreeSet;
             let actual = BTreeSet::from([[1]]);
-            let matcher = each(all_of(matchers![
-                equal_to([9]),
-                crate::elements_are![equal_to(9)]
-            ]));
+            let matcher = each(all_of(matchers![eq([9]), crate::elements_are![eq(9)]]));
             let paths = [
                 alloc::vec![PathSegment::Field("items")],
                 alloc::vec![PathSegment::Field("items"), PathSegment::Index(0)],
@@ -722,8 +725,8 @@ mod tests {
                         RenderingBudget::default().with_max_items(limit),
                     )
                     .isolated_for_order(order);
-                    assert_that!(context.evaluate(&0, &equal_to(9))).is_false();
-                    let matcher = each(equal_to(9));
+                    assert_that!(context.evaluate(&0, &eq(9))).is_false();
+                    let matcher = each(eq(9));
                     assert_that!(context.evaluate(&[1, 2, 3], &matcher)).is_false();
 
                     let retained = limit.min(4);
@@ -751,8 +754,9 @@ mod tests {
     mod probe {
         use super::*;
         use crate::{
-            expectation::{Evidence, all_of},
+            expectation::Evidence,
             failure::{FailureBuilder, FailureKind},
+            matchers::all_of,
         };
 
         struct Flat<'a>(&'a Cell<usize>);

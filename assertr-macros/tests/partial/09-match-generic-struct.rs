@@ -1,5 +1,4 @@
-use renamed_assertr::matchers::eq;
-use renamed_assertr::{matchers::equal_to, prelude::*};
+use renamed_assertr::{matchers::eq, prelude::*};
 
 struct Record<'a, T, const N: usize> {
     value: T,
@@ -8,9 +7,9 @@ struct Record<'a, T, const N: usize> {
 }
 
 fn check_record<T: PartialEq<T> + std::fmt::Debug>(record: &Record<'_, T, 1>, expected: T) {
-    // `equal_to` compares the generic expected value through its `PartialEq` implementation.
+    // `eq` compares the generic expected value through its `PartialEq` implementation.
     assert_that!(record).matches(partial!(Record::<T, 1> {
-        value: equal_to(expected),
+        value: eq(expected),
         label: eq("example"),
         ..
     }));

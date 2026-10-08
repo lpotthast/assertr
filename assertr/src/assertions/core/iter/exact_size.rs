@@ -1,7 +1,10 @@
-use crate::DebugRenderer;
+use crate::renderer::DebugRenderer;
 use crate::{
-    AssertThat, AssertionContext, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind},
+    renderer::ValueRenderer,
 };
 
 /// Requires [`ExactSizeIterator::len`] to equal an expected count, without advancing the iterator.
@@ -173,7 +176,7 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions<R> for Assert
     where
         R: ValueRenderer<usize>,
     {
-        self.apply_assertion(HasRemainingCount::new(expected))
+        self.matches(HasRemainingCount::new(expected))
     }
 
     #[track_caller]
@@ -181,12 +184,12 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions<R> for Assert
     where
         R: ValueRenderer<usize>,
     {
-        self.apply_assertion(HasNoRemainingElements)
+        self.matches(HasNoRemainingElements)
     }
 
     #[track_caller]
     fn has_remaining_elements(self) -> Self {
-        self.apply_assertion(HasRemainingElements)
+        self.matches(HasRemainingElements)
     }
 }
 

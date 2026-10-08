@@ -12,19 +12,21 @@ use crate::renderer::Rendered;
 
 /// Builds one [`AssertionFailure`].
 ///
-/// Leaf assertions receive a builder in [`Expectation::explain`](crate::Expectation::explain),
-/// fill in the rendered values, the relation, facts, and children, and return it. The chain
-/// executor raises it. Execution adapters, which own an operation the expectation protocol cannot
-/// express, start a builder with [`AssertThat::failure`](crate::AssertThat::failure) and pass it
+/// Leaf assertions receive a builder in
+/// [`Expectation::explain`](crate::expectation::Expectation::explain), fill in the rendered values,
+/// the relation, facts, and children, and return it. The chain executor raises it. Execution
+/// adapters, which own an operation the expectation protocol cannot express, start a builder with
+/// [`AssertThat::failure`](crate::AssertThat::failure) and pass it
 /// to [`AssertThat::raise`](crate::AssertThat::raise). Nested failures are completed with
 /// [`build`](Self::build) and attached to their parent through [`child`](Self::child) or
 /// [`children`](Self::children).
 ///
 /// Every value shown by a failure is rendered through the context obtained from
-/// [`AssertionContext::render`](crate::AssertionContext::render) or
+/// [`AssertionContext::render`](crate::expectation::AssertionContext::render) or
 /// [`AssertThat::render`](crate::AssertThat::render), so the chain's
-/// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`](crate::RenderingBudget) apply.
-/// See [custom assertions](crate#custom-assertions) for a complete example.
+/// [`ValueRenderer`](crate::renderer::ValueRenderer) and
+/// [`RenderingBudget`](crate::renderer::RenderingBudget) apply. See [custom
+/// assertions](crate#custom-assertions) for a complete example.
 #[must_use = "a failure is only recorded by `AssertThat::raise` or returned by `build`"]
 pub struct FailureBuilder {
     failure: AssertionFailure,
@@ -112,12 +114,13 @@ impl FailureBuilder {
 
     /// Sets the relation of an expectation and, for a rejection, its rendered subject.
     ///
-    /// This covers the common shape of [`Expectation::explain`](crate::Expectation::explain).
-    /// Without a rejected subject it states `relation`, such as `has a name`. With one, it shows
-    /// the subject and states `negated`, such as `has an empty name`.
+    /// This covers the common shape of
+    /// [`Expectation::explain`](crate::expectation::Expectation::explain). Without a rejected
+    /// subject it states `relation`, such as `has a name`. With one, it shows the subject and
+    /// states `negated`, such as `has an empty name`.
     ///
     /// ```
-    /// # use assertr::{AssertionContext, ValueRenderer, failure::FailureBuilder};
+    /// # use assertr::{expectation::AssertionContext, renderer::ValueRenderer, failure::FailureBuilder};
     /// # struct Person { name: String }
     /// # fn explain<R: ValueRenderer<str>>(
     /// #     rejected: Option<(&Person, ())>,
@@ -192,7 +195,8 @@ mod tests {
 
     use super::FailureBuilder;
     use crate::{
-        Fact, FailureKind,
+        failure::Fact,
+        failure::FailureKind,
         prelude::*,
         renderer::{RenderedBody, RenderingContext},
     };

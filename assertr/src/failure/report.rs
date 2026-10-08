@@ -1,5 +1,5 @@
 //! Assertr's human-readable failure report, produced by the `Display` implementations of
-//! [`AssertionFailure`] and [`AssertionFailures`](crate::AssertionFailures).
+//! [`AssertionFailure`] and [`AssertionFailures`](crate::failure::AssertionFailures).
 //!
 //! The body grammar is:
 //!
@@ -31,7 +31,8 @@ use alloc::{format, string::String, vec::Vec};
 use core::fmt::{self, Display, Write};
 
 use crate::{
-    AssertionFailure, Fact,
+    failure::AssertionFailure,
+    failure::Fact,
     failure::{BANNER, PathSegment},
     renderer::Rendered,
 };
@@ -498,6 +499,34 @@ mod tests {
                       - has a valid identifier
                 -------- assertr --------
             "});
+        }
+    }
+
+    mod expression_line {
+        use super::*;
+
+        #[test]
+        fn is_capped_to_one_line_and_one_hundred_characters() {
+            const LONG_EXPRESSION: &str = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvw";
+
+            let failures = assert_that!(42)
+                .with_expression("first line\nsecond line")
+                .with_location(false)
+                .capture(|it| it.is_equal_to(43));
+            assert_that!(failures[0].to_string()).contains("Expression: `first line...`\n\n");
+
+            let failures = assert_that!(42)
+                .with_expression(LONG_EXPRESSION)
+                .with_location(false)
+                .capture(|it| it.is_equal_to(43));
+            let rendered = failures[0].to_string();
+            let expression_line = rendered
+                .lines()
+                .find(|line| line.starts_with("Expression:"))
+                .expect("expression line");
+            assert_that!(expression_line.chars().count()).is_equal_to("Expression: ``".len() + 100);
+            assert_that!(expression_line).ends_with("...`");
+            assert_that!(failures[0].expression).is_equal_to(Some(LONG_EXPRESSION));
         }
     }
 

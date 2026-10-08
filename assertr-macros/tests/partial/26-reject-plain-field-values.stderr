@@ -18,15 +18,15 @@ error[E0277]: `{integer}` is not an expectation for `i32`
              `ContainsElement<B, E>` implements `Expectation<Range, R>`
              `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
            and $N others
-   = note: required for `assertr::expectation::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>` to implement `Expectation<Named>`
-   = note: required for `assertr::__private::Cons<assertr::expectation::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Named>`
+   = note: required for `assertr::matchers::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>` to implement `Expectation<Named>`
+   = note: required for `assertr::__private::Cons<assertr::matchers::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Named>`
    = note: 1 redundant requirement hidden
-   = note: required for `assertr::__private::PartialMatch<Named, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:55: 11:60}, assertr::__private::Cons<assertr::expectation::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>>` to implement `Expectation<Named>`
-note: required by a bound in `matches`
-  --> $WORKSPACE/assertr/src/assertions/matcher.rs
+   = note: required for `assertr::__private::PartialMatch<Named, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:55: 11:60}, assertr::__private::Cons<assertr::matchers::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>>` to implement `Expectation<Named>`
+note: required by a bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
+  --> $WORKSPACE/assertr/src/assert_that/execution.rs
    |
-   |     fn matches<E: Expectation<T, R>>(self, expected: E) -> Self;
-   |                   ^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+   |     pub fn matches<D: Expectation<T, R>>(self, expected: D) -> Self {
+   |                       ^^^^^^^^^^^^^^^^^ required by this bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
 
 error[E0277]: `{integer}` is not an expectation for `i32`
   --> tests/partial/26-reject-plain-field-values.rs:12:36
@@ -48,12 +48,12 @@ error[E0277]: `{integer}` is not an expectation for `i32`
              `ContainsElement<B, E>` implements `Expectation<Range, R>`
              `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
            and $N others
-   = note: required for `assertr::expectation::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>` to implement `Expectation<Tuple>`
-   = note: required for `assertr::__private::Cons<assertr::expectation::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Tuple>`
+   = note: required for `assertr::matchers::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>` to implement `Expectation<Tuple>`
+   = note: required for `assertr::__private::Cons<assertr::matchers::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Tuple>`
    = note: 1 redundant requirement hidden
-   = note: required for `assertr::__private::PartialMatch<Tuple, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, assertr::__private::Cons<assertr::expectation::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>, assertr::__private::Nil>>` to implement `Expectation<Tuple>`
-note: required by a bound in `matches`
-  --> $WORKSPACE/assertr/src/assertions/matcher.rs
+   = note: required for `assertr::__private::PartialMatch<Tuple, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, assertr::__private::Cons<assertr::matchers::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>, assertr::__private::Nil>>` to implement `Expectation<Tuple>`
+note: required by a bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
+  --> $WORKSPACE/assertr/src/assert_that/execution.rs
    |
-   |     fn matches<E: Expectation<T, R>>(self, expected: E) -> Self;
-   |                   ^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+   |     pub fn matches<D: Expectation<T, R>>(self, expected: D) -> Self {
+   |                       ^^^^^^^^^^^^^^^^^ required by this bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`

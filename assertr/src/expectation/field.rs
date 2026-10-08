@@ -1,6 +1,7 @@
 use crate::{
-    AssertionContext, Expectation,
+    expectation::AssertionContext,
     expectation::Evidence,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind, PathSegment},
 };
 use core::fmt;
@@ -60,7 +61,7 @@ impl<A: ?Sized, T: ?Sized, F, M: fmt::Debug> fmt::Debug for Field<A, T, F, M> {
 ///     )
 /// }
 ///
-/// assert_that!(Person { name: "Ada".into() }).apply_assertion(has_name());
+/// assert_that!(Person { name: "Ada".into() }).matches(has_name());
 /// let failures = assert_that!(Person { name: String::new() }).capture(|it| it.matches(has_name()));
 /// assert_that!(failures[0].to_string()).contains("At .name:");
 /// ```
@@ -156,9 +157,9 @@ where
 mod tests {
     use super::{field, projected};
     use crate::{
-        assertions::core::partial_eq::equal_to,
-        expectation::predicate,
+        assertions::core::partial_eq::eq,
         failure::{FailureKind, PathSegment},
+        matchers::predicate,
         prelude::*,
     };
     use core::cell::Cell;
@@ -167,7 +168,7 @@ mod tests {
     fn scopes_projected_evidence_to_the_field() {
         let matcher = projected(
             |value: &(i32,)| Some(&value.0),
-            equal_to(2),
+            eq(2),
             PathSegment::TupleIndex(0),
         );
         let failures = assert_that!((1,)).capture(|it| it.matches(matcher));
@@ -198,7 +199,7 @@ mod tests {
         struct Person {
             name: &'static str,
         }
-        let matcher = field("name", |person: &Person| &person.name, equal_to("Ada"));
+        let matcher = field("name", |person: &Person| &person.name, eq("Ada"));
         let failures = assert_that!(Person { name: "Bob" })
             .with_location(false)
             .capture(|it| it.matches(&matcher));

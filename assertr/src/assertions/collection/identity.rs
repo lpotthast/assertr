@@ -2,7 +2,8 @@
 
 use super::{Collection, StableOrder};
 use crate::{
-    AssertionContext, Expectation,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::{Rendered, RenderingOrder},
     util::matching::assign_exactly,
@@ -327,7 +328,7 @@ impl<'e, C: StableOrder + ?Sized, U: ?Sized + 'e, B, R> Expectation<C, R>
 where
     C::Item: Borrow<U>,
     B: AsRef<[&'e U]>,
-    R: crate::ValueRenderer<usize>,
+    R: crate::renderer::ValueRenderer<usize>,
 {
     type Success<'a>
         = ()

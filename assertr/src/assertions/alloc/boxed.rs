@@ -1,8 +1,12 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Fact, PanicValue,
+    AssertThat, PanicValue,
     assertions::support::project_checked,
+    expectation::AssertionContext,
+    expectation::Expectation,
+    failure::Fact,
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
+    renderer::DebugRenderer,
 };
 use alloc::{boxed::Box, string::String};
 use core::any::{Any, type_name, type_name_of_val};
@@ -165,14 +169,14 @@ pub trait BoxExtractAssertions<'t, R = DebugRenderer> {
 impl<P: Payload, M: Mode, R> BoxAssertions<R> for AssertThat<'_, P, M, R> {
     #[track_caller]
     fn is_of_type<E: 'static>(self) -> Self {
-        self.apply_assertion(IsOfType::<E>::new())
+        self.matches(IsOfType::<E>::new())
     }
 }
 
 impl<'t, P: Payload, R> BoxExtractAssertions<'t, R> for AssertThat<'t, P, Panic, R> {
     #[track_caller]
     fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
-        self.apply_assertion(IsOfType::<E>::new()).map(|actual| {
+        self.matches(IsOfType::<E>::new()).map(|actual| {
             project_checked(
                 actual,
                 |payload| payload.into_any().downcast::<E>().ok().map(|value| *value),
@@ -232,7 +236,7 @@ mod tests {
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
                         .derive(|value| &value.kind)
-                        .is_equal_to(crate::FailureKind::Variant);
+                        .is_equal_to(crate::failure::FailureKind::Variant);
                 },
             ]);
         }
@@ -289,7 +293,8 @@ mod tests {
                 let actual = PanicValue(Box::new("text"));
                 assert_that_panic_by(|| {
                     let assertion = assert_that!(actual).with_panic_presentation(|failure| {
-                        assert_that!(failure.kind).is_equal_to(crate::FailureKind::Variant);
+                        assert_that!(failure.kind)
+                            .is_equal_to(crate::failure::FailureKind::Variant);
                         String::from(failure.subject_type_name)
                     });
                     if extract {

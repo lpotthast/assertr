@@ -5,12 +5,14 @@ use super::{
 use alloc::boxed::Box;
 
 use crate::{
-    AssertionFailure, Expectation,
     assertions::collection::{
         ContainsExactlyInAnyOrder as CollectionContainsExactlyInAnyOrder, elements_are_in_any_order,
     },
     borrow_for::BorrowFor,
-    expectation::{Evidence, MatcherList},
+    expectation::Evidence,
+    expectation::Expectation,
+    failure::AssertionFailure,
+    matchers::MatcherList,
 };
 
 /// Why unordered equality rejected its input.

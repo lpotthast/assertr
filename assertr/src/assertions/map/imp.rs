@@ -4,9 +4,11 @@ use super::{Map, MapLookup, entry::key_segment};
 use crate::assertions::core::partial_eq::operand_expectation;
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
-    AssertionContext, Expectation, ValueRenderer,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::RenderingOrder,
+    renderer::ValueRenderer,
 };
 use alloc::{collections::BTreeSet, vec::Vec};
 use core::{marker::PhantomData, ptr};

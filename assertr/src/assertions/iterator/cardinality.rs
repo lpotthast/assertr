@@ -2,7 +2,7 @@ use super::{
     AssertionContext, Borrow, FailureBuilder, FailureKind, KnownLength, LengthBound,
     PREVIEW_CAPACITY, PhantomData, RenderingOrder, Scan, Tail, ValueRenderer,
 };
-use crate::Fact;
+use crate::failure::Fact;
 
 /// Requires an iterator to yield no element, consuming at most one.
 pub(crate) struct IsEmpty<T>(PhantomData<fn() -> T>);
@@ -191,7 +191,7 @@ mod tests {
         use super::super::LengthScan;
         use crate::assertions::iterator::run;
         use crate::{
-            AssertionFailures,
+            failure::AssertionFailures,
             prelude::*,
             renderer::RenderedBody,
             test_support::{CustomValueRenderer, assert_custom_fact, assert_custom_value},

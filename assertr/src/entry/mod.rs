@@ -8,8 +8,6 @@ mod type_subject;
 #[cfg(feature = "fluent")]
 pub use fluent::{IntoAssertContext, IntoOwnedAssertContext};
 pub use panic::PanicValue;
-#[cfg(feature = "std")]
-pub use panic::{assert_that_panic_by, assert_that_panic_by_async};
 pub use type_subject::{Type, assert_that_type};
 
 /// The main macro entry point into an assertion context. Borrows its input.
@@ -33,11 +31,13 @@ pub use type_subject::{Type, assert_that_type};
 #[macro_export]
 macro_rules! assert_that {
     ($e:expr) => {
-        $crate::__private::assert_that_macro::Wrap {
-            inner: $crate::__private::assert_that_macro::Fallback(&$e),
-        }
-        .into_assert_that()
-        .with_expression(::core::stringify!($e))
+        $crate::__private::with_expression(
+            $crate::__private::assert_that_macro::Wrap {
+                inner: $crate::__private::assert_that_macro::Fallback(&$e),
+            }
+            .into_assert_that(),
+            ::core::stringify!($e),
+        )
     };
 }
 
@@ -55,6 +55,9 @@ macro_rules! assert_that {
 #[macro_export]
 macro_rules! assert_that_owned {
     ($e:expr) => {
-        $crate::__private::assert_that_macro::owned($e).with_expression(::core::stringify!($e))
+        $crate::__private::with_expression(
+            $crate::__private::assert_that_macro::owned($e),
+            ::core::stringify!($e),
+        )
     };
 }

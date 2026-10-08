@@ -9,11 +9,12 @@ use super::{
     PREVIEW_CAPACITY, PhantomData, RenderingOrder, Scan, Tail, ValueRenderer, consumed_fact,
 };
 use crate::{
-    Fact,
     assertions::collection::Placement,
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{Evidence, MatcherList, context::unsatisfied},
+    expectation::{Evidence, context::unsatisfied},
+    failure::Fact,
     failure::PathSegment,
+    matchers::MatcherList,
 };
 
 /// Checks one expected slot against the element at a yield position, recording any rejection
@@ -840,7 +841,7 @@ mod tests {
                     let descriptions = Cell::new(0);
                     let later_descriptions = Cell::new(0);
                     let matchers = crate::matchers![
-                        crate::expectation::predicate(|actual: &i32| {
+                        matchers::predicate(|actual: &i32| {
                             evaluations.set(evaluations.get() + 1);
                             *actual == 1
                         }),

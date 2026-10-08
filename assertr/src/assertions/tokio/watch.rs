@@ -1,7 +1,7 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::failure::FailureKind;
 use crate::prelude::*;
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 
 /// Compares the current watch value without marking it seen.
 #[derive(Debug, Clone)]
@@ -153,17 +153,17 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R>
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     {
-        self.apply_assertion(HasCurrentValue::new(expected))
+        self.matches(HasCurrentValue::new(expected))
     }
 
     #[track_caller]
     fn has_changed(self) -> Self {
-        self.apply_assertion(HasChanged)
+        self.matches(HasChanged)
     }
 
     #[track_caller]
     fn has_not_changed(self) -> Self {
-        self.apply_assertion(HasNotChanged)
+        self.matches(HasNotChanged)
     }
 }
 

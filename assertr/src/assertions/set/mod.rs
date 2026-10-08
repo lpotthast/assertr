@@ -2,7 +2,7 @@
 //!
 //! A set implements [`Collection`] for order-free element assertions and [`SetLookup`] for subset,
 //! superset, and disjointness relations. It does not implement
-//! [`StableOrder`](crate::assertions::collection::StableOrder), even when its iteration happens to
+//! [`StableOrder`](crate::assertions::StableOrder), even when its iteration happens to
 //! be deterministic.
 //!
 //! Implement [`Collection`] and [`SetLookup`] for a custom set to make every set assertion
@@ -162,16 +162,16 @@ mod tests {
 
         assert_that!(BTreeSet::from([1, 2, 3]))
             .contains(2)
-            .contains_matching(crate::expectation::predicate(is_two))
+            .contains_matching(matchers::predicate(is_two))
             .contains_satisfying(satisfies_two)
             .contains_all([1, 3])
             .does_not_contain(4)
-            .does_not_contain_matching(crate::expectation::predicate(|it: &i32| *it > 7))
+            .does_not_contain_matching(matchers::predicate(|it: &i32| *it > 7))
             .does_not_contain_satisfying(|it| {
                 it.is_equal_to(7);
             })
             .contains_exactly_in_any_order([3, 1, 2])
-            .contains_exactly_in_any_order_matching(crate::expectation::predicate_list(predicates))
+            .contains_exactly_in_any_order_matching(matchers::predicate_list(predicates))
             .contains_exactly_in_any_order_satisfying(assertions)
             .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
             .is_superset_of(BTreeSet::from([1]))

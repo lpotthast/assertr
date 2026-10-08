@@ -6,10 +6,3 @@ pub mod mutex;
 pub mod rw_lock;
 /// Non-extracting assertions for Tokio watch receivers.
 pub mod watch;
-
-/// Tokio assertion traits.
-pub mod prelude {
-    pub use super::mutex::TokioMutexAssertions;
-    pub use super::rw_lock::TokioRwLockAssertions;
-    pub use super::watch::TokioWatchReceiverAssertions;
-}

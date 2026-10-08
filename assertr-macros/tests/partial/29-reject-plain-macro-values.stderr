@@ -20,11 +20,11 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
   = note: required for `ElementsAre<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `Expectation<[{integer}; 1]>`
-note: required by a bound in `matches`
- --> $WORKSPACE/assertr/src/assertions/matcher.rs
+note: required by a bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
+ --> $WORKSPACE/assertr/src/assert_that/execution.rs
   |
-  |     fn matches<E: Expectation<T, R>>(self, expected: E) -> Self;
-  |                   ^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+  |     pub fn matches<D: Expectation<T, R>>(self, expected: D) -> Self {
+  |                       ^^^^^^^^^^^^^^^^^ required by this bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
 
 error[E0277]: `{integer}` is not an expectation for `{integer}`
  --> tests/partial/29-reject-plain-macro-values.rs:7:31
@@ -48,11 +48,11 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
   = note: required for `ElementsAreInAnyOrder<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `Expectation<[{integer}; 1]>`
-note: required by a bound in `matches`
- --> $WORKSPACE/assertr/src/assertions/matcher.rs
+note: required by a bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
+ --> $WORKSPACE/assertr/src/assert_that/execution.rs
   |
-  |     fn matches<E: Expectation<T, R>>(self, expected: E) -> Self;
-  |                   ^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+  |     pub fn matches<D: Expectation<T, R>>(self, expected: D) -> Self {
+  |                       ^^^^^^^^^^^^^^^^^ required by this bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
 
 error[E0277]: `{integer}` is not an expectation for `{integer}`
  --> tests/partial/29-reject-plain-macro-values.rs:8:59
@@ -75,14 +75,14 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
-note: required by a bound in `assertr::prelude::StableOrderAssertions::contains_exactly_matching`
+note: required by a bound in `assertr::assertions::StableOrderAssertions::contains_exactly_matching`
  --> $WORKSPACE/assertr/src/assertions/collection/stable_order.rs
   |
   |     fn contains_exactly_matching<P>(self, expected: P) -> Self
   |        ------------------------- required by a bound in this associated function
   |     where
-  |         P: crate::expectation::MatcherList<T, R>,
-  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `StableOrderAssertions::contains_exactly_matching`
+  |         P: crate::matchers::MatcherList<T, R>,
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `StableOrderAssertions::contains_exactly_matching`
 
 error[E0277]: `{integer}` is not an expectation for `{integer}`
  --> tests/partial/29-reject-plain-macro-values.rs:9:58
@@ -106,8 +106,8 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
           and $N others
   = note: required for `assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>` to implement `EntryMatcherList<BTreeMap<&str, {integer}>>`
   = note: required for `EntriesAre<assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>>` to implement `Expectation<BTreeMap<&str, {integer}>>`
-note: required by a bound in `matches`
- --> $WORKSPACE/assertr/src/assertions/matcher.rs
+note: required by a bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
+ --> $WORKSPACE/assertr/src/assert_that/execution.rs
   |
-  |     fn matches<E: Expectation<T, R>>(self, expected: E) -> Self;
-  |                   ^^^^^^^^^^^^^^^^^ required by this bound in `MatcherAssertions::matches`
+  |     pub fn matches<D: Expectation<T, R>>(self, expected: D) -> Self {
+  |                       ^^^^^^^^^^^^^^^^^ required by this bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`

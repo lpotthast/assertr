@@ -1,7 +1,4 @@
-use renamed_assertr::{
-    matchers::{eq, equal_to},
-    prelude::*,
-};
+use renamed_assertr::{matchers::eq, prelude::*};
 
 // This expectation supports both equality and matching, with deliberately different behavior.
 #[derive(Debug)]
@@ -17,7 +14,7 @@ impl core::borrow::Borrow<i32> for Both {
     }
 }
 
-impl<R> renamed_assertr::Expectation<i32, R> for Both {
+impl<R> renamed_assertr::expectation::Expectation<i32, R> for Both {
     type Success<'a>
         = ()
     where
@@ -31,17 +28,17 @@ impl<R> renamed_assertr::Expectation<i32, R> for Both {
     fn evaluate(
         &self,
         actual: &i32,
-        _: &renamed_assertr::AssertionContext<'_, R>,
+        _: &renamed_assertr::expectation::AssertionContext<'_, R>,
     ) -> Result<(), ()> {
         if *actual >= self.0 { Ok(()) } else { Err(()) }
     }
 
-    const KIND: renamed_assertr::FailureKind = renamed_assertr::FailureKind::Ordering;
+    const KIND: renamed_assertr::failure::FailureKind = renamed_assertr::failure::FailureKind::Ordering;
     fn explain(
         &self,
         rejected: Option<(&i32, ())>,
         failure: renamed_assertr::failure::FailureBuilder,
-        _: &renamed_assertr::AssertionContext<'_, R>,
+        _: &renamed_assertr::expectation::AssertionContext<'_, R>,
     ) -> renamed_assertr::failure::FailureBuilder {
         match rejected {
             None => failure.relation("meets the lower bound"),
@@ -57,9 +54,9 @@ struct Score {
 fn main() {
     // A matcher remains a matcher even when it also supports equality.
     assert_that!(Score { value: 2 }).matches(partial!(Score { value: Both(1) }));
-    // Both equality constructor names select ordinary equality.
+    // `eq` selects ordinary equality, even for a value that is also a matcher.
     assert_that!(Score { value: 2 }).matches(partial!(Score {
-        value: equal_to(Both(2)),
+        value: eq(Both(2)),
     }));
     let failures = assert_that!(Score { value: 2 })
         .capture(|it| it.matches(partial!(Score { value: eq(Both(1)) })));

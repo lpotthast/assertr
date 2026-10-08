@@ -3,7 +3,6 @@
 mod assertions;
 mod caller_location;
 mod collections;
-#[cfg(not(feature = "std"))]
 mod panic;
 mod rendering;
 
@@ -14,7 +13,6 @@ pub(crate) use assertions::{FailureReportAssertions, assert_trait_impl};
 pub(crate) use caller_location::block_on;
 pub(crate) use caller_location::{assert_caller_location, check_caller_location};
 pub(crate) use collections::{PreservedBag, UnorderedMap, UnorderedSet};
-#[cfg(not(feature = "std"))]
 pub(crate) use panic::assert_that_panic_by;
 pub(crate) use rendering::{
     ComparisonRenderer, CustomValueRenderer, NoRenderer, NumericRenderer, RedactingRenderer,
@@ -31,7 +29,7 @@ pub(crate) fn opaque_predicate<A: ?Sized, F: Fn(&A) -> bool>(callback: F) -> Opa
     OpaquePredicate(callback)
 }
 
-impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::Expectation<A, R> for OpaquePredicate<F> {
+impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::expectation::Expectation<A, R> for OpaquePredicate<F> {
     type Success<'a>
         = ()
     where
@@ -42,7 +40,11 @@ impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::Expectation<A, R> for OpaquePredica
     where
         Self: 'a,
         A: 'a;
-    fn evaluate(&self, actual: &A, _: &crate::AssertionContext<'_, R>) -> Result<(), ()> {
+    fn evaluate(
+        &self,
+        actual: &A,
+        _: &crate::expectation::AssertionContext<'_, R>,
+    ) -> Result<(), ()> {
         if (self.0)(actual) { Ok(()) } else { Err(()) }
     }
 
@@ -51,7 +53,7 @@ impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::Expectation<A, R> for OpaquePredica
         &self,
         rejected: Option<(&A, ())>,
         failure: crate::failure::FailureBuilder,
-        _: &crate::AssertionContext<'_, R>,
+        _: &crate::expectation::AssertionContext<'_, R>,
     ) -> crate::failure::FailureBuilder {
         match rejected {
             None => failure.relation("satisfies the opaque predicate"),
@@ -93,17 +95,17 @@ impl<F: Fn()> borrow_for::BorrowFor<String> for StrOperand<F> {
 /// Renders the string comparison leaves and indexes, without a wrapper renderer.
 #[derive(Clone)]
 pub(crate) struct StringRenderer;
-impl crate::ValueRenderer<str> for StringRenderer {
+impl crate::renderer::ValueRenderer<str> for StringRenderer {
     fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{value:?}")
     }
 }
-impl crate::ValueRenderer<String> for StringRenderer {
+impl crate::renderer::ValueRenderer<String> for StringRenderer {
     fn fmt(&self, value: &String, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        crate::ValueRenderer::<str>::fmt(self, value, f)
+        crate::renderer::ValueRenderer::<str>::fmt(self, value, f)
     }
 }
-impl crate::ValueRenderer<usize> for StringRenderer {
+impl crate::renderer::ValueRenderer<usize> for StringRenderer {
     fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{value}")
     }

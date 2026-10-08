@@ -4,12 +4,13 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Records that one assertion was performed on this chain.
     ///
     /// Every assertion is tracked exactly once, before checking or invoking user code, whether it
-    /// passes or fails. Reusable leaf checks implement [`Expectation`](crate::Expectation) and
-    /// delegate to [`AssertThat::apply_assertion`] or [`AssertThat::test_assertion`], which track
-    /// for them, as the example below does. Methods delegating to these or to other tracked
-    /// assertions must not track again. [`AssertThat::capture`] and the fluent `verify` use the
-    /// count to reject a closure that performed no assertions at all, so an assertion that
-    /// forgets to track makes a passing capture closure panic as if it had been empty.
+    /// passes or fails. Reusable leaf checks implement
+    /// [`Expectation`](crate::expectation::Expectation) and delegate to [`AssertThat::matches`]
+    /// or [`AssertThat::test_assertion`], which track for them, as the example below does.
+    /// Methods delegating to these or to other tracked assertions must not track again.
+    /// [`AssertThat::capture`] and the fluent `verify` use the count to reject a closure that
+    /// performed no assertions at all, so an assertion that forgets to track makes a passing
+    /// capture closure panic as if it had been empty.
     ///
     /// Call this method directly only in an execution adapter, which owns an invocation,
     /// consumption, or polling step that the borrowed expectation protocol cannot express. Such an
@@ -28,7 +29,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// impl<M: Mode, R: ValueRenderer<u32>> EvenAssertions for AssertThat<'_, u32, M, R> {
     ///     #[track_caller]
     ///     fn is_even(self) -> Self {
-    ///         self.apply_assertion(predicate(|value: &u32| value % 2 == 0)
+    ///         self.matches(predicate(|value: &u32| value % 2 == 0)
     ///             .described_as("is even"))
     ///     }
     /// }

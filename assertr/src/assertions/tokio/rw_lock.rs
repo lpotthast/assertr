@@ -1,7 +1,7 @@
 use crate::assertions::std::mutex::locked_data;
 use crate::failure::{Fact, FailureKind};
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
-use crate::{AssertionContext, Expectation, failure::FailureBuilder};
+use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use tokio::sync::RwLock;
 
 /// The immediate acquisition state of a Tokio read-write lock.
@@ -163,7 +163,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsNotLocked)
+        self.matches(IsNotLocked)
     }
 
     #[track_caller]
@@ -171,7 +171,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsReadLocked)
+        self.matches(IsReadLocked)
     }
 
     #[track_caller]
@@ -179,7 +179,7 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsWriteLocked)
+        self.matches(IsWriteLocked)
     }
 }
 
@@ -227,7 +227,7 @@ mod tests {
 
     use core::fmt;
 
-    use crate::ValueRenderer;
+    use crate::renderer::ValueRenderer;
     use tokio::sync::RwLock;
 
     struct WriteGuardCheckingRenderer<'a>(&'a RwLock<i32>);

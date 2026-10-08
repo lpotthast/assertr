@@ -55,7 +55,7 @@ The executor constructs `AssertionContext` from the chain's renderer, budget, an
 
 | Entry | Behavior |
 |---|---|
-| `apply_assertion` | Track and evaluate once. On failure, explain and raise the rejection. On success, drop the success value. Return the original chain. `matches` delegates without another count or failure wrapper. |
+| `matches` | Track and evaluate once. On failure, explain and raise the rejection. On success, drop the success value. Return the original chain. `matches` delegates without another count or failure wrapper. |
 | `test_assertion` | Run the same steps, but return `Some(success)` on success. Raise a rejection and return `None` in capture mode. The caller decides how long to retain the success value. |
 | Private methods used after tracking | Accept an adapter's observation and caller location, or `FnOnce` hooks for observation and explanation. Handle the failure without tracking again. |
 

@@ -11,6 +11,8 @@ mod my_facade {
         /// Counts completed entries, proving that generated code resolves the given path rather than
         /// the dependency found in the manifest.
         pub mod __private {
+            pub use renamed_assertr::__private::with_expression;
+
             pub mod fluent_expressions {
                 pub use renamed_assertr::__private::fluent_expressions::*;
 

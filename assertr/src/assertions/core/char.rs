@@ -1,6 +1,10 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    AssertThat, Mode,
+    expectation::AssertionContext,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind},
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
 };
 
 /// Compares characters under ASCII case folding.
@@ -112,7 +116,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.apply_assertion(EqualToIgnoringAsciiCase::new(expected))
+        self.matches(EqualToIgnoringAsciiCase::new(expected))
     }
 
     #[track_caller]
@@ -120,7 +124,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.apply_assertion(IsLowercase)
+        self.matches(IsLowercase)
     }
 
     #[track_caller]
@@ -128,7 +132,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.apply_assertion(IsUppercase)
+        self.matches(IsUppercase)
     }
 
     #[track_caller]
@@ -136,7 +140,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.apply_assertion(IsAsciiLowercase)
+        self.matches(IsAsciiLowercase)
     }
 
     #[track_caller]
@@ -144,7 +148,7 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
     where
         R: ValueRenderer<char>,
     {
-        self.apply_assertion(IsAsciiUppercase)
+        self.matches(IsAsciiUppercase)
     }
 }
 

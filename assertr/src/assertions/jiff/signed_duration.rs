@@ -2,7 +2,9 @@ use crate::assertions::distance::NumericDistance;
 use crate::borrow_for::BorrowFor;
 use crate::mode::Mode;
 use crate::{
-    AssertThat, DebugRenderer, ValueRenderer,
+    AssertThat,
+    renderer::DebugRenderer,
+    renderer::ValueRenderer,
     renderer::{Rendered, RenderingContext},
 };
 use jiff::SignedDuration;
@@ -87,7 +89,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     where
         R: ValueRenderer<SignedDuration>,
     {
-        self.apply_assertion(IsZero)
+        self.matches(IsZero)
     }
 
     #[track_caller]
@@ -95,7 +97,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     where
         R: ValueRenderer<SignedDuration>,
     {
-        self.apply_assertion(IsNegative)
+        self.matches(IsNegative)
     }
 
     #[track_caller]
@@ -103,7 +105,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     where
         R: ValueRenderer<SignedDuration>,
     {
-        self.apply_assertion(IsPositive)
+        self.matches(IsPositive)
     }
 
     #[track_caller]
@@ -113,7 +115,7 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
         D: BorrowFor<SignedDuration, View = SignedDuration>,
         R: ValueRenderer<SignedDuration>,
     {
-        self.apply_assertion(IsCloseTo::new(expected, allowed_deviation))
+        self.matches(IsCloseTo::new(expected, allowed_deviation))
     }
 }
 

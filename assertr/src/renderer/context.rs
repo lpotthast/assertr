@@ -21,9 +21,9 @@ use super::{
 ///
 /// Custom assertion implementations obtain this context through
 /// [`AssertThat::render`](crate::AssertThat::render) or
-/// [`AssertionContext::render`](crate::AssertionContext::render). Every method renders its leaves
-/// immediately and returns an owned [`Rendered`] tree, requiring a [`ValueRenderer`] only for
-/// the leaf types it displays.
+/// [`AssertionContext::render`](crate::expectation::AssertionContext::render). Every method renders
+/// its leaves immediately and returns an owned [`Rendered`] tree, requiring a [`ValueRenderer`]
+/// only for the leaf types it displays.
 ///
 /// Use [`value`](Self::value) for one leaf value. Leaves retain their complete Rust type name and
 /// hide their type hint by default. Show it with [`Rendered::show_type_hint`].
@@ -261,7 +261,7 @@ impl<'r, R> RenderingContext<'r, R> {
     /// The canonical map, key, and value types are retained, with the map's short type hint shown.
     /// The budget limits retained entries and each leaf independently. [`Map::RENDERING_ORDER`]
     /// selects iteration order or sorting by rendered key text, then rendered value text, before
-    /// applying the item limit. No [`MapLookup`](crate::assertions::map::MapLookup) is required.
+    /// applying the item limit. No [`MapLookup`](crate::assertions::MapLookup) is required.
     pub fn map<M: Map + ?Sized>(self, map: &M) -> Rendered
     where
         R: ValueRenderer<M::Key> + ValueRenderer<M::Value>,

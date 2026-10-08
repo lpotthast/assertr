@@ -127,9 +127,12 @@ impl VisitMut for FluentExpressions {
         let entry_call = expression.clone();
 
         *expression = match entry {
-            EntryCall::Must => syn::parse_quote_spanned! {span=>
-                #entry_call.with_expression(::core::stringify!(#receiver))
-            },
+            EntryCall::Must => {
+                let assertr = &self.assertr;
+                syn::parse_quote_spanned! {span=>
+                    #assertr::__private::with_expression(#entry_call, ::core::stringify!(#receiver))
+                }
+            }
             EntryCall::Verify => {
                 // A function call records the start of its path as its caller location. Give the
                 // resolved crate path the method span too, rather than the attribute's call site,

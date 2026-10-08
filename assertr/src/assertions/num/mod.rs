@@ -1,12 +1,12 @@
 //! Assertions for numeric identities, signs, tolerances, and floating-point classifications.
 
 use crate::borrow_for::BorrowFor;
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
+use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
 #[cfg(any(feature = "std", feature = "libm"))]
 use num_traits::Float;
 use num_traits::{Num, Signed};
 
-pub use super::distance::{CloseToRejection, IsCloseTo, NumericDistance};
+pub use super::distance::{IsCloseTo, NumericDistance};
 
 property_expectation! {
     /// Checks [`Signed::is_negative`], including the sign bit of floating-point values.
@@ -195,7 +195,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsZero)
+        self.matches(IsZero)
     }
 
     #[track_caller]
@@ -211,7 +211,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsOne)
+        self.matches(IsOne)
     }
 
     #[track_caller]
@@ -228,7 +228,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: Signed,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsNegative)
+        self.matches(IsNegative)
     }
 
     #[track_caller]
@@ -237,7 +237,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: Signed,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsPositive)
+        self.matches(IsPositive)
     }
 
     #[track_caller]
@@ -250,7 +250,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: NumericDistance,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsCloseTo::new(expected, allowed_deviation))
+        self.matches(IsCloseTo::new(expected, allowed_deviation))
     }
 
     #[track_caller]
@@ -260,7 +260,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsNan)
+        self.matches(IsNan)
     }
 
     #[track_caller]
@@ -270,7 +270,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsFinite)
+        self.matches(IsFinite)
     }
 
     #[track_caller]
@@ -280,7 +280,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsInfinite)
+        self.matches(IsInfinite)
     }
 
     #[track_caller]
@@ -290,7 +290,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsNormal)
+        self.matches(IsNormal)
     }
 
     #[track_caller]
@@ -300,7 +300,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
         T: Float,
         R: ValueRenderer<T>,
     {
-        self.apply_assertion(IsSubnormal)
+        self.matches(IsSubnormal)
     }
 }
 
@@ -554,7 +554,7 @@ mod tests {
         #[test]
         fn description_labels_the_allowed_deviation() {
             use super::super::IsCloseTo;
-            use crate::Fact;
+            use crate::failure::Fact;
 
             let description =
                 AssertionContext::default().describe::<i32, _>(&IsCloseTo::new(42, 2));

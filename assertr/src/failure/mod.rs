@@ -18,11 +18,11 @@
 //!
 //! ## From assertion to report
 //!
-//! 1. **Building:** A failing [`Expectation`](crate::Expectation) describes itself in
-//!    [`Expectation::explain`](crate::Expectation::explain) by filling in a [`FailureBuilder`].
-//!    Assertions that cannot use an expectation start a builder with [`AssertThat::failure`]
-//!    instead. Values are rendered into [`Rendered`] trees through the chain's [renderer and
-//!    budget](crate::renderer).
+//! 1. **Building:** A failing [`Expectation`](crate::expectation::Expectation) describes itself in
+//!    [`Expectation::explain`](crate::expectation::Expectation::explain) by filling in a
+//!    [`FailureBuilder`]. Assertions that cannot use an expectation start a builder with
+//!    [`AssertThat::failure`] instead. Values are rendered into [`Rendered`] trees through the
+//!    chain's [renderer and budget](crate::renderer).
 //! 2. **Handling:** In capture mode, [`AssertThat::capture`] collects the failures and returns
 //!    them. In panic mode, the first failure panics with the text produced by the [panic
 //!    presentation](AssertThat::with_panic_presentation).
@@ -114,9 +114,9 @@ impl Fact {
     /// Creates a labeled fact from a rendered evidence tree.
     ///
     /// Render diagnostic values through
-    /// [`AssertionContext::render`](crate::AssertionContext::render) in expectations or
-    /// [`AssertThat::render`] in execution adapters, so the active renderer and budget apply.
-    /// Structural metadata and caller-authored prose may be passed as verbatim text.
+    /// [`AssertionContext::render`](crate::expectation::AssertionContext::render) in expectations
+    /// or [`AssertThat::render`] in execution adapters, so the active renderer and budget
+    /// apply. Structural metadata and caller-authored prose may be passed as verbatim text.
     pub fn labelled(label: impl Into<Cow<'static, str>>, value: impl Into<Rendered>) -> Self {
         Self {
             label: label.into(),
@@ -126,7 +126,8 @@ impl Fact {
 
     /// Creates an unlabeled note from a rendered evidence tree.
     ///
-    /// Pass diagnostic values through [`AssertionContext::render`](crate::AssertionContext::render)
+    /// Pass diagnostic values through
+    /// [`AssertionContext::render`](crate::expectation::AssertionContext::render)
     /// or [`AssertThat::render`]. Caller-authored prose may be supplied as verbatim text.
     pub fn note(value: impl Into<Rendered>) -> Self {
         Self::labelled("", value)
@@ -187,8 +188,8 @@ pub struct AssertionFailure {
     /// raised by a derived child records the child's subject type rather than the root's.
     pub subject_type_name: &'static str,
 
-    /// The subject, rendered through the chain's [`ValueRenderer`](crate::ValueRenderer), if the
-    /// assertion shows it.
+    /// The subject, rendered through the chain's
+    /// [`ValueRenderer`](crate::renderer::ValueRenderer), if the assertion shows it.
     pub actual: Option<Rendered>,
 
     /// The sentence between the actual and the expected value, such as `does not contain` or `is
@@ -198,11 +199,11 @@ pub struct AssertionFailure {
     pub relation: Option<Cow<'static, str>>,
 
     /// The value the subject was compared with, rendered through the chain's
-    /// [`ValueRenderer`](crate::ValueRenderer), if the assertion has one.
+    /// [`ValueRenderer`](crate::renderer::ValueRenderer), if the assertion has one.
     pub expected: Option<Rendered>,
 
     /// The value a negated assertion found, although it was not expected, rendered through the
-    /// chain's [`ValueRenderer`](crate::ValueRenderer). Set by assertions such as
+    /// chain's [`ValueRenderer`](crate::renderer::ValueRenderer). Set by assertions such as
     /// `does_not_contain` and `is_not_equal_to` instead of [`expected`](Self::expected).
     pub unexpected: Option<Rendered>,
 
@@ -263,8 +264,8 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// facts, and children, then pass the builder to [`AssertThat::raise`].
     /// [`AssertThat::render`] shows an example.
     ///
-    /// Reusable leaf checks implement [`Expectation`](crate::Expectation) instead. The executor
-    /// then supplies the builder and raises the failure. See [custom
+    /// Reusable leaf checks implement [`Expectation`](crate::expectation::Expectation) instead. The
+    /// executor then supplies the builder and raises the failure. See [custom
     /// assertions](crate#custom-assertions).
     pub fn failure(&self, kind: FailureKind) -> FailureBuilder {
         FailureBuilder::new::<T>(kind)

@@ -40,13 +40,13 @@ panic presentation. They start without a subject name or source expression.
 
 Every chain runs in one of two [modes](mode). In panic mode, the default, the first failing
 assertion panics with its report. In capture mode, failures are collected as
-[`AssertionFailure`] values. Enter capture mode with [`AssertThat::capture`], or with `verify(..)`
+[`AssertionFailure`](failure::AssertionFailure) values. Enter capture mode with [`AssertThat::capture`], or with `verify(..)`
 when the `fluent` feature is enabled.
 
-A failure stores its parts as data: the rendered [`actual`](AssertionFailure::actual) and
-[`expected`](AssertionFailure::expected) values, the [`relation`](AssertionFailure::relation)
-between them, extra [`facts`](AssertionFailure::facts), nested
-[`children`](AssertionFailure::children), and its [`kind`](AssertionFailure::kind). Its `Display`
+A failure stores its parts as data: the rendered [`actual`](failure::AssertionFailure::actual) and
+[`expected`](failure::AssertionFailure::expected) values, the [`relation`](failure::AssertionFailure::relation)
+between them, extra [`facts`](failure::AssertionFailure::facts), nested
+[`children`](failure::AssertionFailure::children), and its [`kind`](failure::AssertionFailure::kind). Its `Display`
 implementation produces the report. In panic mode, the report becomes the panic message unless you
 replace it with [`AssertThat::with_panic_presentation`]. See [`failure`] for details.
 
@@ -119,7 +119,7 @@ assert_that!(String::from("Ada")).matches(&expected);
 ```
 
 References as subjects keep their type. See
-[`PartialEqAssertions`](assertions::core::partial_eq::PartialEqAssertions) for comparing through
+[`PartialEqAssertions`](assertions::PartialEqAssertions) for comparing through
 references and for cross-type comparisons.
 
 ### Expected lists
@@ -192,7 +192,7 @@ Before writing new code, check whether existing tools cover the case:
 - For one check on a field, use [`AssertThat::derive`].
 - For several fields and nested values, use [`partial!`](mod@matchers#structural-syntax).
 - For your own collection or map type, implement the matching capability, such as
-  [`HasLength`](assertions::HasLength) or [`Collection`](assertions::collection::Collection). The
+  [`HasLength`](assertions::HasLength) or [`Collection`](assertions::Collection). The
   existing assertions then work on it. See the [assertion families](assertions).
 
 When a domain check shows up throughout your tests, give it a name. There are three ways, from
@@ -235,17 +235,17 @@ fn has_short_name<R: ValueRenderer<Person>>() -> impl Expectation<Person, R> + C
 }
 
 let ada = Person { name: "Ada".into(), age: 36 };
-assert_that!(&ada).apply_assertion(is_adult()).apply_assertion(has_short_name());
+assert_that!(&ada).matches(is_adult()).matches(has_short_name());
 assert_that!([ada]).contains_matching(has_name());
 
 let failures = assert_that!(Person { name: "".into(), age: 16 })
     .with_location(false)
-    .capture(|person| person.apply_assertion(is_adult()).apply_assertion(has_name()));
+    .capture(|person| person.matches(is_adult()).matches(has_name()));
 assert_that!(failures).has_length(2);
 assert_that!(failures[0].to_string()).contains("At .age:");
 ```
 
-[`AssertThat::apply_assertion`] runs any expectation as a step in a chain. The same values work
+[`AssertThat::matches`] runs any expectation as a step in a chain. The same values work
 with `.matches(..)`, `contains_matching(..)`, and as fields in `partial!`.
 
 ### A chainable method
@@ -301,7 +301,7 @@ impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
         R: ValueRenderer<String>,
     {
         // Apply a reusable expectation.
-        self.apply_assertion(matchers::field(
+        self.matches(matchers::field(
             "name",
             |person: &Person| &person.name,
             matchers::IsNotEmpty,
@@ -329,23 +329,23 @@ your types. See [API stability](#api-stability).
 
 ### Implement an expectation
 
-Implement [`Expectation`] when a check needs its own failure report, or when it produces a value
+Implement [`Expectation`](expectation::Expectation) when a check needs its own failure report, or when it produces a value
 worth keeping, such as a parsed number, an error, or a lock guard. An implementation has two parts:
 
-- [`Expectation::evaluate`] inspects the subject and returns `Ok` with the observed value, or `Err`
+- [`Expectation::evaluate`](expectation::Expectation::evaluate) inspects the subject and returns `Ok` with the observed value, or `Err`
   with the reason for rejection. Use `()` when there is nothing to keep.
-- [`Expectation::explain`] fills in a [`FailureBuilder`](failure::FailureBuilder). It receives the
+- [`Expectation::explain`](expectation::Expectation::explain) fills in a [`FailureBuilder`](failure::FailureBuilder). It receives the
   subject and the rejection from `evaluate`, or `None` when there was no subject, for example a
   missing collection element. It must not evaluate again.
 
-Neither part tracks or raises. The chain does that. Set `KIND` when a [`FailureKind`] fits better
-than the default [`FailureKind::Predicate`].
+Neither part tracks or raises. The chain does that. Set `KIND` when a [`FailureKind`](failure::FailureKind) fits better
+than the default [`FailureKind::Predicate`](failure::FailureKind::Predicate).
 
 This expectation keeps the parsed port on success and the parse error on rejection:
 
 ```
 use assertr::prelude::*;
-use assertr::{AssertionContext, Expectation, Fact};
+use assertr::{expectation::AssertionContext, expectation::Expectation, failure::Fact};
 use assertr::failure::FailureBuilder;
 use core::num::ParseIntError;
 
@@ -384,7 +384,7 @@ let port = assert_that!(address).test_assertion(&IsPort);
 assert_that!(port).is_equal_to(Some(8080));
 
 let failures = assert_that!(String::from("http"))
-    .capture(|it| it.apply_assertion(IsPort));
+    .capture(|it| it.matches(IsPort));
 assert_that!(failures[0].to_string()).contains("is not a port");
 ```
 
@@ -400,9 +400,9 @@ When filling the builder:
   [`relations`](failure::FailureBuilder::relations) sets the subject and the relation in one call.
 - Write relations as lowercase phrases without values or a final period, such as
   `"does not end with"`.
-- Add further evidence with [`fact`](failure::FailureBuilder::fact) using [`Fact::labelled`] or
-  [`Fact::note`], and nested failures with [`children`](failure::FailureBuilder::children).
-- Render every value through [`AssertionContext::render`]. This applies the user's renderer and
+- Add further evidence with [`fact`](failure::FailureBuilder::fact) using [`Fact::labelled`](failure::Fact::labelled) or
+  [`Fact::note`](failure::Fact::note), and nested failures with [`children`](failure::FailureBuilder::children).
+- Render every value through [`AssertionContext::render`](expectation::AssertionContext::render). This applies the user's renderer and
   rendering budget and keeps type information in the failure. Do not format values with `Debug`
   yourself.
 
@@ -426,8 +426,8 @@ Because only leaves need renderers, this map expectation works even though neith
 ```
 # extern crate alloc;
 use alloc::collections::BTreeMap;
-use assertr::{prelude::*, AssertionContext, Expectation, FailureKind};
-use assertr::assertions::map::Map;
+use assertr::{prelude::*, expectation::AssertionContext, expectation::Expectation, failure::FailureKind};
+use assertr::assertions::Map;
 use assertr::failure::FailureBuilder;
 
 struct IsEmptyMap;
@@ -479,7 +479,7 @@ impl ValueRenderer<u32> for TokenRenderer {
 
 let failures = assert_that!(BTreeMap::from([(1_u32, Token(7))]))
     .with_renderer(TokenRenderer)
-    .capture(|it| it.apply_assertion(IsEmptyMap));
+    .capture(|it| it.matches(IsEmptyMap));
 assert_that!(failures[0].to_string()).contains("key(1): token(7)");
 ```
 
@@ -492,4 +492,4 @@ If you collect evidence yourself, keep at most
 [`budget().max_items()`](renderer::RenderingContext::budget) entries and record the rest with
 [`FailureBuilder::omitted_children`](failure::FailureBuilder::omitted_children). The budget limits
 the report, never the result of the check. Inside an expectation, skip optional evidence when
-[`AssertionContext::is_diagnostic`] is false.
+[`AssertionContext::is_diagnostic`](expectation::AssertionContext::is_diagnostic) is false.

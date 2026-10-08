@@ -2,8 +2,11 @@
 
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
-    AssertionContext, Expectation, Fact, ValueRenderer,
+    expectation::AssertionContext,
+    expectation::Expectation,
+    failure::Fact,
     failure::{FailureBuilder, FailureKind},
+    renderer::ValueRenderer,
 };
 use core::num::Wrapping;
 
@@ -23,7 +26,7 @@ use core::num::Wrapping;
 ///
 /// ```
 /// # #[cfg(feature = "num")] {
-/// use assertr::assertions::distance::NumericDistance;
+/// use assertr::assertions::NumericDistance;
 /// use assertr::prelude::*;
 ///
 /// fn assert_close<T>(actual: T, expected: T, deviation: T)

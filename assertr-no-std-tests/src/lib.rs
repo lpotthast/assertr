@@ -16,9 +16,8 @@ use assertr::prelude::*;
 #[cfg_attr(test, test)]
 fn memory_assertions_compile_without_std() {
     use alloc::string::String;
-    use assertr::assertions::core::mem::{MemAssertions, NeedsDrop};
-    use assertr::assertions::core::prelude::MemAssertions as CoreMemAssertions;
-    use assertr::matchers::memory::NeedsDrop as MemoryNeedsDrop;
+    use assertr::assertions::MemAssertions;
+    use assertr::matchers::memory::NeedsDrop;
     use assertr::prelude::MemAssertions as PreludeMemAssertions;
 
     struct NoRenderer;
@@ -26,17 +25,14 @@ fn memory_assertions_compile_without_std() {
         assertion.needs_drop()
     }
 
-    check(assert_that_type::<String>().with_renderer(NoRenderer))
-        .matches(NeedsDrop)
-        .matches(MemoryNeedsDrop);
-    // The core prelude and the crate-wide prelude expose the same trait.
-    CoreMemAssertions::needs_drop(assert_that_type::<String>());
+    check(assert_that_type::<String>().with_renderer(NoRenderer)).matches(NeedsDrop);
+    // The assertions module and the prelude expose the same trait.
     PreludeMemAssertions::needs_drop(assert_that_type::<String>());
 
     let failures = assert_that_type::<u32>()
         .with_renderer(NoRenderer)
-        .capture(|it| check(it).matches(NeedsDrop).matches(MemoryNeedsDrop));
-    assert_that!(failures).has_length(3);
+        .capture(|it| check(it).matches(NeedsDrop));
+    assert_that!(failures).has_length(2);
     for failure in &failures {
         assert_that!(failure.relation.as_deref()).is_equal_to(Some("does not need drop"));
     }
@@ -72,7 +68,7 @@ fn projections_compile_without_renderer_support() {
         });
     assert_that!(failures).is_empty();
 
-    let fact = assertr::Fact::note("evidence");
+    let fact = assertr::failure::Fact::note("evidence");
     assert_that!(fact)
         .with_renderer(NoRenderer)
         .derive(|fact| &fact.value.body)
@@ -104,7 +100,7 @@ fn unwind_safe_projections_compile_without_std() {
 #[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn numeric_assertions_compile_without_std() {
-    use assertr::assertions::distance::{IsCloseTo, NumericDistance};
+    use assertr::{assertions::NumericDistance, matchers::IsCloseTo};
 
     // The tolerance expectation needs only `NumericDistance`, not the `num` feature's traits.
     fn assert_close<T: NumericDistance + core::fmt::Debug>(actual: T, expected: T, deviation: T) {
@@ -242,7 +238,7 @@ fn callback_assertions_compile_without_subject_renderers() {
 #[allow(dead_code)]
 fn set_and_map_assertions_compile_without_std() {
     use alloc::collections::{BTreeMap, BTreeSet};
-    use assertr::{Expectation, assertions::collection::ContainsMatching};
+    use assertr::{expectation::Expectation, matchers::ContainsMatching};
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
     fn is_one(value: &i32) -> bool {
@@ -335,7 +331,7 @@ mod tests {
     };
     use core::sync::atomic::{AtomicUsize, Ordering};
 
-    use assertr::AssertionFailure;
+    use assertr::failure::AssertionFailure;
     use assertr::prelude::{
         CollectionAssertions, IdentityAssertions, LengthAssertions, PartialEqAssertions,
         StableOrderAssertions,
@@ -496,7 +492,9 @@ impl ValueRenderer<usize> for NumericRenderer {
 #[cfg_attr(test, test)]
 fn typed_rejections_and_numeric_evidence_compile_without_std() {
     use assertr::{
-        AssertionContext, Expectation, Fact,
+        expectation::AssertionContext,
+        expectation::Expectation,
+        failure::Fact,
         failure::{FailureBuilder, FailureKind},
         matchers::each,
     };
@@ -542,7 +540,7 @@ fn typed_rejections_and_numeric_evidence_compile_without_std() {
         assert_that!(error.0).is_equal_to(7);
         let failures = assert_that!(7_u32)
             .with_renderer(ErrorRenderer)
-            .capture(|it| it.apply_assertion(&assertion));
+            .capture(|it| it.matches(&assertion));
         assert_that!(failures[0].facts[0].value.type_name)
             .is_equal_to(Some(core::any::type_name::<OpaqueError>()));
         let failures = assert_that!([7_u32, 8])
@@ -580,7 +578,7 @@ fn reusable_checks_compile_without_std() {
             .described_as("is not empty")
             .rejected_as("is empty"),
     );
-    assert_that!(Person { name: "Ada".into() }).apply_assertion(&has_name);
+    assert_that!(Person { name: "Ada".into() }).matches(&has_name);
     let failures = assert_that!(Person {
         name: String::new()
     })
@@ -592,8 +590,9 @@ fn reusable_checks_compile_without_std() {
 #[cfg_attr(test, test)]
 fn assertion_definitions_compile_without_std() {
     use alloc::string::String;
+    use assertr::expectation::Expectation;
     use assertr::matchers::{
-        EqualTo, Expectation, GreaterOrEqual, HasDebugString, IsOfType, IsOk, IsReady, IsSome,
+        EqualTo, GreaterOrEqual, HasDebugString, IsOfType, IsOk, IsReady, IsSome,
         cell::{IsBorrowed, IsNotMutablyBorrowed},
         string::StartsWith,
     };
@@ -635,7 +634,8 @@ fn assertion_definitions_compile_without_std() {
 #[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn collection_assertion_definitions_compile_without_std() {
-    use assertr::matchers::{Expectation, HasLengthOf, collection, iterator, map, set};
+    use assertr::expectation::Expectation;
+    use assertr::matchers::{HasLengthOf, collection, iterator, map, set};
 
     with_context(DebugRenderer, |context| {
         let values = [1, 2];
@@ -679,7 +679,7 @@ fn collection_assertion_definitions_compile_without_std() {
 // Tests renderer-independent evaluation through the same boundary available downstream.
 struct InContext<F>(F);
 
-impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> Expectation<(), R> for InContext<F> {
+impl<R, F: Fn(&assertr::expectation::AssertionContext<'_, R>)> Expectation<(), R> for InContext<F> {
     type Success<'a>
         = ()
     where
@@ -694,19 +694,19 @@ impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> Expectation<(), R> for InConte
     fn evaluate<'a>(
         &'a self,
         (): &'a (),
-        context: &assertr::AssertionContext<'_, R>,
+        context: &assertr::expectation::AssertionContext<'_, R>,
     ) -> Result<(), core::convert::Infallible> {
         (self.0)(context);
         Ok(())
     }
 
-    const KIND: assertr::FailureKind = assertr::FailureKind::Other;
+    const KIND: assertr::failure::FailureKind = assertr::failure::FailureKind::Other;
 
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a (), core::convert::Infallible)>,
         failure: assertr::failure::FailureBuilder,
-        _: &assertr::AssertionContext<'_, R>,
+        _: &assertr::expectation::AssertionContext<'_, R>,
     ) -> assertr::failure::FailureBuilder {
         match rejected {
             None => failure.relation("evaluates with the supplied context"),
@@ -715,10 +715,10 @@ impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> Expectation<(), R> for InConte
     }
 }
 
-fn with_context<R, F: Fn(&assertr::AssertionContext<'_, R>)>(renderer: R, f: F) {
+fn with_context<R, F: Fn(&assertr::expectation::AssertionContext<'_, R>)>(renderer: R, f: F) {
     assert_that!(())
         .with_renderer(renderer)
-        .apply_assertion(InContext(f));
+        .matches(InContext(f));
 }
 
 // Keep the alloc-only API boundary here. Detailed rendering behavior is tested in the renderer.
@@ -726,7 +726,8 @@ fn with_context<R, F: Fn(&assertr::AssertionContext<'_, R>)>(renderer: R, f: F) 
 mod structural_rendering {
     use alloc::collections::{BTreeMap, BTreeSet};
     use assertr::{
-        Fact, FailureKind,
+        failure::Fact,
+        failure::FailureKind,
         prelude::*,
         renderer::{Rendered, RenderingContext, RenderingOrder},
     };

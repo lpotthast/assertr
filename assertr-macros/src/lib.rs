@@ -98,8 +98,8 @@ pub fn fluent_aliases(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// The attribute recognizes entry calls by method name and keeps ordinary method resolution.
 /// Callback arguments are never rewritten, so they keep their type, call traits, and coercions.
 /// For `verify` and `verify_owned`, the expression reaches failures raised directly on the
-/// callback's input chain. Derived chains and explicit `with_expression` overrides keep their own
-/// expressions, and results of other methods with these names are returned unchanged. A
+/// callback's input chain. Derived chains keep their own expressions, and results of other methods
+/// with these names are returned unchanged. A
 /// user-defined zero-argument `must` or `must_owned` method that does not return an assertion chain
 /// fails to compile, because its result receives the expression too. Keep such calls outside
 /// annotated scopes.

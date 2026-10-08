@@ -1,5 +1,5 @@
 use crate::mode::Mode;
-use crate::{AssertThat, DebugRenderer, ValueRenderer};
+use crate::{AssertThat, renderer::DebugRenderer, renderer::ValueRenderer};
 use jiff::Span;
 
 sign_expectations!(Span, zero: Span::new());
@@ -30,7 +30,7 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
     where
         R: ValueRenderer<Span>,
     {
-        self.apply_assertion(IsZero)
+        self.matches(IsZero)
     }
 
     #[track_caller]
@@ -38,7 +38,7 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
     where
         R: ValueRenderer<Span>,
     {
-        self.apply_assertion(IsNegative)
+        self.matches(IsNegative)
     }
 
     #[track_caller]
@@ -46,7 +46,7 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
     where
         R: ValueRenderer<Span>,
     {
-        self.apply_assertion(IsPositive)
+        self.matches(IsPositive)
     }
 }
 

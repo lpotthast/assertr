@@ -132,7 +132,7 @@ Rust still checks constructor resolution, visibility, field types, and exhaustiv
 
 Expected expressions construct explicit matchers once, in source order, within one expression. This preserves temporary
 borrows through the statement. Selected fields, matcher-list elements, and `entries_are!` values follow the same rules.
-Equality requires `eq`/`equal_to`, even for expressions that also implement equality.
+Equality requires `eq`, even for expressions that also implement equality.
 [Operand selection](comparison-operands.md#borrowed-views) determines how reference-valued fields and items are compared.
 
 Projections attach `Field`, `TupleIndex`, and optional `Variant` paths, including missing-subject descriptions. Constructor

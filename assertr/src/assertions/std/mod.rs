@@ -6,10 +6,3 @@ pub mod command;
 pub mod mutex;
 /// Assertions for paths.
 pub mod path;
-
-/// Standard-library assertion traits.
-pub mod prelude {
-    pub use super::command::CommandAssertions;
-    pub use super::mutex::MutexAssertions;
-    pub use super::path::PathAssertions;
-}

@@ -1,8 +1,10 @@
 use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation,
-    expectation::{Evidence, MatcherList},
+    expectation::AssertionContext,
+    expectation::Evidence,
+    expectation::Expectation,
     failure::{FailureBuilder, FailureKind, PathSegment},
+    matchers::MatcherList,
 };
 use core::marker::PhantomData;
 
@@ -105,7 +107,7 @@ mod tests {
     fn missing_subject_descriptions_preserve_nested_field_and_variant_paths() {
         use crate::{
             __private::field,
-            assertions::{collection::elements_are_in_any_order, core::partial_eq::equal_to},
+            assertions::{collection::elements_are_in_any_order, core::partial_eq::eq},
             failure::FailureKind,
         };
         let matcher = field(
@@ -114,7 +116,7 @@ mod tests {
                 |_: &(i32,)| true,
                 crate::matchers![field(
                     |row: &(i32,)| Some(&row.0),
-                    equal_to(2),
+                    eq(2),
                     PathSegment::TupleIndex(0),
                 )],
                 "Choice::Some",

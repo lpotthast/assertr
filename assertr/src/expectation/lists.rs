@@ -1,7 +1,10 @@
-use super::{Expectation, Predicate, predicate};
+use super::{
+    Expectation,
+    predicate::{Predicate, predicate},
+};
 use crate::{
     __private::{Cons, Nil},
-    AssertionContext,
+    expectation::AssertionContext,
 };
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -15,7 +18,7 @@ pub(crate) mod sealed {
 /// Implementations are sealed. Use [`matchers!`](crate::matchers!) to mix matcher types, or arrays,
 /// slices, and vectors of one matcher type. Lists store expectations without boxes or renderer type
 /// parameters.
-pub trait MatcherList<A: ?Sized, R = crate::DebugRenderer>: sealed::Sealed {
+pub trait MatcherList<A: ?Sized, R = crate::renderer::DebugRenderer>: sealed::Sealed {
     /// Number of constraints.
     fn len(&self) -> usize;
 
@@ -29,7 +32,7 @@ pub trait MatcherList<A: ?Sized, R = crate::DebugRenderer>: sealed::Sealed {
         &self,
         index: usize,
         context: &AssertionContext<'_, R>,
-    ) -> crate::AssertionFailure;
+    ) -> crate::failure::AssertionFailure;
 
     /// Evaluates one expectation slot. The slot must be less than `len()`.
     fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool;
@@ -59,12 +62,15 @@ where
         &self,
         index: usize,
         context: &AssertionContext<'_, R>,
-    ) -> crate::AssertionFailure {
-        context.describe(&super::satisfying(&self.0.as_ref()[index]))
+    ) -> crate::failure::AssertionFailure {
+        context.describe(&super::satisfying::satisfying(&self.0.as_ref()[index]))
     }
 
     fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool {
-        context.evaluate(actual, &super::satisfying(&self.0.as_ref()[index]))
+        context.evaluate(
+            actual,
+            &super::satisfying::satisfying(&self.0.as_ref()[index]),
+        )
     }
 }
 
@@ -77,7 +83,11 @@ impl<A: ?Sized, R> MatcherList<A, R> for Nil {
         0
     }
 
-    fn describe_at(&self, _: usize, _: &AssertionContext<'_, R>) -> crate::AssertionFailure {
+    fn describe_at(
+        &self,
+        _: usize,
+        _: &AssertionContext<'_, R>,
+    ) -> crate::failure::AssertionFailure {
         panic!("empty matcher list")
     }
 
@@ -99,7 +109,7 @@ where
         &self,
         index: usize,
         context: &AssertionContext<'_, R>,
-    ) -> crate::AssertionFailure {
+    ) -> crate::failure::AssertionFailure {
         if index == 0 {
             context.describe(&self.0)
         } else {
@@ -128,7 +138,7 @@ macro_rules! homogeneous {
                 <[M]>::len(self)
             }
 
-            fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> crate::AssertionFailure {
+            fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> crate::failure::AssertionFailure {
                 context.describe(&self[index])
             }
 
@@ -162,7 +172,7 @@ where
         &self,
         index: usize,
         context: &AssertionContext<'_, R>,
-    ) -> crate::AssertionFailure {
+    ) -> crate::failure::AssertionFailure {
         (**self).describe_at(index, context)
     }
 
@@ -183,12 +193,12 @@ where
 
 /// Constructs a reusable heterogeneous matcher list from explicit expectations.
 ///
-/// Use [`eq`](crate::matchers::eq) or [`equal_to`](crate::matchers::equal_to) for equality. The
+/// Use [`eq`](crate::matchers::eq) for equality. The
 /// list's type is an unsupported implementation detail. Let inference pick it, or name the
 /// enclosing check as `impl Expectation<T>` or the list as `impl MatcherList<T>`:
 ///
 /// ```
-/// use assertr::matchers::{Expectation, all_of, eq, gt};
+/// use assertr::matchers::{all_of, eq, gt};
 /// use assertr::prelude::*;
 ///
 /// fn positive_two() -> impl Expectation<i32> + Clone {

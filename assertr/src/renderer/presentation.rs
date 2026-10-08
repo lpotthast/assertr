@@ -15,7 +15,7 @@ pub enum GroupStyle {
 ///
 /// This is a presentation choice, not a behavioral capability. Sorting uses the final rendered text
 /// of each item. Assertions whose meaning depends on
-/// [`StableOrder`](crate::assertions::collection::StableOrder) always render the subject in
+/// [`StableOrder`](crate::assertions::StableOrder) always render the subject in
 /// iteration order so displayed positions retain their meaning.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -26,12 +26,12 @@ pub enum RenderingOrder {
     SortByRenderedText,
 }
 
-/// Presentation metadata for a [`Collection`](crate::assertions::collection::Collection).
+/// Presentation metadata for a [`Collection`](crate::assertions::Collection).
 ///
 /// This value controls only diagnostic syntax, type-hint visibility, and rendering order.
 /// Positional APIs are controlled independently by
-/// [`StableOrder`](crate::assertions::collection::StableOrder) and
-/// [`RandomAccess`](crate::assertions::collection::RandomAccess).
+/// [`StableOrder`](crate::assertions::StableOrder) and
+/// [`RandomAccess`](crate::assertions::RandomAccess).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CollectionPresentation {
     style: GroupStyle,
