@@ -5,12 +5,11 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     ///
     /// Every assertion is tracked exactly once, before checking or invoking user code, whether it
     /// passes or fails. Reusable leaf checks implement [`Expectation`](crate::Expectation) and
-    /// [`ExpectationDiagnostics`](crate::ExpectationDiagnostics) and delegate to
-    /// [`AssertThat::apply_assertion`] or [`AssertThat::test_assertion`], which track for them, as
-    /// the example below does. Methods delegating to these or to other tracked assertions must not
-    /// track again. [`AssertThat::capture`] and the fluent `verify` use the count to reject a
-    /// closure that performed no assertions at all, so an assertion that forgets to track makes a
-    /// passing capture closure panic as if it had been empty.
+    /// delegate to [`AssertThat::apply_assertion`] or [`AssertThat::test_assertion`], which track
+    /// for them, as the example below does. Methods delegating to these or to other tracked
+    /// assertions must not track again. [`AssertThat::capture`] and the fluent `verify` use the
+    /// count to reject a closure that performed no assertions at all, so an assertion that
+    /// forgets to track makes a passing capture closure panic as if it had been empty.
     ///
     /// Call this method directly only in an execution adapter, which owns an invocation,
     /// consumption, or polling step that the borrowed expectation protocol cannot express. Such an

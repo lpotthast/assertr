@@ -1,6 +1,5 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 use core::cell::RefCell;
@@ -9,7 +8,10 @@ use core::cell::RefCell;
 #[derive(Debug, Clone, Copy)]
 pub struct IsBorrowed;
 
-impl<T, R> Expectation<RefCell<T>, R> for IsBorrowed {
+impl<T, R> Expectation<RefCell<T>, R> for IsBorrowed
+where
+    R: ValueRenderer<T>,
+{
     type Success<'a>
         = ()
     where
@@ -30,26 +32,21 @@ impl<T, R> Expectation<RefCell<T>, R> for IsBorrowed {
             Err(_) => Ok(()),
         }
     }
-}
 
-impl<T, R> ExpectationDiagnostics<RefCell<T>, R> for IsBorrowed
-where
-    R: ValueRenderer<T>,
-{
     const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a RefCell<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        match rejected {
-            None => failure.relation("is borrowed"),
-            Some((actual, guard)) => failure
-                .actual(render.struct_field(actual, "RefCell", "value", &*guard))
-                .relation("is not borrowed"),
-        }
+        failure.relations(
+            rejected
+                .map(|(actual, guard)| render.struct_field(actual, "RefCell", "value", &*guard)),
+            "is borrowed",
+            "is not borrowed",
+        )
     }
 }
 
@@ -57,7 +54,10 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct IsMutablyBorrowed;
 
-impl<T, R> Expectation<RefCell<T>, R> for IsMutablyBorrowed {
+impl<T, R> Expectation<RefCell<T>, R> for IsMutablyBorrowed
+where
+    R: ValueRenderer<T>,
+{
     type Success<'a>
         = ()
     where
@@ -78,26 +78,21 @@ impl<T, R> Expectation<RefCell<T>, R> for IsMutablyBorrowed {
             Err(_) => Ok(()),
         }
     }
-}
 
-impl<T, R> ExpectationDiagnostics<RefCell<T>, R> for IsMutablyBorrowed
-where
-    R: ValueRenderer<T>,
-{
     const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a RefCell<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        match rejected {
-            None => failure.relation("is mutably borrowed"),
-            Some((actual, guard)) => failure
-                .actual(render.struct_field(actual, "RefCell", "value", &*guard))
-                .relation("is not mutably borrowed"),
-        }
+        failure.relations(
+            rejected
+                .map(|(actual, guard)| render.struct_field(actual, "RefCell", "value", &*guard)),
+            "is mutably borrowed",
+            "is not mutably borrowed",
+        )
     }
 }
 
@@ -122,22 +117,22 @@ impl<T, R> Expectation<RefCell<T>, R> for IsNotMutablyBorrowed {
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         actual.try_borrow().map_err(|_| ())
     }
-}
-impl<T, R> ExpectationDiagnostics<RefCell<T>, R> for IsNotMutablyBorrowed {
+
     const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a RefCell<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        match rejected {
-            None => failure.relation("is not mutably borrowed"),
-            Some((actual, ())) => failure
-                .actual(render.unavailable_struct_field(actual, "RefCell", "value", "<borrowed>"))
-                .relation("is unexpectedly mutably borrowed"),
-        }
+        failure.relations(
+            rejected.map(|(actual, ())| {
+                render.unavailable_struct_field(actual, "RefCell", "value", "<borrowed>")
+            }),
+            "is not mutably borrowed",
+            "is unexpectedly mutably borrowed",
+        )
     }
 }
 
@@ -186,6 +181,29 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+        use core::cell::RefCell;
+
+        #[test]
+        fn are_as_expected() {
+            {
+                let cell = RefCell::new(42);
+                let borrow = cell.borrow();
+                cell.must().be_borrowed();
+                drop(borrow);
+            }
+            {
+                let cell = RefCell::new(42);
+                let borrow = cell.borrow_mut();
+                cell.must().be_mutably_borrowed();
+                drop(borrow);
+            }
+            RefCell::new(42).must().not_be_mutably_borrowed();
+        }
+    }
+
     mod observations {
         use super::super::{IsBorrowed, IsMutablyBorrowed, IsNotMutablyBorrowed};
         use crate::{matchers::all_of, prelude::*, test_support::NoRenderer};
@@ -195,16 +213,16 @@ mod tests {
         fn composed_checks_release_rejected_and_successful_borrows_between_siblings() {
             let cell = RefCell::new(7);
             let failures = assert_that!(cell)
-                .capture(|it| it.matches(all_of((IsBorrowed, IsMutablyBorrowed))));
+                .capture(|it| it.matches(all_of(matchers![IsBorrowed, IsMutablyBorrowed])));
             assert_that!(failures[0].children).has_length(2);
             assert_that!(cell)
                 .with_renderer(NoRenderer)
-                .matches(all_of((
+                .matches(all_of(matchers![
                     IsNotMutablyBorrowed,
                     crate::test_support::opaque_predicate(|cell: &RefCell<i32>| {
                         cell.try_borrow_mut().is_ok()
-                    }),
-                )));
+                    })
+                ]));
         }
     }
 
@@ -231,7 +249,7 @@ mod tests {
                 .with_location(false)
                 .capture(RefCellAssertions::is_borrowed);
 
-            assert_that!(ToHumanReadableText.render(&failures[0]))
+            assert_that!(failures[0].to_string())
                 .contains("RefCell {")
                 .contains(SENTINEL);
         }
@@ -241,15 +259,6 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use std::cell::RefCell;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let cell = RefCell::new(42);
-            let borrow = cell.borrow();
-            cell.must().be_borrowed();
-            drop(borrow);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -297,15 +306,6 @@ mod tests {
         use std::cell::RefCell;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let cell = RefCell::new(42);
-            let borrow = cell.borrow_mut();
-            cell.must().be_mutably_borrowed();
-            drop(borrow);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             let cell = RefCell::new(42);
             assert_caller_location!(assert_that!(cell), is_mutably_borrowed());
@@ -325,12 +325,6 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use std::cell::RefCell;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            RefCell::new(42).must().not_be_mutably_borrowed();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {

@@ -56,8 +56,7 @@ pub use crate::{
         set::SetAssertions,
     },
     elements_are, elements_are_in_any_order, entries_are,
-    expectation::{Expectation, ExpectationDiagnostics},
-    failure::adapter::ToHumanReadableText,
+    expectation::Expectation,
     matchers,
     mode::{Capture, Mode, Panic},
     pattern,
@@ -65,8 +64,6 @@ pub use crate::{
 // Without the `std` feature, unit tests use a private helper backed by the hosted test harness.
 #[cfg(all(test, not(feature = "std")))]
 pub(crate) use crate::test_support::assert_that_panic_by;
-#[cfg(test)]
-pub(crate) use crate::test_support::rendered_text;
 pub use crate::{
     AssertThat, AssertionFailure, AssertionFailures, DebugRenderer, RenderingBudget, ValueRenderer,
 };

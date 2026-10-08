@@ -12,8 +12,9 @@ use crate::{AssertThat, actual::Actual, mode::Panic};
 /// `assert_that_panic_by`, `assert_that_panic_by_async`, and the `panics` and `panics_async`
 /// function assertions. Without `std`, the type exists but no value of it can be produced. Its
 /// payload is type-erased, like the `Box<dyn Any + Send>` returned by `std::panic::catch_unwind`.
-/// Use the [`PanicValueAssertions`](crate::assertions::alloc::panic_value::PanicValueAssertions)
-/// methods to inspect it.
+/// Use the [`BoxAssertions`](crate::assertions::alloc::boxed::BoxAssertions) and
+/// [`BoxExtractAssertions`](crate::assertions::alloc::boxed::BoxExtractAssertions) methods to
+/// inspect it.
 pub struct PanicValue(pub(crate) Box<dyn Any + Send>);
 
 /// Invokes `fun`, asserts that the call or dropping its output panics, and returns an assertion
@@ -30,7 +31,7 @@ pub fn assert_that_panic_by<'t, R>(
 ) -> AssertThat<'t, PanicValue, Panic> {
     use crate::prelude::FnOnceAssertions;
 
-    AssertThat::new_panicking(Actual::Owned(fun)).panics()
+    AssertThat::<_, Panic>::new(Actual::Owned(fun)).panics()
 }
 
 /// Invokes `fun`, asserts that the call, polling its future, or dropping its output panics, and
@@ -48,10 +49,9 @@ where
     F: FnOnce() -> Fut + 't,
     Fut: Future<Output = R>,
 {
-    crate::assertions::core::r#fn::panics_async_at(
-        AssertThat::new_panicking(Actual::Owned(fun)),
-        core::panic::Location::caller(),
-    )
+    use crate::prelude::AsyncFnOnceAssertions;
+
+    AssertThat::<_, Panic>::new(Actual::Owned(fun)).panics_async()
 }
 
 #[cfg(all(test, feature = "std"))]

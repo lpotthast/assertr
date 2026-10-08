@@ -1,7 +1,7 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::failure::FailureKind;
 use crate::prelude::*;
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use crate::{AssertionContext, Expectation, failure::FailureBuilder};
 
 /// Compares the current watch value without marking it seen.
 #[derive(Debug, Clone)]
@@ -10,6 +10,7 @@ impl<T, E, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasCurrentValu
 where
     T: PartialEq<E::View>,
     E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -34,20 +35,14 @@ where
             Err((actual, expected))
         }
     }
-}
-impl<T, E, R> ExpectationDiagnostics<tokio::sync::watch::Receiver<T>, R> for HasCurrentValue<E>
-where
-    T: PartialEq<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View>,
-{
+
     const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a tokio::sync::watch::Receiver<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         match rejected {
             None => failure
@@ -59,6 +54,7 @@ where
         }
     }
 }
+
 impl<E> HasCurrentValue<E> {
     /// Expects this current value using its borrowed comparison view.
     #[must_use]
@@ -66,94 +62,62 @@ impl<E> HasCurrentValue<E> {
         Self(expected)
     }
 }
-/// Checks whether the receiver has changed, rejecting closed channels.
-#[derive(Debug, Clone, Copy)]
-pub struct HasChanged;
-impl<T, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasChanged {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        tokio::sync::watch::Receiver<T>: 'a;
-    type Rejection<'a>
-        = bool
-    where
-        Self: 'a,
-        tokio::sync::watch::Receiver<T>: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a tokio::sync::watch::Receiver<T>,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        match actual.has_changed() {
-            Ok(true) => Ok(()),
-            Ok(_) => Err(false),
-            Err(_) => Err(true),
+/// Defines a change-state expectation that observes `has_changed` once, rejecting closed channels.
+/// Its rejection records whether the channel was closed.
+macro_rules! change_state {
+    ($(#[$attr:meta])* $name:ident: $changed:literal, $relation:literal, $negated:literal) => {
+        $(#[$attr])*
+        #[derive(Debug, Clone, Copy)]
+        pub struct $name;
+
+        impl<T, R> Expectation<tokio::sync::watch::Receiver<T>, R> for $name {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                tokio::sync::watch::Receiver<T>: 'a;
+            type Rejection<'a>
+                = bool
+            where
+                Self: 'a,
+                tokio::sync::watch::Receiver<T>: 'a;
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a tokio::sync::watch::Receiver<T>,
+                _context: &AssertionContext<'_, R>,
+            ) -> Result<(), bool> {
+                match actual.has_changed() {
+                    Ok($changed) => Ok(()),
+                    Ok(_) => Err(false),
+                    Err(_) => Err(true),
+                }
+            }
+
+            const KIND: FailureKind = FailureKind::Other;
+            fn explain<'a>(
+                &'a self,
+                rejected: Option<(&'a tokio::sync::watch::Receiver<T>, bool)>,
+                failure: FailureBuilder,
+                _context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder {
+                failure.relation(match rejected {
+                    None => $relation,
+                    Some((_, true)) => "is closed",
+                    Some((_, false)) => $negated,
+                })
+            }
         }
-    }
+    };
 }
-impl<T, R> ExpectationDiagnostics<tokio::sync::watch::Receiver<T>, R> for HasChanged {
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a tokio::sync::watch::Receiver<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure.relation("has changed"),
-            Some((_, closed)) => failure.relation(if closed {
-                "is closed"
-            } else {
-                "has not changed"
-            }),
-        }
-    }
-}
-/// Checks whether the receiver has not changed, rejecting closed channels.
-#[derive(Debug, Clone, Copy)]
-pub struct HasNotChanged;
-impl<T, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasNotChanged {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        tokio::sync::watch::Receiver<T>: 'a;
-    type Rejection<'a>
-        = bool
-    where
-        Self: 'a,
-        tokio::sync::watch::Receiver<T>: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a tokio::sync::watch::Receiver<T>,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        match actual.has_changed() {
-            Ok(false) => Ok(()),
-            Ok(_) => Err(false),
-            Err(_) => Err(true),
-        }
-    }
-}
-impl<T, R> ExpectationDiagnostics<tokio::sync::watch::Receiver<T>, R> for HasNotChanged {
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a tokio::sync::watch::Receiver<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure.relation("has not changed"),
-            Some((_, closed)) => failure.relation(if closed {
-                "is closed"
-            } else {
-                "has unexpectedly changed"
-            }),
-        }
-    }
-}
+
+change_state!(
+    /// Checks whether the receiver has changed, rejecting closed channels.
+    HasChanged: true, "has changed", "has not changed"
+);
+change_state!(
+    /// Checks whether the receiver has not changed, rejecting closed channels.
+    HasNotChanged: false, "has not changed", "has unexpectedly changed"
+);
 
 /// Non-extracting assertions for [`tokio::sync::watch::Receiver`].
 ///
@@ -205,6 +169,30 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R>
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use super::Person;
+        use crate::prelude::*;
+
+        #[tokio::test]
+        async fn are_as_expected() {
+            {
+                let (_tx, rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+                rx.must().have_current_value(Person { name: "bob".into() });
+            }
+            {
+                let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+                rx.mark_changed();
+                rx.must().have_changed();
+            }
+            {
+                let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+                rx.mark_unchanged();
+                rx.must().not_have_changed();
+            }
+        }
+    }
+
     mod observations {
         use crate::prelude::*;
         use core::{borrow::Borrow, cell::Cell};
@@ -283,13 +271,6 @@ mod tests {
         use super::Person;
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[tokio::test]
-        #[cfg(feature = "fluent")]
-        async fn fluent_alias_is_as_expected() {
-            let (_tx, rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.must().have_current_value(Person { name: "bob".into() });
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -377,274 +358,100 @@ mod tests {
         }
     }
 
-    mod has_changed {
-        use super::Person;
+    mod change_state {
         use crate::prelude::*;
         use indoc::formatdoc;
+        use tokio::sync::watch::{self, Receiver};
 
-        #[tokio::test]
-        #[cfg(feature = "fluent")]
-        async fn fluent_alias_is_as_expected() {
-            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_changed();
-            rx.must().have_changed();
-        }
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_unchanged();
-            assert_caller_location!(assert_that!(rx), has_changed());
-        }
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_supports_capture() {
-            let (_sender, mut receiver) = tokio::sync::watch::channel(7);
-            receiver.mark_changed();
-            let failures = receiver.verify(TokioWatchReceiverAssertions::have_changed);
-            assert_that!(failures).is_empty();
-            assert_that!(receiver.has_changed().unwrap()).is_equal_to(true);
-        }
-
-        #[test]
-        fn capture_passes_without_changing_the_receiver() {
-            let (_sender, mut receiver) = tokio::sync::watch::channel(7);
-            receiver.mark_changed();
+        /// Applies `check` twice in capture mode to a receiver with the given seen and closed
+        /// state. Returns the rejection relations after asserting that the receiver's
+        /// observable state did not change.
+        fn relations(
+            check: impl for<'a> Fn(
+                AssertThat<'a, Receiver<i32>, Capture>,
+            ) -> AssertThat<'a, Receiver<i32>, Capture>,
+            changed: bool,
+            closed: bool,
+        ) -> Vec<String> {
+            let (sender, mut receiver) = watch::channel(7);
+            if changed {
+                receiver.mark_changed();
+            } else {
+                receiver.mark_unchanged();
+            }
+            let sender = (!closed).then_some(sender);
             let failures = assert_that!(receiver).capture(|it| {
-                let it = it.has_changed().has_changed();
+                let it = check(check(it));
                 assert_that!(it.state.records.assertion_count()).is_equal_to(2);
                 it
             });
-            assert_that!(failures).is_empty();
-            assert_that!(receiver.has_changed().unwrap()).is_equal_to(true);
-            assert_that!(*tokio::sync::watch::Receiver::borrow(&receiver)).is_equal_to(7);
+            match sender {
+                Some(_) => assert_that!(receiver.has_changed().unwrap()).is_equal_to(changed),
+                None => assert_that!(receiver.has_changed().is_err()).is_true(),
+            };
+            assert_that!(*Receiver::borrow(&receiver)).is_equal_to(7);
+            failures
+                .iter()
+                .map(|failure| failure.relation.as_deref().unwrap().to_owned())
+                .collect()
         }
 
         #[test]
-        fn capture_continues_after_rejection_without_changing_the_receiver() {
-            let (_sender, mut receiver) = tokio::sync::watch::channel(7);
-            receiver.mark_unchanged();
-            let failures = assert_that!(receiver).with_location(false).capture(|it| {
-                let it = it.has_changed().has_changed();
-                assert_that!(it.state.records.assertion_count()).is_equal_to(2);
-                it
-            });
-            assert_that!(failures).has_length(2);
-            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `receiver`
-
-                has not changed
-                -------- assertr --------
-            "});
-            assert_that!(failures[1].relation.as_deref()).is_equal_to(Some("has not changed"));
-            assert_that!(receiver.has_changed().unwrap()).is_equal_to(false);
-            assert_that!(*tokio::sync::watch::Receiver::borrow(&receiver)).is_equal_to(7);
-        }
-
-        #[test]
-        fn capture_rejects_closed_channels_regardless_of_seen_state() {
+        fn observe_once_without_marking_the_value_seen_and_reject_closed_channels() {
             for changed in [false, true] {
-                let (sender, mut receiver) = tokio::sync::watch::channel(7);
-                if changed {
-                    receiver.mark_changed();
-                }
-                drop(sender);
-                let failures = assert_that!(receiver)
-                    .with_location(false)
-                    .capture(|it| it.has_changed().has_changed());
-                assert_that!(failures).has_length(2);
-                assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `receiver`
-
-                    is closed
-                    -------- assertr --------
-                "});
-                assert_that!(failures[1].relation.as_deref()).is_equal_to(Some("is closed"));
-                assert_that!(receiver.has_changed()).is_err();
-                assert_that!(*tokio::sync::watch::Receiver::borrow(&receiver)).is_equal_to(7);
+                let expected = |passes: bool, rejection: &str| {
+                    if passes {
+                        Vec::new()
+                    } else {
+                        vec![rejection.to_owned(); 2]
+                    }
+                };
+                assert_that!(relations(|it| it.has_changed(), changed, false))
+                    .is_equal_to(expected(changed, "has not changed"));
+                assert_that!(relations(|it| it.has_not_changed(), changed, false))
+                    .is_equal_to(expected(!changed, "has unexpectedly changed"));
+                assert_that!(relations(|it| it.has_changed(), changed, true))
+                    .is_equal_to(expected(false, "is closed"));
+                assert_that!(relations(|it| it.has_not_changed(), changed, true))
+                    .is_equal_to(expected(false, "is closed"));
             }
         }
 
-        #[tokio::test]
-        async fn succeeds_when_changed() {
-            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_changed();
-
-            assert_that!(rx).has_changed();
-            assert_that!(rx.has_changed().unwrap()).is_equal_to(true);
-        }
-
-        #[tokio::test]
-        async fn panics_when_not_changed() {
-            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_unchanged();
-
-            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_changed())
+        #[test]
+        fn panics_with_the_rejected_change_state() {
+            let (_sender, mut receiver) = watch::channel(7);
+            receiver.mark_unchanged();
+            assert_that_panic_by(|| assert_that!(receiver).with_location(false).has_changed())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Expression: `rx`
+                    Expression: `receiver`
 
                     has not changed
-                    -------- assertr --------
-                "});
-            assert_that!(rx.has_changed().unwrap()).is_equal_to(false);
-        }
-
-        #[tokio::test]
-        async fn panics_when_the_channel_is_closed() {
-            let (tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_changed();
-            drop(tx);
-
-            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_changed())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `rx`
-
-                    is closed
                     -------- assertr --------
                 "});
         }
     }
 
-    mod has_not_changed {
-        use super::Person;
+    mod has_changed {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[tokio::test]
-        #[cfg(feature = "fluent")]
-        async fn fluent_alias_is_as_expected() {
-            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_unchanged();
-            rx.must().not_have_changed();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
-            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
+            let (_tx, mut rx) = tokio::sync::watch::channel(7);
+            rx.mark_unchanged();
+            assert_caller_location!(assert_that!(rx), has_changed());
+        }
+    }
+
+    mod has_not_changed {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (_tx, mut rx) = tokio::sync::watch::channel(7);
             rx.mark_changed();
             assert_caller_location!(assert_that!(rx), has_not_changed());
-        }
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_supports_capture() {
-            let (_sender, mut receiver) = tokio::sync::watch::channel(7);
-            receiver.mark_unchanged();
-            let failures = receiver.verify(TokioWatchReceiverAssertions::not_have_changed);
-            assert_that!(failures).is_empty();
-            assert_that!(receiver.has_changed().unwrap()).is_equal_to(false);
-        }
-
-        #[test]
-        fn capture_passes_without_changing_the_receiver() {
-            let (_sender, mut receiver) = tokio::sync::watch::channel(7);
-            receiver.mark_unchanged();
-            let failures = assert_that!(receiver).capture(|it| {
-                let it = it.has_not_changed().has_not_changed();
-                assert_that!(it.state.records.assertion_count()).is_equal_to(2);
-                it
-            });
-            assert_that!(failures).is_empty();
-            assert_that!(receiver.has_changed().unwrap()).is_equal_to(false);
-            assert_that!(*tokio::sync::watch::Receiver::borrow(&receiver)).is_equal_to(7);
-        }
-
-        #[test]
-        fn capture_continues_after_rejection_without_changing_the_receiver() {
-            let (_sender, mut receiver) = tokio::sync::watch::channel(7);
-            receiver.mark_changed();
-            let failures = assert_that!(receiver).with_location(false).capture(|it| {
-                let it = it.has_not_changed().has_not_changed();
-                assert_that!(it.state.records.assertion_count()).is_equal_to(2);
-                it
-            });
-            assert_that!(failures).has_length(2);
-            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `receiver`
-
-                has unexpectedly changed
-                -------- assertr --------
-            "});
-            assert_that!(failures[1].relation.as_deref())
-                .is_equal_to(Some("has unexpectedly changed"));
-            assert_that!(receiver.has_changed().unwrap()).is_equal_to(true);
-            assert_that!(*tokio::sync::watch::Receiver::borrow(&receiver)).is_equal_to(7);
-        }
-
-        #[test]
-        fn capture_rejects_closed_channels_regardless_of_seen_state() {
-            for changed in [false, true] {
-                let (sender, mut receiver) = tokio::sync::watch::channel(7);
-                if changed {
-                    receiver.mark_changed();
-                }
-                drop(sender);
-                let failures = assert_that!(receiver)
-                    .with_location(false)
-                    .capture(|it| it.has_not_changed().has_not_changed());
-                assert_that!(failures).has_length(2);
-                assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `receiver`
-
-                    is closed
-                    -------- assertr --------
-                "});
-                assert_that!(failures[1].relation.as_deref()).is_equal_to(Some("is closed"));
-                assert_that!(receiver.has_changed()).is_err();
-                assert_that!(*tokio::sync::watch::Receiver::borrow(&receiver)).is_equal_to(7);
-            }
-        }
-
-        #[tokio::test]
-        async fn succeeds_when_not_changed() {
-            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_unchanged();
-
-            assert_that!(rx).has_not_changed();
-            assert_that!(rx.has_changed().unwrap()).is_equal_to(false);
-        }
-
-        #[tokio::test]
-        async fn panics_when_changed() {
-            let (_tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_changed();
-
-            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_not_changed())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `rx`
-
-                    has unexpectedly changed
-                    -------- assertr --------
-                "});
-            assert_that!(rx.has_changed().unwrap()).is_equal_to(true);
-        }
-
-        #[tokio::test]
-        async fn panics_when_the_channel_is_closed() {
-            let (tx, mut rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
-            rx.mark_unchanged();
-            drop(tx);
-
-            assert_that_panic_by(|| assert_that!(rx).with_location(false).has_not_changed())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `rx`
-
-                    is closed
-                    -------- assertr --------
-                "});
         }
     }
 }

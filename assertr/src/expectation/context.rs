@@ -1,16 +1,15 @@
 #[cfg(test)]
 use crate::RenderingBudget;
 use crate::{
-    AssertionFailure, DebugRenderer, ExpectationDiagnostics,
+    AssertThat, AssertionFailure, DebugRenderer, Expectation,
+    actual::Actual,
     expectation::Evidence,
-    failure::{
-        FailureBuilder, FailureKind, PathSegment,
-        adapter::{HumanReadableText, ToHumanReadableText},
-    },
+    failure::{FailureBuilder, FailureKind, PathSegment, report},
+    mode::Capture,
     renderer::{RenderingContext, RenderingOrder},
     util::selection::{Keyed, Smallest},
 };
-use alloc::vec::Vec;
+use alloc::string::String;
 
 /// Executor-provided rendering, paths, and isolated expectation evidence.
 ///
@@ -28,11 +27,39 @@ pub struct AssertionContext<'r, R = DebugRenderer> {
     rendering: RenderingContext<'r, R>,
     include_location: bool,
     diagnostic: bool,
-    limit: usize,
-    evidence_order: RenderingOrder,
-    path: Vec<PathSegment>,
-    pub(crate) children: Smallest<Keyed<(Option<HumanReadableText>, usize), AssertionFailure>>,
+    order: EvidenceOrder,
+    // Paths are relative to this scope. `scoped` prepends its segment when committing evidence.
+    pub(crate) children: Smallest<Keyed<(Option<String>, usize), AssertionFailure>>,
     pub(crate) omitted: usize,
+}
+
+/// How a scope ranks the evidence it retains.
+///
+/// Sorted scopes rank complete child reports, including paths. Retained paths are relative to
+/// their scope, but ranking must not depend on that: a scope below a path segment ranks each
+/// report as if rendered beneath that (shared) prefix, so retention agrees with every enclosing
+/// scope.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct EvidenceOrder {
+    sorted: bool,
+    nested: bool,
+}
+
+impl EvidenceOrder {
+    /// The sort key text for a retained failure, or `None` when iteration order is preserved.
+    pub(crate) fn text(self, failure: &mut AssertionFailure) -> Option<String> {
+        if !self.sorted {
+            return None;
+        }
+        if !self.nested {
+            return Some(report::child_text(failure));
+        }
+        // Any common prefix ranks the remaining text identically, so a placeholder suffices.
+        failure.path.insert(0, PathSegment::Field(""));
+        let text = report::child_text(failure);
+        failure.path.remove(0);
+        Some(text)
+    }
 }
 
 impl<'r, R> AssertionContext<'r, R> {
@@ -49,13 +76,11 @@ impl<'r, R> AssertionContext<'r, R> {
         include_location: bool,
     ) -> Self {
         Self {
-            limit: rendering.max_items(),
-            evidence_order: RenderingOrder::PreserveIteration,
+            order: EvidenceOrder::default(),
             children: Smallest::new(rendering.max_items()),
             rendering,
             include_location,
             diagnostic: true,
-            path: Vec::new(),
             omitted: 0,
         }
     }
@@ -77,13 +102,12 @@ impl<'r, R> AssertionContext<'r, R> {
         !self.diagnostic
     }
 
-    /// Consumes a completed evaluation's bounded evidence, retaining its already scoped paths.
+    /// Consumes a completed evaluation's bounded evidence. Its paths are relative to this scope.
     #[must_use]
     pub fn into_evidence(self) -> Evidence {
         Evidence {
             children: self.children.into_values(),
             omitted: self.omitted,
-            path_prefix_len: self.path.len(),
         }
     }
 
@@ -121,7 +145,7 @@ impl<'r, R> AssertionContext<'r, R> {
     }
 
     /// Executes and immediately explains one definition. Observations cannot escape to siblings.
-    pub fn evaluate<A: ?Sized, D: ExpectationDiagnostics<A, R> + ?Sized>(
+    pub fn evaluate<A: ?Sized, D: Expectation<A, R> + ?Sized>(
         &mut self,
         actual: &A,
         definition: &D,
@@ -132,17 +156,17 @@ impl<'r, R> AssertionContext<'r, R> {
             // Transparent groups have already applied their budgets and rendered their children.
             // Even a zero-capacity group must transfer its omitted count. Probes never explain.
             if self.diagnostic && (D::FLATTEN || self.is_diagnostic()) {
-                let failure = FailureBuilder::detached::<A>(D::KIND);
+                let failure = FailureBuilder::new::<A>(D::KIND);
                 let failure = definition
                     .explain(Some((actual, rejection)), failure, self)
                     .build();
                 if D::FLATTEN {
-                    self.omitted += failure.omitted_children;
-                    for child in failure.children {
-                        self.record(child);
-                    }
+                    self.append(Evidence {
+                        children: failure.children,
+                        omitted: failure.omitted_children,
+                    });
                 } else {
-                    self.record(failure);
+                    self.retain(failure);
                 }
             } else {
                 drop(rejection);
@@ -153,20 +177,20 @@ impl<'r, R> AssertionContext<'r, R> {
     }
 
     /// Describes an unmet expectation for which there is no subject to evaluate.
-    pub(crate) fn describe<A: ?Sized, D: ExpectationDiagnostics<A, R> + ?Sized>(
+    pub(crate) fn describe<A: ?Sized, D: Expectation<A, R> + ?Sized>(
         &self,
         definition: &D,
     ) -> AssertionFailure {
         definition
-            .explain(None, FailureBuilder::detached::<A>(D::KIND), self)
+            .explain(None, FailureBuilder::new::<A>(D::KIND), self)
             .build()
     }
 
-    pub(crate) fn describe_list<A: ?Sized, L, Target>(
+    pub(crate) fn describe_list<A: ?Sized, L>(
         &self,
         list: &L,
-        failure: FailureBuilder<Target>,
-    ) -> FailureBuilder<Target>
+        failure: FailureBuilder,
+    ) -> FailureBuilder
     where
         L: crate::expectation::MatcherList<A, R>,
     {
@@ -198,21 +222,18 @@ impl<'r, R> AssertionContext<'r, R> {
         if !self.diagnostic {
             return;
         }
-        if !self.is_diagnostic() {
+        if self.is_diagnostic() {
+            let failure = description(self);
+            self.retain(failure);
+        } else {
             self.omitted += 1;
-            return;
         }
-        let mut failure = description(self);
-        let mut path = self.path.clone();
-        path.append(&mut failure.path);
-        failure.path = path;
-        self.retain(failure);
     }
 
     /// Records a leaf constraint when it rejects the subject.
     ///
     /// `description` must describe the unmet constraint as if no subject existed, for example
-    /// through [`ExpectationDiagnostics::explain`] with `None`. The recorded failure wraps it as
+    /// through [`Expectation::explain`] with `None`. The recorded failure wraps it as
     /// the constraint of a "does not satisfy the constraint" failure. The closure runs only when
     /// this scope can retain the failure.
     pub fn outcome(
@@ -221,16 +242,12 @@ impl<'r, R> AssertionContext<'r, R> {
         description: impl FnOnce(&Self) -> AssertionFailure,
     ) -> bool {
         if !matched {
-            if self.is_diagnostic() {
-                self.record(
-                    FailureBuilder::detached::<()>(FailureKind::Matching)
-                        .relation("does not satisfy the constraint")
-                        .constraint(description(self))
-                        .build(),
-                );
-            } else if self.diagnostic {
-                self.omitted += 1;
-            }
+            self.record_with(|context| {
+                FailureBuilder::new::<()>(FailureKind::Matching)
+                    .relation("does not satisfy the constraint")
+                    .constraint(description(context))
+                    .build()
+            });
         }
         matched
     }
@@ -238,7 +255,7 @@ impl<'r, R> AssertionContext<'r, R> {
     /// Evaluates truth in isolation without committing evidence.
     pub fn probe<A: ?Sized, M>(&self, actual: &A, matcher: &M) -> bool
     where
-        M: crate::Expectation<A, R>,
+        M: Expectation<A, R>,
     {
         let context =
             Self::from_rendering(self.rendering, self.include_location).with_diagnostics(false);
@@ -248,26 +265,30 @@ impl<'r, R> AssertionContext<'r, R> {
     /// Evaluates within one relative path segment and commits that scope's evidence once.
     pub fn scoped<T>(&mut self, path: PathSegment, f: impl FnOnce(&mut Self) -> T) -> T {
         let mut child = self.isolated();
-        child.path.push(path);
+        child.order.nested = true;
         let result = f(&mut child);
-        self.append(child.into_evidence());
+        let mut evidence = child.into_evidence();
+        if let Some((last, others)) = evidence.children.split_last_mut() {
+            for failure in others {
+                failure.path.insert(0, path.clone());
+            }
+            last.path.insert(0, path);
+        }
+        self.append(evidence);
         result
     }
 
-    /// Starts an independent evaluation scope with the remaining evidence budget and current path.
-    /// Dropping it discards its evidence. Consume it with [`Self::into_evidence`] to retain
-    /// children.
+    /// Starts an independent evaluation scope with the remaining evidence budget. Its evidence
+    /// paths are relative to this scope. Dropping it discards its evidence. Consume it with
+    /// [`Self::into_evidence`] to retain children.
     #[must_use]
     pub fn isolated(&self) -> Self {
-        let limit = self.child_limit();
         Self {
-            limit,
-            evidence_order: self.evidence_order,
-            children: Smallest::new(limit),
+            order: self.order,
+            children: Smallest::new(self.child_limit()),
             rendering: self.rendering,
             include_location: self.include_location,
             diagnostic: self.diagnostic,
-            path: self.path.clone(),
             omitted: 0,
         }
     }
@@ -275,37 +296,59 @@ impl<'r, R> AssertionContext<'r, R> {
     pub(crate) fn isolated_for_order(&self, order: RenderingOrder) -> Self {
         let mut context = self.isolated();
         // Descendants contribute to the same evidence group and must retain by its order.
-        if order == RenderingOrder::SortByRenderedText {
-            context.evidence_order = order;
-        }
+        context.order.sorted |= order == RenderingOrder::SortByRenderedText;
         context
     }
 
-    /// Effective allowance and inherited order for independently retained candidate evidence.
-    pub(crate) fn evidence_policy(&self) -> (usize, RenderingOrder) {
-        let limit = if self.diagnostic {
-            self.child_limit()
-        } else {
-            0
-        };
-        (limit, self.evidence_order)
+    /// Runs an assertion callback on a capture chain with this scope's rendering and location
+    /// settings, recording its failures here. Returns whether every assertion passed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the callback performed no assertions. User panics propagate.
+    pub(crate) fn run_assertions<A>(
+        &mut self,
+        actual: &A,
+        assertions: impl for<'a> FnOnce(AssertThat<'a, A, Capture, R>),
+    ) -> bool
+    where
+        R: Clone,
+    {
+        let failures = AssertThat::new(Actual::Borrowed(actual))
+            .with_renderer(self.rendering.renderer().clone())
+            .with_rendering_budget(self.rendering.budget())
+            .with_location(self.include_location)
+            .collect_failures(|sink| {
+                assertions(sink.derive(|value| value));
+                sink
+            });
+        let matched = failures.is_empty();
+        for failure in failures {
+            self.record(failure);
+        }
+        matched
     }
 
     // Sorted children keep competing after the group fills. Iteration-preserving children share
     // the remaining slots. Probes inherit the same allowance but disable diagnostics separately.
     fn child_limit(&self) -> usize {
-        if self.evidence_order == RenderingOrder::SortByRenderedText {
-            self.limit
+        let limit = self.children.maximum();
+        if self.order.sorted {
+            limit
         } else {
-            self.limit.saturating_sub(self.children.len())
+            limit.saturating_sub(self.children.len())
         }
     }
 
-    fn retain(&mut self, failure: AssertionFailure) {
+    fn retain(&mut self, mut failure: AssertionFailure) {
+        let limit = self.children.maximum();
         let rank = self.children.len() + self.omitted;
-        self.omitted += usize::from(self.children.len() == self.limit);
-        let text = (self.evidence_order == RenderingOrder::SortByRenderedText && self.limit > 0)
-            .then(|| ToHumanReadableText::render_child(&failure));
+        self.omitted += usize::from(self.children.len() == limit);
+        let text = if limit > 0 {
+            self.order.text(&mut failure)
+        } else {
+            None
+        };
         self.children.offer(Keyed {
             key: (text, rank),
             value: failure,
@@ -354,7 +397,7 @@ mod tests {
                         for index in 0..3 {
                             context.record_with(|_| {
                                 calls.set(calls.get() + 1);
-                                FailureBuilder::detached::<i32>(FailureKind::Equality)
+                                FailureBuilder::new::<i32>(FailureKind::Equality)
                                     .path([PathSegment::Index(index)])
                                     .build()
                             });
@@ -388,7 +431,7 @@ mod tests {
             for relation in ["z", "a", "m"] {
                 context.record_with(|_| {
                     calls.set(calls.get() + 1);
-                    FailureBuilder::detached::<i32>(FailureKind::Matching)
+                    FailureBuilder::new::<i32>(FailureKind::Matching)
                         .relation(relation)
                         .build()
                 });
@@ -403,26 +446,27 @@ mod tests {
 
     mod assertion_children {
         use super::*;
-        use crate::failure::adapter::HumanReadableText;
         use crate::{
             assertions::{collection::each, core::partial_eq::equal_to},
             expectation::all_of,
             failure::PathSegment,
-            renderer::{IntoRendered, RenderingOrder},
+            renderer::RenderingOrder,
         };
         use core::fmt;
 
         struct Group<D>(D);
 
-        impl<D: ExpectationDiagnostics<i32>> Expectation<i32> for Group<D> {
+        impl<D: Expectation<i32>> Expectation<i32> for Group<D> {
             type Success<'a>
                 = ()
             where
-                Self: 'a;
+                Self: 'a,
+                i32: 'a;
             type Rejection<'a>
                 = crate::expectation::Evidence
             where
-                Self: 'a;
+                Self: 'a,
+                i32: 'a;
 
             fn evaluate(
                 &self,
@@ -436,17 +480,15 @@ mod tests {
                     Err(children.into_evidence())
                 }
             }
-        }
 
-        impl<D: ExpectationDiagnostics<i32>> ExpectationDiagnostics<i32> for Group<D> {
             const KIND: crate::FailureKind = crate::FailureKind::Matching;
 
-            fn explain<'a, Target>(
+            fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a i32, Self::Rejection<'a>)>,
-                failure: crate::failure::FailureBuilder<Target>,
+                failure: crate::failure::FailureBuilder,
                 _: &AssertionContext<'_>,
-            ) -> crate::failure::FailureBuilder<Target> {
+            ) -> crate::failure::FailureBuilder {
                 match rejected {
                     Some((_, evidence)) => {
                         evidence.explain(failure.relation("does not satisfy the group"))
@@ -458,7 +500,7 @@ mod tests {
 
         #[test]
         fn grouped_evidence_has_relative_paths_without_losing_repeated_field_names() {
-            use crate::__private::field::field;
+            use crate::__private::field;
             let mut context = AssertionContext::default();
             context.scoped(PathSegment::Field("value"), |context| {
                 context.evaluate(&1, &Group(equal_to(2)));
@@ -480,8 +522,7 @@ mod tests {
             assert_that!(failures[0].children[0].path).is_empty();
             assert_that!(failures[1].children[0].path)
                 .contains_exactly([PathSegment::Field("value")]);
-            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(
-                HumanReadableText::new(indoc::indoc! {r"
+            assert_that!(failures[0].to_string()).is_equal_to(indoc::indoc! {r"
                 -------- assertr --------
                 does not satisfy the group
 
@@ -490,8 +531,7 @@ mod tests {
 
                       Actual: 1
                 -------- assertr --------
-            "}),
-            );
+            "});
         }
 
         #[test]
@@ -499,9 +539,9 @@ mod tests {
             let mut context = AssertionContext::default();
             context.scoped(PathSegment::Field("value"), |context| {
                 context.record(
-                    crate::failure::FailureBuilder::detached::<i32>(crate::FailureKind::Matching)
+                    crate::failure::FailureBuilder::new::<i32>(crate::FailureKind::Matching)
                         .child(
-                            crate::failure::FailureBuilder::detached::<i32>(
+                            crate::failure::FailureBuilder::new::<i32>(
                                 crate::FailureKind::Equality,
                             )
                             .path([PathSegment::Field("value")])
@@ -520,7 +560,7 @@ mod tests {
             let mut context =
                 AssertionContext::new(&DebugRenderer, RenderingBudget::default().with_max_items(1))
                     .isolated_for_order(RenderingOrder::SortByRenderedText);
-            let matcher = all_of((each(equal_to(9)), each(equal_to(8))));
+            let matcher = all_of(matchers![each(equal_to(9)), each(equal_to(8))]);
 
             let result = context.scoped(PathSegment::Field("items"), |context| {
                 context.evaluate(&[3, 2, 1], &matcher)
@@ -535,20 +575,10 @@ mod tests {
                         .contains_exactly([PathSegment::Field("items")]);
                     failure
                         .derive_owned(|failure| failure.actual.as_ref())
-                        .is_equal_to(Some(
-                            &AssertionContext::default()
-                                .render()
-                                .value(&1)
-                                .into_rendered(),
-                        ));
+                        .is_equal_to(Some(&AssertionContext::default().render().value(&1)));
                     failure
                         .derive_owned(|failure| failure.expected.as_ref())
-                        .is_equal_to(Some(
-                            &AssertionContext::default()
-                                .render()
-                                .value(&8)
-                                .into_rendered(),
-                        ));
+                        .is_equal_to(Some(&AssertionContext::default().render().value(&8)));
                 },
             ]);
         }
@@ -557,7 +587,10 @@ mod tests {
         fn scoped_paths_participate_in_sorting_before_truncation() {
             use alloc::collections::BTreeSet;
             let actual = BTreeSet::from([[1]]);
-            let matcher = each(all_of((equal_to([9]), crate::elements_are![equal_to(9)])));
+            let matcher = each(all_of(matchers![
+                equal_to([9]),
+                crate::elements_are![equal_to(9)]
+            ]));
             let paths = [
                 alloc::vec![PathSegment::Field("items")],
                 alloc::vec![PathSegment::Field("items"), PathSegment::Index(0)],
@@ -644,27 +677,27 @@ mod tests {
             type Success<'a>
                 = ()
             where
-                Self: 'a;
+                Self: 'a,
+                i32: 'a;
             type Rejection<'a>
                 = Evidence
             where
-                Self: 'a;
+                Self: 'a,
+                i32: 'a;
 
             fn evaluate(&self, _: &i32, context: &AssertionContext<'_>) -> Result<(), Evidence> {
                 Err(context.isolated().into_evidence())
             }
-        }
 
-        impl ExpectationDiagnostics<i32> for Flat<'_> {
             const KIND: FailureKind = FailureKind::Matching;
             const FLATTEN: bool = true;
 
-            fn explain<'a, Target>(
+            fn explain<'a>(
                 &'a self,
                 _: Option<(&'a i32, Evidence)>,
-                failure: FailureBuilder<Target>,
+                failure: FailureBuilder,
                 _: &AssertionContext<'_>,
-            ) -> FailureBuilder<Target> {
+            ) -> FailureBuilder {
                 self.0.set(self.0.get() + 1);
                 failure
             }
@@ -675,14 +708,17 @@ mod tests {
             let explanations = Cell::new(0);
             let context = AssertionContext::default();
 
-            assert_that!(context.probe(&1, &all_of((Flat(&explanations),)))).is_false();
+            assert_that!(context.probe(&1, &all_of(matchers![Flat(&explanations)]))).is_false();
             assert_that!(explanations.get()).is_equal_to(0);
-            assert_that!(context.probe(&[1], &matchers::each(all_of((Flat(&explanations),)))))
-                .is_false();
+            assert_that!(context.probe(
+                &[1],
+                &matchers::each(all_of(matchers![Flat(&explanations)]))
+            ))
+            .is_false();
             assert_that!(explanations.get()).is_equal_to(0);
 
             let mut context = AssertionContext::default();
-            assert_that!(context.evaluate(&1, &all_of((Flat(&explanations),)))).is_false();
+            assert_that!(context.evaluate(&1, &all_of(matchers![Flat(&explanations)]))).is_false();
             // The rejection, then the conjunction's fallback description of its empty evidence.
             assert_that!(explanations.get()).is_equal_to(2);
         }

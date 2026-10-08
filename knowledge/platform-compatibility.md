@@ -37,8 +37,8 @@ Core assertions, capture, structured failures, rendering, tree collections, and 
 Memory assertions (`assertions::core::mem`, `matchers::memory::NeedsDrop`) need no optional feature.
 
 The published `borrow-for` dependency disables defaults and always enables `alloc` for wrappers, strings, and vectors.
-[Unwind bounds](assertion-lifecycle.md#unwind-safety) use `core` traits. See
-[failure processing](failure-processing.md#presentation-and-fallback) for how panic adapters behave with and without `std`.
+[Unwind bounds](assertion-lifecycle.md#unwind-safety) use `core` traits. See [failure
+processing](failure-processing.md#presentation-and-fallback) for how panic presentations behave with and without `std`.
 
 ## Runtime and macro compatibility
 

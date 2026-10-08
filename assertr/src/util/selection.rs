@@ -4,11 +4,11 @@
 //! every rendered candidate temporarily. This module replaces that full-sort-and-truncate step.
 //! For example, a limit of two selects `[1, 2]` from `[5, 2, 4, 1]`, regardless of encounter order.
 //!
-//! [`select_smallest`] is the adapter-facing operation: cache each candidate's comparison key,
+//! [`select_smallest`] is the rendering-facing operation: cache each candidate's comparison key,
 //! select by that key, and return payloads in stable sorted order. [`Smallest`] supports
-//! incremental callers, such as assignment evidence that must be sampled while comparisons are
-//! still running. It stores ordered items directly. Wrap a payload in [`Keyed`] when only its key
-//! should be ordered.
+//! incremental callers, such as evidence scopes that retain children while evaluation is still
+//! running. It stores ordered items directly. Wrap a payload in [`Keyed`] when only its key should
+//! be ordered.
 //!
 //! Groups that fit the limit stay in a vector and need only one sort, avoiding heap maintenance.
 //! The first offer beyond a finite limit turns that vector into a max-heap. Its root is the largest
@@ -17,19 +17,18 @@
 //! excluding key construction and comparison costs. Storage grows as needed. Neither construction
 //! nor heap conversion reserves k entries upfront.
 //!
-//! A zero limit retains nothing. The adapter helper also skips input traversal and key
+//! A zero limit retains nothing. The rendering helper also skips input traversal and key
 //! construction. `usize::MAX` means unlimited collection followed by sorting. These are item
 //! bounds, not byte bounds: a candidate may own arbitrarily large data. Callers still own
 //! rendering, truth, group membership, and omission accounting.
 
 use alloc::{collections::BinaryHeap, vec::Vec};
-use core::{borrow::Borrow, cmp::Ordering};
+use core::cmp::Ordering;
 
 /// Associates an owned payload with a comparison key, without requiring the payload to be `Ord`.
 ///
-/// Equality and ordering deliberately ignore `value`. This also lets `Rc<Keyed<K, T>>` share a
-/// payload and its key while retaining the same ordering. Include original identity in
-/// `key` when distinct payloads with equal display text must have a stable tie order.
+/// Equality and ordering deliberately ignore `value`. Include original identity in `key` when
+/// distinct payloads with equal display text must have a stable tie order.
 pub(crate) struct Keyed<K, T> {
     pub(crate) key: K,
     pub(crate) value: T,
@@ -63,8 +62,7 @@ enum Storage<T> {
 
 /// The smallest `maximum` items offered so far, with no cloning or eager allocation.
 ///
-/// Use [`Self::into_sorted`] for final presentation and [`Self::into_unsorted`] to move samples
-/// into another collector without an intermediate sort. Equal items have no promised order.
+/// Use [`Self::into_sorted`] for final presentation. Equal items have no promised order.
 /// [`select_smallest`] supplies encounter ranks when stable ordering by a separate key is needed.
 pub(crate) struct Smallest<T> {
     maximum: usize,
@@ -80,6 +78,11 @@ impl<T: Ord> Smallest<T> {
         }
     }
 
+    /// The item limit this selection was created with.
+    pub(crate) fn maximum(&self) -> usize {
+        self.maximum
+    }
+
     /// Number of retained items, excluding discarded or replaced offers.
     pub(crate) fn len(&self) -> usize {
         match &self.storage {
@@ -88,17 +91,11 @@ impl<T: Ord> Smallest<T> {
         }
     }
 
-    /// Whether an offer would be retained, without taking ownership of it.
-    ///
-    /// Shared callers can test a borrowed candidate before allocating its `Rc`. This may heapify
-    /// a full buffer, even if the offer loses, but leaves the retained items unchanged. The answer
-    /// remains valid until another item is offered. `Borrow` lets `Smallest<Rc<T>>` inspect `&T`.
-    pub(crate) fn would_retain<Q: Ord + ?Sized>(&mut self, candidate: &Q) -> bool
-    where
-        T: Borrow<Q>,
-    {
+    /// Keeps the item if there is room or it is smaller than the largest retained item.
+    /// Discards the losing item immediately, including any evicted payload.
+    pub(crate) fn offer(&mut self, item: T) {
         if self.maximum == 0 {
-            return false;
+            return;
         }
         if let Storage::Buffer(buffer) = &mut self.storage
             && buffer.len() == self.maximum
@@ -106,22 +103,13 @@ impl<T: Ord> Smallest<T> {
         {
             self.storage = Storage::Heap(BinaryHeap::from(core::mem::take(buffer)));
         }
-        match &self.storage {
-            Storage::Buffer(_) => true,
-            Storage::Heap(heap) => candidate < heap.peek().expect("a full nonempty heap").borrow(),
-        }
-    }
-
-    /// Keeps the item if there is room or it is smaller than the largest retained item.
-    /// Discards the losing item immediately, including any evicted payload.
-    pub(crate) fn offer(&mut self, item: T) {
-        if !self.would_retain(&item) {
-            return;
-        }
         match &mut self.storage {
             Storage::Buffer(buffer) => buffer.push(item),
             Storage::Heap(heap) => {
-                *heap.peek_mut().expect("a full nonempty heap") = item;
+                let mut largest = heap.peek_mut().expect("a full nonempty heap");
+                if item < *largest {
+                    *largest = item;
+                }
             }
         }
     }
@@ -134,22 +122,6 @@ impl<T: Ord> Smallest<T> {
                 buffer
             }
             Storage::Heap(heap) => heap.into_sorted_vec(),
-        }
-    }
-
-    /// Moves the retained items out without sorting or copying them. Order is unspecified.
-    pub(crate) fn into_unsorted(self) -> Vec<T> {
-        match self.storage {
-            Storage::Buffer(buffer) => buffer,
-            Storage::Heap(heap) => heap.into_vec(),
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn retained(&self) -> &[T] {
-        match &self.storage {
-            Storage::Buffer(buffer) => buffer.as_slice(),
-            Storage::Heap(heap) => heap.as_slice(),
         }
     }
 }

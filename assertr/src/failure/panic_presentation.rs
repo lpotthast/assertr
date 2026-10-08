@@ -1,59 +1,50 @@
 //! Presentation used exclusively when raising an assertion panic.
 //!
-//! Capture mode stores structured failures without invoking this module. General-purpose adapters
-//! remain independent of how assertion failures are handled.
+//! Capture mode stores structured failures without invoking this module.
 
-use alloc::string::String;
-use core::{fmt::Write, panic::RefUnwindSafe};
+use alloc::string::{String, ToString};
+use core::panic::RefUnwindSafe;
 
-use super::{
-    AssertionFailure,
-    adapter::{Adapter, HumanReadableText, ToHumanReadableText},
-};
+use super::AssertionFailure;
 
-/// The context's text-producing adapter, used only by panic-mode failure handling.
+/// The context's panic text closure, used only by panic-mode failure handling.
 ///
-/// The `'static` bound keeps the owned adapter's destructor independent of subject borrows,
+/// The `'static` bound keeps the owned closure's destructor independent of subject borrows,
 /// allowing those borrows to end at the assertion context's last use.
-/// Preserve unwind safety when erasing the adapter type, including through the shared `Rc`.
-pub(crate) type PanicPresentation = dyn Adapter<AssertionFailure, Output = HumanReadableText, Error = String>
-    + RefUnwindSafe
-    + 'static;
+/// Preserve unwind safety when erasing the closure type, including through the shared `Rc`.
+pub(crate) type PanicPresentation = dyn Fn(&AssertionFailure) -> String + RefUnwindSafe + 'static;
 
-/// Produces panic text, preserving the assertion report if the adapter fails.
+/// Produces panic text, preserving the assertion report if the presentation panics.
 pub(crate) fn render(
     failure: &AssertionFailure,
     presentation: Option<&PanicPresentation>,
-) -> HumanReadableText {
-    let Some(adapter) = presentation else {
-        return ToHumanReadableText.render(failure);
+) -> String {
+    let Some(presentation) = presentation else {
+        return failure.to_string();
     };
 
-    // Catch both adapter panics and panics from its error's Display implementation.
     #[cfg(feature = "std")]
-    let result = match std::panic::catch_unwind(|| adapter.adapt(failure)) {
-        Ok(result) => result,
-        Err(payload) => {
-            return fallback(failure, "panicked", panic_payload(payload.as_ref()));
+    {
+        match std::panic::catch_unwind(|| presentation(failure)) {
+            Ok(text) => text,
+            Err(payload) => fallback(failure, panic_payload(payload.as_ref())),
         }
-    };
+    }
 
     #[cfg(not(feature = "std"))]
-    let result = adapter.adapt(failure);
-
-    match result {
-        Ok(message) => message,
-        Err(error) => fallback(failure, "returned an error", &error),
-    }
+    presentation(failure)
 }
 
-fn fallback(failure: &AssertionFailure, reason: &str, detail: &str) -> HumanReadableText {
-    let mut message = ToHumanReadableText.render(failure).into_string();
+#[cfg(feature = "std")]
+fn fallback(failure: &AssertionFailure, detail: &str) -> String {
+    use core::fmt::Write;
+
+    let mut message = failure.to_string();
     message.push_str("\n-------- assertr presentation diagnostic --------\n");
-    writeln!(message, "The failure presentation {reason}: {detail}")
+    writeln!(message, "The failure presentation panicked: {detail}")
         .expect("writing a presentation diagnostic to a String cannot fail");
     message.push_str("------ end assertr presentation diagnostic ------\n");
-    HumanReadableText::new(message)
+    message
 }
 
 #[cfg(feature = "std")]

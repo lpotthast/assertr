@@ -5,7 +5,6 @@
 //! reach it through `$crate`, so no import is ever needed at a call site.
 
 pub mod assert_that_macro;
-pub(crate) mod field;
 #[cfg(feature = "fluent")]
 pub mod fluent_expressions;
 pub(crate) mod partial_match;
@@ -22,13 +21,56 @@ pub fn new_pattern<P>(description: &'static str, predicate: P) -> Pattern<P> {
 }
 
 /// Empty tail of a macro-generated heterogeneous list.
+#[derive(Clone, Copy)]
 pub struct Nil;
 /// One element of a macro-generated heterogeneous list.
+#[derive(Clone, Copy)]
 pub struct Cons<H, T>(pub H, pub T);
+
+/// Formats the elements of a macro-generated list, so it prints like an array of matchers.
+pub trait ListEntries {
+    /// Adds this node's elements to `list`.
+    fn entries(&self, list: &mut core::fmt::DebugList<'_, '_>);
+}
+
+impl ListEntries for Nil {
+    fn entries(&self, _: &mut core::fmt::DebugList<'_, '_>) {}
+}
+
+impl<H: core::fmt::Debug, T: ListEntries> ListEntries for Cons<H, T> {
+    fn entries(&self, list: &mut core::fmt::DebugList<'_, '_>) {
+        list.entry(&self.0);
+        self.1.entries(list);
+    }
+}
+
+impl core::fmt::Debug for Nil {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.debug_list().finish()
+    }
+}
+
+impl<H: core::fmt::Debug, T: ListEntries> core::fmt::Debug for Cons<H, T> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut list = formatter.debug_list();
+        self.entries(&mut list);
+        list.finish()
+    }
+}
 
 #[cfg(feature = "partial")]
 pub use assertr_macros::__partial as partial;
-pub use field::field;
+/// Constructor behind `partial!` field selection.
+pub fn field<A: ?Sized, T: ?Sized, F, M>(
+    projection: F,
+    matcher: M,
+    path: crate::failure::PathSegment,
+) -> crate::expectation::Field<A, T, F, M>
+where
+    F: for<'a> Fn(&'a A) -> Option<&'a T>,
+{
+    crate::expectation::field::projected(projection, matcher, path)
+}
 pub use partial_match::partial_match;
 
 #[doc(hidden)]

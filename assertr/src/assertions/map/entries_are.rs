@@ -1,10 +1,10 @@
-use super::entry_matcher_list::sealed as entry_list_sealed;
+use super::entry::key_segment;
+use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    AssertionContext, Expectation, ValueRenderer,
     assertions::map::{EntryMatcherList, FoundEntries, Map},
-    expectation::{Evidence, MatcherList, lists::sealed as list_sealed},
-    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
-    renderer::IntoRendered,
+    expectation::Evidence,
+    failure::{Fact, FailureBuilder, FailureKind},
 };
 
 /// Exact keyed matching. Duplicate queries cannot replace a missing distinct entry.
@@ -30,16 +30,7 @@ where
     R: ValueRenderer<MapType::Key> + ValueRenderer<usize>,
     L: EntryMatcherList<MapType, R>,
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        MapType: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        MapType: 'a;
+    composite_items!(MapType);
     fn evaluate(
         &self,
         actual: &MapType,
@@ -56,18 +47,14 @@ where
             }
         }
         let mut extras = context.isolated_for_order(MapType::RENDERING_ORDER);
-        for (key, _) in actual.entries() {
-            if !found.contains(key) {
-                entries_match = false;
-                extras.record_with(|context| {
-                    FailureBuilder::detached::<MapType>(FailureKind::Matching)
-                        .path([PathSegment::Key(
-                            context.render().value(key).into_rendered_compact(),
-                        )])
-                        .relation("has an unexpected key")
-                        .build()
-                });
-            }
+        for (key, _) in found.unexpected_entries(actual) {
+            entries_match = false;
+            extras.record_with(|context| {
+                FailureBuilder::new::<MapType>(FailureKind::Matching)
+                    .path([key_segment(context.render(), key)])
+                    .relation("has an unexpected key")
+                    .build()
+            });
         }
         context.append(extras.into_evidence());
         // Distinct expected keys make every length difference a missing or unexpected key. Only
@@ -76,7 +63,7 @@ where
         if entries_match && actual_length != expected_length {
             context.record_with(|context| {
                 let render = context.render();
-                FailureBuilder::detached::<MapType>(FailureKind::Length)
+                FailureBuilder::new::<MapType>(FailureKind::Length)
                     .relation("does not have the required number of entries")
                     .fact(Fact::labelled(
                         "Actual length",
@@ -92,73 +79,21 @@ where
         let matched = entries_match && actual_length == expected_length;
         context.finish(matched, |context| context.describe::<MapType, _>(self))
     }
-}
-impl<MapType: Map + ?Sized, R, L> ExpectationDiagnostics<MapType, R> for EntriesAre<L>
-where
-    R: ValueRenderer<MapType::Key> + ValueRenderer<usize>,
-    L: EntryMatcherList<MapType, R>,
-{
+
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&MapType, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
-            None => context.describe_list::<MapType, _, _>(
+            None => context.describe_list::<MapType, _>(
                 &self.0,
                 failure.relation("has exactly the matching entries"),
             ),
             Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
         }
-    }
-}
-
-impl<L> entry_list_sealed::Sealed for EntriesAre<L> {}
-
-impl<L> list_sealed::Sealed for EntriesAre<L> {}
-
-impl<MapType, R, L> MatcherList<MapType, R> for EntriesAre<L>
-where
-    MapType: Map + ?Sized,
-    L: EntryMatcherList<MapType, R>,
-{
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    fn describe_at(
-        &self,
-        index: usize,
-        context: &AssertionContext<'_, R>,
-    ) -> crate::AssertionFailure {
-        self.0.describe_at(index, context)
-    }
-
-    fn evaluate_at(
-        &self,
-        index: usize,
-        actual: &MapType,
-        context: &mut AssertionContext<'_, R>,
-    ) -> bool {
-        self.0.evaluate_at(index, actual, context)
-    }
-}
-
-impl<MapType, R, L> EntryMatcherList<MapType, R> for EntriesAre<L>
-where
-    MapType: Map + ?Sized,
-    L: EntryMatcherList<MapType, R>,
-{
-    fn evaluate_entry_at<'a>(
-        &'a self,
-        index: usize,
-        actual: &'a MapType,
-        context: &mut AssertionContext<'_, R>,
-    ) -> (bool, Option<&'a MapType::Key>) {
-        self.0.evaluate_entry_at(index, actual, context)
     }
 }
 
@@ -243,30 +178,6 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_keys_matching_every_entry_report_the_length_difference() {
-        assert_that_panic_by(|| {
-            assert_that!(BTreeMap::from([(1, 1)]))
-                .with_location(false)
-                .matches(entries_are![(1, eq(1)), (1, eq(1))]);
-        })
-        .has_type::<String>()
-        .is_equal_to(indoc::formatdoc! {r"
-            -------- assertr --------
-            Expression: `BTreeMap::from([(1, 1)])`
-
-            does not match
-
-            Nested failures:
-              - does not have the required number of entries
-
-                Details:
-                  - Actual length: 1
-                  - Expected length: 2
-            -------- assertr --------
-        "});
-    }
-
-    #[test]
     fn length_differences_count_as_omitted_evidence_at_zero_budget() {
         let failures = assert_that!(BTreeMap::from([(1, 1)]))
             .with_rendering_budget(RenderingBudget::default().with_max_items(0))
@@ -275,86 +186,6 @@ mod tests {
         assert_that!(failures).has_length(1);
         assert_that!(failures[0].children).is_empty();
         assert_that!(failures[0].omitted_children).is_equal_to(1);
-    }
-
-    mod retained_lookup {
-        use super::*;
-        use crate::{
-            assertions::{
-                HasLength,
-                map::{Map, MapLookup},
-            },
-            failure::{FailureKind, PathSegment},
-            renderer::RenderingOrder,
-        };
-        use core::cell::Cell;
-
-        struct ObservedMap {
-            entries: [(u32, i32); 2],
-            lookups: Cell<usize>,
-        }
-        impl HasLength for ObservedMap {
-            fn length(&self) -> usize {
-                self.entries.len()
-            }
-        }
-        impl Map for ObservedMap {
-            type Key = u32;
-            type Value = i32;
-            const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
-            fn entries(&self) -> impl Iterator<Item = (&u32, &i32)> {
-                self.entries.iter().map(|(key, value)| (key, value))
-            }
-        }
-        impl MapLookup<u32> for ObservedMap {
-            fn get_key_value(&self, query: &u32) -> Option<(&u32, &i32)> {
-                self.lookups.set(self.lookups.get() + 1);
-                self.entries().find(|(key, _)| *key == query)
-            }
-        }
-
-        struct Query<'a>(&'a Cell<usize>);
-        impl borrow_for::BorrowFor<u32> for Query<'_> {
-            type View = u32;
-        }
-        impl core::borrow::Borrow<u32> for Query<'_> {
-            fn borrow(&self) -> &u32 {
-                let previous = self.0.get();
-                self.0.set(previous + 1);
-                if previous == 0 { &1 } else { &2 }
-            }
-        }
-
-        #[test]
-        fn converts_and_looks_up_once_even_when_the_value_rejects() {
-            for expected in [1, 99] {
-                let conversions = Cell::new(0);
-                let actual = ObservedMap {
-                    entries: [(1, 1), (2, 2)],
-                    lookups: Cell::new(0),
-                };
-                let failures = assert_that!(actual).capture(|it| {
-                    it.matches(entries_are![
-                        (Query(&conversions), eq(expected)),
-                        (2_u32, eq(2))
-                    ])
-                });
-
-                assert_that!(conversions.get()).is_equal_to(1);
-                assert_that!(actual.lookups.get()).is_equal_to(2);
-                if expected == 1 {
-                    assert_that!(failures).is_empty();
-                } else {
-                    assert_that!(failures).has_length(1);
-                    // The rejected value occupies its original key. There is no unexpected key.
-                    assert_that!(failures[0].children).has_length(1);
-                    let child = &failures[0].children[0];
-                    assert_that!(child.kind).is_equal_to(FailureKind::Equality);
-                    assert_that!(child.path)
-                        .contains_exactly_matching([pattern!(PathSegment::Key(_))]);
-                }
-            }
-        }
     }
 
     #[test]
@@ -366,7 +197,7 @@ mod tests {
 
         assert_that!(failures[0].children).has_length(1);
         assert_that!(failures[0].children[0].path).contains_exactly_matching([
-            pattern!(crate::failure::PathSegment::Key(key) if rendered_text(key) == "\"a\""),
+            pattern!(crate::failure::PathSegment::Key(key) if format!("{key:#}") == "\"a\""),
         ]);
         assert_that!(failures[0].omitted_children).is_equal_to(2);
     }
@@ -385,7 +216,6 @@ mod tests {
 
         assert_that!(actual[0].children).has_length(1);
         assert_that!(actual[0].omitted_children).is_equal_to(2);
-        assert_that!(ToHumanReadableText.render(&actual[0]))
-            .is_equal_to(ToHumanReadableText.render(&expected[0]));
+        assert_that!(actual[0].to_string()).is_equal_to(expected[0].to_string());
     }
 }

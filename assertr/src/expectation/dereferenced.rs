@@ -1,5 +1,5 @@
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics,
+    AssertionContext, Expectation,
     failure::{FailureBuilder, FailureKind},
 };
 use core::ops::Deref;
@@ -35,19 +35,15 @@ where
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         self.0.evaluate(&**actual, context)
     }
-}
-impl<T: Deref + ?Sized, R, M> ExpectationDiagnostics<T, R> for Dereferenced<M>
-where
-    M: ExpectationDiagnostics<T::Target, R>,
-{
-    const KIND: FailureKind = <M as ExpectationDiagnostics<T::Target, R>>::KIND;
-    const FLATTEN: bool = <M as ExpectationDiagnostics<T::Target, R>>::FLATTEN;
-    fn explain<'a, Target>(
+
+    const KIND: FailureKind = <M as Expectation<T::Target, R>>::KIND;
+    const FLATTEN: bool = <M as Expectation<T::Target, R>>::FLATTEN;
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         self.0.explain(
             rejected.map(|(actual, rejection)| (&**actual, rejection)),
             failure,
@@ -55,6 +51,7 @@ where
         )
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::dereferenced;

@@ -77,5 +77,5 @@ impl<T> Default for Type<T> {
 /// guaranteed. [`AssertThat::satisfies`] explains the projection family used by these checks.
 #[must_use]
 pub fn assert_that_type<T>() -> AssertThat<'static, Type<T>, Panic> {
-    AssertThat::new_panicking(Actual::Owned(Type::<T>::new())).with_expression(type_name::<T>())
+    AssertThat::new(Actual::Owned(Type::<T>::new())).with_expression(type_name::<T>())
 }

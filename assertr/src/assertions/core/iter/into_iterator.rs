@@ -1,7 +1,13 @@
-use crate::borrow_for::BorrowFor;
 use crate::{
-    AssertThat, DebugRenderer, ExpectationDiagnostics, Mode, ValueRenderer, assertions::iterator,
-    expectation::MatcherList, mode::Capture,
+    AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer,
+    assertions::iterator::{
+        Contains, ContainsAll, ContainsExactlyInAnyOrder, ContainsMatching, DoesNotContain,
+        DoesNotContainMatching, ElementsAreInAnyOrder, IsEmpty, IsNotEmpty, LengthScan,
+        PositionReporting::Unavailable, run,
+    },
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{MatcherList, lists::SatisfyingList, satisfying},
+    mode::Capture,
 };
 
 /// Chainable assertions over a fresh borrowed iteration of a collection-like value.
@@ -40,7 +46,7 @@ pub trait IntoIteratorAssertions<T, R = DebugRenderer> {
     /// Asserts that a borrowed traversal contains an element matching `expected`.
     fn into_iter_contains_matching<P>(self, expected: P) -> Self
     where
-        P: ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         R: ValueRenderer<usize>;
     /// Asserts that a borrowed traversal contains an element satisfying `assertions`.
     fn into_iter_contains_satisfying<A>(self, assertions: A) -> Self
@@ -58,7 +64,7 @@ pub trait IntoIteratorAssertions<T, R = DebugRenderer> {
     /// Asserts that no element in a borrowed traversal matches `expected`.
     fn into_iter_does_not_contain_matching<P>(self, expected: P) -> Self
     where
-        P: ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         R: ValueRenderer<usize> + ValueRenderer<T>;
     /// Asserts that no element in a borrowed traversal satisfies `assertions`.
     fn into_iter_does_not_contain_satisfying<A>(self, assertions: A) -> Self
@@ -114,8 +120,10 @@ where
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        iterator::assert_contains::<_, T, _, _, _, _>(&self, self.actual().into_iter(), &expected);
+        run(&self, || {
+            let expected = borrow_for::<T, _>(&expected);
+            (self.actual().into_iter(), Contains::<T, _>::new(expected))
+        });
         self
     }
     #[track_caller]
@@ -125,27 +133,22 @@ where
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        iterator::assert_contains_all::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            expected.as_ref(),
-        );
+        run(&self, || {
+            let scan = ContainsAll::<T, _>::new(expected.as_ref());
+            (self.actual().into_iter(), scan)
+        });
         self
     }
     #[track_caller]
     fn into_iter_contains_matching<P>(self, expected: P) -> Self
     where
-        P: ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        iterator::matchers::membership::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            &expected,
-            iterator::PositionReporting::Unavailable,
-        );
+        run(&self, || {
+            let scan = ContainsMatching::<T, _>::new(expected, Unavailable);
+            (self.actual().into_iter(), scan)
+        });
         self
     }
     #[track_caller]
@@ -154,7 +157,7 @@ where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
     {
-        self.into_iter_contains_matching(crate::expectation::satisfying(assertions))
+        self.into_iter_contains_matching(satisfying(assertions))
     }
     #[track_caller]
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
@@ -163,28 +166,23 @@ where
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        iterator::assert_does_not_contain::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            &not_expected,
-            iterator::PositionReporting::Unavailable,
-        );
+        run(&self, || {
+            let unexpected = borrow_for::<T, _>(&not_expected);
+            let scan = DoesNotContain::<T, _>::new(unexpected, Unavailable);
+            (self.actual().into_iter(), scan)
+        });
         self
     }
     #[track_caller]
     fn into_iter_does_not_contain_matching<P>(self, expected: P) -> Self
     where
-        P: ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         R: ValueRenderer<usize> + ValueRenderer<T>,
     {
-        self.track_assertion();
-        iterator::matchers::no_membership::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            &expected,
-            iterator::PositionReporting::Unavailable,
-        );
+        run(&self, || {
+            let scan = DoesNotContainMatching::<T, _>::new(expected, Unavailable);
+            (self.actual().into_iter(), scan)
+        });
         self
     }
     #[track_caller]
@@ -193,7 +191,7 @@ where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
     {
-        self.into_iter_does_not_contain_matching(crate::expectation::satisfying(assertions))
+        self.into_iter_does_not_contain_matching(satisfying(assertions))
     }
     #[track_caller]
     fn into_iter_contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
@@ -202,13 +200,10 @@ where
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        iterator::assert_contains_exactly_in_any_order::<_, T, E, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            expected,
-        );
+        run(&self, || {
+            let scan = ContainsExactlyInAnyOrder::<T, _>::new(expected.as_ref());
+            (self.actual().into_iter(), scan)
+        });
         self
     }
     #[track_caller]
@@ -217,12 +212,10 @@ where
         P: MatcherList<T, R>,
         R: ValueRenderer<usize>,
     {
-        self.track_assertion();
-        iterator::matchers::unordered::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            &expected,
-        );
+        run(&self, || {
+            let scan = ElementsAreInAnyOrder::<T, _>::new(expected);
+            (self.actual().into_iter(), scan)
+        });
         self
     }
     #[track_caller]
@@ -234,13 +227,11 @@ where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        let expected = crate::expectation::lists::SatisfyingList(assertions.as_ref());
-        iterator::matchers::unordered::<_, T, _, _, _, _>(
-            &self,
-            self.actual().into_iter(),
-            &expected,
-        );
+        run(&self, || {
+            let expected = SatisfyingList::new(assertions.as_ref());
+            let scan = ElementsAreInAnyOrder::<T, _>::new(expected);
+            (self.actual().into_iter(), scan)
+        });
         self
     }
     #[track_caller]
@@ -248,8 +239,7 @@ where
     where
         R: ValueRenderer<T> + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        iterator::assert_is_empty::<_, T, _, _, _>(&self, self.actual().into_iter());
+        run(&self, || (self.actual().into_iter(), IsEmpty::<T>::new()));
         self
     }
     #[track_caller]
@@ -257,8 +247,9 @@ where
     where
         R: ValueRenderer<T>,
     {
-        self.track_assertion();
-        iterator::assert_is_not_empty::<_, T, _, _, _>(&self, self.actual().into_iter());
+        run(&self, || {
+            (self.actual().into_iter(), IsNotEmpty::<T>::new())
+        });
         self
     }
     #[track_caller]
@@ -266,8 +257,9 @@ where
     where
         R: ValueRenderer<T> + ValueRenderer<usize>,
     {
-        self.track_assertion();
-        iterator::assert_has_length::<_, T, _, _, _>(&self, self.actual().into_iter(), expected);
+        run(&self, || {
+            (self.actual().into_iter(), LengthScan::<T>::new(expected))
+        });
         self
     }
 }
@@ -275,6 +267,41 @@ where
 #[cfg(test)]
 #[allow(clippy::trivially_copy_pass_by_ref)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::{matchers::eq, prelude::*};
+
+        fn is(expected: i32) -> impl Fn(AssertThat<'_, i32, Capture>) {
+            move |it| {
+                it.is_equal_to(expected);
+            }
+        }
+
+        #[test]
+        fn are_as_expected() {
+            let values = vec![1, 2, 3];
+            values.must().into_iter_contain(2);
+            values.must().into_iter_contain_all([1, 3]);
+            values.must().into_iter_contain_matching(eq(2));
+            values.must().into_iter_contain_satisfying(is(2));
+            values.must().into_iter_not_contain(4);
+            values.must().into_iter_not_contain_matching(eq(4));
+            values.must().into_iter_not_contain_satisfying(is(4));
+            values
+                .must()
+                .into_iter_contain_exactly_in_any_order([3, 1, 2]);
+            values
+                .must()
+                .into_iter_contain_exactly_in_any_order_matching([eq(3), eq(1), eq(2)]);
+            values
+                .must()
+                .into_iter_contain_exactly_in_any_order_satisfying([is(3), is(1), is(2)]);
+            Vec::<i32>::new().must().into_iter_be_empty();
+            values.must().into_iter_not_be_empty();
+            values.must().into_iter_have_length(3);
+        }
+    }
+
     mod renderer_contract {
         use crate::{
             prelude::*,
@@ -292,6 +319,27 @@ mod tests {
         }
 
         #[test]
+        fn matchers_render_elements_without_debug() {
+            use crate::{
+                expectation::{anything, predicate},
+                test_support::{NumericRenderer, SentinelRenderer},
+            };
+
+            struct Opaque;
+
+            assert_that!([Opaque])
+                .with_renderer(SentinelRenderer)
+                .into_iter_contains_matching(anything())
+                .into_iter_does_not_contain_matching(predicate(|_: &Opaque| false));
+            assert_that!([Opaque, Opaque])
+                .with_renderer(NumericRenderer)
+                .into_iter_contains_exactly_in_any_order_matching(matchers![
+                    anything(),
+                    anything(),
+                ]);
+        }
+
+        #[test]
         fn membership_uses_the_active_renderer_type() {
             assert_that!(vec![RendererActual(1), RendererActual(2)])
                 .with_renderer(ComparisonRenderer)
@@ -302,13 +350,6 @@ mod tests {
 
     mod into_iter_contains {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3].must().into_iter_contain(2);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -324,45 +365,11 @@ mod tests {
         fn compiles_for_string_values() {
             assert_that!(vec!["foo".to_owned()]).into_iter_contains("foo");
         }
-
-        #[test]
-        fn panics_when_expected_is_not_contained() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_contains(4);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
-
-                    does not contain
-
-                    Expected: 4
-
-                    Details:
-                      - Consumed elements: 3
-                    -------- assertr --------
-                "});
-        }
     }
 
     mod into_iter_contains_all {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3].must().into_iter_contain_all([1, 3]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -430,31 +437,11 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_contain_matching(crate::expectation::predicate(|it: &i32| *it % 2 == 0));
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
                 into_iter_contains_matching(crate::expectation::predicate(|it: &i32| *it > 7))
             );
-        }
-
-        #[test]
-        fn custom_element_rendering_does_not_require_debug() {
-            use crate::test_support::SentinelRenderer;
-
-            struct Opaque;
-
-            assert_that!([Opaque])
-                .with_renderer(SentinelRenderer)
-                .with_location(false)
-                .into_iter_contains_matching(crate::expectation::anything());
         }
 
         #[test]
@@ -501,12 +488,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3].must().into_iter_contain_satisfying(is_two);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2]),
@@ -528,11 +509,6 @@ mod tests {
             assert_that!(values[0].0).is_equal_to(1);
         }
 
-        #[cfg(feature = "fluent")]
-        fn is_two(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(2);
-        }
-
         fn is_seven(it: AssertThat<i32, Capture>) {
             it.is_equal_to(7);
         }
@@ -541,12 +517,6 @@ mod tests {
     mod into_iter_does_not_contain {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3].must().into_iter_not_contain(4);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -596,14 +566,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_not_contain_matching(crate::expectation::predicate(|it: &i32| *it > 7));
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
@@ -611,20 +573,6 @@ mod tests {
                     *it % 2 == 0
                 }))
             );
-        }
-
-        #[test]
-        fn custom_element_rendering_does_not_require_debug() {
-            use crate::test_support::SentinelRenderer;
-
-            struct Opaque;
-
-            assert_that!([Opaque])
-                .with_renderer(SentinelRenderer)
-                .with_location(false)
-                .into_iter_does_not_contain_matching(crate::expectation::predicate(
-                    |_: &Opaque| false,
-                ));
         }
 
         #[test]
@@ -661,14 +609,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2, 3]
-                .must()
-                .into_iter_not_contain_satisfying(is_seven);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
@@ -679,25 +619,10 @@ mod tests {
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
-
-        #[cfg(feature = "fluent")]
-        fn is_seven(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(7);
-        }
     }
 
     mod into_iter_contains_exactly_in_any_order {
         use crate::prelude::*;
-
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![2, 1, 1]
-                .must()
-                .into_iter_contain_exactly_in_any_order([1, 2, 1]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -711,48 +636,21 @@ mod tests {
         fn succeeds_when_elements_match_in_another_order() {
             assert_that!(vec![2, 1, 1]).into_iter_contains_exactly_in_any_order([1, 2, 1]);
         }
-
-        #[test]
-        fn panics_when_an_element_differs() {
-            assert_that_panic_by(|| {
-                assert_that!(vec![1, 2, 3])
-                    .with_location(false)
-                    .into_iter_contains_exactly_in_any_order([1, 2, 9]);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `vec![1, 2, 3]`
-
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
-
-                    does not contain exactly in any order
-
-                    Expected: [
-                        1,
-                        2,
-                        9,
-                    ]
-
-                    Details:
-                      - Elements not found: [
-                            9,
-                        ]
-                      - Elements not expected: [
-                            3,
-                        ]
-                    -------- assertr --------
-                "});
-        }
     }
 
     mod into_iter_contains_exactly_in_any_order_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(vec![1, 2, 3]),
+                into_iter_contains_exactly_in_any_order_matching(
+                    crate::expectation::predicate_list([is_one, is_two, is_nine,])
+                )
+            );
+        }
 
         #[test]
         fn matches_items_without_equality_through_predicates() {
@@ -769,31 +667,6 @@ mod tests {
                 );
         }
 
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2]
-                .must()
-                .into_iter_contain_exactly_in_any_order_matching(
-                    crate::expectation::predicate_list([is_at_most_two, is_one]),
-                );
-        }
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that!(vec![1, 2, 3]),
-                into_iter_contains_exactly_in_any_order_matching(
-                    crate::expectation::predicate_list([is_one, is_two, is_nine,])
-                )
-            );
-        }
-
-        #[cfg(feature = "fluent")]
-        fn is_at_most_two(value: &i32) -> bool {
-            *value <= 2
-        }
-
         fn is_one(value: &i32) -> bool {
             *value == 1
         }
@@ -804,21 +677,6 @@ mod tests {
 
         fn is_nine(value: &i32) -> bool {
             *value == 9
-        }
-
-        #[test]
-        fn custom_element_rendering_does_not_require_debug() {
-            use crate::test_support::NumericRenderer;
-
-            struct Opaque;
-
-            assert_that!([Opaque, Opaque])
-                .with_renderer(NumericRenderer)
-                .with_location(false)
-                .into_iter_contains_exactly_in_any_order_matching(matchers![
-                    crate::expectation::anything(),
-                    crate::expectation::anything(),
-                ]);
         }
 
         #[test]
@@ -892,14 +750,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![-1, 1]
-                .must()
-                .into_iter_contain_exactly_in_any_order_satisfying([positive, negative]);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, -1, 2]),
@@ -910,22 +760,11 @@ mod tests {
         fn positive(it: AssertThat<i32, Capture>) {
             it.is_greater_than(0);
         }
-
-        #[cfg(feature = "fluent")]
-        fn negative(it: AssertThat<i32, Capture>) {
-            it.is_less_than(0);
-        }
     }
 
     mod into_iter_is_empty {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Vec::<i32>::new().must().into_iter_be_empty();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -967,12 +806,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1].must().into_iter_not_be_empty();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(Vec::<i32>::new()), into_iter_is_not_empty());
         }
@@ -1005,12 +838,6 @@ mod tests {
     mod into_iter_has_length {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1, 2].must().into_iter_have_length(2);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {

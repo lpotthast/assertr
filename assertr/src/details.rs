@@ -80,7 +80,7 @@ mod tests {
                 .with_conditional_detail_message(move |_| condition == "add", move |_| message)
                 .capture(|it| it.is_equal_to(2));
 
-            assert_that!(failures[0].messages()).contains_exactly(["consumed"]);
+            assert_that!(failures[0].messages).contains_exactly(["consumed"]);
         }
 
         #[test]
@@ -92,7 +92,7 @@ mod tests {
                 )
                 .capture(|it| it.is_equal_to(2));
 
-            assert_that!(failures[0].messages()).is_empty();
+            assert_that!(failures[0].messages).is_empty();
         }
     }
 }

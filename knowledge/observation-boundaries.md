@@ -4,7 +4,7 @@ depends_on: [ expectation-execution ]
 sources:
   - assertr/src/assert_that/execution.rs
   - assertr/src/crate_docs.md
-  - assertr/src/assertions/alloc/panic_value.rs
+  - assertr/src/assertions/alloc/boxed.rs
   - assertr/src/assertions/core/fn.rs
   - assertr/src/assertions/core/pattern.rs
   - assertr/src/entry/panic.rs
@@ -33,11 +33,11 @@ preserve its caller location. Internal observation types stay private.
 Reusable expectation hooks remain synchronous. Do not hide one-use values in interior mutability to simulate reusability.
 
 Built-in adapters use executor methods that skip tracking. Downstream adapters cannot access those private methods.
-If an operation cannot use public expectation execution, its adapter tracks explicitly and completes an attached
-[failure builder](failure-processing.md#builder-completion), rendering through `self.render()`.
+If an operation cannot use public expectation execution, its adapter tracks explicitly, builds a
+[failure](failure-processing.md#builder-completion) with `self.failure(..)` and `self.render()`, and passes it to
+`self.raise(..)`.
 
-Ordinary pattern assertions consume their guard closure once and release temporary captures before rendering or
-continuation. Reusable pattern matchers require `Fn` guards.
+Pattern assertions and reusable pattern matchers require `Fn` guards and run through ordinary expectation execution.
 
 ## Invocation and polling
 
@@ -83,10 +83,10 @@ The [function tests](../assertr/src/assertions/core/fn.rs), including
 retain the observed entry kind or the metadata error. `NotFound` and `NotADirectory` report the path as absent. Any
 other error reports an inspection failure with an `I/O error` fact.
 
-The public rejection types `ExistenceRejection` and `EntryKindRejection` have private representations. Explanation never
-inspects the filesystem again. Evaluation needs no renderer. Diagnostics require the path-subject renderer and
-`ValueRenderer<std::io::Error>`, honoring leaf budgets. [Path tests](../assertr/src/assertions/std/path.rs) pin every
-outcome. Invalid-path cases avoid privilege-dependent permission failures.
+Rejections retain the raw observation: `io::Result<bool>` for existence and `io::Result<FileType>` for entry kinds.
+Explanation classifies it and never inspects the filesystem again. Diagnostics require the path-subject renderer and
+`ValueRenderer<std::io::Error>`, honoring leaf budgets. [Path tests](../assertr/src/assertions/std/path.rs) cover the
+outcomes above. Invalid-path cases avoid privilege-dependent permission failures.
 
 ## Guarded observations
 
@@ -97,7 +97,7 @@ acquire guards:
 | Subject | Observation contract |
 |---|---|
 | Standard mutex | `try_lock` success, including acquisition of a poisoned guard, means unlocked. `WouldBlock` means locked. Poison checks are separate. A failing `is_locked` renders through the guard, then releases it before raising to avoid poisoning the mutex. |
-| Tokio mutex callback | Try immediate acquisition. If the lock is held, reject without invoking the callback. Otherwise, run the callback in nested capture. The one-use `has_value_satisfying` method accepts `FnOnce` and runs through the one-use executor after tracking. `HasValueSatisfying` remains the reusable `Fn` form. |
+| Tokio mutex callback | Try immediate acquisition. If the lock is held, reject without invoking the callback. Otherwise, `has_value_satisfying` runs its `FnOnce` callback in the chain's mode while holding the guard, like `is_some_satisfying`. The reusable `Fn` form `HasValueSatisfying` runs the callback in nested capture and reports its failures as children. |
 | Tokio RwLock | Try a write lock, then a read lock if needed. Write success means unlocked. Read-only success means read-locked. Neither succeeding means write-locked. Values that cannot be acquired are shown as unavailable. |
 | Watch receiver | Borrow the current value without marking it seen. `has_changed` and `has_not_changed` observe once, preserve the value and seen state, reject a closed channel, and continue on the receiver in capture mode. |
 
@@ -114,7 +114,7 @@ Reqwest body extraction consumes an owned response in panic mode:
 | JSON-decode failure after successful text read | Text, URL, expected type, original parser error. |
 | Success | No temporary error details on continuation. |
 
-Reading and decoding count as one `get_json` assertion. A partially consumed response cannot be recovered.
-Header extraction checks presence and continues on a clone of the first value. Header diagnostics follow the
-[sensitivity policy](diagnostic-rendering.md#sensitive-http-header-evidence).
-Regression: [`panics_synchronously_when_the_response_is_only_borrowed`](../assertr/src/assertions/reqwest/response.rs).
+Reading and decoding count as one `get_json` assertion. A partially consumed response cannot be recovered. Header
+extraction checks presence and continues on a clone of the first value. Header diagnostics follow the [sensitive header
+rules](diagnostic-rendering.md#sensitive-http-header-evidence). Regression:
+[`panics_synchronously_when_the_response_is_only_borrowed`](../assertr/src/assertions/reqwest/response.rs).

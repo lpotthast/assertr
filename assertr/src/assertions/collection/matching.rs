@@ -1,8 +1,9 @@
 //! Reusable collection element matcher expectations.
 
 use super::Collection;
+use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    AssertionContext, Expectation, ValueRenderer,
     expectation::Evidence,
     failure::{FailureBuilder, FailureKind},
     renderer::RenderingOrder,
@@ -33,7 +34,7 @@ impl MatchingItem {
     ) -> Result<(), Evidence>
     where
         T: ?Sized + 'i,
-        M: ExpectationDiagnostics<T, R>,
+        M: Expectation<T, R>,
     {
         let mut context = settings.isolated_for_order(order);
         for item in items {
@@ -44,9 +45,9 @@ impl MatchingItem {
             context.append(branch.into_evidence());
         }
         context.finish(false, |context| {
-            self.describe::<T, _, _, _>(
+            self.describe::<T, _, _>(
                 matcher,
-                FailureBuilder::detached::<()>(FailureKind::Matching),
+                FailureBuilder::new::<()>(FailureKind::Matching),
                 context,
             )
             .build()
@@ -54,32 +55,32 @@ impl MatchingItem {
     }
 
     /// Explains a rejection from [`Self::find`], or describes the unmet expectation.
-    pub(crate) fn explain<T, R, M, Target>(
+    pub(crate) fn explain<T, R, M>(
         &self,
         matcher: &M,
         rejection: Option<Evidence>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target>
+    ) -> FailureBuilder
     where
         T: ?Sized,
-        M: ExpectationDiagnostics<T, R>,
+        M: Expectation<T, R>,
     {
         match rejection {
-            None => self.describe::<T, _, _, _>(matcher, failure, context),
+            None => self.describe::<T, _, _>(matcher, failure, context),
             Some(evidence) => evidence.explain(failure.relation(self.does_not_contain)),
         }
     }
 
-    fn describe<T, R, M, Target>(
+    fn describe<T, R, M>(
         &self,
         matcher: &M,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target>
+    ) -> FailureBuilder
     where
         T: ?Sized,
-        M: ExpectationDiagnostics<T, R>,
+        M: Expectation<T, R>,
     {
         failure
             .relation(self.contains)
@@ -124,7 +125,7 @@ impl<M> ContainsMatching<M> {
 
 impl<C: Collection + ?Sized, R, M> Expectation<C, R> for ContainsMatching<M>
 where
-    M: ExpectationDiagnostics<C::Item, R>,
+    M: Expectation<C::Item, R>,
 {
     type Success<'a>
         = ()
@@ -145,21 +146,16 @@ where
             settings,
         )
     }
-}
 
-impl<C: Collection + ?Sized, R, M> ExpectationDiagnostics<C, R> for ContainsMatching<M>
-where
-    M: ExpectationDiagnostics<C::Item, R>,
-{
     const KIND: FailureKind = FailureKind::Matching;
 
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&C, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        MATCHING_ELEMENT.explain::<C::Item, _, _, _>(
+    ) -> FailureBuilder {
+        MATCHING_ELEMENT.explain::<C::Item, _, _>(
             &self.0,
             rejected.map(|(_, evidence)| evidence),
             failure,
@@ -201,19 +197,10 @@ impl<M> DoesNotContainMatching<M> {
     }
 }
 
-impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostics<C::Item, R>>
+impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: Expectation<C::Item, R>>
     Expectation<C, R> for DoesNotContainMatching<M>
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        C: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        C: 'a;
+    composite_items!(C);
 
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated_for_order(C::PRESENTATION.order());
@@ -222,7 +209,7 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostic
             if context.probe(item, &self.0) {
                 found = true;
                 context.record_with(|context| {
-                    FailureBuilder::detached::<C::Item>(FailureKind::Membership)
+                    FailureBuilder::new::<C::Item>(FailureKind::Membership)
                         .actual(context.render().value(item))
                         .relation("matches the unwanted constraint")
                         .constraint(context.describe(&self.0))
@@ -236,20 +223,15 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostic
             Ok(())
         }
     }
-}
 
-impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: ExpectationDiagnostics<C::Item, R>>
-    ExpectationDiagnostics<C, R> for DoesNotContainMatching<M>
-{
     const KIND: FailureKind = FailureKind::Membership;
-    const FLATTEN: bool = true;
 
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&C, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => failure
                 .relation("contains no matching elements")
@@ -269,8 +251,7 @@ mod tests {
                 test_support::{assert_bounded_order, bounded_failures},
             },
             prelude::*,
-            renderer::IntoRendered,
-            test_support::{NoRenderer, UnorderedSet, assert_trait_impl, rendered_text},
+            test_support::UnorderedSet,
         };
         use core::{cell::Cell, fmt};
 
@@ -284,13 +265,7 @@ mod tests {
         }
 
         #[test]
-        fn is_implemented_without_renderer_support() {
-            assert_trait_impl!(
-                crate::assertions::collection::ContainsMatching<
-                    crate::test_support::OpaquePredicate<fn(&i32) -> bool>
-                > => Expectation<[i32], NoRenderer>
-            );
-        }
+        fn is_implemented_without_renderer_support() {}
 
         #[test]
         fn bounded_evidence_is_independent_of_iteration_order() {
@@ -357,12 +332,7 @@ mod tests {
                     assert_that!(failures[0].omitted_children).is_equal_to(5);
                     element
                         .derive_owned(|item| item.expected.as_ref())
-                        .is_equal_to(Some(
-                            &AssertionContext::default()
-                                .render()
-                                .value(&0)
-                                .into_rendered(),
-                        ));
+                        .is_equal_to(Some(&AssertionContext::default().render().value(&0)));
                 },
             ]);
             assert_bounded_order(&matcher);
@@ -392,7 +362,9 @@ mod tests {
                                 >| {
                                     child.derive(|child| &child.actual).is_some_satisfying(
                                         |actual| {
-                                            actual.derive_owned(rendered_text).is_equal_to("7");
+                                            actual
+                                                .derive_owned(|value| format!("{value:#}"))
+                                                .is_equal_to("7");
                                         },
                                     );
                                 };

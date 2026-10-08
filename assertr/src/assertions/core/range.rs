@@ -1,11 +1,14 @@
-use crate::borrow_for::{BorrowFor, borrow_for};
+use super::partial_eq::operand_expectation;
+use crate::borrow_for::BorrowFor;
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
     renderer::RenderingContext,
 };
-use alloc::{format, string::String};
+use alloc::{
+    format,
+    string::{String, ToString},
+};
 use core::marker::PhantomData;
 use core::ops::{
     Bound::{Excluded, Included, Unbounded},
@@ -15,21 +18,6 @@ use core::ops::{
 /// Checks whether a range contains an element.
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
 pub struct ContainsElement<B, E = B>(E, PhantomData<fn() -> B>);
-
-impl<B, E: Clone> Clone for ContainsElement<B, E> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone(), PhantomData)
-    }
-}
-
-impl<B, E: core::fmt::Debug> core::fmt::Debug for ContainsElement<B, E> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("ContainsElement")
-            .field(&self.0)
-            .finish()
-    }
-}
 
 impl<B> ContainsElement<B> {
     /// Owns the expected operand, using its type as the range bound type.
@@ -42,7 +30,6 @@ impl<B> ContainsElement<B> {
     ///
     /// let expected = ContainsElement::new(&2);
     /// assert_that!(&1..&3).matches(&expected);
-    /// assert_that!(..).matches(ContainsElement::new(String::from("a")));
     /// ```
     #[must_use]
     pub const fn new(expected: B) -> Self {
@@ -69,85 +56,23 @@ impl<B> ContainsElement<B> {
     }
 }
 
-impl<B, E: BorrowFor<B>, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
-    for ContainsElement<B, E>
-where
-    B: PartialOrd<E::View>,
-    E::View: PartialOrd<B>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Range: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        Range: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Range,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<B, _>(&self.0);
-        if actual.contains(expected) {
-            Ok(())
-        } else {
-            Err(expected)
-        }
-    }
-}
-
-impl<
-    B,
-    E: BorrowFor<B>,
-    Range: RangeBounds<B> + ?Sized,
-    R: ValueRenderer<B> + ValueRenderer<E::View>,
-> ExpectationDiagnostics<Range, R> for ContainsElement<B, E>
-where
-    B: PartialOrd<E::View>,
-    E::View: PartialOrd<B>,
-{
-    const KIND: FailureKind = FailureKind::Membership;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a Range, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (failure.relation("contains"), borrow_for::<B, _>(&self.0)),
-            Some((actual, expected)) => (
-                failure
-                    .actual(render_range(render, actual))
-                    .relation("does not contain"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
+operand_expectation! {
+    impl [B, E, Range: RangeBounds<B> + ?Sized, R] for ContainsElement<B, E>, subject Range, where [
+        B: PartialOrd<E::View>,
+        E: BorrowFor<B>,
+        E::View: PartialOrd<B>,
+        R: ValueRenderer<B> + ValueRenderer<E::View>,
+    ];
+    borrow 0 for B, view E::View;
+    kind Membership;
+    holds |actual, expected| actual.contains(expected);
+    actual |render, actual| render_range(render, actual);
+    expected "contains", "does not contain";
 }
 
 /// Checks whether a range does not contain an element.
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
 pub struct DoesNotContainElement<B, E = B>(E, PhantomData<fn() -> B>);
-
-impl<B, E: Clone> Clone for DoesNotContainElement<B, E> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone(), PhantomData)
-    }
-}
-
-impl<B, E: core::fmt::Debug> core::fmt::Debug for DoesNotContainElement<B, E> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("DoesNotContainElement")
-            .field(&self.0)
-            .finish()
-    }
-}
 
 impl<B> DoesNotContainElement<B> {
     /// Owns the unexpected operand, using its type as the range bound type.
@@ -183,69 +108,39 @@ impl<B> DoesNotContainElement<B> {
     }
 }
 
-impl<B, E: BorrowFor<B>, Range: RangeBounds<B> + ?Sized, R> Expectation<Range, R>
-    for DoesNotContainElement<B, E>
-where
-    B: PartialOrd<E::View>,
-    E::View: PartialOrd<B>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Range: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        Range: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Range,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<B, _>(&self.0);
-        if actual.contains(expected) {
-            Err(expected)
-        } else {
-            Ok(())
-        }
-    }
+operand_expectation! {
+    impl [B, E, Range: RangeBounds<B> + ?Sized, R] for DoesNotContainElement<B, E>, subject Range,
+    where [
+        B: PartialOrd<E::View>,
+        E: BorrowFor<B>,
+        E::View: PartialOrd<B>,
+        R: ValueRenderer<B> + ValueRenderer<E::View>,
+    ];
+    borrow 0 for B, view E::View;
+    kind Membership;
+    holds |actual, expected| actual.contains(expected);
+    actual |render, actual| render_range(render, actual);
+    unexpected "does not contain", "contains";
 }
 
-impl<
-    B,
-    E: BorrowFor<B>,
-    Range: RangeBounds<B> + ?Sized,
-    R: ValueRenderer<B> + ValueRenderer<E::View>,
-> ExpectationDiagnostics<Range, R> for DoesNotContainElement<B, E>
-where
-    B: PartialOrd<E::View>,
-    E::View: PartialOrd<B>,
-{
-    const KIND: FailureKind = FailureKind::Membership;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a Range, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("does not contain"),
-                borrow_for::<B, _>(&self.0),
-            ),
-            Some((actual, expected)) => (
-                failure
-                    .actual(render_range(render, actual))
-                    .relation("contains"),
-                expected,
-            ),
-        };
-        failure.unexpected(render.value(expected))
-    }
+/// Implements `Clone` and `Debug` for a containment definition through its stored operand only.
+macro_rules! operand_traits {
+    ($($name:ident),+) => {$(
+        impl<B, E: Clone> Clone for $name<B, E> {
+            fn clone(&self) -> Self {
+                Self(self.0.clone(), PhantomData)
+            }
+        }
+
+        impl<B, E: core::fmt::Debug> core::fmt::Debug for $name<B, E> {
+            fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                formatter.debug_tuple(stringify!($name)).field(&self.0).finish()
+            }
+        }
+    )+};
 }
+
+operand_traits!(ContainsElement, DoesNotContainElement);
 
 /// Checks whether a value is in range.
 /// Uses [`RangeBounds::contains`], preserving inclusive, exclusive, and unbounded endpoints.
@@ -260,7 +155,9 @@ impl<Range> IsInRange<Range> {
     }
 }
 
-impl<B: PartialOrd, Range: RangeBounds<B>, R> Expectation<B, R> for IsInRange<Range> {
+impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R>
+    for IsInRange<Range>
+{
     type Success<'a>
         = ()
     where
@@ -278,26 +175,22 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R> Expectation<B, R> for IsInRange<Ra
             Err(())
         }
     }
-}
 
-impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagnostics<B, R>
-    for IsInRange<Range>
-{
     const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&B, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is in range"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is not in range"),
-        };
-        failure.expected(render_range(render, &self.0))
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.value(actual)),
+                "is in range",
+                "is not in range",
+            )
+            .expected(render_range(render, &self.0))
     }
 }
 
@@ -314,7 +207,9 @@ impl<Range> IsNotInRange<Range> {
     }
 }
 
-impl<B: PartialOrd, Range: RangeBounds<B>, R> Expectation<B, R> for IsNotInRange<Range> {
+impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R>
+    for IsNotInRange<Range>
+{
     type Success<'a>
         = ()
     where
@@ -332,24 +227,22 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R> Expectation<B, R> for IsNotInRange
             Ok(())
         }
     }
-}
 
-impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagnostics<B, R>
-    for IsNotInRange<Range>
-{
     const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&B, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is not in range"),
-            Some((actual, ())) => failure.actual(render.value(actual)).relation("is in range"),
-        };
-        failure.unexpected(render_range(render, &self.0))
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.value(actual)),
+                "is not in range",
+                "is in range",
+            )
+            .unexpected(render_range(render, &self.0))
     }
 }
 
@@ -360,9 +253,8 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagn
 ///
 /// Standard ranges with borrowed, sized bounds have inherent methods that select the bounds'
 /// pointee type. This keeps owned and borrowed elements inferable even though those ranges
-/// implement both `RangeBounds<B>` and `RangeBounds<&B>`. An unbounded `..` range selects the
-/// operand's own type. Custom ranges use this trait, and fully qualified calls can select `B`
-/// explicitly when a range supports more than one bound type.
+/// implement both `RangeBounds<B>` and `RangeBounds<&B>`. Custom ranges use this trait, and fully
+/// qualified calls can select `B` explicitly when a range supports more than one bound type.
 /// These methods execute [`ContainsElement::borrowing`] and [`DoesNotContainElement::borrowing`]
 /// with the selected bound type. Reusable matchers' `new` constructors instead infer the bound
 /// type from the operand, including its reference type when a reference is passed.
@@ -373,7 +265,6 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> ExpectationDiagn
 /// let upper = String::from("z");
 /// let element = String::from("m");
 /// assert_that!(&lower..&upper).contains_element(&element);
-/// assert_that!(..).contains_element(&element);
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 #[allow(clippy::return_self_not_must_use)]
@@ -454,57 +345,38 @@ macro_rules! borrowed_range_assertions {
     ($($range:ty),+ $(,)?) => {$(
         #[allow(clippy::return_self_not_must_use)]
         impl<'b, B, M: Mode, R> AssertThat<'_, $range, M, R> {
-            /// Asserts that this range contains `expected`, using its bounds' pointee type.
-            ///
-            /// This is [`RangeBoundAssertions::contains_element`] with the native
-            /// `RangeBounds<B>` view selected explicitly for borrowed bounds.
-            #[track_caller]
-            pub fn contains_element<E: BorrowFor<B>>(self, expected: E) -> Self
-            where
-                B: PartialOrd<E::View>,
-                E::View: PartialOrd<B>,
-                R: ValueRenderer<B> + ValueRenderer<E::View>,
-            {
-                RangeBoundAssertions::<B, $range, R>::contains_element(self, expected)
+            borrowed_range_assertions! {
+                @method
+                /// Asserts that this range contains `expected`, using its bounds' pointee type.
+                ///
+                /// This is [`RangeBoundAssertions::contains_element`] with the native
+                /// `RangeBounds<B>` view selected explicitly for borrowed bounds.
+                contains_element => RangeBoundAssertions::<B, $range, R>::contains_element;
+                /// Asserts that this range excludes `expected`, using its bounds' pointee type.
+                ///
+                /// This is [`RangeBoundAssertions::does_not_contain_element`] with the native
+                /// `RangeBounds<B>` view selected explicitly for borrowed bounds.
+                does_not_contain_element =>
+                    RangeBoundAssertions::<B, $range, R>::does_not_contain_element;
+                /// Fluent alias of [`Self::contains_element`].
+                #[cfg(feature = "fluent")]
+                contain_element => Self::contains_element;
+                /// Fluent alias of [`Self::does_not_contain_element`].
+                #[cfg(feature = "fluent")]
+                not_contain_element => Self::does_not_contain_element;
             }
-
-            /// Asserts that this range excludes `expected`, using its bounds' pointee type.
-            ///
-            /// This is [`RangeBoundAssertions::does_not_contain_element`] with the native
-            /// `RangeBounds<B>` view selected explicitly for borrowed bounds.
-            #[track_caller]
-            pub fn does_not_contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
-            where
-                B: PartialOrd<E::View>,
-                E::View: PartialOrd<B>,
-                R: ValueRenderer<B> + ValueRenderer<E::View>,
-            {
-                RangeBoundAssertions::<B, $range, R>::does_not_contain_element(self, expected)
-            }
-
-            /// Fluent alias of [`Self::contains_element`].
-            #[cfg(feature = "fluent")]
-            #[track_caller]
-            pub fn contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
-            where
-                B: PartialOrd<E::View>,
-                E::View: PartialOrd<B>,
-                R: ValueRenderer<B> + ValueRenderer<E::View>,
-            {
-                self.contains_element(expected)
-            }
-
-            /// Fluent alias of [`Self::does_not_contain_element`].
-            #[cfg(feature = "fluent")]
-            #[track_caller]
-            pub fn not_contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
-            where
-                B: PartialOrd<E::View>,
-                E::View: PartialOrd<B>,
-                R: ValueRenderer<B> + ValueRenderer<E::View>,
-            {
-                self.does_not_contain_element(expected)
-            }
+        }
+    )+};
+    (@method $($(#[$attr:meta])* $name:ident => $target:path;)+) => {$(
+        $(#[$attr])*
+        #[track_caller]
+        pub fn $name<E: BorrowFor<B>>(self, expected: E) -> Self
+        where
+            B: PartialOrd<E::View>,
+            E::View: PartialOrd<B>,
+            R: ValueRenderer<B> + ValueRenderer<E::View>,
+        {
+            $target(self, expected)
         }
     )+};
 }
@@ -517,49 +389,6 @@ borrowed_range_assertions!(
     core::ops::RangeToInclusive<&'b B>,
     (core::ops::Bound<&'b B>, core::ops::Bound<&'b B>),
 );
-
-#[allow(clippy::return_self_not_must_use)]
-impl<M: Mode, R> AssertThat<'_, core::ops::RangeFull, M, R> {
-    /// Asserts that this unbounded range contains `expected`.
-    ///
-    /// With no bound to select a comparison type, the operand's own type is used.
-    #[track_caller]
-    pub fn contains_element<E: PartialOrd>(self, expected: E) -> Self
-    where
-        R: ValueRenderer<E>,
-    {
-        RangeBoundAssertions::<E, core::ops::RangeFull, R>::contains_element(self, expected)
-    }
-
-    /// Asserts that this unbounded range excludes `expected`, which always fails.
-    #[track_caller]
-    pub fn does_not_contain_element<E: PartialOrd>(self, expected: E) -> Self
-    where
-        R: ValueRenderer<E>,
-    {
-        RangeBoundAssertions::<E, core::ops::RangeFull, R>::does_not_contain_element(self, expected)
-    }
-
-    /// Fluent alias of [`Self::contains_element`].
-    #[cfg(feature = "fluent")]
-    #[track_caller]
-    pub fn contain_element<E: PartialOrd>(self, expected: E) -> Self
-    where
-        R: ValueRenderer<E>,
-    {
-        self.contains_element(expected)
-    }
-
-    /// Fluent alias of [`Self::does_not_contain_element`].
-    #[cfg(feature = "fluent")]
-    #[track_caller]
-    pub fn not_contain_element<E: PartialOrd>(self, expected: E) -> Self
-    where
-        R: ValueRenderer<E>,
-    {
-        self.does_not_contain_element(expected)
-    }
-}
 
 impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
     #[track_caller]
@@ -588,12 +417,27 @@ fn render_range<B, Range: RangeBounds<B> + ?Sized, R>(
 where
     R: ValueRenderer<B>,
 {
-    let start = range.start_bound().map(|value| rendering.value(value));
-    let end = range.end_bound().map(|value| rendering.value(value));
+    /// Rendered bound text, displayed verbatim inside `Bound`'s `Debug` syntax.
+    struct Leaf(String);
+
+    impl core::fmt::Debug for Leaf {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str(&self.0)
+        }
+    }
+
+    // Bounds are embedded inline, so their leaves use the compact form.
+    let rendering = rendering.compact();
+    let start = range
+        .start_bound()
+        .map(|value| Leaf(rendering.value(value).to_string()));
+    let end = range
+        .end_bound()
+        .map(|value| Leaf(rendering.value(value).to_string()));
 
     match (start, end) {
         // Rust's range operators cannot express an excluded start. Format the bounds around
-        // their rendering adapters so the active renderer and budget still apply to each leaf.
+        // their rendered leaves so the active renderer and budget still apply to each leaf.
         (start @ Excluded(_), end) => format!("({start:?}, {end:?})"),
         (Included(start), Included(end)) => format!("{start:?}..={end:?}"),
         (Included(start), Excluded(end)) => format!("{start:?}..{end:?}"),
@@ -611,24 +455,35 @@ mod tests {
     use crate::prelude::*;
     use indoc::formatdoc;
 
-    type Bounds = (Bound<i32>, Bound<i32>);
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use super::*;
 
-    // Every range contains 2 and excludes 1. Cover ordinary notation and each excluded-start form.
-    const RANGE_CASES: [(Bounds, &str); 4] = [
-        ((Included(2), Excluded(3)), "2..3"),
-        ((Excluded(1), Included(3)), "(Excluded(1), Included(3))"),
-        ((Excluded(1), Excluded(3)), "(Excluded(1), Excluded(3))"),
-        ((Excluded(1), Unbounded), "(Excluded(1), Unbounded)"),
-    ];
+        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
+        fn are_as_expected() {
+            ("aa"..="zz")
+                .must()
+                .contain_element("aa")
+                .not_contain_element("a");
+            (&1..&4).must().contain_element(&2).not_contain_element(&4);
+            (Included(&1), Excluded(&4))
+                .must()
+                .contain_element(&2)
+                .not_contain_element(&4);
+            'a'.must()
+                .be_in_range('a'..='z')
+                .not_be_in_range('b'..)
+                .be_outside_of_range('b'..);
+        }
+    }
 
     mod renderer_contract {
         use core::ops::{Bound, RangeBounds};
 
         use crate::{
             prelude::*,
-            test_support::{
-                NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl, rendered_text,
-            },
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
         };
 
         #[test]
@@ -641,15 +496,6 @@ mod tests {
                 AssertThat<'static, i32, Panic, NoRenderer>
                     => RangeAssertions<i32, NoRenderer>
             );
-
-            assert_trait_impl!(super::super::ContainsElement<i32> => Expectation<core::ops::Range<i32>, NoRenderer>);
-            assert_trait_impl!(super::super::DoesNotContainElement<i32> => Expectation<core::ops::Range<i32>, NoRenderer>);
-            assert_trait_impl!(super::super::ContainsElement<&'static i32> => Expectation<core::ops::Range<&'static i32>, NoRenderer>);
-            assert_trait_impl!(super::super::DoesNotContainElement<&'static i32> => Expectation<core::ops::Range<&'static i32>, NoRenderer>);
-            assert_trait_impl!(super::super::ContainsElement<i32, &'static i32> => Expectation<core::ops::Range<i32>, NoRenderer>);
-            assert_trait_impl!(super::super::DoesNotContainElement<i32, &'static i32> => Expectation<core::ops::Range<i32>, NoRenderer>);
-            assert_trait_impl!(super::super::IsInRange<core::ops::Range<i32>> => Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsNotInRange<core::ops::Range<i32>> => Expectation<i32, NoRenderer>);
         }
 
         #[test]
@@ -658,14 +504,13 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(|it| it.contains_element(4));
-            assert_that!(ToHumanReadableText.render(&bound_failures[0]))
-                .contains(format!("{SENTINEL}..{SENTINEL}"));
+            assert_that!(bound_failures[0].to_string()).contains(format!("{SENTINEL}..{SENTINEL}"));
 
             let value_failures = assert_that!(1)
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(|it| it.is_in_range(2..=3));
-            assert_that!(ToHumanReadableText.render(&value_failures[0]))
+            assert_that!(value_failures[0].to_string())
                 .contains(SENTINEL)
                 .contains(format!("{SENTINEL}..={SENTINEL}"));
         }
@@ -682,7 +527,6 @@ mod tests {
 
             let failures = assert_that!(&1..&3)
                 .with_renderer(BoundRenderer)
-                .with_expression("range")
                 .with_location(false)
                 .capture(|it| {
                     it.contains_element(&4)
@@ -690,17 +534,10 @@ mod tests {
                 });
             assert_that!(failures).has_length(2);
             for failure in &failures {
-                assert_that!(failure).has_text_report(indoc::indoc! {"
-                -------- assertr --------
-                Expression: `range`
-
-                Actual: bound(1)..bound(3)
-
-                does not contain
-
-                Expected: bound(4)
-                -------- assertr --------
-                "});
+                assert_that!(format!("{:#}", failure.actual.as_ref().unwrap()))
+                    .is_equal_to("bound(1)..bound(3)");
+                assert_that!(format!("{:#}", failure.expected.as_ref().unwrap()))
+                    .is_equal_to("bound(4)");
             }
         }
 
@@ -736,18 +573,36 @@ mod tests {
                 let failures = assert_that!(range)
                     .with_renderer(SentinelRenderer)
                     .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(4))
-                    .capture(|it| {
-                        it.contains_element(1)
-                            .matches(super::super::ContainsElement::<i32>::borrowing(&1))
-                    });
-                assert_that!(failures).has_length(2);
-                for failure in &failures {
-                    assert_that!(rendered_text(failure.actual.as_ref().unwrap())).is_equal_to(
-                        format!("(Excluded(<ren... 6 more characters ...), {rendered_end})"),
-                    );
-                    assert_that!(rendered_text(failure.expected.as_ref().unwrap()))
-                        .is_equal_to("<ren... 6 more characters ...");
-                }
+                    .capture(|it| it.contains_element(1));
+                assert_that!(failures).has_length(1);
+                assert_that!(format!("{:#}", failures[0].actual.as_ref().unwrap())).is_equal_to(
+                    format!("(Excluded(<ren... 6 more characters ...), {rendered_end})"),
+                );
+                assert_that!(format!("{:#}", failures[0].expected.as_ref().unwrap()))
+                    .is_equal_to("<ren... 6 more characters ...");
+            }
+        }
+    }
+
+    mod range_notation {
+        use super::*;
+
+        type Bounds = (Bound<i32>, Bound<i32>);
+
+        #[test]
+        fn uses_range_syntax_or_explicit_bounds_for_excluded_starts() {
+            // Every range contains 2 and excludes 1.
+            const CASES: [(Bounds, &str); 4] = [
+                ((Included(2), Excluded(3)), "2..3"),
+                ((Excluded(1), Included(3)), "(Excluded(1), Included(3))"),
+                ((Excluded(1), Excluded(3)), "(Excluded(1), Excluded(3))"),
+                ((Excluded(1), Unbounded), "(Excluded(1), Unbounded)"),
+            ];
+            for (range, rendered_range) in CASES {
+                assert_that!(range).contains_element(2);
+                let failures = assert_that!(range).capture(|it| it.contains_element(1));
+                assert_that!(format!("{:#}", failures[0].actual.as_ref().unwrap()))
+                    .is_equal_to(rendered_range);
             }
         }
     }
@@ -756,51 +611,18 @@ mod tests {
         use super::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            ("aa"..="zz").must().contain_element("aa");
-        }
-
-        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!("aa".."zz"), contains_element("zz"));
-        }
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
-        fn fluent_aliases_infer_borrowed_bounds_and_unbounded_ranges() {
-            (&1..&4).must().contain_element(&2);
-            (&1..=&4).must().contain_element(&2);
-            (&1..).must().contain_element(&2);
-            (..&4).must().contain_element(&2);
-            (..=&4).must().contain_element(&2);
-            (Included(&1), Excluded(&4)).must().contain_element(&2);
-            (..).must().contain_element(&2);
-        }
-
-        #[test]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
-        fn borrowed_bounds_preserve_caller_locations() {
             assert_caller_location!(assert_that!(&1..&4), contains_element(&4));
-            assert_caller_location!(assert_that!(&1..=&4), contains_element(&5));
-            assert_caller_location!(assert_that!(&1..), contains_element(&0));
-            assert_caller_location!(assert_that!(..&4), contains_element(&4));
-            assert_caller_location!(assert_that!(..=&4), contains_element(&5));
-            assert_caller_location!(
-                assert_that!((Included(&1), Excluded(&4))),
-                contains_element(&4)
-            );
         }
 
         #[test]
         fn succeeds_when_element_is_contained() {
-            assert_that!("aa"..="zz").contains_element("aa");
-            assert_that!("aa"..="zz").contains_element("ab");
-            assert_that!("aa"..="zz").contains_element("ac");
-            assert_that!("aa"..="zz").contains_element("zx");
-            assert_that!("aa"..="zz").contains_element("zy");
-            assert_that!("aa"..="zz").contains_element("zz");
+            assert_that!("aa"..="zz")
+                .contains_element("aa")
+                .contains_element("ac")
+                .contains_element("zz");
         }
 
         #[test]
@@ -830,38 +652,20 @@ mod tests {
         }
 
         #[test]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
-        fn unbounded_ranges_infer_owned_and_borrowed_elements() {
-            let element = String::from("element");
-            assert_that!(..).contains_element(2).contains_element(&2);
-            assert_that!(..)
-                .contains_element(String::from("element"))
-                .contains_element(&element);
-        }
-
-        #[test]
         fn fails_when_element_is_not_contained() {
-            for (range, rendered_range) in RANGE_CASES {
-                assert_that!(range).contains_element(2);
-                let failures = assert_that!(range)
-                    .with_location(false)
-                    .capture(|it| it.contains_element(1));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|value| value).has_text_report(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `range`
+            assert_that_panic_by(|| assert_that!(2..3).with_location(false).contains_element(1))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `2..3`
 
-                    Actual: {rendered_range}
+                Actual: 2..3
 
-                    does not contain
+                does not contain
 
-                    Expected: 1
-                    -------- assertr --------
-                "});
-                    },
-                ]);
-            }
+                Expected: 1
+                -------- assertr --------
+            "});
         }
     }
 
@@ -869,49 +673,17 @@ mod tests {
         use super::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            ("aa"..="zz").must().not_contain_element("a");
-        }
-
-        #[test]
+        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!("aa".."zz"), does_not_contain_element("cc"));
-        }
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
-        fn fluent_aliases_infer_borrowed_bounds_and_unbounded_ranges() {
-            (&1..&4).must().not_contain_element(&4);
-            (&1..=&4).must().not_contain_element(&5);
-            (&1..).must().not_contain_element(&0);
-            (..&4).must().not_contain_element(&4);
-            (..=&4).must().not_contain_element(&5);
-            (Included(&1), Excluded(&4)).must().not_contain_element(&4);
-            let failures = (..).must().capture(|it| it.not_contain_element(&2));
-            assert_that!(failures).has_length(1);
-        }
-
-        #[test]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
-        fn borrowed_bounds_and_unbounded_ranges_preserve_caller_locations() {
             assert_caller_location!(assert_that!(&1..&4), does_not_contain_element(&2));
-            assert_caller_location!(assert_that!(&1..=&4), does_not_contain_element(&2));
-            assert_caller_location!(assert_that!(&1..), does_not_contain_element(&2));
-            assert_caller_location!(assert_that!(..&4), does_not_contain_element(&2));
-            assert_caller_location!(assert_that!(..=&4), does_not_contain_element(&2));
-            assert_caller_location!(
-                assert_that!((Included(&1), Excluded(&4))),
-                does_not_contain_element(&2)
-            );
-            assert_caller_location!(assert_that!(..), does_not_contain_element(&2));
         }
 
         #[test]
         fn succeeds_when_element_is_not_contained() {
-            assert_that!("aa"..="zz").does_not_contain_element("a");
-            assert_that!("aa"..="zz").does_not_contain_element("AA");
+            assert_that!("aa"..="zz")
+                .does_not_contain_element("a")
+                .does_not_contain_element("AA");
         }
 
         #[test]
@@ -940,52 +712,29 @@ mod tests {
         }
 
         #[test]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
-        fn unbounded_ranges_infer_owned_and_borrowed_elements() {
-            let element = String::from("element");
-            let failures = assert_that!(..).capture(|it| {
-                it.does_not_contain_element(2)
-                    .does_not_contain_element(&2)
-                    .does_not_contain_element(String::from("element"))
-                    .does_not_contain_element(&element)
-            });
-            assert_that!(failures).has_length(4);
-        }
-
-        #[test]
         fn fails_when_element_is_contained() {
-            for (range, rendered_range) in RANGE_CASES {
-                assert_that!(range).does_not_contain_element(1);
-                let failures = assert_that!(range)
+            assert_that_panic_by(|| {
+                assert_that!(2..3)
                     .with_location(false)
-                    .capture(|it| it.does_not_contain_element(2));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|value| value).has_text_report(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `range`
+                    .does_not_contain_element(2)
+            })
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `2..3`
 
-                    Actual: {rendered_range}
+                Actual: 2..3
 
-                    contains
+                contains
 
-                    Unexpected: 2
-                    -------- assertr --------
-                "});
-                    },
-                ]);
-            }
+                Unexpected: 2
+                -------- assertr --------
+            "});
         }
     }
 
     mod is_in_range {
         use super::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            'a'.must().be_in_range('a'..='z');
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -994,21 +743,17 @@ mod tests {
 
         #[test]
         fn succeeds_when_in_range() {
-            assert_that!('a').is_in_range('a'..='z');
-            assert_that!('p').is_in_range('a'..='z');
-            assert_that!('z').is_in_range('a'..='z');
+            assert_that!('a')
+                .is_in_range('a'..='z')
+                .is_in_range('a'..)
+                .is_in_range(..='a');
         }
 
         #[test]
         fn fails_when_not_in_range() {
-            for (range, rendered_range) in RANGE_CASES {
-                assert_that!(2).is_in_range(range);
-                let failures = assert_that!(1)
-                    .with_location(false)
-                    .capture(|it| it.is_in_range(range));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|value| value).has_text_report(formatdoc! {r"
+            assert_that_panic_by(|| assert_that!(1).with_location(false).is_in_range(2..3))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `1`
 
@@ -1016,23 +761,14 @@ mod tests {
 
                     is not in range
 
-                    Expected: {rendered_range}
+                    Expected: 2..3
                     -------- assertr --------
                 "});
-                    },
-                ]);
-            }
         }
     }
 
     mod is_not_in_range {
         use super::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            (-1).must().not_be_in_range(0..=7);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1043,19 +779,13 @@ mod tests {
         fn succeeds_when_not_in_range() {
             assert_that!(-1).is_not_in_range(0..=7);
             assert_that!(8).is_not_in_range(0..=7);
-            assert_that!(9).is_not_in_range(0..=7);
         }
 
         #[test]
         fn fails_when_in_range() {
-            for (range, rendered_range) in RANGE_CASES {
-                assert_that!(1).is_not_in_range(range);
-                let failures = assert_that!(2)
-                    .with_location(false)
-                    .capture(|it| it.is_not_in_range(range));
-                assert_that!(failures).contains_exactly_satisfying([
-                    |element: AssertThat<AssertionFailure, Capture>| {
-                        element.derive(|value| value).has_text_report(formatdoc! {r"
+            assert_that_panic_by(|| assert_that!(2).with_location(false).is_not_in_range(2..3))
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `2`
 
@@ -1063,25 +793,16 @@ mod tests {
 
                     is in range
 
-                    Unexpected: {rendered_range}
+                    Unexpected: 2..3
                     -------- assertr --------
                 "});
-                    },
-                ]);
-            }
         }
     }
 
-    /// Synonym of `is_not_in_range`. The fluent name and caller location are pinned here. The
-    /// behavior is covered by that module.
+    /// Synonym of `is_not_in_range`. The caller location is pinned here. The behavior is covered
+    /// by that module.
     mod is_outside_of_range {
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            5.must().be_outside_of_range(1..3);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1092,11 +813,7 @@ mod tests {
     mod reusable_definitions {
         use super::super::{ContainsElement, DoesNotContainElement};
         use super::*;
-        use crate::{
-            matchers::{all_of, each},
-            test_support::BorrowSpy,
-        };
-        use core::cell::Cell;
+        use crate::matchers::{all_of, each};
 
         #[test]
         fn constructors_infer_without_a_subject_or_comparison_capabilities() {
@@ -1132,27 +849,10 @@ mod tests {
         }
 
         #[test]
-        fn unbounded_ranges_infer_owned_and_borrowed_operands() {
-            let value = String::from("a");
-            assert_that!(..)
-                .matches(ContainsElement::new(String::from("a")))
-                .matches(ContainsElement::new(&value))
-                .matches(ContainsElement::new(2))
-                .matches(ContainsElement::new(&2));
-            let failures = assert_that!(..).capture(|it| {
-                it.matches(DoesNotContainElement::new(String::from("a")))
-                    .matches(DoesNotContainElement::new(&value))
-                    .matches(DoesNotContainElement::new(2))
-                    .matches(DoesNotContainElement::new(&2))
-            });
-            assert_that!(failures).has_length(4);
-        }
-
-        #[test]
         fn definitions_are_reusable_in_nested_composition() {
             let expected = ContainsElement::new(&2);
             let unexpected = DoesNotContainElement::new(&4);
-            let matcher = all_of((&expected, &unexpected));
+            let matcher = all_of(matchers![&expected, &unexpected]);
             assert_that!(&1..&3).matches(&expected).matches(&unexpected);
             assert_that!(&1..&4).matches(&matcher);
             assert_that!([&1..&3, &0..&4]).matches(each(&matcher));
@@ -1164,175 +864,29 @@ mod tests {
             let upper = String::from("c");
             let value = String::from("b");
             let absent = String::from("z");
-            let matcher = all_of((
+            let matcher = all_of(matchers![
                 ContainsElement::<String>::borrowing(&value),
-                DoesNotContainElement::<String>::borrowing(&absent),
-            ));
+                DoesNotContainElement::<String>::borrowing(&absent)
+            ]);
             assert_that!(String::from("a")..String::from("c")).matches(&matcher);
             assert_that!(&lower..&upper).matches(&matcher);
             assert_that!([&lower..&upper]).matches(each(&matcher));
-            assert_that!(value).is_equal_to("b");
-            assert_that!(absent).is_equal_to("z");
         }
 
         #[test]
-        fn borrowed_matchers_preserve_caller_locations() {
-            assert_caller_location!(assert_that!(&1..&3), matches(ContainsElement::new(&4)));
-            assert_caller_location!(
-                assert_that!(&1..&3),
-                matches(DoesNotContainElement::new(&2))
-            );
-        }
-
-        #[test]
-        fn matchers_preserve_membership_diagnostics() {
-            let failures = assert_that!(&1..&3)
-                .with_expression("range")
-                .with_location(false)
-                .capture(|it| {
-                    it.matches(ContainsElement::new(&4))
-                        .matches(DoesNotContainElement::new(&2))
-                });
-            assert_that!(failures).has_length(2);
-            for (failure, relation, operand) in [
-                (&failures[0], "does not contain", "Expected: 4"),
-                (&failures[1], "contains", "Unexpected: 2"),
-            ] {
-                assert_that!(failure).has_text_report(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `range`
-
-                    Actual: 1..3
-
-                    {relation}
-
-                    {operand}
-                    -------- assertr --------
-                "});
-            }
-        }
-
-        #[test]
-        fn borrowing_happens_once_after_tracking_and_rejections_retain_the_view() {
-            for (negative, value) in [(false, 2), (false, 9), (true, 9), (true, 2)] {
-                let calls = Cell::new(0);
-                let failures = assert_that!(()).capture(|root| {
-                    let expected = BorrowSpy {
-                        value,
-                        observe: || {
-                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                            calls.set(calls.get() + 1);
-                        },
-                    };
-                    let it = root.derive_owned(|()| 1..3);
-                    if negative {
-                        let matcher = DoesNotContainElement::<i32>::borrowing(expected);
-                        assert_that!(calls.get()).is_equal_to(0);
-                        it.matches(&matcher);
-                    } else {
-                        let matcher = ContainsElement::<i32>::borrowing(expected);
-                        assert_that!(calls.get()).is_equal_to(0);
-                        it.matches(&matcher);
-                    }
-                    root
-                });
-                assert_that!(calls.get()).is_equal_to(1);
-                assert_that!(failures).has_length(usize::from(negative == (value == 2)));
-            }
-        }
-    }
-
-    mod borrowed_elements {
-        use super::super::{ContainsElement, DoesNotContainElement};
-        use crate::{prelude::*, test_support::BorrowSpy};
-        use core::cell::Cell;
-        #[test]
-        fn non_copy_bounds_accept_borrowed_elements_and_definitions() {
-            let element = String::from("b");
-            let absent = String::from("z");
-            assert_that!(String::from("a")..String::from("c"))
-                .contains_element(&element)
-                .does_not_contain_element(&absent)
-                .matches(ContainsElement::<String>::borrowing(&element))
-                .matches(DoesNotContainElement::<String>::borrowing(&absent));
-        }
-
-        #[test]
-        fn borrowed_non_copy_bounds_accept_owned_and_borrowed_elements() {
+        fn non_copy_bounds_accept_owned_and_borrowed_elements() {
             let lower = String::from("a");
             let upper = String::from("c");
             let element = String::from("b");
             let absent = String::from("z");
+            assert_that!(String::from("a")..String::from("c"))
+                .contains_element(&element)
+                .does_not_contain_element(&absent);
             assert_that!(&lower..&upper)
                 .contains_element(String::from("b"))
                 .contains_element(&element)
                 .does_not_contain_element(String::from("z"))
                 .does_not_contain_element(&absent);
-            assert_that!(element).is_equal_to("b");
-            assert_that!(absent).is_equal_to("z");
-        }
-
-        #[test]
-        fn borrowed_bounds_borrow_operands_once_after_tracking() {
-            let lower = 1;
-            let upper = 3;
-            for (negative, value) in [(false, 2), (false, 9), (true, 9), (true, 2)] {
-                let calls = Cell::new(0);
-                let failures = assert_that!(()).capture(|root| {
-                    let expected = BorrowSpy {
-                        value,
-                        observe: || {
-                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                            calls.set(calls.get() + 1);
-                        },
-                    };
-                    let it = root.derive_owned(|()| &lower..&upper);
-                    if negative {
-                        it.does_not_contain_element(expected);
-                    } else {
-                        it.contains_element(expected);
-                    }
-                    root
-                });
-                assert_that!(calls.get()).is_equal_to(1);
-                assert_that!(failures).has_length(usize::from(negative == (value == 2)));
-            }
-        }
-
-        #[test]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
-        fn unbounded_ranges_track_each_assertion_once() {
-            let failures = assert_that!(..).capture(|it| {
-                let it = it.contains_element(&2).does_not_contain_element(&2);
-                assert_that!(it.state.records.assertion_count()).is_equal_to(2);
-                it
-            });
-            assert_that!(failures).has_length(1);
-        }
-
-        #[test]
-        fn borrows_once_after_tracking_and_reuses_rejections() {
-            for negative in [false, true] {
-                let calls = Cell::new(0);
-                let failures = assert_that!(()).capture(|root| {
-                    let expected = BorrowSpy {
-                        value: if negative { 2 } else { 9 },
-                        observe: || {
-                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                            calls.set(calls.get() + 1);
-                        },
-                    };
-                    let it = root.derive_owned(|()| 1..3);
-                    if negative {
-                        it.does_not_contain_element(expected);
-                    } else {
-                        it.contains_element(expected);
-                    }
-                    root
-                });
-                assert_that!(calls.get()).is_equal_to(1);
-                assert_that!(failures).has_length(1);
-            }
         }
     }
 }

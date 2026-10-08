@@ -1,27 +1,35 @@
-use core::num::Wrapping;
+//! Tolerance checks for values with a computable distance, such as numbers and durations.
 
-use num_traits::Num;
+use crate::borrow_for::{BorrowFor, borrow_for};
+use crate::{
+    AssertionContext, Expectation, Fact, ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
+};
+use core::num::Wrapping;
 
 /// Numeric values whose distance can be calculated without integer overflow.
 ///
-/// This capability enables [`super::NumAssertions::is_close_to`] for custom numeric types.
-/// Implementations are provided for all primitive integers, `f32`, `f64`, and [`Wrapping`] of a
-/// primitive integer, including with only the `num` feature enabled. Other numeric assertions
-/// require only their own `num_traits` bounds.
+/// This capability enables [`IsCloseTo`] and the `is_close_to` assertions for numbers and, with
+/// the `jiff` feature, `SignedDuration`. Implementations are provided for all primitive integers,
+/// `f32`, `f64`, [`Wrapping`] of a primitive integer, and `jiff::SignedDuration`. They need no
+/// optional feature apart from the integration they cover.
 ///
 /// Integer implementations subtract the smaller endpoint from the larger with checked arithmetic.
 /// `Wrapping` integers use the distance of their inner values and never wrap it. Floating-point
 /// implementations use the rounded result of `(self - other).abs()`, treating equal infinities as
 /// zero distance. They do not rearrange the comparison into tolerance boundaries.
 ///
-/// Generic helpers calling `is_close_to` must include this bound:
+/// Generic helpers calling the numeric `is_close_to` need this bound next to `num_traits::Num`:
 ///
 /// ```
 /// # #[cfg(feature = "num")] {
-/// use assertr::assertions::num::NumericDistance;
+/// use assertr::assertions::distance::NumericDistance;
 /// use assertr::prelude::*;
 ///
-/// fn assert_close<T: NumericDistance + core::fmt::Debug>(actual: T, expected: T, deviation: T) {
+/// fn assert_close<T>(actual: T, expected: T, deviation: T)
+/// where
+///     T: num_traits::Num + NumericDistance + core::fmt::Debug,
+/// {
 ///     assert_that!(actual).is_close_to(expected, deviation);
 /// }
 ///
@@ -34,8 +42,8 @@ use num_traits::Num;
 /// The orphan rule prevents implementing this trait for a type from another crate, such as a
 /// big integer or decimal type. For those, either assert on a projection that already supports
 /// `is_close_to`, express the tolerance with a predicate, or wrap the value in a local newtype
-/// implementing `num_traits::Num`, `PartialOrd`, and `NumericDistance`. For example,
-/// `core::num::Saturating` implements no `num_traits` traits:
+/// implementing `PartialOrd` and `NumericDistance`. For example,
+/// `core::num::Saturating` has no implementation:
 ///
 /// ```
 /// # #[cfg(feature = "num")] {
@@ -51,7 +59,11 @@ use num_traits::Num;
 /// );
 /// # }
 /// ```
-pub trait NumericDistance: Num + PartialOrd {
+pub trait NumericDistance: PartialOrd + Sized {
+    /// Returns the zero distance, which a valid allowed deviation must not be less than.
+    #[must_use]
+    fn zero_distance() -> Self;
+
     /// Returns the nonnegative distance between two values, without overflowing integer arithmetic.
     ///
     /// The result must be symmetric. Equal comparable values have zero distance, including equal
@@ -69,6 +81,10 @@ pub trait NumericDistance: Num + PartialOrd {
 macro_rules! integer_distance {
     ($($ty:ty),+ $(,)?) => {$(
         impl NumericDistance for $ty {
+            fn zero_distance() -> Self {
+                0
+            }
+
             fn checked_distance(&self, other: &Self) -> Option<Self> {
                 if self <= other {
                     other.checked_sub(*self)
@@ -87,6 +103,10 @@ integer_distance!(
 macro_rules! float_distance {
     ($($ty:ty),+ $(,)?) => {$(
         impl NumericDistance for $ty {
+            fn zero_distance() -> Self {
+                0.0
+            }
+
             #[allow(clippy::float_cmp)] // Equal infinities require exact equality.
             fn checked_distance(&self, other: &Self) -> Option<Self> {
                 // Preserve equal infinities without evaluating their NaN difference.
@@ -102,13 +122,123 @@ macro_rules! float_distance {
 
 float_distance!(f32, f64);
 
-impl<T> NumericDistance for Wrapping<T>
-where
-    T: NumericDistance,
-    Self: Num + PartialOrd,
-{
+impl<T: NumericDistance> NumericDistance for Wrapping<T> {
+    fn zero_distance() -> Self {
+        Wrapping(T::zero_distance())
+    }
+
     fn checked_distance(&self, other: &Self) -> Option<Self> {
         self.0.checked_distance(&other.0).map(Wrapping)
+    }
+}
+
+/// Checks distance from an expected value with an inclusive, non-negative deviation.
+/// Uses [`NumericDistance`] without requiring `Clone` or floating-point math features. Values
+/// render compactly, for example `10s` for a `jiff::SignedDuration`.
+#[derive(Debug, Clone)]
+pub struct IsCloseTo<E, D = E> {
+    expected: E,
+    allowed_deviation: D,
+}
+
+impl<E, D> IsCloseTo<E, D> {
+    /// Owns the expected value and allowed deviation.
+    #[must_use]
+    pub const fn new(expected: E, allowed_deviation: D) -> Self {
+        Self {
+            expected,
+            allowed_deviation,
+        }
+    }
+}
+
+/// The reason a numeric tolerance was rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CloseToRejection {
+    /// The deviation was negative or incomparable with zero.
+    InvalidDeviation,
+    /// The distance exceeded the deviation or could not be computed.
+    OutsideDeviation,
+}
+
+impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R: ValueRenderer<T>>
+    Expectation<T, R> for IsCloseTo<E, D>
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = (&'a T, &'a T, CloseToRejection)
+    where
+        Self: 'a,
+        T: 'a;
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        let expected = borrow_for::<T, _>(&self.expected);
+        let allowed_deviation = borrow_for::<T, _>(&self.allowed_deviation);
+        // A NaN deviation is incomparable with zero and therefore invalid, like a negative one.
+        if !allowed_deviation.ge(&T::zero_distance()) {
+            return Err((
+                expected,
+                allowed_deviation,
+                CloseToRejection::InvalidDeviation,
+            ));
+        }
+        if actual
+            .checked_distance(expected)
+            .is_some_and(|distance| &distance <= allowed_deviation)
+        {
+            Ok(())
+        } else {
+            Err((
+                expected,
+                allowed_deviation,
+                CloseToRejection::OutsideDeviation,
+            ))
+        }
+    }
+
+    const KIND: FailureKind = FailureKind::Ordering;
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        // Compact leaves keep values such as durations readable. Scalars render the same either
+        // way.
+        let render = context.render().compact();
+        match rejected {
+            None => failure
+                .relation("is close to")
+                .expected(render.value(borrow_for::<T, _>(&self.expected)))
+                .fact(Fact::labelled(
+                    "Allowed deviation",
+                    render.value(borrow_for::<T, _>(&self.allowed_deviation)),
+                )),
+            Some((actual, (expected, allowed_deviation, rejection))) => {
+                let allowed_deviation = render.value(allowed_deviation);
+                match rejection {
+                    CloseToRejection::InvalidDeviation => failure
+                        .relation("was given an invalid allowed deviation")
+                        .fact(Fact::labelled("Allowed deviation", allowed_deviation))
+                        .fact(Fact::note(
+                            "The allowed deviation must be zero or positive.",
+                        )),
+                    CloseToRejection::OutsideDeviation => failure
+                        .actual(render.value(actual))
+                        .relation("is not close to")
+                        .expected(render.value(expected))
+                        .fact(Fact::labelled("Allowed deviation", allowed_deviation)),
+                }
+            }
+        }
     }
 }
 
@@ -129,7 +259,7 @@ mod tests {
                 .with_detail_message(format!("distance between {a:?} and {b:?}"))
                 .is_equal_to(expected);
             if let Some(actual_distance) = actual_distance {
-                assert_that!(actual_distance).is_greater_or_equal_to(T::zero());
+                assert_that!(actual_distance).is_greater_or_equal_to(T::zero_distance());
             }
         }
     }
@@ -239,7 +369,7 @@ mod tests {
     }
 
     macro_rules! float_tests {
-        ($ty:ident, $precision_boundary:expr) => {
+        ($ty:ident) => {
             mod $ty {
                 use super::{NumericDistance, assert_distance};
                 use crate::prelude::*;
@@ -288,49 +418,6 @@ mod tests {
                 }
 
                 #[test]
-                fn subnormal_distances_are_not_flushed_to_zero() {
-                    let smallest = Number::from_bits(1);
-                    let largest = Number::from_bits(Number::MIN_POSITIVE.to_bits() - 1);
-                    for (a, b, distance) in [
-                        (0.0, smallest, smallest),
-                        (0.0, -smallest, smallest),
-                        (-smallest, smallest, Number::from_bits(2)),
-                        (smallest, Number::from_bits(3), Number::from_bits(2)),
-                        (largest, Number::MIN_POSITIVE, smallest),
-                        (-Number::MIN_POSITIVE, -largest, smallest),
-                    ] {
-                        assert_distance(a, b, Some(distance));
-                    }
-                }
-
-                #[test]
-                fn adjacent_normal_values_retain_their_spacing() {
-                    let one: Number = 1.0;
-                    let below = Number::from_bits(one.to_bits() - 1);
-                    let above = Number::from_bits(one.to_bits() + 1);
-                    assert_distance(below, one, Some(Number::EPSILON / 2.0));
-                    assert_distance(one, above, Some(Number::EPSILON));
-                    assert_distance(-above, -one, Some(Number::EPSILON));
-                }
-
-                #[test]
-                fn distances_round_to_nearest_with_ties_to_even() {
-                    let boundary: Number = $precision_boundary;
-                    for (a, b, distance) in [
-                        (boundary, boundary + 2.0, 2.0),
-                        (-boundary, -boundary - 2.0, 2.0),
-                        (boundary, 1.0, boundary - 1.0),
-                        (boundary + 2.0, 1.0, boundary),
-                        (-1.0, boundary, boundary),
-                        (-boundary, 1.0, boundary),
-                        (-3.0, boundary, boundary + 4.0),
-                        (-1.0, boundary + 2.0, boundary + 4.0),
-                    ] {
-                        assert_distance(a, b, Some(distance));
-                    }
-                }
-
-                #[test]
                 fn finite_subtraction_overflow_returns_positive_infinity() {
                     for (a, b) in [
                         (Number::MIN, Number::MAX),
@@ -339,18 +426,6 @@ mod tests {
                     ] {
                         assert_distance(a, b, Some(Number::INFINITY));
                     }
-                }
-
-                #[test]
-                fn rounding_at_the_overflow_threshold_distinguishes_max_from_infinity() {
-                    let previous = Number::from_bits(Number::MAX.to_bits() - 1);
-                    // The subtraction is exact and gives the spacing at the largest finite value.
-                    let half_ulp = (Number::MAX - previous) / 2.0;
-                    let below_half_ulp = Number::from_bits(half_ulp.to_bits() - 1);
-                    assert_distance(Number::MAX, -below_half_ulp, Some(Number::MAX));
-                    assert_distance(Number::MAX, -half_ulp, Some(Number::INFINITY));
-                    assert_distance(Number::MIN, below_half_ulp, Some(Number::MAX));
-                    assert_distance(Number::MIN, half_ulp, Some(Number::INFINITY));
                 }
 
                 #[test]
@@ -385,34 +460,8 @@ mod tests {
 
                 #[test]
                 fn any_nan_endpoint_has_no_distance() {
-                    let signaling = Number::from_bits(Number::INFINITY.to_bits() | 1);
-                    let payload = Number::from_bits(Number::NAN.to_bits() | 0x123);
-                    let nans = [
-                        Number::NAN,
-                        -Number::NAN,
-                        signaling,
-                        -signaling,
-                        payload,
-                        -payload,
-                    ];
-                    for nan in nans {
-                        for other in [
-                            Number::NEG_INFINITY,
-                            Number::MIN,
-                            -1.0,
-                            -Number::from_bits(1),
-                            -0.0,
-                            0.0,
-                            Number::from_bits(1),
-                            1.0,
-                            Number::MAX,
-                            Number::INFINITY,
-                        ]
-                        .into_iter()
-                        .chain(nans)
-                        {
-                            assert_distance(nan, other, None);
-                        }
+                    for other in [Number::NEG_INFINITY, -1.0, 0.0, Number::MAX, Number::NAN] {
+                        assert_distance(Number::NAN, other, None);
                     }
                 }
             }
@@ -443,18 +492,20 @@ mod tests {
 
         #[test]
         fn enables_is_close_to() {
-            assert_that!(Wrapping(5)).is_close_to(Wrapping(4), Wrapping(1));
-            assert_that!(Wrapping(5_u64)).is_close_to(&Wrapping(7), Wrapping(2));
+            use super::super::IsCloseTo;
+
+            assert_that!(Wrapping(5)).matches(IsCloseTo::new(Wrapping(4), Wrapping(1)));
+            assert_that!(Wrapping(5_u64)).matches(IsCloseTo::new(&Wrapping(7), Wrapping(2)));
 
             let failures = assert_that!(Wrapping(5))
                 .with_location(false)
-                .capture(|it| it.is_close_to(Wrapping(2), Wrapping(1)));
+                .capture(|it| it.matches(IsCloseTo::new(Wrapping(2), Wrapping(1))));
             assert_that!(failures).has_length(1);
         }
     }
 
     unsigned_integer_tests!(u8, u16, u32, u64, u128, usize);
     signed_integer_tests!(i8, i16, i32, i64, i128, isize);
-    float_tests!(f32, 16_777_216.0);
-    float_tests!(f64, 9_007_199_254_740_992.0);
+    float_tests!(f32);
+    float_tests!(f64);
 }

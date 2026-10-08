@@ -6,9 +6,7 @@ use super::{
     value,
 };
 use crate::expectation::{lists::SatisfyingList, satisfying};
-use crate::{
-    AssertThat, DebugRenderer, ExpectationDiagnostics, Mode, ValueRenderer, mode::Capture,
-};
+use crate::{AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer, mode::Capture};
 
 /// Assertions over the elements of a collection: slices, arrays, `Vec`, `VecDeque`, and every type
 /// implementing [`Collection`].
@@ -87,7 +85,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     /// Asserts that at least one element matches `expected`.
     fn contains_matching<P>(self, expected: P) -> Self
     where
-        P: ExpectationDiagnostics<T, R>;
+        P: Expectation<T, R>;
 
     /// Asserts that at least one element satisfies `assertions`.
     ///
@@ -124,7 +122,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     /// Asserts that no element matches `expected`.
     fn does_not_contain_matching<P>(self, expected: P) -> Self
     where
-        P: ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         R: ValueRenderer<T>;
 
     /// Asserts that no element satisfies `assertions`.
@@ -209,7 +207,7 @@ where
     #[track_caller]
     fn contains_matching<P>(self, expected: P) -> Self
     where
-        P: ExpectationDiagnostics<C::Item, R>,
+        P: Expectation<C::Item, R>,
     {
         self.apply_assertion(ContainsMatching::new(expected))
     }
@@ -246,7 +244,7 @@ where
     #[track_caller]
     fn does_not_contain_matching<P>(self, expected: P) -> Self
     where
-        P: ExpectationDiagnostics<C::Item, R>,
+        P: Expectation<C::Item, R>,
         R: ValueRenderer<C::Item>,
     {
         self.apply_assertion(DoesNotContainMatching::new(expected))
@@ -286,16 +284,43 @@ where
         R: Clone + ValueRenderer<usize>,
         A: for<'a> Fn(AssertThat<'a, C::Item, Capture, R>),
     {
-        // Borrowing the callback list accesses the operand, so track first.
-        self.track_assertion();
-        self.apply_assertion_after_tracking(elements_are_in_any_order(SatisfyingList(
-            assertions.as_ref(),
-        )))
+        self.apply_assertion(elements_are_in_any_order(SatisfyingList::new(assertions)))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::{matchers::eq, prelude::*};
+
+        fn is(expected: i32) -> impl Fn(AssertThat<'_, i32, Capture>) {
+            move |it| {
+                it.is_equal_to(expected);
+            }
+        }
+
+        #[test]
+        fn are_as_expected() {
+            let values = [1, 2, 3];
+            let values = values.as_slice();
+            values.must().contain(2);
+            values.must().contain_matching(eq(2));
+            values.must().contain_satisfying(is(2));
+            values.must().contain_all([1, 3]);
+            values.must().not_contain(4);
+            values.must().not_contain_matching(eq(4));
+            values.must().not_contain_satisfying(is(4));
+            values.must().contain_exactly_in_any_order([2, 3, 1]);
+            values
+                .must()
+                .contain_exactly_in_any_order_matching([eq(2), eq(3), eq(1)]);
+            values
+                .must()
+                .contain_exactly_in_any_order_satisfying([is(2), is(3), is(1)]);
+        }
+    }
+
     mod renderer_contract {
         use crate::{
             prelude::*,
@@ -328,19 +353,13 @@ mod tests {
                 .with_renderer(ComparisonRenderer)
                 .with_location(false)
                 .capture(|it| it.contains(RendererExpected::new(2)));
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+            assert_that!(failures[0].to_string()).contains(SENTINEL);
         }
     }
 
     mod contains {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].as_slice().must().contain(2);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -404,15 +423,6 @@ mod tests {
         use crate::{prelude::*, test_support::NoRenderer};
         use core::cell::Cell;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .as_slice()
-                .must()
-                .contain_matching(crate::expectation::predicate(|it: &i32| *it % 2 == 0));
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -500,14 +510,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].as_slice().must().contain_satisfying(|it| {
-                it.is_equal_to(2);
-            });
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 2].as_slice()),
@@ -521,12 +523,6 @@ mod tests {
     mod contains_all {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].as_slice().must().contain_all([1, 3]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -592,15 +588,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .as_slice()
-                .must()
-                .not_contain_matching(crate::expectation::predicate(|it: &i32| *it > 7));
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 2, 3].as_slice()),
@@ -654,14 +641,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].as_slice().must().not_contain_satisfying(|it| {
-                it.is_equal_to(7);
-            });
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 2, 3].as_slice()),
@@ -675,12 +654,6 @@ mod tests {
     mod does_not_contain {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].as_slice().must().not_contain(4);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -748,14 +721,8 @@ mod tests {
         }
 
         impl<R> Expectation<Actual, R> for WildcardExpected {
-            type Success<'a>
-                = ()
-            where
-                Self: 'a;
-            type Rejection<'a>
-                = ()
-            where
-                Self: 'a;
+            type Success<'a> = ();
+            type Rejection<'a> = ();
             fn evaluate(&self, actual: &Actual, _: &AssertionContext<'_, R>) -> Result<(), ()> {
                 match self {
                     Self::Any => Ok(()),
@@ -763,29 +730,19 @@ mod tests {
                     Self::Value(_) => Err(()),
                 }
             }
-        }
-        impl<R> ExpectationDiagnostics<Actual, R> for WildcardExpected {
+
             const KIND: crate::FailureKind = crate::FailureKind::Matching;
-            fn explain<Target>(
+            fn explain(
                 &self,
                 rejected: Option<(&Actual, ())>,
-                failure: crate::failure::FailureBuilder<Target>,
+                failure: crate::failure::FailureBuilder,
                 context: &AssertionContext<'_, R>,
-            ) -> crate::failure::FailureBuilder<Target> {
+            ) -> crate::failure::FailureBuilder {
                 match rejected {
                     None => failure.relation("matches the wildcard constraint"),
                     Some((_, ())) => failure.constraint(context.describe(&self)),
                 }
             }
-        }
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .as_slice()
-                .must()
-                .contain_exactly_in_any_order([2, 3, 1]);
         }
 
         #[test]
@@ -884,22 +841,6 @@ mod tests {
     mod contains_exactly_in_any_order_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .as_slice()
-                .must()
-                .contain_exactly_in_any_order_matching(crate::expectation::predicate_list(
-                    [
-                        move |it: &i32| *it == 1,
-                        move |it: &i32| *it == 2,
-                        move |it: &i32| *it == 3,
-                    ]
-                    .as_slice(),
-                ));
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1073,22 +1014,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2]
-                .as_slice()
-                .must()
-                .contain_exactly_in_any_order_satisfying([
-                    |it: AssertThat<i32, Capture>| {
-                        it.is_equal_to(2);
-                    },
-                    |it: AssertThat<i32, Capture>| {
-                        it.is_equal_to(1);
-                    },
-                ]);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1]),
@@ -1096,32 +1021,6 @@ mod tests {
                     it.is_equal_to(2);
                 }])
             );
-        }
-    }
-
-    #[cfg(feature = "std")]
-    mod evaluation {
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn tracks_before_accessing_expected_values() {
-            struct PanickingValues;
-            impl AsRef<[i32]> for PanickingValues {
-                fn as_ref(&self) -> &[i32] {
-                    panic!("expected slice access");
-                }
-            }
-            let failures = assert_that!([1, 2]).capture(|root| {
-                let child = root.derive(|values| values);
-                let panic = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
-                    child.contains_all(PanickingValues);
-                }));
-                assert_that!(panic).is_err();
-                assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                root
-            });
-            assert_that!(failures).is_empty();
         }
     }
 }

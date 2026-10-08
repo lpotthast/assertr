@@ -1,10 +1,7 @@
 use alloc::vec::Vec;
 use core::{fmt, ops::Deref, slice};
 
-use super::{
-    AssertionFailure,
-    adapter::{Adapter, ToHumanReadableText},
-};
+use super::AssertionFailure;
 use crate::{
     assertions::{
         HasLength,
@@ -16,8 +13,8 @@ use crate::{
 /// The failures collected by one capture scope, in assertion order.
 ///
 /// An empty collection means every assertion passed. Inspect the failures through slice access,
-/// iteration, or ordinary collection assertions. `Display` and `Debug` produce the default plain
-/// report, while adapters can process each failure or the aggregate explicitly.
+/// iteration, or ordinary collection assertions. `Display` and `Debug` produce the reports of all
+/// failures, separated by an empty line.
 #[derive(Clone, Default)]
 #[must_use = "captured failures must be inspected"]
 pub struct AssertionFailures {
@@ -89,24 +86,6 @@ impl AssertionFailures {
         }
     }
 
-    /// Borrows the collected failures in assertion order.
-    #[must_use]
-    pub fn as_slice(&self) -> &[AssertionFailure] {
-        &self.failures
-    }
-
-    /// Returns the number of collected failures.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.failures.len()
-    }
-
-    /// Returns whether all assertions passed.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.failures.is_empty()
-    }
-
     /// Takes ownership of the collected failures.
     #[must_use]
     pub fn into_vec(self) -> Vec<AssertionFailure> {
@@ -133,13 +112,13 @@ impl From<AssertionFailure> for AssertionFailures {
 impl Deref for AssertionFailures {
     type Target = [AssertionFailure];
     fn deref(&self) -> &Self::Target {
-        self.as_slice()
+        &self.failures
     }
 }
 
 impl AsRef<[AssertionFailure]> for AssertionFailures {
     fn as_ref(&self) -> &[AssertionFailure] {
-        self.as_slice()
+        &self.failures
     }
 }
 
@@ -161,7 +140,7 @@ impl<'a> IntoIterator for &'a AssertionFailures {
 
 impl HasLength for AssertionFailures {
     fn length(&self) -> usize {
-        self.len()
+        self.failures.len()
     }
 }
 
@@ -183,10 +162,13 @@ impl RandomAccess for AssertionFailures {
 
 impl fmt::Display for AssertionFailures {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match ToHumanReadableText.adapt(self) {
-            Ok(report) => fmt::Display::fmt(&report, f),
-            Err(never) => match never {},
+        for (index, failure) in self.failures.iter().enumerate() {
+            if index != 0 {
+                f.write_str("\n")?;
+            }
+            fmt::Display::fmt(failure, f)?;
         }
+        Ok(())
     }
 }
 
@@ -200,30 +182,19 @@ impl core::error::Error for AssertionFailures {}
 
 #[cfg(test)]
 mod tests {
-    use crate::failure::adapter::{Adapter, AdapterExt};
     use crate::prelude::*;
     use core::error::Error;
 
     #[test]
-    fn reports_use_the_default_adapter_for_single_and_aggregate_failures() {
+    fn aggregate_reports_join_the_single_reports() {
         let failures = assert_that!(1)
             .with_location(false)
             .capture(|it| it.is_equal_to(2).is_equal_to(3));
-        let single = ToHumanReadableText.render(&failures[0]);
-        assert_that!(format!("{}", failures[0])).is_equal_to(single.as_str());
-        assert_that!(format!("{:?}", failures[0])).is_equal_to(single.as_str());
-        let expected = format!("{}\n{}", single, ToHumanReadableText.render(&failures[1]));
+        let single = failures[0].to_string();
+        assert_that!(format!("{:?}", failures[0])).is_equal_to(&single);
+        let expected = format!("{single}\n{}", failures[1]);
         assert_that!(format!("{failures}")).is_equal_to(&expected);
         assert_that!(format!("{failures:?}")).is_equal_to(&expected);
-        assert_that!(ToHumanReadableText.adapt(&failures).unwrap().as_str()).is_equal_to(&expected);
-        assert_that!(
-            ToHumanReadableText
-                .map_err(|never| never)
-                .adapt(&failures)
-                .unwrap()
-                .as_str()
-        )
-        .is_equal_to(&expected);
         assert_that!(failures.source()).is_none();
         assert_that!(failures[0].source()).is_none();
         assert_that!(format!("{:?}", AssertionFailures::default())).is_equal_to("");
@@ -239,7 +210,6 @@ mod tests {
         assert_that!(failures)
             .get_at(0)
             .is_equal_to(expected.clone());
-        assert_that!(failures.as_ref()).is_equal_to(failures.as_slice());
         assert_that!((&failures).into_iter().count()).is_equal_to(1);
         assert_that_owned!(&AssertionFailures::from(expected)).is_equal_to(&failures);
         assert_that_owned!(&AssertionFailures::from(failures.clone().into_vec()))
@@ -278,7 +248,7 @@ mod tests {
         cloned.attach_expression("receiver", location);
         assert_that!(cloned[0].expression).is_equal_to(Some("receiver"));
         assert_that!(failures[0].expression).is_none();
-        assert_that!(cloned.pending_expression).matches(pattern!(None));
+        assert_that!(cloned.pending_expression.is_none()).is_true();
         cloned.attach_expression("another receiver", location);
         assert_that!(cloned[0].expression).is_equal_to(Some("receiver"));
     }

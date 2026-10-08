@@ -19,6 +19,49 @@ impl BipartiteMatchResult {
     pub(crate) fn is_exact(&self) -> bool {
         self.unmatched_actual.is_empty() && self.unmatched_expected.is_empty()
     }
+
+    /// Selects the unmatched actual and expected values by their indexes.
+    pub(crate) fn unmatched<'a, A: ?Sized, E: ?Sized>(
+        &self,
+        actual: &[&'a A],
+        expected: impl Fn(usize) -> &'a E,
+    ) -> (Vec<&'a A>, Vec<&'a E>) {
+        (
+            self.unmatched_actual
+                .iter()
+                .map(|&index| actual[index])
+                .collect(),
+            self.unmatched_expected
+                .iter()
+                .map(|&index| expected(index))
+                .collect(),
+        )
+    }
+}
+
+/// Decides whether an exact one-to-one assignment exists.
+///
+/// A probe only needs the truth, so it uses [`matches_exactly`] and rejects with `None`. Otherwise
+/// a rejection carries the maximum assignment, which identifies the unmatched values.
+pub(crate) fn assign_exactly(
+    probe: bool,
+    actual_len: usize,
+    expected_len: usize,
+    matches: impl FnMut(usize, usize) -> bool,
+) -> Result<(), Option<BipartiteMatchResult>> {
+    if probe {
+        return if matches_exactly(actual_len, expected_len, matches) {
+            Ok(())
+        } else {
+            Err(None)
+        };
+    }
+    let result = match_bipartite(actual_len, expected_len, matches);
+    if result.is_exact() {
+        Ok(())
+    } else {
+        Err(Some(result))
+    }
 }
 
 /// One value on the alternating path an augmenting search is building.
@@ -87,7 +130,7 @@ pub(crate) fn match_bipartite(
 ///
 /// Unequal lengths need no comparisons. With equal lengths, the first actual value that cannot be
 /// assigned proves that no exact assignment exists, so later values are not compared.
-pub(crate) fn matches_exactly(
+fn matches_exactly(
     actual_len: usize,
     expected_len: usize,
     matches: impl FnMut(usize, usize) -> bool,

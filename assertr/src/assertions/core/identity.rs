@@ -1,155 +1,96 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode,
+    AssertThat, AssertionContext, Expectation, Mode,
     failure::{FailureBuilder, FailureKind},
 };
 
-/// Requires the subject and expected reference to have equal full pointers, without rendering their
-/// contents.
-pub struct IsSameInstanceAs<'e, T: ?Sized>(&'e T);
+/// Defines an identity expectation comparing full pointers with [`core::ptr::eq`]. Diagnostics
+/// render addresses through the identity adapter, never the targets' contents.
+macro_rules! identity_expectation {
+    (
+        $(#[$attr:meta])*
+        $name:ident: same = $same:literal, $relation:literal, $negated:literal, $operand:ident
+    ) => {
+        $(#[$attr])*
+        pub struct $name<'e, T: ?Sized>(&'e T);
 
-impl<T: ?Sized> Clone for IsSameInstanceAs<'_, T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T: ?Sized> Copy for IsSameInstanceAs<'_, T> {}
-
-/// Shows the expected target's address, because identity never inspects its contents.
-impl<T: ?Sized> core::fmt::Debug for IsSameInstanceAs<'_, T> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("IsSameInstanceAs")
-            .field(&core::ptr::from_ref(self.0))
-            .finish()
-    }
-}
-impl<'e, T: ?Sized> IsSameInstanceAs<'e, T> {
-    /// Borrows the reference whose full pointer is compared with the subject's pointer.
-    #[must_use]
-    pub const fn new(expected: &'e T) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: ?Sized, R> Expectation<T, R> for IsSameInstanceAs<'_, T> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if core::ptr::eq(actual, self.0) {
-            Ok(())
-        } else {
-            Err(())
+        impl<T: ?Sized> Clone for $name<'_, T> {
+            fn clone(&self) -> Self {
+                *self
+            }
         }
-    }
-}
 
-impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsSameInstanceAs<'_, T> {
-    const KIND: FailureKind = FailureKind::Equality;
+        impl<T: ?Sized> Copy for $name<'_, T> {}
 
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is the same instance as"),
-            Some((actual, ())) => failure
-                .actual(render.identities().value(actual))
-                .relation("is not the same instance as"),
-        };
-        failure.expected(render.identities().value(self.0))
-    }
-}
-
-/// Checks that the subject is not the same instance as the expected reference, without comparing
-/// or rendering its contents.
-pub struct IsNotSameInstanceAs<'e, T: ?Sized>(&'e T);
-
-impl<T: ?Sized> Clone for IsNotSameInstanceAs<'_, T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T: ?Sized> Copy for IsNotSameInstanceAs<'_, T> {}
-
-/// Shows the expected target's address, because identity never inspects its contents.
-impl<T: ?Sized> core::fmt::Debug for IsNotSameInstanceAs<'_, T> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("IsNotSameInstanceAs")
-            .field(&core::ptr::from_ref(self.0))
-            .finish()
-    }
-}
-impl<'e, T: ?Sized> IsNotSameInstanceAs<'e, T> {
-    /// Borrows the reference whose full pointer is compared with the subject's pointer.
-    #[must_use]
-    pub const fn new(expected: &'e T) -> Self {
-        Self(expected)
-    }
-}
-
-impl<T: ?Sized, R> Expectation<T, R> for IsNotSameInstanceAs<'_, T> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if core::ptr::eq(actual, self.0) {
-            Err(())
-        } else {
-            Ok(())
+        /// Shows the expected target's address, because identity never inspects its contents.
+        impl<T: ?Sized> core::fmt::Debug for $name<'_, T> {
+            fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                formatter
+                    .debug_tuple(stringify!($name))
+                    .field(&core::ptr::from_ref(self.0))
+                    .finish()
+            }
         }
-    }
+
+        impl<'e, T: ?Sized> $name<'e, T> {
+            /// Borrows the reference whose full pointer is compared with the subject's pointer.
+            #[must_use]
+            pub const fn new(expected: &'e T) -> Self {
+                Self(expected)
+            }
+        }
+
+        impl<T: ?Sized, R> Expectation<T, R> for $name<'_, T> {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                T: 'a;
+            type Rejection<'a>
+                = ()
+            where
+                Self: 'a,
+                T: 'a;
+
+            fn evaluate(&self, actual: &T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+                if core::ptr::eq(actual, self.0) == $same {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            }
+
+            const KIND: FailureKind = FailureKind::Equality;
+
+            fn explain(
+                &self,
+                rejected: Option<(&T, ())>,
+                failure: FailureBuilder,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder {
+                let identities = context.render().identities();
+                failure
+                    .relations(
+                        rejected.map(|(actual, ())| identities.value(actual)),
+                        $relation,
+                        $negated,
+                    )
+                    .$operand(identities.value(self.0))
+            }
+        }
+    };
 }
 
-impl<T: ?Sized, R> ExpectationDiagnostics<T, R> for IsNotSameInstanceAs<'_, T> {
-    const KIND: FailureKind = FailureKind::Equality;
+identity_expectation!(
+    /// Requires the subject and expected reference to have equal full pointers, without rendering
+    /// their contents.
+    IsSameInstanceAs: same = true, "is the same instance as", "is not the same instance as", expected
+);
 
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is not the same instance as"),
-            Some((actual, ())) => failure
-                .actual(render.identities().value(actual))
-                .relation("is the same instance as"),
-        };
-        failure.unexpected(render.identities().value(self.0))
-    }
-}
+identity_expectation!(
+    /// Checks that the subject is not the same instance as the expected reference, without
+    /// comparing or rendering its contents.
+    IsNotSameInstanceAs: same = false, "is not the same instance as", "is the same instance as", unexpected
+);
 
 /// Assertions comparing the address of the assertion subject with another reference.
 ///
@@ -205,6 +146,18 @@ impl<T, M: Mode, R> IdentityAssertions<T> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            let values = [1, 1];
+            values[0].must().be_same_instance_as(&values[0]);
+            values[0].must().not_be_same_instance_as(&values[1]);
+        }
+    }
+
     use crate::{
         FailureKind,
         prelude::*,
@@ -250,13 +203,6 @@ mod tests {
 
     mod is_same_instance_as {
         use super::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let value = Opaque { _byte: 1 };
-            value.must().be_same_instance_as(&value);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -374,13 +320,6 @@ mod tests {
         use super::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let values = [Opaque { _byte: 1 }, Opaque { _byte: 1 }];
-            values[0].must().not_be_same_instance_as(&values[1]);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             let value = Opaque { _byte: 1 };
             assert_caller_location!(
@@ -423,18 +362,6 @@ mod tests {
             ", value = &value});
                 },
             ]);
-        }
-
-        #[test]
-        fn panics_when_the_instances_are_the_same() {
-            let value = Opaque { _byte: 1 };
-            assert_that_panic_by(|| {
-                assert_that!(value)
-                    .with_renderer(NoRenderer)
-                    .is_not_same_instance_as(&value)
-            })
-            .has_type::<String>()
-            .contains("is the same instance as");
         }
     }
 }

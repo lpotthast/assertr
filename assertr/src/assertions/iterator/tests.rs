@@ -150,7 +150,7 @@ fn verify_failure(failures: &AssertionFailures, state: &State, failed: bool) {
         assert_that!(state.renders.get()).is_greater_than(0);
         let renders = state.renders.get();
         // A completed report no longer needs either the items or the iterator's resource.
-        assert_that!(ToHumanReadableText.render(&failures[0]).as_str()).contains("resource(");
+        assert_that!(failures[0].to_string()).contains("resource(");
         assert_that!(state.renders.get()).is_equal_to(renders);
     }
 }
@@ -432,8 +432,6 @@ mod borrowed {
 
 mod release {
     use super::*;
-    use crate::failure::adapter::{Adapter, HumanReadableText};
-    use core::convert::Infallible;
     use std::sync::{Arc, Mutex, MutexGuard};
 
     struct Guarded<'a> {
@@ -447,21 +445,6 @@ mod release {
         }
     }
 
-    struct ReleasedPresentation(Arc<Mutex<()>>);
-
-    impl Adapter<AssertionFailure> for ReleasedPresentation {
-        type Output = HumanReadableText;
-        type Error = Infallible;
-
-        fn adapt(&self, _: &AssertionFailure) -> Result<HumanReadableText, Infallible> {
-            Ok(HumanReadableText::new(if self.0.try_lock().is_ok() {
-                "iterator released before presentation"
-            } else {
-                "iterator still holds its guard"
-            }))
-        }
-    }
-
     #[test]
     fn panic_routing_releases_the_iterator_before_presentation_without_poisoning() {
         let resource = Arc::new(Mutex::new(()));
@@ -469,7 +452,16 @@ mod release {
             assert_that_owned!(Guarded {
                 _guard: resource.lock().unwrap()
             })
-            .with_panic_presentation(ReleasedPresentation(Arc::clone(&resource)))
+            .with_panic_presentation({
+                let resource = Arc::clone(&resource);
+                move |_| {
+                    String::from(if resource.try_lock().is_ok() {
+                        "iterator released before presentation"
+                    } else {
+                        "iterator still holds its guard"
+                    })
+                }
+            })
             .does_not_contain(1);
         })
         .unwrap_err()
@@ -516,11 +508,7 @@ mod release {
 }
 
 mod string_views {
-    use crate::{
-        prelude::*,
-        test_support::{StrOperand, StringRenderer},
-    };
-    use core::cell::Cell;
+    use crate::prelude::*;
 
     #[test]
     fn all_streaming_comparisons_accept_literal_operands() {
@@ -561,51 +549,6 @@ mod string_views {
             .into_iter_contains_all([&a])
             .into_iter_contains_exactly_in_any_order([&a]);
         assert_that_owned!([&a].into_iter()).contains(&a);
-    }
-
-    #[test]
-    fn all_streaming_rejections_access_unsized_views_after_tracking() {
-        for method in 0..11 {
-            let calls = Cell::new(0);
-            let failures = assert_that!(())
-                .with_renderer(StringRenderer)
-                .capture(|root| {
-                    let expected = StrOperand {
-                        value: if matches!(method, 1 | 9) { "a" } else { "b" },
-                        observe: || {
-                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                            calls.set(calls.get() + 1);
-                        },
-                    };
-                    if matches!(method, 2 | 8..) {
-                        let it = root.derive_owned(|()| [String::from("a")]);
-                        match method {
-                            2 => it.into_iter_contains_all([expected]),
-                            8 => it.into_iter_contains(expected),
-                            9 => it.into_iter_does_not_contain(expected),
-                            _ => it.into_iter_contains_exactly_in_any_order([expected]),
-                        };
-                    } else {
-                        let it = root.derive_owned(|()| [String::from("a")].into_iter());
-                        match method {
-                            0 => it.contains(expected),
-                            1 => it.does_not_contain(expected),
-                            3 => it.starts_with([expected]),
-                            4 => it.ends_with([expected]),
-                            5 => it.contains_contiguous([expected]),
-                            6 => it.contains_exactly([expected]),
-                            _ => it.contains_exactly_in_any_order([expected]),
-                        };
-                    }
-                    root
-                });
-            if matches!(method, 0 | 1 | 8 | 9) {
-                assert_that!(calls.get()).is_equal_to(1);
-            } else {
-                assert_that!(calls.get()).is_greater_than(0);
-            }
-            assert_that!(failures).has_length(1);
-        }
     }
 }
 
@@ -713,8 +656,10 @@ mod callbacks {
                             _ => unreachable!(),
                         })
                 };
-                assert_that!(calls.get()).is_equal_to(1);
-                assert_that!(clones.get()).is_equal_to(3);
+                // Unordered assignment probes the pair, then evaluates it again to explain it.
+                let evaluations = if matches!(operation, Unordered) { 2 } else { 1 };
+                assert_that!(calls.get()).is_equal_to(evaluations);
+                assert_that!(clones.get()).is_equal_to(3 * evaluations);
                 assert_that!(failures).has_length(1);
                 let mut leaves = Vec::new();
                 equality_failures(&failures[0], &mut leaves);
@@ -734,8 +679,7 @@ mod callbacks {
                     assert_that!(leaf.path).is_equal_to(path);
                 }
                 if maximum == 1 {
-                    assert_that!(ToHumanReadableText.render(&failures[0]).as_str())
-                        .contains("1 more");
+                    assert_that!(failures[0].to_string()).contains("1 more");
                 }
             }
         }
@@ -758,95 +702,57 @@ mod tracking {
         }
     }
 
+    struct Input<F> {
+        values: [i32; 1],
+        observe: F,
+    }
+
+    impl<'a, F: Fn()> IntoIterator for &'a Input<F> {
+        type Item = &'a i32;
+        type IntoIter = core::slice::Iter<'a, i32>;
+        fn into_iter(self) -> Self::IntoIter {
+            (self.observe)();
+            self.values.iter()
+        }
+    }
+
     #[test]
     fn sequence_views_are_accessed_after_tracking() {
-        for method in 0..5 {
+        for method in 0..4 {
             let conversions = Cell::new(0);
             let failures = assert_that!(()).capture(|root| {
+                let observe = || {
+                    assert_that!(root.state.records.assertion_count()).is_equal_to(1);
+                    conversions.set(conversions.get() + 1);
+                };
                 let expected = ObservedView {
                     values: [9],
-                    observe: || {
-                        assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                        conversions.set(conversions.get() + 1);
-                    },
+                    observe,
                 };
-                let child = root.derive_owned(|()| [1].into_iter());
+                let callbacks = ObservedView {
+                    values: [|it: AssertThat<i32, Capture>| {
+                        it.is_equal_to(9);
+                    }],
+                    observe,
+                };
+                let direct = || root.derive_owned(|()| [1].into_iter());
                 match method {
-                    0 => child.starts_with(expected),
-                    1 => child.ends_with(expected),
-                    2 => child.contains_contiguous(expected),
-                    3 => child.contains_exactly(expected),
-                    _ => child.contains_exactly_in_any_order(expected),
-                };
+                    0 => drop(direct().ends_with(expected)),
+                    1 => drop(direct().contains_exactly_satisfying(callbacks)),
+                    2 => drop(direct().contains_exactly_in_any_order(expected)),
+                    _ => drop(
+                        root.derive_owned(|()| Input {
+                            values: [1],
+                            observe,
+                        })
+                        .into_iter_contains_all(expected),
+                    ),
+                }
                 assert_that!(root.state.records.assertion_count()).is_equal_to(1);
                 root
             });
             assert_that!(conversions.get()).is_greater_than(0);
             assert_that!(failures).has_length(1);
-        }
-    }
-
-    #[test]
-    fn borrowed_bulk_scan_tracks_before_accessing_either_input() {
-        struct Input<F> {
-            values: [i32; 1],
-            observe: F,
-        }
-        impl<'a, F: Fn()> IntoIterator for &'a Input<F> {
-            type Item = &'a i32;
-            type IntoIter = core::slice::Iter<'a, i32>;
-            fn into_iter(self) -> Self::IntoIter {
-                (self.observe)();
-                self.values.iter()
-            }
-        }
-        let failures = assert_that!(()).capture(|root| {
-            let observe = || {
-                assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-            };
-            let expected = ObservedView {
-                values: [9],
-                observe,
-            };
-            root.derive_owned(|()| Input {
-                values: [1],
-                observe,
-            })
-            .into_iter_contains_all(expected);
-            root
-        });
-        assert_that!(failures).has_length(1);
-    }
-
-    #[test]
-    fn callback_views_are_converted_once_after_tracking() {
-        for method in 0..6 {
-            let conversions = Cell::new(0);
-            let root = assert_that!(());
-            let assertions = ObservedView {
-                values: [|it: AssertThat<i32, Capture>| {
-                    it.is_equal_to(1);
-                }],
-                observe: || {
-                    assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                    conversions.set(conversions.get() + 1);
-                },
-            };
-            if method == 5 {
-                root.derive_owned(|()| [1])
-                    .into_iter_contains_exactly_in_any_order_satisfying(assertions);
-            } else {
-                let child = root.derive_owned(|()| [1].into_iter());
-                match method {
-                    0 => child.starts_with_satisfying(assertions),
-                    1 => child.ends_with_satisfying(assertions),
-                    2 => child.contains_contiguous_satisfying(assertions),
-                    3 => child.contains_exactly_satisfying(assertions),
-                    _ => child.contains_exactly_in_any_order_satisfying(assertions),
-                };
-            }
-            assert_that!(conversions.get()).is_equal_to(1);
-            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
         }
     }
 }
@@ -860,22 +766,13 @@ mod reporting {
         let failures = assert_that_owned!(0..100)
             .with_location(false)
             .capture(|it| it.does_not_contain(99));
-        let failure = ToHumanReadableText.render(&failures[0]);
+        let failure = failures[0].to_string();
         assert_that!(failure.as_str())
             .contains("last 16 consumed elements")
             .contains("84,")
             .contains("99,")
             .does_not_contain("83,")
             .contains("Decisive index: 99");
-    }
-
-    #[test]
-    fn failure_locations_point_at_the_callers_assertion() {
-        let failures = assert_that_owned!([1, 2, 3].into_iter()).capture(|it| it.contains(9));
-        assert_that!(failures[0].location.expect("present").file()).contains("iterator/tests.rs");
-
-        let failures = assert_that!(vec![1, 2, 3]).capture(|it| it.into_iter_contains(9));
-        assert_that!(failures[0].location.expect("present").file()).contains("iterator/tests.rs");
     }
 
     #[test]

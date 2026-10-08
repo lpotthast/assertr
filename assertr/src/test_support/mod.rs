@@ -19,7 +19,7 @@ pub(crate) use panic::assert_that_panic_by;
 pub(crate) use rendering::{
     ComparisonRenderer, CustomValueRenderer, NoRenderer, NumericRenderer, RedactingRenderer,
     RendererActual, RendererExpected, SENTINEL, SentinelRenderer, assert_custom_fact,
-    assert_custom_value, assert_redacted, rendered_text,
+    assert_custom_value, assert_redacted,
 };
 
 /// A boolean matcher whose diagnostics render nothing, for renderer-independence fixtures.
@@ -45,15 +45,14 @@ impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::Expectation<A, R> for OpaquePredica
     fn evaluate(&self, actual: &A, _: &crate::AssertionContext<'_, R>) -> Result<(), ()> {
         if (self.0)(actual) { Ok(()) } else { Err(()) }
     }
-}
-impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::ExpectationDiagnostics<A, R> for OpaquePredicate<F> {
+
     const KIND: crate::failure::FailureKind = crate::failure::FailureKind::Matching;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&A, ())>,
-        failure: crate::failure::FailureBuilder<Target>,
+        failure: crate::failure::FailureBuilder,
         _: &crate::AssertionContext<'_, R>,
-    ) -> crate::failure::FailureBuilder<Target> {
+    ) -> crate::failure::FailureBuilder {
         match rejected {
             None => failure.relation("satisfies the opaque predicate"),
             Some(_) => failure.relation("does not satisfy the opaque predicate"),

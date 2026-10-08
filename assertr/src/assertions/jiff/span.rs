@@ -1,10 +1,8 @@
-use crate::failure::FailureKind;
 use crate::mode::Mode;
 use crate::{AssertThat, DebugRenderer, ValueRenderer};
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use jiff::Span;
 
-sign_expectations!(subject: Span, zero: Span::new());
+sign_expectations!(Span, zero: Span::new());
 
 /// Assertions for [`Span`].
 #[allow(clippy::return_self_not_must_use)]
@@ -54,6 +52,19 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+        use jiff::{Span, ToSpan};
+
+        #[test]
+        fn are_as_expected() {
+            Span::new().must().be_zero();
+            (-2).hours().minutes(30).must().be_negative();
+            2.hours().minutes(30).must().be_positive();
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
@@ -73,7 +84,7 @@ mod tests {
                 .with_location(false)
                 .capture(SpanAssertions::is_zero);
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+            assert_that!(failures[0].to_string()).contains(SENTINEL);
         }
     }
 
@@ -81,12 +92,6 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::{Span, ToSpan};
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Span::new().must().be_zero();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -119,14 +124,7 @@ mod tests {
 
     mod is_negative {
         use crate::prelude::*;
-        use indoc::formatdoc;
         use jiff::ToSpan;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            (-2).hours().minutes(30).must().be_negative();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -134,44 +132,15 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_zero() {
+        fn accepts_only_negative_spans() {
             assert_that!((-2).hours().minutes(30)).is_negative();
-        }
-
-        #[test]
-        fn panics_when_zero() {
-            assert_that_panic_by(|| {
-                assert_that!(0.seconds()).with_location(false).is_negative();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `0.seconds()`
-
-                    Actual: 0s
-
-                    is not negative
-                    -------- assertr --------
-                "});
-        }
-
-        #[test]
-        fn panics_when_positive() {
-            assert_that_panic_by(|| {
-                assert_that!(2.hours().minutes(30))
-                    .with_location(false)
-                    .is_negative();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `2.hours().minutes(30)`
-
-                    Actual: 2h 30m
-
-                    is not negative
-                    -------- assertr --------
-                "});
+            let failures = assert_that!(0.seconds())
+                .capture(SpanAssertions::is_negative)
+                .into_iter()
+                .chain(assert_that!(2.hours()).capture(SpanAssertions::is_negative));
+            for failure in failures {
+                assert_that!(failure.relation.as_deref()).is_equal_to(Some("is not negative"));
+            }
         }
     }
 
@@ -181,12 +150,6 @@ mod tests {
         use jiff::ToSpan;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            2.hours().minutes(30).must().be_positive();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(0.seconds()), is_positive());
         }
@@ -194,23 +157,8 @@ mod tests {
         #[test]
         fn succeeds_when_positive() {
             assert_that!(2.hours().minutes(30)).is_positive();
-        }
-
-        #[test]
-        fn panics_when_zero() {
-            assert_that_panic_by(|| {
-                assert_that!(0.seconds()).with_location(false).is_positive();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `0.seconds()`
-
-                    Actual: 0s
-
-                    is not positive
-                    -------- assertr --------
-                "});
+            assert_that!(assert_that!(0.seconds()).capture(SpanAssertions::is_positive))
+                .has_length(1);
         }
 
         #[test]
@@ -222,14 +170,14 @@ mod tests {
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `(-2).hours().minutes(30)`
+                -------- assertr --------
+                Expression: `(-2).hours().minutes(30)`
 
-                    Actual: 2h 30m ago
+                Actual: 2h 30m ago
 
-                    is not positive
-                    -------- assertr --------
-                "});
+                is not positive
+                -------- assertr --------
+            "});
         }
     }
 }

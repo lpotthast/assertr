@@ -2,21 +2,21 @@ use super::entry::{explain_entry, record_entry};
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     __private::{Cons, Nil},
-    AssertThat, AssertionContext, AssertionFailure, DebugRenderer, ExpectationDiagnostics,
-    ValueRenderer,
+    AssertThat, AssertionContext, AssertionFailure, DebugRenderer, Expectation, ValueRenderer,
     assertions::map::{Entry, Map, MapLookup, entry},
     expectation::{MatcherList, lists::sealed as list_sealed, satisfying},
     failure::{FailureBuilder, FailureKind},
     mode::Capture,
 };
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 
 pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
-/// Supported keyed matcher lists. Use `entries_are!` for heterogeneous entries, or arrays,
-/// slices, and vectors of [`Entry`] values for homogeneous entries.
+/// Supported keyed matcher lists. Use a `matchers!` list of [`entry`] values for heterogeneous
+/// entries, or arrays, slices, and vectors of [`Entry`] values for homogeneous entries.
 pub trait EntryMatcherList<MapType: Map + ?Sized, R = DebugRenderer>:
     MatcherList<MapType, R> + sealed::Sealed
 {
@@ -47,7 +47,7 @@ impl<MapType, StoredKey, R, K, M, T> EntryMatcherList<MapType, R> for Cons<Entry
 where
     MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
     K: BorrowFor<StoredKey>,
-    M: ExpectationDiagnostics<MapType::Value, R>,
+    M: Expectation<MapType::Value, R>,
     R: ValueRenderer<K::View>,
     T: EntryMatcherList<MapType, R>,
 {
@@ -58,7 +58,7 @@ where
         context: &mut AssertionContext<'_, R>,
     ) -> (bool, Option<&'a MapType::Key>) {
         if index == 0 {
-            self.0.evaluate_and_record(actual, context)
+            record_entry(&self.0.key, &self.0.matcher, actual, context)
         } else {
             self.1.evaluate_entry_at(index - 1, actual, context)
         }
@@ -73,7 +73,7 @@ macro_rules! homogeneous {
         where
             MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
             K: BorrowFor<StoredKey>,
-            M: ExpectationDiagnostics<MapType::Value, R>,
+            M: Expectation<MapType::Value, R>,
             R: ValueRenderer<K::View>,
         {
             fn evaluate_entry_at<'a>(
@@ -82,7 +82,8 @@ macro_rules! homogeneous {
                 actual: &'a MapType,
                 context: &mut AssertionContext<'_, R>,
             ) -> (bool, Option<&'a MapType::Key>) {
-                self[index].evaluate_and_record(actual, context)
+                let entry = &self[index];
+                record_entry(&entry.key, &entry.matcher, actual, context)
             }
         }
     };
@@ -115,30 +116,38 @@ pub fn entry_matchers<K, M>(entries: impl IntoIterator<Item = (K, M)>) -> Vec<En
 }
 
 /// A borrowed list of key/callback pairs that adapts only the entry being evaluated or described.
-pub(crate) struct SatisfyingEntryList<'a, K, F>(pub(crate) &'a [(K, F)]);
+pub(crate) struct SatisfyingEntryList<L, K, F>(L, PhantomData<fn() -> (K, F)>);
 
-impl<K, F> sealed::Sealed for SatisfyingEntryList<'_, K, F> {}
+impl<L: AsRef<[(K, F)]>, K, F> SatisfyingEntryList<L, K, F> {
+    /// Stores the callbacks without accessing them, so tracking precedes the first borrow.
+    pub(crate) fn new(callbacks: L) -> Self {
+        Self(callbacks, PhantomData)
+    }
+}
 
-impl<K, F> list_sealed::Sealed for SatisfyingEntryList<'_, K, F> {}
+impl<L, K, F> sealed::Sealed for SatisfyingEntryList<L, K, F> {}
 
-impl<MapType, StoredKey, R, K, F> MatcherList<MapType, R> for SatisfyingEntryList<'_, K, F>
+impl<L, K, F> list_sealed::Sealed for SatisfyingEntryList<L, K, F> {}
+
+impl<MapType, StoredKey, R, L, K, F> MatcherList<MapType, R> for SatisfyingEntryList<L, K, F>
 where
+    L: AsRef<[(K, F)]>,
     MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
     K: BorrowFor<StoredKey>,
     F: for<'a> Fn(AssertThat<'a, MapType::Value, Capture, R>),
     R: ValueRenderer<K::View> + Clone,
 {
     fn len(&self) -> usize {
-        self.0.len()
+        self.0.as_ref().len()
     }
 
     fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> AssertionFailure {
-        let (key, assertions) = &self.0[index];
-        explain_entry::<MapType::Value, _, _, _, _>(
-            borrow_for::<StoredKey, _>(key),
+        let (key, assertions) = &self.0.as_ref()[index];
+        explain_entry::<MapType::Value, _, _, _>(
+            || borrow_for::<StoredKey, _>(key),
             &satisfying(assertions),
             None,
-            FailureBuilder::detached::<MapType>(FailureKind::Matching),
+            FailureBuilder::new::<MapType>(FailureKind::Matching),
             context,
         )
         .build()
@@ -154,8 +163,9 @@ where
     }
 }
 
-impl<MapType, StoredKey, R, K, F> EntryMatcherList<MapType, R> for SatisfyingEntryList<'_, K, F>
+impl<MapType, StoredKey, R, L, K, F> EntryMatcherList<MapType, R> for SatisfyingEntryList<L, K, F>
 where
+    L: AsRef<[(K, F)]>,
     MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
     K: BorrowFor<StoredKey>,
     F: for<'a> Fn(AssertThat<'a, MapType::Value, Capture, R>),
@@ -167,7 +177,7 @@ where
         actual: &'a MapType,
         context: &mut AssertionContext<'_, R>,
     ) -> (bool, Option<&'a MapType::Key>) {
-        let (key, assertions) = &self.0[index];
+        let (key, assertions) = &self.0.as_ref()[index];
         record_entry(key, &satisfying(assertions), actual, context)
     }
 }

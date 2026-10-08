@@ -1,5 +1,5 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Fact, Mode, Type,
+    AssertThat, AssertionContext, Expectation, Fact, Mode, Type,
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -11,24 +11,24 @@ impl<T, R> Expectation<Type<T>, R> for NeedsDrop {
     type Success<'a>
         = ()
     where
-        T: 'a;
+        Self: 'a,
+        Type<T>: 'a;
     type Rejection<'a>
         = ()
     where
-        T: 'a;
+        Self: 'a,
+        Type<T>: 'a;
     fn evaluate<'a>(&'a self, actual: &'a Type<T>, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         if actual.needs_drop() { Ok(()) } else { Err(()) }
     }
-}
 
-impl<T, R> ExpectationDiagnostics<Type<T>, R> for NeedsDrop {
     const KIND: FailureKind = FailureKind::Predicate;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&Type<T>, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => failure.relation("needs drop"),
             Some((actual, ())) => failure
@@ -63,6 +63,16 @@ impl<T, M: Mode, R> MemAssertions for AssertThat<'_, Type<T>, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            crate::Type::<String>::new().must().need_drop();
+        }
+    }
+
     mod renderer_contract {
         use crate::Type;
         use crate::prelude::*;
@@ -76,8 +86,6 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, Type<i32>, Capture, NoRenderer> => MemAssertions
             );
-
-            assert_trait_impl!(super::super::NeedsDrop => ExpectationDiagnostics<Type<i32>, NoRenderer>);
         }
     }
 
@@ -85,12 +93,6 @@ mod tests {
         use crate::assert_that_type;
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            crate::Type::<String>::new().must().need_drop();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {

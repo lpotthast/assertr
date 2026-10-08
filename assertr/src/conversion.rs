@@ -101,7 +101,7 @@ mod tests {
                             .$method();
                         assert_that!(converted.actual().is_err()).is_equal_to(fail);
                         assert_that!(converted.state.records.assertion_count()).is_equal_to(0);
-                        assert_that!(converted.actual).matches(pattern!(Actual::Owned(_)));
+                        assert_that!(matches!(converted.actual, Actual::Owned(_))).is_true();
                         let converted = assert_that_owned!(Serialized {
                             calls: &calls,
                             fail
@@ -111,13 +111,13 @@ mod tests {
                         .$method();
                         assert_that!(converted.actual().is_err()).is_equal_to(fail);
                         assert_that!(converted.state.records.assertion_count()).is_equal_to(0);
-                        let converted = AssertThat::new_capturing(Actual::Borrowed(&subject))
+                        let converted = AssertThat::<_, Capture>::new(Actual::Borrowed(&subject))
                             .with_renderer(NoRenderer)
                             .with_location(false)
                             .$method();
                         assert_that!(converted.actual().is_err()).is_equal_to(fail);
                         assert_that!(converted.state.records.assertion_count()).is_equal_to(0);
-                        let converted = AssertThat::new_capturing(Actual::Owned(Serialized {
+                        let converted = AssertThat::<_, Capture>::new(Actual::Owned(Serialized {
                             calls: &calls,
                             fail,
                         }))

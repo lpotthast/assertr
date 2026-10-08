@@ -1,22 +1,16 @@
 //! Assertions for numeric identities, signs, tolerances, and floating-point classifications.
 
-use crate::borrow_for::{BorrowFor, borrow_for};
-use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Fact, Mode,
-    ValueRenderer,
-    failure::{FailureBuilder, FailureKind},
-};
-use core::cmp::Ordering;
+use crate::borrow_for::BorrowFor;
+use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
 #[cfg(any(feature = "std", feature = "libm"))]
 use num_traits::Float;
 use num_traits::{Num, Signed};
 
-mod numeric_distance;
-pub use numeric_distance::NumericDistance;
+pub use super::distance::{CloseToRejection, IsCloseTo, NumericDistance};
 
 property_expectation! {
     /// Checks [`Signed::is_negative`], including the sign bit of floating-point values.
-    pub struct IsNegative for<T: Signed>;
+    pub struct IsNegative for<T: Signed> T;
     kind Ordering;
     check |actual| actual.is_negative();
     relations "is negative", "is not negative";
@@ -24,7 +18,7 @@ property_expectation! {
 
 property_expectation! {
     /// Checks [`Signed::is_positive`], including the sign bit of floating-point values.
-    pub struct IsPositive for<T: Signed>;
+    pub struct IsPositive for<T: Signed> T;
     kind Ordering;
     check |actual| actual.is_positive();
     relations "is positive", "is not positive";
@@ -33,7 +27,7 @@ property_expectation! {
 #[cfg(any(feature = "std", feature = "libm"))]
 property_expectation! {
     /// Checks whether a numeric value is finite.
-    pub struct IsFinite for<T: Float>;
+    pub struct IsFinite for<T: Float> T;
     kind Predicate;
     check |actual| actual.is_finite();
     relations "is finite", "is not finite";
@@ -42,7 +36,7 @@ property_expectation! {
 #[cfg(any(feature = "std", feature = "libm"))]
 property_expectation! {
     /// Checks whether a numeric value is infinite.
-    pub struct IsInfinite for<T: Float>;
+    pub struct IsInfinite for<T: Float> T;
     kind Predicate;
     check |actual| actual.is_infinite();
     relations "is infinite", "is not infinite";
@@ -51,7 +45,7 @@ property_expectation! {
 #[cfg(any(feature = "std", feature = "libm"))]
 property_expectation! {
     /// Checks whether a numeric value is normal.
-    pub struct IsNormal for<T: Float>;
+    pub struct IsNormal for<T: Float> T;
     kind Predicate;
     check |actual| actual.is_normal();
     relations "is normal", "is not normal";
@@ -60,7 +54,7 @@ property_expectation! {
 #[cfg(any(feature = "std", feature = "libm"))]
 property_expectation! {
     /// Checks whether a numeric value is subnormal.
-    pub struct IsSubnormal for<T: Float>;
+    pub struct IsSubnormal for<T: Float> T;
     kind Predicate;
     check |actual| actual.is_subnormal();
     relations "is subnormal", "is not subnormal";
@@ -68,7 +62,7 @@ property_expectation! {
 
 property_expectation! {
     /// Checks whether a numeric value is zero.
-    pub struct IsZero for<T: Num>;
+    pub struct IsZero for<T: Num> T;
     kind Equality;
     check |actual| actual.is_zero();
     expected T::zero(), "is zero";
@@ -76,7 +70,7 @@ property_expectation! {
 
 property_expectation! {
     /// Checks whether a numeric value is one.
-    pub struct IsOne for<T: Num>;
+    pub struct IsOne for<T: Num> T;
     kind Equality;
     check |actual| actual.is_one();
     expected T::one(), "is one";
@@ -85,124 +79,10 @@ property_expectation! {
 #[cfg(any(feature = "std", feature = "libm"))]
 property_expectation! {
     /// Checks whether a numeric value is NaN.
-    pub struct IsNan for<T: Float>;
+    pub struct IsNan for<T: Float> T;
     kind Predicate;
     check |actual| actual.is_nan();
     relations "is NaN", "is not NaN";
-}
-
-/// Checks distance from an expected value with an inclusive, non-negative deviation.
-/// Uses [`NumericDistance`] without requiring `Clone` or floating-point math features.
-#[derive(Debug, Clone)]
-pub struct IsCloseTo<E, D = E> {
-    expected: E,
-    allowed_deviation: D,
-}
-
-impl<E, D> IsCloseTo<E, D> {
-    /// Owns the expected value and allowed deviation.
-    #[must_use]
-    pub const fn new(expected: E, allowed_deviation: D) -> Self {
-        Self {
-            expected,
-            allowed_deviation,
-        }
-    }
-}
-
-/// The reason a numeric tolerance was rejected.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum CloseToRejection {
-    /// The deviation was negative or incomparable with zero.
-    InvalidDeviation,
-    /// The distance exceeded the deviation or could not be computed.
-    OutsideDeviation,
-}
-
-impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R> Expectation<T, R>
-    for IsCloseTo<E, D>
-{
-    type Success<'a>
-        = ()
-    where
-        T: 'a,
-        Self: 'a;
-    type Rejection<'a>
-        = (&'a T, &'a T, CloseToRejection)
-    where
-        T: 'a,
-        Self: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<T, _>(&self.expected);
-        let allowed_deviation = borrow_for::<T, _>(&self.allowed_deviation);
-        let zero = T::zero();
-        if !matches!(
-            allowed_deviation.partial_cmp(&zero),
-            Some(Ordering::Greater | Ordering::Equal)
-        ) {
-            return Err((
-                expected,
-                allowed_deviation,
-                CloseToRejection::InvalidDeviation,
-            ));
-        }
-        if actual
-            .checked_distance(expected)
-            .is_some_and(|distance| &distance <= allowed_deviation)
-        {
-            Ok(())
-        } else {
-            Err((
-                expected,
-                allowed_deviation,
-                CloseToRejection::OutsideDeviation,
-            ))
-        }
-    }
-}
-
-impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R: ValueRenderer<T>>
-    ExpectationDiagnostics<T, R> for IsCloseTo<E, D>
-{
-    const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure
-                .relation("is close to")
-                .expected(render.value(borrow_for::<T, _>(&self.expected)))
-                .fact(Fact::labelled(
-                    "Allowed deviation",
-                    render.value(borrow_for::<T, _>(&self.allowed_deviation)),
-                )),
-            Some((actual, (expected, allowed_deviation, rejection))) => {
-                let allowed_deviation = render.value(allowed_deviation);
-                match rejection {
-                    CloseToRejection::InvalidDeviation => failure
-                        .relation("was given an invalid allowed deviation")
-                        .fact(Fact::labelled("Allowed deviation", allowed_deviation))
-                        .fact(Fact::note(
-                            "The allowed deviation must be a non-negative number.",
-                        )),
-                    CloseToRejection::OutsideDeviation => failure
-                        .actual(render.value(actual))
-                        .relation("is not close to")
-                        .expected(render.value(expected))
-                        .fact(Fact::labelled("Allowed deviation", allowed_deviation)),
-                }
-            }
-        }
-    }
 }
 
 /// Assertions for numeric values not already handled by [`crate::prelude::PartialEqAssertions`] and
@@ -426,6 +306,29 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            0_i32.must().be_zero().be_additive_identity();
+            1_i32.must().be_one().be_multiplicative_identity();
+            (-0.01_f64).must().be_negative();
+            0.01_f64.must().be_positive();
+            0.333_f64.must().be_close_to(0.333, 0.001);
+        }
+
+        #[test]
+        #[cfg(any(feature = "std", feature = "libm"))]
+        fn float_classifications_are_as_expected() {
+            f32::NAN.must().be_nan();
+            0.3_f32.must().be_finite().be_normal();
+            f32::INFINITY.must().be_infinite();
+            f32::from_bits(1).must().be_subnormal();
+        }
+    }
+
     mod renderer_contract {
         use crate::{
             prelude::*,
@@ -440,20 +343,6 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, f64, Panic, NoRenderer> => NumAssertions<f64, NoRenderer>
             );
-
-            assert_trait_impl!(super::super::IsZero => Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsOne => Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsNegative => Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsPositive => Expectation<i32, NoRenderer>);
-            assert_trait_impl!(super::super::IsCloseTo<i32> => Expectation<i32, NoRenderer>);
-            #[cfg(any(feature = "std", feature = "libm"))]
-            {
-                assert_trait_impl!(super::super::IsNan => Expectation<f64, NoRenderer>);
-                assert_trait_impl!(super::super::IsFinite => Expectation<f64, NoRenderer>);
-                assert_trait_impl!(super::super::IsInfinite => Expectation<f64, NoRenderer>);
-                assert_trait_impl!(super::super::IsNormal => Expectation<f64, NoRenderer>);
-                assert_trait_impl!(super::super::IsSubnormal => Expectation<f64, NoRenderer>);
-            }
         }
     }
 
@@ -532,12 +421,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            0_i32.must().be_zero();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(3), is_zero());
         }
@@ -563,16 +446,10 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_zero`. The fluent name and caller location are pinned here.
-    /// The behavior is covered by that module.
+    /// Synonym of `is_zero`. The caller location is pinned here. The behavior is covered by that
+    /// module.
     mod is_additive_identity {
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            0_i32.must().be_additive_identity();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -582,13 +459,6 @@ mod tests {
 
     mod is_one {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            1_i32.must().be_one();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -596,36 +466,17 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_one() {
+        fn accepts_only_one() {
             assert_that!(1).is_one();
-        }
-
-        #[test]
-        fn panics_when_not_one() {
-            assert_that_panic_by(|| assert_that!(3).with_location(false).is_one())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `3`
-
-                    Expected: 1
-
-                      Actual: 3
-                    -------- assertr --------
-                "});
+            let failures = assert_that!(3).capture(NumAssertions::is_one);
+            assert_that!(failures).has_length(1);
         }
     }
 
-    /// Synonym of `is_one`. The fluent name and caller location are pinned here.
-    /// The behavior is covered by that module.
+    /// Synonym of `is_one`. The caller location is pinned here. The behavior is covered by that
+    /// module.
     mod is_multiplicative_identity {
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            1_i32.must().be_multiplicative_identity();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -636,12 +487,6 @@ mod tests {
     mod is_negative {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            (-0.01_f64).must().be_negative();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -660,7 +505,9 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_zero() {
+        fn panics_when_zero_or_positive() {
+            let failures = assert_that!(1.23).capture(NumAssertions::is_negative);
+            assert_that!(failures).has_length(1);
             assert_that_panic_by(|| assert_that!(0.0).with_location(false).is_negative())
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
@@ -673,32 +520,10 @@ mod tests {
                     -------- assertr --------
                 "});
         }
-
-        #[test]
-        fn panics_when_positive() {
-            assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_negative())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `1.23`
-
-                    Actual: 1.23
-
-                    is not negative
-                    -------- assertr --------
-                "});
-        }
     }
 
     mod is_positive {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            0.01_f64.must().be_positive();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -706,33 +531,12 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_positive() {
-            assert_that!(0.01).is_positive();
-        }
-
-        #[test]
-        fn succeeds_for_positive_zero() {
-            assert_that!(0.0).is_positive();
-        }
-
-        #[test]
         fn uses_the_float_sign_bit() {
+            assert_that!(0.01).is_positive();
+            assert_that!(0.0).is_positive();
             assert_that!(f64::NAN).is_positive();
-        }
-
-        #[test]
-        fn panics_when_negative() {
-            assert_that_panic_by(|| assert_that!(-1.23).with_location(false).is_positive())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `-1.23`
-
-                    Actual: -1.23
-
-                    is not positive
-                    -------- assertr --------
-                "});
+            let failures = assert_that!(-0.0).capture(NumAssertions::is_positive);
+            assert_that!(failures).has_length(1);
         }
     }
 
@@ -741,12 +545,6 @@ mod tests {
         // These tests cover tolerance handling, diagnostics, and integration.
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            0.333_f64.must().be_close_to(0.333, 0.001);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -769,7 +567,15 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_below_allowed_range() {
+        fn succeeds_when_actual_is_in_allowed_range() {
+            assert_that!(0.25).is_close_to(0.5, 0.25);
+            assert_that!(0.5).is_close_to(0.5, 0.25);
+            assert_that!(0.75).is_close_to(0.5, 0.25);
+            assert_that!(0_u8).is_close_to(0, 1);
+        }
+
+        #[test]
+        fn panics_when_outside_allowed_range() {
             assert_that_panic_by(|| {
                 assert_that!(0.3319)
                     .with_location(false)
@@ -793,101 +599,43 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_actual_is_in_allowed_range() {
-            assert_that!(0.25).is_close_to(0.5, 0.25);
-            assert_that!(0.5).is_close_to(0.5, 0.25);
-            assert_that!(0.75).is_close_to(0.5, 0.25);
-            assert_that!(0_u8).is_close_to(0, 1);
-        }
-
-        #[test]
-        fn reports_distance_beyond_a_rounded_subtraction_boundary() {
-            assert_that_panic_by(|| {
-                assert_that!(9_007_199_254_740_992_f64)
-                    .with_location(false)
-                    .is_close_to(9_007_199_254_740_994_f64, 1.0);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `9_007_199_254_740_992_f64`
-
-                Actual: 9007199254740992.0
-
-                is not close to
-
-                Expected: 9007199254740994.0
-
-                Details:
-                  - Allowed deviation: 1.0
-                -------- assertr --------
-            "});
-        }
-
-        #[test]
-        fn rejects_decimal_distance_just_above_deviation() {
-            for (actual, expected) in [(0.334_f64, 0.333_f64), (0.333, 0.334)] {
-                let failures = assert_that!(actual).capture(|it| it.is_close_to(expected, 0.001));
+        fn rejects_distances_just_above_deviation() {
+            for (actual, expected, deviation) in [
+                (0.3341, 0.333, 0.001),
+                (0.334_f64, 0.333_f64, 0.001),
+                (0.333, 0.334, 0.001),
+                (9_007_199_254_740_992_f64, 9_007_199_254_740_994_f64, 1.0),
+            ] {
+                let failures =
+                    assert_that!(actual).capture(|it| it.is_close_to(expected, deviation));
                 assert_that!(failures).has_length(1);
             }
         }
 
         #[test]
-        fn succeeds_for_equal_negative_infinity() {
+        fn handles_infinities_and_nan() {
             assert_that!(f64::NEG_INFINITY).is_close_to(f64::NEG_INFINITY, 0.0);
-        }
-
-        #[test]
-        fn positive_infinite_deviation_is_unbounded_for_comparable_values() {
-            let deviation = f64::INFINITY;
-
-            assert_that!(-f64::MAX).is_close_to(f64::MAX, deviation);
-            assert_that!(f64::NEG_INFINITY).is_close_to(f64::INFINITY, deviation);
-        }
-
-        #[test]
-        fn positive_infinite_deviation_does_not_accept_nan_values() {
-            assert_that_panic_by(|| {
-                assert_that!(f64::NAN)
-                    .with_location(false)
-                    .is_close_to(1.0, f64::INFINITY);
-            })
-            .has_type::<String>()
-            .contains("is not close to");
-
-            assert_that_panic_by(|| {
-                assert_that!(1.0)
-                    .with_location(false)
-                    .is_close_to(f64::NAN, f64::INFINITY);
-            })
-            .has_type::<String>()
-            .contains("is not close to");
-        }
-
-        #[test]
-        fn rejects_nan_deviation() {
-            assert_that_panic_by(|| {
-                assert_that!(1.0)
-                    .with_location(false)
-                    .is_close_to(1.0, f64::NAN);
-            })
-            .has_type::<String>()
-            .contains("was given an invalid allowed deviation");
+            // Positive-infinite deviation is unbounded for comparable values only.
+            assert_that!(-f64::MAX).is_close_to(f64::MAX, f64::INFINITY);
+            assert_that!(f64::NEG_INFINITY).is_close_to(f64::INFINITY, f64::INFINITY);
+            let failures = assert_that!(f64::NAN).capture(|it| {
+                it.is_close_to(1.0, f64::INFINITY)
+                    .is_close_to(f64::NAN, f64::INFINITY)
+            });
+            assert_that!(failures).has_length(2);
         }
 
         #[test]
         fn reports_extreme_signed_values_without_overflowing() {
-            assert_that_panic_by(|| {
-                assert_that!(i8::MIN)
-                    .with_location(false)
-                    .is_close_to(i8::MAX, i8::MAX);
-            })
-            .has_type::<String>()
-            .contains("is not close to");
+            let failures = assert_that!(i8::MIN).capture(|it| it.is_close_to(i8::MAX, i8::MAX));
+            assert_that!(failures).has_length(1);
         }
 
         #[test]
-        fn rejects_negative_deviation() {
+        fn rejects_negative_or_nan_deviation() {
+            let failures = assert_that!(1.0).capture(|it| it.is_close_to(1.0, f64::NAN));
+            assert_that!(failures[0].relation.as_deref())
+                .is_equal_to(Some("was given an invalid allowed deviation"));
             assert_that_panic_by(|| {
                 assert_that!(1_i8).with_location(false).is_close_to(1, -1);
             })
@@ -900,33 +648,9 @@ mod tests {
 
                 Details:
                   - Allowed deviation: -1
-                  - The allowed deviation must be a non-negative number.
+                  - The allowed deviation must be zero or positive.
                 -------- assertr --------
             "});
-        }
-
-        #[test]
-        fn panics_when_above_allowed_range() {
-            assert_that_panic_by(|| {
-                assert_that!(0.3341)
-                    .with_location(false)
-                    .is_close_to(0.333, 0.001)
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `0.3341`
-
-                    Actual: 0.3341
-
-                    is not close to
-
-                    Expected: 0.333
-
-                    Details:
-                      - Allowed deviation: 0.001
-                    -------- assertr --------
-                "});
         }
     }
 
@@ -935,12 +659,6 @@ mod tests {
         use crate::prelude::*;
         use ::num_traits::Float;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            f32::nan().must().be_nan();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -972,13 +690,6 @@ mod tests {
     mod is_finite {
         use crate::prelude::*;
         use indoc::formatdoc;
-        use num_traits::Float;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            0.3_f32.must().be_finite();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -986,42 +697,19 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_finite() {
+        fn rejects_both_infinities() {
             assert_that!(0.3f32).is_finite();
-        }
-
-        #[test]
-        fn panics_when_positive_infinity() {
+            let failures = assert_that!(f32::NEG_INFINITY).capture(NumAssertions::is_finite);
+            assert_that!(failures).has_length(1);
             assert_that_panic_by(|| {
-                assert_that!(f32::infinity())
-                    .with_location(false)
-                    .is_finite();
+                assert_that!(f32::INFINITY).with_location(false).is_finite();
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Expression: `f32::infinity()`
+                    Expression: `f32::INFINITY`
 
                     Actual: inf
-
-                    is not finite
-                    -------- assertr --------
-                "});
-        }
-
-        #[test]
-        fn panics_when_negative_infinity() {
-            assert_that_panic_by(|| {
-                assert_that!(f32::neg_infinity())
-                    .with_location(false)
-                    .is_finite();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `f32::neg_infinity()`
-
-                    Actual: -inf
 
                     is not finite
                     -------- assertr --------
@@ -1032,14 +720,6 @@ mod tests {
     #[cfg(any(feature = "std", feature = "libm"))]
     mod is_infinite {
         use crate::prelude::*;
-        use ::num_traits::Float;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            f32::infinity().must().be_infinite();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1047,41 +727,17 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_positive_infinity() {
-            assert_that!(f32::infinity()).is_infinite();
-        }
-
-        #[test]
-        fn succeeds_when_negative_infinity() {
-            assert_that!(f32::neg_infinity()).is_infinite();
-        }
-
-        #[test]
-        fn panics_when_not_infinity() {
-            assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_infinite())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `1.23`
-
-                    Actual: 1.23
-
-                    is not infinite
-                    -------- assertr --------
-                "});
+        fn accepts_both_infinities() {
+            assert_that!(f32::INFINITY).is_infinite();
+            assert_that!(f32::NEG_INFINITY).is_infinite();
+            let failures = assert_that!(1.23).capture(NumAssertions::is_infinite);
+            assert_that!(failures).has_length(1);
         }
     }
 
     #[cfg(any(feature = "std", feature = "libm"))]
     mod is_normal {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            f32::MIN_POSITIVE.must().be_normal();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1090,40 +746,16 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_normal() {
+        fn rejects_subnormal_values() {
             assert_that!(f32::MIN_POSITIVE).is_normal();
-        }
-
-        #[test]
-        fn panics_when_subnormal() {
-            let subnormal = f32::from_bits(1);
-
-            assert_that_panic_by(|| {
-                assert_that!(subnormal).with_location(false).is_normal();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `subnormal`
-
-                    Actual: 1e-45
-
-                    is not normal
-                    -------- assertr --------
-                "});
+            let failures = assert_that!(f32::from_bits(1)).capture(NumAssertions::is_normal);
+            assert_that!(failures).has_length(1);
         }
     }
 
     #[cfg(any(feature = "std", feature = "libm"))]
     mod is_subnormal {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            f32::from_bits(1).must().be_subnormal();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1131,25 +763,10 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_subnormal() {
+        fn rejects_normal_values() {
             assert_that!(f32::from_bits(1)).is_subnormal();
-        }
-
-        #[test]
-        fn panics_when_normal() {
-            assert_that_panic_by(|| {
-                assert_that!(1.0_f32).with_location(false).is_subnormal();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `1.0_f32`
-
-                    Actual: 1.0
-
-                    is not subnormal
-                    -------- assertr --------
-                "});
+            let failures = assert_that!(1.0_f32).capture(NumAssertions::is_subnormal);
+            assert_that!(failures).has_length(1);
         }
     }
 
@@ -1157,6 +774,7 @@ mod tests {
         use super::super::IsCloseTo;
         use crate::{prelude::*, test_support::BorrowSpy};
         use core::cell::Cell;
+
         #[test]
         fn expected_and_deviation_can_be_borrowed_independently() {
             let expected = 10;
@@ -1170,22 +788,17 @@ mod tests {
             assert_that!(11).matches(&matcher);
             assert_that!(9).matches(&matcher);
         }
+
         #[test]
-        fn borrows_both_operands_once_after_tracking_even_for_invalid_deviation() {
+        fn borrows_both_operands_once_even_for_invalid_deviation() {
             for deviation in [-1, 1, 10] {
                 let calls = Cell::new(0);
-                let failures = assert_that!(()).capture(|root| {
-                    let operand = |value| BorrowSpy {
-                        value,
-                        observe: || {
-                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                            calls.set(calls.get() + 1);
-                        },
-                    };
-                    root.derive_owned(|()| 5)
-                        .is_close_to(operand(10), operand(deviation));
-                    root
-                });
+                let operand = |value| BorrowSpy {
+                    value,
+                    observe: || calls.set(calls.get() + 1),
+                };
+                let failures =
+                    assert_that!(5).capture(|it| it.is_close_to(operand(10), operand(deviation)));
                 assert_that!(calls.get()).is_equal_to(2);
                 assert_that!(failures).has_length(usize::from(deviation != 10));
             }

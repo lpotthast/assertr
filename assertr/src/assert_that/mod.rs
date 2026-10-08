@@ -6,8 +6,6 @@ mod execution;
 mod projection;
 mod rendering;
 
-pub(crate) use capture::collect_assertions;
-
 use alloc::vec::Vec;
 use core::{
     cell::{Cell, RefCell},
@@ -18,7 +16,7 @@ use core::{
 use crate::{
     AssertThat, AssertionFailures, ChainRecords, ChainState, Expression,
     actual::Actual,
-    mode::{Capture, Mode, Panic},
+    mode::{Mode, Panic},
     renderer::{DebugRenderer, RenderingBudget},
 };
 
@@ -48,8 +46,12 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
         }
     }
 
-    /// Inherit diagnostic settings while starting a new subject and linking only ancestor records.
-    fn child<R2>(&self, renderer: R2) -> ChainState<'_, M, R2> {
+    /// Inherit diagnostic settings and the renderer while starting a new subject and linking only
+    /// ancestor records.
+    fn child(&self) -> ChainState<'_, M, R>
+    where
+        R: Clone,
+    {
         ChainState {
             records: ChainRecords::new(Some(&self.records)),
             subject_name: None,
@@ -58,7 +60,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
             rendering_budget: self.rendering_budget,
             panic_presentation: self.panic_presentation.clone(),
             mode: PhantomData,
-            renderer,
+            renderer: self.renderer.clone(),
         }
     }
 
@@ -76,9 +78,9 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
     }
 }
 
-impl<'t, T> AssertThat<'t, T, Panic> {
-    #[track_caller]
-    pub(crate) const fn new_panicking(actual: Actual<'t, T>) -> Self {
+impl<'t, T, M: Mode> AssertThat<'t, T, M> {
+    /// Starts a root chain with default settings.
+    pub(crate) const fn new(actual: Actual<'t, T>) -> Self {
         AssertThat {
             actual,
             state: ChainState::root(DebugRenderer),
@@ -86,22 +88,14 @@ impl<'t, T> AssertThat<'t, T, Panic> {
     }
 }
 
-impl<'t, T> AssertThat<'t, T, Capture> {
+#[cfg(feature = "fluent")]
+impl<'t, T> AssertThat<'t, T, crate::mode::Capture> {
     /// Starts a fluent capture root whose receiver expression can be attached after completion.
-    #[cfg(feature = "fluent")]
     #[track_caller]
     pub(crate) fn new_fluent_capturing(actual: Actual<'t, T>) -> Self {
-        let mut assertion = Self::new_capturing(actual);
+        let mut assertion = Self::new(actual);
         assertion.state.expression = Expression::PendingFluent(core::panic::Location::caller());
         assertion
-    }
-
-    #[track_caller]
-    pub(crate) const fn new_capturing(actual: Actual<'t, T>) -> Self {
-        AssertThat {
-            actual,
-            state: ChainState::root(DebugRenderer),
-        }
     }
 }
 

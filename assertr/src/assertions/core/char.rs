@@ -1,6 +1,5 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -16,7 +15,7 @@ impl EqualToIgnoringAsciiCase {
     }
 }
 
-impl<R> Expectation<char, R> for EqualToIgnoringAsciiCase {
+impl<R: ValueRenderer<char>> Expectation<char, R> for EqualToIgnoringAsciiCase {
     type Success<'a> = ();
     type Rejection<'a> = ();
     fn evaluate<'a>(&'a self, actual: &'a char, _: &AssertionContext<'_, R>) -> Result<(), ()> {
@@ -26,24 +25,22 @@ impl<R> Expectation<char, R> for EqualToIgnoringAsciiCase {
             Err(())
         }
     }
-}
 
-impl<R: ValueRenderer<char>> ExpectationDiagnostics<char, R> for EqualToIgnoringAsciiCase {
     const KIND: FailureKind = FailureKind::Equality;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&char, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is equal to ignoring ASCII case"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is not equal to ignoring ASCII case"),
-        };
-        failure.expected(render.value(&self.0))
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.value(actual)),
+                "is equal to ignoring ASCII case",
+                "is not equal to ignoring ASCII case",
+            )
+            .expected(render.value(&self.0))
     }
 }
 
@@ -153,6 +150,20 @@ impl<M: Mode, R> CharAssertions<R> for AssertThat<'_, char, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            'a'.must().be_equal_to_ignoring_ascii_case('A');
+            'a'.must().be_lowercase();
+            'A'.must().be_uppercase();
+            'a'.must().be_ascii_lowercase();
+            'A'.must().be_ascii_uppercase();
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
@@ -162,12 +173,6 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, char, Panic, NoRenderer> => CharAssertions<NoRenderer>
             );
-
-            assert_trait_impl!(super::super::EqualToIgnoringAsciiCase => Expectation<char, NoRenderer>);
-            assert_trait_impl!(super::super::IsLowercase => Expectation<char, NoRenderer>);
-            assert_trait_impl!(super::super::IsUppercase => Expectation<char, NoRenderer>);
-            assert_trait_impl!(super::super::IsAsciiLowercase => Expectation<char, NoRenderer>);
-            assert_trait_impl!(super::super::IsAsciiUppercase => Expectation<char, NoRenderer>);
         }
 
         #[test]
@@ -177,19 +182,13 @@ mod tests {
                 .with_location(false)
                 .capture(CharAssertions::is_lowercase);
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+            assert_that!(failures[0].to_string()).contains(SENTINEL);
         }
     }
 
     mod is_equal_to_ignoring_ascii_case {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            'a'.must().be_equal_to_ignoring_ascii_case('A');
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -228,12 +227,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            'a'.must().be_lowercase();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!('A'), is_lowercase());
         }
@@ -261,13 +254,6 @@ mod tests {
 
     mod is_uppercase {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            'A'.must().be_uppercase();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -280,30 +266,14 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_not_uppercase() {
-            assert_that_panic_by(|| assert_that!('a').with_location(false).is_uppercase())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `'a'`
-
-                    Actual: 'a'
-
-                    is not uppercase
-                    -------- assertr --------
-                "});
+        fn reports_the_negated_relation() {
+            let failures = assert_that!('a').capture(CharAssertions::is_uppercase);
+            assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not uppercase"));
         }
     }
 
     mod is_ascii_lowercase {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            'a'.must().be_ascii_lowercase();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -316,30 +286,15 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_not_ascii_lowercase() {
-            assert_that_panic_by(|| assert_that!('A').with_location(false).is_ascii_lowercase())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `'A'`
-
-                    Actual: 'A'
-
-                    is not an ASCII lowercase letter
-                    -------- assertr --------
-                "});
+        fn reports_the_negated_relation() {
+            let failures = assert_that!('A').capture(CharAssertions::is_ascii_lowercase);
+            assert_that!(failures[0].relation.as_deref())
+                .is_equal_to(Some("is not an ASCII lowercase letter"));
         }
     }
 
     mod is_ascii_uppercase {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            'A'.must().be_ascii_uppercase();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -352,18 +307,10 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_not_ascii_uppercase() {
-            assert_that_panic_by(|| assert_that!('a').with_location(false).is_ascii_uppercase())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `'a'`
-
-                    Actual: 'a'
-
-                    is not an ASCII uppercase letter
-                    -------- assertr --------
-                "});
+        fn reports_the_negated_relation() {
+            let failures = assert_that!('a').capture(CharAssertions::is_ascii_uppercase);
+            assert_that!(failures[0].relation.as_deref())
+                .is_equal_to(Some("is not an ASCII uppercase letter"));
         }
     }
 }

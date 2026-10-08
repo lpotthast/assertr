@@ -1,8 +1,8 @@
 use crate::failure::FailureKind;
 use crate::mode::Mode;
-use crate::renderer::GroupStyle;
+use crate::renderer::RenderingOrder;
 use crate::{AssertThat, DebugRenderer, ValueRenderer};
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use crate::{AssertionContext, Expectation, failure::FailureBuilder};
 use alloc::vec::Vec;
 use std::ffi::OsStr;
 use std::process::Command;
@@ -13,6 +13,7 @@ pub struct HasArg<E>(E);
 impl<E, R> Expectation<Command, R> for HasArg<E>
 where
     E: AsRef<OsStr>,
+    R: ValueRenderer<OsStr>,
 {
     type Success<'a>
         = ()
@@ -37,31 +38,29 @@ where
             Err((actual.get_args().collect(), expected))
         }
     }
-}
-impl<E, R> ExpectationDiagnostics<Command, R> for HasArg<E>
-where
-    E: AsRef<OsStr>,
-    R: ValueRenderer<OsStr>,
-{
+
     const KIND: FailureKind = FailureKind::Membership;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Command, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         match rejected {
             None => failure
                 .relation("contains")
                 .expected(render.value(self.0.as_ref())),
             Some((_, (args, expected))) => failure
-                .actual(render.borrowed_values::<OsStr, _>(&args, GroupStyle::List))
+                .actual(
+                    render.borrowed_values::<OsStr, _>(&args, RenderingOrder::PreserveIteration),
+                )
                 .relation("does not contain")
                 .expected(render.value(expected)),
         }
     }
 }
+
 impl<E> HasArg<E> {
     /// Expects this argument.
     #[must_use]
@@ -92,6 +91,19 @@ impl<M: Mode, R> CommandAssertions<R> for AssertThat<'_, Command, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+        use std::process::Command;
+
+        #[test]
+        fn are_as_expected() {
+            let mut cmd = Command::new("foo");
+            cmd.arg("--bar");
+            cmd.must().have_arg("--bar");
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
@@ -115,7 +127,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.has_arg("--expected"));
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+            assert_that!(failures[0].to_string()).contains(SENTINEL);
         }
     }
 
@@ -123,14 +135,6 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use std::process::Command;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let mut cmd = Command::new("foo");
-            cmd.arg("--bar");
-            cmd.must().have_arg("--bar");
-        }
 
         #[test]
         fn caller_location_is_as_expected() {

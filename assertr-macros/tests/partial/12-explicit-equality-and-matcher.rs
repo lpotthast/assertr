@@ -18,8 +18,16 @@ impl core::borrow::Borrow<i32> for Both {
 }
 
 impl<R> renamed_assertr::Expectation<i32, R> for Both {
-    type Success<'a> = ();
-    type Rejection<'a> = ();
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        i32: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        i32: 'a;
     fn evaluate(
         &self,
         actual: &i32,
@@ -27,15 +35,14 @@ impl<R> renamed_assertr::Expectation<i32, R> for Both {
     ) -> Result<(), ()> {
         if *actual >= self.0 { Ok(()) } else { Err(()) }
     }
-}
-impl<R> ExpectationDiagnostics<i32, R> for Both {
+
     const KIND: renamed_assertr::FailureKind = renamed_assertr::FailureKind::Ordering;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&i32, ())>,
-        failure: renamed_assertr::failure::FailureBuilder<Target>,
+        failure: renamed_assertr::failure::FailureBuilder,
         _: &renamed_assertr::AssertionContext<'_, R>,
-    ) -> renamed_assertr::failure::FailureBuilder<Target> {
+    ) -> renamed_assertr::failure::FailureBuilder {
         match rejected {
             None => failure.relation("meets the lower bound"),
             Some((_, ())) => failure.relation("is below the lower bound"),

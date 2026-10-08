@@ -2,36 +2,8 @@ use core::{cell::Cell, marker::PhantomData, panic::AssertUnwindSafe};
 
 use crate::{
     AssertThat, AssertionFailures, ChainRecords, ChainState,
-    actual::Actual,
     mode::{Capture, Panic},
-    renderer::RenderingContext,
 };
-
-/// Runs a callback on an isolated capture chain with the supplied rendering and location settings.
-///
-/// Descendant assertions contribute to the capture root. User panics propagate, and an empty
-/// callback is rejected before its failures are returned.
-pub(crate) fn collect_assertions<A, R, F>(
-    actual: &A,
-    rendering: RenderingContext<'_, R>,
-    include_location: bool,
-    assertions: F,
-) -> AssertionFailures
-where
-    R: Clone,
-    F: for<'a> FnOnce(AssertThat<'a, A, Capture, R>),
-{
-    let sink = AssertThat::new_capturing(Actual::Borrowed(actual))
-        .with_renderer(rendering.renderer().clone())
-        .with_rendering_budget(rendering.budget())
-        .with_location(include_location);
-    assertions(sink.derive(|value| value));
-    assert!(
-        sink.state.records.assertion_count() != 0,
-        "the assertion callback performed no assertions"
-    );
-    sink.state.records.failures.take()
-}
 
 impl<'t, R> ChainState<'t, Panic, R> {
     fn into_capturing(self) -> ChainState<'t, Capture, R> {
@@ -79,20 +51,18 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     ///
     /// assert_that!(failures).contains_exactly_satisfying([
     ///     |failure: AssertThat<AssertionFailure, Capture>| {
-    ///         failure.derive_owned(AssertionFailure::kind).is_equal_to(assertr::FailureKind::Ordering);
-    ///         failure.derive_owned(|failure| ToHumanReadableText.render(failure))
+    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::FailureKind::Ordering);
+    ///         failure.derive_owned(|failure| failure.to_string())
     ///             .contains("is not less than");
     ///     },
     ///     |failure: AssertThat<AssertionFailure, Capture>| {
-    ///         failure.derive_owned(AssertionFailure::kind).is_equal_to(assertr::FailureKind::Equality);
+    ///         failure.derive(|failure| &failure.kind).is_equal_to(assertr::FailureKind::Equality);
     ///     },
     /// ]);
     /// ```
     ///
     /// Each [`crate::AssertionFailure`] exposes its values, relation, facts, and nested failures as
-    /// data. Inspect those fields directly or pass the failure to an
-    /// [adapter](crate::failure::adapter).
-    /// [`ToHumanReadableText`](crate::failure::adapter::ToHumanReadableText) produces the default
+    /// data. Inspect those fields directly. Its `Display` implementation produces the default
     /// report. Capture mode never invokes the chain's
     /// [panic presentation](Self::with_panic_presentation).
     ///
@@ -114,7 +84,7 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     where
         F: FnOnce(AssertThat<'t, T, Capture, R>) -> AssertThat<'t, U, Capture, R2>,
     {
-        self.into_capturing().run_and_collect(assertions)
+        self.into_capturing().collect_failures(assertions)
     }
 
     fn into_capturing(self) -> AssertThat<'t, T, Capture, R> {
@@ -127,18 +97,22 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
 }
 
 impl<'t, T, R> AssertThat<'t, T, Capture, R> {
-    /// Runs the given assertion closure and extracts the collected failures from the assertion it
-    /// returns. Shared implementation of [`AssertThat::capture`] and the fluent `verify` entry
-    /// points.
+    /// Runs an assertion callback on this capture root and takes the failures collected by the
+    /// chain it returns. Shared by [`AssertThat::capture`], the fluent `verify` entry points, and
+    /// assertion-callback matchers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the callback performed no assertions.
     #[track_caller]
-    pub(crate) fn run_and_collect<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
+    pub(crate) fn collect_failures<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(Self) -> AssertThat<'t, U, Capture, R2>,
     {
         let completed = assertions(self);
         assert!(
             completed.state.records.assertion_count() != 0,
-            "The closure passed to `capture` / `verify` performed no assertions!"
+            "the assertion callback performed no assertions"
         );
         completed.state.records.failures.take()
     }
@@ -176,7 +150,7 @@ mod tests {
             let failures = child.capture(|it| it.with_detail_message("child-2").is_equal_to(6));
 
             assert_that!(failures).has_length(1);
-            assert_that!(failures[0].messages()).contains_exactly(["child-1", "child-2", "parent"]);
+            assert_that!(failures[0].messages).contains_exactly(["child-1", "child-2", "parent"]);
         }
 
         #[test]
@@ -186,7 +160,7 @@ mod tests {
                 .capture(|it| it.with_detail_message("second").is_equal_to(6));
 
             assert_that!(failures).has_length(1);
-            assert_that!(failures[0].messages()).contains_exactly(["first", "second"]);
+            assert_that!(failures[0].messages).contains_exactly(["first", "second"]);
         }
     }
 
@@ -214,7 +188,7 @@ mod tests {
             .with_location(false)
             .capture(|it| it.is_greater_than(100).is_equal_to(1));
 
-        assert_that!(failures.as_slice()).contains_exactly_satisfying([
+        assert_that!(&failures[..]).contains_exactly_satisfying([
             |it: AssertThat<AssertionFailure, Capture>| {
                 it.has_text_report(formatdoc! {"
                     -------- assertr --------

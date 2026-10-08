@@ -2,11 +2,10 @@
 
 use super::{EntryRejection, Map, MapLookup};
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    AssertionContext, Expectation, ValueRenderer,
     assertions::collection::matching::MatchingItem,
     expectation::Evidence,
-    failure::{FailureBuilder, FailureKind, PathSegment},
-    renderer::IntoRendered,
+    failure::{FailureBuilder, FailureKind},
 };
 
 const MATCHING_VALUE: MatchingItem = MatchingItem {
@@ -41,7 +40,7 @@ impl<'e, Q: ?Sized, E> ContainsEntryMatching<'e, Q, E> {
 impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, E, R> Expectation<Mp, R>
     for ContainsEntryMatching<'_, Q, E>
 where
-    E: ExpectationDiagnostics<Mp::Value, R>,
+    E: Expectation<Mp::Value, R>,
     R: ValueRenderer<Q>,
 {
     type Success<'a>
@@ -60,29 +59,20 @@ where
         actual: &'a Mp,
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        super::entry::evaluate_entry(actual, self.key, &self.expected, context, |render| {
-            PathSegment::Key(render.value(self.key).into_rendered_compact())
-        })
+        super::entry::evaluate_entry(actual, self.key, &self.expected, context)
     }
-}
 
-impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, E, R> ExpectationDiagnostics<Mp, R>
-    for ContainsEntryMatching<'_, Q, E>
-where
-    E: ExpectationDiagnostics<Mp::Value, R>,
-    R: ValueRenderer<Q>,
-{
     const KIND: FailureKind = FailureKind::Matching;
     const FLATTEN: bool = true;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        super::entry::explain_entry::<Mp::Value, _, _, _, _>(
-            self.key,
+    ) -> FailureBuilder {
+        super::entry::explain_entry::<Mp::Value, _, _, _>(
+            || self.key,
             &self.expected,
             rejected.map(|(_, rejection)| rejection.evidence),
             failure,
@@ -108,7 +98,7 @@ impl<E> ContainsValueMatching<E> {
 
 impl<Mp: Map + ?Sized, E, R> Expectation<Mp, R> for ContainsValueMatching<E>
 where
-    E: ExpectationDiagnostics<Mp::Value, R>,
+    E: Expectation<Mp::Value, R>,
 {
     type Success<'a>
         = ()
@@ -133,21 +123,16 @@ where
             settings,
         )
     }
-}
 
-impl<Mp: Map + ?Sized, E, R> ExpectationDiagnostics<Mp, R> for ContainsValueMatching<E>
-where
-    E: ExpectationDiagnostics<Mp::Value, R>,
-{
     const KIND: FailureKind = FailureKind::Matching;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        MATCHING_VALUE.explain::<Mp::Value, _, _, _>(
+    ) -> FailureBuilder {
+        MATCHING_VALUE.explain::<Mp::Value, _, _>(
             &self.0,
             rejected.map(|(_, evidence)| evidence),
             failure,

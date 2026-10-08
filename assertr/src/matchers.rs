@@ -2,8 +2,8 @@
 //!
 //! An **expectation** defines a check and its diagnostics. A **matcher** is an expectation used
 //! with [`matches`](crate::assertions::matcher::MatcherAssertions::matches), a `*_matching`
-//! method, or composition. Both uses execute the same [`Expectation`] and
-//! [`ExpectationDiagnostics`] traits. There is no separate matcher trait or registration step.
+//! method, or composition. Both uses execute the same [`Expectation`] trait. There is no separate
+//! matcher trait or registration step.
 //!
 //! This module is the catalog of all public built-in expectations. General comparisons, lengths,
 //! variants, and composition helpers are available directly. Subject families have namespaces to
@@ -25,7 +25,7 @@
 //! ```rust
 //! use assertr::{matchers::{all_of, HasLengthOf, IsSome, string}, prelude::*};
 //!
-//! let three_letters = all_of((string::IsNotBlank, HasLengthOf::new(3)));
+//! let three_letters = all_of(matchers![string::IsNotBlank, HasLengthOf::new(3)]);
 //! assert_that!("Ada").matches(&three_letters);
 //! assert_that!(["", "Ada", "Grace"]).contains_matching(&three_letters);
 //! assert_that!([None, Some(42)]).contains_matching(IsSome);
@@ -33,10 +33,10 @@
 //!
 //! [`all_of`] requires every branch to pass and reports each failing branch directly.
 //! [`any_of`] stops at the first passing branch. When every alternative fails, it reports one
-//! nested group whose failures name their zero-based `branch`.
+//! nested group whose failures carry a zero-based `Branch` fact.
 //! Explicit negative definitions, such as [`NotEqualTo`], [`IsNone`], and
 //! [`DoesNotMatchPattern`], own their checks and diagnostic evidence. There is no generic `not`.
-//! See [`MatcherList`] for tuples, arrays, and the [`matchers!`](crate::matchers!) list macro.
+//! See [`MatcherList`] for arrays and the [`matchers!`](crate::matchers!) list macro.
 //!
 //! A matcher checks the original subject. It does not change the chain's subject type:
 //!
@@ -107,7 +107,7 @@
 //! not repeat the check. User panics propagate.
 //!
 //! Ordinary methods that consume a function or iterator, or await a response body, own those
-//! execution steps. They also use the expectation traits internally, with private adapters that
+//! execution steps. They also use the `Expectation` trait internally, with private adapters that
 //! are not reusable public matchers. `matches(...)` does not invoke an owned `FnOnce` or await I/O.
 //! Use the corresponding ordinary assertion for those operations. [`satisfying`] adapts reusable
 //! capture-mode assertion callbacks, including custom assertion methods, into composition.
@@ -175,7 +175,7 @@
 //!
 //! Macro entries require explicit matchers, evaluated once in source order when the matcher is
 //! built. Use [`eq(value)`](eq) or [`equal_to(value)`](equal_to) for equality, including inside
-//! macros. An expression implementing the expectation traits is always used as a matcher,
+//! macros. An expression implementing the `Expectation` trait is always used as a matcher,
 //! even if it also supports equality. The same rule applies to `.matches(eq(42))`.
 //!
 //! ## Collection policies
@@ -211,8 +211,8 @@
 //! [`pattern!`](crate::pattern) matches Rust patterns. [`satisfying`] combines
 //! existing assertion methods and documents callback bounds and type annotations.
 //!
-//! For a reusable check with a typed rejection and custom diagnostics, implement [`Expectation`]
-//! and [`ExpectationDiagnostics`]. Ordinary assertions and matcher composition execute the same
+//! For a reusable check with a typed rejection and custom diagnostics, implement [`Expectation`].
+//! Ordinary assertions and matcher composition execute the same
 //! definitions. See [`expectation`](crate::expectation) for the evaluation and diagnostic
 //! contracts.
 //!
@@ -233,11 +233,12 @@ pub use crate::{
             partial_eq::{EqualTo, NotEqualTo, eq, equal_to},
             partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
         },
+        distance::IsCloseTo,
         map::{EntriesAre, Entry, EntryMatcherList, entries_are, entry, entry_matchers},
     },
     expectation::{
-        AllOf, AnyOf, Anything, Dereferenced, Expectation, ExpectationDiagnostics, MatcherList,
-        Predicate, Satisfying, all_of, any_of, anything, dereferenced, predicate, predicate_list,
+        AllOf, AnyOf, Anything, Dereferenced, Expectation, Field, MatcherList, Predicate,
+        Satisfying, all_of, any_of, anything, dereferenced, field, predicate, predicate_list,
         satisfying,
     },
 };
@@ -496,8 +497,8 @@ mod tests {
 
         #[test]
         fn compositions_derive_debug_and_clone_from_their_parts() {
-            assert_that!(debug_and_clone(&all_of((eq(1), ge(0)))))
-                .is_equal_to("AllOf((EqualTo(1), GreaterOrEqual { expected: 0 }))");
+            assert_that!(debug_and_clone(&all_of(matchers![eq(1), ge(0)])))
+                .is_equal_to("AllOf([EqualTo(1), GreaterOrEqual { expected: 0 }])");
             assert_that!(debug_and_clone(&any_of([eq(1), eq(2)])))
                 .is_equal_to("AnyOf([EqualTo(1), EqualTo(2)])");
             assert_that!(debug_and_clone(&each(IsSome))).is_equal_to("Each(IsSome)");
@@ -507,13 +508,22 @@ mod tests {
                 .is_equal_to("ElementsAre { list: [EqualTo(1)], position: Exact }");
             assert_that!(debug_and_clone(&entries_are([entry("a", eq(1))])))
                 .is_equal_to(r#"EntriesAre([Entry { key: "a", matcher: EqualTo(1) }])"#);
+            assert_that!(debug_and_clone(&field(
+                "x",
+                |point: &(i32,)| &point.0,
+                eq(1)
+            )))
+            .is_equal_to(r#"Field { path: Field("x"), matcher: EqualTo(1), .. }"#);
         }
 
         #[test]
         fn callback_expectations_clone_with_their_callbacks_and_omit_them_from_debug() {
-            let positive = predicate(|value: &i32| *value > 0).described_as("is positive");
-            assert_that!(debug_and_clone(&positive))
-                .is_equal_to(r#"Predicate { description: "is positive", .. }"#);
+            let positive = predicate(|value: &i32| *value > 0)
+                .described_as("is positive")
+                .rejected_as("is not positive");
+            assert_that!(debug_and_clone(&positive)).is_equal_to(
+                r#"Predicate { description: "is positive", rejection: Some("is not positive"), .. }"#,
+            );
             assert_that!(1).matches(positive.clone());
 
             let callback = satisfying(|it: AssertThat<'_, i32, Capture>| {

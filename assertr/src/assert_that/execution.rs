@@ -1,8 +1,9 @@
 //! Execution of reusable expectations and one-use observations on assertion chains.
 
 use crate::{
-    AssertThat, AssertionContext, ExpectationDiagnostics, Mode,
-    failure::{Attached, FailureBuilder, FailureKind},
+    AssertThat, AssertionContext, Expectation, Mode,
+    failure::{FailureBuilder, FailureKind},
+    mode::Panic,
 };
 use core::panic::Location;
 
@@ -23,7 +24,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// ```
     #[track_caller]
     #[allow(clippy::return_self_not_must_use)]
-    pub fn apply_assertion<D: ExpectationDiagnostics<T, R>>(self, definition: D) -> Self {
+    pub fn apply_assertion<D: Expectation<T, R>>(self, definition: D) -> Self {
         drop(self.test_assertion(&definition));
         self
     }
@@ -35,49 +36,19 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// This tracks one assertion, just like [`apply_assertion`](Self::apply_assertion). A method
     /// that delegates here must use `#[track_caller]` and must not track the assertion again.
     #[track_caller]
-    pub fn test_assertion<'a, D: ExpectationDiagnostics<T, R>>(
+    pub fn test_assertion<'a, D: Expectation<T, R>>(
         &'a self,
         definition: &'a D,
     ) -> Option<D::Success<'a>> {
-        self.test_assertion_with_failure(definition, |_, failure| failure)
-    }
-
-    #[track_caller]
-    pub(crate) fn apply_assertion_with_failure<D, F>(self, definition: D, prepare: F) -> Self
-    where
-        D: ExpectationDiagnostics<T, R>,
-        F: for<'a> FnOnce(&'a Self, FailureBuilder<Attached<'a>>) -> FailureBuilder<Attached<'a>>,
-    {
-        drop(self.test_assertion_with_failure(&definition, prepare));
-        self
-    }
-
-    #[track_caller]
-    fn test_assertion_with_failure<'a, D, F>(
-        &'a self,
-        definition: &'a D,
-        prepare: F,
-    ) -> Option<D::Success<'a>>
-    where
-        D: ExpectationDiagnostics<T, R>,
-        F: FnOnce(&'a Self, FailureBuilder<Attached<'a>>) -> FailureBuilder<Attached<'a>>,
-    {
         self.track_assertion();
-        self.test_observation_with_failure(self.actual(), definition, Location::caller(), prepare)
+        self.test_observation_after_tracking(self.actual(), definition, Location::caller())
     }
 
-    // Consuming adapters track before invoking user code, then execute the observed or collected
-    // subject without tracking a second time.
+    /// Applies an expectation to the subject after the adapter has tracked and captured its
+    /// caller, for example before invoking user code or awaiting.
+    #[cfg(feature = "std")]
     #[track_caller]
-    pub(crate) fn apply_assertion_after_tracking<D: ExpectationDiagnostics<T, R>>(
-        self,
-        definition: D,
-    ) -> Self {
-        self.apply_assertion_after_tracking_at(definition, Location::caller())
-    }
-
-    #[track_caller]
-    pub(crate) fn apply_assertion_after_tracking_at<D: ExpectationDiagnostics<T, R>>(
+    pub(crate) fn apply_assertion_after_tracking<D: Expectation<T, R>>(
         self,
         definition: D,
         location: &'static Location<'static>,
@@ -86,39 +57,21 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         self
     }
 
-    /// Executes an adapter's borrowed observation on the original chain. The adapter has already
-    /// tracked, and may execute multiple observations or resume after awaiting at `location`.
+    /// Executes an expectation on a borrowed observation after the assertion was tracked, raising
+    /// a rejection at `location`.
     #[track_caller]
-    pub(crate) fn test_observation_after_tracking<'a, O: ?Sized, D>(
+    pub(crate) fn test_observation_after_tracking<'a, O: ?Sized, D: Expectation<O, R>>(
         &'a self,
         actual: &'a O,
         definition: &'a D,
         location: &'static Location<'static>,
-    ) -> Option<D::Success<'a>>
-    where
-        D: ExpectationDiagnostics<O, R>,
-    {
-        self.test_observation_with_failure(actual, definition, location, |_, failure| failure)
-    }
-
-    #[track_caller]
-    fn test_observation_with_failure<'a, O: ?Sized, D, F>(
-        &'a self,
-        actual: &'a O,
-        definition: &'a D,
-        location: &'static Location<'static>,
-        prepare: F,
-    ) -> Option<D::Success<'a>>
-    where
-        D: ExpectationDiagnostics<O, R>,
-        F: FnOnce(&'a Self, FailureBuilder<Attached<'a>>) -> FailureBuilder<Attached<'a>>,
-    {
+    ) -> Option<D::Success<'a>> {
         self.test_once_after_tracking(
             D::KIND,
             location,
             |context| definition.evaluate(actual, context),
             |rejection, failure, context| {
-                definition.explain(Some((actual, rejection)), prepare(self, failure), context)
+                definition.explain(Some((actual, rejection)), failure, context)
             },
         )
     }
@@ -130,25 +83,33 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// so failure routing never holds a temporary guard. Successful observations belong to the
     /// caller, just as they do with `test_assertion`.
     #[track_caller]
-    pub(crate) fn test_once_after_tracking<'a, Success, Rejection>(
-        &'a self,
+    pub(crate) fn test_once_after_tracking<Success, Rejection>(
+        &self,
         kind: FailureKind,
         location: &'static Location<'static>,
         observe: impl FnOnce(&AssertionContext<'_, R>) -> Result<Success, Rejection>,
-        explain: impl FnOnce(
-            Rejection,
-            FailureBuilder<Attached<'a>>,
-            &AssertionContext<'_, R>,
-        ) -> FailureBuilder<Attached<'a>>,
+        explain: impl FnOnce(Rejection, FailureBuilder, &AssertionContext<'_, R>) -> FailureBuilder,
     ) -> Option<Success> {
         let context = self.assertion_context();
         match observe(&context) {
             Ok(success) => Some(success),
             Err(rejection) => {
-                explain(rejection, self.failure_at(kind, location), &context).raise();
+                self.raise_at(explain(rejection, self.failure(kind), &context), location);
                 None
             }
         }
+    }
+}
+
+impl<T, R> AssertThat<'_, T, Panic, R> {
+    /// Asserts an expectation whose successful observation an extraction continues with.
+    ///
+    /// Panic mode raises every rejection, so a returned value always exists. This tracks one
+    /// assertion, just like [`test_assertion`](Self::test_assertion).
+    #[track_caller]
+    pub(crate) fn require<'a, D: Expectation<T, R>>(&'a self, definition: &'a D) -> D::Success<'a> {
+        self.test_assertion(definition)
+            .expect("panic mode raises rejected expectations")
     }
 }
 
@@ -221,7 +182,7 @@ mod tests {
             assert_that!(calls.get()).is_equal_to(1);
             assert_that!(explanations.get()).is_equal_to(1);
             assert_that!(failures).has_length(1);
-            assert_that!(ToHumanReadableText.render(&failures[0]).as_str()).contains("Actual: 7");
+            assert_that!(failures[0].to_string()).contains("Actual: 7");
         }
     }
 
@@ -230,7 +191,7 @@ mod tests {
         calls: &'e Cell<usize>,
     }
 
-    impl<R> Expectation<String, R> for Expected<'_> {
+    impl<R: ValueRenderer<str>> Expectation<String, R> for Expected<'_> {
         type Success<'a>
             = ()
         where
@@ -239,7 +200,8 @@ mod tests {
         type Rejection<'a>
             = (&'a str, &'a str)
         where
-            Self: 'a;
+            Self: 'a,
+            String: 'a;
 
         fn evaluate<'a>(
             &'a self,
@@ -251,17 +213,15 @@ mod tests {
             assert_that!(context.render().budget().max_leaf_characters()).is_equal_to(2);
             Err((actual.as_str(), self.text))
         }
-    }
 
-    impl<R: ValueRenderer<str>> ExpectationDiagnostics<String, R> for Expected<'_> {
         const KIND: FailureKind = FailureKind::Other;
 
-        fn explain<'a, Target>(
+        fn explain<'a>(
             &'a self,
             rejected: Option<(&'a String, Self::Rejection<'a>)>,
-            failure: FailureBuilder<Target>,
+            failure: FailureBuilder,
             context: &AssertionContext<'_, R>,
-        ) -> FailureBuilder<Target> {
+        ) -> FailureBuilder {
             let render = context.render();
             match rejected {
                 None => failure
@@ -272,6 +232,22 @@ mod tests {
                     .expected(render.value(expected)),
             }
         }
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn tracks_before_evaluation_can_panic() {
+        use crate::expectation::predicate;
+
+        let failures = assert_that!(1).capture(|it| {
+            let child = it.derive(|value| value);
+            let outcome = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
+                child.matches(predicate(|_: &i32| panic!("evaluation panicked")));
+            }));
+            assert_that!(outcome).is_err();
+            it
+        });
+        assert_that!(failures).is_empty();
     }
 
     #[test]

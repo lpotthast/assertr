@@ -158,7 +158,7 @@ fn a_custom_collection_gets_every_collection_assertion() {
     assert_that!(&failures).contains_exactly_satisfying([
         |element: AssertThat<AssertionFailure, Capture>| {
             element
-                .derive_owned(|value| ToHumanReadableText.render(value))
+                .derive_owned(ToString::to_string)
                 .contains("Actual: [");
         },
     ]);
@@ -208,7 +208,7 @@ fn a_custom_bag_gets_only_order_free_collection_assertions() {
     let failures = assert_that!(Multiset(vec![2, 1, 1]))
         .with_location(false)
         .capture(|it| it.contains(3));
-    assert_that!(ToHumanReadableText.render(&failures[0]))
+    assert_that!(failures[0].to_string())
         .contains("Actual: Multiset [")
         .contains("(sorted for rendering)");
 }
@@ -283,7 +283,7 @@ fn a_custom_set_gets_every_set_and_collection_assertion() {
     assert_that!(&failures).contains_exactly_satisfying([
         |element: AssertThat<AssertionFailure, Capture>| {
             element
-                .derive_owned(|value| ToHumanReadableText.render(value))
+                .derive_owned(ToString::to_string)
                 .contains("Actual: CustomSet {");
         },
     ]);
@@ -294,7 +294,7 @@ fn a_custom_set_gets_every_set_and_collection_assertion() {
     assert_that!(&relation_failures).contains_exactly_satisfying([
         |element: AssertThat<AssertionFailure, Capture>| {
             element
-                .derive_owned(|value| ToHumanReadableText.render(value))
+                .derive_owned(ToString::to_string)
                 .contains("Actual: CustomSet {")
                 .contains("Expected: CustomSet {");
         },

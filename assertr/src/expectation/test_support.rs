@@ -1,9 +1,9 @@
-use super::ExpectationDiagnostics;
+use super::Expectation;
 use crate::{prelude::*, test_support::UnorderedSet};
 
 pub(crate) fn bounded_failures(
     values: &[i32],
-    matcher: &impl ExpectationDiagnostics<UnorderedSet>,
+    matcher: &impl Expectation<UnorderedSet>,
     limit: usize,
 ) -> AssertionFailures {
     let actual = UnorderedSet(values.to_vec());
@@ -13,7 +13,7 @@ pub(crate) fn bounded_failures(
         .capture(|it| it.matches(matcher))
 }
 
-pub(crate) fn assert_bounded_order(matcher: &impl ExpectationDiagnostics<UnorderedSet>) {
+pub(crate) fn assert_bounded_order(matcher: &impl Expectation<UnorderedSet>) {
     for limit in [0, 1, 2, usize::MAX] {
         let expected = bounded_failures(&[1, 2, 3], matcher, limit);
         assert_that!(expected).contains_exactly_satisfying([
@@ -24,8 +24,8 @@ pub(crate) fn assert_bounded_order(matcher: &impl ExpectationDiagnostics<Unorder
                         .contains_exactly_satisfying([
                             |actual: AssertThat<AssertionFailure, Capture>| {
                                 actual
-                                    .derive_owned(|actual| ToHumanReadableText.render(actual))
-                                    .is_equal_to(ToHumanReadableText.render(expected.actual()));
+                                    .derive_owned(ToString::to_string)
+                                    .is_equal_to(expected.actual().to_string());
                             },
                         ]);
                 }

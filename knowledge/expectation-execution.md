@@ -15,10 +15,9 @@ sources:
 
 [Architecture overview](README.md)
 
-Both ordinary assertions and composed matchers use `Expectation` to check a value and `ExpectationDiagnostics` to explain
-a failure. The executor tracks the assertion and handles the completed failure. Expected values follow the
-[operand access rules](comparison-operands.md), while [matcher composition](matcher-composition.md) determines which
-nested checks run.
+Both ordinary assertions and composed matchers use one `Expectation` trait to check a value and explain a failure. The
+executor tracks the assertion and handles the completed failure. Expected values follow the [operand access
+rules](comparison-operands.md), while [matcher composition](matcher-composition.md) determines which nested checks run.
 
 ## Evaluation and explanation
 
@@ -29,14 +28,14 @@ Neither `evaluate` nor `explain` tracks assertions or raises failures. Implement
 | `Expectation<T, R>::evaluate` | Return `Result<Success<'a>, Rejection<'a>>` for the supplied subject. |
 | `Success<'a>` | Retain a successful observation for continuation, such as a payload or guard. Use `()` when unnecessary. |
 | `Rejection<'a>` | Retain the failed observation needed for explanation. May borrow the subject or definition. |
-| `ExpectationDiagnostics<T, R>::explain` | Populate and return the supplied `FailureBuilder<Target>`. |
-| `KIND` | Use the same `FailureKind` for rejection and missing-subject diagnostics. |
+| `Expectation<T, R>::explain` | Populate and return the supplied `FailureBuilder`. |
+| `KIND` | Use the same `FailureKind` for rejection and missing-subject diagnostics. Defaults to `Predicate`. Built-in expectations state it explicitly. |
 | `FLATTEN` | Permit composition to merge children into its receiving context. Composition then shows only the children and their omission count, not the definition's own relation, operands, or facts. Probes never explain. Ordinary execution still retains the enclosing failure. |
 
 Retain converted views, errors, counts, or guards whenever obtaining them again would repeat an observation. Explanation
 must not repeat comparisons, searches, lookups, callbacks, consumption, or other observations. It may
 [read bulk expected data again](comparison-operands.md#reading-expected-data-again), subject to the consistency rules.
-Rust's lifetimes allow borrowing but cannot enforce these requirements. Both traits forward through references without
+Rust's lifetimes allow borrowing but cannot enforce these requirements. The trait forwards through references without
 cloning. See [diagnostic rendering](diagnostic-rendering.md#capabilities-and-structure) for renderer bounds.
 
 ### Present rejection versus missing subject
@@ -65,8 +64,8 @@ Argument expressions run before method entry. Tracking comes before library-cont
 even on success. Without tracking, capture appears empty. Tracking twice inflates the count.
 [Execution adapters](observation-boundaries.md#execution-adapters) track before the operation they perform.
 
-The executor supplies an [attached builder](failure-processing.md#builder-completion) and raises the failure after
-explanation returns. An explanation retaining a guard must render its values and release it before returning.
+The executor supplies a [builder](failure-processing.md#builder-completion) and raises the failure after explanation
+returns. An explanation retaining a guard must render its values and release it before returning.
 The executor cannot enforce resource handling inside custom hooks. Regression:
 [`rejection_renders_the_original_guard_then_releases_it_before_continuation`](../assertr/src/assert_that/execution.rs).
 
@@ -86,14 +85,14 @@ A single matcher can be evaluated against several subjects, with one evaluation 
 ## Child scopes and evidence
 
 `AssertionContext` has no public constructor. Definitions receive it from the executor or an enclosing definition.
-It borrows rendering settings and stores paths and child failures within the diagnostic budget.
+It borrows rendering settings and stores child failures, with paths relative to the scope, within the diagnostic budget.
 
 | Operation | Behavior |
 |---|---|
-| `isolated` | Start a separate group of evidence with inherited settings, path, and item allowance. Do not clone the renderer. Dropping the scope discards its evidence. |
+| `isolated` | Start a separate group of evidence with inherited settings and item allowance. Its paths are relative to the scope. Do not clone the renderer. Dropping the scope discards its evidence. |
 | `evaluate` | Evaluate the check and immediately explain a rejection if diagnostics are enabled and the budget permits it. Drop the observed success or rejection before returning the boolean result. |
 | `scoped` | Add one relative path segment for the operation, then append that scope's evidence once. |
-| `record` | Retain an existing failure under the current path and item allowance. |
+| `record` | Retain an existing failure within the item allowance. |
 | `outcome` | Record a boolean rejection, constructing its constraint description only if needed. |
 | `into_evidence` | Return owned failures and omission counts without borrowing subjects, definitions, or guards. |
 
@@ -102,9 +101,12 @@ omitted evidence exists. Each matcher family decides how to traverse its input a
 does not imply success. Private recording and completion helpers implement these rules
 in [context.rs](../assertr/src/expectation/context.rs).
 
-[Paths](failure-processing.md#paths) participate in evidence ordering before truncation. `Evidence::explain` removes the
-originating context's prefix once. Descendants remain relative to the enclosing subject. Flattening applies the receiving
-prefix once, preserving repeated field names when they refer to distinct nested fields. Regression:
+Evidence paths stay relative to the scope that retains them. `scoped` prepends its segment once when it appends the
+child scope's evidence, so `Evidence::explain` attaches children unchanged. Flattening appends the explained children to
+the receiving scope, preserving repeated field names when they refer to distinct nested fields.
+[Paths](failure-processing.md#paths) participate in evidence ordering before truncation. A sorted scope below a path
+segment ranks each report as if rendered beneath that shared prefix, so retention agrees with every enclosing scope.
+Regression:
 [`grouped_evidence_has_relative_paths_without_losing_repeated_field_names`](../assertr/src/expectation/context.rs).
 
 Before evaluating the next sibling, a child check finishes its observation, explains or discards it, and retains only

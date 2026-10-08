@@ -1,5 +1,6 @@
+use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics,
+    AssertionContext, Expectation,
     expectation::{Evidence, MatcherList},
     failure::{FailureBuilder, FailureKind, PathSegment},
 };
@@ -39,24 +40,10 @@ where
     F: Fn(&A) -> bool,
     L: MatcherList<A, R>,
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        A: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        A: 'a;
+    composite_items!(A);
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
-        let structure = |_: &AssertionContext<'_, R>| {
-            FailureBuilder::detached::<()>(FailureKind::Matching)
-                .relation("has the required structure")
-                .expected(self.name)
-                .build()
-        };
-        // A wrong shape skips the fields. The fallback stays within the variant scope.
+        // A wrong shape skips the fields. The structural fallback stays within the variant scope,
+        // so a rejection always leaves evidence there.
         let evaluate = |context: &mut AssertionContext<'_, R>| {
             let mut matched = (self.shape)(actual);
             if matched {
@@ -64,7 +51,12 @@ where
                     matched &= self.fields.evaluate_at(index, actual, context);
                 }
             }
-            context.complete(matched, structure)
+            context.complete(matched, |_| {
+                FailureBuilder::new::<()>(FailureKind::Matching)
+                    .relation("has the required structure")
+                    .expected(self.name)
+                    .build()
+            })
         };
         let mut context = settings.isolated();
         let matched = if let Some(variant) = self.variant {
@@ -72,24 +64,22 @@ where
         } else {
             evaluate(&mut context)
         };
-        context.finish(matched, structure)
+        if matched {
+            Ok(())
+        } else {
+            Err(context.into_evidence())
+        }
     }
-}
-impl<A: ?Sized, R, F, L> ExpectationDiagnostics<A, R> for PartialMatch<A, F, L>
-where
-    F: Fn(&A) -> bool,
-    L: MatcherList<A, R>,
-{
+
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
-            None => context.describe_list::<A, _, _>(
+            None => context.describe_list::<A, _>(
                 &self.fields,
                 failure
                     .path(self.variant.map(PathSegment::Variant))
@@ -100,6 +90,7 @@ where
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::partial_match;
@@ -113,7 +104,7 @@ mod tests {
     #[test]
     fn missing_subject_descriptions_preserve_nested_field_and_variant_paths() {
         use crate::{
-            __private::field::field,
+            __private::field,
             assertions::{collection::elements_are_in_any_order, core::partial_eq::equal_to},
             failure::FailureKind,
         };
@@ -121,19 +112,19 @@ mod tests {
             |row: &((i32,),)| Some(&row.0),
             partial_match(
                 |_: &(i32,)| true,
-                (field(
+                crate::matchers![field(
                     |row: &(i32,)| Some(&row.0),
                     equal_to(2),
                     PathSegment::TupleIndex(0),
-                ),),
+                )],
                 "Choice::Some",
                 Some("Some"),
             ),
             PathSegment::Field("choice"),
         );
         let actual: [((i32,),); 0] = [];
-        let failures =
-            assert_that!(actual).capture(|it| it.matches(elements_are_in_any_order((matcher,))));
+        let failures = assert_that!(actual)
+            .capture(|it| it.matches(elements_are_in_any_order(matchers![matcher])));
         let description = failures[0].children[0].constraint.as_ref().unwrap();
         assert_that!(description.path)
             .is_equal_to([PathSegment::Field("choice"), PathSegment::Variant("Some")]);
@@ -171,10 +162,10 @@ mod tests {
         let calls = Cell::new(0);
         let matcher = partial_match(
             Option::is_some,
-            (opaque_predicate(|_: &Option<i32>| {
+            crate::matchers![opaque_predicate(|_: &Option<i32>| {
                 calls.set(calls.get() + 1);
                 true
-            }),),
+            })],
             "Option::Some",
             Some("Some"),
         );

@@ -1,7 +1,5 @@
 //! Construction of delegating fluent alias methods.
 
-use std::collections::BTreeSet;
-
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{ToTokens, quote};
 use syn::{FnArg, GenericParam, Meta, Pat, TraitItemFn, ext::IdentExt};
@@ -90,66 +88,38 @@ fn generic_arguments(method: &TraitItemFn) -> Vec<TokenStream> {
 /// Makes every declared value argument directly addressable and returns the names to forward.
 ///
 /// Plain identifier patterns keep their public names. Identifier bindings such as `ref value` are
-/// reduced to their by-value name, and patterns that do not provide a name receive an internal,
-/// collision-free one in the alias signature.
+/// reduced to their by-value name. Patterns that do not provide a name receive `argument_{index}`
+/// with mixed-site hygiene, which keeps it apart from the caller's argument names. Const generic
+/// parameters are not hygienic, so a name they use is prefixed with underscores until it is free.
 fn value_arguments(method: &mut TraitItemFn) -> Vec<Ident> {
-    let mut unavailable_names = method
+    let const_parameters = method
         .sig
         .generics
-        .params
-        .iter()
-        .filter_map(|parameter| match parameter {
-            GenericParam::Lifetime(_) => None,
-            GenericParam::Type(parameter) => Some(parameter.ident.to_string()),
-            GenericParam::Const(parameter) => Some(parameter.ident.to_string()),
-        })
-        .collect::<BTreeSet<_>>();
-
-    unavailable_names.extend(
-        method
-            .sig
-            .inputs
-            .iter()
-            .filter_map(|argument| match argument {
-                FnArg::Receiver(_) => None,
-                FnArg::Typed(argument) => match &*argument.pat {
-                    Pat::Ident(pattern) => Some(pattern.ident.to_string()),
-                    _ => None,
-                },
-            }),
-    );
-
-    let mut next_internal_name = 0;
+        .const_params()
+        .map(|parameter| parameter.ident.to_string())
+        .collect::<Vec<_>>();
     method
         .sig
         .inputs
         .iter_mut()
-        .filter_map(|argument| match argument {
+        .enumerate()
+        .filter_map(|(index, argument)| match argument {
             FnArg::Receiver(_) => None,
             FnArg::Typed(argument) => {
-                let ident = match &*argument.pat {
-                    Pat::Ident(pattern) => pattern.ident.clone(),
-                    _ => fresh_argument_ident(&mut unavailable_names, &mut next_internal_name),
+                let ident = if let Pat::Ident(pattern) = &*argument.pat {
+                    pattern.ident.clone()
+                } else {
+                    let mut name = format!("argument_{index}");
+                    while const_parameters.contains(&name) {
+                        name.insert(0, '_');
+                    }
+                    Ident::new(&name, Span::mixed_site())
                 };
                 *argument.pat = syn::parse_quote! { #ident };
                 Some(ident)
             }
         })
         .collect()
-}
-
-/// Allocates a hygienic argument name that cannot collide with preserved arguments or generics.
-fn fresh_argument_ident(
-    unavailable_names: &mut BTreeSet<String>,
-    next_internal_name: &mut usize,
-) -> Ident {
-    loop {
-        let name = format!("__assertr_fluent_argument_{next_internal_name}");
-        *next_internal_name += 1;
-        if unavailable_names.insert(name.clone()) {
-            return Ident::new(&name, Span::call_site());
-        }
-    }
 }
 
 #[cfg(test)]
@@ -233,9 +203,9 @@ mod tests {
     #[test]
     fn forwards_arguments_with_non_identifier_patterns() {
         let original: TraitItemFn = parse_quote! {
-            fn is_expected<const __assertr_fluent_argument_0: usize>(
+            fn is_expected<const argument_3: usize>(
                 self,
-                expected: usize,
+                argument_2: usize,
                 (left, right): (usize, usize),
                 _: bool,
                 ref label: String,
@@ -246,25 +216,21 @@ mod tests {
 
         let alias = generate_alias(&original, ident("be_expected"));
 
+        // The generated `argument_2` has mixed-site hygiene and does not shadow the caller's.
         assert_equal(
             &alias.sig.inputs,
             &parse_quote! {
                 self,
-                expected: usize,
-                __assertr_fluent_argument_1: (usize, usize),
-                __assertr_fluent_argument_2: bool,
+                argument_2: usize,
+                argument_2: (usize, usize),
+                _argument_3: bool,
                 label: String,
             },
         );
         assert_equal(
             &alias.default,
             &Some(parse_quote! {{
-                self.is_expected::<__assertr_fluent_argument_0>(
-                    expected,
-                    __assertr_fluent_argument_1,
-                    __assertr_fluent_argument_2,
-                    label
-                )
+                self.is_expected::<argument_3>(argument_2, argument_2, _argument_3, label)
             }}),
         );
     }

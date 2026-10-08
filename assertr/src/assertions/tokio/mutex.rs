@@ -1,13 +1,16 @@
 use crate::assertions::std::mutex::{explain_acquired_lock, explain_held_lock};
 use crate::failure::FailureKind;
 use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use crate::{AssertionContext, Expectation, failure::FailureBuilder};
 use tokio::sync::Mutex;
 
 /// Observes a locked Tokio mutex, retaining any acquired guard on rejection.
 #[derive(Debug, Clone, Copy)]
 pub struct IsLocked;
-impl<T, R> Expectation<Mutex<T>, R> for IsLocked {
+impl<T, R> Expectation<Mutex<T>, R> for IsLocked
+where
+    R: ValueRenderer<T>,
+{
     type Success<'a>
         = ()
     where
@@ -25,18 +28,14 @@ impl<T, R> Expectation<Mutex<T>, R> for IsLocked {
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         actual.try_lock().map_or_else(|_| Ok(()), Err)
     }
-}
-impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsLocked
-where
-    R: ValueRenderer<T>,
-{
+
     const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => failure.relation("is locked"),
             Some((actual, guard)) => {
@@ -48,6 +47,7 @@ where
         }
     }
 }
+
 /// Acquires an available Tokio mutex and returns its guard.
 #[derive(Debug, Clone, Copy)]
 pub struct IsNotLocked;
@@ -69,15 +69,14 @@ impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         actual.try_lock().map_err(|_| ())
     }
-}
-impl<T, R> ExpectationDiagnostics<Mutex<T>, R> for IsNotLocked {
+
     const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => failure.relation("is not locked"),
             Some((actual, ())) => explain_held_lock(actual, "Mutex", failure, context),
@@ -122,27 +121,18 @@ fn evaluate_value<'a, T, R: Clone>(
     context: &AssertionContext<'_, R>,
 ) -> Result<(), ValueRejection<'a, T>> {
     let guard = actual.try_lock().map_err(|_| ValueRejection::Locked)?;
-    let failures = crate::assert_that::collect_assertions(
-        &*guard,
-        context.render(),
-        context.include_location(),
-        assertions,
-    );
-    if failures.is_empty() {
-        return Ok(());
-    }
     let mut evidence = context.isolated();
-    for failure in failures {
-        evidence.record(failure);
+    if evidence.run_assertions(&*guard, assertions) {
+        return Ok(());
     }
     Err(ValueRejection::Rejected(guard, evidence.into_evidence()))
 }
 
-fn explain_value<T, R: ValueRenderer<T>, Target>(
+fn explain_value<T, R: ValueRenderer<T>>(
     rejected: Option<(&Mutex<T>, ValueRejection<'_, T>)>,
-    failure: FailureBuilder<Target>,
+    failure: FailureBuilder,
     context: &AssertionContext<'_, R>,
-) -> FailureBuilder<Target> {
+) -> FailureBuilder {
     let render = context.render();
     match rejected {
         None => failure.relation("contains a value that satisfies the assertions"),
@@ -157,7 +147,7 @@ fn explain_value<T, R: ValueRenderer<T>, Target>(
     }
 }
 
-impl<T, R: Clone, F> Expectation<Mutex<T>, R> for HasValueSatisfying<F>
+impl<T, R: Clone + ValueRenderer<T>, F> Expectation<Mutex<T>, R> for HasValueSatisfying<F>
 where
     F: for<'a> Fn(AssertThat<'a, T, crate::mode::Capture, R>),
 {
@@ -165,12 +155,12 @@ where
         = ()
     where
         Self: 'a,
-        T: 'a;
+        Mutex<T>: 'a;
     type Rejection<'a>
         = ValueRejection<'a, T>
     where
         Self: 'a,
-        T: 'a;
+        Mutex<T>: 'a;
     fn evaluate<'a>(
         &'a self,
         actual: &'a Mutex<T>,
@@ -178,19 +168,14 @@ where
     ) -> Result<(), Self::Rejection<'a>> {
         evaluate_value(actual, &self.0, context)
     }
-}
-impl<T, R: Clone + ValueRenderer<T>, F> ExpectationDiagnostics<Mutex<T>, R>
-    for HasValueSatisfying<F>
-where
-    F: for<'a> Fn(AssertThat<'a, T, crate::mode::Capture, R>),
-{
+
     const KIND: FailureKind = FailureKind::Predicate;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         explain_value(rejected, failure, context)
     }
 }
@@ -198,7 +183,7 @@ where
 /// Non-blocking assertions for Tokio's [`Mutex`] type.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait TokioMutexAssertions<T, R = DebugRenderer> {
+pub trait TokioMutexAssertions<T, M: Mode, R = DebugRenderer> {
     /// Asserts that `try_lock` cannot acquire the mutex.
     fn is_locked(self) -> Self
     where
@@ -218,15 +203,16 @@ pub trait TokioMutexAssertions<T, R = DebugRenderer> {
 
     /// Tries to acquire the mutex and runs assertions against its contained value.
     ///
-    /// Fails the assertion if the mutex is currently locked. The closure receives a capture-mode
-    /// assertion, and any failures it raises are attached to one mutex-level failure.
+    /// Fails the assertion if the mutex is currently locked, without running the callback.
+    /// Otherwise, the callback receives an assertion over the value in this chain's mode while
+    /// the guard is held.
     fn has_value_satisfying<A>(self, assertions: A) -> Self
     where
-        A: for<'a> FnOnce(AssertThat<'a, T, crate::mode::Capture, R>),
-        R: ValueRenderer<T> + Clone;
+        A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
+        R: Clone;
 }
 
-impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
+impl<T, M: Mode, R> TokioMutexAssertions<T, M, R> for AssertThat<'_, Mutex<T>, M, R> {
     #[track_caller]
     fn is_locked(self) -> Self
     where
@@ -243,26 +229,41 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R
     #[track_caller]
     fn has_value_satisfying<A>(self, assertions: A) -> Self
     where
-        A: for<'a> FnOnce(AssertThat<'a, T, crate::mode::Capture, R>),
-        R: ValueRenderer<T> + Clone,
+        A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
+        R: Clone,
     {
-        // The one-use callback runs through the one-use executor instead of the reusable
-        // `HasValueSatisfying` expectation, which requires `Fn`.
-        self.track_assertion();
-        self.test_once_after_tracking(
-            FailureKind::Predicate,
-            core::panic::Location::caller(),
-            |context| evaluate_value(self.actual(), assertions, context),
-            |rejection, failure, context| {
-                explain_value(Some((self.actual(), rejection)), failure, context)
-            },
-        );
+        {
+            // The guard is held while the callback runs and released before the chain continues.
+            let guard = self.test_assertion(&IsNotLocked);
+            self.satisfy_success(guard.as_deref(), assertions);
+        }
         self
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+        use tokio::sync::Mutex;
+
+        #[tokio::test]
+        async fn are_as_expected() {
+            {
+                let mutex = Mutex::new(42);
+                let guard = mutex.lock().await;
+                mutex.must().be_locked();
+                drop(guard);
+            }
+            Mutex::new(42).must().not_be_locked();
+            Mutex::new(42).must().be_free();
+            Mutex::new(42).must().have_value_satisfying(|value| {
+                value.is_equal_to(42);
+            });
+        }
+    }
+
     mod observations {
         use super::super::{HasValueSatisfying, IsNotLocked};
         use crate::{RenderingBudget, matchers::all_of, prelude::*, test_support::NoRenderer};
@@ -273,13 +274,14 @@ mod tests {
         fn successful_acquisitions_are_released_between_siblings_without_a_renderer() {
             assert_that!(Mutex::new(7))
                 .with_renderer(NoRenderer)
-                .matches(all_of((IsNotLocked, IsNotLocked)));
+                .matches(all_of(matchers![IsNotLocked, IsNotLocked]));
         }
 
         #[test]
         fn callback_rejections_retain_truth_and_omissions_with_zero_child_budget() {
             let lock = Mutex::new(7);
             let budget = RenderingBudget::default().with_max_items(0);
+            // The chain method runs the callback in the chain's mode, so each failure is its own.
             let failures = assert_that!(lock)
                 .with_rendering_budget(budget)
                 .capture(|it| {
@@ -287,9 +289,8 @@ mod tests {
                         value.is_equal_to(8).is_equal_to(9);
                     })
                 });
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0].children).is_empty();
-            assert_that!(failures[0].omitted_children).is_equal_to(2);
+            assert_that!(failures).has_length(2);
+            // The reusable expectation nests its callback failures within the budget.
             let definition = HasValueSatisfying::new(|value: AssertThat<'_, i32, Capture>| {
                 value.is_equal_to(8).is_equal_to(9);
             });
@@ -313,8 +314,8 @@ mod tests {
             assert_that!(failures).has_length(1);
             assert_that!(calls.get()).is_equal_to(0);
             drop(guard);
-            let failures =
-                assert_that!(lock).capture(|it| it.matches(all_of((&definition, &definition))));
+            let failures = assert_that!(lock)
+                .capture(|it| it.matches(all_of(matchers![&definition, &definition])));
             assert_that!(failures[0].children).has_length(2);
             assert_that!(calls.get()).is_equal_to(2);
             assert_that!(lock.try_lock().is_ok()).is_true();
@@ -330,7 +331,7 @@ mod tests {
         fn trait_is_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, Mutex<i32>, Panic, NoRenderer>
-                    => TokioMutexAssertions<i32, NoRenderer>
+                    => TokioMutexAssertions<i32, Panic, NoRenderer>
             );
         }
     }
@@ -340,15 +341,6 @@ mod tests {
         use tokio::sync::Mutex;
 
         use crate::prelude::*;
-
-        #[tokio::test]
-        #[cfg(feature = "fluent")]
-        async fn fluent_alias_is_as_expected() {
-            let mutex = Mutex::new(42);
-            let guard = mutex.lock().await;
-            mutex.must().be_locked();
-            drop(guard);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -388,12 +380,6 @@ mod tests {
         use tokio::sync::Mutex;
 
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Mutex::new(42).must().not_be_locked();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -437,12 +423,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Mutex::new(42).must().be_free();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             let lock = Mutex::new(42);
             let _guard = lock.try_lock().unwrap();
@@ -457,22 +437,16 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Mutex::new(42).must().have_value_satisfying(|value| {
-                value.is_equal_to(42);
-            });
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             let mutex = Mutex::new(42);
+            let guard = mutex.try_lock().unwrap();
             assert_caller_location!(
                 assert_that!(mutex),
                 has_value_satisfying(|value| {
-                    value.is_equal_to(43);
+                    value.is_equal_to(42);
                 })
             );
+            drop(guard);
         }
 
         #[test]
@@ -496,7 +470,7 @@ mod tests {
         }
 
         #[test]
-        fn panics_with_the_contained_failures_when_the_value_does_not_satisfy_the_assertions() {
+        fn panics_with_the_callback_failure_when_the_value_does_not_satisfy_the_assertions() {
             let mutex = Mutex::new(42);
 
             assert_that_panic_by(|| {
@@ -509,96 +483,22 @@ mod tests {
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Expression: `mutex`
+                    Expected: 43
 
-                    Actual: Mutex {{
-                        data: 42,
-                    }}
-
-                    contains a value that does not satisfy the assertions
-
-                    Nested failures:
-                      - Expected: 43
-
-                          Actual: 42
+                      Actual: 42
                     -------- assertr --------
                 "});
         }
 
         #[tokio::test]
-        async fn panics_when_the_mutex_is_locked() {
+        async fn rejects_a_locked_mutex_without_running_the_callback() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock().await;
-
-            assert_that_panic_by(|| {
-                assert_that!(mutex)
-                    .with_location(false)
-                    .has_value_satisfying(|value| {
-                        value.is_equal_to(42);
-                    });
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `mutex`
-
-                    Actual: Mutex {{
-                        data: <locked>,
-                    }}
-
-                    is unexpectedly locked
-                    -------- assertr --------
-                "});
-
+            let failures = assert_that!(mutex)
+                .capture(|it| it.has_value_satisfying(|_| panic!("assertions should not run")));
+            assert_that!(failures[0].relation.as_deref())
+                .is_equal_to(Some("is unexpectedly locked"));
             drop(guard);
-        }
-
-        #[test]
-        fn works_in_capture_mode() {
-            let mutex = Mutex::new(42);
-
-            let failures = assert_that!(mutex).with_location(false).capture(|it| {
-                it.has_value_satisfying(|value| {
-                    value.is_equal_to(43);
-                })
-            });
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |failure: AssertThat<AssertionFailure, Capture>| {
-                    failure
-                        .satisfies_owned(
-                            |failure| ToHumanReadableText.render(failure),
-                            |description| {
-                                description.contains(formatdoc! {r"
-                                    Actual: Mutex {{
-                                        data: 42,
-                                    }}
-
-                                    contains a value that does not satisfy the assertions
-                                "});
-                            },
-                        )
-                        .satisfies(
-                            |failure| &failure.children,
-                            |children| {
-                                children.contains_exactly_satisfying([
-                                    |child: AssertThat<AssertionFailure, Capture>| {
-                                        child.satisfies_owned(
-                                            |failure| ToHumanReadableText.render(failure),
-                                            |description| {
-                                                description.contains(formatdoc! {r"
-                                                    Expected: 43
-
-                                                      Actual: 42
-                                                "});
-                                            },
-                                        );
-                                    },
-                                ]);
-                            },
-                        );
-                },
-            ]);
         }
     }
 }

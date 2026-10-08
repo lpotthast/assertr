@@ -2,93 +2,66 @@
 
 use super::{Collection, StableOrder};
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics,
+    AssertionContext, Expectation,
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
-    renderer::{GroupStyle, IntoRendered, Rendered, RenderingOrder},
-    util::{
-        matching::{match_bipartite, matches_exactly},
-        selection::{Keyed, Smallest},
-    },
+    renderer::{Rendered, RenderingOrder},
+    util::matching::assign_exactly,
 };
-use alloc::{string::String, vec::Vec};
+use alloc::vec::Vec;
 use core::{borrow::Borrow, marker::PhantomData, ptr};
 
 const METADATA_NOTE: &str = "Some pointers have equal data addresses but different metadata.";
 
-// Retain only the diagnostic prefix, or the smallest rendered identities for sorted
-// presentation. Inspected counts are independent of retention, so explanation never repeats
-// Borrow on a target that evaluation already visited.
+/// Borrowed targets that evaluation already visited, in iteration order.
+///
+/// Probes retain nothing, because they are never explained. Explanation completes the targets
+/// without borrowing a visited element again.
 struct ObservedTargets<'a, U: ?Sized> {
-    targets: Smallest<Keyed<(Option<String>, usize), &'a U>>,
-    inspected: usize,
-    limit: usize,
-    order: RenderingOrder,
+    targets: Vec<&'a U>,
+    retain: bool,
 }
 
 impl<'a, U: ?Sized> ObservedTargets<'a, U> {
-    fn new<R>(context: &AssertionContext<'_, R>, order: RenderingOrder) -> Self {
-        let limit = if context.is_diagnostic() {
-            context.render().max_items()
-        } else {
-            0
-        };
+    fn new<R>(context: &AssertionContext<'_, R>) -> Self {
         Self {
-            targets: Smallest::new(limit),
-            inspected: 0,
-            limit,
-            order,
+            targets: Vec::new(),
+            retain: !context.is_probe(),
         }
     }
 
-    fn observe<R>(&mut self, target: &'a U, context: &AssertionContext<'_, R>) {
-        self.inspected += 1;
-        if self.limit == 0 {
-            return;
+    fn observe(&mut self, target: &'a U) -> &'a U {
+        if self.retain {
+            self.targets.push(target);
         }
-        // Compare the budgeted text, including truncation markers, just like collection rendering.
-        let key = (self.order == RenderingOrder::SortByRenderedText).then(|| {
-            context
-                .render()
-                .identities()
-                .value(target)
-                .into_rendered()
-                .text(true)
-        });
-        self.targets.offer(Keyed {
-            key: (key, self.inspected),
-            value: target,
-        });
+        target
     }
 
-    fn complete<C: Collection + ?Sized, R>(
-        &mut self,
+    /// Renders the subject from the visited targets, borrowing only the elements evaluation did
+    /// not reach.
+    fn render<C: Collection + ?Sized, R>(
+        mut self,
         actual: &'a C,
+        order: RenderingOrder,
         context: &AssertionContext<'_, R>,
-    ) where
+    ) -> Rendered
+    where
         C::Item: Borrow<U>,
     {
-        let remaining = if self.limit > 0 && self.order == RenderingOrder::SortByRenderedText {
+        let rendering = context.render().identities();
+        let remaining = if order == RenderingOrder::SortByRenderedText {
             usize::MAX
         } else {
-            self.limit.saturating_sub(self.targets.len())
+            rendering.max_items().saturating_sub(self.targets.len())
         };
-        for element in actual.elements().skip(self.inspected).take(remaining) {
-            self.observe(element.borrow(), context);
-        }
-    }
-
-    fn render<C: Collection + ?Sized, R>(
-        self,
-        actual: &C,
-        context: &AssertionContext<'_, R>,
-    ) -> Rendered {
-        let targets = self.targets.into_values();
-        context.render().identities().observed_collection(
-            actual,
-            &targets,
-            actual.length(),
-            self.order,
-        )
+        let visited = self.targets.len();
+        self.targets.extend(
+            actual
+                .elements()
+                .skip(visited)
+                .take(remaining)
+                .map(Borrow::borrow),
+        );
+        rendering.observed_collection(actual, &self.targets, order)
     }
 }
 
@@ -185,10 +158,9 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let mut same_address = false;
-        let mut observed = ObservedTargets::new(context, C::PRESENTATION.order());
+        let mut observed = ObservedTargets::new(context);
         for element in actual.elements() {
-            let target = <C::Item as Borrow<U>>::borrow(element);
-            observed.observe(target, context);
+            let target = observed.observe(element.borrow());
             same_address |= ptr::addr_eq(target, self.0);
             if ptr::eq(target, self.0) {
                 return Ok(());
@@ -199,21 +171,15 @@ where
             same_address,
         })
     }
-}
 
-impl<C: Collection + ?Sized, U: ?Sized, R> ExpectationDiagnostics<C, R>
-    for ContainsSameInstanceAs<'_, U>
-where
-    C::Item: Borrow<U>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let rendering = context.render().identities();
         let failure = match rejected {
             None => failure.relation("contains the same instance as"),
@@ -225,7 +191,7 @@ where
                 },
             )) => {
                 let mut failure = failure
-                    .actual(observed.render(actual, context))
+                    .actual(observed.render(actual, C::PRESENTATION.order(), context))
                     .relation("does not contain the same instance as");
                 if same_address {
                     failure = failure.fact(Fact::note(METADATA_NOTE));
@@ -286,11 +252,9 @@ where
         actual: &'a C,
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let mut observed = ObservedTargets::new(context, C::PRESENTATION.order());
+        let mut observed = ObservedTargets::new(context);
         for element in actual.elements() {
-            let target = <C::Item as Borrow<U>>::borrow(element);
-            observed.observe(target, context);
-            if ptr::eq(target, self.0) {
+            if ptr::eq(observed.observe(element.borrow()), self.0) {
                 return Err(IdentityMembershipRejection {
                     observed,
                     same_address: false,
@@ -299,32 +263,25 @@ where
         }
         Ok(())
     }
-}
 
-impl<C: Collection + ?Sized, U: ?Sized, R> ExpectationDiagnostics<C, R>
-    for DoesNotContainSameInstanceAs<'_, U>
-where
-    C::Item: Borrow<U>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let rendering = context.render().identities();
-        let failure = match rejected {
-            None => failure.relation("does not contain the same instance as"),
-            Some((actual, IdentityMembershipRejection { mut observed, .. })) => {
-                observed.complete(actual, context);
-                failure
-                    .actual(observed.render(actual, context))
-                    .relation("contains the same instance as")
-            }
-        };
-        failure.unexpected(rendering.value(self.0))
+    ) -> FailureBuilder {
+        let actual = rejected.map(|(actual, IdentityMembershipRejection { observed, .. })| {
+            observed.render(actual, C::PRESENTATION.order(), context)
+        });
+        failure
+            .relations(
+                actual,
+                "does not contain the same instance as",
+                "contains the same instance as",
+            )
+            .unexpected(context.render().identities().value(self.0))
     }
 }
 
@@ -370,6 +327,7 @@ impl<'e, C: StableOrder + ?Sized, U: ?Sized + 'e, B, R> Expectation<C, R>
 where
     C::Item: Borrow<U>,
     B: AsRef<[&'e U]>,
+    R: crate::ValueRenderer<usize>,
 {
     type Success<'a>
         = ()
@@ -389,14 +347,10 @@ where
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let expected = self.expected.as_ref();
         let length = actual.length();
-        let mut observed = ObservedTargets::new(context, RenderingOrder::PreserveIteration);
+        let mut observed = ObservedTargets::new(context);
         let mismatch = actual
             .elements()
-            .map(|element| {
-                let target = <C::Item as Borrow<U>>::borrow(element);
-                observed.observe(target, context);
-                target
-            })
+            .map(|element| observed.observe(element.borrow()))
             .zip(expected.iter().copied())
             .enumerate()
             .find(|(_, (element, expected))| !ptr::eq(*element, *expected))
@@ -417,23 +371,15 @@ where
             Ok(())
         }
     }
-}
 
-impl<'e, C: StableOrder + ?Sized, U: ?Sized + 'e, B, R> ExpectationDiagnostics<C, R>
-    for ContainsExactlySameInstances<'e, U, B>
-where
-    C::Item: Borrow<U>,
-    B: AsRef<[&'e U]>,
-    R: crate::ValueRenderer<usize>,
-{
     const KIND: FailureKind = FailureKind::Equality;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let rendering = render.identities();
         let expected = rejected.as_ref().map_or_else(
@@ -447,12 +393,10 @@ where
                     expected,
                     length,
                     mismatch,
-                    mut observed,
+                    observed,
                 } = rejection;
-                observed.complete(actual, context);
-
                 let mut failure = failure
-                    .actual(observed.render(actual, context))
+                    .actual(observed.render(actual, RenderingOrder::PreserveIteration, context))
                     .relation("does not contain exactly the same instances in order");
                 if length != expected.len() {
                     failure = failure
@@ -475,7 +419,7 @@ where
                     let mut child = context.isolated();
                     child.record_with(|context| {
                         let rendering = context.render().identities();
-                        FailureBuilder::detached::<U>(FailureKind::Equality)
+                        FailureBuilder::new::<U>(FailureKind::Equality)
                             .actual(rendering.value(element))
                             .relation("is not the same instance as")
                             .expected(rendering.value(expected))
@@ -487,7 +431,9 @@ where
                 failure
             }
         };
-        failure.expected(rendering.borrowed_values::<U, _>(expected, GroupStyle::List))
+        failure.expected(
+            rendering.borrowed_values::<U, _>(expected, RenderingOrder::PreserveIteration),
+        )
     }
 }
 
@@ -551,35 +497,28 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let expected = self.expected.as_ref();
-        let targets = || actual.elements().map(<C::Item as Borrow<U>>::borrow);
-        if context.is_probe() {
-            let exact = actual.length() == expected.len() && {
-                let elements = targets().collect::<Vec<_>>();
-                matches_exactly(elements.len(), expected.len(), |a, e| {
-                    ptr::eq(elements[a], expected[e])
-                })
-            };
-            return if exact {
-                Ok(())
-            } else {
-                Err(UnorderedIdentityRejection {
-                    expected,
-                    observed: Vec::new(),
-                    missing: Vec::new(),
-                    unexpected: Vec::new(),
-                    same_address: false,
-                })
-            };
+        // A probe of a different length cannot match, so it rejects without borrowing targets.
+        if context.is_probe() && actual.length() != expected.len() {
+            return Err(UnorderedIdentityRejection {
+                expected,
+                observed: Vec::new(),
+                missing: Vec::new(),
+                unexpected: Vec::new(),
+                same_address: false,
+            });
         }
-        let elements = targets().collect::<Vec<_>>();
-        let matched = match_bipartite(elements.len(), expected.len(), |a, e| {
-            ptr::eq(elements[a], expected[e])
-        });
-        if matched.is_exact() {
-            return Ok(());
-        }
-        let (unexpected, missing) =
-            super::value::unmatched_occurrences(&matched, &elements, |index| expected[index]);
+        let elements = actual.elements().map(Borrow::borrow).collect::<Vec<&U>>();
+        let unmatched = assign_exactly(
+            context.is_probe(),
+            elements.len(),
+            expected.len(),
+            |a, e| ptr::eq(elements[a], expected[e]),
+        );
+        let (unexpected, missing) = match unmatched {
+            Ok(()) => return Ok(()),
+            Err(None) => (Vec::new(), Vec::new()),
+            Err(Some(matched)) => matched.unmatched(&elements, |index| expected[index]),
+        };
         let same_address = unexpected.iter().any(|actual| {
             missing
                 .iter()
@@ -593,22 +532,15 @@ where
             same_address,
         })
     }
-}
 
-impl<'e, C: Collection + ?Sized, U: ?Sized + 'e, B, R> ExpectationDiagnostics<C, R>
-    for ContainsExactlySameInstancesInAnyOrder<'e, U, B>
-where
-    C::Item: Borrow<U>,
-    B: AsRef<[&'e U]>,
-{
     const KIND: FailureKind = FailureKind::Equality;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let rendering = render.identities();
         let expected = rejected.as_ref().map_or_else(
@@ -626,35 +558,30 @@ where
                     ..
                 } = rejection;
 
-                let mut failure = failure
+                let failure = failure
                     .actual(rendering.observed_collection(
                         actual,
                         &observed,
-                        actual.length(),
                         C::PRESENTATION.order(),
                     ))
                     .relation("does not contain exactly the same instances in any order");
-                if !missing.is_empty() {
-                    failure = failure.fact(Fact::labelled(
-                        "Instances not found",
-                        rendering.borrowed_values::<U, _>(&missing, GroupStyle::List),
-                    ));
-                }
-                if !unexpected.is_empty() {
-                    failure = failure.fact(Fact::labelled(
-                        "Instances not expected",
-                        rendering
-                            .borrowed_values::<U, _>(&unexpected, GroupStyle::List)
-                            .with_order(C::PRESENTATION.order()),
-                    ));
-                }
+                let mut failure = super::value::unmatched_facts(
+                    failure,
+                    rendering,
+                    ["Instances not found", "Instances not expected"],
+                    &missing,
+                    &unexpected,
+                    C::PRESENTATION.order(),
+                );
                 if same_address {
                     failure = failure.fact(Fact::note(METADATA_NOTE));
                 }
                 failure
             }
         };
-        failure.expected(rendering.borrowed_values::<U, _>(expected, GroupStyle::List))
+        failure.expected(
+            rendering.borrowed_values::<U, _>(expected, RenderingOrder::PreserveIteration),
+        )
     }
 }
 
@@ -664,7 +591,7 @@ mod tests {
     use crate::{
         prelude::*,
         renderer::{CollectionPresentation, Rendered, RenderedBody, RenderingContext},
-        test_support::{NoRenderer, NumericRenderer, PreservedBag, UnorderedSet, rendered_text},
+        test_support::{NoRenderer, NumericRenderer, PreservedBag, UnorderedSet},
     };
     use indoc::formatdoc;
 
@@ -687,15 +614,27 @@ mod tests {
         items
     }
 
-    mod contains_same_instance_as {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
         use super::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
+        fn are_as_expected() {
             let keys = keys();
-            [&keys[0]].must().contain_same_instance_as(&keys[0]);
+            let actual = [&keys[0], &keys[1]];
+            actual.must().contain_same_instance_as(&keys[0]);
+            actual.must().not_contain_same_instance_as(&keys[2]);
+            actual
+                .must()
+                .contain_exactly_same_instances([&keys[0], &keys[1]]);
+            actual
+                .must()
+                .contain_exactly_same_instances_in_any_order([&keys[1], &keys[0]]);
         }
+    }
+
+    mod contains_same_instance_as {
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -770,9 +709,9 @@ mod tests {
                         .is_equal_to([Fact::note(METADATA_NOTE)]);
                     element
                         .derive_owned(|value| {
-                            rendered_text(&items(value.actual.as_ref().unwrap())[0])
+                            format!("{:#}", items(value.actual.as_ref().unwrap())[0])
                         })
-                        .is_equal_to(rendered_text(element.actual().expected.as_ref().unwrap()));
+                        .is_equal_to(format!("{:#}", element.actual().expected.as_ref().unwrap()));
                 },
             ]);
         }
@@ -792,13 +731,6 @@ mod tests {
 
     mod does_not_contain_same_instance_as {
         use super::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let keys = keys();
-            [&keys[0]].must().not_contain_same_instance_as(&keys[1]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -868,15 +800,6 @@ mod tests {
 
     mod contains_exactly_same_instances {
         use super::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let keys = keys();
-            [&keys[1], &keys[0]]
-                .must()
-                .contain_exactly_same_instances([&keys[1], &keys[0]]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1041,15 +964,6 @@ mod tests {
 
     mod contains_exactly_same_instances_in_any_order {
         use super::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let keys = keys();
-            [&keys[0], &keys[1]]
-                .must()
-                .contain_exactly_same_instances_in_any_order([&keys[1], &keys[0]]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1290,7 +1204,7 @@ mod tests {
                 assert_that!(
                     items(rendered)
                         .iter()
-                        .map(rendered_text)
+                        .map(|value| format!("{value:#}"))
                         .collect::<Vec<_>>()
                 )
                 .contains_exactly(&addresses);
@@ -1333,7 +1247,7 @@ mod tests {
                 .is_matching(pattern!(RenderedBody::Group { sorted: false, .. }));
             assert_that!(items(rendered)[0].type_name)
                 .is_equal_to(Some(core::any::type_name::<Opaque>()));
-            assert_that!(rendered_text(&items(rendered)[0]))
+            assert_that!(format!("{:#}", items(rendered)[0]))
                 .is_equal_to(format!("{:p}", references[0]));
             assert_that!(failures[0].children[0].path).contains_exactly([PathSegment::Index(0)]);
             assert_that!(failures[0].children[0].facts).is_empty();
@@ -1404,42 +1318,26 @@ mod tests {
         use core::cell::Cell;
 
         #[test]
-        fn membership_scans_bound_retention_and_preserve_omission_counts() {
+        fn membership_rejections_render_within_the_budget() {
             let targets = [0_u32; 4096];
             let missing = 1_u32;
             for limit in [0, 1, 3] {
-                let context = AssertionContext::new(
-                    &NoRenderer,
-                    RenderingBudget::default().with_max_items(limit),
-                );
-                let matcher = ContainsSameInstanceAs::new(&missing);
-                let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-                assert_that!(rejection.observed.targets.len()).is_equal_to(limit);
-                assert_that!(rejection.observed.inspected).is_equal_to(targets.len());
-                let failure = matcher
-                    .explain(
-                        Some((&targets, rejection)),
-                        FailureBuilder::detached::<[u32; 4096]>(FailureKind::Membership),
-                        &context,
-                    )
-                    .build();
-                let RenderedBody::Group { items, omitted, .. } =
-                    &failure.actual.as_ref().unwrap().body
-                else {
-                    panic!("expected identity evidence")
-                };
-                assert_that!(items).has_length(limit);
-                assert_that!(*omitted).is_equal_to(targets.len() - limit);
-
-                let matcher = DoesNotContainSameInstanceAs::new(&targets[4095]);
-                let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-                assert_that!(rejection.observed.targets.len()).is_equal_to(limit);
-                assert_that!(rejection.observed.inspected).is_equal_to(targets.len());
-
-                let expected = targets.iter().rev().collect::<Vec<_>>();
-                let matcher = ContainsExactlySameInstances::new(expected);
-                let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-                assert_that!(rejection.observed.targets.len()).is_less_or_equal_to(limit);
+                let failures = assert_that!(targets)
+                    .with_renderer(NumericRenderer)
+                    .with_rendering_budget(RenderingBudget::default().with_max_items(limit))
+                    .capture(|it| {
+                        it.contains_same_instance_as(&missing)
+                            .does_not_contain_same_instance_as(&targets[4095])
+                    });
+                for failure in &failures {
+                    let RenderedBody::Group { items, omitted, .. } =
+                        &failure.actual.as_ref().unwrap().body
+                    else {
+                        panic!("expected identity evidence")
+                    };
+                    assert_that!(items).has_length(limit);
+                    assert_that!(*omitted).is_equal_to(targets.len() - limit);
+                }
             }
         }
 
@@ -1447,43 +1345,34 @@ mod tests {
         fn probes_retain_no_identity_targets() {
             let targets = [0_u32; 4096];
             let missing = 1_u32;
-            let context = AssertionContext::new(&NoRenderer, RenderingBudget::unlimited())
+            let context = AssertionContext::new(&DebugRenderer, RenderingBudget::unlimited())
                 .with_diagnostics(false);
             let matcher = ContainsSameInstanceAs::new(&missing);
             let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-            assert_that!(rejection.observed.targets.len()).is_equal_to(0);
-            let matcher = DoesNotContainSameInstanceAs::new(&targets[4095]);
-            let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-            assert_that!(rejection.observed.targets.len()).is_equal_to(0);
+            assert_that!(rejection.observed.targets).is_empty();
             let expected = targets.iter().rev().collect::<Vec<_>>();
             let matcher = ContainsExactlySameInstances::new(expected);
             let rejection = matcher.evaluate(&targets, &context).err().unwrap();
-            assert_that!(rejection.observed.targets.len()).is_equal_to(0);
+            assert_that!(rejection.observed.targets).is_empty();
         }
 
         #[test]
-        fn sorted_retention_matches_full_rendering_before_truncation() {
+        fn sorted_evidence_matches_full_rendering_before_truncation() {
             let missing = 99_i32;
             let actual = UnorderedSet((0..32).rev().collect());
             for limit in [0, 1, 3, 32, 33, usize::MAX] {
                 for leaf_limit in [0, 4, usize::MAX] {
-                    let context = AssertionContext::new(
-                        &NoRenderer,
-                        RenderingBudget::default()
-                            .with_max_items(limit)
-                            .with_max_leaf_characters(leaf_limit),
-                    );
-                    let matcher = ContainsSameInstanceAs::new(&missing);
-                    let rejection = matcher.evaluate(&actual, &context).err().unwrap();
-                    assert_that!(rejection.observed.targets.len())
-                        .is_equal_to(limit.min(actual.length()));
-                    let expected = context
-                        .render()
+                    let budget = RenderingBudget::default()
+                        .with_max_items(limit)
+                        .with_max_leaf_characters(leaf_limit);
+                    let failures = assert_that!(&actual)
+                        .with_renderer(NoRenderer)
+                        .with_rendering_budget(budget)
+                        .capture(|it| it.contains_same_instance_as(&missing));
+                    let expected = RenderingContext::new(&DebugRenderer, budget)
                         .identities()
-                        .borrowed_collection::<i32, _>(&actual)
-                        .into_rendered();
-                    assert_that!(rejection.observed.render(&actual, &context))
-                        .is_equal_to(expected);
+                        .collection(&actual);
+                    assert_that!(failures[0].actual.as_ref()).is_equal_to(Some(&expected));
                 }
             }
         }

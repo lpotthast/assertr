@@ -199,7 +199,7 @@ built-in expectation, grouped by subject family:
 ```rust
 use assertr::{matchers::{all_of, HasLengthOf, string}, prelude::*};
 
-let short_name = all_of((string::IsNotBlank, HasLengthOf::new(3)));
+let short_name = all_of(matchers![string::IsNotBlank, HasLengthOf::new(3)]);
 assert_that!("Ada").matches(&short_name);
 assert_that!(["", "Ada", "Grace"]).contains_matching(&short_name);
 ```
@@ -234,8 +234,8 @@ you can adapt:
 - [Work within async limitations](https://docs.rs/assertr/latest/assertr/#async-limitations):
   await async assertions in the calling task. Expectation hooks and capture callbacks are
   synchronous, and chains cannot cross a `Send` boundary.
-- [Process failures and customize reports](https://docs.rs/assertr/latest/assertr/failure/adapter/index.html):
-  transform captured failures with adapters or select the presentation used by a panicking
+- [Process failures and customize reports](https://docs.rs/assertr/latest/assertr/failure/index.html):
+  inspect captured failures as structured data or select the presentation used by a panicking
   assertion.
 - [Write assertions for custom types](https://docs.rs/assertr/latest/assertr/#custom-assertions):
   implement reusable expectations with structured diagnostics, then expose chainable methods

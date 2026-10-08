@@ -2,8 +2,7 @@
 
 use super::RandomAccess;
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Fact,
-    ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Fact, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
 };
@@ -19,7 +18,10 @@ impl HasElementAt {
     }
 }
 
-impl<C: RandomAccess + ?Sized, R> Expectation<C, R> for HasElementAt {
+impl<C: RandomAccess + ?Sized, R> Expectation<C, R> for HasElementAt
+where
+    R: ValueRenderer<C::Item> + ValueRenderer<usize>,
+{
     type Success<'a>
         = &'a C::Item
     where
@@ -38,20 +40,15 @@ impl<C: RandomAccess + ?Sized, R> Expectation<C, R> for HasElementAt {
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         actual.element_at(self.0).ok_or_else(|| actual.length())
     }
-}
 
-impl<C: RandomAccess + ?Sized, R> ExpectationDiagnostics<C, R> for HasElementAt
-where
-    R: ValueRenderer<C::Item> + ValueRenderer<usize>,
-{
     const KIND: FailureKind = FailureKind::Length;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let failure = match rejected {
             None => failure.relation("has an element at the index"),
@@ -105,6 +102,16 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            vec![1].must().get_at(0).be_equal_to(1);
+        }
+    }
+
     mod renderer_contract {
         use crate::{
             prelude::*,
@@ -118,17 +125,24 @@ mod tests {
                     => RandomAccessExtractAssertions<'static, i32, NoRenderer>
             );
         }
+
+        #[test]
+        fn index_and_length_use_the_active_renderer() {
+            use crate::test_support::CustomValueRenderer;
+            assert_that_panic_by(|| {
+                assert_that!([7])
+                    .with_renderer(CustomValueRenderer)
+                    .get_at(9);
+            })
+            .has_type::<String>()
+            .contains("Expected: custom(9)")
+            .contains("Actual length: custom(1)");
+        }
     }
 
     mod get_at {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            vec![1].must().get_at(0).be_equal_to(1);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -163,34 +177,6 @@ mod tests {
                       - Actual length: 2
                     -------- assertr --------
                 "});
-        }
-
-        #[test]
-        fn panics_with_rendered_index_and_length() {
-            use crate::test_support::CustomValueRenderer;
-            assert_that_panic_by(|| {
-                assert_that!([7])
-                    .with_renderer(CustomValueRenderer)
-                    .with_location(false)
-                    .get_at(9);
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[7]`
-
-                Actual: [
-                    custom(7),
-                ]
-
-                has no element at the index
-
-                Expected: custom(9)
-
-                Details:
-                  - Actual length: custom(1)
-                -------- assertr --------
-            "});
         }
 
         #[test]

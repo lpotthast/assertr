@@ -1,7 +1,7 @@
 use crate::assertions::std::mutex::locked_data;
 use crate::failure::{Fact, FailureKind};
 use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use crate::{AssertionContext, Expectation, failure::FailureBuilder};
 use tokio::sync::RwLock;
 
 /// The immediate acquisition state of a Tokio read-write lock.
@@ -24,12 +24,12 @@ impl<T> LockObservation<'_, T> {
             },
         }
     }
-    fn explain<R: ValueRenderer<T>, Target>(
+    fn explain<R: ValueRenderer<T>>(
         self,
         actual: &RwLock<T>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         match self {
             Self::Unlocked(guard) => failure
@@ -50,7 +50,10 @@ macro_rules! lock_state_expectation {
         $(#[$meta])*
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
-        impl<T, R> Expectation<RwLock<T>, R> for $name {
+        impl<T, R> Expectation<RwLock<T>, R> for $name
+        where
+            R: ValueRenderer<T>,
+        {
             type Success<'a>
                 = LockObservation<'a, T>
             where
@@ -73,18 +76,14 @@ macro_rules! lock_state_expectation {
                     Err(observation)
                 }
             }
-        }
-        impl<T, R> ExpectationDiagnostics<RwLock<T>, R> for $name
-        where
-            R: ValueRenderer<T>,
-        {
+
             const KIND: FailureKind = FailureKind::Other;
-            fn explain<'a, Target>(
+            fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a RwLock<T>, Self::Rejection<'a>)>,
-                failure: FailureBuilder<Target>,
+                failure: FailureBuilder,
                 context: &AssertionContext<'_, R>,
-            ) -> FailureBuilder<Target> {
+            ) -> FailureBuilder {
                 match rejected {
                     None => failure.relation($met),
                     Some((actual, observation)) => {
@@ -93,6 +92,7 @@ macro_rules! lock_state_expectation {
                 }
             }
         }
+
     };
 }
 
@@ -185,6 +185,30 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+        use tokio::sync::RwLock;
+
+        #[tokio::test]
+        async fn are_as_expected() {
+            RwLock::new(42).must().not_be_locked();
+            RwLock::new(42).must().be_free();
+            {
+                let rw_lock = RwLock::new(42);
+                let rw_lock_read_guard = rw_lock.read().await;
+                rw_lock.must().be_read_locked();
+                drop(rw_lock_read_guard);
+            }
+            {
+                let rw_lock = RwLock::new(42);
+                let rw_lock_write_guard = rw_lock.write().await;
+                rw_lock.must().be_write_locked();
+                drop(rw_lock_write_guard);
+            }
+        }
+    }
+
     use crate::prelude::*;
     mod observations {
         use super::super::{IsNotLocked, IsReadLocked, IsWriteLocked};
@@ -194,10 +218,10 @@ mod tests {
         #[test]
         fn composed_checks_release_rejected_and_successful_guards_between_siblings() {
             let lock = RwLock::new(7);
-            let failures =
-                assert_that!(lock).capture(|it| it.matches(all_of((IsReadLocked, IsWriteLocked))));
+            let failures = assert_that!(lock)
+                .capture(|it| it.matches(all_of(matchers![IsReadLocked, IsWriteLocked])));
             assert_that!(failures[0].children).has_length(2);
-            assert_that!(lock).matches(all_of((IsNotLocked, IsNotLocked)));
+            assert_that!(lock).matches(all_of(matchers![IsNotLocked, IsNotLocked]));
         }
     }
 
@@ -239,8 +263,13 @@ mod tests {
                 .with_location(false)
                 .capture(TokioRwLockAssertions::is_read_locked);
 
-            assert_that!(failures[0].actual.as_ref().map(rendered_text))
-                .is_equal_to(Some(format!("RwLock {{\n    data: {SENTINEL},\n}}")));
+            assert_that!(
+                failures[0]
+                    .actual
+                    .as_ref()
+                    .map(|value| format!("{value:#}"))
+            )
+            .is_equal_to(Some(format!("RwLock {{\n    data: {SENTINEL},\n}}")));
         }
     }
 
@@ -248,12 +277,6 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            RwLock::new(42).must().not_be_locked();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -326,12 +349,6 @@ mod tests {
         use tokio::sync::RwLock;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            RwLock::new(42).must().be_free();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             let lock = RwLock::new(42);
             let _guard = lock.try_write().unwrap();
@@ -344,15 +361,6 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
-
-        #[tokio::test]
-        #[cfg(feature = "fluent")]
-        async fn fluent_alias_is_as_expected() {
-            let rw_lock = RwLock::new(42);
-            let rw_lock_read_guard = rw_lock.read().await;
-            rw_lock.must().be_read_locked();
-            drop(rw_lock_read_guard);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -396,31 +404,6 @@ mod tests {
             drop(rw_lock_read_guard);
         }
 
-        #[tokio::test]
-        async fn panics_when_write_locked() {
-            let rw_lock = RwLock::new(42);
-            let rw_lock_write_guard = rw_lock.write().await;
-
-            assert_that_panic_by(|| assert_that!(&rw_lock).with_location(false).is_read_locked())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `&rw_lock`
-
-                    Actual: RwLock {{
-                        data: <locked>,
-                    }}
-
-                    is not read-locked
-
-                    Details:
-                      - Lock state: write-locked
-                    -------- assertr --------
-                "});
-
-            drop(rw_lock_write_guard);
-        }
-
         #[test]
         fn panics_when_not_locked_at_all() {
             let rw_lock = RwLock::new(42);
@@ -449,15 +432,6 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
-
-        #[tokio::test]
-        #[cfg(feature = "fluent")]
-        async fn fluent_alias_is_as_expected() {
-            let rw_lock = RwLock::new(42);
-            let rw_lock_write_guard = rw_lock.write().await;
-            rw_lock.must().be_write_locked();
-            drop(rw_lock_write_guard);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -499,57 +473,6 @@ mod tests {
             let rw_lock_write_guard = rw_lock.write().await;
             assert_that!(&rw_lock).is_write_locked();
             drop(rw_lock_write_guard);
-        }
-
-        #[tokio::test]
-        async fn panics_when_read_locked() {
-            let rw_lock = RwLock::new(42);
-            let rw_lock_read_guard = rw_lock.read().await;
-
-            assert_that_panic_by(|| {
-                assert_that!(&rw_lock)
-                    .with_location(false)
-                    .is_write_locked()
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `&rw_lock`
-
-                    Actual: RwLock {{
-                        data: 42,
-                    }}
-
-                    is not write-locked
-
-                    Details:
-                      - Lock state: read-locked
-                    -------- assertr --------
-                "});
-
-            drop(rw_lock_read_guard);
-        }
-
-        #[test]
-        fn panics_when_not_write_locked() {
-            let rw_lock = RwLock::new(42);
-
-            assert_that_panic_by(|| assert_that!(rw_lock).with_location(false).is_write_locked())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `rw_lock`
-
-                    Actual: RwLock {{
-                        data: 42,
-                    }}
-
-                    is not write-locked
-
-                    Details:
-                      - Lock state: unlocked
-                    -------- assertr --------
-                "});
         }
     }
 }

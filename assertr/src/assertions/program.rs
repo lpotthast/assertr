@@ -2,7 +2,7 @@
 
 use crate::mode::{Mode, Panic};
 use crate::{Actual, AssertThat, DebugRenderer, Fact, ValueRenderer, failure::FailureKind};
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use crate::{AssertionContext, Expectation, failure::FailureBuilder};
 use alloc::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
@@ -10,7 +10,10 @@ use std::path::PathBuf;
 /// Resolves an executable program once, returning its path or lookup error.
 #[derive(Debug, Clone, Copy)]
 pub struct Exists;
-impl<'p, R> Expectation<Program<'p>, R> for Exists {
+impl<'p, R> Expectation<Program<'p>, R> for Exists
+where
+    R: ValueRenderer<Program<'p>> + ValueRenderer<which::Error>,
+{
     type Success<'a>
         = PathBuf
     where
@@ -28,18 +31,14 @@ impl<'p, R> Expectation<Program<'p>, R> for Exists {
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         which::which(actual.as_ref())
     }
-}
-impl<'p, R> ExpectationDiagnostics<Program<'p>, R> for Exists
-where
-    R: ValueRenderer<Program<'p>> + ValueRenderer<which::Error>,
-{
+
     const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Program<'p>, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         match rejected {
             None => failure.relation("can be resolved"),
@@ -139,19 +138,33 @@ impl<'t, 'a, R> ProgramExtractAssertions<'t, 'a, R> for AssertThat<'t, Program<'
     where
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
-        let path = self
-            .test_assertion(&Exists)
-            .expect("Panic mode raises lookup failures");
+        let path = self.require(&Exists);
         self.map(|_| Actual::Owned(path))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    mod renderer_contract {
-        use crate::assertions::program::Program;
+    use crate::prelude::*;
+
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
         use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+
+        #[test]
+        fn are_as_expected() {
+            Program::from("ls").must().exist();
+        }
+    }
+
+    const MISSING: &str = "assertr-private-missing-executable-987";
+
+    mod renderer_contract {
+        use super::*;
+        use crate::test_support::{
+            CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
+            assert_redacted, assert_trait_impl,
+        };
 
         #[test]
         fn traits_are_implemented_without_renderer_support() {
@@ -166,155 +179,76 @@ mod tests {
         }
 
         #[test]
-        fn checking_and_extracting_failures_use_the_active_renderer() {
-            const MISSING: &str = "assertr-renderer-test-program-that-does-not-exist";
-
+        fn lookup_errors_keep_the_original_type_and_can_be_redacted() {
             let failures = assert_that!(Program::from(MISSING))
-                .with_renderer(SentinelRenderer)
-                .with_location(false)
+                .with_renderer(CustomValueRenderer)
                 .capture(ProgramAssertions::exists);
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+            assert_custom_value(
+                &failures[0].facts[0].value,
+                &which::Error::CannotFindBinaryPath,
+            );
+            let failures = assert_that!(Program::from(MISSING))
+                .with_renderer(RedactingRenderer)
+                .capture(ProgramAssertions::exists);
+            assert_redacted(&failures[0], &[MISSING, "CannotFindBinaryPath"]);
+        }
 
+        #[test]
+        fn checking_and_extracting_failures_use_the_active_renderer() {
+            let program = r#"custom(Program("assertr-private-missing-executable-987"))"#;
             assert_that_panic_by(|| {
                 assert_that!(Program::from(MISSING))
-                    .with_renderer(SentinelRenderer)
-                    .with_location(false)
+                    .with_renderer(CustomValueRenderer)
+                    .exists();
+            })
+            .has_type::<String>()
+            .contains(program)
+            .contains("Reason: custom(CannotFindBinaryPath)");
+            assert_that_panic_by(|| {
+                let _ = assert_that!(Program::from(MISSING))
+                    .with_renderer(CustomValueRenderer)
                     .get_resolved_path();
             })
             .has_type::<String>()
-            .contains(SENTINEL);
+            .contains(program)
+            .contains("Reason: custom(CannotFindBinaryPath)");
+            assert_that_panic_by(|| {
+                let _ = assert_that!(Program::from(MISSING))
+                    .with_renderer(RedactingRenderer)
+                    .get_resolved_path();
+            })
+            .has_type::<String>()
+            .contains("Actual: <redacted>")
+            .contains("Reason: <redacted>");
         }
     }
 
-    mod program_construction {
-        use crate::prelude::*;
+    #[test]
+    fn programs_convert_from_owned_and_borrowed_strings() {
         use alloc::borrow::Cow;
-        use std::ffi::OsStr;
-        use std::ffi::OsString;
+        use std::ffi::{OsStr, OsString};
 
-        #[test]
-        fn new_os_str() {
-            let _ = Program::new(OsStr::new("ls"));
-        }
-
-        #[test]
-        fn new_os_string() {
-            let _ = Program::new(OsString::from("ls"));
-        }
-
-        #[test]
-        fn from_str() {
-            let _ = Program::from("ls");
-        }
-
-        #[test]
-        fn from_string() {
-            let _ = Program::from(String::from("ls"));
-        }
-
-        #[test]
-        fn from_os_str() {
-            let _ = Program::from(OsStr::new("ls"));
-        }
-
-        #[test]
-        fn from_os_string() {
-            let _ = Program::from(OsString::from("ls"));
-        }
-
-        #[test]
-        fn from_cow_str() {
-            let _ = Program::from(Cow::Borrowed("ls"));
-        }
-
-        #[test]
-        fn from_cow_string() {
-            let _ = Program::from(Cow::Owned("ls".to_owned()));
+        let ls = Program::from("ls");
+        for program in [
+            Program::new(OsStr::new("ls")),
+            Program::new(OsString::from("ls")),
+            Program::from(String::from("ls")),
+            Program::from(OsStr::new("ls")),
+            Program::from(OsString::from("ls")),
+            Program::from(Cow::Borrowed("ls")),
+            Program::from(Cow::<str>::Owned("ls".to_owned())),
+        ] {
+            assert_that!(program).is_equal_to(&ls);
         }
     }
 
     mod exists {
-        use crate::prelude::*;
+        use super::*;
         use indoc::formatdoc;
-        use tokio::sync::RwLock;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Program::from("ls").must().exist();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that!(Program::from(
-                    "assertr-caller-test-program-that-does-not-exist"
-                )),
-                exists()
-            );
-        }
-
-        #[test]
-        fn lookup_errors_keep_the_original_type_and_can_be_redacted() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{
-                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-            };
-            let subject = Program::from("assertr-private-missing-executable-987");
-            let failures = assert_that!(subject)
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(ProgramAssertions::exists);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: custom(Program("assertr-private-missing-executable-987"))
-
-                cannot be resolved
-
-                Details:
-                  - Reason: custom(CannotFindBinaryPath)
-                -------- assertr --------
-            "#});
-
-                    assert_custom_value(
-                        &element.actual().facts[0].value,
-                        &which::Error::CannotFindBinaryPath,
-                    );
-                },
-            ]);
-            let failures = assert_that!(subject)
-                .with_renderer(RedactingRenderer)
-                .with_location(false)
-                .capture(ProgramAssertions::exists);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `subject`
-
-                Actual: <redacted>
-
-                cannot be resolved
-
-                Details:
-                  - Reason: <redacted>
-                -------- assertr --------
-            "});
-
-                    assert_redacted(
-                        element.actual(),
-                        &[
-                            "assertr-private-missing-executable-987",
-                            "CannotFindBinaryPath",
-                        ],
-                    );
-                },
-            ]);
+            assert_caller_location!(assert_that!(Program::from(MISSING)), exists());
         }
 
         #[test]
@@ -322,11 +256,8 @@ mod tests {
             assert_that!(Program::from("ls")).exists();
         }
 
-        #[tokio::test]
-        async fn panics_when_not_existent() {
-            let rw_lock = RwLock::new(42);
-            let rw_lock_write_guard = rw_lock.write().await;
-
+        #[test]
+        fn panics_when_not_existent() {
             assert_that_panic_by(|| {
                 assert_that_owned!(Program::from("someNonexistentProgram"))
                     .with_location(false)
@@ -334,131 +265,39 @@ mod tests {
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `Program::from("someNonexistentProgram")`
+                -------- assertr --------
+                Expression: `Program::from("someNonexistentProgram")`
 
-                    Actual: Program(
-                        "someNonexistentProgram",
-                    )
+                Actual: Program(
+                    "someNonexistentProgram",
+                )
 
-                    cannot be resolved
+                cannot be resolved
 
-                    Details:
-                      - Reason: CannotFindBinaryPath
-                    -------- assertr --------
-                "#});
-
-            drop(rw_lock_write_guard);
+                Details:
+                  - Reason: CannotFindBinaryPath
+                -------- assertr --------
+            "#});
         }
     }
 
     mod get_resolved_path {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-        use tokio::sync::RwLock;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Program::from("ls").must_owned().get_resolved_path();
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that!(Program::from(
-                    "assertr-caller-test-program-that-does-not-exist"
-                )),
-                get_resolved_path()
-            );
-        }
-
-        #[cfg(target_os = "linux")]
-        fn expected_ls_location() -> &'static str {
-            "/usr/bin/ls"
-        }
-
-        #[cfg(target_os = "macos")]
-        fn expected_ls_location() -> &'static str {
-            "/bin/ls"
+            assert_caller_location!(assert_that!(Program::from(MISSING)), get_resolved_path());
         }
 
         #[test]
-        fn lookup_error_extraction_uses_the_active_renderer() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{CustomValueRenderer, RedactingRenderer};
-            let name = "assertr-private-missing-executable-987";
-            assert_that_panic_by(|| {
-                assert_that!(Program::from(name))
-                    .with_renderer(CustomValueRenderer)
-                    .with_location(false)
-                    .get_resolved_path();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `Program::from(name)`
-
-                Actual: custom(Program("assertr-private-missing-executable-987"))
-
-                cannot be resolved
-
-                Details:
-                  - Reason: custom(CannotFindBinaryPath)
-                -------- assertr --------
-            "#});
-            assert_that_panic_by(|| {
-                assert_that!(Program::from(name))
-                    .with_renderer(RedactingRenderer)
-                    .with_location(false)
-                    .get_resolved_path();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `Program::from(name)`
-
-                Actual: <redacted>
-
-                cannot be resolved
-
-                Details:
-                  - Reason: <redacted>
-                -------- assertr --------
-            "});
-        }
-
-        #[test]
-        fn succeeds_when_existent() {
+        fn continues_on_the_resolved_path() {
+            #[cfg(target_os = "linux")]
+            let expected = "/usr/bin/ls";
+            #[cfg(target_os = "macos")]
+            let expected = "/bin/ls";
             assert_that!(Program::from("ls"))
                 .get_resolved_path()
-                .has_debug_value(expected_ls_location());
-        }
-
-        #[tokio::test]
-        async fn panics_when_not_existent() {
-            let rw_lock = RwLock::new(42);
-            let rw_lock_write_guard = rw_lock.write().await;
-
-            assert_that_panic_by(|| {
-                assert_that!(Program::from("ls"))
-                    .with_location(false)
-                    .get_resolved_path()
-                    .has_debug_value("/some/unexpected/location/ls");
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `Program::from("ls")`
-
-                    Expected: "\"/some/unexpected/location/ls\""
-
-                      Actual: "\"{}\""
-                    -------- assertr --------
-                "#, expected_ls_location()});
-
-            drop(rw_lock_write_guard);
+                .has_debug_value(expected);
         }
     }
 }

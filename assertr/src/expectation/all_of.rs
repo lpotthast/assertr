@@ -1,6 +1,6 @@
 use super::MatcherList;
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics,
+    AssertionContext, Expectation,
     expectation::Evidence,
     failure::{FailureBuilder, FailureKind},
 };
@@ -18,16 +18,7 @@ impl<A: ?Sized, R, L> Expectation<A, R> for AllOf<L>
 where
     L: MatcherList<A, R>,
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        A: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        A: 'a;
+    composite_items!(A);
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated();
         let mut matched = true;
@@ -36,26 +27,22 @@ where
         }
         context.finish(matched, |context| context.describe::<A, _>(self))
     }
-}
-impl<A: ?Sized, R, L> ExpectationDiagnostics<A, R> for AllOf<L>
-where
-    L: MatcherList<A, R>,
-{
+
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => context
-                .describe_list::<A, _, _>(&self.0, failure.relation("satisfies every constraint")),
+                .describe_list::<A, _>(&self.0, failure.relation("satisfies every constraint")),
             Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::all_of;
@@ -66,11 +53,11 @@ mod tests {
 
     #[test]
     fn composes_constraints() {
-        assert_that!(2).matches(all_of((ge(1), equal_to(2))));
+        assert_that!(2).matches(all_of(matchers![ge(1), equal_to(2)]));
     }
 
     #[test]
     fn empty_conjunction_succeeds() {
-        assert_that!(2).matches(all_of(()));
+        assert_that!(2).matches(all_of(crate::matchers![]));
     }
 }

@@ -1,6 +1,7 @@
-use crate::failure::{FailureBuilder, FailureKind};
-use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics};
+use crate::{
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    failure::{FailureBuilder, FailureKind},
+};
 
 /// A Rust pattern together with the predicate and source text needed to assert that it matches.
 ///
@@ -34,8 +35,8 @@ impl<P> Pattern<P> {
 /// Creates a pattern for use with [`PatternAssertions`] or as a reusable matcher.
 ///
 /// The subject is matched by reference, so ordinary patterns benefit from Rust's match ergonomics
-/// and do not consume the assertion subject. Pattern guards are supported. Reusable matchers
-/// require `Fn` guards. Direct pattern assertions also accept `FnOnce` guards.
+/// and do not consume the assertion subject. Pattern guards are supported. They must be reusable
+/// (`Fn`), because the same pattern serves direct assertions and reusable matchers.
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -62,6 +63,7 @@ macro_rules! pattern {
 impl<A: ?Sized, R, F> Expectation<A, R> for Pattern<F>
 where
     F: Fn(&A) -> bool,
+    R: ValueRenderer<A>,
 {
     type Success<'a>
         = ()
@@ -80,54 +82,29 @@ where
             Err(())
         }
     }
-}
-impl<A: ?Sized, R, F> ExpectationDiagnostics<A, R> for Pattern<F>
-where
-    F: Fn(&A) -> bool,
-{
+
     const KIND: FailureKind = FailureKind::Predicate;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&A, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure
-                .relation("matches the pattern")
-                .expected(self.description),
-            Some((_, ())) => failure
-                .relation("does not satisfy the constraint")
-                .constraint(context.describe(&self)),
-        }
+    ) -> FailureBuilder {
+        let render = context.render();
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.value(actual)),
+                "matches the pattern",
+                "does not match the pattern",
+            )
+            .expected(self.description)
     }
-}
-
-// Ordinary checks render the subject. Reusable positive patterns instead describe a constraint.
-fn explain_pattern_rejection<T: ?Sized, Target, R: ValueRenderer<T>>(
-    actual: &T,
-    description: &'static str,
-    negative: bool,
-    failure: FailureBuilder<Target>,
-    context: &AssertionContext<'_, R>,
-) -> FailureBuilder<Target> {
-    let failure = if negative {
-        failure
-            .unexpected(description)
-            .relation("matches the pattern")
-    } else {
-        failure
-            .expected(description)
-            .relation("does not match the pattern")
-    };
-    failure.actual(context.render().value(actual))
 }
 
 /// Rejects subjects that match a Rust pattern, retaining the unwanted pattern in diagnostics.
 ///
-/// Construct with [`new`](Self::new) and [`pattern!`](crate::pattern). Like `Pattern`, reusable
-/// guards must implement `Fn`. Ordinary [`PatternAssertions::is_not_matching`] also accepts
-/// consuming `FnOnce` guards through its execution adapter.
+/// Construct with [`new`](Self::new) and [`pattern!`](crate::pattern). Like `Pattern`, guards
+/// must implement `Fn`.
 ///
 /// ```
 /// use assertr::{matchers::DoesNotMatchPattern, prelude::*};
@@ -153,7 +130,9 @@ impl<P> DoesNotMatchPattern<P> {
     }
 }
 
-impl<T: ?Sized, R, P: Fn(&T) -> bool> Expectation<T, R> for DoesNotMatchPattern<P> {
+impl<T: ?Sized, R: ValueRenderer<T>, P: Fn(&T) -> bool> Expectation<T, R>
+    for DoesNotMatchPattern<P>
+{
     type Success<'a>
         = ()
     where
@@ -171,26 +150,22 @@ impl<T: ?Sized, R, P: Fn(&T) -> bool> Expectation<T, R> for DoesNotMatchPattern<
             Ok(())
         }
     }
-}
 
-impl<T: ?Sized, R: ValueRenderer<T>, P: Fn(&T) -> bool> ExpectationDiagnostics<T, R>
-    for DoesNotMatchPattern<P>
-{
     const KIND: FailureKind = FailureKind::Predicate;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&T, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure
-                .unexpected(self.0.description)
-                .relation("does not match the pattern"),
-            Some((actual, ())) => {
-                explain_pattern_rejection(actual, self.0.description, true, failure, context)
-            }
-        }
+    ) -> FailureBuilder {
+        let render = context.render();
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.value(actual)),
+                "does not match the pattern",
+                "matches the pattern",
+            )
+            .unexpected(self.0.description)
     }
 }
 
@@ -204,13 +179,13 @@ pub trait PatternAssertions<T, R = DebugRenderer> {
     /// Asserts that the subject matches `pattern`.
     fn is_matching<P>(self, pattern: Pattern<P>) -> Self
     where
-        P: FnOnce(&T) -> bool,
+        P: Fn(&T) -> bool,
         R: ValueRenderer<T>;
 
     /// Asserts that the subject does not match `pattern`.
     fn is_not_matching<P>(self, pattern: Pattern<P>) -> Self
     where
-        P: FnOnce(&T) -> bool,
+        P: Fn(&T) -> bool,
         R: ValueRenderer<T>;
 }
 
@@ -218,91 +193,42 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_matching<P>(self, pattern: Pattern<P>) -> Self
     where
-        P: FnOnce(&T) -> bool,
+        P: Fn(&T) -> bool,
         R: ValueRenderer<T>,
     {
-        assert_pattern(self, pattern, false)
+        self.apply_assertion(pattern)
     }
 
     #[track_caller]
     fn is_not_matching<P>(self, pattern: Pattern<P>) -> Self
     where
-        P: FnOnce(&T) -> bool,
+        P: Fn(&T) -> bool,
         R: ValueRenderer<T>,
     {
-        assert_pattern(self, pattern, true)
+        self.apply_assertion(DoesNotMatchPattern::new(pattern))
     }
-}
-
-#[track_caller]
-fn assert_pattern<T, M: Mode, R, P>(
-    this: AssertThat<'_, T, M, R>,
-    pattern: Pattern<P>,
-    negative: bool,
-) -> AssertThat<'_, T, M, R>
-where
-    P: FnOnce(&T) -> bool,
-    R: ValueRenderer<T>,
-{
-    this.track_assertion();
-    this.test_once_after_tracking(
-        FailureKind::Predicate,
-        core::panic::Location::caller(),
-        |_| {
-            if (pattern.predicate)(this.actual()) == negative {
-                Err(())
-            } else {
-                Ok(())
-            }
-        },
-        |(), failure, context| {
-            explain_pattern_rejection(
-                this.actual(),
-                pattern.description,
-                negative,
-                failure,
-                context,
-            )
-        },
-    );
-    this
 }
 
 #[cfg(test)]
 mod tests {
-    fn assert_one_use_guard_lifetime(negative: bool) {
-        use crate::prelude::*;
-        use core::cell::{Cell, RefCell};
+    use crate::prelude::*;
+    use indoc::formatdoc;
 
-        for (actual, matches) in [(Some(1), false), (Some(1), true), (None, true)] {
-            let resource = RefCell::new(());
-            let calls = Cell::new(0);
-            let renders = Cell::new(0);
-            let guard = resource.borrow_mut();
-            let pattern = pattern!(Some(_) if {
-                let _guard = guard;
-                calls.set(calls.get() + 1);
-                matches
-            });
-            let failures = assert_that!(actual)
-                .with_debug_format(|value: &Option<i32>, f: &mut core::fmt::Formatter<'_>| {
-                    assert_that!(resource.try_borrow_mut().is_ok()).is_true();
-                    renders.set(renders.get() + 1);
-                    write!(f, "{value:?}")
-                })
-                .capture(|it| {
-                    let it = if negative {
-                        it.is_not_matching(pattern)
-                    } else {
-                        it.is_matching(pattern)
-                    };
-                    assert_that!(resource.try_borrow_mut().is_ok()).is_true();
-                    it
-                });
-            assert_that!(calls.get()).is_equal_to(usize::from(actual.is_some()));
-            let failed = (actual.is_some() && matches) == negative;
-            assert_that!(failures.len()).is_equal_to(usize::from(failed));
-            assert_that!(renders.get()).is_equal_to(usize::from(failed));
+    #[derive(Debug)]
+    enum TestError {
+        MissingQueryParams,
+        MissingTokenQueryParam,
+        InvalidToken { reason: String },
+    }
+
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            Some(42).must().be_matching(pattern!(Some(42)));
+            Some(42).must().not_be_matching(pattern!(Some(43)));
         }
     }
 
@@ -319,16 +245,22 @@ mod tests {
         }
 
         #[test]
-        fn reusable_and_ordinary_patterns_share_the_predicate_kind() {
-            for failures in [
-                assert_that!(Some(1)).capture(|it| it.matches(pattern!(None))),
-                assert_that!(Some(1)).capture(|it| it.is_matching(pattern!(None))),
-                assert_that!(None::<i32>)
-                    .capture(|it| it.matches(DoesNotMatchPattern::new(pattern!(None)))),
-                assert_that!(None::<i32>).capture(|it| it.is_not_matching(pattern!(None))),
+        fn reusable_and_ordinary_patterns_report_the_same_failure() {
+            let some = || assert_that!(Some(1)).with_location(false);
+            let none = || assert_that!(None::<i32>).with_location(false);
+            for (reusable, ordinary) in [
+                (
+                    some().capture(|it| it.matches(pattern!(None))),
+                    some().capture(|it| it.is_matching(pattern!(None))),
+                ),
+                (
+                    none().capture(|it| it.matches(DoesNotMatchPattern::new(pattern!(None)))),
+                    none().capture(|it| it.is_not_matching(pattern!(None))),
+                ),
             ] {
-                assert_that!(failures).has_length(1);
-                assert_that!(failures[0].kind).is_equal_to(FailureKind::Predicate);
+                assert_that!(&reusable).has_length(1);
+                assert_that!(reusable[0].kind).is_equal_to(FailureKind::Predicate);
+                assert_that!(reusable[0].to_string()).is_equal_to(ordinary[0].to_string());
             }
         }
 
@@ -350,7 +282,7 @@ mod tests {
                 true
             }));
             let failures = assert_that!([] as [Option<i32>; 0])
-                .capture(|it| it.matches(elements_are((&forbidden,))));
+                .capture(|it| it.matches(elements_are(matchers![&forbidden])));
             let description = failures[0].children[0].constraint.as_ref().unwrap();
             assert_that!(description.relation.as_deref())
                 .is_equal_to(Some("does not match the pattern"));
@@ -365,6 +297,8 @@ mod tests {
     }
 
     mod renderer_contract {
+        use core::fmt;
+
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};
 
@@ -374,29 +308,31 @@ mod tests {
                 AssertThat<'static, i32, Panic, NoRenderer>
                     => PatternAssertions<i32, NoRenderer>
             );
-            assert_trait_impl!(
-                matchers::DoesNotMatchPattern<fn(&i32) -> bool>
-                    => Expectation<i32, NoRenderer>
-            );
-            assert_trait_impl!(
-                matchers::Pattern<fn(&i32) -> bool>
-                    => ExpectationDiagnostics<i32, NoRenderer>
-            );
+        }
+
+        #[test]
+        fn both_methods_render_the_subject_with_the_active_renderer() {
+            struct Opaque(u8);
+
+            for negative in [false, true] {
+                let failures = assert_that!(Opaque(1))
+                    .with_debug_format(|actual: &Opaque, f: &mut fmt::Formatter<'_>| {
+                        write!(f, "Opaque({})", actual.0)
+                    })
+                    .capture(|it| {
+                        if negative {
+                            it.is_not_matching(pattern!(Opaque(1)))
+                        } else {
+                            it.is_matching(pattern!(Opaque(2)))
+                        }
+                    });
+                assert_that!(failures[0].to_string()).contains("Actual: Opaque(1)");
+            }
         }
     }
 
     mod is_matching {
-        use core::fmt;
-
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Some(42).must().be_matching(pattern!(Some(42)));
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -408,46 +344,10 @@ mod tests {
             );
         }
 
-        #[derive(Debug)]
-        enum TestError {
-            MissingQueryParams,
-            MissingTokenQueryParam,
-            InvalidToken { reason: String },
-        }
-
         #[test]
         fn succeeds_when_pattern_matches() {
             assert_that!(Result::<(), TestError>::Err(TestError::MissingQueryParams))
                 .is_matching(pattern!(Err(TestError::MissingQueryParams)));
-        }
-
-        #[test]
-        fn supports_consuming_one_shot_guards() {
-            let token = String::from("token");
-            assert_that!(Some(1)).is_matching(pattern!(Some(_) if { drop(token); true }));
-        }
-
-        #[test]
-        fn one_use_guard_is_released_before_rendering_or_continuation() {
-            super::assert_one_use_guard_lifetime(false);
-        }
-
-        #[test]
-        fn rejecting_guard_runs_once_after_tracking() {
-            let calls = core::cell::Cell::new(0);
-            let token = String::from("token");
-            let failures = assert_that!(Some(1)).capture(|root| {
-                let child = root.derive(|value| value);
-                child.is_matching(pattern!(Some(_) if {
-                    assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                    calls.set(calls.get() + 1);
-                    drop(token);
-                    false
-                }));
-                root
-            });
-            assert_that!(failures).has_length(1);
-            assert_that!(calls.get()).is_equal_to(1);
         }
 
         #[test]
@@ -516,71 +416,10 @@ mod tests {
                 -------- assertr --------
             "});
         }
-
-        #[test]
-        fn works_in_capture_mode() {
-            let failures = assert_that!(Some(42))
-                .with_location(false)
-                .capture(|it| it.is_matching(pattern!(None)));
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r"
-                        -------- assertr --------
-                        Expression: `Some(42)`
-
-                        Actual: Some(
-                            42,
-                        )
-
-                        does not match the pattern
-
-                        Expected: None
-                        -------- assertr --------
-                    "});
-                },
-            ]);
-        }
-
-        #[test]
-        fn uses_the_active_renderer() {
-            struct Opaque(u8);
-
-            assert_that_panic_by(|| {
-                assert_that!(Opaque(1))
-                    .with_debug_format(|actual: &Opaque, f: &mut fmt::Formatter<'_>| {
-                        write!(f, "Opaque({})", actual.0)
-                    })
-                    .with_location(false)
-                    .is_matching(pattern!(Opaque(2)));
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `Opaque(1)`
-
-                Actual: Opaque(1)
-
-                does not match the pattern
-
-                Expected: Opaque(2)
-                -------- assertr --------
-            "});
-        }
     }
 
     mod is_not_matching {
-        use core::fmt;
-
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Some(42).must().not_be_matching(pattern!(Some(43)));
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -590,42 +429,12 @@ mod tests {
             );
         }
 
-        #[derive(Debug)]
-        enum TestError {
-            MissingQueryParams,
-            MissingTokenQueryParam,
-            InvalidToken { reason: String },
-        }
-
         #[test]
         fn succeeds_when_pattern_does_not_match() {
             assert_that!(Result::<(), TestError>::Err(
                 TestError::MissingTokenQueryParam
             ))
             .is_not_matching(pattern!(Err(TestError::MissingQueryParams)));
-        }
-
-        #[test]
-        fn one_use_guard_is_released_before_rendering_or_continuation() {
-            super::assert_one_use_guard_lifetime(true);
-        }
-
-        #[test]
-        fn rejecting_guard_runs_once_after_tracking() {
-            let calls = core::cell::Cell::new(0);
-            let token = String::from("token");
-            let failures = assert_that!(Some(1)).capture(|root| {
-                let child = root.derive(|value| value);
-                child.is_not_matching(pattern!(Some(_) if {
-                    assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                    calls.set(calls.get() + 1);
-                    drop(token);
-                    true
-                }));
-                root
-            });
-            assert_that!(failures).has_length(1);
-            assert_that!(calls.get()).is_equal_to(1);
         }
 
         #[test]
@@ -657,57 +466,6 @@ mod tests {
                 matches the pattern
 
                 Unexpected: Err(TestError::MissingQueryParams)
-                -------- assertr --------
-            "});
-        }
-
-        #[test]
-        fn works_in_capture_mode() {
-            let failures = assert_that!(Some(42))
-                .with_location(false)
-                .capture(|it| it.is_not_matching(pattern!(Some(42))));
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r"
-                        -------- assertr --------
-                        Expression: `Some(42)`
-
-                        Actual: Some(
-                            42,
-                        )
-
-                        matches the pattern
-
-                        Unexpected: Some(42)
-                        -------- assertr --------
-                    "});
-                },
-            ]);
-        }
-
-        #[test]
-        fn uses_the_active_renderer() {
-            struct Opaque(u8);
-
-            assert_that_panic_by(|| {
-                assert_that!(Opaque(1))
-                    .with_debug_format(|actual: &Opaque, f: &mut fmt::Formatter<'_>| {
-                        write!(f, "Opaque({})", actual.0)
-                    })
-                    .with_location(false)
-                    .is_not_matching(pattern!(Opaque(1)));
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `Opaque(1)`
-
-                Actual: Opaque(1)
-
-                matches the pattern
-
-                Unexpected: Opaque(1)
                 -------- assertr --------
             "});
         }

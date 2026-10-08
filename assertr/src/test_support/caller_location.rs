@@ -2,48 +2,34 @@
 
 use crate::{
     AssertionFailure,
-    failure::adapter::{Adapter, AdapterExt, Then, ToHumanReadableText},
     prelude::{PartialEqAssertions, ResultAssertions, assert_that},
 };
-use alloc::{rc::Rc, vec::Vec};
-use core::{convert::Infallible, panic::Location};
+use alloc::{
+    boxed::Box,
+    rc::Rc,
+    string::{String, ToString},
+    vec::Vec,
+};
+use core::panic::{Location, RefUnwindSafe};
 use std::sync::Mutex;
 
-type FailureLocation = Option<&'static Location<'static>>;
-
-/// Records the failure's location and forwards the failure to the next adapter.
-pub(crate) struct LocationRecorder {
-    recorded_locations: Rc<Mutex<Vec<FailureLocation>>>,
-}
-
-impl Adapter<AssertionFailure> for LocationRecorder {
-    type Output = AssertionFailure;
-    type Error = Infallible;
-
-    fn adapt(&self, failure: &AssertionFailure) -> Result<Self::Output, Self::Error> {
-        self.recorded_locations
-            .lock()
-            .unwrap()
-            .push(failure.location);
-        Ok(failure.clone())
-    }
-}
+/// A panic presentation recording the failure's location before producing the default report.
+pub(crate) type LocationRecorder = Box<dyn Fn(&AssertionFailure) -> String + RefUnwindSafe>;
 
 /// Runs an assertion with a recording presentation, then checks its captured caller location.
 #[track_caller]
-pub(crate) fn check_caller_location(
-    assertions: impl FnOnce(Then<LocationRecorder, ToHumanReadableText>),
-) {
+pub(crate) fn check_caller_location(assertions: impl FnOnce(LocationRecorder)) {
     let expected = Location::caller();
     let recorded_locations = Rc::new(Mutex::new(Vec::new()));
 
     // The assertion context owns its presentation. Retain a handle to the recorded locations so
     // they survive unwinding and can be checked after the assertion panics.
-    let recorder = LocationRecorder {
-        recorded_locations: Rc::clone(&recorded_locations),
-    };
+    let recorder = Rc::clone(&recorded_locations);
     let outcome = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
-        assertions(recorder.then(ToHumanReadableText));
+        assertions(Box::new(move |failure: &AssertionFailure| {
+            recorder.lock().unwrap().push(failure.location);
+            failure.to_string()
+        }));
     }));
     assert_that!(outcome)
         .with_detail_message("expected an assertion failure")

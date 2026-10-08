@@ -1,5 +1,6 @@
+use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics,
+    AssertionContext, Expectation,
     assertions::collection::Collection,
     expectation::Evidence,
     failure::{FailureBuilder, FailureKind},
@@ -16,18 +17,9 @@ pub fn each<M>(matcher: M) -> Each<M> {
 
 impl<C: Collection + ?Sized, R, M> Expectation<C, R> for Each<M>
 where
-    M: ExpectationDiagnostics<C::Item, R>,
+    M: Expectation<C::Item, R>,
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        C: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        C: 'a;
+    composite_items!(C);
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated_for_order(C::PRESENTATION.order());
         let mut matched = true;
@@ -36,19 +28,14 @@ where
         }
         context.finish(matched, |context| context.describe::<C, _>(self))
     }
-}
-impl<C: Collection + ?Sized, R, M> ExpectationDiagnostics<C, R> for Each<M>
-where
-    M: ExpectationDiagnostics<C::Item, R>,
-{
+
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&C, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => failure
                 .relation("has every element matching")
@@ -57,6 +44,7 @@ where
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::each;

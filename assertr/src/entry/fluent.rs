@@ -89,83 +89,47 @@ pub trait IntoAssertContext<'t> {
     /// are collected and returned as structured [`crate::AssertionFailure`] values.
     ///
     /// See [`AssertThat::capture`] for the capture-closure contract.
+    #[track_caller]
     #[must_use = "The captured failures must be inspected. Use `must()` to panic on failure instead."]
     fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
         F: FnOnce(AssertThat<'t, Self::Subject, Capture>) -> AssertThat<'t, U, Capture, R2>;
 }
 
+/// Implements [`IntoAssertContext`] for one receiver shape, given its conversion into the subject.
 #[cfg(feature = "fluent")]
-impl<'t, T: 't> IntoAssertContext<'t> for &'t T {
-    type Subject = T;
+macro_rules! into_assert_context {
+    ([$($generics:tt)*] $receiver:ty => $subject:ty, |$this:ident| $actual:expr) => {
+        impl<$($generics)*> IntoAssertContext<'t> for $receiver {
+            type Subject = $subject;
 
-    fn must(self) -> AssertThat<'t, T, Panic> {
-        AssertThat::new_panicking(Actual::Borrowed(self))
-    }
+            fn must(self) -> AssertThat<'t, $subject, Panic> {
+                let $this = self;
+                let actual: Actual<'t, $subject> = $actual;
+                AssertThat::new(actual)
+            }
 
-    #[track_caller]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
-    where
-        F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
-    {
-        AssertThat::new_fluent_capturing(Actual::Borrowed(self)).run_and_collect(assertions)
-    }
+            #[track_caller]
+            fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
+            where
+                F: FnOnce(AssertThat<'t, $subject, Capture>) -> AssertThat<'t, U, Capture, R2>,
+            {
+                let $this = self;
+                let actual: Actual<'t, $subject> = $actual;
+                AssertThat::new_fluent_capturing(actual).collect_failures(assertions)
+            }
+        }
+    };
 }
 
 #[cfg(feature = "fluent")]
-impl<'t, T: 't> IntoAssertContext<'t> for &'t mut T {
-    type Subject = T;
-
-    fn must(self) -> AssertThat<'t, T, Panic> {
-        AssertThat::new_panicking(Actual::Borrowed(self))
-    }
-
-    #[track_caller]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
-    where
-        F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
-    {
-        AssertThat::new_fluent_capturing(Actual::Borrowed(self)).run_and_collect(assertions)
-    }
-}
-
+into_assert_context!(['t, T: 't] &'t T => T, |this| Actual::Borrowed(this));
 #[cfg(feature = "fluent")]
-impl<'t, T: 't> IntoAssertContext<'t> for &'t mut [T] {
-    type Subject = &'t [T];
-
-    fn must(self) -> AssertThat<'t, &'t [T], Panic> {
-        let shared: &'t [T] = self;
-        AssertThat::new_panicking(Actual::Owned(shared))
-    }
-
-    #[track_caller]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
-    where
-        F: FnOnce(AssertThat<'t, &'t [T], Capture>) -> AssertThat<'t, U, Capture, R2>,
-    {
-        let shared: &'t [T] = self;
-        AssertThat::new_fluent_capturing(Actual::Owned(shared)).run_and_collect(assertions)
-    }
-}
-
+into_assert_context!(['t, T: 't] &'t mut T => T, |this| Actual::Borrowed(this));
 #[cfg(feature = "fluent")]
-impl<'t> IntoAssertContext<'t> for &'t mut str {
-    type Subject = &'t str;
-
-    fn must(self) -> AssertThat<'t, &'t str, Panic> {
-        let shared: &'t str = self;
-        AssertThat::new_panicking(Actual::Owned(shared))
-    }
-
-    #[track_caller]
-    fn verify<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
-    where
-        F: FnOnce(AssertThat<'t, &'t str, Capture>) -> AssertThat<'t, U, Capture, R2>,
-    {
-        let shared: &'t str = self;
-        AssertThat::new_fluent_capturing(Actual::Owned(shared)).run_and_collect(assertions)
-    }
-}
+into_assert_context!(['t, T: 't] &'t mut [T] => &'t [T], |this| Actual::Owned(this));
+#[cfg(feature = "fluent")]
+into_assert_context!(['t] &'t mut str => &'t str, |this| Actual::Owned(this));
 
 /// Fluent entry points that preserve ownership of their receiver.
 ///
@@ -196,7 +160,7 @@ pub trait IntoOwnedAssertContext<'t>: Sized {
 #[cfg(feature = "fluent")]
 impl<'t, T: 't> IntoOwnedAssertContext<'t> for T {
     fn must_owned(self) -> AssertThat<'t, T, Panic> {
-        AssertThat::new_panicking(Actual::Owned(self))
+        AssertThat::new(Actual::Owned(self))
     }
 
     #[track_caller]
@@ -204,7 +168,7 @@ impl<'t, T: 't> IntoOwnedAssertContext<'t> for T {
     where
         F: FnOnce(AssertThat<'t, T, Capture>) -> AssertThat<'t, U, Capture, R2>,
     {
-        AssertThat::new_fluent_capturing(Actual::Owned(self)).run_and_collect(assertions)
+        AssertThat::new_fluent_capturing(Actual::Owned(self)).collect_failures(assertions)
     }
 }
 

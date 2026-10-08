@@ -1,25 +1,39 @@
 use crate::assertions::HasLength;
 use crate::failure::FailureKind;
 use crate::mode::{Mode, Panic};
+use crate::renderer::{Rendered, RenderingContext};
 use crate::{AssertThat, DebugRenderer, ValueRenderer};
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
+use crate::{AssertionContext, Expectation, failure::FailureBuilder};
 use alloc::borrow::ToOwned;
 use alloc::string::String;
+
+/// Renders a header value with its contents visible, even when it is marked sensitive.
+///
+/// The `Debug` form of a sensitive `HeaderValue` hides its contents, but a failing header check
+/// must show the value it asserted. The active renderer therefore receives an unmarked diagnostic
+/// copy, so a renderer that redacts header values still applies. The subject stays unchanged.
+fn reveal<R: ValueRenderer<http::HeaderValue>>(
+    render: RenderingContext<'_, R>,
+    value: &http::HeaderValue,
+) -> Rendered {
+    if value.is_sensitive() {
+        let mut visible = value.clone();
+        visible.set_sensitive(false);
+        render.value(&visible)
+    } else {
+        render.value(value)
+    }
+}
 
 /// Checks printable ASCII and horizontal tabs, returning the accepted header string.
 #[derive(Debug, Clone, Copy)]
 pub struct IsAscii;
-impl<R> Expectation<http::HeaderValue, R> for IsAscii {
-    type Success<'a>
-        = &'a str
-    where
-        Self: 'a,
-        http::HeaderValue: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        http::HeaderValue: 'a;
+impl<R> Expectation<http::HeaderValue, R> for IsAscii
+where
+    R: ValueRenderer<http::HeaderValue>,
+{
+    type Success<'a> = &'a str;
+    type Rejection<'a> = ();
     fn evaluate<'a>(
         &'a self,
         actual: &'a http::HeaderValue,
@@ -27,94 +41,40 @@ impl<R> Expectation<http::HeaderValue, R> for IsAscii {
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         actual.to_str().map_err(|_| ())
     }
-}
-impl<R> ExpectationDiagnostics<http::HeaderValue, R> for IsAscii
-where
-    R: ValueRenderer<http::HeaderValue>,
-{
+
     const KIND: FailureKind = FailureKind::Predicate;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a http::HeaderValue, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        match rejected {
-            None => failure.relation("is ASCII"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual))
-                .relation("is not ASCII"),
-        }
+        failure.relations(
+            rejected.map(|(actual, ())| reveal(render, actual)),
+            "is ASCII",
+            "is not ASCII",
+        )
     }
 }
 
-/// Generates a header-value sensitivity expectation.
-macro_rules! sensitivity_expectation {
-    ($(#[$meta:meta])* $name:ident, sensitive: $sensitive:literal, $met:literal, $unmet:literal) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, Copy)]
-        pub struct $name;
-        impl<R> Expectation<http::HeaderValue, R> for $name {
-            type Success<'a>
-                = ()
-            where
-                Self: 'a,
-                http::HeaderValue: 'a;
-            type Rejection<'a>
-                = ()
-            where
-                Self: 'a,
-                http::HeaderValue: 'a;
-            fn evaluate<'a>(
-                &'a self,
-                actual: &'a http::HeaderValue,
-                _context: &AssertionContext<'_, R>,
-            ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-                if actual.is_sensitive() == $sensitive {
-                    Ok(())
-                } else {
-                    Err(())
-                }
-            }
-        }
-        impl<R> ExpectationDiagnostics<http::HeaderValue, R> for $name
-        where
-            R: ValueRenderer<http::HeaderValue>,
-        {
-            const KIND: FailureKind = FailureKind::Other;
-            fn explain<'a, Target>(
-                &'a self,
-                rejected: Option<(&'a http::HeaderValue, Self::Rejection<'a>)>,
-                failure: FailureBuilder<Target>,
-                context: &AssertionContext<'_, R>,
-            ) -> FailureBuilder<Target> {
-                match rejected {
-                    None => failure.relation($met),
-                    Some((actual, ())) => failure
-                        .actual(context.render().value(actual))
-                        .relation($unmet),
-                }
-            }
-        }
-    };
+property_expectation! {
+    /// Checks whether a header value is marked sensitive.
+    pub struct IsSensitive for http::HeaderValue;
+    kind Other;
+    check |actual| actual.is_sensitive();
+    relations "is sensitive", "is not sensitive";
+    present reveal;
 }
 
-sensitivity_expectation!(
-    /// Checks whether a header value is marked sensitive.
-    IsSensitive,
-    sensitive: true,
-    "is sensitive",
-    "is not sensitive"
-);
-
-sensitivity_expectation!(
+property_expectation! {
     /// Checks whether a header value is not marked sensitive.
-    IsInsensitive,
-    sensitive: false,
-    "is insensitive",
-    "is sensitive"
-);
+    pub struct IsInsensitive for http::HeaderValue;
+    kind Other;
+    check |actual| !actual.is_sensitive();
+    relations "is insensitive", "is sensitive";
+    present reveal;
+}
 
 /// The header value's length in bytes, enabling
 /// [`LengthAssertions`](crate::assertions::core::length::LengthAssertions).
@@ -129,6 +89,9 @@ impl HasLength for http::HeaderValue {
 }
 
 /// Non-extracting assertions for [`http::HeaderValue`].
+///
+/// Failure diagnostics display header contents even when the value is marked sensitive, so test
+/// failures expose the value being asserted. The rendering budget still applies.
 ///
 /// Length assertions such as `is_empty`, `is_not_empty`, and `has_length` come from
 /// [`LengthAssertions`](crate::assertions::core::length::LengthAssertions) and count bytes.
@@ -229,19 +192,42 @@ impl<'t, R> HttpHeaderValueExtractAssertions<'t, R>
     where
         R: ValueRenderer<http::header::HeaderValue>,
     {
-        let value = self
-            .test_assertion(&IsAscii)
-            .expect("Panic mode raises invalid ASCII")
-            .to_owned();
+        let value = self.require(&IsAscii).to_owned();
         self.map(|_| value.into())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+        use http::HeaderValue;
+
+        #[test]
+        fn are_as_expected() {
+            let mut sensitive = HeaderValue::from_static("http/1.1");
+            sensitive.set_sensitive(true);
+            sensitive.must().be_sensitive();
+
+            let actual = HeaderValue::from_static("http/1.1");
+            actual
+                .must()
+                .be_insensitive()
+                .be_ascii()
+                .be_ascii_satisfying(|s| {
+                    s.starts_with("http");
+                });
+            actual.must().get_ascii().is_equal_to("http/1.1");
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use crate::test_support::{
+            NoRenderer, RedactingRenderer, SENTINEL, SentinelRenderer, assert_redacted,
+            assert_trait_impl,
+        };
         use http::HeaderValue;
 
         #[test]
@@ -263,48 +249,41 @@ mod tests {
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(HttpHeaderValueAssertions::is_ascii);
-            assert_that!(ToHumanReadableText.render(&opaque_failures[0])).contains(SENTINEL);
+            assert_that!(opaque_failures[0].to_string()).contains(SENTINEL);
 
             let visible = HeaderValue::from_static("visible");
             let projected_failures = assert_that!(visible)
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(HttpHeaderValueAssertions::is_sensitive);
-            assert_that!(ToHumanReadableText.render(&projected_failures[0])).contains(SENTINEL);
+            assert_that!(projected_failures[0].to_string()).contains(SENTINEL);
+        }
+
+        #[test]
+        fn redacting_renderers_still_redact_sensitive_values() {
+            let mut actual = HeaderValue::from_static("secret");
+            actual.set_sensitive(true);
+
+            let failures = assert_that!(actual)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(HttpHeaderValueAssertions::is_insensitive);
+
+            assert_redacted(&failures[0], &["secret"]);
         }
     }
 
-    mod length {
+    #[test]
+    fn length_assertions_count_header_bytes() {
         use crate::prelude::*;
         use http::HeaderValue;
-        use indoc::formatdoc;
 
-        #[test]
-        fn length_assertions_count_header_bytes() {
-            assert_that!(HeaderValue::from_static("")).is_empty();
-            assert_that!(HeaderValue::from_static("http/1.1"))
-                .is_not_empty()
-                .has_length(8);
-            assert_that!(HeaderValue::from_bytes(b"\xFF").expect("valid opaque header bytes"))
-                .has_length(1);
-        }
-
-        #[test]
-        fn panics_when_not_empty() {
-            let actual = HeaderValue::from_static("http/1.1");
-
-            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_empty())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `actual`
-
-                    Actual: HeaderValue "http/1.1"
-
-                    is not empty
-                    -------- assertr --------
-                "#});
-        }
+        assert_that!(HeaderValue::from_static("")).is_empty();
+        assert_that!(HeaderValue::from_static("http/1.1"))
+            .is_not_empty()
+            .has_length(8);
+        assert_that!(HeaderValue::from_bytes(b"\xFF").expect("valid opaque header bytes"))
+            .has_length(1);
     }
 
     mod is_sensitive {
@@ -313,23 +292,14 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.set_sensitive(true);
-            actual.must().be_sensitive();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
-            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.set_sensitive(false);
+            let actual = HeaderValue::from_static("http/1.1");
             assert_caller_location!(assert_that!(actual), is_sensitive());
         }
 
         #[test]
         fn succeeds_when_sensitive() {
-            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+            let mut actual = HeaderValue::from_static("http/1.1");
             actual.set_sensitive(true);
 
             assert_that!(actual).is_sensitive();
@@ -337,8 +307,7 @@ mod tests {
 
         #[test]
         fn panics_when_insensitive() {
-            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.set_sensitive(false);
+            let actual = HeaderValue::from_static("http/1.1");
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_sensitive())
                 .has_type::<String>()
@@ -360,50 +329,33 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.must().be_insensitive();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
-            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+            let mut actual = HeaderValue::from_static("http/1.1");
             actual.set_sensitive(true);
             assert_caller_location!(assert_that!(actual), is_insensitive());
         }
 
         #[test]
-        fn not_sensitive_by_default() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-
-            assert_that!(actual).is_insensitive();
+        fn succeeds_when_not_marked_sensitive() {
+            assert_that!(HeaderValue::from_static("http/1.1")).is_insensitive();
         }
 
         #[test]
-        fn succeeds_when_insensitive() {
-            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.set_sensitive(false);
-
-            assert_that!(actual).is_insensitive();
-        }
-
-        #[test]
-        fn panics_when_sensitive() {
-            let mut actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+        fn panics_with_the_revealed_value_when_sensitive() {
+            let mut actual = HeaderValue::from_static("http/1.1");
             actual.set_sensitive(true);
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).is_insensitive())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
+                .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `actual`
 
-                    Actual: Sensitive
+                    Actual: "http/1.1"
 
                     is sensitive
                     -------- assertr --------
-                "});
+                "#});
         }
     }
 
@@ -413,13 +365,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.must().be_ascii();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
             assert_caller_location!(assert_that!(actual), is_ascii());
@@ -427,7 +372,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_ascii_and_retains_the_subject() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+            let actual = HeaderValue::from_static("http/1.1");
 
             assert_that!(actual).is_ascii().is_not_empty();
         }
@@ -450,34 +395,23 @@ mod tests {
         }
 
         #[test]
-        fn works_in_capture_mode() {
-            let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
+        fn shows_sensitive_contents_and_keeps_the_subject_sensitive() {
+            let mut actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
+            actual.set_sensitive(true);
 
             let failures = assert_that!(actual)
                 .with_location(false)
                 .capture(|it| it.is_ascii().is_not_empty());
 
-            assert_that!(&failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element
-                        .derive_owned(|value| ToHumanReadableText.render(value))
-                        .contains("is not ASCII");
-                },
-            ]);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].to_string()).contains(r#"Actual: " !\xff""#);
+            assert_that!(actual.is_sensitive()).is_true();
         }
     }
 
     mod get_ascii {
         use crate::prelude::*;
         use http::header::HeaderValue;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let actual = HeaderValue::from_static("http/1.1");
-            actual.must().get_ascii().is_equal_to("http/1.1");
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -486,67 +420,27 @@ mod tests {
         }
 
         #[test]
-        fn extracts_the_value_when_constructed_from_visible_ascii_characters_through_str() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-
+        fn extracts_visible_ascii_values() {
+            let actual = HeaderValue::from_static("http/1.1");
             assert_that!(actual).get_ascii().is_equal_to("http/1.1");
-        }
 
-        #[test]
-        fn extracts_the_value_when_constructed_from_visible_ascii_characters_through_bytes() {
             let actual = HeaderValue::from_bytes(&[32, 33, 34]).expect("valid header value");
-
             assert_that!(actual).get_ascii().is_equal_to(" !\"");
         }
 
         #[test]
-        fn panics_when_constructed_from_non_ascii_characters_through_str() {
+        fn rejects_non_ascii_utf8_values() {
             let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
 
             assert_that_panic_by(|| assert_that!(actual).with_location(false).get_ascii())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `actual`
-
-                    Actual: "\xc3\x84"
-
-                    is not ASCII
-                    -------- assertr --------
-                "#});
-        }
-
-        #[test]
-        fn panics_when_constructed_from_non_ascii_characters_through_bytes() {
-            let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
-
-            assert_that_panic_by(|| assert_that!(actual).with_location(false).get_ascii())
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `actual`
-
-                    Actual: " !\xff"
-
-                    is not ASCII
-                    -------- assertr --------
-                "#});
+                .contains(r#"Actual: "\xc3\x84""#);
         }
     }
 
     mod is_ascii_satisfying {
         use crate::prelude::*;
         use http::header::HeaderValue;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-            actual.must().be_ascii_satisfying(|s| {
-                s.starts_with("http");
-            });
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -561,7 +455,7 @@ mod tests {
 
         #[test]
         fn succeeds_when_ascii_and_assertions_pass() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
+            let actual = HeaderValue::from_static("http/1.1");
 
             assert_that!(actual).is_ascii_satisfying(|s| {
                 s.starts_with("http");
@@ -569,56 +463,23 @@ mod tests {
         }
 
         #[test]
-        fn collects_failure_in_capture_mode_when_ascii_but_assertion_fails() {
-            let actual = HeaderValue::from_str("http/1.1").expect("valid header value");
-
-            let failures = assert_that!(actual).with_location(false).capture(|it| {
+        fn collects_either_the_ascii_or_the_callback_failure_in_capture_mode() {
+            let ascii = HeaderValue::from_static("http/1.1");
+            let failures = assert_that!(ascii).with_location(false).capture(|it| {
                 it.is_ascii_satisfying(|s| {
                     s.starts_with("ftp");
                 })
             });
-            assert_that!(failures).has_length(1);
-        }
+            assert_that!(failures[0].to_string()).contains("does not start with");
 
-        #[test]
-        fn collects_failure_in_capture_mode_when_not_ascii() {
-            let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
-
-            let failures = assert_that!(actual).with_location(false).capture(|it| {
+            let opaque = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
+            let failures = assert_that!(opaque).with_location(false).capture(|it| {
                 it.is_ascii_satisfying(|s| {
                     s.starts_with("http");
                 })
             });
-            assert_that!(failures).contains_exactly_satisfying([
-                |failure: AssertThat<AssertionFailure, Capture>| {
-                    failure
-                        .derive_owned(|failure| ToHumanReadableText.render(failure))
-                        .contains("is not ASCII");
-                },
-            ]);
-        }
-
-        #[test]
-        fn panics_when_not_ascii_in_panic_mode() {
-            let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
-
-            assert_that_panic_by(|| {
-                assert_that!(actual)
-                    .with_location(false)
-                    .is_ascii_satisfying(|s| {
-                        s.starts_with("http");
-                    })
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `actual`
-
-                Actual: " !\xff"
-
-                is not ASCII
-                -------- assertr --------
-            "#});
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].to_string()).contains("is not ASCII");
         }
     }
 }

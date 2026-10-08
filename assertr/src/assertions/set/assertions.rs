@@ -65,6 +65,22 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+        use alloc::collections::BTreeSet;
+
+        #[test]
+        fn are_as_expected() {
+            let set = BTreeSet::from(["foo"]);
+            set.must().be_subset_of(BTreeSet::from(["foo", "bar"]));
+            BTreeSet::from(["foo", "bar"])
+                .must()
+                .be_superset_of(set.clone());
+            set.must().be_disjoint_from(BTreeSet::from(["bar"]));
+        }
+    }
+
     mod renderer_contract {
         use alloc::collections::BTreeSet;
 
@@ -80,22 +96,39 @@ mod tests {
         }
     }
 
-    mod is_subset_of {
+    /// Every relation accepts hash sets, borrowed sets, other hashers, and other set types.
+    #[cfg(feature = "std")]
+    mod set_types {
         use alloc::collections::BTreeSet;
-        #[cfg(feature = "std")]
         use std::collections::{HashSet, hash_map::RandomState};
-        #[cfg(feature = "std")]
         use std::hash::{BuildHasherDefault, DefaultHasher};
 
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let set = BTreeSet::from(["foo"]);
-            set.must().be_subset_of(BTreeSet::from(["foo", "bar"]));
+        fn relations_accept_any_set_type() {
+            let small: HashSet<&str, RandomState> = HashSet::from(["foo"]);
+            let mut large: HashSet<&str, BuildHasherDefault<DefaultHasher>> =
+                HashSet::with_hasher(BuildHasherDefault::default());
+            large.extend(["foo", "bar"]);
+            let other = BTreeSet::from(["baz"]);
+            assert_that!(&small)
+                .is_subset_of(&large)
+                .is_disjoint_from(&other);
+            assert_that!(&large)
+                .is_superset_of(&small)
+                .is_superset_of(BTreeSet::from(["bar"]));
+            assert_that!(other)
+                .is_subset_of(HashSet::from(["baz", "qux"]))
+                .is_disjoint_from(small);
         }
+    }
+
+    mod is_subset_of {
+        use alloc::collections::BTreeSet;
+
+        use crate::prelude::*;
+        use indoc::formatdoc;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -111,94 +144,7 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_for_hash_sets() {
-            assert_that!(HashSet::from(["foo"])).is_subset_of(HashSet::from(["foo", "bar"]));
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_with_borrowed_actual_and_expected_sets() {
-            let actual = HashSet::from(["foo"]);
-            let expected = HashSet::from(["foo", "bar"]);
-
-            assert_that!(&actual).is_subset_of(&expected);
-        }
-
-        #[test]
-        fn a_borrowed_expected_set_keeps_the_underlying_set_type() {
-            let mut expected = BTreeSet::new();
-            let mut actual = BTreeSet::from(["extra"]);
-            let failures = assert_that_owned!(&mut actual)
-                .with_location(false)
-                .capture(|it| it.is_subset_of(&expected).is_subset_of(&mut expected));
-            assert_that!(failures).has_length(2);
-            assert_that!(failures[1].facts).is_equal_to(failures[0].facts.clone());
-
-            assert_that!(failures[0].facts.as_slice()).contains_exactly_satisfying([
-                |element: AssertThat<crate::Fact, Capture>| {
-                    element
-                        .derive_owned(|item| item.label.as_ref())
-                        .is_equal_to("Elements not in expected");
-                    element
-                        .derive_owned(|item| rendered_text(&item.value))
-                        .is_equal_to("[\n    \"extra\",\n]");
-                },
-            ]);
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_with_different_hashers() {
-            let actual: HashSet<&str, RandomState> = HashSet::from(["foo"]);
-            let mut expected: HashSet<&str, BuildHasherDefault<DefaultHasher>> =
-                HashSet::with_hasher(BuildHasherDefault::default());
-            expected.insert("foo");
-            expected.insert("bar");
-
-            assert_that!(actual).is_subset_of(expected);
-        }
-
-        /// The generic signature compares any set against any other, not only sets of one type.
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_across_set_types() {
-            assert_that!(HashSet::from(["foo"])).is_subset_of(BTreeSet::from(["foo", "bar"]));
-            assert_that!(BTreeSet::from(["foo"])).is_subset_of(HashSet::from(["foo", "bar"]));
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn panics_when_actual_contains_extra_elements() {
-            assert_that_panic_by(|| {
-                assert_that!(HashSet::from(["bar"]))
-                    .with_location(false)
-                    .is_subset_of(BTreeSet::<&str>::new());
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `HashSet::from(["bar"])`
-
-                    Actual: HashSet {{
-                        "bar",
-                    }}
-
-                    is not a subset of
-
-                    Expected: BTreeSet {{}}
-
-                    Details:
-                      - Elements not in expected: [
-                            "bar",
-                        ]
-                      - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
-                    -------- assertr --------
-                "#});
-        }
-
-        #[test]
-        fn panics_naming_the_btree_set_type() {
+        fn panics_with_the_elements_not_in_expected() {
             assert_that_panic_by(|| {
                 assert_that!(BTreeSet::from(["bar"]))
                     .with_location(false)
@@ -228,20 +174,9 @@ mod tests {
 
     mod is_superset_of {
         use alloc::collections::BTreeSet;
-        #[cfg(feature = "std")]
-        use std::collections::{HashSet, hash_map::RandomState};
-        #[cfg(feature = "std")]
-        use std::hash::{BuildHasherDefault, DefaultHasher};
 
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let set = BTreeSet::from(["foo", "bar"]);
-            set.must().be_superset_of(BTreeSet::from(["foo"]));
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -257,69 +192,7 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_for_hash_sets() {
-            assert_that!(HashSet::from(["foo", "bar"])).is_superset_of(HashSet::from(["foo"]));
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_with_borrowed_actual_and_expected_sets() {
-            let actual = HashSet::from(["foo", "bar"]);
-            let expected = HashSet::from(["foo"]);
-
-            assert_that!(&actual).is_superset_of(&expected);
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_with_different_hashers() {
-            let actual: HashSet<&str, RandomState> = HashSet::from(["foo", "bar"]);
-            let mut expected: HashSet<&str, BuildHasherDefault<DefaultHasher>> =
-                HashSet::with_hasher(BuildHasherDefault::default());
-            expected.insert("foo");
-
-            assert_that!(actual).is_superset_of(expected);
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_across_set_types() {
-            assert_that!(HashSet::from(["foo", "bar"])).is_superset_of(BTreeSet::from(["foo"]));
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn panics_when_actual_is_missing_elements() {
-            assert_that_panic_by(|| {
-                assert_that!(HashSet::<&str>::new())
-                    .with_location(false)
-                    .is_superset_of(BTreeSet::from(["bar"]));
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `HashSet::<&str>::new()`
-
-                    Actual: HashSet {{}}
-
-                    is not a superset of
-
-                    Expected: BTreeSet {{
-                        "bar",
-                    }}
-
-                    Details:
-                      - Elements not in actual: [
-                            "bar",
-                        ]
-                      - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
-                    -------- assertr --------
-                "#});
-        }
-
-        #[test]
-        fn panics_naming_the_btree_set_type() {
+        fn panics_with_the_elements_not_in_actual() {
             assert_that_panic_by(|| {
                 assert_that!(BTreeSet::<&str>::new())
                     .with_location(false)
@@ -349,20 +222,9 @@ mod tests {
 
     mod is_disjoint_from {
         use alloc::collections::BTreeSet;
-        #[cfg(feature = "std")]
-        use std::collections::{HashSet, hash_map::RandomState};
-        #[cfg(feature = "std")]
-        use std::hash::{BuildHasherDefault, DefaultHasher};
 
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let set = BTreeSet::from(["foo"]);
-            set.must().be_disjoint_from(BTreeSet::from(["bar"]));
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -378,71 +240,7 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_for_hash_sets() {
-            assert_that!(HashSet::from(["foo"])).is_disjoint_from(HashSet::from(["bar"]));
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_with_borrowed_actual_and_expected_sets() {
-            let actual = HashSet::from(["foo"]);
-            let expected = HashSet::from(["bar"]);
-
-            assert_that!(&actual).is_disjoint_from(&expected);
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_with_different_hashers() {
-            let actual: HashSet<&str, RandomState> = HashSet::from(["foo"]);
-            let mut expected: HashSet<&str, BuildHasherDefault<DefaultHasher>> =
-                HashSet::with_hasher(BuildHasherDefault::default());
-            expected.insert("bar");
-
-            assert_that!(actual).is_disjoint_from(expected);
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn succeeds_across_set_types() {
-            assert_that!(HashSet::from(["foo"])).is_disjoint_from(BTreeSet::from(["bar"]));
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn panics_when_sets_overlap() {
-            assert_that_panic_by(|| {
-                assert_that!(HashSet::from(["foo"]))
-                    .with_location(false)
-                    .is_disjoint_from(BTreeSet::from(["foo"]));
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `HashSet::from(["foo"])`
-
-                    Actual: HashSet {{
-                        "foo",
-                    }}
-
-                    is not disjoint from
-
-                    Expected: BTreeSet {{
-                        "foo",
-                    }}
-
-                    Details:
-                      - Overlapping elements: [
-                            "foo",
-                        ]
-                      - The sets have different types, but cross-type relations are supported. This assertion failed based on their elements.
-                    -------- assertr --------
-                "#});
-        }
-
-        #[test]
-        fn panics_naming_the_btree_set_type() {
+        fn panics_with_the_overlapping_elements() {
             assert_that_panic_by(|| {
                 assert_that!(BTreeSet::from(["foo"]))
                     .with_location(false)

@@ -1,10 +1,10 @@
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    AssertionContext, Expectation, ValueRenderer,
     assertions::map::{Map, MapLookup},
     expectation::Evidence,
     failure::{FailureBuilder, FailureKind, PathSegment},
-    renderer::IntoRendered,
+    renderer::RenderingContext,
 };
 
 /// A value matcher under one native map key query.
@@ -15,8 +15,8 @@ use crate::{
 /// for custom operand registration and lookup requirements.
 #[derive(Debug, Clone)]
 pub struct Entry<K, M> {
-    key: K,
-    matcher: M,
+    pub(super) key: K,
+    pub(super) matcher: M,
 }
 
 /// The original stored key and scoped value evidence from a rejected entry expectation.
@@ -31,6 +31,14 @@ pub fn entry<K, M>(key: K, matcher: M) -> Entry<K, M> {
     Entry { key, matcher }
 }
 
+/// The path segment locating evidence at a key, rendered compactly.
+pub(super) fn key_segment<Q: ?Sized, R: ValueRenderer<Q>>(
+    render: RenderingContext<'_, R>,
+    key: &Q,
+) -> PathSegment {
+    PathSegment::Key(render.compact().value(key))
+}
+
 // Both borrowed native queries and owned/adapted keys execute this operation.
 // The stored key is retained even if its value rejects. Exact entry checks never look it up again.
 pub(super) fn evaluate_entry<'a, Mp, Q, E, R>(
@@ -38,12 +46,12 @@ pub(super) fn evaluate_entry<'a, Mp, Q, E, R>(
     query: &Q,
     expected: &E,
     settings: &AssertionContext<'_, R>,
-    path: impl FnOnce(crate::renderer::RenderingContext<'_, R>) -> PathSegment,
 ) -> Result<&'a Mp::Key, EntryRejection<'a, Mp::Key>>
 where
     Mp: MapLookup<Q> + ?Sized,
     Q: ?Sized,
-    E: ExpectationDiagnostics<Mp::Value, R>,
+    E: Expectation<Mp::Value, R>,
+    R: ValueRenderer<Q>,
 {
     let mut context = settings.isolated();
     let found = actual.get_key_value(query);
@@ -51,20 +59,17 @@ where
     let evaluate = |context: &mut AssertionContext<'_, R>| {
         if let Some((_, value)) = found {
             let matched = context.evaluate(value, expected);
-            if !matched && !context.has_evidence() {
-                context.outcome(false, |context| context.describe(expected));
-            }
-            matched
+            context.complete(matched, |context| context.describe(expected))
         } else {
             context.outcome(false, |_| {
-                FailureBuilder::detached::<()>(FailureKind::Matching)
+                FailureBuilder::new::<()>(FailureKind::Matching)
                     .relation("contains the required key")
                     .build()
             })
         }
     };
     let matched = if context.is_diagnostic() {
-        context.scoped(path(context.render()), evaluate)
+        context.scoped(key_segment(context.render(), query), evaluate)
     } else {
         evaluate(&mut context)
     };
@@ -78,22 +83,23 @@ where
     }
 }
 
-// Query storage differs, but both entry forms use the same diagnostic grammar.
-pub(super) fn explain_entry<V: ?Sized, K: ?Sized, E, R, Target>(
-    key: &K,
+// Query storage differs, but both entry forms use the same diagnostic grammar. Only a requirement
+// description borrows the key. A rejection explains its retained evidence.
+pub(super) fn explain_entry<'k, V: ?Sized, K: ?Sized + 'k, E, R>(
+    key: impl FnOnce() -> &'k K,
     expected: &E,
     rejection: Option<Evidence>,
-    failure: FailureBuilder<Target>,
+    failure: FailureBuilder,
     context: &AssertionContext<'_, R>,
-) -> FailureBuilder<Target>
+) -> FailureBuilder
 where
-    E: ExpectationDiagnostics<V, R>,
+    E: Expectation<V, R>,
     R: ValueRenderer<K>,
 {
     match rejection {
         None => failure
             .relation("contains a matching entry")
-            .expected(context.render().value(key))
+            .expected(context.render().value(key()))
             .child(context.describe(expected)),
         Some(evidence) => evidence.explain(failure.relation("does not contain a matching entry")),
     }
@@ -103,7 +109,7 @@ impl<MapType, R, K, M> Expectation<MapType, R> for Entry<K, M>
 where
     MapType: Map + MapLookup<<K as BorrowFor<<MapType as Map>::Key>>::View> + ?Sized,
     K: BorrowFor<MapType::Key>,
-    M: ExpectationDiagnostics<MapType::Value, R>,
+    M: Expectation<MapType::Value, R>,
     R: ValueRenderer<K::View>,
 {
     type Success<'a>
@@ -123,57 +129,25 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let query = borrow_for::<MapType::Key, _>(&self.key);
-        evaluate_entry(actual, query, &self.matcher, context, |render| {
-            PathSegment::Key(render.value(query).into_rendered_compact())
-        })
+        evaluate_entry(actual, query, &self.matcher, context)
     }
-}
 
-impl<MapType, StoredKey, R, K, M> ExpectationDiagnostics<MapType, R> for Entry<K, M>
-where
-    MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
-    K: BorrowFor<StoredKey>,
-    M: ExpectationDiagnostics<MapType::Value, R>,
-    R: ValueRenderer<K::View>,
-{
     const KIND: FailureKind = FailureKind::Matching;
     const FLATTEN: bool = true;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a MapType, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            Some((_, rejection)) => rejection
-                .evidence
-                .explain(failure.relation("does not contain a matching entry")),
-            None => explain_entry::<MapType::Value, _, _, _, _>(
-                borrow_for::<StoredKey, _>(&self.key),
-                &self.matcher,
-                None,
-                failure,
-                context,
-            ),
-        }
-    }
-}
-
-impl<K, M> Entry<K, M> {
-    // Keyed lists retain the original lookup identity while committing already scoped children.
-    pub(super) fn evaluate_and_record<'a, Mp, StoredKey, R>(
-        &'a self,
-        actual: &'a Mp,
-        context: &mut AssertionContext<'_, R>,
-    ) -> (bool, Option<&'a Mp::Key>)
-    where
-        Mp: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
-        K: BorrowFor<StoredKey>,
-        M: ExpectationDiagnostics<Mp::Value, R>,
-        R: ValueRenderer<K::View>,
-    {
-        record_entry(&self.key, &self.matcher, actual, context)
+    ) -> FailureBuilder {
+        explain_entry::<MapType::Value, _, _, _>(
+            || borrow_for::<MapType::Key, _>(&self.key),
+            &self.matcher,
+            rejected.map(|(_, rejection)| rejection.evidence),
+            failure,
+            context,
+        )
     }
 }
 
@@ -188,14 +162,10 @@ pub(super) fn record_entry<'a, Mp, StoredKey, K, M, R>(
 where
     Mp: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
     K: BorrowFor<StoredKey>,
-    M: ExpectationDiagnostics<Mp::Value, R>,
+    M: Expectation<Mp::Value, R>,
     R: ValueRenderer<K::View>,
 {
-    let query = borrow_for::<StoredKey, _>(key);
-    let result = evaluate_entry(actual, query, matcher, context, |render| {
-        PathSegment::Key(render.value(query).into_rendered_compact())
-    });
-    match result {
+    match evaluate_entry(actual, borrow_for::<StoredKey, _>(key), matcher, context) {
         Ok(key) => (true, Some(key)),
         Err(EntryRejection { key, evidence }) => {
             context.append(evidence);

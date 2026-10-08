@@ -16,8 +16,8 @@
 //! enabled. Each assertion trait page is the authoritative list of its methods, signatures, and
 //! required bounds. Rustdoc search can also find a method directly by name.
 //!
-//! Ordinary methods execute [`Expectation`](crate::Expectation) and
-//! [`ExpectationDiagnostics`](crate::ExpectationDiagnostics) definitions owned by these families.
+//! Ordinary methods execute [`Expectation`](crate::Expectation) definitions owned by these
+//! families.
 //! To use a check with `.matches(...)`, element matching, or structural composition, browse the
 //! complete public [`matchers`](mod@crate::matchers) catalog. It re-exports these definitions and
 //! groups colliding names into subject namespaces.
@@ -51,6 +51,7 @@ mod support;
 pub mod alloc;
 pub mod collection;
 pub mod core;
+pub mod distance;
 mod has_length;
 #[cfg(feature = "http")]
 pub mod http;

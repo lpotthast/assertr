@@ -4,50 +4,54 @@
 //! carry every part of a failure as data: the rendered [`actual`](AssertionFailure::actual) and
 //! [`expected`](AssertionFailure::expected) values, the [`relation`](AssertionFailure::relation)
 //! between them, additional [`facts`](AssertionFailure::facts), and nested
-//! [`children`](AssertionFailure::children). Adapters consume these fields directly, so no
-//! machine-readable use needs to parse the human-readable text report.
+//! [`children`](AssertionFailure::children). Custom presentations consume these fields directly,
+//! so no machine-readable use needs to parse the human-readable text report.
 //!
 //! ## From assertion to report
 //!
 //! 1. **Construction:** A rejected [`Expectation`](crate::Expectation) explains itself through
-//!    [`ExpectationDiagnostics::explain`](crate::ExpectationDiagnostics::explain), populating the
-//!    [`FailureBuilder`] supplied by the chain executor. Execution adapters that cannot use the
-//!    expectation protocol start a builder with [`AssertThat::failure`] instead. Diagnostic values
-//!    are rendered through the chain's [renderer and budget](crate::renderer) into owned
-//!    [`Rendered`] trees.
+//!    [`Expectation::explain`](crate::Expectation::explain), populating the [`FailureBuilder`]
+//!    supplied by the chain executor. Execution adapters that cannot use the expectation protocol
+//!    start a builder with [`AssertThat::failure`] instead. Diagnostic values are rendered through
+//!    the chain's [renderer and budget](crate::renderer) into owned [`Rendered`] trees.
 //! 2. **Handling:** [`AssertThat::capture`] stores failures and returns them to the caller. Panic
-//!    mode stops at the first failure and asks the selected [presentation
-//!    adapter](AssertThat::with_panic_presentation) for panic text.
-//! 3. **Presentation:** An [adapter] reads the structured failure and produces another
-//!    representation. [`ToHumanReadableText`](adapter::ToHumanReadableText) produces the default
-//!    report. Capture mode leaves this step to the caller.
+//!    mode stops at the first failure and panics with its report, produced by the [panic
+//!    presentation](AssertThat::with_panic_presentation).
+//! 3. **Presentation:** The `Display` implementation of [`AssertionFailure`] produces the default
+//!    human-readable report. Custom code can read the structured fields to produce any other
+//!    representation. Capture mode leaves this step to the caller.
 //!
-//! Adapters receive rendered evidence, not the original Rust values. They can inspect structure,
-//! type metadata, and omission counts without parsing a report or rendering leaves again. For
-//! examples, start with [capturing failures](AssertThat::capture) or [processing them](adapter).
-//! To create failures in your own methods, see [custom assertions](crate#custom-assertions).
+//! Presentation receives rendered evidence, not the original Rust values. It can inspect
+//! structure, type metadata, and omission counts without parsing a report or rendering leaves
+//! again. For examples, start with [capturing failures](AssertThat::capture). To create failures
+//! in your own methods, see [custom assertions](crate#custom-assertions).
+//!
+//! ```
+//! use assertr::prelude::*;
+//!
+//! let failures = assert_that!(42).capture(|it| it.is_less_than(0).is_equal_to(43));
+//! let reports: Vec<String> = failures.iter().map(ToString::to_string).collect();
+//! assert_that!(&reports[0]).contains("is not less than");
+//! assert_that!(&reports[1]).contains("Expected: 43");
+//! ```
 
-pub mod adapter;
 mod builder;
 mod failures;
 pub use failures::AssertionFailures;
 pub(crate) mod panic_presentation;
+pub(crate) mod report;
 
-use crate::{
-    AssertThat,
-    prelude::Mode,
-    renderer::{IntoRendered, Rendered},
-};
+use crate::{AssertThat, prelude::Mode, renderer::Rendered};
 use alloc::{borrow::Cow, boxed::Box, string::String, vec::Vec};
 
-pub use builder::{Attached, Detached, FailureBuilder};
+pub use builder::FailureBuilder;
 
 /// Delimiter opening and closing every rendered failure message.
 pub(crate) const BANNER: &str = "-------- assertr --------\n";
 
 /// The family an assertion belongs to, recorded on every [`AssertionFailure`].
 ///
-/// One tag per family, never one per method: the kind exists so adapters can filter or group
+/// One tag per family, never one per method: the kind exists so consumers can filter or group
 /// failures, not to describe them. The description lives in the failure's other fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -108,35 +112,25 @@ pub struct Fact {
 }
 
 impl Fact {
-    /// Creates a labeled fact, rendering its value once into an owned evidence tree.
+    /// Creates a labeled fact from a rendered evidence tree.
     ///
-    /// Pass diagnostic values through [`AssertThat::render`] so the active renderer and budget
-    /// apply. Structural metadata and caller-authored prose may be passed as verbatim text.
-    pub fn labelled(label: impl Into<Cow<'static, str>>, value: impl IntoRendered) -> Self {
+    /// Render diagnostic values through
+    /// [`AssertionContext::render`](crate::AssertionContext::render) in expectations or
+    /// [`AssertThat::render`] in execution adapters, so the active renderer and budget apply.
+    /// Structural metadata and caller-authored prose may be passed as verbatim text.
+    pub fn labelled(label: impl Into<Cow<'static, str>>, value: impl Into<Rendered>) -> Self {
         Self {
             label: label.into(),
-            value: value.into_rendered(),
+            value: value.into(),
         }
     }
 
-    /// Creates an unlabeled note, rendering its value once into an owned evidence tree.
+    /// Creates an unlabeled note from a rendered evidence tree.
     ///
-    /// Pass diagnostic values through [`AssertThat::render`]. Caller-authored prose may be
-    /// supplied as verbatim text.
-    pub fn note(value: impl IntoRendered) -> Self {
+    /// Pass diagnostic values through [`AssertionContext::render`](crate::AssertionContext::render)
+    /// or [`AssertThat::render`]. Caller-authored prose may be supplied as verbatim text.
+    pub fn note(value: impl Into<Rendered>) -> Self {
         Self::labelled("", value)
-    }
-
-    /// Returns what this fact describes, or an empty string for a plain note.
-    #[must_use]
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-
-    /// Borrows the rendered evidence tree.
-    #[must_use]
-    pub const fn value(&self) -> &Rendered {
-        &self.value
     }
 }
 
@@ -146,31 +140,26 @@ impl Fact {
 /// part of a failure is exposed as its own field, so consumers can inspect failures
 /// programmatically or compose their own rendering without parsing formatted text.
 ///
-/// Read-only accessors also work as projection functions. Use [`AssertThat::derive`] for
-/// borrowed sized values and [`AssertThat::derive_owned`] for slices, strings, optional views,
-/// and copied values:
+/// Fields can be asserted on through [`AssertThat::derive`]:
 ///
 /// ```
-/// use assertr::{prelude::*, Fact, renderer::Rendered};
+/// use assertr::prelude::*;
 ///
 /// let failures = assert_that!([1]).capture(|it| it.has_length(2));
 /// assert_that!(failures[0])
-///     .derive_owned(AssertionFailure::facts)
+///     .derive(|failure| &failure.facts)
 ///     .contains_satisfying(|fact| {
-///         fact.derive_owned(Fact::label).is_equal_to("Actual length");
-///         fact.derive(Fact::value)
-///             .derive_owned(Rendered::type_name)
+///         fact.derive(|fact| &fact.label).is_equal_to("Actual length");
+///         fact.derive(|fact| &fact.value.type_name)
 ///             .is_equal_to(Some("usize"));
 ///     });
 /// ```
 ///
-/// `Display` and `Debug` use the default plain report. This type also implements
-/// [`core::error::Error`] for ordinary Result propagation, without treating nested assertion
-/// evidence as an error cause chain. The complete human-readable form is produced by
-/// [`ToHumanReadableText`](adapter::ToHumanReadableText). Panic mode uses the selected
-/// [presentation adapter](crate::AssertThat::with_panic_presentation) to produce the panic text.
-/// Capture mode retains the fields without invoking presentation. Captured failures can be
-/// explicitly passed to any [adapter](adapter::Adapter).
+/// `Display` and `Debug` produce the complete human-readable report, the default panic text.
+/// This type also implements [`core::error::Error`] for ordinary Result propagation, without
+/// treating nested assertion evidence as an error cause chain. Panic mode uses the selected
+/// [panic presentation](crate::AssertThat::with_panic_presentation) to produce the panic text.
+/// Capture mode retains the fields without invoking presentation.
 #[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AssertionFailure {
@@ -205,7 +194,7 @@ pub struct AssertionFailure {
 
     /// The sentence between the actual and the expected value, such as `does not contain` or `is
     /// not greater than`. A failure without a relation is a direct comparison of
-    /// [`expected`](Self::expected) and [`actual`](Self::actual), which the human-readable adapter
+    /// [`expected`](Self::expected) and [`actual`](Self::actual), which the human-readable report
     /// renders as an aligned `Expected:` / `Actual:` pair.
     pub relation: Option<Cow<'static, str>>,
 
@@ -243,98 +232,6 @@ pub struct AssertionFailure {
     pub kind: FailureKind,
 }
 
-impl AssertionFailure {
-    /// Borrows the diagnostic describing an unmet expectation, when present.
-    #[must_use]
-    pub fn constraint(&self) -> Option<&AssertionFailure> {
-        self.constraint.as_deref()
-    }
-
-    /// Borrows the relative path from the parent subject.
-    #[must_use]
-    pub fn path(&self) -> &[PathSegment] {
-        &self.path
-    }
-
-    /// Returns the number of diagnostic children omitted by the rendering budget.
-    #[must_use]
-    pub const fn omitted_children(&self) -> usize {
-        self.omitted_children
-    }
-
-    /// Returns where the failing assertion was invoked, when location recording was enabled.
-    #[must_use]
-    pub const fn location(&self) -> Option<&'static core::panic::Location<'static>> {
-        self.location
-    }
-
-    /// Returns the name given to the subject via `with_subject_name`, when present.
-    #[must_use]
-    pub fn subject_name(&self) -> Option<&str> {
-        self.subject_name.as_deref()
-    }
-
-    /// Returns the source expression that produced the subject, when the entry point captured it.
-    #[must_use]
-    pub const fn expression(&self) -> Option<&'static str> {
-        self.expression
-    }
-
-    /// Returns the Rust type name of the subject that raised this failure.
-    #[must_use]
-    pub const fn subject_type_name(&self) -> &'static str {
-        self.subject_type_name
-    }
-
-    /// Borrows the rendered subject, when present.
-    #[must_use]
-    pub const fn actual(&self) -> Option<&Rendered> {
-        self.actual.as_ref()
-    }
-
-    /// Returns the relation sentence, when present.
-    #[must_use]
-    pub fn relation(&self) -> Option<&str> {
-        self.relation.as_deref()
-    }
-
-    /// Borrows the rendered expected value, when present.
-    #[must_use]
-    pub const fn expected(&self) -> Option<&Rendered> {
-        self.expected.as_ref()
-    }
-
-    /// Borrows the rendered unexpected value, when present.
-    #[must_use]
-    pub const fn unexpected(&self) -> Option<&Rendered> {
-        self.unexpected.as_ref()
-    }
-
-    /// Borrows the evidence attached to this failure.
-    #[must_use]
-    pub fn facts(&self) -> &[Fact] {
-        &self.facts
-    }
-
-    /// Borrows the user-provided messages collected from the assertion chain.
-    #[must_use]
-    pub fn messages(&self) -> &[String] {
-        &self.messages
-    }
-
-    /// Borrows the failures raised by nested assertions.
-    #[must_use]
-    pub fn children(&self) -> &[Self] {
-        &self.children
-    }
-
-    /// Returns the assertion family that raised this failure.
-    #[must_use]
-    pub const fn kind(&self) -> FailureKind {
-        self.kind
-    }
-}
-
 impl crate::ChainRecords<'_> {
     /// Stores a captured failure on the root of this chain.
     pub(crate) fn store_failure(
@@ -358,37 +255,63 @@ impl crate::ChainRecords<'_> {
 }
 
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
-    /// Starts a failure of the given kind, located at the caller.
+    /// Starts a failure of the given kind over this chain's subject type.
     ///
     /// This is the failure path of an execution adapter: an assertion that owns an invocation,
     /// consumption, or polling step the borrowed expectation protocol cannot express. Such an
     /// adapter calls [`AssertThat::track_assertion`] before its operation. When the condition
     /// does not hold, fill in the values rendered through [`AssertThat::render`], the relation,
-    /// facts, and children, then call [`FailureBuilder::raise`], which records the failure in
-    /// capture mode or panics immediately in panic mode. [`AssertThat::render`] shows an example.
+    /// facts, and children, then pass the builder to [`AssertThat::raise`].
+    /// [`AssertThat::render`] shows an example.
     ///
-    /// Reusable leaf checks implement [`Expectation`](crate::Expectation) and
-    /// [`ExpectationDiagnostics`](crate::ExpectationDiagnostics) instead. The executor then
-    /// supplies the builder and raises the failure. See [custom
+    /// Reusable leaf checks implement [`Expectation`](crate::Expectation) instead. The executor
+    /// then supplies the builder and raises the failure. See [custom
     /// assertions](crate#custom-assertions).
-    #[track_caller]
-    pub fn failure(&self, kind: FailureKind) -> FailureBuilder<Attached<'_>> {
-        self.failure_at(kind, core::panic::Location::caller())
+    pub fn failure(&self, kind: FailureKind) -> FailureBuilder {
+        FailureBuilder::new::<T>(kind)
     }
 
-    /// Starts a failure of the given kind at an explicit location.
-    pub(crate) fn failure_at(
+    /// Records the failure in capture mode and panics with its rendered form otherwise. The
+    /// failure is located at the caller.
+    ///
+    /// # Panics
+    ///
+    /// Panics with the formatted failure message when not in capture mode.
+    #[track_caller]
+    pub fn raise(&self, failure: FailureBuilder) {
+        self.raise_at(failure, core::panic::Location::caller());
+    }
+
+    /// Raises a failure at an explicit location, adding this chain's subject metadata.
+    #[track_caller]
+    pub(crate) fn raise_at(
         &self,
-        kind: FailureKind,
+        failure: FailureBuilder,
         location: &'static core::panic::Location<'static>,
-    ) -> FailureBuilder<Attached<'_>> {
-        FailureBuilder::attached(self, location, kind)
+    ) {
+        let state = &self.state;
+        let mut failure = failure.build();
+        failure.location = state.include_location.then_some(location);
+        failure.subject_name.clone_from(&state.subject_name);
+        failure.expression = state.expression.get();
+        state.records.collect_messages(&mut failure.messages);
+
+        if M::CAPTURES {
+            state.records.store_failure(
+                failure,
+                #[cfg(feature = "fluent")]
+                state.expression.pending_fluent(),
+            );
+        } else {
+            let text = panic_presentation::render(&failure, state.panic_presentation.as_deref());
+            panic!("{text}");
+        }
     }
 }
 
 impl core::fmt::Display for AssertionFailure {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Display::fmt(&adapter::ToHumanReadableText.render(self), f)
+        report::write_failure(self, f)
     }
 }
 
@@ -399,42 +322,3 @@ impl core::fmt::Debug for AssertionFailure {
 }
 
 impl core::error::Error for AssertionFailure {}
-
-#[cfg(test)]
-mod tests {
-    use crate::prelude::*;
-
-    use super::{FailureBuilder, FailureKind, PathSegment};
-
-    mod accessors {
-        use super::*;
-
-        #[test]
-        fn expose_the_subject_and_location_fields() {
-            let failures = assert_that!(1)
-                .with_subject_name("answer")
-                .capture(|it| it.is_equal_to(2));
-            let failure = &failures[0];
-
-            assert_that!(failure.subject_name()).is_equal_to(Some("answer"));
-            assert_that!(failure.expression()).is_equal_to(Some("1"));
-            assert_that!(failure.subject_type_name()).is_equal_to("i32");
-            assert_that!(failure.location().map(core::panic::Location::file))
-                .is_equal_to(Some(file!()));
-            assert_that!(failure.path()).is_empty();
-            assert_that!(failure.omitted_children()).is_equal_to(0);
-        }
-
-        #[test]
-        fn expose_the_path_and_omitted_children() {
-            let failure = FailureBuilder::detached::<i32>(FailureKind::Other)
-                .path([PathSegment::Index(3)])
-                .omitted_children(2)
-                .build();
-
-            assert_that!(failure.path()).contains_exactly([PathSegment::Index(3)]);
-            assert_that!(failure.omitted_children()).is_equal_to(2);
-            assert_that!(failure.location()).is_none();
-        }
-    }
-}

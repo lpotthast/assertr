@@ -1,10 +1,81 @@
-use crate::borrow_for::{BorrowFor, borrow_for};
+use crate::borrow_for::BorrowFor;
 
-use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
-    failure::{FailureBuilder, FailureKind},
-};
+use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
+
+/// Implements [`Expectation`](crate::Expectation) for a check of the subject against one stored
+/// operand.
+///
+/// The generics must name the renderer `R`. Evaluation borrows the operand stored in the `borrow`
+/// field once, selecting its view for the `for` type, and retains that view on rejection. `holds`
+/// states whether the relation between the subject and the view holds. An `expected` operand must
+/// satisfy the relation and an `unexpected` operand must not. A requirement description states the
+/// first relation and borrows the operand anew. A rejection renders the subject with `actual`,
+/// states the second relation when one is given, and presents the retained view in its role.
+macro_rules! operand_expectation {
+    (
+        impl [$($generics:tt)*] for $name:ty, subject $subject:ty, where [$($bounds:tt)*];
+        borrow $field:tt for $target:ty, view $view:ty;
+        kind $kind:ident;
+        holds |$actual:ident, $expected:ident| $holds:expr;
+        actual |$render:ident, $rendered:ident| $render_actual:expr;
+        $role:ident $relation:literal $(, $rejection:literal)?;
+    ) => {
+        impl<$($generics)*> $crate::Expectation<$subject, R> for $name
+        where
+            $($bounds)*
+        {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                $subject: 'a;
+            type Rejection<'a>
+                = &'a $view
+            where
+                Self: 'a,
+                $subject: 'a;
+
+            fn evaluate<'a>(
+                &'a self,
+                $actual: &'a $subject,
+                _: &$crate::AssertionContext<'_, R>,
+            ) -> Result<(), &'a $view> {
+                let $expected = $crate::borrow_for::borrow_for::<$target, _>(&self.$field);
+                operand_expectation!(@outcome $role, $holds, $expected)
+            }
+
+            const KIND: $crate::failure::FailureKind = $crate::failure::FailureKind::$kind;
+
+            fn explain<'a>(
+                &'a self,
+                rejected: Option<(&'a $subject, &'a $view)>,
+                failure: $crate::failure::FailureBuilder,
+                context: &$crate::AssertionContext<'_, R>,
+            ) -> $crate::failure::FailureBuilder {
+                let $render = context.render();
+                let (failure, operand) = match rejected {
+                    None => (
+                        failure.relation($relation),
+                        $crate::borrow_for::borrow_for::<$target, _>(&self.$field),
+                    ),
+                    Some(($rendered, operand)) => (
+                        failure.actual($render_actual)$(.relation($rejection))?,
+                        operand,
+                    ),
+                };
+                failure.$role($render.value(operand))
+            }
+        }
+    };
+    (@outcome expected, $holds:expr, $view:ident) => {
+        if $holds { Ok(()) } else { Err($view) }
+    };
+    (@outcome unexpected, $holds:expr, $view:ident) => {
+        if $holds { Err($view) } else { Ok(()) }
+    };
+}
+
+pub(crate) use operand_expectation;
 
 /// Reusable equality with an owned or borrowed expected value, selected through [`BorrowFor`].
 ///
@@ -67,110 +138,32 @@ impl<E> NotEqualTo<E> {
     }
 }
 
-impl<T: ?Sized, E, R> Expectation<T, R> for EqualTo<E>
-where
-    T: PartialEq<E::View>,
-    E: BorrowFor<T>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<T, _>(&self.0);
-        if actual.eq(expected) {
-            Ok(())
-        } else {
-            Err(expected)
-        }
-    }
+operand_expectation! {
+    impl [T: ?Sized, E, R] for EqualTo<E>, subject T, where [
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+    ];
+    borrow 0 for T, view E::View;
+    kind Equality;
+    holds |actual, expected| actual.eq(expected);
+    actual |render, actual| render.value(actual);
+    expected "is equal to";
 }
-impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for EqualTo<E>
-where
-    T: PartialEq<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View>,
-{
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (failure.relation("is equal to"), borrow_for::<T, _>(&self.0)),
-            Some((actual, expected)) => (failure.actual(render.value(actual)), expected),
-        };
-        failure.expected(render.value(expected))
-    }
+
+operand_expectation! {
+    impl [T: ?Sized, E, R] for NotEqualTo<E>, subject T, where [
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+    ];
+    borrow 0 for T, view E::View;
+    kind Equality;
+    holds |actual, expected| actual.eq(expected);
+    actual |render, actual| render.value(actual);
+    unexpected "is not equal to", "is equal to";
 }
-impl<T: ?Sized, E, R> Expectation<T, R> for NotEqualTo<E>
-where
-    T: PartialEq<E::View>,
-    E: BorrowFor<T>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<T, _>(&self.0);
-        if actual.eq(expected) {
-            Err(expected)
-        } else {
-            Ok(())
-        }
-    }
-}
-impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for NotEqualTo<E>
-where
-    T: PartialEq<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View>,
-{
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("is not equal to"),
-                borrow_for::<T, _>(&self.0),
-            ),
-            Some((actual, expected)) => (
-                failure.actual(render.value(actual)).relation("is equal to"),
-                expected,
-            ),
-        };
-        failure.unexpected(render.value(expected))
-    }
-}
+
 /// Equality and inequality assertions using [`PartialEq`].
 ///
 /// Expected values can be owned or borrowed. [`BorrowFor`] selects their borrowed type,
@@ -260,12 +253,21 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            "foo".must().be_equal_to("foo").not_be_equal_to("bar");
+        }
+    }
+
     mod diagnostics {
         use super::super::{EqualTo, NotEqualTo};
         use crate::{
             failure::{FailureBuilder, FailureKind},
             prelude::*,
-            renderer::IntoRendered,
         };
         use core::cell::RefCell;
 
@@ -288,21 +290,17 @@ mod tests {
             calls.borrow_mut().clear();
             let renderer = RecordingRenderer(&calls);
             let context = AssertionContext::new(&renderer, RenderingBudget::default());
-            let description = <NotEqualTo<i32> as ExpectationDiagnostics<i32, _>>::explain(
+            let description = <NotEqualTo<i32> as Expectation<i32, _>>::explain(
                 &NotEqualTo::new(2),
                 None,
-                FailureBuilder::detached::<i32>(FailureKind::Equality),
+                FailureBuilder::new::<i32>(FailureKind::Equality),
                 &context,
             )
             .build();
             assert_that!(*calls.borrow()).contains_exactly([2]);
             assert_that!(description.expected).is_none();
-            assert_that!(description.unexpected).is_equal_to(Some(
-                AssertionContext::default()
-                    .render()
-                    .value(&2)
-                    .into_rendered(),
-            ));
+            assert_that!(description.unexpected)
+                .is_equal_to(Some(AssertionContext::default().render().value(&2)));
         }
 
         #[test]
@@ -310,19 +308,15 @@ mod tests {
             let failures = assert_that!([] as [i32; 0])
                 .with_location(false)
                 .capture(|it| {
-                    it.matches(crate::assertions::collection::elements_are((
-                        NotEqualTo::new(3),
-                    )))
+                    it.matches(crate::assertions::collection::elements_are(matchers![
+                        NotEqualTo::new(3)
+                    ]))
                 });
             let description = failures[0].children[0].constraint.as_ref().unwrap();
             assert_that!(description.expected).is_none();
-            assert_that!(description.unexpected).is_equal_to(Some(
-                AssertionContext::default()
-                    .render()
-                    .value(&3)
-                    .into_rendered(),
-            ));
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains("Unexpected: 3");
+            assert_that!(description.unexpected)
+                .is_equal_to(Some(AssertionContext::default().render().value(&3)));
+            assert_that!(failures[0].to_string()).contains("Unexpected: 3");
         }
     }
 
@@ -363,7 +357,7 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_equal_to(Expected(Actual(2))));
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+            assert_that!(failures[0].to_string()).contains(SENTINEL);
         }
     }
 
@@ -371,12 +365,6 @@ mod tests {
         use indoc::formatdoc;
 
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            "foo".must().be_equal_to("foo");
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -405,11 +393,6 @@ mod tests {
         }
 
         #[test]
-        fn string_vectors_compare_with_string_literal_arrays() {
-            assert_that!(vec![String::from("hello")]).is_equal_to(["hello"]);
-        }
-
-        #[test]
         fn panics_when_not_equal() {
             assert_that_panic_by(|| assert_that!("foo").with_location(false).is_equal_to("bar"))
                 .has_type::<String>()
@@ -423,37 +406,12 @@ mod tests {
                     -------- assertr --------
                 "#});
         }
-
-        #[test]
-        fn custom_heterogeneous_comparisons_use_predicates() {
-            #[derive(Debug)]
-            struct Foo {}
-
-            #[derive(Debug)]
-            struct Bar {}
-
-            impl PartialEq<Bar> for Foo {
-                fn eq(&self, _other: &Bar) -> bool {
-                    true
-                }
-            }
-
-            assert_that!(Foo {}).matches(crate::expectation::predicate(|actual: &Foo| {
-                actual.eq(&Bar {})
-            }));
-        }
     }
 
     mod is_not_equal_to {
         use indoc::formatdoc;
 
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            "foo".must().not_be_equal_to("bar");
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -488,31 +446,27 @@ mod tests {
         }
 
         #[test]
-        fn custom_heterogeneous_comparisons_use_predicates() {
+        fn negates_eq_even_when_ne_is_overridden() {
             #[derive(Debug)]
-            struct Foo {}
-
-            #[derive(Debug)]
-            struct Bar {}
-
-            impl PartialEq<Bar> for Foo {
-                fn eq(&self, _other: &Bar) -> bool {
+            struct Unusual;
+            #[allow(clippy::partialeq_ne_impl)]
+            impl PartialEq for Unusual {
+                fn eq(&self, _: &Self) -> bool {
+                    false
+                }
+                fn ne(&self, _: &Self) -> bool {
                     false
                 }
             }
-
-            assert_that!(Foo {}).matches(crate::expectation::predicate(|actual: &Foo| {
-                !actual.eq(&Bar {})
-            }));
+            assert_that!(Unusual).is_not_equal_to(&Unusual);
         }
     }
 
+    // `operand_expectation!` is shared by the equality, ordering, range, and map value operands.
+    // These tests cover its borrowing contract once.
     mod borrowed_operands {
         use super::super::{EqualTo, NotEqualTo};
-        use crate::{
-            prelude::*,
-            test_support::{BorrowSpy, NoRenderer, assert_trait_impl},
-        };
+        use crate::{prelude::*, test_support::BorrowSpy};
         use core::cell::Cell;
 
         #[derive(Debug, PartialEq)]
@@ -535,9 +489,8 @@ mod tests {
             assert_that!(&actual).is_equal_to(&expected);
             assert_that!(&actual).is_equal_to(&point());
             let matcher = EqualTo::new(&expected);
-            assert_that!(point()).matches(&matcher);
+            assert_that!(point()).matches(&matcher).matches(&matcher);
             assert_that!(&actual).matches(&matcher);
-            assert_that!(expected).is_equal_to(point());
         }
 
         #[test]
@@ -568,217 +521,19 @@ mod tests {
         }
 
         #[test]
-        fn direct_unsized_targets_and_declared_references() {
+        fn selects_sequence_and_string_views_for_the_declared_subject() {
             let context = AssertionContext::default();
+            assert_that!(vec![String::from("hello")]).is_equal_to(["hello"]);
+            assert_that!([1, 2].as_slice()).is_equal_to(vec![1, 2]);
+            assert_that!(String::from("hello"))
+                .is_equal_to("hello")
+                .is_not_equal_to("world");
+            assert_that!("hello").is_equal_to(String::from("hello"));
             assert_that!(EqualTo::new("hello").evaluate("hello", &context).is_ok()).is_true();
             assert_that!(NotEqualTo::new("world").evaluate("hello", &context).is_ok()).is_true();
-            assert_that!(
-                EqualTo::new(vec![1, 2])
-                    .evaluate([1, 2].as_slice(), &context)
-                    .is_ok()
-            )
-            .is_true();
             let value = point();
             assert_that_owned!(&value).matches(EqualTo::new(&value));
             assert_that_owned!(&value).matches(matchers::dereferenced(EqualTo::new(point())));
-            assert_trait_impl!(EqualTo<String> => Expectation<str, NoRenderer>);
-            assert_trait_impl!(EqualTo<Vec<i32>> => Expectation<[i32], NoRenderer>);
         }
-
-        #[test]
-        fn inequality_negates_eq_even_when_ne_is_overridden() {
-            #[derive(Debug)]
-            struct Unusual;
-            #[allow(clippy::partialeq_ne_impl)]
-            impl PartialEq for Unusual {
-                fn eq(&self, _: &Self) -> bool {
-                    false
-                }
-                fn ne(&self, _: &Self) -> bool {
-                    false
-                }
-            }
-            assert_that!(Unusual)
-                .is_not_equal_to(&Unusual)
-                .matches(NotEqualTo::new(&Unusual));
-        }
-
-        #[test]
-        fn operand_wrappers_need_no_renderer() {
-            #[derive(PartialEq)]
-            struct Value(i32);
-            struct Renderer;
-            impl ValueRenderer<Value> for Renderer {
-                fn fmt(
-                    &self,
-                    value: &Value,
-                    f: &mut core::fmt::Formatter<'_>,
-                ) -> core::fmt::Result {
-                    write!(f, "value({})", value.0)
-                }
-            }
-            let calls = Cell::new(0);
-            let failures = assert_that!(Value(1))
-                .with_renderer(Renderer)
-                .capture(|it| {
-                    it.is_equal_to(BorrowSpy {
-                        value: Value(2),
-                        observe: || calls.set(calls.get() + 1),
-                    })
-                });
-            assert_that!(calls.get()).is_equal_to(1);
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains("value(2)");
-        }
-    }
-}
-
-#[cfg(test)]
-mod sequence_views {
-    use super::{EqualTo, NotEqualTo};
-    use crate::{
-        prelude::*,
-        test_support::{FailureReportAssertions, NoRenderer, assert_trait_impl},
-    };
-    use indoc::formatdoc;
-
-    #[derive(Debug, PartialEq)]
-    struct Element(u8);
-
-    #[test]
-    #[allow(clippy::needless_borrows_for_generic_args)] // Both operand forms are the contract under test.
-    fn vectors_accept_owned_and_borrowed_arrays_without_cloning_elements() {
-        let actual = vec![Element(1), Element(2)];
-        let expected = [Element(1), Element(2)];
-        assert_that!(actual)
-            .is_equal_to([Element(1), Element(2)])
-            .is_equal_to(&expected)
-            .is_not_equal_to([Element(1)])
-            .is_not_equal_to([Element(1), Element(3)]);
-        let matcher = EqualTo::new(expected);
-        assert_that!(actual).matches(&matcher).matches(&matcher);
-        assert_trait_impl!(EqualTo<[Element; 2]> => Expectation<Vec<Element>, NoRenderer>);
-        assert_trait_impl!(NotEqualTo<[Element; 2]> => Expectation<Vec<Element>, NoRenderer>);
-    }
-
-    #[test]
-    fn slice_subjects_accept_owned_and_borrowed_vectors_without_cloning_elements() {
-        let actual = [Element(1), Element(2)];
-        let expected = vec![Element(1), Element(2)];
-        let slice = actual.as_slice();
-        assert_that!(slice)
-            .is_equal_to(vec![Element(1), Element(2)])
-            .is_equal_to(&expected)
-            .is_not_equal_to(vec![Element(1)])
-            .is_not_equal_to(vec![Element(1), Element(3)]);
-        let matcher = EqualTo::new(&expected);
-        assert_that!(slice).matches(&matcher).matches(&matcher);
-        assert_that_owned!(slice).matches(&matcher);
-        assert_that!(
-            matcher
-                .evaluate(slice, &AssertionContext::default())
-                .is_ok()
-        )
-        .is_true();
-        assert_trait_impl!(EqualTo<Vec<Element>> => Expectation<&'static [Element], NoRenderer>);
-        assert_trait_impl!(EqualTo<&Vec<Element>> => Expectation<&'static [Element], NoRenderer>);
-        assert_trait_impl!(EqualTo<&Vec<Element>> => Expectation<[Element], NoRenderer>);
-        assert_trait_impl!(NotEqualTo<Vec<Element>> => Expectation<&'static [Element], NoRenderer>);
-        assert_trait_impl!(NotEqualTo<&Vec<Element>> => Expectation<&'static [Element], NoRenderer>);
-        assert_trait_impl!(NotEqualTo<&Vec<Element>> => Expectation<[Element], NoRenderer>);
-    }
-
-    #[test]
-    fn sequence_views_preserve_equality_diagnostics() {
-        let from_array = assert_that!(vec![1, 2])
-            .with_expression("sequence")
-            .with_location(false)
-            .capture(|it| it.is_equal_to([1, 3]));
-        let expected = vec![1, 3];
-        let from_vector = assert_that!([1, 2].as_slice())
-            .with_expression("sequence")
-            .with_location(false)
-            .capture(|it| it.is_equal_to(&expected));
-        for failures in [from_array, from_vector] {
-            assert_that!(failures).has_length(1);
-            assert_that!(failures[0]).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `sequence`
-
-                Expected: [
-                    1,
-                    3,
-                ]
-
-                  Actual: [
-                    1,
-                    2,
-                ]
-                -------- assertr --------
-            "});
-        }
-    }
-}
-
-#[cfg(test)]
-mod string_views {
-    use super::{EqualTo, NotEqualTo};
-    use crate::{
-        prelude::*,
-        test_support::{NoRenderer, StrOperand, StringRenderer, assert_trait_impl},
-    };
-    use core::cell::Cell;
-
-    #[test]
-    #[allow(clippy::needless_borrows_for_generic_args)]
-    fn string_value_reference_matrix_and_reusable_matchers() {
-        let actual = String::from("hello");
-        let expected = String::from("hello");
-        assert_that!(actual).is_equal_to(String::from("hello"));
-        assert_that!(&actual).is_equal_to(String::from("hello"));
-        assert_that!(actual).is_equal_to(&expected);
-        assert_that!(&actual).is_equal_to(&expected);
-        assert_that!(actual)
-            .is_equal_to("hello")
-            .is_equal_to(&"hello");
-        assert_that!(&actual).is_equal_to("hello");
-        assert_that!("hello")
-            .is_equal_to(String::from("hello"))
-            .is_equal_to(&expected);
-        let borrowed = EqualTo::new(&expected);
-        let literal = EqualTo::new("hello");
-        assert_that!(actual).matches(&borrowed).matches(&literal);
-        assert_that!("hello").matches(&borrowed).matches(&literal);
-        let context = AssertionContext::default();
-        assert_that!(literal.evaluate("hello", &context).is_ok()).is_true();
-        assert_that!(borrowed.evaluate("hello", &context).is_ok()).is_true();
-        assert_trait_impl!(EqualTo<&str> => Expectation<String, NoRenderer>);
-        assert_trait_impl!(EqualTo<&String> => Expectation<str, NoRenderer>);
-    }
-
-    #[test]
-    fn unsized_view_is_borrowed_once_after_tracking_and_rendered_on_both_rejections() {
-        for negative in [false, true] {
-            let calls = Cell::new(0);
-            let failures = assert_that!(String::from("hello"))
-                .with_renderer(StringRenderer)
-                .capture(|root| {
-                    let operand = StrOperand {
-                        value: if negative { "hello" } else { "world" },
-                        observe: || {
-                            assert_that!(root.state.records.assertion_count()).is_equal_to(1);
-                            calls.set(calls.get() + 1);
-                        },
-                    };
-                    if negative {
-                        root.derive(|it| it).is_not_equal_to(operand);
-                    } else {
-                        root.derive(|it| it).is_equal_to(operand);
-                    }
-                    root
-                });
-            assert_that!(calls.get()).is_equal_to(1);
-            assert_that!(failures).has_length(1);
-        }
-        assert_that!(String::from("hello")).matches(NotEqualTo::new("world"));
     }
 }

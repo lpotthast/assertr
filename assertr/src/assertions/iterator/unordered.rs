@@ -1,18 +1,20 @@
 use super::{
-    AssertThat, AssertionContext, Borrow, ExpectationDiagnostics, FailureBuilder, FailureKind,
-    GroupStyle, Items, KnownLength, Mode, PhantomData, Scan, ValueRenderer, buffer_exactly,
-    execute,
+    AssertionContext, Borrow, FailureBuilder, FailureKind, Items, KnownLength, PhantomData,
+    RenderingOrder, Scan, ValueRenderer, buffer_exactly, consumed_fact,
 };
 use alloc::boxed::Box;
 
 use crate::{
-    AssertionFailure, Expectation, Fact,
-    assertions::collection::ContainsExactlyInAnyOrder as CollectionContainsExactlyInAnyOrder,
+    AssertionFailure, Expectation,
+    assertions::collection::{
+        ContainsExactlyInAnyOrder as CollectionContainsExactlyInAnyOrder, elements_are_in_any_order,
+    },
     borrow_for::BorrowFor,
+    expectation::{Evidence, MatcherList},
 };
 
 /// Why unordered equality rejected its input.
-enum UnorderedRejection {
+pub(crate) enum UnorderedRejection {
     /// An exact size hint ruled out the expected length before consuming anything.
     Reported(KnownLength),
     /// The collection report over the buffered elements. `consumed` is set when the buffer filled
@@ -25,9 +27,18 @@ enum UnorderedRejection {
 
 /// Buffers the input, then delegates to the collection expectation, so both report the same
 /// unmatched elements.
-struct ContainsExactlyInAnyOrder<'e, T, E> {
+pub(crate) struct ContainsExactlyInAnyOrder<'e, T, E> {
     expected: &'e [E],
     item: PhantomData<fn() -> T>,
+}
+
+impl<'e, T, E> ContainsExactlyInAnyOrder<'e, T, E> {
+    pub(crate) const fn new(expected: &'e [E]) -> Self {
+        Self {
+            expected,
+            item: PhantomData,
+        }
+    }
 }
 
 impl<T, E, I, R> Scan<I, R> for ContainsExactlyInAnyOrder<'_, T, E>
@@ -39,6 +50,11 @@ where
     R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = UnorderedRejection;
+
+    fn kind(&self) -> FailureKind {
+        FailureKind::Equality
+    }
+
     fn observe(
         &self,
         iterator: &mut I,
@@ -57,7 +73,7 @@ where
             expectation
                 .explain(
                     Some((&actual, rejection)),
-                    FailureBuilder::detached::<I>(FailureKind::Equality),
+                    FailureBuilder::new::<I>(FailureKind::Equality),
                     context,
                 )
                 .build(),
@@ -68,29 +84,27 @@ where
         })
     }
 
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejection: Self::Rejection,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         match rejection {
             UnorderedRejection::Reported(known) => known.facts(
                 failure
                     .relation("does not contain exactly in any order")
-                    .expected(
-                        render.borrowed_values::<E::View, _>(self.expected, GroupStyle::List),
-                    ),
+                    .expected(render.borrowed_values::<E::View, _>(
+                        self.expected,
+                        RenderingOrder::PreserveIteration,
+                    )),
                 render,
             ),
             UnorderedRejection::Compared { report, consumed } => {
                 let failure = adopt(failure, *report);
                 match consumed {
-                    Some(consumed) => {
-                        failure.fact(Fact::labelled("Consumed elements", render.value(&consumed)))
-                    }
+                    Some(consumed) => consumed_fact(failure, context, consumed),
                     None => failure,
                 }
             }
@@ -99,10 +113,7 @@ where
 }
 
 /// Moves the diagnostic fields of a detached report into the root failure.
-fn adopt<Target>(
-    failure: FailureBuilder<Target>,
-    report: AssertionFailure,
-) -> FailureBuilder<Target> {
+fn adopt(failure: FailureBuilder, report: AssertionFailure) -> FailureBuilder {
     let AssertionFailure {
         actual,
         relation,
@@ -132,26 +143,80 @@ fn adopt<Target>(
     failure
 }
 
-#[track_caller]
-pub(crate) fn assert_contains_exactly_in_any_order<S, T, E, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    expected: &[E],
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    T: PartialEq<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-{
-    execute(
-        this,
-        iterator,
-        &ContainsExactlyInAnyOrder::<T, E> {
+/// Why unordered matching rejected its input.
+pub(crate) enum MatchingRejection {
+    /// An exact size hint ruled out the expected length before consuming anything.
+    Reported(KnownLength),
+    Mismatch {
+        evidence: Evidence,
+        consumed: usize,
+    },
+}
+
+/// Buffers the input, then evaluates the collection's exact unordered assignment on it.
+pub(crate) struct ElementsAreInAnyOrder<T, L> {
+    expected: L,
+    item: PhantomData<fn() -> T>,
+}
+
+impl<T, L> ElementsAreInAnyOrder<T, L> {
+    pub(crate) const fn new(expected: L) -> Self {
+        Self {
             expected,
             item: PhantomData,
-        },
-    );
+        }
+    }
+}
+
+impl<T, L, I, R> Scan<I, R> for ElementsAreInAnyOrder<T, L>
+where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    L: MatcherList<T, R>,
+    R: ValueRenderer<usize>,
+{
+    type Rejection = MatchingRejection;
+
+    fn kind(&self) -> FailureKind {
+        FailureKind::Matching
+    }
+
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        let items =
+            buffer_exactly(iterator, self.expected.len()).map_err(MatchingRejection::Reported)?;
+        let actual = Items::<T, _>::new(&items);
+        let mut child = context.isolated();
+        if child.evaluate(&actual, &elements_are_in_any_order(&self.expected)) {
+            Ok(())
+        } else {
+            Err(MatchingRejection::Mismatch {
+                evidence: child.into_evidence(),
+                consumed: items.len(),
+            })
+        }
+    }
+
+    fn explain(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        match rejection {
+            MatchingRejection::Reported(known) => known.facts(
+                failure.relation("does not have the required number of elements"),
+                context.render(),
+            ),
+            MatchingRejection::Mismatch { evidence, consumed } => {
+                let failure = failure.relation("does not match exactly in any order");
+                evidence.explain(consumed_fact(failure, context, consumed))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -167,10 +232,7 @@ mod tests {
             let mut iterator = (0..length)
                 .inspect(|_| consumed.set(consumed.get() + 1))
                 .filter(|_| true);
-            let scan = ContainsExactlyInAnyOrder::<i32, i32> {
-                expected: &[1, 2],
-                item: PhantomData,
-            };
+            let scan = ContainsExactlyInAnyOrder::<i32, i32>::new(&[1, 2]);
             assert_that!(
                 scan.observe(&mut iterator, &AssertionContext::default())
                     .is_err()

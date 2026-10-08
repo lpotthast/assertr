@@ -1,17 +1,18 @@
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    AssertionContext, Expectation, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 use alloc::borrow::Cow;
 use core::fmt;
 
-/// A boolean closure with an optional diagnostic description.
+/// A boolean closure with optional diagnostic relations.
 ///
-/// It is `Clone` when the closure is. `Debug` shows the description without the closure.
+/// It is `Clone` when the closure is. `Debug` shows the relations without the closure.
 #[derive(Clone)]
 pub struct Predicate<F> {
     callback: F,
     description: Cow<'static, str>,
+    rejection: Option<Cow<'static, str>>,
 }
 
 impl<F> fmt::Debug for Predicate<F> {
@@ -19,14 +20,31 @@ impl<F> fmt::Debug for Predicate<F> {
         formatter
             .debug_struct("Predicate")
             .field("description", &self.description)
+            .field("rejection", &self.rejection)
             .finish_non_exhaustive()
     }
 }
 
 /// Adapts a reusable boolean closure.
 ///
-/// Evaluation needs no renderer. Diagnostics render a rejected subject, so explaining a failure
-/// requires the active renderer to support the subject type.
+/// Diagnostics render a rejected subject, so the active renderer must support the subject type.
+/// Name the check with [`described_as`](Predicate::described_as) and its rejection with
+/// [`rejected_as`](Predicate::rejected_as) to define a domain check without implementing
+/// [`Expectation`]:
+///
+/// ```
+/// use assertr::{matchers::predicate, prelude::*};
+///
+/// fn is_even<R: ValueRenderer<i32>>() -> impl Expectation<i32, R> + Clone {
+///     predicate(|value: &i32| value % 2 == 0)
+///         .described_as("is even")
+///         .rejected_as("is odd")
+/// }
+///
+/// assert_that!(4).apply_assertion(is_even());
+/// let failures = assert_that!(3).with_location(false).capture(|it| it.matches(is_even()));
+/// assert_that!(failures[0].to_string()).contains("Actual: 3\n\nis odd");
+/// ```
 pub fn predicate<A: ?Sized, F>(callback: F) -> Predicate<F>
 where
     F: Fn(&A) -> bool,
@@ -34,6 +52,7 @@ where
     Predicate {
         callback,
         description: Cow::Borrowed("satisfies the predicate"),
+        rejection: None,
     }
 }
 
@@ -44,11 +63,22 @@ impl<F> Predicate<F> {
         self.description = description.into();
         self
     }
+
+    /// Sets the relation reported next to a rejected subject, such as `is odd`.
+    ///
+    /// Without it, a rejection reports that the subject does not satisfy the constraint and
+    /// nests the [`described_as`](Self::described_as) description.
+    #[must_use]
+    pub fn rejected_as(mut self, relation: impl Into<Cow<'static, str>>) -> Self {
+        self.rejection = Some(relation.into());
+        self
+    }
 }
 
 impl<A: ?Sized, R, F> Expectation<A, R> for Predicate<F>
 where
     F: Fn(&A) -> bool,
+    R: ValueRenderer<A>,
 {
     type Success<'a>
         = ()
@@ -67,22 +97,20 @@ where
             Err(())
         }
     }
-}
-impl<A: ?Sized, R, F> ExpectationDiagnostics<A, R> for Predicate<F>
-where
-    F: Fn(&A) -> bool,
-    R: ValueRenderer<A>,
-{
+
     const KIND: FailureKind = FailureKind::Matching;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&A, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        match rejected {
-            None => failure.relation(self.description.clone()),
-            Some((actual, ())) => failure
+    ) -> FailureBuilder {
+        match (rejected, &self.rejection) {
+            (None, _) => failure.relation(self.description.clone()),
+            (Some((actual, ())), Some(rejection)) => failure
+                .actual(context.render().value(actual))
+                .relation(rejection.clone()),
+            (Some((actual, ())), None) => failure
                 .actual(context.render().value(actual))
                 .relation("does not satisfy the constraint")
                 .constraint(context.describe(&self)),
@@ -109,6 +137,26 @@ mod tests {
             .is_equal_to(Some("does not satisfy the constraint"));
         assert_that!(child.constraint.as_ref().unwrap().relation.as_deref())
             .is_equal_to(Some("satisfies the predicate"));
+    }
+
+    #[test]
+    fn a_rejection_relation_replaces_the_nested_constraint() {
+        let failures = assert_that!(3).with_location(false).capture(|it| {
+            it.matches(
+                predicate(|value: &i32| value % 2 == 0)
+                    .described_as("is even")
+                    .rejected_as("is odd"),
+            )
+        });
+        assert_that!(failures[0].to_string()).is_equal_to(indoc::indoc! {"
+            -------- assertr --------
+            Expression: `3`
+
+            Actual: 3
+
+            is odd
+            -------- assertr --------
+        "});
     }
 
     #[test]

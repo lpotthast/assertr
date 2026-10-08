@@ -203,81 +203,228 @@ where
     }
 }
 
+/// Instrumented maps, keys, and operands that record every observation in one shared log.
 #[cfg(test)]
-mod tests {
-    use alloc::{
-        borrow::Cow, boxed::Box, collections::BTreeMap, rc::Rc, string::String, sync::Arc, vec::Vec,
+pub(super) mod fixture {
+    use super::{Map, MapLookup};
+    use crate::{
+        ValueRenderer,
+        assertions::HasLength,
+        borrow_for::BorrowFor,
+        renderer::RenderingOrder,
+        test_support::{StrOperand, StringRenderer},
     };
+    use alloc::{string::String, vec::Vec};
     use core::{
-        cell::Cell,
+        borrow::Borrow,
+        cell::{Cell, RefCell},
         cmp::Ordering,
+        fmt,
         hash::{Hash, Hasher},
     };
 
-    use crate::prelude::*;
+    /// Observations in the order they happened.
+    pub(crate) type Events = RefCell<Vec<&'static str>>;
 
-    use crate::assertions::HasLength;
-
-    use super::{Map, MapLookup, RenderingOrder};
-
-    #[derive(Debug, Default)]
-    struct LookupCounts {
-        equality: Cell<usize>,
-        hashing: Cell<usize>,
-        ordering: Cell<usize>,
+    /// Counts the recorded occurrences of `event`.
+    pub(crate) fn count(events: &Events, event: &str) -> usize {
+        events
+            .borrow()
+            .iter()
+            .filter(|recorded| **recorded == event)
+            .count()
     }
 
-    impl LookupCounts {
-        fn reset(&self) {
-            self.equality.set(0);
-            self.hashing.set(0);
-            self.ordering.set(0);
+    /// Takes the recorded native lookups and value comparisons, clearing the log.
+    pub(crate) fn take_observations(events: &Events) -> Vec<&'static str> {
+        events
+            .take()
+            .into_iter()
+            .filter(|event| matches!(*event, "lookup" | "compare"))
+            .collect()
+    }
+
+    /// A stored value whose comparisons with a `str` view record "compare".
+    #[derive(Debug)]
+    pub(crate) struct Value<'a> {
+        text: &'static str,
+        events: &'a Events,
+    }
+
+    impl PartialEq<str> for Value<'_> {
+        fn eq(&self, expected: &str) -> bool {
+            self.events.borrow_mut().push("compare");
+            self.text == expected
         }
     }
 
-    #[derive(Clone, Debug)]
-    struct CountingKey {
-        value: i32,
-        counts: Rc<LookupCounts>,
+    impl ValueRenderer<Value<'_>> for StringRenderer {
+        fn fmt(&self, value: &Value<'_>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{:?}", value.text)
+        }
     }
 
-    impl CountingKey {
-        fn new(value: i32, counts: &Rc<LookupCounts>) -> Self {
+    impl<F: Fn()> BorrowFor<Value<'_>> for StrOperand<F> {
+        type View = str;
+    }
+
+    /// An expected value whose borrows record "value".
+    pub(crate) fn value(events: &Events, text: &'static str) -> StrOperand<impl Fn()> {
+        StrOperand {
+            value: text,
+            observe: move || events.borrow_mut().push("value"),
+        }
+    }
+
+    /// A map with `String` keys whose native lookups record "lookup".
+    pub(crate) struct ObservedMap<'a> {
+        entries: Vec<(String, Value<'a>)>,
+        events: &'a Events,
+    }
+
+    impl<'a> ObservedMap<'a> {
+        pub(crate) fn new(events: &'a Events, entries: &[(&str, &'static str)]) -> Self {
+            let entries = entries
+                .iter()
+                .map(|&(key, text)| (String::from(key), Value { text, events }))
+                .collect();
+            Self { entries, events }
+        }
+    }
+
+    impl HasLength for ObservedMap<'_> {
+        fn length(&self) -> usize {
+            self.entries.len()
+        }
+    }
+
+    impl<'a> Map for ObservedMap<'a> {
+        type Key = String;
+        type Value = Value<'a>;
+        const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
+
+        fn entries(&self) -> impl Iterator<Item = (&String, &Value<'a>)> {
+            self.entries.iter().map(|(key, value)| (key, value))
+        }
+    }
+
+    impl MapLookup<str> for ObservedMap<'_> {
+        fn get_key_value(&self, query: &str) -> Option<(&String, &Self::Value)> {
+            self.events.borrow_mut().push("lookup");
+            self.entries().find(|(key, _)| *key == query)
+        }
+    }
+
+    /// A key operand whose borrows record "key". After its first borrow, a non-repeatable query
+    /// resolves to "later" instead.
+    pub(crate) struct Query<'a> {
+        first: &'a str,
+        borrows: Cell<usize>,
+        repeatable: bool,
+        events: &'a Events,
+    }
+
+    impl<'a> Query<'a> {
+        pub(crate) fn new(first: &'a str, events: &'a Events) -> Self {
             Self {
-                value,
-                counts: Rc::clone(counts),
+                first,
+                borrows: Cell::new(0),
+                repeatable: true,
+                events,
+            }
+        }
+
+        pub(crate) fn once(first: &'a str, events: &'a Events) -> Self {
+            Self {
+                repeatable: false,
+                ..Self::new(first, events)
             }
         }
     }
 
-    impl PartialEq for CountingKey {
+    impl Borrow<str> for Query<'_> {
+        fn borrow(&self) -> &str {
+            self.events.borrow_mut().push("key");
+            let previous = self.borrows.replace(self.borrows.get() + 1);
+            if self.repeatable || previous == 0 {
+                self.first
+            } else {
+                "later"
+            }
+        }
+    }
+
+    impl BorrowFor<String> for Query<'_> {
+        type View = str;
+    }
+
+    /// Bulk expected data whose slice accesses record "container".
+    pub(crate) struct Inputs<'a, T> {
+        pub(crate) values: Vec<T>,
+        pub(crate) events: &'a Events,
+    }
+
+    impl<T> AsRef<[T]> for Inputs<'_, T> {
+        fn as_ref(&self) -> &[T] {
+            self.events.borrow_mut().push("container");
+            &self.values
+        }
+    }
+
+    /// A key for standard maps whose equality, ordering, and hashing record "eq", "cmp", and
+    /// "hash".
+    #[derive(Clone, Debug)]
+    pub(crate) struct CountingKey<'a> {
+        pub(crate) value: i32,
+        pub(crate) events: &'a Events,
+    }
+
+    impl PartialEq for CountingKey<'_> {
         fn eq(&self, other: &Self) -> bool {
-            self.counts.equality.update(|count| count + 1);
+            self.events.borrow_mut().push("eq");
             self.value == other.value
         }
     }
 
-    impl Eq for CountingKey {}
+    impl Eq for CountingKey<'_> {}
 
-    impl PartialOrd for CountingKey {
+    impl PartialOrd for CountingKey<'_> {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
             Some(self.cmp(other))
         }
     }
 
-    impl Ord for CountingKey {
+    impl Ord for CountingKey<'_> {
         fn cmp(&self, other: &Self) -> Ordering {
-            self.counts.ordering.update(|count| count + 1);
+            self.events.borrow_mut().push("cmp");
             self.value.cmp(&other.value)
         }
     }
 
-    impl Hash for CountingKey {
+    impl Hash for CountingKey<'_> {
         fn hash<H: Hasher>(&self, state: &mut H) {
-            self.counts.hashing.update(|count| count + 1);
+            self.events.borrow_mut().push("hash");
             self.value.hash(state);
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::{
+        borrow::Cow, boxed::Box, collections::BTreeMap, rc::Rc, string::String, sync::Arc, vec::Vec,
+    };
+
+    use crate::{
+        assertions::HasLength,
+        matchers::{entry, entry_matchers, predicate},
+        prelude::*,
+    };
+
+    use super::{
+        Map, MapLookup, RenderingOrder,
+        fixture::{CountingKey, Events, count},
+    };
 
     fn assert_map_contract<M>(actual: &M, arbitrary_iteration: bool)
     where
@@ -305,10 +452,15 @@ mod tests {
         assert_that!(entries).contains_exactly([("alpha", 1), ("beta", 2)]);
     }
 
-    #[test]
-    fn mutable_reference_adapter_follows_the_map_contract() {
-        let mut map = BTreeMap::from([(String::from("alpha"), 1), (String::from("beta"), 2)]);
+    fn counting_keys(events: &Events, count: i32) -> impl Iterator<Item = CountingKey<'_>> {
+        (0..count).map(move |value| CountingKey { value, events })
+    }
 
+    #[test]
+    fn btree_map_adapter_follows_the_map_contract_for_values_and_references() {
+        let mut map = BTreeMap::from([(String::from("alpha"), 1), (String::from("beta"), 2)]);
+        assert_map_contract(&map, false);
+        assert_map_contract(&&map, false);
         assert_map_contract(&&mut map, false);
         assert_that_owned!(&mut map)
             .contains_key("alpha")
@@ -394,115 +546,140 @@ mod tests {
     }
 
     #[test]
-    fn btree_map_adapter_follows_the_map_contract_for_values_and_references() {
-        let map = BTreeMap::from([(String::from("alpha"), 1), (String::from("beta"), 2)]);
-        let map_ref = &map;
+    #[allow(clippy::mutable_key_type)]
+    fn btree_map_adapter_uses_ordered_lookup_instead_of_scanning_entries() {
+        let events = Events::default();
+        let map = counting_keys(&events, 8)
+            .map(|key| (key, 0))
+            .collect::<BTreeMap<_, _>>();
+        let missing = CountingKey {
+            value: 42,
+            events: &events,
+        };
+        events.take();
 
-        assert_map_contract(&map, false);
-        assert_map_contract(&map_ref, false);
+        assert_that!(MapLookup::<CountingKey>::get_key_value(&map, &missing)).is_none();
+        assert_that!(count(&events, "cmp")).is_not_equal_to(0);
+        assert_that!(count(&events, "eq") + count(&events, "hash")).is_equal_to(0);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    #[allow(clippy::mutable_key_type)]
+    fn hash_map_adapter_uses_hashed_lookup_instead_of_scanning_entries() {
+        use std::{
+            collections::HashMap,
+            hash::{BuildHasherDefault, DefaultHasher},
+        };
+
+        let events = Events::default();
+        let map = counting_keys(&events, 8)
+            .map(|key| (key, 0))
+            .collect::<HashMap<_, _, BuildHasherDefault<DefaultHasher>>>();
+        let missing = CountingKey {
+            value: 42,
+            events: &events,
+        };
+        events.take();
+
+        assert_that!(MapLookup::<CountingKey>::get_key_value(&map, &missing)).is_none();
+        assert_that!(count(&events, "hash")).is_not_equal_to(0);
+        assert_that!(count(&events, "cmp")).is_equal_to(0);
     }
 
     #[test]
     #[allow(clippy::mutable_key_type)]
-    fn btree_map_adapter_uses_ordered_lookup_instead_of_scanning_entries() {
-        let counts = Rc::new(LookupCounts::default());
-        let map = (0..8)
-            .map(|value| (CountingKey::new(value, &counts), value))
-            .collect::<BTreeMap<_, _>>();
-        let missing = CountingKey::new(42, &counts);
-        counts.reset();
-
-        assert_that!(
-            <BTreeMap<CountingKey, i32> as MapLookup<CountingKey>>::get_key_value(&map, &missing)
-        )
-        .is_none();
-        assert_that!(counts.ordering.get()).is_not_equal_to(0);
-        assert_that!(counts.equality.get()).is_equal_to(0);
-        assert_that!(counts.hashing.get()).is_equal_to(0);
-    }
-
-    /// A key type that is `Ord` but not `Hash`: the ordinary case for a hand-written `BTreeMap`
-    /// key. Every key-querying assertion must be available with the map's own bounds alone.
-    #[test]
-    fn btree_map_adapter_looks_up_keys_that_only_implement_ord() {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-        struct OrdOnlyKey(u32);
-
-        #[allow(clippy::trivially_copy_pass_by_ref)]
-        fn is_positive(value: &i32) -> bool {
-            *value > 0
-        }
-
-        fn satisfies_positive(it: AssertThat<i32, Capture>) {
-            it.is_greater_than(0);
-        }
-
-        let map = BTreeMap::from([(OrdOnlyKey(1), 1), (OrdOnlyKey(2), 2)]);
-        assert_that!(map)
-            .contains_key(&OrdOnlyKey(1))
-            .does_not_contain_key(&OrdOnlyKey(3))
-            .contains_entry(&OrdOnlyKey(1), 1)
-            .contains_entry_satisfying(&OrdOnlyKey(1), satisfies_positive)
-            .does_not_contain_entry(&OrdOnlyKey(1), 2)
-            .contains_keys([OrdOnlyKey(1), OrdOnlyKey(2)])
-            .contains_exactly_entries([(OrdOnlyKey(1), 1), (OrdOnlyKey(2), 2)])
-            .contains_exactly_entries_matching(crate::assertions::map::entry_matchers(
-                ([(OrdOnlyKey(1), is_positive), (OrdOnlyKey(2), is_positive)])
-                    .into_iter()
-                    .map(|(key, p)| (key, crate::expectation::predicate(p))),
-            ))
-            .contains_exactly_entries_satisfying([
-                (OrdOnlyKey(1), satisfies_positive),
-                (OrdOnlyKey(2), satisfies_positive),
-            ]);
-    }
-
-    #[test]
-    #[allow(clippy::mutable_key_type, clippy::trivially_copy_pass_by_ref)]
     fn exact_entry_assertions_do_not_compare_every_actual_and_expected_key() {
-        fn matches(value: &i32) -> bool {
-            *value >= 0
-        }
-
-        fn satisfies(it: AssertThat<i32, Capture>) {
-            it.is_not_equal_to(-1);
-        }
-
-        let counts = Rc::new(LookupCounts::default());
-        let map = (0..32)
-            .map(|value| (CountingKey::new(value, &counts), value))
+        let events = Events::default();
+        let map = counting_keys(&events, 32)
+            .map(|key| {
+                let value = key.value;
+                (key, value)
+            })
             .collect::<BTreeMap<_, _>>();
         let linear_comparison_bound = map.len() * 2;
-
+        let keys = || map.keys().cloned().collect::<Vec<_>>();
         let expected = map
             .iter()
             .map(|(key, value)| (key.clone(), *value))
             .collect::<Vec<_>>();
-        counts.reset();
-        assert_that!(map).contains_exactly_entries(expected);
-        assert_that!(counts.equality.get()).is_less_than(linear_comparison_bound);
-
-        let predicates = map
-            .keys()
-            .map(|key| (key.clone(), matches as fn(&i32) -> bool))
-            .collect::<Vec<_>>();
-        counts.reset();
-        assert_that!(map).contains_exactly_entries_matching(
-            crate::assertions::map::entry_matchers(
-                (predicates)
-                    .into_iter()
-                    .map(|(key, p)| (key, crate::expectation::predicate(p))),
-            ),
+        let matchers = entry_matchers(
+            keys()
+                .into_iter()
+                .map(|key| (key, predicate(|value: &i32| *value >= 0))),
         );
-        assert_that!(counts.equality.get()).is_less_than(linear_comparison_bound);
-
-        let assertions = map
-            .keys()
-            .map(|key| (key.clone(), satisfies as fn(AssertThat<i32, Capture>)))
+        let assertions = keys()
+            .into_iter()
+            .map(|key| {
+                (key, |it: AssertThat<i32, Capture>| {
+                    it.is_not_equal_to(-1);
+                })
+            })
             .collect::<Vec<_>>();
-        counts.reset();
+
+        events.take();
+        assert_that!(map).contains_exactly_entries(expected);
+        assert_that!(count(&events, "eq")).is_less_than(linear_comparison_bound);
+        events.take();
+        assert_that!(map).contains_exactly_entries_matching(matchers);
+        assert_that!(count(&events, "eq")).is_less_than(linear_comparison_bound);
+        events.take();
         assert_that!(map).contains_exactly_entries_satisfying(assertions);
-        assert_that!(counts.equality.get()).is_less_than(linear_comparison_bound);
+        assert_that!(count(&events, "eq")).is_less_than(linear_comparison_bound);
+    }
+
+    /// Key types with only the map's own lookup bounds: `Ord` but not `Hash` for a `BTreeMap`,
+    /// and `Hash` but not `Ord` for a `HashMap`. Every key-querying assertion must be available.
+    #[test]
+    fn standard_maps_look_up_keys_with_only_their_own_bounds() {
+        fn check<Mp, K>(map: Mp, key: fn(u32) -> K)
+        where
+            Mp: Map<Key = K, Value = i32> + MapLookup<K> + core::fmt::Debug,
+            K: core::fmt::Debug,
+        {
+            #[allow(clippy::trivially_copy_pass_by_ref)]
+            fn is_positive(value: &i32) -> bool {
+                *value > 0
+            }
+
+            fn satisfies_positive(it: AssertThat<i32, Capture>) {
+                it.is_greater_than(0);
+            }
+
+            assert_that!(map)
+                .contains_key(&key(1))
+                .does_not_contain_key(&key(3))
+                .contains_entry(&key(1), 1)
+                .contains_entry_satisfying(&key(1), satisfies_positive)
+                .does_not_contain_entry(&key(1), 2)
+                .contains_keys([key(1), key(2)])
+                .contains_exactly_entries([(key(1), 1), (key(2), 2)])
+                .contains_exactly_entries_matching([
+                    entry(key(1), predicate(is_positive)),
+                    entry(key(2), predicate(is_positive)),
+                ])
+                .contains_exactly_entries_satisfying([
+                    (key(1), satisfies_positive),
+                    (key(2), satisfies_positive),
+                ]);
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        struct OrdOnlyKey(u32);
+        check(
+            BTreeMap::from([(OrdOnlyKey(1), 1), (OrdOnlyKey(2), 2)]),
+            OrdOnlyKey,
+        );
+
+        #[cfg(feature = "std")]
+        {
+            #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+            struct HashOnlyKey(u32);
+            check(
+                std::collections::HashMap::from([(HashOnlyKey(1), 1), (HashOnlyKey(2), 2)]),
+                HashOnlyKey,
+            );
+        }
     }
 
     #[cfg(feature = "std")]
@@ -517,78 +694,11 @@ mod tests {
             HashMap::with_hasher(BuildHasherDefault::default());
         map.insert(String::from("alpha"), 1);
         map.insert(String::from("beta"), 2);
-        let map_ref = &map;
-
         assert_map_contract(&map, true);
-        assert_map_contract(&map_ref, true);
+        assert_map_contract(&&map, true);
         assert_that!(map)
             .contains_key("alpha")
             .contains_value(2)
             .contains_exactly_entries([(String::from("alpha"), 1), (String::from("beta"), 2)]);
-    }
-
-    #[cfg(feature = "std")]
-    #[test]
-    #[allow(clippy::mutable_key_type)]
-    fn hash_map_adapter_uses_hashed_lookup_instead_of_scanning_entries() {
-        use std::{
-            collections::HashMap,
-            hash::{BuildHasherDefault, DefaultHasher},
-        };
-
-        let counts = Rc::new(LookupCounts::default());
-        let map = (0..8)
-            .map(|value| (CountingKey::new(value, &counts), value))
-            .collect::<HashMap<_, _, BuildHasherDefault<DefaultHasher>>>();
-        let missing = CountingKey::new(42, &counts);
-        counts.reset();
-
-        assert_that!(
-            <HashMap<CountingKey, i32, BuildHasherDefault<DefaultHasher>> as MapLookup<
-                CountingKey,
-            >>::get_key_value(&map, &missing)
-        )
-        .is_none();
-        assert_that!(counts.hashing.get()).is_not_equal_to(0);
-        assert_that!(counts.ordering.get()).is_equal_to(0);
-    }
-
-    /// A key type that is `Hash` but not `Ord`: the ordinary case for a hand-written `HashMap` key.
-    /// Every key-querying assertion must be available with the map's own bounds alone.
-    #[cfg(feature = "std")]
-    #[test]
-    fn hash_map_adapter_looks_up_keys_that_only_implement_hash() {
-        use std::collections::HashMap;
-
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        struct HashOnlyKey(u32);
-
-        #[allow(clippy::trivially_copy_pass_by_ref)]
-        fn is_positive(value: &i32) -> bool {
-            *value > 0
-        }
-
-        fn satisfies_positive(it: AssertThat<i32, Capture>) {
-            it.is_greater_than(0);
-        }
-
-        let map = HashMap::from([(HashOnlyKey(1), 1), (HashOnlyKey(2), 2)]);
-        assert_that!(map)
-            .contains_key(&HashOnlyKey(1))
-            .does_not_contain_key(&HashOnlyKey(3))
-            .contains_entry(&HashOnlyKey(1), 1)
-            .contains_entry_satisfying(&HashOnlyKey(1), satisfies_positive)
-            .does_not_contain_entry(&HashOnlyKey(1), 2)
-            .contains_keys([HashOnlyKey(1), HashOnlyKey(2)])
-            .contains_exactly_entries([(HashOnlyKey(1), 1), (HashOnlyKey(2), 2)])
-            .contains_exactly_entries_matching(crate::assertions::map::entry_matchers(
-                ([(HashOnlyKey(1), is_positive), (HashOnlyKey(2), is_positive)])
-                    .into_iter()
-                    .map(|(key, p)| (key, crate::expectation::predicate(p))),
-            ))
-            .contains_exactly_entries_satisfying([
-                (HashOnlyKey(1), satisfies_positive),
-                (HashOnlyKey(2), satisfies_positive),
-            ]);
     }
 }

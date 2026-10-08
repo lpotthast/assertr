@@ -208,7 +208,7 @@
 //! ```rust
 //! use assertr::{matchers::{all_of, HasLengthOf, string}, prelude::*};
 //!
-//! let short_name = all_of((string::IsNotBlank, HasLengthOf::new(3)));
+//! let short_name = all_of(matchers![string::IsNotBlank, HasLengthOf::new(3)]);
 //! assert_that!("Ada").matches(&short_name);
 //! assert_that!(["", "Ada", "Grace"]).contains_matching(&short_name);
 //! ```
@@ -243,8 +243,8 @@
 //! - [Work within async limitations](https://docs.rs/assertr/latest/assertr/#async-limitations):
 //!   await async assertions in the calling task. Expectation hooks and capture callbacks are
 //!   synchronous, and chains cannot cross a `Send` boundary.
-//! - [Process failures and customize reports](https://docs.rs/assertr/latest/assertr/failure/adapter/index.html):
-//!   transform captured failures with adapters or select the presentation used by a panicking
+//! - [Process failures and customize reports](https://docs.rs/assertr/latest/assertr/failure/index.html):
+//!   inspect captured failures as structured data or select the presentation used by a panicking
 //!   assertion.
 //! - [Write assertions for custom types](https://docs.rs/assertr/latest/assertr/#custom-assertions):
 //!   implement reusable expectations with structured diagnostics, then expose chainable methods
@@ -342,7 +342,7 @@ pub use entry::{IntoAssertContext, IntoOwnedAssertContext};
 pub use entry::{PanicValue, Type, assert_that_type};
 #[cfg(feature = "std")]
 pub use entry::{assert_that_panic_by, assert_that_panic_by_async};
-pub use expectation::{AssertionContext, Expectation, ExpectationDiagnostics};
+pub use expectation::{AssertionContext, Expectation};
 pub use failure::{AssertionFailure, AssertionFailures, Fact, FailureKind};
 pub use renderer::{CustomRenderer, DebugRenderer, RenderingBudget, ValueRenderer};
 
@@ -585,9 +585,9 @@ struct ChainState<'t, M: Mode, R> {
     /// inherit these limits, which the rendering context applies in both panic and capture mode.
     rendering_budget: RenderingBudget,
 
-    /// An inherited context override for panic text. `None` uses `ToHumanReadableText`. Capture
-    /// mode never invokes presentation. Local adapters need not be thread-safe. `Rc` shares the
-    /// adapter with derived contexts without requiring the adapter to be `Clone`.
+    /// An inherited context override for panic text. `None` uses the failure's `Display` report.
+    /// Capture mode never invokes presentation. Local closures need not be thread-safe. `Rc`
+    /// shares the closure with derived contexts without requiring it to be `Clone`.
     panic_presentation: Option<alloc::rc::Rc<failure::panic_presentation::PanicPresentation>>,
 
     /// Compile-time marker selecting immediate panics or failure collection. Derived chains retain
@@ -614,9 +614,9 @@ struct ChainState<'t, M: Mode, R> {
 /// messages. Starting `capture` detaches the parent link and retains the ancestor messages as
 /// inherited messages, which still follow every local message.
 ///
-/// Parent links expose only these records, never the parent's subject, renderer, or presentation
-/// adapter. This lets a child retain its ancestry without requiring the parent's user values to
-/// be unwind safe. The child's own subject and renderer still determine its auto traits.
+/// Parent links expose only these records, never the parent's subject, renderer, or panic
+/// presentation. This lets a child retain its ancestry without requiring the parent's user values
+/// to be unwind safe. The child's own subject and renderer still determine its auto traits.
 struct ChainRecords<'t> {
     /// The ancestor records used for propagation. `None` marks a root, including one created by
     /// `capture`. This deliberately does not point to an entire assertion context or `ChainState`.

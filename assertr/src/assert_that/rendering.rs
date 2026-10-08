@@ -10,14 +10,13 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// Returns this chain's diagnostic rendering context.
     ///
     /// Execution adapters use [`RenderingContext::value`], [`RenderingContext::collection`],
-    /// [`RenderingContext::map`], and the context's other structural adapters instead of
+    /// [`RenderingContext::map`], and the context's other structural methods instead of
     /// formatting diagnostic values directly. This honors both the active
-    /// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. A rendered value always
-    /// retains type metadata. Customize its hint through
-    /// [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) and its text visibility
-    /// through [`Typed::show_type_hint`](crate::renderer::Typed::show_type_hint).
+    /// [`ValueRenderer`](crate::ValueRenderer) and [`RenderingBudget`]. Rendered leaves retain
+    /// type metadata. Control the visibility of its type hint through
+    /// [`Rendered::show_type_hint`](crate::renderer::Rendered::show_type_hint).
     ///
-    /// Reusable leaf checks implement [`ExpectationDiagnostics`](crate::ExpectationDiagnostics)
+    /// Reusable leaf checks implement [`Expectation`](crate::Expectation)
     /// and obtain the same context through
     /// [`AssertionContext::render`](crate::AssertionContext::render) instead. See
     /// [custom assertions](crate#custom-assertions).
@@ -45,10 +44,11 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///         self.track_assertion();
     ///         let produced = (self.actual())();
     ///         if produced % 2 != 0 {
-    ///             self.failure(FailureKind::Predicate)
-    ///                 .relation("does not produce an even number")
-    ///                 .fact(Fact::labelled("Produced", self.render().value(&produced)))
-    ///                 .raise();
+    ///             self.raise(
+    ///                 self.failure(FailureKind::Predicate)
+    ///                     .relation("does not produce an even number")
+    ///                     .fact(Fact::labelled("Produced", self.render().value(&produced))),
+    ///             );
     ///         }
     ///         self
     ///     }
@@ -57,7 +57,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// assert_that!(|| 4).produces_an_even_number();
     ///
     /// let failures = assert_that!(|| 3).capture(|it| it.produces_an_even_number());
-    /// assert_that!(ToHumanReadableText.render(&failures[0])).contains("Produced: 3");
+    /// assert_that!(failures[0].to_string()).contains("Produced: 3");
     /// ```
     #[must_use]
     pub const fn render(&self) -> RenderingContext<'_, R> {
@@ -82,7 +82,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///     .with_location(false)
     ///     .capture(|it| it.contains(5));
     ///
-    /// assert_that!(ToHumanReadableText.render(&failures[0])).contains("... 2 more elements ...");
+    /// assert_that!(failures[0].to_string()).contains("... 2 more elements ...");
     /// ```
     #[must_use]
     pub fn with_rendering_budget(mut self, budget: RenderingBudget) -> Self {
@@ -172,13 +172,13 @@ mod tests {
         let bounded = assert_that!(&values)
             .with_location(false)
             .capture(|it| it.contains(999));
-        assert_that!(ToHumanReadableText.render(&bounded[0])).contains("... 4 more elements ...");
+        assert_that!(bounded[0].to_string()).contains("... 4 more elements ...");
 
         let unlimited = assert_that!(&values)
             .with_rendering_budget(RenderingBudget::unlimited())
             .with_location(false)
             .capture(|it| it.contains(999));
-        assert_that!(ToHumanReadableText.render(&unlimited[0])).does_not_contain("more elements");
+        assert_that!(unlimited[0].to_string()).does_not_contain("more elements");
     }
 
     #[test]
@@ -195,8 +195,7 @@ mod tests {
                 )
             });
 
-        assert_that!(ToHumanReadableText.render(&failures[0]))
-            .contains("Actual: 123... 3 more characters ...");
+        assert_that!(failures[0].to_string()).contains("Actual: 123... 3 more characters ...");
     }
 
     #[test]
@@ -206,7 +205,7 @@ mod tests {
             .with_location(false)
             .capture(|it| it.is_equal_to(Secret(2)));
 
-        assert_that!(ToHumanReadableText.render(&failures[0]))
+        assert_that!(failures[0].to_string())
             .contains("Expected: Secret(2)")
             .contains("Actual: Secret(1)");
     }

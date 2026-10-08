@@ -1,4 +1,5 @@
-//! Assertr's stable human-readable failure adapter.
+//! Assertr's human-readable failure report, produced by the `Display` implementations of
+//! [`AssertionFailure`] and [`AssertionFailures`](crate::AssertionFailures).
 //!
 //! The body grammar is:
 //!
@@ -25,15 +26,8 @@
 //! `Nested failures:` (its children), each child indented one level and introduced by the
 //! typed path it was raised for, when present.
 
-use super::super::Adapter;
-use alloc::{string::String, vec::Vec};
-use assertr::borrow_for::BorrowFor;
-use core::borrow::Borrow;
-use core::{
-    convert::Infallible,
-    fmt::{self, Display, Write},
-    ops::Deref,
-};
+use alloc::{format, string::String, vec::Vec};
+use core::fmt::{self, Display, Write};
 
 use crate::{
     AssertionFailure, Fact,
@@ -41,155 +35,19 @@ use crate::{
     renderer::Rendered,
 };
 
-/// The typed human-readable representation of an assertion failure.
-///
-/// Keeping this distinct from an arbitrary [`String`] prevents a machine-oriented stage from
-/// accidentally accepting human-readable text. It can be borrowed through [`AsRef<str>`] or
-/// `AsRef<[u8]>`, or consumed with [`into_string`](Self::into_string).
-#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct HumanReadableText(String);
-
-impl HumanReadableText {
-    /// Creates human-readable text for a custom failure presentation or adapter chain.
-    #[must_use]
-    pub fn new(text: impl Into<String>) -> Self {
-        Self(text.into())
-    }
-
-    /// Borrows the text.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Consumes this value and returns its string.
-    #[must_use]
-    pub fn into_string(self) -> String {
-        self.0
-    }
+/// Writes the complete report of one failure, enclosed in banners.
+pub(crate) fn write_failure(failure: &AssertionFailure, w: &mut dyn Write) -> fmt::Result {
+    w.write_str(BANNER)?;
+    write_report(failure, w)?;
+    w.write_str(BANNER)
 }
 
-impl AsRef<str> for HumanReadableText {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl AsRef<[u8]> for HumanReadableText {
-    fn as_ref(&self) -> &[u8] {
-        self.as_str().as_bytes()
-    }
-}
-
-impl Deref for HumanReadableText {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_str()
-    }
-}
-
-impl Display for HumanReadableText {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl From<HumanReadableText> for String {
-    fn from(text: HumanReadableText) -> Self {
-        text.into_string()
-    }
-}
-
-impl PartialEq<str> for HumanReadableText {
-    fn eq(&self, other: &str) -> bool {
-        self.as_str() == other
-    }
-}
-
-impl PartialEq<&str> for HumanReadableText {
-    fn eq(&self, other: &&str) -> bool {
-        self.as_str() == *other
-    }
-}
-
-impl PartialEq<String> for HumanReadableText {
-    fn eq(&self, other: &String) -> bool {
-        self.as_str() == other
-    }
-}
-
-impl Borrow<str> for HumanReadableText {
-    fn borrow(&self) -> &str {
-        self.as_str()
-    }
-}
-impl BorrowFor<String> for HumanReadableText {
-    type View = str;
-}
-impl BorrowFor<HumanReadableText> for &str {
-    type View = str;
-}
-impl BorrowFor<HumanReadableText> for String {
-    type View = str;
-}
-
-/// Converts an [`AssertionFailure`] to assertr's stable human-readable text.
-///
-/// Call [`render`](Self::render) on a captured failure for a [`HumanReadableText`] report. Use its
-/// [`Adapter`] implementation when composing a pipeline. The [adapter
-/// guide](crate::failure::adapter) demonstrates both forms and explains how to select a custom
-/// panic presentation.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ToHumanReadableText;
-
-impl ToHumanReadableText {
-    /// Converts one failure without the `Result` wrapper needed by generic adapter composition.
-    ///
-    /// # Panics
-    ///
-    /// Panics if Rust's infallible [`String`] formatter unexpectedly reports an error.
-    #[must_use]
-    pub fn render(self, failure: &AssertionFailure) -> HumanReadableText {
-        let mut report = String::new();
-        report.push_str(BANNER);
-        write_report(failure, &mut report).expect("writing a text report to a String cannot fail");
-        report.push_str(BANNER);
-        HumanReadableText(report)
-    }
-
-    /// Includes the path heading used when evidence is displayed inside a parent failure.
-    pub(crate) fn render_child(failure: &AssertionFailure) -> HumanReadableText {
-        let mut report = String::new();
-        write_children(&mut report, core::slice::from_ref(failure))
-            .expect("writing a text report to a String cannot fail");
-        HumanReadableText(report)
-    }
-}
-
-impl Adapter<crate::AssertionFailures> for ToHumanReadableText {
-    type Output = HumanReadableText;
-    type Error = Infallible;
-
-    fn adapt(&self, failures: &crate::AssertionFailures) -> Result<Self::Output, Self::Error> {
-        let mut report = String::new();
-        for (index, failure) in failures.iter().enumerate() {
-            if index != 0 {
-                report.push('\n');
-            }
-            report.push_str(self.render(failure).as_str());
-        }
-        Ok(HumanReadableText(report))
-    }
-}
-
-impl Adapter<AssertionFailure> for ToHumanReadableText {
-    type Output = HumanReadableText;
-    type Error = Infallible;
-
-    fn adapt(&self, failure: &AssertionFailure) -> Result<Self::Output, Self::Error> {
-        Ok(self.render(failure))
-    }
+/// The report of a failure displayed inside a parent failure, including its path heading.
+pub(crate) fn child_text(failure: &AssertionFailure) -> String {
+    let mut report = String::new();
+    write_children(&mut report, core::slice::from_ref(failure))
+        .expect("writing a text report to a String cannot fail");
+    report
 }
 
 /// Renders the description of a failure from its fields.
@@ -239,11 +97,7 @@ fn write_body_value(body: &mut String, label: &str, value: &Rendered) {
 }
 
 fn write_value(output: &mut String, value: &Rendered) {
-    let mut rendered = String::new();
-    value
-        .write(&mut rendered, true)
-        .expect("writing a rendered value to a String cannot fail");
-    output.push_str(rendered.trim_end_matches('\n'));
+    output.push_str(format!("{value:#}").trim_end_matches('\n'));
 }
 
 /// Writes everything between the banners.
@@ -322,9 +176,7 @@ impl Display for FactText<'_> {
             f.write_str(&self.0.label)?;
             f.write_str(": ")?;
         }
-        let mut value = String::new();
-        self.0.value.write(&mut value, true)?;
-        f.write_str(value.trim_end_matches('\n'))
+        f.write_str(format!("{:#}", self.0.value).trim_end_matches('\n'))
     }
 }
 
@@ -365,11 +217,7 @@ fn write_children(w: &mut dyn Write, children: &[AssertionFailure]) -> fmt::Resu
                     PathSegment::TupleIndex(index) => write!(w, ".{index}")?,
                     PathSegment::Variant(name) => write!(w, "::{name}")?,
                     PathSegment::Index(index) => write!(w, "[{index}]")?,
-                    PathSegment::Key(key) => {
-                        w.write_str("[")?;
-                        key.write(w, false)?;
-                        w.write_str("]")?;
-                    }
+                    PathSegment::Key(key) => write!(w, "[{key}]")?,
                 }
             }
             w.write_str(":\n")?;
@@ -450,9 +298,8 @@ impl Write for Indented<'_> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
-    use crate::renderer::IntoRendered;
 
-    use super::{ToHumanReadableText, body};
+    use super::body;
 
     mod child_locations {
         use super::*;
@@ -468,7 +315,7 @@ mod tests {
                 } else {
                     "  - At [1]:\n    does not match"
                 };
-                let child = FailureBuilder::detached::<()>(FailureKind::Matching)
+                let child = FailureBuilder::new::<()>(FailureKind::Matching)
                     .path(path)
                     .relation("does not match")
                     .facts([
@@ -476,7 +323,7 @@ mod tests {
                         Fact::labelled("key", "evidence"),
                     ])
                     .build();
-                let root = FailureBuilder::detached::<()>(FailureKind::Matching)
+                let root = FailureBuilder::new::<()>(FailureKind::Matching)
                     .relation("does not hold")
                     .facts([
                         Fact::labelled("index", "8"),
@@ -505,17 +352,17 @@ mod tests {
 
         #[test]
         fn every_path_segment_contributes_to_the_child_heading() {
-            let child = FailureBuilder::detached::<()>(FailureKind::Matching)
+            let child = FailureBuilder::new::<()>(FailureKind::Matching)
                 .path([
                     PathSegment::Field("rows"),
                     PathSegment::Index(1),
                     PathSegment::Variant("Some"),
                     PathSegment::TupleIndex(0),
-                    PathSegment::Key("\"id\"".into_rendered()),
+                    PathSegment::Key("\"id\"".into()),
                 ])
                 .relation("does not match")
                 .build();
-            let root = FailureBuilder::detached::<()>(FailureKind::Matching)
+            let root = FailureBuilder::new::<()>(FailureKind::Matching)
                 .child(child)
                 .build();
 
@@ -535,22 +382,21 @@ mod tests {
 
         #[test]
         fn descriptions_render_facts_and_unexpected_values_through_the_common_grammar() {
-            let description = FailureBuilder::detached::<i32>(FailureKind::Equality)
+            let description = FailureBuilder::new::<i32>(FailureKind::Equality)
                 .relation("is not equal to")
                 .unexpected("3")
                 .fact(Fact::labelled("Reason", "reserved value"))
                 .child(
-                    FailureBuilder::detached::<i32>(FailureKind::Other)
+                    FailureBuilder::new::<i32>(FailureKind::Other)
                         .relation("has a valid identifier")
                         .build(),
                 )
                 .omitted_children(1)
                 .build();
-            let failure = FailureBuilder::detached::<[i32]>(FailureKind::Matching)
+            let failure = FailureBuilder::new::<[i32]>(FailureKind::Matching)
                 .constraint(description)
                 .build();
-            assert_that!(ToHumanReadableText.render(&failure)).is_equal_to(
-                crate::failure::adapter::HumanReadableText::new(indoc::indoc! {r"
+            assert_that!(failure.to_string()).is_equal_to(indoc::indoc! {r"
                 -------- assertr --------
                 Constraint:
                     is not equal to
@@ -563,8 +409,7 @@ mod tests {
                     Nested failures:
                       - has a valid identifier
                 -------- assertr --------
-            "}),
-            );
+            "});
         }
     }
 
@@ -574,36 +419,32 @@ mod tests {
 
         #[test]
         fn is_omitted_when_nothing_follows_the_header() {
-            let mut failure = FailureBuilder::detached::<i32>(FailureKind::Other).build();
+            let mut failure = FailureBuilder::new::<i32>(FailureKind::Other).build();
             failure.subject_name = Some("answer".into());
             failure.expression = Some("value");
 
-            assert_that!(ToHumanReadableText.render(&failure).as_str()).is_equal_to(
-                indoc::indoc! {"
+            assert_that!(failure.to_string()).is_equal_to(indoc::indoc! {"
                 -------- assertr --------
                 Subject: answer
                 Expression: `value`
                 -------- assertr --------
-            "},
-            );
+            "});
         }
 
         #[test]
         fn separates_the_header_from_a_following_block() {
-            let mut failure = FailureBuilder::detached::<i32>(FailureKind::Other).build();
+            let mut failure = FailureBuilder::new::<i32>(FailureKind::Other).build();
             failure.expression = Some("value");
             failure.messages.push("context".into());
 
-            assert_that!(ToHumanReadableText.render(&failure).as_str()).is_equal_to(
-                indoc::indoc! {"
+            assert_that!(failure.to_string()).is_equal_to(indoc::indoc! {"
                 -------- assertr --------
                 Expression: `value`
 
                 Messages:
                   - context
                 -------- assertr --------
-            "},
-            );
+            "});
         }
     }
 
@@ -611,7 +452,7 @@ mod tests {
         use super::*;
 
         fn rendered(text: &str) -> crate::renderer::Rendered {
-            text.into_rendered()
+            text.into()
         }
 
         #[test]
@@ -668,29 +509,29 @@ mod tests {
 
         #[test]
         fn nested_failures_are_indented_one_level_per_depth_with_empty_lines_left_empty() {
-            let grandchild = FailureBuilder::detached::<i32>(FailureKind::Ordering)
+            let grandchild = FailureBuilder::new::<i32>(FailureKind::Ordering)
                 .actual(1)
                 .relation("is not greater than")
                 .expected(5)
                 .path([PathSegment::Index(0)])
                 .build();
-            let child = FailureBuilder::detached::<[i32; 1]>(FailureKind::Predicate)
+            let child = FailureBuilder::new::<[i32; 1]>(FailureKind::Predicate)
                 .actual(format_args!("[1]"))
                 .relation("does not exactly satisfy the assertions")
                 .child(grandchild)
                 .build();
             let failures = assert_that!(1).with_location(false).capture(|it| {
                 it.track_assertion();
-                it.failure(FailureKind::Predicate)
-                    .relation("does not hold")
-                    .fact(Fact::note("first note\nsecond line"))
-                    .child(child)
-                    .raise();
+                it.raise(
+                    it.failure(FailureKind::Predicate)
+                        .relation("does not hold")
+                        .fact(Fact::note("first note\nsecond line"))
+                        .child(child),
+                );
                 it
             });
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(
-                crate::failure::adapter::HumanReadableText::new(indoc::indoc! {"
+            assert_that!(failures[0].to_string()).is_equal_to(indoc::indoc! {"
                 -------- assertr --------
                 Expression: `1`
 
@@ -712,8 +553,7 @@ mod tests {
 
                         Expected: 5
                 -------- assertr --------
-            "}),
-            );
+            "});
         }
     }
 }

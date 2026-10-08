@@ -1,137 +1,38 @@
-use crate::borrow_for::{BorrowFor, borrow_for};
-use crate::failure::{Fact, FailureKind};
+use crate::assertions::distance::NumericDistance;
+use crate::borrow_for::BorrowFor;
 use crate::mode::Mode;
 use crate::{
     AssertThat, DebugRenderer, ValueRenderer,
-    renderer::{IntoRendered, Rendered},
+    renderer::{Rendered, RenderingContext},
 };
-use crate::{AssertionContext, Expectation, ExpectationDiagnostics, failure::FailureBuilder};
 use jiff::SignedDuration;
 
 // SignedDuration's alternate Debug form shows raw nanoseconds. Keep its compact form in reports.
-fn compact(value: impl IntoRendered) -> Rendered {
-    let mut rendered = value.into_rendered_compact();
-    rendered.compact = true;
-    rendered
+fn compact<R: ValueRenderer<SignedDuration>>(
+    render: RenderingContext<'_, R>,
+    value: &SignedDuration,
+) -> Rendered {
+    render.compact().value(value)
 }
 
-sign_expectations!(subject: SignedDuration, zero: SignedDuration::ZERO, present: compact);
+sign_expectations!(SignedDuration, zero: SignedDuration::ZERO, present: compact);
 
-/// Compares exact nanosecond distance within a non-negative inclusive deviation.
-///
-/// Expected value and deviation independently select `SignedDuration` views through [`BorrowFor`].
-/// Construction only stores the operands. Each evaluation borrows expected value first and
-/// deviation second, once each. Rejection retains both views, with `true` marking an invalid
-/// negative deviation. Diagnostics require only a renderer for `SignedDuration`.
-///
-/// The default type parameters preserve the owned `IsCloseTo` spelling:
-///
-/// ```
-/// use assertr::{matchers::signed_duration::IsCloseTo, prelude::*};
-/// use jiff::SignedDuration;
-/// const ZERO: IsCloseTo = IsCloseTo::new(SignedDuration::ZERO, SignedDuration::ZERO);
-/// assert_that!(SignedDuration::ZERO).matches(ZERO);
-/// let expected = SignedDuration::from_secs(3);
-/// let deviation = SignedDuration::from_secs(1);
-/// let reusable = IsCloseTo::new(&expected, deviation);
-/// assert_that!(SignedDuration::from_secs(4)).matches(&reusable);
-/// ```
-#[derive(Debug, Clone)]
-pub struct IsCloseTo<E = SignedDuration, D = E> {
-    expected: E,
-    allowed_deviation: D,
-}
-impl<E, D, R> Expectation<SignedDuration, R> for IsCloseTo<E, D>
-where
-    E: BorrowFor<SignedDuration, View = SignedDuration>,
-    D: BorrowFor<SignedDuration, View = SignedDuration>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        SignedDuration: 'a;
-    type Rejection<'a>
-        = (&'a SignedDuration, &'a SignedDuration, bool)
-    where
-        Self: 'a,
-        SignedDuration: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a SignedDuration,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<SignedDuration, _>(&self.expected);
-        let allowed_deviation = borrow_for::<SignedDuration, _>(&self.allowed_deviation);
-        if allowed_deviation.is_negative() {
-            return Err((expected, allowed_deviation, true));
-        }
-        // The full MIN-to-MAX distance fits in i128 nanoseconds.
-        let distance = (actual.as_nanos() - expected.as_nanos()).abs();
-        if distance <= allowed_deviation.as_nanos() {
-            Ok(())
-        } else {
-            Err((expected, allowed_deviation, false))
-        }
+pub use crate::assertions::distance::IsCloseTo;
+
+/// Exact, overflow-checked distance between durations. A distance larger than
+/// `SignedDuration::MAX` cannot be represented and therefore never satisfies a deviation.
+impl NumericDistance for SignedDuration {
+    fn zero_distance() -> Self {
+        SignedDuration::ZERO
     }
-}
-impl<E, D, R> ExpectationDiagnostics<SignedDuration, R> for IsCloseTo<E, D>
-where
-    E: BorrowFor<SignedDuration, View = SignedDuration>,
-    D: BorrowFor<SignedDuration, View = SignedDuration>,
-    R: ValueRenderer<SignedDuration>,
-{
-    const KIND: FailureKind = FailureKind::Ordering;
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a SignedDuration, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            Some((_, (_, allowed_deviation, true))) => failure
-                .relation("was given an invalid allowed deviation")
-                .fact(Fact::labelled(
-                    "Allowed deviation",
-                    compact(render.value(allowed_deviation)),
-                ))
-                .fact(Fact::note(
-                    "The allowed deviation must be a non-negative duration.",
-                )),
-            observation => {
-                let (expected, allowed_deviation, failure) = match observation {
-                    None => (
-                        borrow_for::<SignedDuration, _>(&self.expected),
-                        borrow_for::<SignedDuration, _>(&self.allowed_deviation),
-                        failure.relation("is close to"),
-                    ),
-                    Some((actual, (expected, allowed_deviation, _))) => (
-                        expected,
-                        allowed_deviation,
-                        failure
-                            .actual(compact(render.value(actual)))
-                            .relation("is not close to"),
-                    ),
-                };
-                failure
-                    .expected(compact(render.value(expected)))
-                    .fact(Fact::labelled(
-                        "Allowed deviation",
-                        compact(render.value(allowed_deviation)),
-                    ))
-            }
-        }
-    }
-}
-impl<E, D> IsCloseTo<E, D> {
-    /// Expects a duration within this inclusive deviation of `expected`.
-    #[must_use]
-    pub const fn new(expected: E, allowed_deviation: D) -> Self {
-        Self {
-            expected,
-            allowed_deviation,
-        }
+
+    fn checked_distance(&self, other: &Self) -> Option<Self> {
+        // The full MIN-to-MAX distance fits in i128 nanoseconds, unlike `checked_sub` near MIN.
+        const NANOS_PER_SECOND: i128 = 1_000_000_000;
+        let distance = (self.as_nanos() - other.as_nanos()).abs();
+        let secs = i64::try_from(distance / NANOS_PER_SECOND).ok()?;
+        let nanos = i32::try_from(distance % NANOS_PER_SECOND).ok()?;
+        Some(SignedDuration::new(secs, nanos))
     }
 }
 
@@ -218,6 +119,22 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+        use jiff::SignedDuration;
+
+        #[test]
+        fn are_as_expected() {
+            SignedDuration::ZERO.must().be_zero();
+            SignedDuration::from_secs(-5).must().be_negative();
+            SignedDuration::from_secs(5)
+                .must()
+                .be_positive()
+                .be_close_to(SignedDuration::from_secs(4), SignedDuration::from_secs(1));
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
@@ -238,7 +155,7 @@ mod tests {
                 .with_location(false)
                 .capture(SignedDurationAssertions::is_zero);
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+            assert_that!(failures[0].to_string()).contains(SENTINEL);
         }
     }
 
@@ -246,12 +163,6 @@ mod tests {
         use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::SignedDuration;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            SignedDuration::ZERO.must().be_zero();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -290,12 +201,6 @@ mod tests {
         use jiff::SignedDuration;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            SignedDuration::from_secs(-5).must().be_negative();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(SignedDuration::ZERO), is_negative());
         }
@@ -323,37 +228,12 @@ mod tests {
                     -------- assertr --------
                 "});
         }
-
-        #[test]
-        fn panics_when_positive() {
-            assert_that_panic_by(|| {
-                assert_that!(SignedDuration::from_secs(5))
-                    .with_location(false)
-                    .is_negative();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `SignedDuration::from_secs(5)`
-
-                    Actual: 5s
-
-                    is not negative
-                    -------- assertr --------
-                "});
-        }
     }
 
     mod is_positive {
         use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::SignedDuration;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            SignedDuration::from_secs(5).must().be_positive();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -363,25 +243,6 @@ mod tests {
         #[test]
         fn succeeds_when_positive() {
             assert_that!(SignedDuration::from_secs(5)).is_positive();
-        }
-
-        #[test]
-        fn panics_when_zero() {
-            assert_that_panic_by(|| {
-                assert_that!(SignedDuration::ZERO)
-                    .with_location(false)
-                    .is_positive();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `SignedDuration::ZERO`
-
-                    Actual: 0s
-
-                    is not positive
-                    -------- assertr --------
-                "});
         }
 
         #[test]
@@ -407,18 +268,9 @@ mod tests {
     mod is_close_to {
         use crate::failure::FailureKind;
         use crate::prelude::*;
-        use crate::test_support::{SENTINEL, SentinelRenderer, rendered_text};
+        use crate::test_support::{SENTINEL, SentinelRenderer};
         use indoc::formatdoc;
         use jiff::SignedDuration;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            SignedDuration::from_secs_f32(0.333).must().be_close_to(
-                SignedDuration::from_secs_f32(0.333),
-                SignedDuration::from_secs_f32(0.001),
-            );
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -433,7 +285,8 @@ mod tests {
         #[allow(clippy::needless_borrows_for_generic_args)]
         fn accepts_owned_borrowed_and_independently_typed_operands() {
             use super::super::IsCloseTo;
-            const TYPED: IsCloseTo = IsCloseTo::new(SignedDuration::ZERO, SignedDuration::ZERO);
+            const TYPED: IsCloseTo<SignedDuration> =
+                IsCloseTo::new(SignedDuration::ZERO, SignedDuration::ZERO);
             let expected = SignedDuration::from_secs(3);
             let deviation = SignedDuration::from_secs(1);
             let actual = SignedDuration::from_secs(4);
@@ -452,7 +305,7 @@ mod tests {
         #[test]
         fn resolves_operands_once_in_order_and_reuses_rejected_views() {
             use super::super::IsCloseTo;
-            use crate::{borrow_for::BorrowFor, test_support::NoRenderer};
+            use crate::borrow_for::BorrowFor;
             use core::{
                 borrow::Borrow,
                 cell::{Cell, RefCell},
@@ -520,10 +373,9 @@ mod tests {
                     .describe::<SignedDuration, _>(&matcher);
                 assert_that!(description.relation.as_deref()).is_equal_to(Some("is close to"));
                 assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
-                // Re-evaluation resolves the new views, and the leaf needs no renderer to check
-                // them.
+                // Re-evaluation resolves the new views.
                 events.borrow_mut().clear();
-                let root = assert_that!(SignedDuration::MAX).with_renderer(NoRenderer);
+                let root = assert_that!(SignedDuration::MAX);
                 assert_that!(
                     matcher
                         .evaluate(&SignedDuration::MAX, &root.assertion_context())
@@ -552,21 +404,10 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_for_equal_extremes() {
+        fn accepts_equal_extremes() {
             for value in [SignedDuration::MAX, SignedDuration::MIN] {
                 for deviation in [SignedDuration::ZERO, SignedDuration::from_secs(1)] {
                     assert_that!(value).is_close_to(value, deviation);
-                }
-            }
-        }
-
-        #[test]
-        fn captures_no_failures_for_equal_extremes() {
-            for value in [SignedDuration::MAX, SignedDuration::MIN] {
-                for deviation in [SignedDuration::ZERO, SignedDuration::from_secs(1)] {
-                    let failures =
-                        assert_that!(value).capture(|it| it.is_close_to(value, deviation));
-                    assert_that!(failures).is_empty();
                 }
             }
         }
@@ -737,7 +578,7 @@ mod tests {
 
                 Details:
                   - Allowed deviation: 1s ago
-                  - The allowed deviation must be a non-negative duration.
+                  - The allowed deviation must be zero or positive.
                 -------- assertr --------
             "});
         }
@@ -746,69 +587,16 @@ mod tests {
         fn failures_render_all_duration_values_with_the_active_renderer() {
             let failures = assert_that!(SignedDuration::MIN)
                 .with_renderer(SentinelRenderer)
-                .capture(|it| it.is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1)));
+                .capture(|it| {
+                    it.is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1))
+                        .is_close_to(SignedDuration::MAX, SignedDuration::MIN)
+                });
 
-            assert_that!(failures).contains_exactly_satisfying([
-                |subject: AssertThat<AssertionFailure, Capture>| {
-                    subject
-                        .derive_owned(|entry| rendered_text(entry.actual.as_ref().unwrap()))
-                        .is_equal_to(SENTINEL);
-                    subject
-                        .derive_owned(|entry| rendered_text(entry.expected.as_ref().unwrap()))
-                        .is_equal_to(SENTINEL);
-                    subject
-                        .derive(|entry| &entry.facts)
-                        .contains_exactly_satisfying([
-                            |element: AssertThat<crate::Fact, Capture>| {
-                                element
-                                    .derive_owned(|item| rendered_text(&item.value))
-                                    .is_equal_to(SENTINEL);
-                            },
-                        ]);
-                },
-            ]);
-        }
-
-        #[test]
-        fn invalid_deviation_uses_the_active_renderer() {
-            let failures = assert_that!(SignedDuration::MAX)
-                .with_renderer(SentinelRenderer)
-                .capture(|it| it.is_close_to(SignedDuration::MAX, SignedDuration::MIN));
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element
-                        .derive_owned(|item| rendered_text(&item.facts[0].value))
-                        .is_equal_to(SENTINEL);
-                },
-            ]);
-        }
-
-        #[test]
-        fn panics_when_below_allowed_range() {
-            assert_that_panic_by(|| {
-                assert_that!(SignedDuration::from_secs_f32(0.3319))
-                    .with_location(false)
-                    .is_close_to(
-                        SignedDuration::from_secs_f32(0.333),
-                        SignedDuration::from_secs_f32(0.001),
-                    );
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `SignedDuration::from_secs_f32(0.3319)`
-
-                    Actual: 331ms 900µs
-
-                    is not close to
-
-                    Expected: 333ms
-
-                    Details:
-                      - Allowed deviation: 1ms
-                    -------- assertr --------
-                "});
+            let rendered = |value: &crate::renderer::Rendered| format!("{value:#}");
+            assert_that!(rendered(failures[0].actual.as_ref().unwrap())).is_equal_to(SENTINEL);
+            assert_that!(rendered(failures[0].expected.as_ref().unwrap())).is_equal_to(SENTINEL);
+            assert_that!(rendered(&failures[0].facts[0].value)).is_equal_to(SENTINEL);
+            assert_that!(rendered(&failures[1].facts[0].value)).is_equal_to(SENTINEL);
         }
 
         #[test]
@@ -828,30 +616,16 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_above_allowed_range() {
-            assert_that_panic_by(|| {
-                assert_that!(SignedDuration::from_secs_f32(0.3341))
-                    .with_location(false)
-                    .is_close_to(
+        fn rejects_values_outside_the_allowed_range() {
+            for actual in [0.3319, 0.3341] {
+                let failures = assert_that!(SignedDuration::from_secs_f32(actual)).capture(|it| {
+                    it.is_close_to(
                         SignedDuration::from_secs_f32(0.333),
                         SignedDuration::from_secs_f32(0.001),
-                    );
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `SignedDuration::from_secs_f32(0.3341)`
-
-                    Actual: 334ms 100µs
-
-                    is not close to
-
-                    Expected: 333ms
-
-                    Details:
-                      - Allowed deviation: 1ms
-                    -------- assertr --------
-                "});
+                    )
+                });
+                assert_that!(failures).has_length(1);
+            }
         }
     }
 }

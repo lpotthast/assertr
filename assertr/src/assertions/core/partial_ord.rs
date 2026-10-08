@@ -1,14 +1,11 @@
-use crate::borrow_for::{BorrowFor, borrow_for};
+use super::partial_eq::operand_expectation;
+use crate::borrow_for::BorrowFor;
 use core::cmp::Ordering;
 
-use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
-    failure::{FailureBuilder, FailureKind},
-};
+use crate::{AssertThat, DebugRenderer, Mode, ValueRenderer};
 
-/// Generates one reusable ordering bound: the struct, its constructors, and both expectation
-/// hooks. The bound accepts the listed [`Ordering`] results of `actual.partial_cmp(expected)`.
+/// Generates one reusable ordering bound: the struct, its constructors, and its expectation.
+/// The bound accepts the listed [`Ordering`] results of `actual.partial_cmp(expected)`.
 macro_rules! ordering_expectation {
     (
         $(#[$struct_doc:meta])*
@@ -39,66 +36,20 @@ macro_rules! ordering_expectation {
             }
         }
 
-        impl<T: ?Sized, E, R> Expectation<T, R> for $name<E>
-        where
-            T: PartialOrd<E::View>,
-            E: BorrowFor<T>,
-        {
-            type Success<'a>
-                = ()
-            where
-                Self: 'a,
-                T: 'a;
-            type Rejection<'a>
-                = &'a E::View
-            where
-                Self: 'a,
-                T: 'a;
-
-            fn evaluate<'a>(
-                &'a self,
-                actual: &'a T,
-                _: &AssertionContext<'_, R>,
-            ) -> Result<(), Self::Rejection<'a>> {
-                let expected = borrow_for::<T, _>(&self.expected);
-                if matches!(
-                    actual.partial_cmp(expected),
-                    Some($(Ordering::$accepted)|+)
-                ) {
-                    Ok(())
-                } else {
-                    Err(expected)
-                }
-            }
-        }
-
-        impl<T: ?Sized, E, R> ExpectationDiagnostics<T, R> for $name<E>
-        where
-            T: PartialOrd<E::View>,
-            E: BorrowFor<T>,
-            R: ValueRenderer<T> + ValueRenderer<E::View>,
-        {
-            const KIND: FailureKind = FailureKind::Ordering;
-
-            fn explain<'a, Target>(
-                &'a self,
-                rejected: Option<(&'a T, Self::Rejection<'a>)>,
-                failure: FailureBuilder<Target>,
-                context: &AssertionContext<'_, R>,
-            ) -> FailureBuilder<Target> {
-                let render = context.render();
-                let (failure, expected) = match rejected {
-                    None => (
-                        failure.relation($relation),
-                        borrow_for::<T, _>(&self.expected),
-                    ),
-                    Some((actual, expected)) => (
-                        failure.actual(render.value(actual)).relation($rejection),
-                        expected,
-                    ),
-                };
-                failure.expected(render.value(expected))
-            }
+        operand_expectation! {
+            impl [T: ?Sized, E, R] for $name<E>, subject T, where [
+                T: PartialOrd<E::View>,
+                E: BorrowFor<T>,
+                R: ValueRenderer<T> + ValueRenderer<E::View>,
+            ];
+            borrow expected for T, view E::View;
+            kind Ordering;
+            holds |actual, expected| matches!(
+                actual.partial_cmp(expected),
+                Some($(Ordering::$accepted)|+)
+            );
+            actual |render, actual| render.value(actual);
+            expected $relation, $rejection;
         }
     };
 }
@@ -300,15 +251,25 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            3.must()
+                .be_less_than(4)
+                .be_greater_than(2)
+                .be_less_or_equal_to(3)
+                .be_greater_or_equal_to(3);
+        }
+    }
+
     mod renderer_contract {
         use core::{borrow::Borrow, cmp::Ordering, fmt};
 
         use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl, rendered_text};
-        use crate::{
-            Expectation,
-            assertions::core::partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan},
-        };
+        use crate::test_support::{NoRenderer, assert_trait_impl};
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -316,10 +277,6 @@ mod tests {
                 AssertThat<'static, i32, Panic, NoRenderer>
                     => PartialOrdAssertions<i32, NoRenderer>
             );
-            assert_trait_impl!(GreaterOrEqual<i32> => Expectation<i32, NoRenderer>);
-            assert_trait_impl!(LessThan<i32> => Expectation<i32, NoRenderer>);
-            assert_trait_impl!(GreaterThan<i32> => Expectation<i32, NoRenderer>);
-            assert_trait_impl!(LessOrEqual<i32> => Expectation<i32, NoRenderer>);
         }
 
         #[test]
@@ -365,129 +322,48 @@ mod tests {
                 });
             assert_that!(failures).has_length(4);
             for failure in &failures {
-                assert_that!(rendered_text(failure.actual.as_ref().unwrap())).is_equal_to("actual");
-                assert_that!(rendered_text(failure.expected.as_ref().unwrap()))
+                assert_that!(format!("{:#}", failure.actual.as_ref().unwrap()))
+                    .is_equal_to("actual");
+                assert_that!(format!("{:#}", failure.expected.as_ref().unwrap()))
                     .is_equal_to("expected");
             }
         }
     }
 
-    mod operand_observation {
-        use crate::prelude::*;
-        use core::{borrow::Borrow, cell::Cell, cmp::Ordering};
-
-        #[derive(Debug)]
-        struct Subject<'a> {
-            value: i32,
-            comparisons: &'a Cell<usize>,
-        }
-
-        impl PartialEq for Subject<'_> {
-            fn eq(&self, expected: &Self) -> bool {
-                self.value == expected.value
-            }
-        }
-
-        impl PartialOrd for Subject<'_> {
-            fn partial_cmp(&self, expected: &Self) -> Option<Ordering> {
-                self.comparisons.set(self.comparisons.get() + 1);
-                self.value.partial_cmp(&expected.value)
-            }
-        }
-
-        struct Operand<'a> {
-            value: Subject<'a>,
-            calls: &'a Cell<usize>,
-        }
-        impl<'a> borrow_for::BorrowFor<Subject<'a>> for Operand<'a> {
-            type View = Subject<'a>;
-        }
-        impl<'a> Borrow<Subject<'a>> for Operand<'a> {
-            fn borrow(&self) -> &Subject<'a> {
-                self.calls.set(self.calls.get() + 1);
-                &self.value
-            }
-        }
+    mod diagnostics {
+        use crate::{prelude::*, test_support::FailureReportAssertions};
+        use indoc::formatdoc;
 
         #[test]
-        fn borrows_and_compares_once_on_both_acceptance_and_rejection() {
-            for value in [0, 1, 2] {
-                let calls = Cell::new(0);
-                let comparisons = Cell::new(0);
-                let actual = Subject {
-                    value,
-                    comparisons: &comparisons,
-                };
-                let operand = || Operand {
-                    value: Subject {
-                        value: 1,
-                        comparisons: &comparisons,
-                    },
-                    calls: &calls,
-                };
-                let failures = assert_that!(actual).capture(|it| {
-                    let it = it.is_less_than(operand());
-                    assert_that!((calls.get(), comparisons.get())).is_equal_to((1, 1));
-                    let it = it.is_greater_than(operand());
-                    assert_that!((calls.get(), comparisons.get())).is_equal_to((2, 2));
-                    let it = it.is_less_or_equal_to(operand());
-                    assert_that!((calls.get(), comparisons.get())).is_equal_to((3, 3));
-                    let it = it.is_greater_or_equal_to(operand());
-                    assert_that!((calls.get(), comparisons.get())).is_equal_to((4, 4));
-                    it
-                });
-                assert_that!(failures).has_length(2);
-            }
-        }
+        fn incomparable_values_fail_every_bound() {
+            macro_rules! case {
+                ($method:ident, $relation:literal) => {{
+                    let nan = f32::NAN;
+                    let failures = assert_that!(nan)
+                        .with_location(false)
+                        .capture(|it| it.$method(0.0));
+                    assert_that!(&failures[0]).has_text_report(formatdoc! {r"
+                        -------- assertr --------
+                        Expression: `nan`
 
-        #[test]
-        #[cfg(feature = "std")]
-        fn tracks_before_user_borrow_code_can_panic() {
-            struct PanickingOperand;
-            impl borrow_for::BorrowFor<i32> for PanickingOperand {
-                type View = i32;
-            }
-            impl Borrow<i32> for PanickingOperand {
-                fn borrow(&self) -> &i32 {
-                    panic!("operand conversion panicked")
-                }
-            }
-            fn check(assertion: impl FnOnce(AssertThat<'_, i32, Capture>)) {
-                let failures = assert_that!(0).capture(|it| {
-                    let child = it.derive(|value| value);
-                    let outcome = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
-                        assertion(child);
-                    }));
-                    assert_that!(outcome).is_err();
-                    it
-                });
-                assert_that!(failures).is_empty();
-            }
+                        Actual: NaN
 
-            check(|it| {
-                it.is_less_than(PanickingOperand);
-            });
-            check(|it| {
-                it.is_greater_than(PanickingOperand);
-            });
-            check(|it| {
-                it.is_less_or_equal_to(PanickingOperand);
-            });
-            check(|it| {
-                it.is_greater_or_equal_to(PanickingOperand);
-            });
+                        {}
+
+                        Expected: 0.0
+                        -------- assertr --------
+                    ", $relation});
+                }};
+            }
+            case!(is_less_than, "is not less than");
+            case!(is_greater_than, "is not greater than");
+            case!(is_less_or_equal_to, "is not less than or equal to");
+            case!(is_greater_or_equal_to, "is not greater than or equal to");
         }
     }
 
     mod is_less_than {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            3.must().be_less_than(4);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -495,49 +371,17 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_less() {
+        fn accepts_only_less_values() {
             assert_that!(3).is_less_than(4);
-        }
-
-        #[test]
-        fn rejects_equal_and_greater_values() {
             for actual in [4, 5] {
                 let failures = assert_that!(actual).capture(|it| it.is_less_than(4));
                 assert_that!(failures).has_length(1);
             }
         }
-
-        #[test]
-        fn panics_when_values_are_not_comparable() {
-            assert_that_panic_by(|| {
-                assert_that!(f32::NAN)
-                    .with_location(false)
-                    .is_less_than(0.0)
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `f32::NAN`
-
-                Actual: NaN
-
-                is not less than
-
-                Expected: 0.0
-                -------- assertr --------
-            "});
-        }
     }
 
     mod is_greater_than {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            7.must().be_greater_than(6);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -545,49 +389,17 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_greater() {
+        fn accepts_only_greater_values() {
             assert_that!(7).is_greater_than(6);
-        }
-
-        #[test]
-        fn rejects_equal_and_less_values() {
             for actual in [5, 6] {
                 let failures = assert_that!(actual).capture(|it| it.is_greater_than(6));
                 assert_that!(failures).has_length(1);
             }
         }
-
-        #[test]
-        fn panics_when_values_are_not_comparable() {
-            assert_that_panic_by(|| {
-                assert_that!(f32::NAN)
-                    .with_location(false)
-                    .is_greater_than(0.0)
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `f32::NAN`
-
-                Actual: NaN
-
-                is not greater than
-
-                Expected: 0.0
-                -------- assertr --------
-            "});
-        }
     }
 
     mod is_less_or_equal_to {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            3.must().be_less_or_equal_to(3);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -595,52 +407,17 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_less() {
-            assert_that!(3).is_less_or_equal_to(4);
-        }
-
-        #[test]
-        fn succeeds_when_equal() {
-            assert_that!(3).is_less_or_equal_to(3);
-        }
-
-        #[test]
-        fn rejects_greater_values() {
+        fn accepts_less_and_equal_values() {
+            assert_that!(3)
+                .is_less_or_equal_to(4)
+                .is_less_or_equal_to(3);
             let failures = assert_that!(4).capture(|it| it.is_less_or_equal_to(3));
             assert_that!(failures).has_length(1);
-        }
-
-        #[test]
-        fn panics_when_values_are_not_comparable() {
-            assert_that_panic_by(|| {
-                assert_that!(f32::NAN)
-                    .with_location(false)
-                    .is_less_or_equal_to(0.0)
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `f32::NAN`
-
-                Actual: NaN
-
-                is not less than or equal to
-
-                Expected: 0.0
-                -------- assertr --------
-            "});
         }
     }
 
     mod is_greater_or_equal_to {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            7.must().be_greater_or_equal_to(7);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -648,34 +425,12 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_greater() {
-            assert_that!(7).is_greater_or_equal_to(6);
-        }
-
-        #[test]
-        fn succeeds_when_equal() {
-            assert_that!(7).is_greater_or_equal_to(7);
-        }
-
-        #[test]
-        fn panics_when_values_are_not_comparable() {
-            assert_that_panic_by(|| {
-                assert_that!(f32::NAN)
-                    .with_location(false)
-                    .is_greater_or_equal_to(0.0)
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `f32::NAN`
-
-                Actual: NaN
-
-                is not greater than or equal to
-
-                Expected: 0.0
-                -------- assertr --------
-            "});
+        fn accepts_greater_and_equal_values() {
+            assert_that!(7)
+                .is_greater_or_equal_to(6)
+                .is_greater_or_equal_to(7);
+            let failures = assert_that!(6).capture(|it| it.is_greater_or_equal_to(7));
+            assert_that!(failures).has_length(1);
         }
     }
 

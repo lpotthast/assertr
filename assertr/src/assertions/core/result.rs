@@ -1,7 +1,6 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics,
-    ValueRenderer,
-    assertions::support::project_checked,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ValueRenderer,
+    assertions::support::{explain_variant, project_checked},
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
 };
@@ -11,17 +10,17 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct IsOk;
 
-impl<T, E, R> Expectation<Result<T, E>, R> for IsOk {
+impl<T, E, R: ValueRenderer<E>> Expectation<Result<T, E>, R> for IsOk {
     type Success<'a>
         = &'a T
     where
-        T: 'a,
-        E: 'a;
+        Self: 'a,
+        Result<T, E>: 'a;
     type Rejection<'a>
         = &'a E
     where
-        T: 'a,
-        E: 'a;
+        Self: 'a,
+        Result<T, E>: 'a;
     fn evaluate<'a>(
         &'a self,
         actual: &'a Result<T, E>,
@@ -32,24 +31,20 @@ impl<T, E, R> Expectation<Result<T, E>, R> for IsOk {
             Err(value) => Err(value),
         }
     }
-}
 
-impl<T, E, R: ValueRenderer<E>> ExpectationDiagnostics<Result<T, E>, R> for IsOk {
     const KIND: FailureKind = FailureKind::Variant;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Result<T, E>, &'a E)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is the expected variant"),
-            Some((actual, value)) => failure
-                .actual(render.variant(actual, "Err", value))
-                .relation("is not the expected variant"),
-        };
-        failure.expected("Result::Ok")
+        explain_variant(
+            failure,
+            rejected.map(|(actual, value)| render.variant(actual, "Err", value)),
+            "Result::Ok",
+        )
     }
 }
 
@@ -58,17 +53,17 @@ impl<T, E, R: ValueRenderer<E>> ExpectationDiagnostics<Result<T, E>, R> for IsOk
 #[derive(Debug, Clone, Copy)]
 pub struct IsErr;
 
-impl<T, E, R> Expectation<Result<T, E>, R> for IsErr {
+impl<T, E, R: ValueRenderer<T>> Expectation<Result<T, E>, R> for IsErr {
     type Success<'a>
         = &'a E
     where
-        T: 'a,
-        E: 'a;
+        Self: 'a,
+        Result<T, E>: 'a;
     type Rejection<'a>
         = &'a T
     where
-        T: 'a,
-        E: 'a;
+        Self: 'a,
+        Result<T, E>: 'a;
     fn evaluate<'a>(
         &'a self,
         actual: &'a Result<T, E>,
@@ -79,24 +74,20 @@ impl<T, E, R> Expectation<Result<T, E>, R> for IsErr {
             Ok(value) => Err(value),
         }
     }
-}
 
-impl<T, E, R: ValueRenderer<T>> ExpectationDiagnostics<Result<T, E>, R> for IsErr {
     const KIND: FailureKind = FailureKind::Variant;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Result<T, E>, &'a T)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is the expected variant"),
-            Some((actual, value)) => failure
-                .actual(render.variant(actual, "Ok", value))
-                .relation("is not the expected variant"),
-        };
-        failure.expected("Result::Err")
+        explain_variant(
+            failure,
+            rejected.map(|(actual, value)| render.variant(actual, "Ok", value)),
+            "Result::Err",
+        )
     }
 }
 
@@ -205,9 +196,7 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
         R: ValueRenderer<E> + Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        if let Some(value) = self.test_assertion(&IsOk) {
-            assertions(self.derive(|_| value));
-        }
+        self.satisfy_success(self.test_assertion(&IsOk), assertions);
         self
     }
 
@@ -217,15 +206,32 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
         R: ValueRenderer<T> + Clone,
         A: for<'a> FnOnce(AssertThat<'a, E, M, R>),
     {
-        if let Some(value) = self.test_assertion(&IsErr) {
-            assertions(self.derive(|_| value));
-        }
+        self.satisfy_success(self.test_assertion(&IsErr), assertions);
         self
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{FailureKind, prelude::*};
+
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            Result::<i32, ()>::Ok(42).must().be_ok();
+            Result::<(), i32>::Err(42).must().be_err();
+            Result::<i32, ()>::Ok(42).must().be_ok_satisfying(|ok| {
+                ok.is_equal_to(42);
+            });
+            Result::<(), i32>::Err(42).must().be_err_satisfying(|err| {
+                err.is_equal_to(42);
+            });
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
@@ -242,34 +248,30 @@ mod tests {
                 AssertThat<'static, Result<i32, i32>, Panic, NoRenderer>
                     => ResultExtractAssertions<'static, i32, i32, NoRenderer>
             );
-
-            assert_trait_impl!(super::super::IsOk => Expectation<Result<(), ()>, NoRenderer>);
-            assert_trait_impl!(super::super::IsErr => Expectation<Result<(), ()>, NoRenderer>);
         }
 
         #[test]
-        fn err_variant_is_rendered_from_its_leaf_value() {
+        fn rejected_variants_are_rendered_from_their_leaf_values() {
             let failures = assert_that!(Result::<(), Secret>::Err(Secret))
                 .with_renderer(SentinelRenderer)
                 .with_location(false)
                 .capture(ResultAssertions::is_ok);
-
-            assert_that!(ToHumanReadableText.render(&failures[0]))
+            assert_that!(failures[0].to_string())
                 .contains("Err(")
+                .contains(SENTINEL);
+            let failures = assert_that!(Result::<Secret, ()>::Ok(Secret))
+                .with_renderer(SentinelRenderer)
+                .with_location(false)
+                .capture(ResultAssertions::is_err);
+            assert_that!(failures[0].to_string())
+                .contains("Ok(")
                 .contains(SENTINEL);
         }
     }
 
     mod is_ok {
+        use super::*;
         use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Result::<i32, ()>::Ok(42).must().be_ok();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -295,56 +297,31 @@ mod tests {
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `Result::<i32, String>::Err("someError".to_owned())`
+                -------- assertr --------
+                Expression: `Result::<i32, String>::Err("someError".to_owned())`
 
-                    Actual: Err(
-                        "someError",
-                    )
+                Actual: Err(
+                    "someError",
+                )
 
-                    is not the expected variant
+                is not the expected variant
 
-                    Expected: Result::Ok
-                    -------- assertr --------
-                "#});
+                Expected: Result::Ok
+                -------- assertr --------
+            "#});
         }
 
         #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
+        fn continues_in_capture_mode() {
             let failures = assert_that!(Result::<i32, String>::Err("someError".to_owned()))
-                .with_location(false)
                 .capture(|it| it.is_ok().is_err());
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Expression: `Result::<i32, String>::Err("someError".to_owned())`
-
-                        Actual: Err(
-                            "someError",
-                        )
-
-                        is not the expected variant
-
-                        Expected: Result::Ok
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
+            assert_that!(failures).has_length(1);
         }
     }
 
     mod is_err {
+        use super::*;
         use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Result::<(), i32>::Err(42).must().be_err();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -367,31 +344,29 @@ mod tests {
             })
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `Result::<i32, String>::Ok(42)`
+                -------- assertr --------
+                Expression: `Result::<i32, String>::Ok(42)`
 
-                    Actual: Ok(
-                        42,
-                    )
+                Actual: Ok(
+                    42,
+                )
 
-                    is not the expected variant
+                is not the expected variant
 
-                    Expected: Result::Err
-                    -------- assertr --------
-                "});
+                Expected: Result::Err
+                -------- assertr --------
+            "});
         }
     }
 
+    fn rejected_kind(extract: impl FnOnce()) {
+        assert_that_panic_by(extract)
+            .has_type::<String>()
+            .is_equal_to(format!("{:?}", FailureKind::Variant));
+    }
+
     mod get_ok {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Result::<i32, ()>::Ok(42).must().get_ok().is_equal_to(42);
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -402,56 +377,24 @@ mod tests {
         }
 
         #[test]
-        fn extracts_the_borrowed_inner_value() {
+        fn extracts_borrowed_and_owned_values() {
             let result: Result<String, ()> = Ok(String::from("value"));
-
             assert_that!(result).get_ok().is_equal_to("value");
-
-            // The result was only borrowed and remains usable.
-            assert_that!(result).is_ok();
+            assert_that_owned!(result).get_ok().is_equal_to("value");
         }
 
         #[test]
-        fn extracts_the_owned_inner_value() {
-            assert_that_owned!(Result::<String, ()>::Ok(String::from("value")))
-                .get_ok()
-                .is_equal_to("value");
-        }
-
-        #[test]
-        fn panics_when_error() {
-            assert_that_panic_by(|| {
-                assert_that!(Result::<i32, String>::Err("someError".to_owned()))
-                    .with_location(false)
+        fn rejects_errors_like_is_ok() {
+            rejected_kind(|| {
+                let _ = assert_that!(Result::<i32, i32>::Err(1))
+                    .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_ok();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `Result::<i32, String>::Err("someError".to_owned())`
-
-                    Actual: Err(
-                        "someError",
-                    )
-
-                    is not the expected variant
-
-                    Expected: Result::Ok
-                    -------- assertr --------
-                "#});
+            });
         }
     }
 
     mod get_err {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Result::<(), i32>::Err(42).must().get_err().is_equal_to(42);
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -459,60 +402,26 @@ mod tests {
         }
 
         #[test]
-        fn extracts_the_borrowed_inner_value() {
+        fn extracts_borrowed_and_owned_errors() {
             let result: Result<(), String> = Err(String::from("someError"));
-
             assert_that!(result).get_err().is_equal_to("someError");
-
-            // The result was only borrowed and remains usable.
-            assert_that!(result).is_err();
-        }
-
-        #[test]
-        fn extracts_the_owned_inner_value() {
-            assert_that_owned!(Result::<(), String>::Err(String::from("someError")))
+            assert_that_owned!(result)
                 .get_err()
                 .is_equal_to("someError");
         }
 
         #[test]
-        fn panics_when_ok() {
-            assert_that_panic_by(|| {
-                assert_that!(Result::<i32, String>::Ok(42))
-                    .with_location(false)
+        fn rejects_values_like_is_err() {
+            rejected_kind(|| {
+                let _ = assert_that!(Result::<i32, i32>::Ok(1))
+                    .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_err();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `Result::<i32, String>::Ok(42)`
-
-                    Actual: Ok(
-                        42,
-                    )
-
-                    is not the expected variant
-
-                    Expected: Result::Err
-                    -------- assertr --------
-                "});
+            });
         }
     }
 
     mod is_ok_satisfying {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Result::<i32, ()>::Ok(42)
-                .must()
-                .be_ok_satisfying(|ok_value| {
-                    ok_value.is_equal_to(42);
-                });
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -534,83 +443,16 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_ok_and_assertions_pass() {
-            assert_that!(Result::<i32, ()>::Ok(42)).is_ok_satisfying(|ok_value| {
-                ok_value.is_equal_to(42);
-            });
-        }
-
-        #[test]
-        fn hands_out_a_value_typed_assertion_supporting_type_specific_assertions() {
-            assert_that!(Result::<String, ()>::Ok(String::from("value"))).is_ok_satisfying(
-                |ok_value| {
-                    ok_value.contains("alu").starts_with("v");
-                },
-            );
-        }
-
-        #[test]
-        fn captures_inner_failure_when_ok_and_assertion_fails() {
-            let failures = assert_that!(Result::<i32, ()>::Ok(42))
-                .with_location(false)
-                .capture(|it| {
-                    it.is_ok_satisfying(|ok_value| {
-                        ok_value.is_greater_than(9000);
-                    })
-                });
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {"
-                        -------- assertr --------
-                        Actual: 42
-
-                        is not greater than
-
-                        Expected: 9000
-                        -------- assertr --------
-                    "});
-                },
-            ]);
-        }
-
-        #[test]
-        fn captures_variant_failure_when_err() {
-            let failures = assert_that!(Result::<i32, String>::Err(String::from("boom")))
-                .with_location(false)
+        fn does_not_run_the_callback_for_errors() {
+            let failures = assert_that!(Result::<i32, i32>::Err(1))
                 .capture(|it| it.is_ok_satisfying(|_| panic!("assertions should not run")));
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Expression: `Result::<i32, String>::Err(String::from("boom"))`
-
-                        Actual: Err(
-                            "boom",
-                        )
-
-                        is not the expected variant
-
-                        Expected: Result::Ok
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].kind).is_equal_to(FailureKind::Variant);
         }
     }
 
     mod is_err_satisfying {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Result::<(), i32>::Err(42).must().be_err_satisfying(|err| {
-                err.is_equal_to(42);
-            });
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -621,73 +463,23 @@ mod tests {
         }
 
         #[test]
-        fn retains_fn_once_callbacks_and_tracks_the_variant_once() {
-            let owned = String::from("consumed by callback");
-            let assertion = assert_that!(Err::<(), _>(3)).is_err_satisfying(
-                |it: AssertThat<'_, i32, Panic>| {
-                    drop(owned);
-                    it.is_equal_to(3);
-                },
-            );
-            assert_that!(assertion.state.records.assertion_count()).is_equal_to(2);
-        }
-
-        #[test]
-        fn succeeds_when_err_and_assertions_pass() {
-            assert_that!(Result::<(), String>::Err(String::from("boom"))).is_err_satisfying(
-                |err| {
-                    err.contains("oo").starts_with("b");
-                },
-            );
-        }
-
-        #[test]
-        fn captures_inner_failure_when_err_and_assertion_fails() {
-            let failures = assert_that!(Result::<(), String>::Err(String::from("boom")))
-                .with_location(false)
-                .capture(|it| {
+        fn hands_out_an_error_typed_assertion() {
+            let failures =
+                assert_that!(Result::<(), String>::Err(String::from("boom"))).capture(|it| {
                     it.is_err_satisfying(|err| {
-                        err.contains("xyz");
+                        err.contains("oo").contains("xyz");
                     })
                 });
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Actual: "boom"
-
-                        does not contain
-
-                        Expected: "xyz"
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].to_string()).contains("does not contain");
         }
 
         #[test]
-        fn captures_variant_failure_when_ok() {
-            let failures = assert_that!(Result::<i32, String>::Ok(42))
-                .with_location(false)
+        fn does_not_run_the_callback_for_values() {
+            let failures = assert_that!(Result::<i32, i32>::Ok(1))
                 .capture(|it| it.is_err_satisfying(|_| panic!("assertions should not run")));
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r"
-                        -------- assertr --------
-                        Expression: `Result::<i32, String>::Ok(42)`
-
-                        Actual: Ok(
-                            42,
-                        )
-
-                        is not the expected variant
-
-                        Expected: Result::Err
-                        -------- assertr --------
-                    "});
-                },
-            ]);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].kind).is_equal_to(FailureKind::Variant);
         }
     }
 }

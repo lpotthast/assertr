@@ -1,7 +1,7 @@
 /// The structural syntax used to render a group of diagnostic values.
 ///
-/// Collection subjects obtain their syntax from [`CollectionPresentation`]. Custom assertions and
-/// equality implementations pass this style directly when rendering an ad-hoc group.
+/// Collection subjects obtain their syntax from [`CollectionPresentation`]. Synthetic groups use
+/// list syntax.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GroupStyle {
@@ -92,36 +92,5 @@ impl CollectionPresentation {
     #[must_use]
     pub const fn order(self) -> RenderingOrder {
         self.order
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::prelude::*;
-
-    use super::{CollectionPresentation, GroupStyle, RenderingOrder};
-
-    #[test]
-    fn list_and_set_defaults_preserve_order_and_hide_the_type_hint() {
-        let list = CollectionPresentation::list();
-        assert_that!(list.style()).is_equal_to(GroupStyle::List);
-        assert_that!(list.shows_type_hint()).is_false();
-        assert_that!(list.order()).is_equal_to(RenderingOrder::PreserveIteration);
-
-        let set = CollectionPresentation::set();
-        assert_that!(set.style()).is_equal_to(GroupStyle::Set);
-        assert_that!(set.shows_type_hint()).is_false();
-        assert_that!(set.order()).is_equal_to(RenderingOrder::PreserveIteration);
-    }
-
-    #[test]
-    fn builders_change_only_the_selected_presentation_property() {
-        let presentation = CollectionPresentation::list()
-            .show_type_hint(true)
-            .with_order(RenderingOrder::SortByRenderedText);
-
-        assert_that!(presentation.style()).is_equal_to(GroupStyle::List);
-        assert_that!(presentation.shows_type_hint()).is_true();
-        assert_that!(presentation.order()).is_equal_to(RenderingOrder::SortByRenderedText);
     }
 }

@@ -31,8 +31,5 @@ impl<T> HasLength for ReportAttachments<T> {
 pub mod prelude {
     pub use super::report::RootcauseDynamicReportAssertions;
     pub use super::report::RootcauseDynamicReportExtractAssertions;
-    pub use super::report::RootcauseDynamicReportRefAssertions;
-    pub use super::report::RootcauseDynamicReportRefExtractAssertions;
     pub use super::report::RootcauseReportAssertions;
-    pub use super::report::RootcauseReportRefAssertions;
 }

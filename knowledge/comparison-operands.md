@@ -71,9 +71,9 @@ comparisons. Prepare stateful inputs beforehand, or retain their observed values
 allows repeated access to bulk data only. It does not permit repeating scalar borrows, callbacks, matcher evaluations,
 guard acquisition, or identity observations.
 
-Bulk rejections retain the failed observations. Explanation may read expected data again through rendering adapters and
-borrow only the operands that fit the display budget. It never repeats comparisons, searches, lookups, or consumption.
-[Map observations](collection-semantics.md#map-observations) specify retained query results.
+Bulk rejections retain the failed observations. Explanation may read expected data again through the rendering context
+and borrow only the operands that fit the display budget. It never repeats comparisons, searches, lookups, or
+consumption. [Map observations](collection-semantics.md#map-observations) specify retained query results.
 
 Prefix, suffix, ordered exact, collection membership, and map key checks allocate no expected-view buffer. Algorithms
 may still need actual-element, membership, window, or assignment storage. The
@@ -82,7 +82,8 @@ may still need actual-element, membership, window, or assignment storage. The
 ## Range-bound selection
 
 For standard ranges whose bounds are references to sized values, the inherent containment methods select `RangeBounds<B>` for
-the referenced value. This avoids ambiguity with `RangeBounds<&B>`. The unbounded range `..` selects the operand type.
+the referenced value. This avoids ambiguity with `RangeBounds<&B>`. The unbounded range `..` needs an explicit `B` or a
+`ContainsElement` expectation.
 Methods and aliases delegate to `RangeBoundAssertions` with an explicit `B`. Custom ranges use that generic trait, and
 fully qualified calls can select `B` explicitly.
 

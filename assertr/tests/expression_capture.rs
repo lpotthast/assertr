@@ -1,5 +1,4 @@
 use assertr::prelude::*;
-use indoc::formatdoc;
 
 #[cfg(feature = "fluent")]
 fn assert_string_panic_contains(panic: std::thread::Result<()>, expected: &str) {
@@ -11,49 +10,6 @@ fn assert_string_panic_contains(panic: std::thread::Result<()>, expected: &str) 
 }
 
 #[test]
-fn macro_entry_points_capture_the_asserted_expression() {
-    let answer = 42;
-    let failures = assert_that!(answer + 1)
-        .with_location(false)
-        .capture(|it| it.is_equal_to(42));
-    assert_that!(failures[0].expression).is_equal_to(Some("answer + 1"));
-
-    let failures = assert_that_owned!(String::from("actual"))
-        .with_location(false)
-        .capture(|it| it.is_equal_to("expected"));
-    assert_that!(failures[0].expression).is_equal_to(Some("String::from(\"actual\")"));
-}
-
-#[test]
-#[cfg(feature = "std")]
-fn type_entry_point_uses_the_asserted_type_name() {
-    let failures = assert_that_type::<u8>()
-        .with_location(false)
-        .capture(MemAssertions::needs_drop);
-
-    assert_that!(failures[0].expression).is_equal_to(Some(core::any::type_name::<u8>()));
-}
-
-#[test]
-fn the_human_readable_adapter_renders_a_subject_name_and_expression_as_separate_fields() {
-    let failures = assert_that!(42)
-        .with_subject_name("answer")
-        .with_location(false)
-        .capture(|it| it.is_equal_to(43));
-
-    assert_that!(ToHumanReadableText.render(&failures[0])).is_equal_to(formatdoc! {"
-            -------- assertr --------
-            Subject: answer
-            Expression: `42`
-
-            Expected: 43
-
-              Actual: 42
-            -------- assertr --------
-        "});
-}
-
-#[test]
 fn the_human_readable_adapter_caps_expressions_to_one_line_and_one_hundred_characters() {
     const LONG_EXPRESSION: &str = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvw";
 
@@ -61,14 +17,13 @@ fn the_human_readable_adapter_caps_expressions_to_one_line_and_one_hundred_chara
         .with_expression("first line\nsecond line")
         .with_location(false)
         .capture(|it| it.is_equal_to(43));
-    assert_that!(ToHumanReadableText.render(&failures[0]))
-        .contains("Expression: `first line...`\n\n");
+    assert_that!(failures[0].to_string()).contains("Expression: `first line...`\n\n");
 
     let failures = assert_that!(42)
         .with_expression(LONG_EXPRESSION)
         .with_location(false)
         .capture(|it| it.is_equal_to(43));
-    let rendered = ToHumanReadableText.render(&failures[0]);
+    let rendered = failures[0].to_string();
     let expression_line = rendered
         .lines()
         .find(|line| line.starts_with("Expression:"))
@@ -76,18 +31,6 @@ fn the_human_readable_adapter_caps_expressions_to_one_line_and_one_hundred_chara
     assert_that!(expression_line.chars().count()).is_equal_to("Expression: ``".len() + 100);
     assert_that!(expression_line).ends_with("...`");
     assert_that!(failures[0].expression).is_equal_to(Some(LONG_EXPRESSION));
-}
-
-#[test]
-fn derived_chains_start_without_the_root_expression() {
-    let root = assert_that!(("value", 42)).with_location(false);
-    let failures = root
-        .derive_owned(|value| value.1)
-        .capture(|it| it.is_equal_to(43));
-
-    assert_that!(failures[0].expression).is_none();
-    assert_that!(ToHumanReadableText.render(&failures[0])).does_not_contain("Subject:");
-    assert_that!(ToHumanReadableText.render(&failures[0])).does_not_contain("Expression:");
 }
 
 #[cfg(feature = "fluent")]

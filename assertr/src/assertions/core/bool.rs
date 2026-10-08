@@ -51,6 +51,17 @@ impl<M: Mode, R> BoolAssertions<R> for AssertThat<'_, bool, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            true.must().be_true();
+            false.must().be_false();
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
@@ -60,9 +71,6 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, bool, Panic, NoRenderer> => BoolAssertions<NoRenderer>
             );
-
-            assert_trait_impl!(super::super::IsTrue => Expectation<bool, NoRenderer>);
-            assert_trait_impl!(super::super::IsFalse => Expectation<bool, NoRenderer>);
         }
 
         #[test]
@@ -72,19 +80,13 @@ mod tests {
                 .with_location(false)
                 .capture(BoolAssertions::is_true);
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+            assert_that!(failures[0].to_string()).contains(SENTINEL);
         }
     }
 
     mod is_true {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            true.must().be_true();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -114,13 +116,6 @@ mod tests {
 
     mod is_false {
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            false.must().be_false();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -136,7 +131,7 @@ mod tests {
         fn panics_when_true() {
             assert_that_panic_by(|| assert_that!(true).with_location(false).is_false())
                 .has_type::<String>()
-                .is_equal_to(formatdoc! {r"
+                .is_equal_to(indoc::formatdoc! {r"
                     -------- assertr --------
                     Expression: `true`
 

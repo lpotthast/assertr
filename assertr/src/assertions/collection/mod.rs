@@ -59,6 +59,19 @@ pub use stable_order::{
     HasFirst, HasLast, HasSingle, StableOrderAssertions, StableOrderExtractAssertions,
 };
 
+/// Where an expected sequence must occur within an ordered subject.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Placement {
+    /// Every position of the subject, in order.
+    Exact,
+    /// The leading positions.
+    Prefix,
+    /// The trailing positions, aligned with the subject's end.
+    Suffix,
+    /// Any contiguous window.
+    Contiguous,
+}
+
 /// A collection whose elements can be inspected repeatedly by reference.
 ///
 /// Implementing this trait makes [`CollectionAssertions`] available. Its [`HasLength`] supertrait
@@ -387,7 +400,7 @@ mod tests {
         let failures = assert_that!(&heap)
             .with_location(false)
             .capture(|it| it.contains(4));
-        assert_that!(ToHumanReadableText.render(&failures[0])).contains(indoc::indoc! {"
+        assert_that!(failures[0].to_string()).contains(indoc::indoc! {"
             Actual: BinaryHeap [
                 1,
                 2,

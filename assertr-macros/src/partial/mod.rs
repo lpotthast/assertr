@@ -3,6 +3,7 @@ use quote::{ToTokens, quote_spanned};
 use std::collections::BTreeSet;
 use syn::{
     Expr, Ident, Path, Token,
+    ext::IdentExt,
     parse::{Parse, ParseStream},
 };
 
@@ -56,7 +57,7 @@ impl Parse for Input {
                     break;
                 }
                 let name: Ident = content.parse()?;
-                if !names.insert(name.to_string().trim_start_matches("r#").to_owned()) {
+                if !names.insert(name.unraw().to_string()) {
                     return Err(syn::Error::new(name.span(), "duplicate matcher field"));
                 }
                 content.parse::<Token![:]>()?;
@@ -142,13 +143,7 @@ fn delimited(delimiter: Delimiter, fields: TokenStream, span: Span) -> TokenStre
 fn constructor_label(path: &Path) -> String {
     path.segments
         .iter()
-        .map(|segment| {
-            segment
-                .ident
-                .to_string()
-                .trim_start_matches("r#")
-                .to_owned()
-        })
+        .map(|segment| segment.ident.unraw().to_string())
         .collect::<Vec<_>>()
         .join("::")
 }
@@ -163,8 +158,8 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
     let constructor_name = constructor_label(&path);
     let actual = Ident::new("__assertr_actual", Span::mixed_site().located_at(span));
     let value = Ident::new("__assertr_value", Span::mixed_site().located_at(span));
-    let mut expectations = Vec::new();
-    let mut projections = Vec::new();
+    let field = |projection: TokenStream, expression: &Expr, path: TokenStream| quote_spanned!(span=> #runtime::__private::field(#projection,#expression,#path));
+    let mut matcher_fields = Vec::new();
     let pattern;
     match shape {
         Shape::Named(fields, rest, delimiter) => {
@@ -177,9 +172,8 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
             );
             pattern = quote_spanned!(span=> #path #fields_pattern);
             for (name, expression) in &fields {
-                let field_name = name.to_string().trim_start_matches("r#").to_owned();
-                expectations.push(quote_spanned!(span=> #expression));
-                projections.push((
+                let field_name = name.unraw().to_string();
+                matcher_fields.push(field(
                     quote_spanned!(name.span()=> |#actual| {
                         #[allow(unreachable_patterns)]
                         match #actual {
@@ -187,6 +181,7 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
                             _ => ::core::option::Option::None,
                         }
                     }),
+                    expression,
                     quote_spanned!(span=> #runtime::failure::PathSegment::Field(#field_name)),
                 ));
             }
@@ -217,8 +212,7 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
                 }
                 let mut projection = slots.clone();
                 projection[index] = quote_spanned!(span=> #value);
-                expectations.push(quote_spanned!(span=> #expression));
-                projections.push((
+                matcher_fields.push(field(
                     quote_spanned!(span=> |#actual| {
                         #[allow(unreachable_patterns)]
                         match #actual {
@@ -226,6 +220,7 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
                             _ => ::core::option::Option::None,
                         }
                     }),
+                    expression,
                     quote_spanned!(span=> #runtime::failure::PathSegment::TupleIndex(#index)),
                 ));
             }
@@ -237,7 +232,10 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
     }
     // Keep expectations in one expression so borrowed temporaries live through the caller's
     // statement. Nested constructor arguments evaluate each expectation once in source order.
-    let list = matcher_fields(expectations, projections, &runtime, span);
+    let list = matcher_fields.into_iter().rev().fold(
+        quote_spanned!(span=> #runtime::__private::Nil),
+        |tail, head| quote_spanned!(span=> #runtime::__private::Cons(#head,#tail)),
+    );
     let variant = if variant {
         quote_spanned!(span=> ::core::option::Option::Some(#constructor_name))
     } else {
@@ -254,24 +252,4 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
             #variant,
         )
     ))
-}
-
-/// Builds the nested matcher list in source order from the expectations and projections.
-fn matcher_fields(
-    expectations: Vec<TokenStream>,
-    projections: Vec<(TokenStream, TokenStream)>,
-    runtime: &TokenStream,
-    span: Span,
-) -> TokenStream {
-    let fields = expectations
-        .into_iter()
-        .zip(projections)
-        .map(|(expectation, (projection, path))| {
-            quote_spanned!(span=> #runtime::__private::field(#projection,#expectation,#path))
-        })
-        .collect::<Vec<_>>();
-    fields.into_iter().rev().fold(
-        quote_spanned!(span=> #runtime::__private::Nil),
-        |tail, head| quote_spanned!(span=> #runtime::__private::Cons(#head,#tail)),
-    )
 }

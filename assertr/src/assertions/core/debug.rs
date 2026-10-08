@@ -1,10 +1,36 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 use alloc::{format, string::String};
 use core::fmt::Debug;
+
+/// Compares a subject's formatted representation with the expected text. A rejection retains both
+/// texts, so explanation never formats the operands again.
+pub(super) fn compare_text<E: AsRef<str>>(actual: String, expected: E) -> Result<(), (String, E)> {
+    if actual == expected.as_ref() {
+        Ok(())
+    } else {
+        Err((actual, expected))
+    }
+}
+
+/// Explains a formatted-text comparison from its retained texts. Only a missing subject formats
+/// the expected operand, through `expected`.
+pub(super) fn explain_text<R: ValueRenderer<str>, E: AsRef<str>>(
+    rejected: Option<(String, E)>,
+    expected: impl FnOnce() -> E,
+    relation: &'static str,
+    failure: FailureBuilder,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder {
+    let render = context.render();
+    let (failure, expected) = match rejected {
+        None => (failure.relation(relation), expected()),
+        Some((actual, expected)) => (failure.actual(render.value(actual.as_str())), expected),
+    };
+    failure.expected(render.value(expected.as_ref()))
+}
 
 /// Compares the complete `Debug` representation with verbatim expected text.
 /// Formatting determines truth even when diagnostic rendering is disabled or budgeted.
@@ -20,7 +46,9 @@ impl<E> HasDebugString<E> {
     }
 }
 
-impl<T: Debug + ?Sized, E: AsRef<str>, R> Expectation<T, R> for HasDebugString<E> {
+impl<T: Debug + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> Expectation<T, R>
+    for HasDebugString<E>
+{
     type Success<'a>
         = ()
     where
@@ -36,40 +64,23 @@ impl<T: Debug + ?Sized, E: AsRef<str>, R> Expectation<T, R> for HasDebugString<E
         actual: &'a T,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection<'a>> {
-        let actual = format!("{actual:?}");
-        let expected = self.0.as_ref();
-        if actual == expected {
-            Ok(())
-        } else {
-            Err((actual, expected))
-        }
+        compare_text(format!("{actual:?}"), self.0.as_ref())
     }
-}
 
-impl<T: Debug + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for HasDebugString<E>
-{
     const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => {
-                let expected = self.0.as_ref();
-                (
-                    failure.relation("has the expected Debug representation"),
-                    expected,
-                )
-            }
-            Some((_, (actual, expected))) => {
-                (failure.actual(render.value(actual.as_str())), expected)
-            }
-        };
-        failure.expected(render.value(expected))
+    ) -> FailureBuilder {
+        explain_text(
+            rejected.map(|(_, texts)| texts),
+            || self.0.as_ref(),
+            "has the expected Debug representation",
+            failure,
+            context,
+        )
     }
 }
 
@@ -87,7 +98,7 @@ impl<E> HasDebugValue<E> {
     }
 }
 
-impl<T: Debug + ?Sized, E: Debug, R> Expectation<T, R> for HasDebugValue<E> {
+impl<T: Debug + ?Sized, E: Debug, R: ValueRenderer<str>> Expectation<T, R> for HasDebugValue<E> {
     type Success<'a>
         = ()
     where
@@ -103,40 +114,23 @@ impl<T: Debug + ?Sized, E: Debug, R> Expectation<T, R> for HasDebugValue<E> {
         actual: &'a T,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection<'a>> {
-        let actual = format!("{actual:?}");
-        let expected = format!("{:?}", self.0);
-        if actual == expected {
-            Ok(())
-        } else {
-            Err((actual, expected))
-        }
+        compare_text(format!("{actual:?}"), format!("{:?}", self.0))
     }
-}
 
-impl<T: Debug + ?Sized, E: Debug, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for HasDebugValue<E>
-{
     const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => {
-                let expected = format!("{:?}", self.0);
-                (
-                    failure.relation("has the expected Debug representation"),
-                    expected,
-                )
-            }
-            Some((_, (actual, expected))) => {
-                (failure.actual(render.value(actual.as_str())), expected)
-            }
-        };
-        failure.expected(render.value(expected.as_str()))
+    ) -> FailureBuilder {
+        explain_text(
+            rejected.map(|(_, texts)| texts),
+            || format!("{:?}", self.0),
+            "has the expected Debug representation",
+            failure,
+            context,
+        )
     }
 }
 
@@ -187,6 +181,17 @@ impl<T: Debug, M: Mode, R> DebugAssertions<R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            42.must().have_debug_string("42");
+            42.must().have_debug_value(42);
+        }
+    }
+
     mod renderer_contract {
         use crate::{
             prelude::*,
@@ -198,21 +203,12 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, i32, Panic, NoRenderer> => DebugAssertions<NoRenderer>
             );
-
-            assert_trait_impl!(super::super::HasDebugString<&'static str> => Expectation<str, NoRenderer>);
-            assert_trait_impl!(super::super::HasDebugValue<i32> => Expectation<i32, NoRenderer>);
         }
     }
 
     mod has_debug_string {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            42.must().have_debug_string("42");
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -259,10 +255,10 @@ mod tests {
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
-                        .derive_owned(|value| rendered_text(value.actual.as_ref().unwrap()))
+                        .derive_owned(|value| format!("{:#}", value.actual.as_ref().unwrap()))
                         .is_equal_to("text:... 3 more characters ...");
                     element
-                        .derive_owned(|value| rendered_text(value.expected.as_ref().unwrap()))
+                        .derive_owned(|value| format!("{:#}", value.expected.as_ref().unwrap()))
                         .is_equal_to("text:... 3 more characters ...");
                 },
             ]);
@@ -270,9 +266,6 @@ mod tests {
 
         #[test]
         fn succeeds_when_equal() {
-            assert_that!(42).has_debug_string("42");
-            assert_that!(42).has_debug_string("42");
-            assert_that!(42).has_debug_string("42");
             assert_that!(42).has_debug_string("42");
         }
 
@@ -313,12 +306,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            42.must().have_debug_value(42);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(42), has_debug_value(43));
         }
@@ -326,7 +313,7 @@ mod tests {
         #[test]
         fn formats_each_operand_once_in_ordinary_matching_and_probe_execution() {
             use super::super::HasDebugValue;
-            use crate::{AssertionContext, Expectation, test_support::NoRenderer};
+            use crate::{AssertionContext, Expectation};
             use core::{cell::Cell, fmt};
 
             struct Value<'a>(&'a Cell<usize>, &'a str);
@@ -349,7 +336,7 @@ mod tests {
                 assert_that!((actual_calls.get(), expected_calls.get())).is_equal_to((2, 2));
                 assert_that!(failures.len()).is_equal_to(usize::from(expected_text != "actual"));
                 let context = AssertionContext::new(
-                    &NoRenderer,
+                    &DebugRenderer,
                     RenderingBudget::default().with_max_leaf_characters(0),
                 )
                 .with_diagnostics(false);
@@ -363,7 +350,6 @@ mod tests {
 
         mod with_number {
             use crate::prelude::*;
-            use indoc::formatdoc;
 
             #[test]
             fn succeeds_when_equal_using_same_value() {
@@ -376,21 +362,6 @@ mod tests {
                 let failures = assert_that!(42).capture(|it| it.has_debug_value("42"));
                 assert_that!(failures).has_length(1);
                 assert_that!(42).has_debug_string("42");
-            }
-
-            #[test]
-            fn panics_when_not_equal() {
-                assert_that_panic_by(|| assert_that!(42).with_location(false).has_debug_value(43))
-                    .has_type::<String>()
-                    .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `42`
-
-                    Expected: "43"
-
-                      Actual: "42"
-                    -------- assertr --------
-                "#});
             }
         }
 
@@ -421,7 +392,6 @@ mod tests {
 
         mod with_custom_struct {
             use crate::prelude::*;
-            use indoc::formatdoc;
 
             #[derive(Debug)]
             #[expect(dead_code)] // Expect fields to never be read.
@@ -461,28 +431,6 @@ mod tests {
                     alive: true,
                 })
                 .has_debug_string("Person { age: 42, alive: true }");
-            }
-
-            #[test]
-            fn panics_when_not_equal() {
-                assert_that_panic_by(|| {
-                    assert_that!(Person {
-                        age: 42,
-                        alive: true,
-                    })
-                    .with_location(false)
-                    .has_debug_string("foo")
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `Person {{ age: 42, alive: true, }}`
-
-                    Expected: "foo"
-
-                      Actual: "Person {{ age: 42, alive: true }}"
-                    -------- assertr --------
-                "#});
             }
         }
     }

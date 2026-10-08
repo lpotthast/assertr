@@ -1,10 +1,6 @@
-use alloc::{format, rc::Rc, string::String};
+use alloc::{rc::Rc, string::String};
 
-use crate::{
-    AssertThat,
-    failure::adapter::{Adapter, AdapterExt, HumanReadableText},
-    mode::Mode,
-};
+use crate::{AssertThat, mode::Mode};
 
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Sets the subject name shown in failure messages.
@@ -38,74 +34,48 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         self
     }
 
-    /// Selects the adapter that produces this context's panic text.
+    /// Selects the closure that produces this context's panic text.
     ///
-    /// The default is [`ToHumanReadableText`](crate::failure::adapter::ToHumanReadableText). This
-    /// method takes ownership of an adapter returning [`HumanReadableText`], displayed by the
-    /// panic. The adapter must be `'static`, so it cannot borrow stack-local data. Move data into
-    /// the adapter, clone owned values such as [`String`], or share owned data through [`Rc`]. This
-    /// bound does not require the adapter to live forever. It is dropped when the last context
-    /// using it is dropped, and the subject's borrow can still end at the context's last use.
+    /// The default panic text is the failure's `Display` report. The closure receives the
+    /// already-built [`AssertionFailure`](crate::AssertionFailure) and returns the text displayed
+    /// by the panic. It can wrap the default report, which `failure.to_string()` produces, or build
+    /// any other representation from the failure's structured fields.
     ///
-    /// The adapter's error can be any type implementing [`core::fmt::Display`]. This method wraps
-    /// the adapter to convert its errors to [`String`] only when presentation runs. The conversion
-    /// uses the alternate form (`{:#}`), so a [`ThenError`](crate::failure::adapter::ThenError)
-    /// reports both the failed stage and that stage's error.
+    /// The closure must be `'static`, so it cannot borrow stack-local data. Move data into it,
+    /// clone owned values such as [`String`], or share owned data through [`Rc`]. This bound does
+    /// not require the closure to live forever. It is dropped when the last context using it is
+    /// dropped, and the subject's borrow can still end at the context's last use.
     ///
     /// It runs on the asserting thread and needs neither `Send`, `Sync`, nor `Clone`. Mapped and
-    /// derived assertions share the adapter through an internal [`Rc`]. Calling this method again
+    /// derived assertions share the closure through an internal [`Rc`]. Calling this method again
     /// replaces the selected presentation for this context.
     ///
-    /// The adapter must implement [`RefUnwindSafe`](core::panic::RefUnwindSafe), since its concrete
-    /// type is erased and shared by contexts that may cross a `catch_unwind` boundary. General
-    /// adapters applied explicitly to captured failures do not need this bound. An adapter
-    /// containing unprotected shared mutable state is rejected.
+    /// The closure must implement [`RefUnwindSafe`](core::panic::RefUnwindSafe), since its
+    /// concrete type is erased and shared by contexts that may cross a `catch_unwind` boundary. A
+    /// closure capturing unprotected shared mutable state is rejected.
     ///
-    /// Presentation receives an already-built [`AssertionFailure`](crate::AssertionFailure). Use
-    /// [`with_renderer`](Self::with_renderer) to customize individual diagnostic values and
+    /// Use [`with_renderer`](Self::with_renderer) to customize individual diagnostic values and
     /// [`with_rendering_budget`](Self::with_rendering_budget) to limit them before presentation.
     ///
-    /// Capture mode stores structured failures without invoking presentation. In panic mode a
-    /// returned adapter error falls back to the built-in report with a presentation diagnostic.
-    /// With `std`, an unwinding adapter panic also uses this fallback. Without `std`, adapter
-    /// panics propagate because unwind catching is unavailable. Assertr never logs the report to
-    /// stdout automatically.
+    /// Capture mode stores structured failures without invoking presentation. In panic mode with
+    /// `std`, a panicking closure falls back to the built-in report with a presentation
+    /// diagnostic. Without `std`, its panics propagate because unwind catching is unavailable.
+    /// Assertr never logs the report to stdout automatically.
     ///
     /// ```should_panic
-    /// use core::convert::Infallible;
-    /// use assertr::failure::adapter::{
-    ///     Adapter, AdapterExt, HumanReadableText, ToHumanReadableText,
-    /// };
     /// use assertr::prelude::*;
     ///
-    /// struct AddContext(String);
-    ///
-    /// impl Adapter<HumanReadableText> for AddContext {
-    ///     type Output = HumanReadableText;
-    ///     type Error = Infallible;
-    ///
-    ///     fn adapt(&self, text: &HumanReadableText) -> Result<HumanReadableText, Infallible> {
-    ///         Ok(HumanReadableText::new(format!("{}\n{text}", self.0)))
-    ///     }
-    /// }
-    ///
     /// let context = String::from("Integration check failed:");
-    /// let presentation = ToHumanReadableText.then(AddContext(context.clone()));
     /// assert_that!(1)
-    ///     .with_panic_presentation(presentation)
+    ///     .with_panic_presentation(move |failure| format!("{context}\n{failure}"))
     ///     .is_equal_to(2);
     /// ```
     #[must_use]
-    pub fn with_panic_presentation<A>(mut self, adapter: A) -> Self
-    where
-        A: Adapter<crate::AssertionFailure, Output = HumanReadableText>
-            + core::panic::RefUnwindSafe
-            + 'static,
-        A::Error: core::fmt::Display,
-    {
-        // The alternate form lets composed errors such as `ThenError` keep their stage's error.
-        let adapter = adapter.map_err(|error| format!("{error:#}"));
-        self.state.panic_presentation = Some(Rc::new(adapter));
+    pub fn with_panic_presentation(
+        mut self,
+        presentation: impl Fn(&crate::AssertionFailure) -> String + core::panic::RefUnwindSafe + 'static,
+    ) -> Self {
+        self.state.panic_presentation = Some(Rc::new(presentation));
         self
     }
 }

@@ -1,8 +1,6 @@
-use std::convert::Infallible;
 use std::panic::{catch_unwind, set_hook, take_hook};
 use std::sync::mpsc;
 
-use assertr::failure::adapter::{Adapter, HumanReadableText};
 use assertr::prelude::*;
 
 #[test]
@@ -22,7 +20,10 @@ fn panic_and_failure_locations_point_to_the_assertion_call() {
         let _ = sender.send(location);
     }));
 
-    let assertion = assert_that!(1).with_panic_presentation(RecordFailure(failure_sender));
+    let assertion = assert_that!(1).with_panic_presentation(move |failure| {
+        let _ = failure_sender.send(failure.clone());
+        failure.to_string()
+    });
     // `line!()` shares the line of the failing call, so the expectation follows edits above.
     let (expected_line, outcome) = (line!(), catch_unwind(|| drop(assertion.is_equal_to(2))));
     set_hook(previous_hook);
@@ -53,16 +54,4 @@ fn panic_and_failure_locations_point_to_the_assertion_call() {
     assert_that!(location.file()).is_equal_to(file.as_str());
     assert_that!(location.line()).is_equal_to(line);
     assert_that!(location.column()).is_equal_to(column);
-}
-
-struct RecordFailure(mpsc::Sender<AssertionFailure>);
-
-impl Adapter<AssertionFailure> for RecordFailure {
-    type Output = HumanReadableText;
-    type Error = Infallible;
-
-    fn adapt(&self, failure: &AssertionFailure) -> Result<HumanReadableText, Infallible> {
-        let _ = self.0.send(failure.clone());
-        ToHumanReadableText.adapt(failure)
-    }
 }

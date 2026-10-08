@@ -14,8 +14,7 @@ sources:
   - assertr/src/assertions/collection/elements_are.rs
   - assertr/src/assertions/collection/elements_are_in_any_order.rs
   - assertr/src/assertions/map/entry_matcher_list.rs
-  - assertr/src/expectation/assignment.rs
-  - assertr/src/__private/field.rs
+  - assertr/src/expectation/field.rs
   - assertr/src/__private/partial_match.rs
   - assertr/src/util/matching.rs
   - assertr-macros/src/partial/mod.rs
@@ -35,7 +34,8 @@ Public expectation types implement `Debug` and `Clone`, bounded on their operand
 `Copy` when they hold no data, only concrete copyable data, or only borrowed targets. Callback definitions (`Predicate`,
 `Satisfying`, `Pattern`, `HasValueSatisfying`) are `Clone` when their callback is and omit it from `Debug`. Identity definitions show addresses and type selections such as `IsOfType` name the
 type, so neither bounds its target. Lists built by `matchers!`, `elements_are!`, and `entries_are!` use private nodes
-without these traits. Arrays, slices, vectors, and tuples of matchers keep them.
+that are `Debug`, `Clone`, and `Copy` when their matchers are, and print like arrays. Arrays, slices, and vectors of
+matchers keep these traits too.
 
 ## Evaluation and failure evidence
 
@@ -51,7 +51,8 @@ and failure handling.
 | `contains_matching` | Stop at first matching element. A rejection stays one nested failure ("does not contain a matching element"), also when composed. | Reject. |
 | `does_not_contain_matching` | Probe every element and identify unexpected matches. | Accept. |
 | Positional collection matchers | Evaluate all available positions in each candidate window. Contiguous search stops at the first successful window. A rejected search reports "does not contain these elements contiguously" with one "does not match in this window" group per retained window, each carrying a `Window start` fact. | Empty criteria accept except exact matching against nonempty input. |
-| `predicate` | Call `Fn(&T) -> bool`. `described_as` supplies the relation. There is no typed rejection error. Evaluation needs no renderer. Explaining a rejection renders the subject, so diagnostics require `R: ValueRenderer<T>`. | Not applicable. |
+| `predicate` | Call `Fn(&T) -> bool`. `described_as` supplies the relation. A rejection renders the subject with the `rejected_as` relation, or nests the description under "does not satisfy the constraint" without one. There is no typed rejection error. The expectation requires `R: ValueRenderer<T>`. | Not applicable. |
+| `field` | Project one field with `Fn(&T) -> &F` and evaluate the inner matcher at a `.name` path. The rejection contributes the inner matcher's evidence under that path. `partial!` uses the same expectation with optional projections for enum variants. | Not applicable. |
 
 Candidate windows share the enclosing [evidence allowance](expectation-execution.md#budgets-and-probes). Failures from
 earlier windows are discarded if a later window succeeds. Missing positions are described without evaluation. Suffix
@@ -63,17 +64,17 @@ Iterator contiguous searches report the same per-window groups.
 
 | Trait | Supported lists |
 |---|---|
-| `MatcherList<A, R>` | Sealed. `matchers!` nodes and tuples of up to twelve can mix matcher types. Arrays, slices, and vectors hold one matcher type. References reuse existing lists. |
-| `EntryMatcherList<MapType, R>` | Sealed. `entries_are!` can mix keyed matcher types. Arrays, slices, and vectors hold one `Entry` type. |
+| `MatcherList<A, R>` | Sealed. `matchers!` nodes can mix matcher types. Arrays, slices, and vectors hold one matcher type. References reuse existing lists. |
+| `EntryMatcherList<MapType, R>` | Sealed. `matchers![entry(..), ..]` can mix keyed matcher types. Arrays, slices, and vectors hold one `Entry` type. |
 
 Lists store definitions without boxing them or adding a renderer type parameter to the storage. Each slot can be
 evaluated on a subject or described without one. Keyed slots also identify the stored key when the value check fails,
 so [exact map checks](collection-semantics.md#keyed-maps) can determine which entries were visited.
 
-List `_satisfying` adapters borrow callback slices after tracking and wrap each callback as it is needed. They allocate
-no vector of wrappers and do not clone callbacks. Describing a missing slot never invokes its callback.
-This differs from [bulk expected values](comparison-operands.md#reading-expected-data-again), which supply comparison
-operands rather than executable constraints.
+List `_satisfying` methods store their callback lists and borrow them only after tracking, wrapping each callback as it
+is needed. They allocate no vector of wrappers and do not clone callbacks. Describing a missing slot never invokes its
+callback. This differs from [bulk expected values](comparison-operands.md#reading-expected-data-again), which supply
+comparison operands rather than executable constraints.
 
 ## Assertion callbacks
 
@@ -99,38 +100,29 @@ maximum assignments exist, no particular one is guaranteed.
 
 ### Candidate evaluation
 
-Structural assignment evaluates each pair of an actual occurrence and an expected matcher at most once. A matcher can
-still run for many pairs. Rejection diagnostics use the original observation. If assignment fails and diagnostics are
-enabled, evaluate any remaining pairs that involve an unmatched occurrence or slot. Successful assignments, probes, and
-zero item allowances skip this extra work. Probes also reject unequal lengths without comparisons and stop at the first
-occurrence that cannot be assigned.
+The assignment search evaluates pairs of an actual occurrence and an expected matcher only as probes, without
+diagnostics. A sparse cache ensures the search evaluates each pair at most once. A matcher can still run for many
+pairs. Probes also reject unequal lengths without comparisons and stop at the first occurrence that cannot be assigned.
 
-Each missing slot is reported with its constraint and candidate failures. An extra occurrence that satisfies an already
-matched expectation is surplus, not a rejected candidate. `At slot` identifies a zero-based expected position, never an
-actual collection index.
+When assignment fails and diagnostics are enabled, the report is built from the search result:
 
-### Bounded candidate evidence
+- Each missing slot is recorded as one group with its constraint. Inside it, every occurrence whose pair did not match
+  during the search is evaluated again with diagnostics. Rejections against a missing slot belong only to that slot.
+- Unexpected occurrences are recorded in one group. An occurrence that satisfies an already occupied slot is surplus.
+  It is described through those slots, without rendering the element. Otherwise, its pairs with the occupied slots are
+  evaluated again with diagnostics, so unexpected occurrences keep their evidence.
+- Groups beyond the [evidence allowance](expectation-execution.md#budgets-and-probes) are only counted, and their pairs
+  are not evaluated. Successful assignments, probes, and zero item allowances skip this extra work.
 
-- Retain a sample of up to `k` direct child failures per occurrence and per slot, where `k` is the inherited item
-  allowance. Nested children stay attached to their failure and take no additional sample positions.
-- Sorted scopes rank child-report text. Original occurrence, slot, and child ordinal break ties and define unsorted order.
-- After assignment, combine the samples. Report each rejection under its missing slot if there is one. Otherwise,
-  report it under the unmatched occurrence if applicable. Failures from the remaining pair evaluations go directly to
-  these destinations.
-- Selecting and combining samples must not change pair evaluation order, budgets, or whether a rejection is explained.
-  Rendering a constraint description is separate from explaining a pair's rejection.
-- Assignment can make sampled candidates ineligible after their possible replacements have been discarded. In that
-  case, leave the sample partly empty and count the lost candidates as omissions. Never evaluate a pair again to fill
-  the gaps. Unlimited budgets retain all evidence.
+On the failure path, a pair can therefore be evaluated twice: once as a probe and once with diagnostics. Matchers and
+callbacks of rejected pairs can run twice. Evidence follows ordinary context ordering, either iteration order or sorted
+rendered text. `At slot` identifies a zero-based expected position, never an actual collection index. Memory beyond the
+retained evidence is bounded by the sparse pair cache.
 
-For `n` occurrences and `m` slots, samples hold at most `k × (n + m)` references to failures, plus evidence for the current
-pair. Shared failures are stored once. Nested failure trees and a scalar cache that can grow to O(nm) require additional
-memory. The sample limit therefore does not bound total memory or guarantee faster execution.
-
-Sampling and omission accounting are implemented in [assignment.rs](../assertr/src/expectation/assignment.rs). Pair
-evaluation and report assembly are in [elements_are_in_any_order.rs](../assertr/src/assertions/collection/elements_are_in_any_order.rs),
-with regressions `supports_overlapping_constraints` and
-`assignment_can_starve_an_unexpected_sample_without_replaying_discarded_pairs`.
+Pair evaluation and report assembly are in
+[elements_are_in_any_order.rs](../assertr/src/assertions/collection/elements_are_in_any_order.rs), with regressions
+`supports_overlapping_constraints`, `explains_both_unmatched_sides_by_evaluating_their_pairs_again`, and
+`the_search_probes_each_pair_once_and_diagnostics_follow_it`.
 
 ## Structural macros
 

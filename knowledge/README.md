@@ -48,7 +48,7 @@ Each page covers one part of the library. The [glossary](glossary.md) defines th
 | [Reference identity](reference-identity.md) | Which addresses same-instance assertions compare and what pointer equality can establish. |
 | [Observation boundaries](observation-boundaries.md) | When assertions invoke functions, poll futures, inspect files or locks, and consume responses. |
 | [Diagnostic rendering](diagnostic-rendering.md) | How values become diagnostic trees, with renderer bounds, ordering, and size limits. |
-| [Failure processing](failure-processing.md) | How structured failures become reports, panics, or explicit output. |
+| [Failure processing](failure-processing.md) | How structured failures become reports and panics, and how panic presentation is customized. |
 | [Fluent entry](fluent-entry.md) | How fluent methods borrow values, provide aliases, and capture expression text. |
 | [Assertion extensions](extension-contract.md) | Which extension point to use and how to test it. |
 | [Platform compatibility](platform-compatibility.md) | Which features and platforms are supported, including macro versions and MSRV. |
@@ -59,7 +59,7 @@ Each page covers one part of the library. The [glossary](glossary.md) defines th
 |---|---|
 | [entry](../assertr/src/entry/), [assert_that](../assertr/src/assert_that/) | Entry, chain state, execution, projection, capture. |
 | [assertions](../assertr/src/assertions/) | Assertion families and their reusable definitions. |
-| [expectation](../assertr/src/expectation/) | Shared expectation protocol, composition, assignment evidence. |
+| [expectation](../assertr/src/expectation/) | Shared expectation protocol, composition, child evidence. |
 | [matchers.rs](../assertr/src/matchers.rs) | Public expectation catalog and subject namespaces. |
 | [renderer](../assertr/src/renderer/), [failure](../assertr/src/failure/) | Diagnostic values, completed failures, presentation. |
 | [assertr-macros](../assertr-macros/), [__private](../assertr/src/__private/) | Generated code and unsupported runtime plumbing. |

@@ -1,11 +1,12 @@
 //! Reusable native map expectations and their rejection evidence.
 
-use super::{Map, MapLookup};
+use super::{Map, MapLookup, entry::key_segment};
+use crate::assertions::core::partial_eq::operand_expectation;
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
-    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
-    renderer::{GroupStyle, IntoRendered, RenderingOrder},
+    AssertionContext, Expectation, ValueRenderer,
+    failure::{Fact, FailureBuilder, FailureKind},
+    renderer::RenderingOrder,
 };
 use alloc::{collections::BTreeSet, vec::Vec};
 use core::{marker::PhantomData, ptr};
@@ -31,19 +32,41 @@ impl<K> FoundEntries<K> {
         self.0.insert(ptr::from_ref(stored_key));
     }
 
-    pub(crate) fn contains(&self, stored_key: &K) -> bool {
+    fn contains(&self, stored_key: &K) -> bool {
         self.0.contains(&ptr::from_ref(stored_key))
     }
 
-    fn unexpected_entries<'m, Mp>(&self, actual: &'m Mp) -> Vec<(&'m K, &'m Mp::Value)>
+    /// The actual entries that no expected key resolved to, in iteration order.
+    pub(crate) fn unexpected_entries<'m, Mp>(
+        &self,
+        actual: &'m Mp,
+    ) -> impl Iterator<Item = (&'m K, &'m Mp::Value)>
     where
         Mp: Map<Key = K> + ?Sized,
     {
         actual
             .entries()
             .filter(|(actual_key, _)| !self.contains(actual_key))
-            .collect()
     }
+}
+
+/// Records the keyed child failure for a present value that does not equal its expectation.
+fn record_value_mismatch<V, Q: ?Sized, EV: ?Sized, R>(
+    children: &mut AssertionContext<'_, R>,
+    key: &Q,
+    value: &V,
+    expected: &EV,
+) where
+    R: ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<EV>,
+{
+    children.record_with(|context| {
+        let render = context.render();
+        FailureBuilder::new::<V>(FailureKind::Equality)
+            .actual(render.value(value))
+            .expected(render.value(expected))
+            .path([key_segment(render, key)])
+            .build()
+    });
 }
 
 /// Checks key presence through native borrowed lookup, without imposing key equality bounds.
@@ -65,7 +88,10 @@ impl<'e, Q: ?Sized> ContainsKey<'e, Q> {
     }
 }
 
-impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, R> Expectation<Mp, R> for ContainsKey<'_, Q> {
+impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, R> Expectation<Mp, R> for ContainsKey<'_, Q>
+where
+    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<Q>,
+{
     type Success<'a>
         = &'a Mp::Value
     where
@@ -87,28 +113,23 @@ impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, R> Expectation<Mp, R> for ContainsKey
             None => Err(()),
         }
     }
-}
 
-impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, R> ExpectationDiagnostics<Mp, R> for ContainsKey<'_, Q>
-where
-    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<Q>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("contains key"),
-            Some((actual, ())) => failure
-                .actual(render.map(actual))
-                .relation("does not contain key"),
-        };
-        failure.expected(render.value(self.0))
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.map(actual)),
+                "contains key",
+                "does not contain key",
+            )
+            .expected(render.value(self.0))
     }
 }
 
@@ -131,7 +152,10 @@ impl<'e, Q: ?Sized> DoesNotContainKey<'e, Q> {
     }
 }
 
-impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, R> Expectation<Mp, R> for DoesNotContainKey<'_, Q> {
+impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, R> Expectation<Mp, R> for DoesNotContainKey<'_, Q>
+where
+    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<Q>,
+{
     type Success<'a>
         = ()
     where
@@ -154,27 +178,23 @@ impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, R> Expectation<Mp, R> for DoesNotCont
             Ok(())
         }
     }
-}
 
-impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, R> ExpectationDiagnostics<Mp, R>
-    for DoesNotContainKey<'_, Q>
-where
-    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<Q>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("does not contain key"),
-            Some((actual, ())) => failure.actual(render.map(actual)).relation("contains key"),
-        };
-        failure.unexpected(render.value(self.0))
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.map(actual)),
+                "does not contain key",
+                "contains key",
+            )
+            .unexpected(render.value(self.0))
     }
 }
 
@@ -191,65 +211,17 @@ impl<E> ContainsValue<E> {
     }
 }
 
-impl<Mp: Map + ?Sized, E, R> Expectation<Mp, R> for ContainsValue<E>
-where
-    Mp::Value: PartialEq<E::View>,
-    E: BorrowFor<Mp::Value>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Mp: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        Mp: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Mp,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<Mp::Value, _>(&self.0);
-        if actual.entries().any(|(_, value)| value.eq(expected)) {
-            Ok(())
-        } else {
-            Err(expected)
-        }
-    }
-}
-
-impl<Mp: Map + ?Sized, E, R> ExpectationDiagnostics<Mp, R> for ContainsValue<E>
-where
-    Mp::Value: PartialEq<E::View>,
-    E: BorrowFor<Mp::Value>,
-    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
-{
-    const KIND: FailureKind = FailureKind::Membership;
-
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("contains value"),
-                borrow_for::<Mp::Value, _>(&self.0),
-            ),
-            Some((actual, expected)) => (
-                failure
-                    .actual(render.map(actual))
-                    .relation("does not contain value"),
-                expected,
-            ),
-        };
-        failure.expected(render.value(expected))
-    }
+operand_expectation! {
+    impl [Mp: Map + ?Sized, E, R] for ContainsValue<E>, subject Mp, where [
+        Mp::Value: PartialEq<E::View>,
+        E: BorrowFor<Mp::Value>,
+        R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
+    ];
+    borrow 0 for Mp::Value, view E::View;
+    kind Membership;
+    holds |actual, expected| actual.entries().any(|(_, value)| value.eq(expected));
+    actual |render, actual| render.map(actual);
+    expected "contains value", "does not contain value";
 }
 
 /// Checks that no map value equals a borrowed view for the declared value type, without key
@@ -265,65 +237,17 @@ impl<E> DoesNotContainValue<E> {
     }
 }
 
-impl<Mp: Map + ?Sized, E, R> Expectation<Mp, R> for DoesNotContainValue<E>
-where
-    Mp::Value: PartialEq<E::View>,
-    E: BorrowFor<Mp::Value>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Mp: 'a;
-    type Rejection<'a>
-        = &'a E::View
-    where
-        Self: 'a,
-        Mp: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Mp,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<Mp::Value, _>(&self.0);
-        if actual.entries().any(|(_, value)| value.eq(expected)) {
-            Err(expected)
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl<Mp: Map + ?Sized, E, R> ExpectationDiagnostics<Mp, R> for DoesNotContainValue<E>
-where
-    Mp::Value: PartialEq<E::View>,
-    E: BorrowFor<Mp::Value>,
-    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
-{
-    const KIND: FailureKind = FailureKind::Membership;
-
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => (
-                failure.relation("does not contain value"),
-                borrow_for::<Mp::Value, _>(&self.0),
-            ),
-            Some((actual, expected)) => (
-                failure
-                    .actual(render.map(actual))
-                    .relation("contains value"),
-                expected,
-            ),
-        };
-        failure.unexpected(render.value(expected))
-    }
+operand_expectation! {
+    impl [Mp: Map + ?Sized, E, R] for DoesNotContainValue<E>, subject Mp, where [
+        Mp::Value: PartialEq<E::View>,
+        E: BorrowFor<Mp::Value>,
+        R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
+    ];
+    borrow 0 for Mp::Value, view E::View;
+    kind Membership;
+    holds |actual, expected| actual.entries().any(|(_, value)| value.eq(expected));
+    actual |render, actual| render.map(actual);
+    unexpected "does not contain value", "contains value";
 }
 
 /// Checks a map entry with one native lookup and one expected-value borrow.
@@ -353,6 +277,10 @@ impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, E, R> Expectation<Mp, R> for Contains
 where
     Mp::Value: PartialEq<E::View>,
     E: BorrowFor<Mp::Value>,
+    R: ValueRenderer<Mp::Key>
+        + ValueRenderer<Mp::Value>
+        + ValueRenderer<Q>
+        + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -377,26 +305,15 @@ where
             Some((_, value)) => Err(Some((value, expected))),
         }
     }
-}
 
-impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, E, R> ExpectationDiagnostics<Mp, R>
-    for ContainsEntry<'_, Q, E>
-where
-    Mp::Value: PartialEq<E::View>,
-    E: BorrowFor<Mp::Value>,
-    R: ValueRenderer<Mp::Key>
-        + ValueRenderer<Mp::Value>
-        + ValueRenderer<Q>
-        + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         match rejected {
             None => failure.relation("contains the entry").expected((
@@ -411,16 +328,7 @@ where
                         .expected(render.value(self.key)),
                     Some((value, expected)) => {
                         let mut child = context.isolated();
-                        child.record_with(|context| {
-                            let render = context.render();
-                            FailureBuilder::detached::<Mp::Value>(FailureKind::Equality)
-                                .actual(render.value(value))
-                                .expected(render.value(expected))
-                                .path([PathSegment::Key(
-                                    render.value(self.key).into_rendered_compact(),
-                                )])
-                                .build()
-                        });
+                        record_value_mismatch(&mut child, self.key, value, expected);
                         child.into_evidence().explain(
                             failure.relation("does not contain the expected value at a key"),
                         )
@@ -460,6 +368,10 @@ impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, E, R> Expectation<Mp, R>
 where
     Mp::Value: PartialEq<E::View>,
     E: BorrowFor<Mp::Value>,
+    R: ValueRenderer<Mp::Key>
+        + ValueRenderer<Mp::Value>
+        + ValueRenderer<Q>
+        + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -487,36 +399,27 @@ where
             Ok(())
         }
     }
-}
 
-impl<Mp: MapLookup<Q> + ?Sized, Q: ?Sized, E, R> ExpectationDiagnostics<Mp, R>
-    for DoesNotContainEntry<'_, Q, E>
-where
-    Mp::Value: PartialEq<E::View>,
-    E: BorrowFor<Mp::Value>,
-    R: ValueRenderer<Mp::Key>
-        + ValueRenderer<Mp::Value>
-        + ValueRenderer<Q>
-        + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let expected = rejected.as_ref().map_or_else(
-            || borrow_for::<Mp::Value, _>(&self.value),
-            |(_, expected)| *expected,
-        );
-        let failure = match rejected {
-            None => failure.relation("does not contain the entry"),
-            Some((actual, _)) => failure
-                .actual(render.map(actual))
-                .relation("contains the entry"),
+        let (failure, expected) = match rejected {
+            None => (
+                failure.relation("does not contain the entry"),
+                borrow_for::<Mp::Value, _>(&self.value),
+            ),
+            Some((actual, expected)) => (
+                failure
+                    .actual(render.map(actual))
+                    .relation("contains the entry"),
+                expected,
+            ),
         };
         failure.unexpected((render.value(self.key), render.value(expected)))
     }
@@ -553,6 +456,7 @@ where
     Mp: MapLookup<<E as BorrowFor<<Mp as Map>::Key>>::View>,
     E: BorrowFor<Mp::Key>,
     B: AsRef<[E]>,
+    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -584,23 +488,15 @@ where
             Err(MissingKeysRejection { missing })
         }
     }
-}
 
-impl<Mp: Map<Key = K> + ?Sized, K, E, B, R> ExpectationDiagnostics<Mp, R> for ContainsKeys<E, B>
-where
-    Mp: MapLookup<E::View>,
-    E: BorrowFor<K>,
-    B: AsRef<[E]>,
-    R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let expected = self.expected.as_ref();
         let failure = match rejected {
@@ -610,10 +506,13 @@ where
                 .relation("does not contain all of")
                 .fact(Fact::labelled(
                     "Keys not found",
-                    render.borrowed_values::<E::View, _>(&missing, GroupStyle::List),
+                    render
+                        .borrowed_values::<E::View, _>(&missing, RenderingOrder::PreserveIteration),
                 )),
         };
-        failure.expected(render.borrowed_values::<E::View, _>(expected, GroupStyle::List))
+        failure.expected(
+            render.borrowed_values::<E::View, _>(expected, RenderingOrder::PreserveIteration),
+        )
     }
 }
 
@@ -655,6 +554,11 @@ where
     Mp::Value: PartialEq<EV::View>,
     EV: BorrowFor<Mp::Value>,
     B: AsRef<[(EK, EV)]>,
+    R: ValueRenderer<Mp::Key>
+        + ValueRenderer<Mp::Value>
+        + ValueRenderer<EK::View>
+        + ValueRenderer<usize>
+        + ValueRenderer<EV::View>,
 {
     type Success<'a>
         = ()
@@ -690,7 +594,7 @@ where
                 }
             }
         }
-        let unexpected = found.unexpected_entries(actual);
+        let unexpected: Vec<_> = found.unexpected_entries(actual).collect();
         if length == expected.len()
             && missing.is_empty()
             && unexpected.is_empty()
@@ -706,30 +610,15 @@ where
             })
         }
     }
-}
 
-impl<Mp: Map<Key = K> + ?Sized, K, EK, EV, B, R> ExpectationDiagnostics<Mp, R>
-    for ContainsExactlyEntries<EK, EV, B>
-where
-    Mp: MapLookup<EK::View>,
-    EK: BorrowFor<K>,
-    Mp::Value: PartialEq<EV::View>,
-    EV: BorrowFor<Mp::Value>,
-    B: AsRef<[(EK, EV)]>,
-    R: ValueRenderer<Mp::Key>
-        + ValueRenderer<Mp::Value>
-        + ValueRenderer<EK::View>
-        + ValueRenderer<usize>
-        + ValueRenderer<EV::View>,
-{
     const KIND: FailureKind = FailureKind::Equality;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mp, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let expected = self.expected.as_ref();
         let failure = match rejected {
@@ -743,20 +632,20 @@ where
                     ..
                 } = rejection;
                 let mut children = context.isolated_for_order(Mp::RENDERING_ORDER);
-                for (key, expected, value) in mismatches {
-                    children.record_with(|context| {
-                        let render = context.render();
-                        FailureBuilder::detached::<Mp::Value>(FailureKind::Equality)
-                            .actual(render.value(value))
-                            .expected(render.value(expected))
-                            .path([PathSegment::Key(render.value(key).into_rendered_compact())])
-                            .build()
-                    });
+                for &(key, expected, value) in &mismatches {
+                    record_value_mismatch(&mut children, key, value, expected);
                 }
                 let mut failure = failure
                     .actual(render.map(actual))
                     .relation("does not contain exactly");
-                if length != expected.len() {
+                // Like `EntriesAre`, report the lengths only when no entry explains the failure.
+                // Distinct expected keys make every length difference a missing or unexpected
+                // key. Only duplicate expected keys can match every entry while the lengths differ.
+                if length != expected.len()
+                    && missing.is_empty()
+                    && unexpected.is_empty()
+                    && mismatches.is_empty()
+                {
                     failure = failure
                         .fact(Fact::labelled("Actual length", render.value(&length)))
                         .fact(Fact::labelled(
@@ -767,7 +656,10 @@ where
                 if !missing.is_empty() {
                     failure = failure.fact(Fact::labelled(
                         "Keys not found",
-                        render.borrowed_values::<EK::View, _>(&missing, GroupStyle::List),
+                        render.borrowed_values::<EK::View, _>(
+                            &missing,
+                            RenderingOrder::PreserveIteration,
+                        ),
                     ));
                 }
                 if !unexpected.is_empty() {
@@ -794,8 +686,7 @@ where
 #[cfg(test)]
 mod tests {
     mod child_paths {
-        use super::super::*;
-        use crate::{prelude::*, test_support::CustomValueRenderer};
+        use crate::{failure::PathSegment, prelude::*, test_support::CustomValueRenderer};
         use alloc::collections::BTreeMap;
         use core::fmt;
 
@@ -843,7 +734,7 @@ mod tests {
                           Actual: 1
                 "}
                 };
-                assert_that!(ToHumanReadableText::render_child(&failure.children[0]))
+                assert_that!(crate::failure::report::child_text(&failure.children[0]))
                     .is_equal_to(expected);
             }
         }
@@ -874,7 +765,7 @@ mod tests {
                         panic!("expected one key segment");
                     };
                     let retained = compact.len().min(maximum);
-                    assert_that!(key.type_name()).is_equal_to(Some(core::any::type_name::<Key>()));
+                    assert_that!(key.type_name).is_equal_to(Some(core::any::type_name::<Key>()));
                     assert_that!(&key.body).is_equal_to(&crate::renderer::RenderedBody::Text {
                         text: compact[..retained].into(),
                         omitted_characters: compact.len() - retained,

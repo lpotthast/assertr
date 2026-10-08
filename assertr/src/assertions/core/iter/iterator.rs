@@ -1,6 +1,15 @@
-use crate::borrow_for::BorrowFor;
 use crate::{
-    AssertThat, DebugRenderer, Mode, ValueRenderer, actual::Actual, assertions::iterator,
+    AssertThat, DebugRenderer, Expectation, Mode, ValueRenderer,
+    assertions::{
+        collection::Placement,
+        iterator::{
+            Contains, ContainsExactlyInAnyOrder, ContainsMatching, DoesNotContain,
+            DoesNotContainMatching, ElementsAreInAnyOrder, ElementsEqual, ElementsMatch,
+            PositionReporting::YieldOrder, run,
+        },
+    },
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{MatcherList, lists::SatisfyingList, satisfying},
     mode::Capture,
 };
 
@@ -64,7 +73,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// Asserts that the iterator contains an element matching `expected`.
     fn contains_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         't: 'u,
         R: ValueRenderer<usize>;
 
@@ -86,7 +95,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// Asserts that the iterator's prefix matches the expected matcher list in order.
     fn starts_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>;
 
@@ -108,7 +117,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// Asserts that the iterator's suffix matches the expected matcher list in order.
     fn ends_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>;
 
@@ -133,7 +142,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// carries a `Window start` fact with the window's zero-based starting index.
     fn contains_contiguous_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>;
 
@@ -161,7 +170,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// Asserts that no iterator element matches `expected`.
     fn does_not_contain_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         't: 'u,
         R: ValueRenderer<usize> + ValueRenderer<T>;
 
@@ -183,7 +192,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// Asserts that each element matches the constraint at the same position, including length.
     fn contains_exactly_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>;
 
@@ -212,7 +221,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// order.
     fn contains_exactly_in_any_order_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>;
 
@@ -239,25 +248,24 @@ where
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::assert_contains::<_, T, _, _, _, _>(&this, iter, &expected);
+        let (actual, this) = take_iterator(self);
+        run(&this, || {
+            (actual, Contains::<T, _>::new(borrow_for::<T, _>(&expected)))
+        });
         this
     }
 
     #[track_caller]
     fn contains_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         't: 'u,
         R: ValueRenderer<usize>,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::matchers::membership::<_, T, _, _, _, _>(
-            &this,
-            iter,
-            &expected,
-            iterator::PositionReporting::YieldOrder,
-        );
+        let (actual, this) = take_iterator(self);
+        run(&this, || {
+            (actual, ContainsMatching::<T, _>::new(expected, YieldOrder))
+        });
         this
     }
 
@@ -268,7 +276,7 @@ where
         R: Clone + ValueRenderer<usize>,
         't: 'u,
     {
-        self.contains_matching(crate::expectation::satisfying(assertions))
+        self.contains_matching(satisfying(assertions))
     }
 
     #[track_caller]
@@ -279,23 +287,17 @@ where
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::assert_starts_with::<_, T, _, _, _, _>(&this, iter, expected);
-        this
+        equal(self, &expected, Placement::Prefix)
     }
 
     #[track_caller]
     fn starts_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::matchers::exact_or_prefix::<_, T, _, _, _, _>(&this, iter, &expected, false);
-        this
+        matching(self, || expected, Placement::Prefix)
     }
 
     #[track_caller]
@@ -305,11 +307,11 @@ where
         R: Clone + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = crate::expectation::lists::SatisfyingList(assertions.as_ref());
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::matchers::exact_or_prefix::<_, T, _, _, _, _>(&this, iter, &expected, false);
-        this
+        matching(
+            self,
+            || SatisfyingList::new(assertions.as_ref()),
+            Placement::Prefix,
+        )
     }
 
     #[track_caller]
@@ -320,23 +322,17 @@ where
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::assert_ends_with::<_, T, _, _, _, _>(&this, iter, expected);
-        this
+        equal(self, &expected, Placement::Suffix)
     }
 
     #[track_caller]
     fn ends_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::matchers::suffix_or_contiguous::<_, T, _, _, _, _>(&this, iter, &expected, true);
-        this
+        matching(self, || expected, Placement::Suffix)
     }
 
     #[track_caller]
@@ -346,11 +342,11 @@ where
         R: Clone + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = crate::expectation::lists::SatisfyingList(assertions.as_ref());
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::matchers::suffix_or_contiguous::<_, T, _, _, _, _>(&this, iter, &expected, true);
-        this
+        matching(
+            self,
+            || SatisfyingList::new(assertions.as_ref()),
+            Placement::Suffix,
+        )
     }
 
     #[track_caller]
@@ -361,23 +357,17 @@ where
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::assert_contains_contiguous::<_, T, _, _, _, _>(&this, iter, expected);
-        this
+        equal(self, &expected, Placement::Contiguous)
     }
 
     #[track_caller]
     fn contains_contiguous_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::matchers::suffix_or_contiguous::<_, T, _, _, _, _>(&this, iter, &expected, false);
-        this
+        matching(self, || expected, Placement::Contiguous)
     }
 
     #[track_caller]
@@ -390,11 +380,11 @@ where
         R: Clone + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = crate::expectation::lists::SatisfyingList(assertions.as_ref());
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::matchers::suffix_or_contiguous::<_, T, _, _, _, _>(&this, iter, &expected, false);
-        this
+        matching(
+            self,
+            || SatisfyingList::new(assertions.as_ref()),
+            Placement::Contiguous,
+        )
     }
 
     #[track_caller]
@@ -405,30 +395,28 @@ where
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::assert_does_not_contain::<_, T, _, _, _, _>(
-            &this,
-            iter,
-            &not_expected,
-            iterator::PositionReporting::YieldOrder,
-        );
+        let (actual, this) = take_iterator(self);
+        run(&this, || {
+            let unexpected = borrow_for::<T, _>(&not_expected);
+            (actual, DoesNotContain::<T, _>::new(unexpected, YieldOrder))
+        });
         this
     }
 
     #[track_caller]
     fn does_not_contain_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::ExpectationDiagnostics<T, R>,
+        P: Expectation<T, R>,
         't: 'u,
         R: ValueRenderer<usize> + ValueRenderer<T>,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::matchers::no_membership::<_, T, _, _, _, _>(
-            &this,
-            iter,
-            &expected,
-            iterator::PositionReporting::YieldOrder,
-        );
+        let (actual, this) = take_iterator(self);
+        run(&this, || {
+            (
+                actual,
+                DoesNotContainMatching::<T, _>::new(expected, YieldOrder),
+            )
+        });
         this
     }
 
@@ -439,7 +427,7 @@ where
         R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
         't: 'u,
     {
-        self.does_not_contain_matching(crate::expectation::satisfying(assertions))
+        self.does_not_contain_matching(satisfying(assertions))
     }
 
     #[track_caller]
@@ -450,23 +438,17 @@ where
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::assert_contains_exactly::<_, T, _, _, _, _>(&this, iter, expected);
-        this
+        equal(self, &expected, Placement::Exact)
     }
 
     #[track_caller]
     fn contains_exactly_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::matchers::exact_or_prefix::<_, T, _, _, _, _>(&this, iter, &expected, true);
-        this
+        matching(self, || expected, Placement::Exact)
     }
 
     #[track_caller]
@@ -479,11 +461,11 @@ where
         R: Clone + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = crate::expectation::lists::SatisfyingList(assertions.as_ref());
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::matchers::exact_or_prefix::<_, T, _, _, _, _>(&this, iter, &expected, true);
-        this
+        matching(
+            self,
+            || SatisfyingList::new(assertions.as_ref()),
+            Placement::Exact,
+        )
     }
 
     #[track_caller]
@@ -497,22 +479,25 @@ where
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = expected.as_ref();
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::assert_contains_exactly_in_any_order::<_, T, E, _, _, _>(&this, iter, expected);
+        let (actual, this) = take_iterator(self);
+        run(&this, || {
+            let scan = ContainsExactlyInAnyOrder::<T, _>::new(expected.as_ref());
+            (actual, scan)
+        });
         this
     }
 
     #[track_caller]
     fn contains_exactly_in_any_order_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
     where
-        P: crate::expectation::MatcherList<T, R>,
+        P: MatcherList<T, R>,
         't: 'u,
         R: ValueRenderer<usize>,
     {
-        let (iter, this) = take_iterator(self);
-        iterator::matchers::unordered::<_, T, _, _, _, _>(&this, iter, &expected);
+        let (actual, this) = take_iterator(self);
+        run(&this, || {
+            (actual, ElementsAreInAnyOrder::<T, _>::new(expected))
+        });
         this
     }
 
@@ -526,50 +511,112 @@ where
         R: Clone + ValueRenderer<usize>,
         't: 'u,
     {
-        self.track_assertion();
-        let expected = crate::expectation::lists::SatisfyingList(assertions.as_ref());
-        let (iter, this) = take_iterator_after_tracking(self);
-        iterator::matchers::unordered::<_, T, _, _, _, _>(&this, iter, &expected);
+        let (actual, this) = take_iterator(self);
+        run(&this, || {
+            let expected = SatisfyingList::new(assertions.as_ref());
+            (actual, ElementsAreInAnyOrder::<T, _>::new(expected))
+        });
         this
     }
 }
 
 /// Takes the iterator out of `this`, returning it together with the terminal `()` assertion.
-///
-/// The assertion itself must run directly inside the calling `#[track_caller]` trait method, not
-/// inside a closure passed to a helper, so failure locations point at the user's call site.
 #[track_caller]
-fn take_iterator<'t, 'u, T, I, M: Mode, R>(
+fn take_iterator<'t, 'u, I, M: Mode, R>(
     this: AssertThat<'t, I, M, R>,
 ) -> (I, AssertThat<'u, (), M, R>)
 where
-    I: Iterator<Item = T>,
     't: 'u,
 {
-    this.track_assertion();
-    take_iterator_after_tracking(this)
+    this.take_owned(
+        "Iterator assertions consume the iterator and therefore need to own it. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
+    )
 }
 
+/// Runs a positional equality scan, accessing the expected list only after tracking.
 #[track_caller]
-fn take_iterator_after_tracking<'t, 'u, T, I, M: Mode, R>(
+fn equal<'t, 'u, T, I, E, M: Mode, R>(
     this: AssertThat<'t, I, M, R>,
-) -> (I, AssertThat<'u, (), M, R>)
+    expected: &impl AsRef<[E]>,
+    placement: Placement,
+) -> AssertThat<'u, (), M, R>
 where
     I: Iterator<Item = T>,
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     't: 'u,
 {
-    let (actual, terminal) = this.replace_actual_with(Actual::Owned(()));
-    match actual {
-        Actual::Owned(iterator) => (iterator, terminal),
-        Actual::Borrowed(_) => panic!(
-            "Iterator assertions consume the iterator and therefore need to own it. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead."
-        ),
-    }
+    let (actual, this) = take_iterator(this);
+    run(&this, || {
+        (
+            actual,
+            ElementsEqual::<T, _>::new(expected.as_ref(), placement),
+        )
+    });
+    this
+}
+
+/// Runs a positional matcher scan, creating the list only after tracking.
+#[track_caller]
+fn matching<'t, 'u, T, I, L, M: Mode, R>(
+    this: AssertThat<'t, I, M, R>,
+    expected: impl FnOnce() -> L,
+    placement: Placement,
+) -> AssertThat<'u, (), M, R>
+where
+    I: Iterator<Item = T>,
+    L: MatcherList<T, R>,
+    R: ValueRenderer<usize>,
+    't: 'u,
+{
+    let (actual, this) = take_iterator(this);
+    run(&this, || {
+        (actual, ElementsMatch::<T, _>::new(expected(), placement))
+    });
+    this
 }
 
 #[cfg(test)]
 #[allow(clippy::trivially_copy_pass_by_ref)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::{matchers::eq, prelude::*};
+
+        fn is(expected: i32) -> impl Fn(AssertThat<'_, i32, Capture>) {
+            move |it| {
+                it.is_equal_to(expected);
+            }
+        }
+
+        #[test]
+        fn are_as_expected() {
+            let values = || [1, 2, 3].into_iter().must_owned();
+            values().contain(2);
+            values().contain_matching(eq(2));
+            values().contain_satisfying(is(2));
+            values().not_contain(4);
+            values().not_contain_matching(eq(4));
+            values().not_contain_satisfying(is(4));
+            values().start_with([1, 2]);
+            values().start_with_matching([eq(1), eq(2)]);
+            values().start_with_satisfying([is(1)]);
+            values().end_with([2, 3]);
+            values().end_with_matching([eq(2), eq(3)]);
+            values().end_with_satisfying([is(2), is(3)]);
+            values().contain_contiguous([2, 3]);
+            values().contain_contiguous_matching([eq(1), eq(2)]);
+            values().contain_contiguous_satisfying([is(2), is(3)]);
+            values().contain_exactly([1, 2, 3]);
+            values().contain_exactly_matching([eq(1), eq(2), eq(3)]);
+            values().contain_exactly_satisfying([is(1), is(2), is(3)]);
+            values().contain_exactly_in_any_order([3, 1, 2]);
+            values().contain_exactly_in_any_order_matching([eq(3), eq(1), eq(2)]);
+            values().contain_exactly_in_any_order_satisfying([is(3), is(1), is(2)]);
+        }
+    }
+
     mod renderer_contract {
         use crate::{
             prelude::*,
@@ -587,6 +634,48 @@ mod tests {
         }
 
         #[test]
+        fn numeric_evidence_uses_the_active_renderer() {
+            use crate::{
+                matchers::eq,
+                test_support::{CustomValueRenderer, assert_custom_fact},
+            };
+
+            // Iterators with and without an exact size hint.
+            let hinted = || [1, 2].into_iter();
+            let unhinted = || [1, 2].into_iter().filter(|_| true);
+            macro_rules! case {
+                ($iterator:expr, $call:ident($($arg:expr),*), $label:literal, $value:expr) => {{
+                    let failures = assert_that_owned!($iterator)
+                        .with_renderer(CustomValueRenderer)
+                        .capture(|it| it.$call($($arg),*));
+                    assert_custom_fact(&failures[0], $label, $value);
+                }};
+            }
+            case!(hinted(), contains(9), "Consumed elements", 2);
+            case!(hinted(), contains_matching(eq(9)), "Consumed elements", 2);
+            case!(hinted(), starts_with([1, 2, 3]), "Reported length", 2);
+            case!(hinted(), contains_exactly([1, 2, 3]), "Expected length", 3);
+            case!(unhinted(), contains_exactly([1, 9]), "Decisive index", 1);
+            case!(
+                unhinted(),
+                contains_exactly([1]),
+                "Extra element at index",
+                1
+            );
+            case!(hinted(), ends_with([1, 2, 3]), "Suffix length", 3);
+            case!(
+                hinted(),
+                contains_exactly_in_any_order([1]),
+                "Expected length",
+                1
+            );
+            let failures = assert_that_owned!(hinted())
+                .with_renderer(CustomValueRenderer)
+                .capture(|it| it.contains_contiguous_matching([eq(1), eq(9)]));
+            assert_custom_fact(&failures[0].children[0], "Window start", 0);
+        }
+
+        #[test]
         fn membership_and_sequence_equality_use_the_active_renderer_type() {
             assert_that_owned!(vec![RendererActual(1), RendererActual(2)].into_iter())
                 .with_renderer(ComparisonRenderer)
@@ -601,12 +690,6 @@ mod tests {
     mod contains {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].into_iter().must_owned().contain(2);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -655,54 +738,11 @@ mod tests {
                     -------- assertr --------
                 "});
         }
-
-        #[test]
-        fn renders_numeric_evidence_with_the_active_renderer() {
-            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
-            use indoc::formatdoc;
-
-            let failures = assert_that_owned!([1, 2].into_iter())
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(|it| it.contains(9));
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2].into_iter()`
-
-                Actual: [
-                    custom(1),
-                    custom(2),
-                ]
-
-                does not contain
-
-                Expected: custom(9)
-
-                Details:
-                  - Consumed elements: custom(2)
-                -------- assertr --------
-            "});
-
-                    assert_custom_fact(element.actual(), "Consumed elements", 2);
-                },
-            ]);
-        }
     }
 
     mod contains_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .contain_matching(crate::expectation::predicate(|it: &i32| *it % 2 == 0));
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -753,57 +793,10 @@ mod tests {
                 -------- assertr --------
             "});
         }
-
-        #[test]
-        fn renders_numeric_evidence_with_the_active_renderer() {
-            use crate::{
-                assertions::core::partial_eq::equal_to,
-                test_support::{CustomValueRenderer, assert_custom_fact},
-            };
-            use indoc::formatdoc;
-            let failures = assert_that_owned!([1, 2].into_iter())
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(|it| it.contains_matching(equal_to(9)));
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2].into_iter()`
-
-                does not contain a matching element
-
-                Details:
-                  - Consumed elements: custom(2)
-                Nested failures:
-                  - At [0]:
-                    Expected: custom(9)
-
-                      Actual: custom(1)
-                  - At [1]:
-                    Expected: custom(9)
-
-                      Actual: custom(2)
-                -------- assertr --------
-            "});
-
-                    assert_custom_fact(element.actual(), "Consumed elements", 2);
-                },
-            ]);
-        }
     }
 
     mod contains_satisfying {
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .contain_satisfying(is_two);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -831,11 +824,6 @@ mod tests {
             assert_that!(failures).is_empty();
         }
 
-        #[cfg(feature = "fluent")]
-        fn is_two(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(2);
-        }
-
         fn is_seven(it: AssertThat<i32, Capture>) {
             it.is_equal_to(7);
         }
@@ -844,12 +832,6 @@ mod tests {
     mod does_not_contain {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].into_iter().must_owned().not_contain(4);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -903,15 +885,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .not_contain_matching(crate::expectation::predicate(|it: &i32| *it > 7));
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
@@ -954,15 +927,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .not_contain_satisfying(is_seven);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
@@ -973,21 +937,10 @@ mod tests {
         fn is_two(it: AssertThat<i32, Capture>) {
             it.is_equal_to(2);
         }
-
-        #[cfg(feature = "fluent")]
-        fn is_seven(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(7);
-        }
     }
 
     mod starts_with {
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].into_iter().must_owned().start_with([1, 2]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1008,15 +961,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .start_with_matching(crate::expectation::predicate_list([is_one, is_two]));
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
@@ -1026,11 +970,6 @@ mod tests {
 
         fn is_one(value: &i32) -> bool {
             *value == 1
-        }
-
-        #[cfg(feature = "fluent")]
-        fn is_two(value: &i32) -> bool {
-            *value == 2
         }
 
         fn is_nine(value: &i32) -> bool {
@@ -1070,15 +1009,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .start_with_satisfying([is_one]);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
@@ -1098,12 +1028,6 @@ mod tests {
     mod ends_with {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].into_iter().must_owned().end_with([2, 3]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1150,58 +1074,11 @@ mod tests {
                     -------- assertr --------
                 "});
         }
-
-        #[test]
-        fn renders_numeric_evidence_with_the_active_renderer() {
-            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
-            use indoc::formatdoc;
-            let failures = assert_that_owned!([1, 2].into_iter())
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(|it| it.ends_with([1, 2, 3]));
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2].into_iter()`
-
-                Actual: [
-                    custom(1),
-                    custom(2),
-                ]
-
-                does not end with
-
-                Expected: [
-                    custom(1),
-                    custom(2),
-                    custom(3),
-                ]
-
-                Details:
-                  - Consumed elements: custom(2)
-                  - Suffix length: custom(3)
-                -------- assertr --------
-            "});
-
-                    assert_custom_fact(element.actual(), "Suffix length", 3);
-                },
-            ]);
-        }
     }
 
     mod ends_with_matching {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .end_with_matching(crate::expectation::predicate_list([is_two, is_three]));
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1213,11 +1090,6 @@ mod tests {
 
         fn is_two(value: &i32) -> bool {
             *value == 2
-        }
-
-        #[cfg(feature = "fluent")]
-        fn is_three(value: &i32) -> bool {
-            *value == 3
         }
 
         fn is_nine(value: &i32) -> bool {
@@ -1257,15 +1129,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .end_with_satisfying([is_two, is_three]);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
@@ -1277,11 +1140,6 @@ mod tests {
             it.is_equal_to(2);
         }
 
-        #[cfg(feature = "fluent")]
-        fn is_three(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(3);
-        }
-
         fn is_nine(it: AssertThat<i32, Capture>) {
             it.is_equal_to(9);
         }
@@ -1290,15 +1148,6 @@ mod tests {
     mod contains_contiguous {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .contain_contiguous([2, 3]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1351,15 +1200,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .contain_contiguous_matching(crate::expectation::predicate_list([is_one, is_two]));
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
@@ -1367,11 +1207,6 @@ mod tests {
                     [is_two, is_nine,]
                 ))
             );
-        }
-
-        #[cfg(feature = "fluent")]
-        fn is_one(value: &i32) -> bool {
-            *value == 1
         }
 
         fn is_two(value: &i32) -> bool {
@@ -1447,15 +1282,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .contain_contiguous_satisfying([is_two, is_three]);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
@@ -1467,11 +1293,6 @@ mod tests {
             it.is_equal_to(2);
         }
 
-        #[cfg(feature = "fluent")]
-        fn is_three(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(3);
-        }
-
         fn is_nine(it: AssertThat<i32, Capture>) {
             it.is_equal_to(9);
         }
@@ -1480,15 +1301,6 @@ mod tests {
     mod contains_exactly {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3]
-                .into_iter()
-                .must_owned()
-                .contain_exactly([1, 2, 3]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1541,14 +1353,6 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2, 3].into_iter().must_owned().contain_exactly_matching(
-                crate::expectation::predicate_list([is_one, is_two, is_three]),
-            );
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
@@ -1560,11 +1364,6 @@ mod tests {
 
         fn is_one(value: &i32) -> bool {
             *value == 1
-        }
-
-        #[cfg(feature = "fluent")]
-        fn is_two(value: &i32) -> bool {
-            *value == 2
         }
 
         fn is_three(value: &i32) -> bool {
@@ -1634,15 +1433,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2]
-                .into_iter()
-                .must_owned()
-                .contain_exactly_satisfying([is_one, is_two]);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2].into_iter()),
@@ -1654,11 +1444,6 @@ mod tests {
             it.is_equal_to(1);
         }
 
-        #[cfg(feature = "fluent")]
-        fn is_two(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(2);
-        }
-
         fn is_nine(it: AssertThat<i32, Capture>) {
             it.is_equal_to(9);
         }
@@ -1668,15 +1453,6 @@ mod tests {
         use crate::prelude::*;
 
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [2, 1, 1]
-                .into_iter()
-                .must_owned()
-                .contain_exactly_in_any_order([1, 2, 1]);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1761,37 +1537,6 @@ mod tests {
                     -------- assertr --------
                 "});
         }
-
-        #[test]
-        fn renders_numeric_evidence_with_the_active_renderer() {
-            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
-            use indoc::formatdoc;
-            let failures = assert_that_owned!([1, 2].into_iter())
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(|it| it.contains_exactly_in_any_order([1]));
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2].into_iter()`
-
-                does not contain exactly in any order
-
-                Expected: [
-                    custom(1),
-                ]
-
-                Details:
-                  - Reported length: custom(2)
-                  - Expected length: custom(1)
-                -------- assertr --------
-            "});
-
-                    assert_custom_fact(element.actual(), "Expected length", 1);
-                },
-            ]);
-        }
     }
 
     mod contains_exactly_in_any_order_matching {
@@ -1801,6 +1546,16 @@ mod tests {
         /// An item without `PartialEq`, matched by predicates over its field.
         #[derive(Debug)]
         struct Opaque(u8);
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
+                    is_one, is_two, is_nine,
+                ]))
+            );
+        }
 
         #[test]
         fn matches_items_without_equality_through_predicates() {
@@ -1818,33 +1573,6 @@ mod tests {
                     |_: &Opaque| true,
                     |it: &Opaque| it.0 == 2,
                 ]));
-        }
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2]
-                .into_iter()
-                .must_owned()
-                .contain_exactly_in_any_order_matching(crate::expectation::predicate_list([
-                    is_at_most_two,
-                    is_one,
-                ]));
-        }
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that_owned!([1, 2, 3].into_iter()),
-                contains_exactly_in_any_order_matching(crate::expectation::predicate_list([
-                    is_one, is_two, is_nine,
-                ]))
-            );
-        }
-
-        #[cfg(feature = "fluent")]
-        fn is_at_most_two(value: &i32) -> bool {
-            *value <= 2
         }
 
         fn is_one(value: &i32) -> bool {
@@ -1930,15 +1658,6 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [-1, 1]
-                .into_iter()
-                .must_owned()
-                .contain_exactly_in_any_order_satisfying([positive, negative]);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, -1, 2].into_iter()),
@@ -1948,11 +1667,6 @@ mod tests {
 
         fn positive(it: AssertThat<i32, Capture>) {
             it.is_greater_than(0);
-        }
-
-        #[cfg(feature = "fluent")]
-        fn negative(it: AssertThat<i32, Capture>) {
-            it.is_less_than(0);
         }
     }
 }

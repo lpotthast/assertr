@@ -1,33 +1,24 @@
+use crate::expectation::composite_items;
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics, Fact,
-    assertions::collection::StableOrder,
+    AssertionContext, Expectation, Fact,
+    assertions::collection::{Placement, StableOrder},
     expectation::{Evidence, MatcherList},
     failure::{FailureBuilder, FailureKind, PathSegment},
-    renderer::IntoRendered,
 };
 use alloc::vec::Vec;
-
-/// Positional policy for a matcher sequence.
-#[derive(Debug, Clone, Copy)]
-enum Position {
-    Exact,
-    Prefix,
-    Suffix,
-    Contiguous,
-}
 
 /// A sequence constraint requiring stable element order.
 #[derive(Debug, Clone)]
 pub struct ElementsAre<L> {
     list: L,
-    position: Position,
+    position: Placement,
 }
 
 /// Matches exactly the listed constraints in positional order.
 pub fn elements_are<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
-        position: Position::Exact,
+        position: Placement::Exact,
     }
 }
 
@@ -35,7 +26,7 @@ pub fn elements_are<L>(list: L) -> ElementsAre<L> {
 pub fn starts_with_elements<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
-        position: Position::Prefix,
+        position: Placement::Prefix,
     }
 }
 
@@ -44,7 +35,7 @@ pub fn starts_with_elements<L>(list: L) -> ElementsAre<L> {
 pub fn ends_with_elements<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
-        position: Position::Suffix,
+        position: Placement::Suffix,
     }
 }
 
@@ -55,7 +46,7 @@ pub fn ends_with_elements<L>(list: L) -> ElementsAre<L> {
 pub fn contains_contiguous_elements<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
-        position: Position::Contiguous,
+        position: Placement::Contiguous,
     }
 }
 
@@ -64,41 +55,32 @@ where
     R: crate::ValueRenderer<usize>,
     L: MatcherList<C::Item, R>,
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        C: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        C: 'a;
+    composite_items!(C);
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let actual_length = actual.length();
         let expected_length = self.list.len();
         let mut elements = actual.elements();
         // Only contiguous searches revisit elements across multiple candidate windows.
-        let buffered = if matches!(self.position, Position::Contiguous) {
+        let buffered = if matches!(self.position, Placement::Contiguous) {
             elements.by_ref().collect::<Vec<_>>()
         } else {
             Vec::new()
         };
         // A suffix aligns from the right. Leading slots of a longer suffix precede the subject.
-        let unaligned = if matches!(self.position, Position::Suffix) {
+        let unaligned = if matches!(self.position, Placement::Suffix) {
             expected_length.saturating_sub(actual_length)
         } else {
             0
         };
         let starts = match self.position {
-            Position::Exact | Position::Prefix => 0..1,
-            Position::Suffix => {
+            Placement::Exact | Placement::Prefix => 0..1,
+            Placement::Suffix => {
                 actual_length.saturating_sub(expected_length)
                     ..actual_length.saturating_sub(expected_length) + 1
             }
-            Position::Contiguous => 0..actual_length.saturating_sub(expected_length) + 1,
+            Placement::Contiguous => 0..actual_length.saturating_sub(expected_length) + 1,
         };
-        let length_matches = if matches!(self.position, Position::Exact) {
+        let length_matches = if matches!(self.position, Placement::Exact) {
             actual_length == expected_length
         } else {
             actual_length >= expected_length
@@ -114,7 +96,7 @@ where
                     continue;
                 }
                 let position = start + index - unaligned;
-                let item = if matches!(self.position, Position::Contiguous) {
+                let item = if matches!(self.position, Placement::Contiguous) {
                     buffered.get(position).copied()
                 } else {
                     window_elements.next()
@@ -129,15 +111,15 @@ where
             }
             if !length_matches {
                 window.record_with(|window| {
-                    FailureBuilder::detached::<C>(FailureKind::Matching)
+                    FailureBuilder::new::<C>(FailureKind::Matching)
                         .relation("does not have the required sequence")
                         .fact(Fact::labelled(
                             "Actual length",
-                            window.render().value(&actual_length).into_rendered(),
+                            window.render().value(&actual_length),
                         ))
                         .fact(Fact::labelled(
                             "Expected length",
-                            window.render().value(&expected_length).into_rendered(),
+                            window.render().value(&expected_length),
                         ))
                         .build()
                 });
@@ -146,17 +128,17 @@ where
                 return Ok(());
             }
             let evidence = window.into_evidence();
-            if matches!(self.position, Position::Contiguous) {
+            if matches!(self.position, Placement::Contiguous) {
                 // Each rejected window stays one group, so its evidence does not interleave with
                 // the evidence of overlapping windows.
                 alternatives.record_with(|alternatives| {
                     evidence
                         .explain(
-                            FailureBuilder::detached::<C>(FailureKind::Matching)
+                            FailureBuilder::new::<C>(FailureKind::Matching)
                                 .relation("does not match in this window")
                                 .fact(Fact::labelled(
                                     "Window start",
-                                    alternatives.render().value(&start).into_rendered(),
+                                    alternatives.render().value(&start),
                                 )),
                         )
                         .build()
@@ -167,33 +149,27 @@ where
         }
         Err(alternatives.into_evidence())
     }
-}
-impl<C: StableOrder + ?Sized, R, L> ExpectationDiagnostics<C, R> for ElementsAre<L>
-where
-    R: crate::ValueRenderer<usize>,
-    L: MatcherList<C::Item, R>,
-{
+
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&C, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
-            None => context.describe_list::<C::Item, _, _>(
+            None => context.describe_list::<C::Item, _>(
                 &self.list,
                 failure.relation(match self.position {
-                    Position::Exact => "has exactly these elements in order",
-                    Position::Prefix => "starts with these elements",
-                    Position::Suffix => "ends with these elements",
-                    Position::Contiguous => "contains these elements contiguously",
+                    Placement::Exact => "has exactly these elements in order",
+                    Placement::Prefix => "starts with these elements",
+                    Placement::Suffix => "ends with these elements",
+                    Placement::Contiguous => "contains these elements contiguously",
                 }),
             ),
             Some((_, evidence)) => evidence.explain(failure.relation(match self.position {
-                Position::Contiguous => "does not contain these elements contiguously",
-                Position::Exact | Position::Prefix | Position::Suffix => "does not match",
+                Placement::Contiguous => "does not contain these elements contiguously",
+                Placement::Exact | Placement::Prefix | Placement::Suffix => "does not match",
             })),
         }
     }
@@ -234,7 +210,7 @@ mod tests {
     fn positional_policies_cover_empty_short_reordered_and_overlapping_sequences() {
         use super::{
             ElementsAre,
-            Position::{Contiguous, Exact, Prefix, Suffix},
+            Placement::{Contiguous, Exact, Prefix, Suffix},
         };
 
         // Outcomes are exact, prefix, suffix, and contiguous respectively. Exercise the
@@ -254,13 +230,13 @@ mod tests {
             (&[1, 1, 2], &[1, 2, 2], [false, false, false, false]),
         ];
         for &(actual, expected, outcomes) in cases {
-            for (position, accepted) in [Exact, Prefix, Suffix, Contiguous]
+            for (placement, accepted) in [Exact, Prefix, Suffix, Contiguous]
                 .into_iter()
                 .zip(outcomes)
             {
                 let matcher = ElementsAre {
                     list: expected.iter().copied().map(eq).collect::<Vec<_>>(),
-                    position,
+                    position: placement,
                 };
                 let failures = assert_that!(actual).capture(|it| it.matches(matcher));
                 assert_that!(failures.is_empty()).is_equal_to(accepted);
@@ -499,7 +475,7 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3))
-                .capture(|it| it.matches(all_of((elements_are![eq(1)],))));
+                .capture(|it| it.matches(all_of(matchers![elements_are![eq(1)]])));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element.derive(|value| value).has_text_report(formatdoc! {r"

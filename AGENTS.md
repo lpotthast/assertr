@@ -50,8 +50,8 @@ fit.
 - Presentation never grants behavior. `CollectionPresentation` and `RenderingOrder` control diagnostics only and remain
   independent of `StableOrder`, `RandomAccess`, and `SetLookup`.
 - Custom `ValueRenderer`s render leaves. Assertr owns structural syntax. Render every diagnostic value through
-  `context.render()` in expectation hooks or `self.render()` in execution adapters, using their adapters so the active
-  renderer and `RenderingBudget` apply. Never format subjects directly with `Debug`.
+  `context.render()` in expectations or `self.render()` in execution adapters, so the active renderer and
+  `RenderingBudget` apply. Never format subjects directly with `Debug`.
 - Keep `BTreeSet` and `BTreeMap` support available with `alloc`. Only hash collection implementations belong behind
   `std`. A feature wrapping a std-only dependency must enable `std` itself.
 
@@ -59,7 +59,7 @@ fit.
 
 - Put behavior, exact diagnostic tests, and built-in adapter tests beside the generic family that owns them. Keep
   downstream-implementor and `no_std` coverage in existing integration fixtures instead of duplicating every assertion
-  across every adapter.
+  across every adapter. Pin each failure shape's exact report once, not again per mode or per delegating method.
 - Prefer natural assertion names. Type-changing assertions do not require a `get_` prefix. Keep checking and extracting
   behavior distinguishable, for example `is_of_type` checks and `has_type` extracts.
 - Shape public `*Assertions` traits as `<'t, subject parameters, M: Mode, R = DebugRenderer>`, declaring each parameter
@@ -68,29 +68,32 @@ fit.
   `assertr-macros/src/fluent_aliases/naming.rs`. Use an explicit alias only when no rule applies, and
   `#[no_fluent_alias]` for deprecated names.
 - Keep trait implementations independent of renderer capabilities. Put renderer and `Clone` bounds on individual methods
-  in both the trait and impl. Preserve the active renderer in projections and extractions. Add a `NoRenderer`
-  compile-time regression for a new trait or capability boundary.
+  in both the trait and impl. Put renderer bounds of an `Expectation` on its impl. Preserve the active renderer in
+  projections and extractions. Add a `NoRenderer` compile-time regression for a new assertion trait or capability
+  boundary.
 - Mark assertion methods `#[track_caller]`. Delegate reusable checks to `apply_assertion` or `test_assertion`, which
   track once. Methods delegating to tracked assertions must not track again. Execution adapters track explicitly before
   the operation they own and preserve the caller location. Built-in adapters then use the private executor entry points
   that skip tracking. See [observation boundaries](knowledge/observation-boundaries.md) for async timing.
-- Implement reusable leaf checks in `Expectation::evaluate` and diagnostics in `ExpectationDiagnostics::explain`.
-  Neither hook tracks or raises. Evaluation retains the original observation. Explanation populates and returns the
-  supplied structured `FailureBuilder` without repeating observations. Bulk expected lists and operand views may be
-  accessed again when they describe the same logical list and comparison values. Access counts are unspecified. The chain executor raises the
-  completed failure. Child contexts instead build and retain evidence for the enclosing assertion.
+- Implement reusable leaf checks in `Expectation::evaluate` and their diagnostics in `Expectation::explain`. Prefer
+  `property_expectation!` for unit property checks and `FailureBuilder::relations` for the common relation pair. Keep
+  an explicit `KIND` on built-in expectations. Neither hook tracks or raises. Evaluation retains the original
+  observation. Explanation populates and returns the supplied structured `FailureBuilder` without repeating
+  observations. Bulk expected lists and operand views may be accessed again when they describe the same logical list
+  and comparison values. Access counts are unspecified. The chain executor raises the completed failure. Child contexts
+  instead build and retain evidence for the enclosing assertion.
 - Use `.actual(..)`, `.relation(..)`, `.expected(..)` or `.unexpected(..)`, `.fact(Fact::labelled(..))` or
   `.fact(Fact::note(..))` (or `.facts(..)` for a group), and nested `.children(..)` for diagnostics. An execution adapter
-  that constructs a failure directly uses `self.failure(FailureKind::..)` and `.raise()` with the same fields.
+  that constructs a failure directly starts it with `self.failure(FailureKind::..)` and passes it to `self.raise(..)`.
   Never format a failure body by hand. The common report grammar renders the structured fields. Relations are lowercase
   sentences without trailing periods and never embed values.
 - Add explicit negative assertions only when commonly useful and not already represented by an existing assertion.
   Hand-write diagnostics that name the negation and preserve its evidence. There is no generic `.not()`. Allow at most
   one antonym synonym per positive assertion.
-- Give every assertion method its own test submodule. When `fluent` applies, the first test is
-  `fluent_alias_is_as_expected` with one passing fluent call. Follow it with `caller_location_is_as_expected`, using
-  `assert_caller_location!` and one failing call, without a `fluent` gate. The macro compares the exact caller location
-  without fixed line numbers. A pure delegating synonym gets these two pins and does not duplicate behavior tests.
+- Give every assertion method its own test submodule. Its first test is `caller_location_is_as_expected`, using
+  `assert_caller_location!` and one failing call. The macro compares the exact caller location without fixed line
+  numbers. When `fluent` applies, the test module of the file has one `fluent_aliases::are_as_expected` test with one
+  passing call per alias. A pure delegating synonym gets these pins and does not duplicate behavior tests.
 
 ## Documentation and dependencies
 

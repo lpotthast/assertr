@@ -34,7 +34,7 @@ that reports to its parent.
 | `ChainRecords` (private) | Local messages, assertion count, captured failures, optional parent-record link. |
 
 A root has no parent link. A child's link gives it access to ancestor records, but not to ancestor subjects, renderers,
-or presentation adapters. The child's subject may also borrow a value projected from its parent. That borrow has its
+or panic presentations. The child's subject may also borrow a value projected from its parent. That borrow has its
 own lifetime and unwind-safety requirements, separate from the record link.
 
 Counts propagate through every ancestor. Captured failures reach the root in the order they are raised. Diagnostics
@@ -75,8 +75,6 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
   `map_async` awaits a new owned subject.
 - `derive` borrows a sized projection. `derive_owned` and `derive_async` store the mapper's result, which may itself
   reference an unsized target. Derivation does not clone the subject.
-- `Actual::map` consumes its receiver and calls its `FnOnce` mapper exactly once. It keeps whichever storage variant the
-  mapper returns.
 
 ### Continuation availability
 
@@ -110,7 +108,7 @@ These bounds apply in both modes and both storage variants. Construction, projec
 bounds. Only the message, count, and failure cells have local `AssertUnwindSafe` exemptions. The count is a
 `Cell<usize>`. Inherited messages are a plain `Vec<String>` that is never mutated after construction and needs no
 exemption. Conversions and rendering finish before records are borrowed mutably. Unwinding releases guards without
-undoing records or user effects. Subjects, renderers, and panic adapters remain outside those exemptions.
+undoing records or user effects. Subjects, renderers, and panic presentations remain outside those exemptions.
 
 [Panic-catching execution adapters](observation-boundaries.md#invocation-and-polling) use localized exemptions for
 mutable captures. They do not make arbitrary chains unwind-safe or roll back user state.

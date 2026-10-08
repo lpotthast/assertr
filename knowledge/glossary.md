@@ -22,7 +22,7 @@ sources:
 
 Use **assertion chain** for `AssertThat` in prose. Use exact Rust names for API items and lowercase for concepts.
 Distinguish `AssertionContext` from `RenderingContext`, and diagnostic evidence from the owned type `Evidence`.
-Say which kind of adapter you mean: execution, rendering, or failure. Private types are marked below. Follow the links
+Execution adapter means an assertion that performs an operation itself. Private types are marked below. Follow the links
 for detailed requirements and exceptions.
 
 ## Chain state
@@ -61,10 +61,10 @@ for detailed requirements and exceptions.
 |---|---|
 | [Assertion family](extension-contract.md#choosing-an-extension) | Assertion methods and reusable definitions grouped by capability or topic. |
 | [Leaf assertion](expectation-execution.md#evaluation-and-explanation) | A check that determines its own result and diagnostics. |
-| [Expectation](expectation-execution.md#evaluation-and-explanation) | A reusable check describing what a subject should satisfy. |
+| [Expectation](expectation-execution.md#evaluation-and-explanation) | A reusable check describing what a subject should satisfy, with its failure kind and diagnostics. |
 | [Expectation::Success](expectation-execution.md#evaluation-and-explanation) | Successful observation available for continuation, such as payload or guard. |
 | [Expectation::Rejection](expectation-execution.md#evaluation-and-explanation) | Original failed observation retained for explanation. |
-| [ExpectationDiagnostics](expectation-execution.md#evaluation-and-explanation) | Defines the failure kind and explains a rejection or an expectation with no subject. |
+| [Expectation::explain](expectation-execution.md#evaluation-and-explanation) | Explains a rejection or an expectation with no subject. |
 | [AssertionContext](expectation-execution.md#child-scopes-and-evidence) | Context supplied by the executor with rendering settings, location policy, paths, and child evidence. |
 | [Matcher](matcher-composition.md) | Expectation used in composition. |
 | [MatcherList](matcher-composition.md#matcher-lists) | A list whose expectations can be evaluated or described individually. |
@@ -98,7 +98,7 @@ for detailed requirements and exceptions.
 |---|---|
 | [ValueRenderer](diagnostic-rendering.md#capabilities-and-structure) | Formats one diagnostic leaf type. |
 | [Diagnostic leaf](diagnostic-rendering.md#capabilities-and-structure) | Value formatted as one unit, possibly an entire opaque subject. |
-| [RenderingContext](diagnostic-rendering.md#capabilities-and-structure) | Active renderer and budget, supplying structural rendering adapters. |
+| [RenderingContext](diagnostic-rendering.md#structural-rendering) | Active renderer and budget, rendering leaves and structures into `Rendered` trees. |
 | [Rendered](diagnostic-rendering.md#capabilities-and-structure) | Owned diagnostic tree: text, structure, type metadata, layout, omissions. |
 | [RenderingBudget](diagnostic-rendering.md#bounded-retention) | Limits how many items each diagnostic group retains and how many characters each leaf contains. |
 | [CollectionPresentation](diagnostic-rendering.md#capabilities-and-structure) | Collection diagnostic syntax, type hints, and ordering. |
@@ -111,22 +111,15 @@ for detailed requirements and exceptions.
 | [AssertionFailure](failure-processing.md#structured-construction-and-ownership) | Owned diagnostic node: operands, relation, facts, children, paths, metadata. |
 | [AssertionFailures](failure-processing.md#structured-construction-and-ownership) | Ordered aggregate returned by capture/verification. |
 | [FailureKind](failure-processing.md#structured-construction-and-ownership) | Non-exhaustive failure family, not a specific assertion. |
-| [FailureBuilder](failure-processing.md#structured-construction-and-ownership) | Builds a structured failure. Its target determines whether completion raises or returns the failure. |
-| [Attached](failure-processing.md#builder-completion) | Builder target completed by `raise()`, which adds chain metadata and handles the failure according to the mode. |
-| [Detached](failure-processing.md#builder-completion) | Builder target completed by `build()`, without raising or chain metadata. |
+| [FailureBuilder](failure-processing.md#builder-completion) | Builds a structured failure. The executor or `AssertThat::raise` adds chain metadata and handles it according to the mode. |
 | [Relation](failure-processing.md#structured-construction-and-ownership) | Lowercase diagnostic sentence without values or trailing period. |
 | [Fact](failure-processing.md#structured-construction-and-ownership) | Label plus `Rendered` evidence. |
 | [Note](failure-processing.md#structured-construction-and-ownership) | `Fact` with empty label, shown as unlabelled detail. |
 | [Path](failure-processing.md#paths) | A sequence of `PathSegment` values locating nested evidence relative to its parent subject. |
 
-## Adapter roles and presentation
+## Execution and presentation
 
 | Term | Meaning |
 |---|---|
 | [Execution adapter](observation-boundaries.md) | Performs invocation, polling, traversal, or consumption and passes the observation to assertion execution. |
-| [Rendering adapter](diagnostic-rendering.md#rendering-adapters) | Builds `Rendered` values through the active renderer and budget. |
-| [Failure adapter](failure-processing.md#presentation-and-fallback) | Processes completed failures or subsequent report representations. |
-| [Adapter](failure-processing.md#presentation-and-fallback) | Trait that converts borrowed input to a declared output or error type. |
-| [ToHumanReadableText](failure-processing.md#presentation-and-fallback) | Built-in report adapter for one failure or an aggregate. |
-| [HumanReadableText](failure-processing.md#presentation-and-fallback) | Owned text-report wrapper. |
-| [PanicPresentation](failure-processing.md#presentation-and-fallback) | Private shared text-adapter trait object used when raising assertion panics. |
+| [Panic presentation](failure-processing.md#presentation-and-fallback) | Closure producing panic text from a failure. The private `PanicPresentation` type erases it. |

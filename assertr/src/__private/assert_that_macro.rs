@@ -33,7 +33,7 @@ impl<'a, T> Wrap<&'_ &'a T> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, T, Panic> {
-        AssertThat::new_panicking(Actual::Borrowed(*self.inner.0))
+        AssertThat::new(Actual::Borrowed(*self.inner.0))
     }
 }
 
@@ -43,7 +43,7 @@ impl<'x, T> Wrap<&'x &'_ mut T> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'x, T, Panic> {
-        AssertThat::new_panicking(Actual::Borrowed(&**self.inner.0))
+        AssertThat::new(Actual::Borrowed(&**self.inner.0))
     }
 }
 
@@ -69,7 +69,7 @@ impl<'a> Wrap<&'_ &'a str> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a str, Panic> {
-        AssertThat::new_panicking(Actual::Owned(*self.inner.0))
+        AssertThat::new(Actual::Owned(*self.inner.0))
     }
 }
 
@@ -77,7 +77,7 @@ impl<'a, T> Wrap<&'_ &'a [T]> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a [T], Panic> {
-        AssertThat::new_panicking(Actual::Owned(*self.inner.0))
+        AssertThat::new(Actual::Owned(*self.inner.0))
     }
 }
 
@@ -85,7 +85,7 @@ impl<'a> Wrap<&'_ &'a core::ffi::CStr> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a core::ffi::CStr, Panic> {
-        AssertThat::new_panicking(Actual::Owned(*self.inner.0))
+        AssertThat::new(Actual::Owned(*self.inner.0))
     }
 }
 
@@ -94,7 +94,7 @@ impl<'a> Wrap<&'_ &'a std::path::Path> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a std::path::Path, Panic> {
-        AssertThat::new_panicking(Actual::Owned(*self.inner.0))
+        AssertThat::new(Actual::Owned(*self.inner.0))
     }
 }
 
@@ -103,7 +103,7 @@ impl<'a> Wrap<&'_ &'a std::ffi::OsStr> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a std::ffi::OsStr, Panic> {
-        AssertThat::new_panicking(Actual::Owned(*self.inner.0))
+        AssertThat::new(Actual::Owned(*self.inner.0))
     }
 }
 
@@ -124,7 +124,7 @@ impl<'t, T> Fallback<&'t T> {
     #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'t, T, Panic> {
-        AssertThat::new_panicking(Actual::Borrowed(self.0))
+        AssertThat::new(Actual::Borrowed(self.0))
     }
 }
 
@@ -132,7 +132,7 @@ impl<'t, T> Fallback<&'t T> {
 #[track_caller]
 #[must_use]
 pub fn owned<'t, T: 't>(value: T) -> AssertThat<'t, T, Panic> {
-    AssertThat::new_panicking(Actual::Owned(value))
+    AssertThat::new(Actual::Owned(value))
 }
 
 #[cfg(test)]

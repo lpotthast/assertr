@@ -6,7 +6,7 @@
 //! [matcher catalog](mod@crate::matchers) lists the built-in expectations. With the `partial`
 //! feature, `partial!` also checks selected fields of structs and enums.
 
-use crate::{AssertThat, DebugRenderer, ExpectationDiagnostics, Mode};
+use crate::{AssertThat, DebugRenderer, Expectation, Mode};
 
 /// Assertions against reusable expected-side constraints.
 ///
@@ -18,7 +18,7 @@ use crate::{AssertThat, DebugRenderer, ExpectationDiagnostics, Mode};
 /// ```
 /// use assertr::{matchers::{all_of, eq, ge, lt}, prelude::*};
 ///
-/// assert_that!(42).matches(all_of((ge(18), lt(65))));
+/// assert_that!(42).matches(all_of(matchers![ge(18), lt(65)]));
 /// assert_that!([1, 2]).matches(elements_are![eq(1), ge(2)]);
 /// ```
 #[allow(clippy::return_self_not_must_use)]
@@ -35,29 +35,34 @@ pub trait MatcherAssertions<T, R = DebugRenderer> {
     /// equality assertion, use
     /// [`is_equal_to`](crate::assertions::core::partial_eq::PartialEqAssertions::is_equal_to).
     #[track_caller]
-    fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self;
+    fn matches<E: Expectation<T, R>>(self, expected: E) -> Self;
 }
 
 impl<T, M: Mode, R> MatcherAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
-    fn matches<E: ExpectationDiagnostics<T, R>>(self, expected: E) -> Self {
+    fn matches<E: Expectation<T, R>>(self, expected: E) -> Self {
         self.apply_assertion(expected)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::matchers::equal_to;
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            1.must().match_expectation(equal_to(1));
+        }
+    }
+
     use crate::{matchers::*, prelude::*};
 
     mod matches {
         use super::*;
         use indoc::indoc;
-
-        #[cfg(feature = "fluent")]
-        #[test]
-        fn fluent_alias_is_as_expected() {
-            1.must().match_expectation(equal_to(1));
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -95,7 +100,7 @@ mod tests {
                         .is_equal_to(crate::FailureKind::Equality);
                     element.derive(|value| &value.children).is_empty();
                     element
-                        .derive_owned(|value| ToHumanReadableText.render(value))
+                        .derive_owned(ToString::to_string)
                         .is_equal_to(indoc! {r"
                 -------- assertr --------
                 Expression: `1`

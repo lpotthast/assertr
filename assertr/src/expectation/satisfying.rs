@@ -1,6 +1,5 @@
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics,
-    assert_that::collect_assertions,
+    AssertThat, AssertionContext, Expectation,
     expectation::Evidence,
     failure::{FailureBuilder, FailureKind},
     mode::Capture,
@@ -87,44 +86,20 @@ where
     R: Clone,
     F: for<'a> Fn(AssertThat<'a, A, Capture, R>),
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        A: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        A: 'a;
+    composite_items!(A);
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated();
-        let failures = collect_assertions(
-            actual,
-            context.render(),
-            context.include_location(),
-            &self.0,
-        );
-        let matched = failures.is_empty();
-        for failure in failures {
-            context.record(failure);
-        }
+        let matched = context.run_assertions(actual, &self.0);
         context.finish(matched, |context| context.describe::<A, _>(self))
     }
-}
-impl<A, R, F> ExpectationDiagnostics<A, R> for Satisfying<F>
-where
-    R: Clone,
-    F: for<'a> Fn(AssertThat<'a, A, Capture, R>),
-{
+
     const KIND: FailureKind = FailureKind::Matching;
-    const FLATTEN: bool = true;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => failure.relation("satisfies the assertions"),
             Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
@@ -274,7 +249,8 @@ mod tests {
             assert_that!(failures).has_length(1);
             assert_that!(failures[0].children).has_length(1);
             assert_that!(failures[0].omitted_children).is_equal_to(1);
-            assert_that!(rendered_text(
+            assert_that!(format!(
+                "{:#}",
                 failures[0].children[0].actual.as_ref().unwrap()
             ))
             .is_equal_to("123... 3 more characters ...");

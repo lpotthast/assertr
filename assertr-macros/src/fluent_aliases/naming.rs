@@ -1,30 +1,39 @@
 //! Naming rules for automatically generated fluent aliases.
 
-/// Method prefixes whose verbs are already imperative and therefore need no separate alias.
-const ALREADY_FLUENT_PREFIXES: [&str; 1] = ["get_"];
-
 /// Namespace prefixes that are kept verbatim. The alias rule applies to the remainder
 /// (`into_iter_contains` -> `into_iter_contain`, `into_iter_is_empty` -> `into_iter_be_empty`).
 const PASSTHROUGH_PREFIXES: [&str; 1] = ["into_iter_"];
+
+/// Prefixes replaced in front of the remaining name. Negated prefixes come before their positive
+/// counterparts so `is_not_empty` never degrades to `be_not_empty`.
+const PREFIXES: [(&str, &str); 5] = [
+    ("does_not_", "not_"),
+    ("is_not_", "not_be_"),
+    ("has_not_", "not_have_"),
+    ("is_", "be_"),
+    ("has_", "have_"),
+];
+
+/// Third-person verbs and their imperative forms, applied to the whole name or its first word.
+const VERBS: [(&str, &str); 7] = [
+    ("contains", "contain"),
+    ("ends", "end"),
+    ("exists", "exist"),
+    ("needs", "need"),
+    ("panics", "panic"),
+    ("satisfies", "satisfy"),
+    ("starts", "start"),
+];
 
 /// Derives an imperative alias from the assertion method's third-person verb.
 ///
 /// Negated methods put `not` first in their alias, matching the English imperative ("must not be
 /// equal to", "must not have changed"): `is_not_*` becomes `not_be_*`, `has_not_*` becomes
 /// `not_have_*`, and `does_not_*` becomes `not_*`. The possessive `has_no_*` keeps its word order
-/// as `have_no_*` ("must have no remaining elements"). The negated prefixes are matched before
-/// their positive counterparts so `is_not_empty` never degrades to `be_not_empty`. A namespace
-/// prefix from [`PASSTHROUGH_PREFIXES`] is kept in front of the derived alias. Methods beginning
-/// with a prefix from [`ALREADY_FLUENT_PREFIXES`] retain their original spelling without a second
-/// alias. Returns `None` for such names and for names outside these rules.
+/// as `have_no_*` ("must have no remaining elements"). A namespace prefix from
+/// [`PASSTHROUGH_PREFIXES`] is kept in front of the derived alias. Returns `None` for names
+/// outside these rules, for example already imperative `get_*` extractions.
 pub(super) fn automatic_alias(name: &str) -> Option<String> {
-    if ALREADY_FLUENT_PREFIXES
-        .into_iter()
-        .any(|prefix| name.starts_with(prefix))
-    {
-        return None;
-    }
-
     if let Some(namespace) = PASSTHROUGH_PREFIXES
         .into_iter()
         .find(|prefix| name.starts_with(prefix))
@@ -35,36 +44,21 @@ pub(super) fn automatic_alias(name: &str) -> Option<String> {
 
     // `match` is a keyword and `be_matching` belongs to `is_matching`, so `matches` gets the
     // explicit `match_expectation`.
-    let exact = match name {
-        "matches" => Some("match_expectation"),
-        "contains" => Some("contain"),
-        "exists" => Some("exist"),
-        "panics" => Some("panic"),
-        "satisfies" => Some("satisfy"),
-        _ => None,
-    };
-    if let Some(alias) = exact {
-        return Some(alias.to_owned());
+    if name == "matches" {
+        return Some("match_expectation".to_owned());
     }
 
-    let (prefix, replacement) = [
-        ("does_not_", "not_"),
-        ("is_not_", "not_be_"),
-        ("has_not_", "not_have_"),
-        ("is_", "be_"),
-        ("has_", "have_"),
-        ("contains_", "contain_"),
-        ("starts_", "start_"),
-        ("ends_", "end_"),
-        ("exists_", "exist_"),
-        ("needs_", "need_"),
-        ("panics_", "panic_"),
-        ("satisfies_", "satisfy_"),
-    ]
-    .into_iter()
-    .find(|(prefix, _)| name.starts_with(prefix))?;
+    if let Some((prefix, replacement)) = PREFIXES
+        .into_iter()
+        .find(|(prefix, _)| name.starts_with(prefix))
+    {
+        return Some(format!("{replacement}{}", &name[prefix.len()..]));
+    }
 
-    Some(format!("{replacement}{}", &name[prefix.len()..]))
+    VERBS.into_iter().find_map(|(verb, imperative)| {
+        let rest = name.strip_prefix(verb)?;
+        (rest.is_empty() || rest.starts_with('_')).then(|| format!("{imperative}{rest}"))
+    })
 }
 
 #[cfg(test)]

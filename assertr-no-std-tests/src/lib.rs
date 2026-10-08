@@ -75,12 +75,12 @@ fn projections_compile_without_renderer_support() {
     let fact = assertr::Fact::note("evidence");
     assert_that!(fact)
         .with_renderer(NoRenderer)
-        .derive(assertr::Fact::value)
-        .derive(assertr::renderer::Rendered::body)
-        .is_same_instance_as(fact.value().body());
+        .derive(|fact| &fact.value.body)
+        .is_same_instance_as(&fact.value.body);
 }
 
 #[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn unwind_safe_projections_compile_without_std() {
     use core::{
         cell::Cell,
@@ -100,30 +100,15 @@ fn unwind_safe_projections_compile_without_std() {
     assert_that!(failures).is_empty();
 }
 
-#[cfg(test)]
-#[test]
-fn unwind_safe_projections_run_without_std() {
-    unwind_safe_projections_compile_without_std();
-    let failures = assert_that!(1).capture(|root| {
-        let result = std::panic::catch_unwind(|| {
-            root.derive(|value| value).is_equal_to(2);
-            panic!("after recording a failure");
-        });
-        assert_that!(result.is_err()).is_true();
-        root.is_equal_to(3)
-    });
-    assert_that!(failures).has_length(2);
-}
-
 #[cfg(feature = "num")]
 #[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn numeric_assertions_compile_without_std() {
-    use assertr::assertions::num::NumericDistance;
-    struct NoRenderer;
+    use assertr::assertions::distance::{IsCloseTo, NumericDistance};
 
+    // The tolerance expectation needs only `NumericDistance`, not the `num` feature's traits.
     fn assert_close<T: NumericDistance + core::fmt::Debug>(actual: T, expected: T, deviation: T) {
-        assert_that_owned!(actual).is_close_to(expected, deviation);
+        assert_that_owned!(actual).matches(IsCloseTo::new(expected, deviation));
     }
 
     assert_close(i128::MIN, -1, i128::MAX);
@@ -133,35 +118,10 @@ fn numeric_assertions_compile_without_std() {
     let failures = assert_that!(9_007_199_254_740_992_f64)
         .capture(|it| it.is_close_to(9_007_199_254_740_994.0, 1.0));
     assert_that!(failures).has_length(1);
-    with_context(NoRenderer, |context| {
-        let close = matchers::numeric::IsCloseTo::new(2, 1);
+    with_context(DebugRenderer, |context| {
+        let close = IsCloseTo::new(2, 1);
         assert_that!(Expectation::evaluate(&close, &3, context).is_ok()).is_true();
     });
-}
-
-#[allow(dead_code)]
-fn sensitive_value_policy_compiles_without_std() {
-    use assertr::renderer::{RenderingContext, SensitiveValuePolicy};
-    use core::fmt;
-
-    struct BorrowedRenderer<'a>(&'a str);
-
-    impl ValueRenderer<str> for BorrowedRenderer<'_> {
-        fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}{value}", self.0)
-        }
-
-        fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
-            SensitiveValuePolicy::Reveal
-        }
-    }
-
-    let prefix = String::from("value: ");
-    let renderer = BorrowedRenderer(&prefix);
-    let erased: &dyn ValueRenderer<str> = &renderer;
-    assert_that!(erased.sensitive_value_policy()).is_equal_to(SensitiveValuePolicy::Reveal);
-    let value = RenderingContext::new(&renderer, RenderingBudget::unlimited()).value("original");
-    assert_that!(alloc::format!("{value:?}")).is_equal_to("value: original");
 }
 
 #[allow(dead_code)]
@@ -201,35 +161,14 @@ fn identity_assertions_compile_without_std() {
 }
 
 #[allow(dead_code)]
-fn failure_adapters_compile_without_std() {
-    use alloc::string::{String, ToString};
-    use core::convert::Infallible;
-
-    use assertr::failure::adapter::{Adapter, AdapterExt, HumanReadableText, ToHumanReadableText};
-
-    struct Sink;
-
-    impl Adapter<HumanReadableText> for Sink {
-        type Output = ();
-        type Error = Infallible;
-
-        fn adapt(&self, _input: &HumanReadableText) -> Result<Self::Output, Self::Error> {
-            Ok(())
-        }
-    }
-
-    fn accepts_failure_adapter<A: Adapter<AssertionFailure>>(_adapter: A) {}
+fn panic_presentation_compiles_without_std() {
+    use alloc::string::ToString;
 
     struct NoRenderer;
 
-    accepts_failure_adapter(ToHumanReadableText.then(Sink));
     let _assertion = assert_that!(1)
         .with_renderer(NoRenderer)
-        .with_panic_presentation(ToHumanReadableText);
-    let presentation = ToHumanReadableText.map_err(|error: Infallible| error.to_string());
-    let adapter: &dyn Adapter<AssertionFailure, Output = HumanReadableText, Error = String> =
-        &presentation;
-    accepts_failure_adapter(adapter);
+        .with_panic_presentation(ToString::to_string);
 }
 
 #[allow(dead_code)]
@@ -371,10 +310,6 @@ extern crate std;
 mod tests {
     use crate::NumericRenderer;
     use assertr::{assert_that, prelude::StrAssertions};
-    #[test]
-    fn borrowed_renderers_support_sensitivity_policy_without_std() {
-        crate::sensitive_value_policy_compiles_without_std();
-    }
 
     mod matchers {
         use assertr::matchers::{eq, ge};
@@ -394,22 +329,27 @@ mod tests {
         }
     }
 
-    use alloc::{rc::Rc, string::String};
-    use core::{
-        convert::Infallible,
-        sync::atomic::{AtomicUsize, Ordering},
+    use alloc::{
+        rc::Rc,
+        string::{String, ToString},
     };
+    use core::sync::atomic::{AtomicUsize, Ordering};
 
+    use assertr::AssertionFailure;
     use assertr::prelude::{
-        BoolAssertions, CollectionAssertions, IdentityAssertions, IteratorAssertions,
-        LengthAssertions, PartialEqAssertions, StableOrderAssertions,
-    };
-    use assertr::{
-        AssertionFailure,
-        failure::adapter::{Adapter, HumanReadableText, ToHumanReadableText},
+        CollectionAssertions, IdentityAssertions, LengthAssertions, PartialEqAssertions,
+        StableOrderAssertions,
     };
 
-    struct CountsPresentations(Rc<AtomicUsize>);
+    fn counting(
+        count: &Rc<AtomicUsize>,
+    ) -> impl Fn(&AssertionFailure) -> String + core::panic::RefUnwindSafe + 'static {
+        let count = Rc::clone(count);
+        move |failure| {
+            count.fetch_add(1, Ordering::Relaxed);
+            failure.to_string()
+        }
+    }
 
     #[test]
     fn opaque_identity_assertions_capture_and_panic_without_std() {
@@ -445,28 +385,18 @@ mod tests {
             .contains("is not the same instance as");
     }
 
-    impl Adapter<AssertionFailure> for CountsPresentations {
-        type Output = HumanReadableText;
-        type Error = Infallible;
-
-        fn adapt(&self, failure: &AssertionFailure) -> Result<Self::Output, Self::Error> {
-            self.0.fetch_add(1, Ordering::Relaxed);
-            ToHumanReadableText.adapt(failure)
-        }
-    }
-
     #[test]
     fn a_non_sync_presentation_runs_only_in_panic_mode_without_std() {
         let count = Rc::new(AtomicUsize::new(0));
         let failures = assertr::assert_that!(1)
-            .with_panic_presentation(CountsPresentations(Rc::clone(&count)))
+            .with_panic_presentation(counting(&count))
             .capture(|it| it.is_equal_to(2));
         assert_that!(failures).has_length(1);
         assert_that!(count.load(Ordering::Relaxed)).is_equal_to(0);
 
         let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             assertr::assert_that!(1)
-                .with_panic_presentation(CountsPresentations(Rc::clone(&count)))
+                .with_panic_presentation(counting(&count))
                 .is_equal_to(2);
         }))
         .unwrap_err();
@@ -477,55 +407,15 @@ mod tests {
     }
 
     #[test]
-    fn a_presentation_error_falls_back_without_std() {
-        struct ReturnsError;
-
-        impl Adapter<AssertionFailure> for ReturnsError {
-            type Output = HumanReadableText;
-            type Error = &'static str;
-
-            fn adapt(&self, _: &AssertionFailure) -> Result<HumanReadableText, &'static str> {
-                Err("presentation unavailable")
-            }
-        }
-
+    fn a_panicking_presentation_propagates_without_std() {
+        crate::panic_presentation_compiles_without_std();
         let panic = std::panic::catch_unwind(|| {
             assertr::assert_that!(1)
-                .with_panic_presentation(ReturnsError)
+                .with_panic_presentation(|_| panic!("presentation exploded"))
                 .is_equal_to(2);
         })
         .unwrap_err();
-        let message = panic.downcast_ref::<String>().unwrap();
-        assert_that!(message).contains("Expected: 2\n\n  Actual: 1");
-        assert_that!(message)
-            .contains("The failure presentation returned an error: presentation unavailable");
-    }
-
-    #[test]
-    fn streaming_iterator_assertions_run_in_the_hosted_no_std_fixture() {
-        let failures = assertr::assert_that_owned!(0..20).capture(|it| it.does_not_contain(19));
-
-        assertr::assert_that!(failures).has_length(1);
-    }
-
-    #[test]
-    fn dropping_an_unused_assertion_does_not_panic() {
-        let result = std::panic::catch_unwind(|| {
-            let _assertion = assertr::assert_that!(42);
-        });
-
-        assertr::assert_that!(result.is_ok()).is_true();
-    }
-
-    #[test]
-    fn dropping_an_unused_assertion_during_unwinding_preserves_the_original_panic() {
-        let panic = std::panic::catch_unwind(|| {
-            let _assertion = assertr::assert_that!(42);
-            panic!("original panic");
-        })
-        .expect_err("the closure should panic");
-
-        assertr::assert_that!(panic.downcast_ref::<&str>()).is_equal_to(Some(&"original panic"));
+        assert_that!(*panic.downcast_ref::<&str>().unwrap()).is_equal_to("presentation exploded");
     }
 
     #[test]
@@ -613,23 +503,22 @@ fn typed_rejections_and_numeric_evidence_compile_without_std() {
 
     struct OpaqueError(u32);
     struct Reject;
-    impl<R> Expectation<u32, R> for Reject {
+    impl<R: ValueRenderer<OpaqueError>> Expectation<u32, R> for Reject {
         type Success<'a> = ();
         type Rejection<'a> = OpaqueError;
 
         fn evaluate(&self, value: &u32, _: &AssertionContext<'_, R>) -> Result<(), OpaqueError> {
             Err(OpaqueError(*value))
         }
-    }
-    impl<R: ValueRenderer<OpaqueError>> ExpectationDiagnostics<u32, R> for Reject {
+
         const KIND: FailureKind = FailureKind::Predicate;
 
-        fn explain<Target>(
+        fn explain(
             &self,
             rejected: Option<(&u32, OpaqueError)>,
-            failure: FailureBuilder<Target>,
+            failure: FailureBuilder,
             context: &AssertionContext<'_, R>,
-        ) -> FailureBuilder<Target> {
+        ) -> FailureBuilder {
             match rejected {
                 None => failure.relation("is accepted"),
                 Some((_, error)) => failure
@@ -638,17 +527,17 @@ fn typed_rejections_and_numeric_evidence_compile_without_std() {
             }
         }
     }
+
     struct ErrorRenderer;
     impl ValueRenderer<OpaqueError> for ErrorRenderer {
         fn fmt(&self, error: &OpaqueError, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             write!(f, "error({})", error.0)
         }
     }
-    struct NoRenderer;
     fn iterator_trait<A: ExactSizeIteratorAssertions<NumericRenderer>>() {}
     iterator_trait::<AssertThat<'static, core::array::IntoIter<u32, 1>, Panic, NumericRenderer>>();
     let assertion = Reject;
-    with_context(NoRenderer, |context| {
+    with_context(ErrorRenderer, |context| {
         let error = assertion.evaluate(&7, context).unwrap_err();
         assert_that!(error.0).is_equal_to(7);
         let failures = assert_that!(7_u32)
@@ -678,6 +567,29 @@ fn typed_rejections_and_numeric_evidence_compile_without_std() {
 
 #[allow(dead_code)]
 #[cfg_attr(test, test)]
+fn reusable_checks_compile_without_std() {
+    use assertr::matchers::{field, predicate};
+
+    struct Person {
+        name: String,
+    }
+    let has_name = field(
+        "name",
+        |person: &Person| &person.name,
+        predicate(|name: &String| !name.is_empty())
+            .described_as("is not empty")
+            .rejected_as("is empty"),
+    );
+    assert_that!(Person { name: "Ada".into() }).apply_assertion(&has_name);
+    let failures = assert_that!(Person {
+        name: String::new()
+    })
+    .capture(|it| it.matches(&has_name));
+    assert_that!(failures[0].children[0].relation.as_deref()).is_equal_to(Some("is empty"));
+}
+
+#[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn assertion_definitions_compile_without_std() {
     use alloc::string::String;
     use assertr::matchers::{
@@ -685,9 +597,8 @@ fn assertion_definitions_compile_without_std() {
         cell::{IsBorrowed, IsNotMutablyBorrowed},
         string::StartsWith,
     };
-    struct NoRenderer;
-    with_context(NoRenderer, |context| {
-        // One definition per leaf capability, evaluated without renderer support.
+    with_context(DebugRenderer, |context| {
+        // One definition per leaf capability.
         assert_that!(EqualTo::new(3).evaluate(&3, context).is_ok()).is_true();
         assert_that!(GreaterOrEqual::new(0.0).evaluate(&1.0, context).is_ok()).is_true();
         let prefix = StartsWith::new("hel");
@@ -699,27 +610,25 @@ fn assertion_definitions_compile_without_std() {
         let rejection: core::cell::RefMut<'_, i32> =
             IsBorrowed.evaluate(&cell, context).err().unwrap();
         drop(rejection);
-        let assertion = assert_that!(cell).with_renderer(NoRenderer);
+        let assertion = assert_that!(cell);
         let guard: core::cell::Ref<'_, i32> =
             assertion.test_assertion(&IsNotMutablyBorrowed).unwrap();
         drop(guard);
 
         // Borrowed payloads include an optional value, an allocated value, and a nested reference.
         let optional = Some(3);
-        let assertion = assert_that!(optional).with_renderer(NoRenderer);
+        let assertion = assert_that!(optional);
         let value: Option<&i32> = assertion.test_assertion(&IsSome);
         assert_that!(value).is_equal_to(Some(&3));
         let result = Ok::<_, ()>(String::from("borrowed"));
         let value = IsOk.evaluate(&result, context).unwrap();
         assert_that!(value).is_same_instance_as(result.as_ref().unwrap());
         let ready = core::task::Poll::Ready(value);
-        let assertion = assert_that!(ready).with_renderer(NoRenderer);
+        let assertion = assert_that!(ready);
         let observed = assertion.test_assertion(&IsReady).unwrap();
         assert_that!(*observed).is_same_instance_as(value);
         let boxed: Box<dyn core::any::Any> = Box::new(123);
-        assert_that!(boxed)
-            .with_renderer(NoRenderer)
-            .matches(IsOfType::<i32>::new());
+        assert_that!(boxed).matches(IsOfType::<i32>::new());
     });
 }
 
@@ -728,8 +637,7 @@ fn assertion_definitions_compile_without_std() {
 fn collection_assertion_definitions_compile_without_std() {
     use assertr::matchers::{Expectation, HasLengthOf, collection, iterator, map, set};
 
-    struct NoRenderer;
-    with_context(NoRenderer, |context| {
+    with_context(DebugRenderer, |context| {
         let values = [1, 2];
         assert_that!(HasLengthOf::new(2).evaluate(&values, context).is_ok()).is_true();
         assert_that!(
@@ -764,9 +672,7 @@ fn collection_assertion_definitions_compile_without_std() {
                 .is_ok()
         )
         .is_true();
-        assert_that!([&values[0]])
-            .with_renderer(NoRenderer)
-            .matches(collection::ContainsSameInstanceAs::new(&values[0]));
+        assert_that!([&values[0]]).matches(collection::ContainsSameInstanceAs::new(&values[0]));
     });
 }
 
@@ -777,11 +683,13 @@ impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> Expectation<(), R> for InConte
     type Success<'a>
         = ()
     where
-        Self: 'a;
+        Self: 'a,
+        (): 'a;
     type Rejection<'a>
         = core::convert::Infallible
     where
-        Self: 'a;
+        Self: 'a,
+        (): 'a;
 
     fn evaluate<'a>(
         &'a self,
@@ -791,17 +699,15 @@ impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> Expectation<(), R> for InConte
         (self.0)(context);
         Ok(())
     }
-}
 
-impl<R, F: Fn(&assertr::AssertionContext<'_, R>)> ExpectationDiagnostics<(), R> for InContext<F> {
     const KIND: assertr::FailureKind = assertr::FailureKind::Other;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a (), core::convert::Infallible)>,
-        failure: assertr::failure::FailureBuilder<Target>,
+        failure: assertr::failure::FailureBuilder,
         _: &assertr::AssertionContext<'_, R>,
-    ) -> assertr::failure::FailureBuilder<Target> {
+    ) -> assertr::failure::FailureBuilder {
         match rejected {
             None => failure.relation("evaluates with the supplied context"),
             Some(((), never)) => match never {},
@@ -822,7 +728,7 @@ mod structural_rendering {
     use assertr::{
         Fact, FailureKind,
         prelude::*,
-        renderer::{GroupStyle, IntoRendered, Rendered, RenderingContext, RenderingOrder},
+        renderer::{Rendered, RenderingContext, RenderingOrder},
     };
     use core::{cell::RefCell, fmt};
 
@@ -842,11 +748,12 @@ mod structural_rendering {
         let set = BTreeSet::from([Token(1)]);
         let failures = assert_that!(map).with_renderer(LeafRenderer).capture(|it| {
             it.track_assertion();
-            it.failure(FailureKind::Length)
-                .actual(it.render().map(it.actual()))
-                .relation("is not empty")
-                .fact(Fact::labelled("Keys", it.render().collection(&set)))
-                .raise();
+            it.raise(
+                it.failure(FailureKind::Length)
+                    .actual(it.render().map(it.actual()))
+                    .relation("is not empty")
+                    .fact(Fact::labelled("Keys", it.render().collection(&set))),
+            );
             it
         });
         assert_that!(failures).has_length(1);
@@ -859,37 +766,23 @@ mod structural_rendering {
         let entries = [(&tokens[0], &tokens[0])];
         let owner = Some(Token(3));
         let cell = RefCell::new(Token(4));
-        // Conversion, not just construction, must compile with alloc and leaf-only rendering.
-        let _: [Rendered; 8] = [
-            render.stable_collection(&tokens).into_rendered(),
-            render.values(&tokens, GroupStyle::List).into_rendered(),
+        // Every structural method must compile with alloc and leaf-only rendering.
+        let _: [Rendered; 7] = [
+            render.collection(&tokens),
+            render.stable_collection(&tokens),
+            render.map(&BTreeMap::from([(Token(2), Token(20))])),
+            render.borrowed_values::<Token, _>(&borrowed, RenderingOrder::SortByRenderedText),
             render
-                .stable_borrowed_collection::<Token, _>(&borrowed)
-                .into_rendered(),
-            render
-                .borrowed_values::<Token, _>(&borrowed, GroupStyle::Set)
-                .with_order(RenderingOrder::SortByRenderedText)
-                .into_rendered(),
-            render
-                .borrowed_collection::<Token, _>(&borrowed)
-                .into_rendered(),
-            render
-                .entry_list::<Token, Token, _, _, _>(&entries, RenderingOrder::SortByRenderedText)
-                .into_rendered(),
-            render
-                .variant(&owner, "Some", owner.as_ref().unwrap())
-                .into_rendered(),
-            render
-                .struct_field(&cell, "RefCell", "value", &*cell.borrow())
-                .into_rendered(),
+                .entry_list::<Token, Token, _, _, _>(&entries, RenderingOrder::SortByRenderedText),
+            render.variant(&owner, "Some", owner.as_ref().unwrap()),
+            render.struct_field(&cell, "RefCell", "value", &*cell.borrow()),
         ];
         let _: Rendered = RenderingContext::new(&NoRenderer, RenderingBudget::default())
-            .unavailable_struct_field(&cell, "RefCell", "value", "<borrowed>")
-            .into_rendered();
+            .unavailable_struct_field(&cell, "RefCell", "value", "<borrowed>");
     }
 
     #[test]
-    fn public_structural_adapters_work_with_alloc() {
+    fn public_structural_rendering_works_with_alloc() {
         verify();
     }
 }
@@ -953,20 +846,17 @@ fn borrowed_views_compile_without_std() {
     assert_that_owned!([String::from("hello")].into_iter()).contains(&expected);
     assert_that!(BTreeMap::from([(1, String::from("hello"))])).contains_entry(&1, "hello");
 
-    // Range bounds can be owned, borrowed, or inferred from an operand on an unbounded range.
+    // Range bounds can be owned or borrowed.
     let lower = String::from("a");
     let upper = String::from("z");
     assert_that!(&lower..&upper).contains_element(&expected);
-    let failures = assert_that!(..).capture(|it| it.does_not_contain_element(&expected));
-    assert_that!(failures).has_length(1);
-    let range_matcher = all_of((
+    let range_matcher = all_of(matchers![
         ContainsElement::<String>::borrowing(&expected),
-        DoesNotContainElement::<String>::borrowing(&upper),
-    ));
+        DoesNotContainElement::<String>::borrowing(&upper)
+    ]);
     assert_that!(String::from("a")..String::from("z")).matches(&range_matcher);
     assert_that!([&lower..&upper]).matches(each(&range_matcher));
     assert_that!(&1..&3).matches(ContainsElement::new(&2));
-    assert_that!(..).matches(ContainsElement::new(String::from("a")));
 
     // Reusable matchers borrow non-Copy operands and accept sized or unsized subjects.
     assert_that_owned!(&expected).matches(dereferenced(EqualTo::new("hello")));

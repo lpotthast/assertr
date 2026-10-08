@@ -1,9 +1,7 @@
 //! Assertions about reports and compile-time trait availability.
 
-use crate::{
-    AssertThat, AssertionFailure, Mode,
-    failure::{FailureKind, adapter::ToHumanReadableText},
-};
+use crate::{AssertThat, AssertionFailure, Mode, failure::FailureKind};
+use alloc::string::ToString;
 
 pub(crate) trait FailureReportAssertions {
     fn has_text_report(self, expected: impl AsRef<str>) -> Self;
@@ -13,13 +11,14 @@ impl<M: Mode, R> FailureReportAssertions for AssertThat<'_, AssertionFailure, M,
     #[track_caller]
     fn has_text_report(self, expected: impl AsRef<str>) -> Self {
         self.track_assertion();
-        let report = ToHumanReadableText.render(self.actual());
+        let report = self.actual().to_string();
         let expected = expected.as_ref();
         if report != expected {
-            self.failure(FailureKind::Equality)
-                .actual(format_args!("{report:?}"))
-                .expected(format_args!("{expected:?}"))
-                .raise();
+            self.raise(
+                self.failure(FailureKind::Equality)
+                    .actual(format_args!("{report:?}"))
+                    .expected(format_args!("{expected:?}")),
+            );
         }
         self
     }

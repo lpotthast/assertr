@@ -1,12 +1,12 @@
 //! Reusable value expectations for finite collections.
 
-use super::{Collection, StableOrder};
+use super::{Collection, Placement, StableOrder};
 use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics, ValueRenderer,
+    AssertionContext, Expectation, ValueRenderer,
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
-    renderer::GroupStyle,
-    util::matching::{BipartiteMatchResult, match_bipartite, matches_exactly},
+    renderer::{RenderingContext, RenderingOrder},
+    util::matching::{assign_exactly, match_bipartite},
 };
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -31,24 +31,37 @@ struct ElementMismatch<'a, A: ?Sized, E: ?Sized> {
     expected: &'a E,
 }
 
-/// Selects the occurrences a maximum assignment left unmatched, as actual and expected references.
-pub(super) fn unmatched_occurrences<'a, A: ?Sized, E: ?Sized>(
-    matched: &BipartiteMatchResult,
-    actual: &[&'a A],
-    expected: impl Fn(usize) -> &'a E,
-) -> (Vec<&'a A>, Vec<&'a E>) {
-    (
-        matched
-            .unmatched_actual
-            .iter()
-            .map(|index| actual[*index])
-            .collect(),
-        matched
-            .unmatched_expected
-            .iter()
-            .map(|index| expected(*index))
-            .collect(),
-    )
+/// Labels for the values an exact element comparison left unmatched.
+const ELEMENTS: [&str; 2] = ["Elements not found", "Elements not expected"];
+
+/// Attaches the missing and unexpected occurrences of an exact comparison, when there are any.
+pub(super) fn unmatched_facts<A: ?Sized, E: ?Sized, R>(
+    failure: FailureBuilder,
+    render: RenderingContext<'_, R>,
+    [not_found, not_expected]: [&'static str; 2],
+    missing: &[&E],
+    unexpected: &[&A],
+    unexpected_order: RenderingOrder,
+) -> FailureBuilder
+where
+    R: ValueRenderer<A> + ValueRenderer<E>,
+{
+    let failure = if missing.is_empty() {
+        failure
+    } else {
+        failure.fact(Fact::labelled(
+            not_found,
+            render.borrowed_values::<E, _>(missing, RenderingOrder::PreserveIteration),
+        ))
+    };
+    if unexpected.is_empty() {
+        failure
+    } else {
+        failure.fact(Fact::labelled(
+            not_expected,
+            render.borrowed_values::<A, _>(unexpected, unexpected_order),
+        ))
+    }
 }
 
 /// Retained unmatched occurrences from an exact collection rejection.
@@ -77,6 +90,7 @@ impl<C: Collection + ?Sized, E, R> Expectation<C, R> for Contains<E>
 where
     C::Item: PartialEq<E::View>,
     E: BorrowFor<C::Item>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -101,22 +115,15 @@ where
             Err(expected)
         }
     }
-}
 
-impl<C: Collection + ?Sized, E, R> ExpectationDiagnostics<C, R> for Contains<E>
-where
-    C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
-    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let (failure, expected) = match rejected {
             None => (
@@ -151,6 +158,7 @@ impl<C: Collection + ?Sized, E, R> Expectation<C, R> for DoesNotContain<E>
 where
     C::Item: PartialEq<E::View>,
     E: BorrowFor<C::Item>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -175,22 +183,15 @@ where
             Ok(())
         }
     }
-}
 
-impl<C: Collection + ?Sized, E, R> ExpectationDiagnostics<C, R> for DoesNotContain<E>
-where
-    C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
-    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let (failure, expected) = match rejected {
             None => (
@@ -231,6 +232,7 @@ where
     C::Item: PartialEq<E::View>,
     E: BorrowFor<C::Item>,
     B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -260,23 +262,15 @@ where
             Err(MissingElementsRejection { missing })
         }
     }
-}
 
-impl<C: Collection + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for ContainsAll<E, B>
-where
-    C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
-    B: AsRef<[E]>,
-    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let expected = self.expected.as_ref();
         let failure = match rejected {
@@ -288,115 +282,115 @@ where
                     .relation("does not contain all of")
                     .fact(Fact::labelled(
                         "Elements not found",
-                        render.borrowed_values::<E::View, _>(&missing, GroupStyle::List),
+                        render.borrowed_values::<E::View, _>(
+                            &missing,
+                            RenderingOrder::PreserveIteration,
+                        ),
                     ))
             }
         };
-        failure.expected(render.borrowed_values::<E::View, _>(expected, GroupStyle::List))
+        failure.expected(
+            render.borrowed_values::<E::View, _>(expected, RenderingOrder::PreserveIteration),
+        )
     }
 }
 
 /// A rejected affix subject with its retained evidence.
 type RejectedAffix<'a, C, V> = (&'a C, PositionalRejection<'a, <C as Collection>::Item, V>);
 
-/// Which end of a stable-order collection an affix comparison aligns with.
-#[derive(Clone, Copy)]
-enum Affix {
-    Prefix,
-    Suffix,
+/// Compares the positions aligned with a [`Placement::Prefix`] or [`Placement::Suffix`],
+/// stopping at the first mismatch.
+///
+/// A suffix aligns both lists at their ends, so a subject shorter than the expected suffix is
+/// compared with the expected list's tail. Success allocates nothing, and expected operands past
+/// the first mismatch are never borrowed.
+fn evaluate_affix<'a, C, E>(
+    placement: Placement,
+    actual: &'a C,
+    expected: &'a [E],
+) -> Result<(), PositionalRejection<'a, C::Item, E::View>>
+where
+    C: StableOrder + ?Sized,
+    C::Item: PartialEq<E::View>,
+    E: BorrowFor<C::Item>,
+{
+    let length = actual.length();
+    let (offset, compared) = if placement == Placement::Suffix {
+        (
+            length.saturating_sub(expected.len()),
+            &expected[expected.len().saturating_sub(length)..],
+        )
+    } else {
+        (0, expected)
+    };
+    let mismatch = actual
+        .elements()
+        .skip(offset)
+        .zip(compared.iter().map(borrow_for::<C::Item, _>))
+        .enumerate()
+        .find(|(_, (actual, expected))| !(*actual).eq(*expected))
+        .map(|(index, (actual, expected))| ElementMismatch {
+            index: offset + index,
+            actual,
+            expected,
+        });
+    if length < expected.len() || mismatch.is_some() {
+        Err(PositionalRejection { length, mismatch })
+    } else {
+        Ok(())
+    }
 }
 
-impl Affix {
-    /// Compares the aligned positions, stopping at the first mismatch.
-    ///
-    /// A suffix aligns both lists at their ends, so a subject shorter than the expected suffix is
-    /// compared with the expected list's tail. Success allocates nothing, and expected operands
-    /// past the first mismatch are never borrowed.
-    fn evaluate<'a, C, E>(
-        self,
-        actual: &'a C,
-        expected: &'a [E],
-    ) -> Result<(), PositionalRejection<'a, C::Item, E::View>>
-    where
-        C: StableOrder + ?Sized,
-        C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
-    {
-        let length = actual.length();
-        let (offset, compared) = match self {
-            Self::Prefix => (0, expected),
-            Self::Suffix => (
-                length.saturating_sub(expected.len()),
-                &expected[expected.len().saturating_sub(length)..],
-            ),
-        };
-        let mismatch = actual
-            .elements()
-            .skip(offset)
-            .zip(compared.iter().map(borrow_for::<C::Item, _>))
-            .enumerate()
-            .find(|(_, (actual, expected))| !(*actual).eq(*expected))
-            .map(|(index, (actual, expected))| ElementMismatch {
-                index: offset + index,
-                actual,
-                expected,
-            });
-        if length < expected.len() || mismatch.is_some() {
-            Err(PositionalRejection { length, mismatch })
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Explains a rejection from [`Self::evaluate`], or describes the unmet expectation.
-    fn explain<C, E, R, Target>(
-        self,
-        expected: &[E],
-        rejected: Option<RejectedAffix<'_, C, E::View>>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target>
-    where
-        C: StableOrder + ?Sized,
-        E: BorrowFor<C::Item>,
-        R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
-    {
-        let (holds, fails) = match self {
-            Self::Prefix => ("starts with", "does not start with"),
-            Self::Suffix => ("ends with", "does not end with"),
-        };
-        let render = context.render();
-        let failure = match rejected {
-            None => failure.relation(holds),
-            Some((actual, PositionalRejection { length, mismatch })) => {
-                let mut failure = failure
-                    .actual(render.stable_collection(actual))
-                    .relation(fails);
-                if length < expected.len() {
-                    failure = failure.fact(Fact::labelled("Actual length", render.value(&length)));
-                }
-                if let Some(ElementMismatch {
-                    index,
-                    actual: element,
-                    expected,
-                }) = mismatch
-                {
-                    let mut child = context.isolated();
-                    child.record_with(|context| {
-                        let render = context.render();
-                        FailureBuilder::detached::<C::Item>(FailureKind::Equality)
-                            .actual(render.value(element))
-                            .expected(render.value(expected))
-                            .path([PathSegment::Index(index)])
-                            .build()
-                    });
-                    failure = child.into_evidence().explain(failure);
-                }
-                failure
+/// Explains a rejection from [`evaluate_affix`], or describes the unmet expectation.
+fn explain_affix<C, E, R>(
+    placement: Placement,
+    expected: &[E],
+    rejected: Option<RejectedAffix<'_, C, E::View>>,
+    failure: FailureBuilder,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder
+where
+    C: StableOrder + ?Sized,
+    E: BorrowFor<C::Item>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
+{
+    let (holds, fails) = if placement == Placement::Suffix {
+        ("ends with", "does not end with")
+    } else {
+        ("starts with", "does not start with")
+    };
+    let render = context.render();
+    let failure = match rejected {
+        None => failure.relation(holds),
+        Some((actual, PositionalRejection { length, mismatch })) => {
+            let mut failure = failure
+                .actual(render.stable_collection(actual))
+                .relation(fails);
+            if length < expected.len() {
+                failure = failure.fact(Fact::labelled("Actual length", render.value(&length)));
             }
-        };
-        failure.expected(render.borrowed_values::<E::View, _>(expected, GroupStyle::List))
-    }
+            if let Some(ElementMismatch {
+                index,
+                actual: element,
+                expected,
+            }) = mismatch
+            {
+                let mut child = context.isolated();
+                child.record_with(|context| {
+                    let render = context.render();
+                    FailureBuilder::new::<C::Item>(FailureKind::Equality)
+                        .actual(render.value(element))
+                        .expected(render.value(expected))
+                        .path([PathSegment::Index(index)])
+                        .build()
+                });
+                failure = child.into_evidence().explain(failure);
+            }
+            failure
+        }
+    };
+    failure
+        .expected(render.borrowed_values::<E::View, _>(expected, RenderingOrder::PreserveIteration))
 }
 
 /// Requires an equal collection prefix, retaining the first mismatch and observed length.
@@ -422,6 +416,7 @@ where
     C::Item: PartialEq<E::View>,
     E: BorrowFor<C::Item>,
     B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Success<'a>
         = ()
@@ -439,26 +434,24 @@ where
         actual: &'a C,
         _: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        Affix::Prefix.evaluate(actual, self.expected.as_ref())
+        evaluate_affix(Placement::Prefix, actual, self.expected.as_ref())
     }
-}
 
-impl<C: StableOrder + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for StartsWith<E, B>
-where
-    C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
-    B: AsRef<[E]>,
-    R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        Affix::Prefix.explain(self.expected.as_ref(), rejected, failure, context)
+    ) -> FailureBuilder {
+        explain_affix(
+            Placement::Prefix,
+            self.expected.as_ref(),
+            rejected,
+            failure,
+            context,
+        )
     }
 }
 
@@ -488,6 +481,7 @@ where
     C::Item: PartialEq<E::View>,
     E: BorrowFor<C::Item>,
     B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Success<'a>
         = ()
@@ -505,26 +499,24 @@ where
         actual: &'a C,
         _: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        Affix::Suffix.evaluate(actual, self.expected.as_ref())
+        evaluate_affix(Placement::Suffix, actual, self.expected.as_ref())
     }
-}
 
-impl<C: StableOrder + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for EndsWith<E, B>
-where
-    C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
-    B: AsRef<[E]>,
-    R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        Affix::Suffix.explain(self.expected.as_ref(), rejected, failure, context)
+    ) -> FailureBuilder {
+        explain_affix(
+            Placement::Suffix,
+            self.expected.as_ref(),
+            rejected,
+            failure,
+            context,
+        )
     }
 }
 
@@ -551,6 +543,7 @@ where
     C::Item: PartialEq<E::View>,
     E: BorrowFor<C::Item>,
     B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -584,32 +577,26 @@ where
         });
         if found { Ok(()) } else { Err(()) }
     }
-}
 
-impl<C: StableOrder + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for ContainsContiguous<E, B>
-where
-    C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
-    B: AsRef<[E]>,
-    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Membership;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let expected = self.expected.as_ref();
-        let failure = match rejected {
-            None => failure.relation("contains the contiguous subsequence"),
-            Some((actual, ())) => failure
-                .actual(render.stable_collection(actual))
-                .relation("does not contain the contiguous subsequence"),
-        };
-        failure.expected(render.borrowed_values::<E::View, _>(expected, GroupStyle::List))
+        let actual = rejected.map(|(actual, ())| render.stable_collection(actual));
+        let failure = failure.relations(
+            actual,
+            "contains the contiguous subsequence",
+            "does not contain the contiguous subsequence",
+        );
+        failure.expected(
+            render.borrowed_values::<E::View, _>(expected, RenderingOrder::PreserveIteration),
+        )
     }
 }
 
@@ -636,6 +623,7 @@ where
     C::Item: PartialEq<E::View>,
     E: BorrowFor<C::Item>,
     B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -677,7 +665,7 @@ where
             elements[a].eq(borrow_for::<C::Item, _>(&expected[e]))
         });
         let only_order_differs = same_length && matched.is_exact();
-        let (unexpected, missing) = unmatched_occurrences(&matched, &elements, |index| {
+        let (unexpected, missing) = matched.unmatched(&elements, |index| {
             borrow_for::<C::Item, _>(&expected[index])
         });
         Err(ExactElementsRejection {
@@ -686,23 +674,15 @@ where
             only_order_differs,
         })
     }
-}
 
-impl<C: StableOrder + ?Sized, E, B, R> ExpectationDiagnostics<C, R> for ContainsExactly<E, B>
-where
-    C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
-    B: AsRef<[E]>,
-    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Equality;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let expected = self.expected.as_ref();
         let failure = match rejected {
@@ -714,28 +694,25 @@ where
                     only_order_differs,
                     ..
                 } = rejection;
-                let mut failure = failure
-                    .actual(render.stable_collection(actual))
-                    .relation("does not contain exactly");
-                if !missing.is_empty() {
-                    failure = failure.fact(Fact::labelled(
-                        "Elements not found",
-                        render.borrowed_values::<E::View, _>(&missing, GroupStyle::List),
-                    ));
-                }
-                if !unexpected.is_empty() {
-                    failure = failure.fact(Fact::labelled(
-                        "Elements not expected",
-                        render.borrowed_values::<C::Item, _>(&unexpected, GroupStyle::List),
-                    ));
-                }
+                let mut failure = unmatched_facts(
+                    failure
+                        .actual(render.stable_collection(actual))
+                        .relation("does not contain exactly"),
+                    render,
+                    ELEMENTS,
+                    &missing,
+                    &unexpected,
+                    RenderingOrder::PreserveIteration,
+                );
                 if only_order_differs {
                     failure = failure.fact(Fact::note("Only the order of the elements differs."));
                 }
                 failure
             }
         };
-        failure.expected(render.borrowed_values::<E::View, _>(expected, GroupStyle::List))
+        failure.expected(
+            render.borrowed_values::<E::View, _>(expected, RenderingOrder::PreserveIteration),
+        )
     }
 }
 
@@ -762,6 +739,7 @@ where
     C::Item: PartialEq<E::View>,
     E: BorrowFor<C::Item>,
     B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
     type Success<'a>
         = ()
@@ -780,58 +758,43 @@ where
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let expected = self.expected.as_ref();
-        if context.is_probe() {
-            let exact = actual.length() == expected.len() && {
-                let elements = actual.elements().collect::<Vec<_>>();
-                matches_exactly(elements.len(), expected.len(), |a, e| {
-                    elements[a].eq(borrow_for::<C::Item, _>(&expected[e]))
-                })
-            };
-            return if exact {
-                Ok(())
-            } else {
-                Err(ExactElementsRejection {
-                    unexpected: Vec::new(),
-                    missing: Vec::new(),
-                    only_order_differs: false,
-                })
-            };
+        // A probe of a different length cannot match, so it rejects without traversing.
+        if context.is_probe() && actual.length() != expected.len() {
+            return Err(ExactElementsRejection {
+                unexpected: Vec::new(),
+                missing: Vec::new(),
+                only_order_differs: false,
+            });
         }
-
         let elements = actual.elements().collect::<Vec<_>>();
-        let matched = match_bipartite(elements.len(), expected.len(), |a, e| {
-            elements[a].eq(borrow_for::<C::Item, _>(&expected[e]))
-        });
-        if matched.is_exact() {
-            return Ok(());
-        }
-        let (unexpected, missing) = unmatched_occurrences(&matched, &elements, |index| {
-            borrow_for::<C::Item, _>(&expected[index])
-        });
+        let unmatched = assign_exactly(
+            context.is_probe(),
+            elements.len(),
+            expected.len(),
+            |a, e| elements[a].eq(borrow_for::<C::Item, _>(&expected[e])),
+        );
+        let (unexpected, missing) = match unmatched {
+            Ok(()) => return Ok(()),
+            Err(None) => (Vec::new(), Vec::new()),
+            Err(Some(matched)) => matched.unmatched(&elements, |index| {
+                borrow_for::<C::Item, _>(&expected[index])
+            }),
+        };
         Err(ExactElementsRejection {
             unexpected,
             missing,
             only_order_differs: false,
         })
     }
-}
 
-impl<C: Collection + ?Sized, E, B, R> ExpectationDiagnostics<C, R>
-    for ContainsExactlyInAnyOrder<E, B>
-where
-    C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
-    B: AsRef<[E]>,
-    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
-{
     const KIND: FailureKind = FailureKind::Equality;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let expected = self.expected.as_ref();
         let failure = match rejected {
@@ -842,27 +805,21 @@ where
                     missing,
                     ..
                 } = rejection;
-                let mut failure = failure
-                    .actual(render.collection(actual))
-                    .relation("does not contain exactly in any order");
-                if !missing.is_empty() {
-                    failure = failure.fact(Fact::labelled(
-                        "Elements not found",
-                        render.borrowed_values::<E::View, _>(&missing, GroupStyle::List),
-                    ));
-                }
-                if !unexpected.is_empty() {
-                    failure = failure.fact(Fact::labelled(
-                        "Elements not expected",
-                        render
-                            .borrowed_values::<C::Item, _>(&unexpected, GroupStyle::List)
-                            .with_order(C::PRESENTATION.order()),
-                    ));
-                }
-                failure
+                unmatched_facts(
+                    failure
+                        .actual(render.collection(actual))
+                        .relation("does not contain exactly in any order"),
+                    render,
+                    ELEMENTS,
+                    &missing,
+                    &unexpected,
+                    C::PRESENTATION.order(),
+                )
             }
         };
-        failure.expected(render.borrowed_values::<E::View, _>(expected, GroupStyle::List))
+        failure.expected(
+            render.borrowed_values::<E::View, _>(expected, RenderingOrder::PreserveIteration),
+        )
     }
 }
 
@@ -943,7 +900,7 @@ mod tests {
                     }
                     // Presenting retained evidence never performs another leaf conversion.
                     let before = renders.get();
-                    let report = ToHumanReadableText.render(failure);
+                    let report = failure.to_string();
                     assert_that!(report.as_str()).contains(if suffix {
                         "does not end with"
                     } else {
@@ -984,10 +941,10 @@ mod tests {
         #[test]
         fn prefix_and_suffix_mismatches_keep_relative_paths_inside_matchers() {
             let failures = assert_that!([[1, 2, 3]]).capture(|it| {
-                it.matches(elements_are![all_of((
+                it.matches(elements_are![all_of(matchers![
                     StartsWith::new([1, 9]),
-                    EndsWith::new([2, 9]),
-                ))])
+                    EndsWith::new([2, 9])
+                ])])
             });
             assert_that!(failures).has_length(1);
             assert_that!(failures[0].children).has_length(2);
@@ -1060,7 +1017,6 @@ mod tests {
             assertions::{HasLength, collection::Collection},
             prelude::*,
             renderer::CollectionPresentation,
-            test_support::NoRenderer,
         };
 
         /// Reports a length but panics when its elements are traversed.
@@ -1087,7 +1043,7 @@ mod tests {
 
         #[test]
         fn decides_empty_and_oversized_expectations_without_buffering_elements() {
-            let context = AssertionContext::new(&NoRenderer, RenderingBudget::default());
+            let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
             assert_that!(
                 context.probe(&Untraversable(2), &ContainsContiguous::new([] as [i32; 0]))
             )
@@ -1099,9 +1055,10 @@ mod tests {
 
     mod contains_exactly_in_any_order {
         use super::super::ContainsExactlyInAnyOrder;
-        use crate::{AssertionContext, prelude::*, test_support::NoRenderer};
+        use crate::{AssertionContext, prelude::*};
         use core::cell::Cell;
 
+        #[derive(Debug)]
         struct Counted<'a> {
             value: i32,
             comparisons: &'a Cell<usize>,
@@ -1120,7 +1077,7 @@ mod tests {
                 value,
                 comparisons: &comparisons,
             });
-            let context = AssertionContext::new(&NoRenderer, RenderingBudget::default());
+            let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
             assert_that!(context.probe(
                 &actual,
                 &ContainsExactlyInAnyOrder::new([&actual[0], &actual[1]])
@@ -1142,9 +1099,10 @@ mod tests {
 
     mod contains_exactly {
         use super::super::ContainsExactly;
-        use crate::{AssertionContext, prelude::*, test_support::NoRenderer};
+        use crate::{AssertionContext, prelude::*};
         use core::cell::Cell;
 
+        #[derive(Debug)]
         struct Counted<'a> {
             value: i32,
             comparisons: &'a Cell<usize>,
@@ -1165,7 +1123,7 @@ mod tests {
             });
             for limit in [0, 1, usize::MAX] {
                 let context = AssertionContext::new(
-                    &NoRenderer,
+                    &DebugRenderer,
                     RenderingBudget::default().with_max_items(limit),
                 );
                 comparisons.set(0);
@@ -1253,45 +1211,11 @@ mod tests {
                 assert_that!(failures).has_length(1);
             }
         }
-    }
-
-    mod string_views {
-        use super::super::*;
-        use crate::{
-            prelude::*,
-            test_support::{StrOperand, StringRenderer},
-        };
-        use core::cell::Cell;
-
-        #[test]
-        fn literal_lists_work_in_all_value_methods_and_definitions() {
-            let values = [String::from("a"), String::from("b"), String::from("a")];
-            let list = ["a", "b", "a"];
-            assert_that!(values)
-                .contains("b")
-                .does_not_contain("c")
-                .contains_all(["a", "b"])
-                .starts_with(["a", "b"])
-                .ends_with(["b", "a"])
-                .contains_contiguous(["b", "a"])
-                .contains_exactly(&list)
-                .contains_exactly_in_any_order(["b", "a", "a"]);
-            assert_that!(values)
-                .matches(Contains::new("a"))
-                .matches(DoesNotContain::new("c"))
-                .matches(ContainsAll::new(["b", "a"]))
-                .matches(StartsWith::new(["a"]))
-                .matches(EndsWith::new(["a"]))
-                .matches(ContainsContiguous::new(["b", "a"]))
-                .matches(ContainsExactly::new(&list))
-                .matches(ContainsExactlyInAnyOrder::new(["a", "a", "b"]));
-            let failures = assert_that!(values)
-                .capture(|it| it.contains_exactly_in_any_order(["b", "b", "a"]));
-            assert_that!(failures).has_length(1);
-        }
 
         #[test]
         fn unsized_operands_are_accessed_after_tracking_through_explanation() {
+            use crate::test_support::{StrOperand, StringRenderer};
+
             for method in 0..8 {
                 let calls = Cell::new(0);
                 let failures = assert_that!([String::from("a")])
@@ -1327,12 +1251,41 @@ mod tests {
         }
     }
 
+    mod string_views {
+        use super::super::*;
+        use crate::prelude::*;
+
+        #[test]
+        fn literal_lists_work_in_all_value_methods_and_definitions() {
+            let values = [String::from("a"), String::from("b"), String::from("a")];
+            let list = ["a", "b", "a"];
+            assert_that!(values)
+                .contains("b")
+                .does_not_contain("c")
+                .contains_all(["a", "b"])
+                .starts_with(["a", "b"])
+                .ends_with(["b", "a"])
+                .contains_contiguous(["b", "a"])
+                .contains_exactly(&list)
+                .contains_exactly_in_any_order(["b", "a", "a"]);
+            assert_that!(values)
+                .matches(Contains::new("a"))
+                .matches(DoesNotContain::new("c"))
+                .matches(ContainsAll::new(["b", "a"]))
+                .matches(StartsWith::new(["a"]))
+                .matches(EndsWith::new(["a"]))
+                .matches(ContainsContiguous::new(["b", "a"]))
+                .matches(ContainsExactly::new(&list))
+                .matches(ContainsExactlyInAnyOrder::new(["a", "a", "b"]));
+            let failures = assert_that!(values)
+                .capture(|it| it.contains_exactly_in_any_order(["b", "b", "a"]));
+            assert_that!(failures).has_length(1);
+        }
+    }
+
     mod repeatable_expected_data {
         use super::super::*;
-        use crate::{
-            prelude::*,
-            test_support::{BorrowSpy, NoRenderer},
-        };
+        use crate::{prelude::*, test_support::BorrowSpy};
         use core::{borrow::Borrow, cell::Cell};
 
         #[test]
@@ -1378,7 +1331,7 @@ mod tests {
                         assert_that!(index).is_equal_to(0);
                     },
                 });
-                let context = AssertionContext::new(&NoRenderer, RenderingBudget::default());
+                let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
                 let actual = [1, 2];
                 let result = match method {
                     0 => context.probe(&actual, &StartsWith::new(&inputs)),
@@ -1414,7 +1367,7 @@ mod tests {
             definition: &D,
             comparisons: &Cell<usize>,
         ) where
-            D: ExpectationDiagnostics<[Actual<'a>; 2]>,
+            D: Expectation<[Actual<'a>; 2]>,
         {
             let context =
                 AssertionContext::new(&DebugRenderer, RenderingBudget::default().with_max_items(1));
@@ -1426,7 +1379,7 @@ mod tests {
             let _ = definition
                 .explain(
                     Some((actual, rejection)),
-                    FailureBuilder::detached::<[Actual; 2]>(D::KIND),
+                    FailureBuilder::new::<[Actual; 2]>(D::KIND),
                     &context,
                 )
                 .build();

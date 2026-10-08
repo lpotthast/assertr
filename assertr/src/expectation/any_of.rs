@@ -1,6 +1,6 @@
 use super::MatcherList;
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics,
+    AssertionContext, Expectation,
     expectation::Evidence,
     failure::{Fact, FailureBuilder, FailureKind},
 };
@@ -37,7 +37,9 @@ where
         let mut context = settings.isolated();
         for index in 0..self.0.len() {
             let mut branch = context.isolated();
-            let matched = self.0.evaluate_at(index, actual, &mut branch);
+            if self.0.evaluate_at(index, actual, &mut branch) {
+                return Ok(());
+            }
             let render = branch.render();
             let mut evidence = branch.into_evidence();
             for failure in &mut evidence.children {
@@ -45,35 +47,29 @@ where
                     .facts
                     .push(Fact::labelled("Branch", render.value(&index)));
             }
-            if matched {
-                return Ok(());
-            }
             context.append(evidence);
         }
         context.finish(false, |context| context.describe::<A, _>(self))
     }
-}
-impl<A: ?Sized, R, L> ExpectationDiagnostics<A, R> for AnyOf<L>
-where
-    L: MatcherList<A, R>,
-    R: crate::ValueRenderer<usize>,
-{
+
     const KIND: FailureKind = FailureKind::Matching;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
-            None => context
-                .describe_list::<A, _, _>(&self.0, failure.relation("satisfies any constraint")),
+            None => {
+                context.describe_list::<A, _>(&self.0, failure.relation("satisfies any constraint"))
+            }
             Some((_, evidence)) => {
                 evidence.explain(failure.relation("does not match any alternative"))
             }
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::any_of;
@@ -87,7 +83,8 @@ mod tests {
             calls.set(calls.get() + 1);
             *actual == 2
         });
-        let failures = assert_that!(2).capture(|it| it.matches(any_of((matcher, equal_to(3)))));
+        let failures =
+            assert_that!(2).capture(|it| it.matches(any_of(matchers![matcher, equal_to(3)])));
 
         assert_that!(failures).is_empty();
         assert_that!(calls.get()).is_equal_to(1);
@@ -95,24 +92,24 @@ mod tests {
 
     #[test]
     fn branch_numbers_use_the_active_renderer_and_budget() {
-        use crate::{
-            RenderingBudget,
-            test_support::{SentinelRenderer, rendered_text},
-        };
+        use crate::{RenderingBudget, test_support::SentinelRenderer};
         let failures = assert_that!(0)
             .with_renderer(SentinelRenderer)
             .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(2))
-            .capture(|it| it.matches(any_of((predicate(|_: &i32| false),))));
+            .capture(|it| it.matches(any_of(matchers![predicate(|_: &i32| false)])));
         let branch = &failures[0].children[0].facts[0].value;
-        assert_that!(rendered_text(branch)).is_equal_to("<r... 8 more characters ...");
+        assert_that!(format!("{branch:#}")).is_equal_to("<r... 8 more characters ...");
     }
 
     #[test]
     fn stays_nested_within_a_conjunction() {
         use crate::expectation::all_of;
-        let failures = assert_that!(3)
-            .with_location(false)
-            .capture(|it| it.matches(all_of((any_of((equal_to(1), equal_to(2))), equal_to(5)))));
+        let failures = assert_that!(3).with_location(false).capture(|it| {
+            it.matches(all_of(matchers![
+                any_of(matchers![equal_to(1), equal_to(2)]),
+                equal_to(5)
+            ]))
+        });
         assert_that!(failures).has_length(1);
         assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
             -------- assertr --------
@@ -145,9 +142,12 @@ mod tests {
 
     #[test]
     fn nested_disjunctions_keep_their_own_branch_numbers() {
-        let failures = assert_that!(3)
-            .with_location(false)
-            .capture(|it| it.matches(any_of((any_of((equal_to(1), equal_to(2))), equal_to(5)))));
+        let failures = assert_that!(3).with_location(false).capture(|it| {
+            it.matches(any_of(matchers![
+                any_of(matchers![equal_to(1), equal_to(2)]),
+                equal_to(5)
+            ]))
+        });
         assert_that!(failures).has_length(1);
         assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
             -------- assertr --------
@@ -188,7 +188,7 @@ mod tests {
         for limit in [0, 1, usize::MAX] {
             let failures = assert_that!(2)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(limit))
-                .capture(|it| it.matches(any_of(())));
+                .capture(|it| it.matches(any_of(crate::matchers![])));
             assert_that!(failures).has_length(1);
             assert_that!(failures[0].children).has_length(limit.min(1));
             assert_that!(failures[0].omitted_children).is_equal_to(usize::from(limit == 0));

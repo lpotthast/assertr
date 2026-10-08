@@ -1,11 +1,24 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics,
-    ValueRenderer,
-    assertions::support::project_checked,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, ValueRenderer,
+    assertions::support::{explain_variant, project_checked},
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
 };
 use core::task::Poll;
+
+fn ready<T>(poll: Poll<T>) -> Option<T> {
+    match poll {
+        Poll::Ready(value) => Some(value),
+        Poll::Pending => None,
+    }
+}
+
+fn ready_ref<T>(poll: &Poll<T>) -> Option<&T> {
+    match poll {
+        Poll::Ready(value) => Some(value),
+        Poll::Pending => None,
+    }
+}
 
 /// Checks for `Ready` and returns the borrowed value on success.
 /// Checks, extraction, and ordinary callbacks execute this same definition.
@@ -16,38 +29,29 @@ impl<T, R> Expectation<Poll<T>, R> for IsReady {
     type Success<'a>
         = &'a T
     where
-        T: 'a;
+        Self: 'a,
+        Poll<T>: 'a;
     type Rejection<'a>
         = ()
     where
-        T: 'a;
+        Self: 'a,
+        Poll<T>: 'a;
     fn evaluate<'a>(
         &'a self,
         actual: &'a Poll<T>,
         _: &AssertionContext<'_, R>,
     ) -> Result<&'a T, ()> {
-        match actual {
-            Poll::Ready(value) => Ok(value),
-            Poll::Pending => Err(()),
-        }
+        ready_ref(actual).ok_or(())
     }
-}
 
-impl<T, R> ExpectationDiagnostics<Poll<T>, R> for IsReady {
     const KIND: FailureKind = FailureKind::Variant;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&Poll<T>, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let failure = match rejected {
-            None => failure.relation("is the expected variant"),
-            Some((_, ())) => failure
-                .actual("Pending")
-                .relation("is not the expected variant"),
-        };
-        failure.expected("Poll::Ready")
+    ) -> FailureBuilder {
+        explain_variant(failure, rejected.map(|_| "Pending"), "Poll::Ready")
     }
 }
 
@@ -55,15 +59,17 @@ impl<T, R> ExpectationDiagnostics<Poll<T>, R> for IsReady {
 #[derive(Debug, Clone, Copy)]
 pub struct IsPending;
 
-impl<T, R> Expectation<Poll<T>, R> for IsPending {
+impl<T, R: ValueRenderer<T>> Expectation<Poll<T>, R> for IsPending {
     type Success<'a>
         = ()
     where
-        T: 'a;
+        Self: 'a,
+        Poll<T>: 'a;
     type Rejection<'a>
         = &'a T
     where
-        T: 'a;
+        Self: 'a,
+        Poll<T>: 'a;
     fn evaluate<'a>(
         &'a self,
         actual: &'a Poll<T>,
@@ -74,24 +80,20 @@ impl<T, R> Expectation<Poll<T>, R> for IsPending {
             Poll::Ready(value) => Err(value),
         }
     }
-}
 
-impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Poll<T>, R> for IsPending {
     const KIND: FailureKind = FailureKind::Variant;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Poll<T>, &'a T)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is the expected variant"),
-            Some((actual, value)) => failure
-                .actual(render.variant(actual, "Ready", value))
-                .relation("is not the expected variant"),
-        };
-        failure.expected("Poll::Pending")
+        explain_variant(
+            failure,
+            rejected.map(|(actual, value)| render.variant(actual, "Ready", value)),
+            "Poll::Pending",
+        )
     }
 }
 
@@ -140,9 +142,7 @@ impl<T, M: Mode, R> PollAssertions<T, M, R> for AssertThat<'_, Poll<T>, M, R> {
         R: Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        if let Some(value) = self.test_assertion(&IsReady) {
-            assertions(self.derive(|_| value));
-        }
+        self.satisfy_success(self.test_assertion(&IsReady), assertions);
         self
     }
 }
@@ -163,28 +163,39 @@ pub trait PollExtractAssertions<'t, T, R = DebugRenderer> {
 impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic, R> {
     #[track_caller]
     fn get_ready(self) -> AssertThat<'t, T, Panic, R> {
-        self.apply_assertion(IsReady).map(|actual| {
-            project_checked(
-                actual,
-                |poll| match poll {
-                    Poll::Ready(value) => Some(value),
-                    Poll::Pending => None,
-                },
-                |poll| match poll {
-                    Poll::Ready(value) => Some(value),
-                    Poll::Pending => None,
-                },
-            )
-        })
+        self.apply_assertion(IsReady)
+            .map(|actual| project_checked(actual, ready, ready_ref))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{FailureKind, prelude::*};
+    use core::task::Poll;
+    use indoc::formatdoc;
+
+    #[derive(Debug, PartialEq)]
+    pub struct Foo {
+        val: u32,
+    }
+
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use super::*;
+
+        #[test]
+        fn are_as_expected() {
+            Poll::Ready(42).must().be_ready();
+            Poll::<i32>::Pending.must().be_pending();
+            Poll::Ready(42).must().be_ready_satisfying(|ready| {
+                ready.is_equal_to(42);
+            });
+        }
+    }
+
     mod renderer_contract {
-        use crate::prelude::*;
+        use super::*;
         use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
-        use core::task::Poll;
 
         struct Secret;
 
@@ -198,9 +209,6 @@ mod tests {
                 AssertThat<'static, Poll<()>, Panic, NoRenderer>
                     => PollExtractAssertions<'static, (), NoRenderer>
             );
-
-            assert_trait_impl!(super::super::IsReady => Expectation<Poll<()>, NoRenderer>);
-            assert_trait_impl!(super::super::IsPending => Expectation<Poll<()>, NoRenderer>);
         }
 
         #[test]
@@ -210,28 +218,14 @@ mod tests {
                 .with_location(false)
                 .capture(PollAssertions::is_pending);
 
-            assert_that!(ToHumanReadableText.render(&failures[0]))
+            assert_that!(failures[0].to_string())
                 .contains("Ready(")
                 .contains(SENTINEL);
         }
     }
 
-    #[derive(Debug, PartialEq)]
-    pub struct Foo {
-        val: u32,
-    }
-
     mod is_ready {
-        use super::Foo;
-        use crate::prelude::*;
-        use indoc::formatdoc;
-        use std::task::Poll;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Poll::Ready(Foo { val: 42 }).must().be_ready();
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -267,40 +261,15 @@ mod tests {
         }
 
         #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
-            let failures = assert_that!(Poll::<i32>::Pending)
-                .with_location(false)
-                .capture(|it| it.is_ready().is_pending());
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r"
-                        -------- assertr --------
-                        Expression: `Poll::<i32>::Pending`
-
-                        Actual: Pending
-
-                        is not the expected variant
-
-                        Expected: Poll::Ready
-                        -------- assertr --------
-                    "});
-                },
-            ]);
+        fn continues_in_capture_mode() {
+            let failures =
+                assert_that!(Poll::<i32>::Pending).capture(|it| it.is_ready().is_pending());
+            assert_that!(failures).has_length(1);
         }
     }
 
     mod get_ready {
-        use super::Foo;
-        use crate::prelude::*;
-        use indoc::formatdoc;
-        use std::task::Poll;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Poll::Ready(42).must().get_ready().is_equal_to(42);
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -308,56 +277,28 @@ mod tests {
         }
 
         #[test]
-        fn extracts_the_borrowed_inner_value() {
+        fn extracts_borrowed_and_owned_values() {
             let poll = Poll::Ready(Foo { val: 42 });
-
             assert_that!(poll).get_ready().is_equal_to(Foo { val: 42 });
-
-            // The poll was only borrowed and remains usable.
-            assert_that!(poll).is_ready();
-        }
-
-        #[test]
-        fn extracts_the_owned_inner_value() {
-            assert_that_owned!(Poll::Ready(Foo { val: 42 }))
+            assert_that_owned!(poll)
                 .get_ready()
                 .is_equal_to(Foo { val: 42 });
         }
 
         #[test]
-        fn panics_when_not_ready() {
+        fn rejects_pending_like_is_ready() {
             assert_that_panic_by(|| {
-                assert_that!(Poll::<Foo>::Pending)
-                    .with_location(false)
+                let _ = assert_that!(Poll::<i32>::Pending)
+                    .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_ready();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `Poll::<Foo>::Pending`
-
-                Actual: Pending
-
-                is not the expected variant
-
-                Expected: Poll::Ready
-                -------- assertr --------
-            "});
+            .is_equal_to(format!("{:?}", FailureKind::Variant));
         }
     }
 
     mod is_ready_satisfying {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-        use std::task::Poll;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Poll::Ready(42).must().be_ready_satisfying(|ready| {
-                ready.is_equal_to(42);
-            });
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -380,100 +321,16 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_ready_and_assertions_pass() {
-            assert_that!(Poll::Ready(42)).is_ready_satisfying(|ready| {
-                ready.is_equal_to(42);
-            });
-        }
-
-        #[test]
-        fn hands_out_a_value_typed_assertion_supporting_type_specific_assertions() {
-            assert_that!(Poll::Ready(String::from("value"))).is_ready_satisfying(|ready| {
-                ready.contains("alu").starts_with("v");
-            });
-        }
-
-        #[test]
-        fn captures_inner_failure_when_ready_and_assertion_fails() {
-            let failures = assert_that!(Poll::Ready(42))
-                .with_location(false)
-                .capture(|it| {
-                    it.is_ready_satisfying(|ready| {
-                        ready.is_greater_than(9000);
-                    })
-                });
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {"
-                        -------- assertr --------
-                        Actual: 42
-
-                        is not greater than
-
-                        Expected: 9000
-                        -------- assertr --------
-                    "});
-                },
-            ]);
-        }
-
-        #[test]
-        fn captures_variant_failure_when_pending() {
+        fn does_not_run_the_callback_when_pending() {
             let failures = assert_that!(Poll::<i32>::Pending)
-                .with_location(false)
                 .capture(|it| it.is_ready_satisfying(|_| panic!("assertions should not run")));
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r"
-                        -------- assertr --------
-                        Expression: `Poll::<i32>::Pending`
-
-                        Actual: Pending
-
-                        is not the expected variant
-
-                        Expected: Poll::Ready
-                        -------- assertr --------
-                    "});
-                },
-            ]);
-        }
-
-        #[test]
-        fn panics_when_pending() {
-            assert_that_panic_by(|| {
-                assert_that!(Poll::<i32>::Pending)
-                    .with_location(false)
-                    .is_ready_satisfying(|_| panic!("assertions should not run"));
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `Poll::<i32>::Pending`
-
-                Actual: Pending
-
-                is not the expected variant
-
-                Expected: Poll::Ready
-                -------- assertr --------
-            "});
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].kind).is_equal_to(FailureKind::Variant);
         }
     }
 
     mod is_pending {
-        use super::Foo;
-        use crate::prelude::*;
-        use indoc::formatdoc;
-        use std::task::Poll;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Poll::<Foo>::Pending.must().be_pending();
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {

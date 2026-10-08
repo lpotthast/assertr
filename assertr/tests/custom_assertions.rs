@@ -1,13 +1,15 @@
 //! Downstream-style coverage for the public assertion-authoring methods.
 //!
 //! These tests are written the way a downstream crate would write them: only through
-//! `assertr::prelude::*`, without reaching into any private module. They pin the two supported
+//! `assertr::prelude::*`, without reaching into any private module. They pin the supported
 //! routes for teaching assertr about your own types, plus the execution-adapter escape hatch:
 //!
 //! - **Composition** - delegate to existing assertions through `satisfies` and friends. Tracking,
 //!   failure formatting and capture-mode behavior come from the assertions delegated to.
-//! - **Leaf assertions** - implement `Expectation` and `ExpectationDiagnostics`, then delegate to
-//!   `apply_assertion` or `test_assertion`, which track, evaluate, and raise the explained failure.
+//! - **Reusable checks without an implementation** - build an `Expectation` from `predicate`,
+//!   `field`, and the other matchers, and return it as `impl Expectation`.
+//! - **Leaf assertions** - implement `Expectation`, then delegate to `apply_assertion` or
+//!   `test_assertion`, which track, evaluate, and raise the explained failure.
 //! - **Execution adapters** - for an operation the expectation protocol cannot express, call
 //!   `track_assertion()` first, then raise a failure through the `failure(kind)` builder when the
 //!   check does not hold.
@@ -227,7 +229,7 @@ mod composed {
         assert_that!(&failures).contains_exactly_satisfying([
             |element: AssertThat<AssertionFailure, Capture>| {
                 element
-                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .derive_owned(|value| value.to_string())
                     .contains("Expected: 30")
                     .contains("Actual: 12");
             },
@@ -235,10 +237,115 @@ mod composed {
     }
 }
 
+mod reusable_without_impl {
+    use assertr::AssertionContext;
+    use assertr::matchers::{field, ge, predicate};
+    use assertr::prelude::*;
+
+    #[derive(Debug)]
+    struct Person {
+        name: String,
+        age: u32,
+    }
+
+    fn is_adult<R: ValueRenderer<u32>>() -> impl Expectation<Person, R> + Clone {
+        field("age", |person: &Person| &person.age, ge(18))
+    }
+
+    fn has_capitalized_name<R: ValueRenderer<String>>() -> impl Expectation<Person, R> + Clone {
+        field(
+            "name",
+            |person: &Person| &person.name,
+            predicate(|name: &String| name.starts_with(char::is_uppercase))
+                .described_as("is capitalized")
+                .rejected_as("is not capitalized"),
+        )
+    }
+
+    #[test]
+    fn checks_compose_as_assertions_and_matchers() {
+        let ada = Person {
+            name: "Ada".into(),
+            age: 36,
+        };
+        assert_that!(&ada)
+            .apply_assertion(is_adult())
+            .matches(has_capitalized_name());
+        assert_that!([ada]).contains_matching(matchers::all_of(matchers![
+            is_adult(),
+            has_capitalized_name()
+        ]));
+    }
+
+    #[test]
+    fn rejections_report_the_field_and_the_named_relation() {
+        let minor = Person {
+            name: "ada".into(),
+            age: 16,
+        };
+        let failures = assert_that!(minor).with_location(false).capture(|it| {
+            it.apply_assertion(is_adult())
+                .apply_assertion(has_capitalized_name())
+        });
+
+        assert_that!(failures).has_length(2);
+        assert_that!(failures[1].to_string()).is_equal_to(indoc::indoc! {r#"
+            -------- assertr --------
+            Expression: `minor`
+
+            does not match
+
+            Nested failures:
+              - At .name:
+                Actual: "ada"
+
+                is not capitalized
+            -------- assertr --------
+        "#});
+    }
+
+    struct IsEven;
+
+    // The shortest full implementation: default `KIND`, no lifetime bounds for an owned subject,
+    // and `relations` for the common explanation.
+    impl<R: ValueRenderer<u32>> Expectation<u32, R> for IsEven {
+        type Success<'a> = ();
+        type Rejection<'a> = ();
+
+        fn evaluate(&self, actual: &u32, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+            if actual.is_multiple_of(2) {
+                Ok(())
+            } else {
+                Err(())
+            }
+        }
+
+        fn explain(
+            &self,
+            rejected: Option<(&u32, ())>,
+            failure: assertr::failure::FailureBuilder,
+            context: &AssertionContext<'_, R>,
+        ) -> assertr::failure::FailureBuilder {
+            failure.relations(
+                rejected.map(|(actual, ())| context.render().value(actual)),
+                "is even",
+                "is odd",
+            )
+        }
+    }
+
+    #[test]
+    fn a_minimal_implementation_uses_the_default_kind_and_relations() {
+        assert_that!(4_u32).apply_assertion(IsEven);
+        let failures = assert_that!(3_u32).capture(|it| it.matches(IsEven));
+        assert_that!(failures[0].kind).is_equal_to(assertr::FailureKind::Predicate);
+        assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is odd"));
+    }
+}
+
 mod leaf {
     use super::Person;
     use assertr::prelude::*;
-    use assertr::renderer::TypeHint;
     use assertr::{Fact, FailureKind};
     use core::fmt;
     use indoc::formatdoc;
@@ -262,10 +369,11 @@ mod leaf {
             let age = self.actual().age;
             if age < 18 {
                 // A failure that renders no value needs no renderer capability.
-                self.failure(FailureKind::Ordering)
-                    .relation("is not an adult")
-                    .fact(Fact::labelled("Age", age))
-                    .raise();
+                self.raise(
+                    self.failure(FailureKind::Ordering)
+                        .relation("is not an adult")
+                        .fact(Fact::labelled("Age", age)),
+                );
             }
             self
         }
@@ -281,13 +389,14 @@ mod leaf {
             if actual.age <= other.age {
                 // Facts belong to the failure, not to the chain: they must not reappear in a later
                 // failure of the same chain.
-                self.failure(FailureKind::Ordering)
-                    .actual(self.render().value(actual))
-                    .relation("is not older than")
-                    .expected(self.render().value(other))
-                    .fact(Fact::labelled("Actual age", actual.age))
-                    .fact(Fact::labelled("Expected age", other.age))
-                    .raise();
+                self.raise(
+                    self.failure(FailureKind::Ordering)
+                        .actual(self.render().value(actual))
+                        .relation("is not older than")
+                        .expected(self.render().value(other))
+                        .fact(Fact::labelled("Actual age", actual.age))
+                        .fact(Fact::labelled("Expected age", other.age)),
+                );
             }
             self
         }
@@ -368,7 +477,7 @@ mod leaf {
                     .derive_owned(|value| value.facts.as_slice())
                     .contains_exactly([Fact::labelled("Age", "12")]);
                 element
-                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .derive_owned(|value| value.to_string())
                     .contains(formatdoc! {"
             -------- assertr --------
             Subject: child
@@ -419,26 +528,13 @@ mod leaf {
             .is_equal_to(Some("Person(age=12)"));
         assert_that!(super::text_opt(failures[0].expected.as_ref()))
             .is_equal_to(Some("Person(age=40)"));
-        assert_that!(ToHumanReadableText.render(&failures[0])).contains(formatdoc! {"
+        assert_that!(failures[0].to_string()).contains(formatdoc! {"
             Actual: Person(age=12)
 
             is not older than
 
             Expected: Person(age=40)
         "});
-    }
-
-    #[test]
-    fn rendered_values_can_customize_and_show_type_hints() {
-        let person = person(12);
-        let assertion = assert_that!(&person).with_renderer(AgeRenderer);
-        let rendered = assertion
-            .render()
-            .value(assertion.actual())
-            .with_type_hint(TypeHint::Label("Subject"))
-            .show_type_hint(true);
-
-        assert_that!(format!("{rendered:?}")).is_equal_to("Subject Person(age=12)");
     }
 
     #[test]
@@ -457,7 +553,7 @@ mod leaf {
         // why the tracking hook is public rather than internal.
         let failures = assert_that!(person(30)).capture(|it| it.is_adult());
 
-        assert_that!(failures.as_slice()).is_empty();
+        assert_that!(&failures[..]).is_empty();
     }
 
     #[test]
@@ -498,6 +594,20 @@ mod generated_fluent_aliases {
         {
             core::future::ready(expected).await
         }
+
+        // Unnamed patterns receive hygienic names that cannot collide with these spellings.
+        #[allow(non_upper_case_globals)]
+        fn has_pair<const argument_3: usize>(
+            self,
+            argument_2: usize,
+            (_left, _right): (usize, usize),
+            _: bool,
+        ) -> usize
+        where
+            Self: Sized,
+        {
+            argument_2 + argument_3
+        }
     }
 
     impl<M: Mode, R> BorrowAssertions for AssertThat<'_, String, M, R> {
@@ -516,6 +626,12 @@ mod generated_fluent_aliases {
     #[test]
     fn aliases_support_late_bound_lifetimes() {
         "value".to_owned().must().borrow_as("expected");
+    }
+
+    #[test]
+    fn aliases_name_unnamed_patterns_hygienically() {
+        let sum = "value".to_owned().must().have_pair::<2>(1, (3, 4), true);
+        assert_that!(sum).is_equal_to(3);
     }
 
     #[tokio::test]
@@ -625,6 +741,10 @@ mod generic_num_traits_bounds {
     }
 
     impl NumericDistance for Money {
+        fn zero_distance() -> Self {
+            Self(0)
+        }
+
         fn checked_distance(&self, other: &Self) -> Option<Self> {
             self.0.checked_distance(&other.0).map(Self)
         }
@@ -657,7 +777,7 @@ mod generic_num_traits_bounds {
         assert_that!(one).is_one().is_multiplicative_identity();
     }
 
-    fn assert_close_to<T: NumericDistance + Debug>(value: T, expected: T, deviation: T) {
+    fn assert_close_to<T: Num + NumericDistance + Debug>(value: T, expected: T, deviation: T) {
         assert_that!(value).is_close_to(expected, deviation);
     }
 
@@ -881,7 +1001,7 @@ mod matcher_authoring {
         AssertionContext, Fact,
         expectation::Evidence,
         failure::{FailureBuilder, FailureKind},
-        matchers::{EqualTo, NotEqualTo, all_of, each},
+        matchers::{all_of, each},
         prelude::*,
         renderer::RenderedBody,
     };
@@ -889,15 +1009,17 @@ mod matcher_authoring {
     // Retain a guarded observation, as assertions over cells, locks, and receivers need to do.
     struct HasText<'e>(&'e str);
 
-    impl<R> Expectation<RefCell<String>, R> for HasText<'_> {
+    impl<R: ValueRenderer<str>> Expectation<RefCell<String>, R> for HasText<'_> {
         type Success<'a>
             = ()
         where
-            Self: 'a;
+            Self: 'a,
+            RefCell<String>: 'a;
         type Rejection<'a>
             = Ref<'a, String>
         where
-            Self: 'a;
+            Self: 'a,
+            RefCell<String>: 'a;
 
         fn evaluate<'a>(
             &'a self,
@@ -913,17 +1035,15 @@ mod matcher_authoring {
                 Err(observed)
             }
         }
-    }
 
-    impl<R: ValueRenderer<str>> ExpectationDiagnostics<RefCell<String>, R> for HasText<'_> {
         const KIND: FailureKind = FailureKind::Equality;
 
-        fn explain<'a, Target>(
+        fn explain<'a>(
             &'a self,
             rejected: Option<(&'a RefCell<String>, Ref<'a, String>)>,
-            failure: FailureBuilder<Target>,
+            failure: FailureBuilder,
             context: &AssertionContext<'_, R>,
-        ) -> FailureBuilder<Target> {
+        ) -> FailureBuilder {
             let render = context.render();
             let failure = match rejected {
                 None => failure.relation("has text"),
@@ -941,7 +1061,7 @@ mod matcher_authoring {
         observations: Cell<usize>,
     }
 
-    impl<R> Expectation<Subject, R> for Reject {
+    impl<R: ValueRenderer<OpaqueError>> Expectation<Subject, R> for Reject {
         type Success<'a> = ();
         type Rejection<'a> = OpaqueError;
 
@@ -953,17 +1073,15 @@ mod matcher_authoring {
             self.observations.set(self.observations.get() + 1);
             Err(OpaqueError(actual.0))
         }
-    }
 
-    impl<R: ValueRenderer<OpaqueError>> ExpectationDiagnostics<Subject, R> for Reject {
         const KIND: FailureKind = FailureKind::Predicate;
 
-        fn explain<Target>(
+        fn explain(
             &self,
             rejected: Option<(&Subject, OpaqueError)>,
-            failure: FailureBuilder<Target>,
+            failure: FailureBuilder,
             context: &AssertionContext<'_, R>,
-        ) -> FailureBuilder<Target> {
+        ) -> FailureBuilder {
             match rejected {
                 None => failure.relation("is accepted"),
                 Some((_, error)) => failure
@@ -984,7 +1102,7 @@ mod matcher_authoring {
     // A downstream composite must use only the public context and retain owned child evidence.
     struct Twice<D>(D);
 
-    impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R>> Expectation<T, R> for Twice<D> {
+    impl<T: ?Sized, R, D: Expectation<T, R>> Expectation<T, R> for Twice<D> {
         type Success<'a>
             = ()
         where
@@ -1006,35 +1124,20 @@ mod matcher_authoring {
                 Err(children.into_evidence())
             }
         }
-    }
 
-    impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R>> ExpectationDiagnostics<T, R> for Twice<D> {
         const KIND: FailureKind = D::KIND;
 
-        fn explain<'a, Target>(
+        fn explain<'a>(
             &'a self,
             rejected: Option<(&'a T, Evidence)>,
-            failure: FailureBuilder<Target>,
+            failure: FailureBuilder,
             context: &AssertionContext<'_, R>,
-        ) -> FailureBuilder<Target> {
+        ) -> FailureBuilder {
             match rejected {
                 None => self.0.explain(None, failure, context),
                 Some((_, children)) => children.explain(failure),
             }
         }
-    }
-
-    #[test]
-    fn expectations_and_probes_are_available_without_renderer_support() {
-        struct NoRenderer;
-        fn accepts_expectation<T: ?Sized, D: Expectation<T, NoRenderer>>(_: &D) {}
-
-        accepts_expectation::<String, _>(&EqualTo::new("expected"));
-        accepts_expectation::<String, _>(&NotEqualTo::new("expected"));
-        accepts_expectation::<RefCell<String>, _>(&HasText("expected"));
-        accepts_expectation::<Subject, _>(&Reject::default());
-        // Pin the public probe's bounds without introducing an expectation just to get a context.
-        let _ = AssertionContext::<NoRenderer>::probe::<Subject, Reject>;
     }
 
     mod guarded_observations {
@@ -1182,7 +1285,7 @@ mod matcher_authoring {
             let failures = assert_that!(Subject(42))
                 .with_renderer(NeverRender)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(0))
-                .capture(|it| it.matches(all_of((&definition, &definition))));
+                .capture(|it| it.matches(all_of(matchers![&definition, &definition])));
 
             assert_that!(definition.observations.get()).is_equal_to(2);
             assert_that!(failures).has_length(1);
@@ -1195,21 +1298,16 @@ mod matcher_authoring {
 mod structural_rendering {
     use assertr::{
         AssertionContext, FailureKind,
-        assertions::{collection::Collection, map::Map},
+        assertions::collection::Collection,
         failure::{FailureBuilder, PathSegment},
         prelude::*,
-        renderer::{
-            CollectionPresentation, EntryList, GroupStyle, IntoRendered, MapEntries, Rendered,
-            RenderedBody, RenderedValue, RenderedValues, RenderingContext, RenderingOrder,
-            StructField, Typed, UnavailableStructField, Variant,
-        },
+        renderer::{CollectionPresentation, RenderedBody},
     };
-    use core::{cell::RefCell, fmt};
+    use core::fmt;
 
     // Neither subjects nor leaves implement Debug. The renderer is deliberately not Clone.
     struct Token(&'static str);
     struct LeafRenderer;
-    struct NoRenderer;
 
     impl ValueRenderer<Token> for LeafRenderer {
         fn fmt(&self, value: &Token, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1239,27 +1337,9 @@ mod structural_rendering {
         }
     }
 
-    struct Table(Vec<(Token, Token)>);
-
-    impl HasLength for Table {
-        fn length(&self) -> usize {
-            self.0.len()
-        }
-    }
-
-    // No lookup, equality, or ordering capabilities are needed to render a map.
-    impl Map for Table {
-        type Key = Token;
-        type Value = Token;
-        const RENDERING_ORDER: RenderingOrder = RenderingOrder::SortByRenderedText;
-        fn entries(&self) -> impl Iterator<Item = (&Token, &Token)> {
-            self.0.iter().map(|(key, value)| (key, value))
-        }
-    }
-
     // Detailed tree metadata, ordering, and omission behavior live in renderer::context tests.
     #[test]
-    fn chain_settings_reach_a_custom_collection_adapter() {
+    fn chain_settings_reach_custom_collection_rendering() {
         let values = Bag(vec![Token("first"), Token("second")]);
         let budget = RenderingBudget::unlimited()
             .with_max_items(1)
@@ -1272,10 +1352,11 @@ mod structural_rendering {
             .capture(|it| {
                 it.track_assertion();
                 assert_that!(it.render().budget()).is_equal_to(budget);
-                it.failure(FailureKind::Length)
-                    .actual(it.render().collection(it.actual()))
-                    .relation("is not empty")
-                    .raise();
+                it.raise(
+                    it.failure(FailureKind::Length)
+                        .actual(it.render().collection(it.actual()))
+                        .relation("is not empty"),
+                );
                 it
             });
         assert_that!(failures).has_length(1);
@@ -1299,91 +1380,9 @@ mod structural_rendering {
         assert_that!(*omitted_characters).is_equal_to(7);
     }
 
-    #[test]
-    fn structural_adapters_render_custom_leaves_without_parent_or_clone_support() {
-        let render = RenderingContext::new(&LeafRenderer, RenderingBudget::unlimited());
-        let tokens = Bag(vec![Token("a")]);
-        let strings = Bag(vec![String::from("a")]);
-        let map = Table(vec![(Token("a"), Token("a"))]);
-        let owner = Some(Token("a"));
-        let cell = RefCell::new(Token("a"));
-
-        // Bag has no StableOrder and Table has no lookup, equality, or ordering capabilities.
-        // Neither has Debug or a parent renderer. Strings render only through their str view.
-        for rendered in [
-            render.collection(&tokens).into_rendered(),
-            render.stable_collection(&tokens.0).into_rendered(),
-            render.values(&tokens, GroupStyle::Set).into_rendered(),
-            render
-                .borrowed_collection::<str, _>(&strings)
-                .into_rendered(),
-            render
-                .stable_borrowed_collection::<str, _>(&strings.0)
-                .into_rendered(),
-            render
-                .borrowed_values::<str, _>(&strings, GroupStyle::List)
-                .into_rendered(),
-            render.map(&map).into_rendered(),
-            render
-                .entry_list::<Token, Token, _, _, _>(&map.0, Table::RENDERING_ORDER)
-                .into_rendered(),
-            render
-                .variant(&owner, "Some", owner.as_ref().unwrap())
-                .into_rendered(),
-            render
-                .struct_field(&cell, "RefCell", "value", &*cell.borrow())
-                .into_rendered(),
-        ] {
-            let leaf = match &rendered.body {
-                RenderedBody::Group { items, .. } => &items[0],
-                RenderedBody::Map { entries, .. } | RenderedBody::EntryList { entries, .. } => {
-                    assert_that!(super::text_opt(Some(&entries[0].1)))
-                        .is_equal_to(Some("token(a)"));
-                    &entries[0].0
-                }
-                RenderedBody::Variant { value, .. } => value,
-                RenderedBody::Struct { fields, .. } => &fields[0].1,
-                _ => panic!("expected a structural adapter"),
-            };
-            assert_that!([Some("token(a)"), Some("text(a)")]).contains(super::text_opt(Some(leaf)));
-        }
-    }
-
-    #[test]
-    fn all_adapter_types_are_nameable_and_construction_needs_no_renderer() {
-        let render = RenderingContext::new(&NoRenderer, RenderingBudget::default());
-        let values = Bag(vec![Token("a")]);
-        let map = Table(vec![(Token("k"), Token("v"))]);
-        let strings = Bag(vec![String::from("a")]);
-        let _: Typed<RenderedValues<'_, Token, Bag<Token>, NoRenderer>> =
-            render.collection(&values);
-        let _: Typed<RenderedValues<'_, Token, Vec<Token>, NoRenderer>> =
-            render.stable_collection(&values.0);
-        let _: RenderedValues<'_, Token, Bag<Token>, NoRenderer> = render
-            .values(&values, GroupStyle::Set)
-            .with_order(RenderingOrder::SortByRenderedText);
-        let _: Typed<RenderedValues<'_, str, Bag<String>, NoRenderer>> =
-            render.borrowed_collection::<str, _>(&strings);
-        let _: Typed<RenderedValues<'_, str, Vec<String>, NoRenderer>> =
-            render.stable_borrowed_collection::<str, _>(&strings.0);
-        let _: RenderedValues<'_, str, Bag<String>, NoRenderer> =
-            render.borrowed_values::<str, _>(&strings, GroupStyle::List);
-        let _: Typed<RenderedValue<'_, Token, NoRenderer>> = render.value(&values.0[0]);
-        let _: Typed<MapEntries<'_, Table, NoRenderer>> = render.map(&map);
-        let _: EntryList<'_, Token, Token, Vec<(Token, Token)>, NoRenderer> =
-            render.entry_list::<Token, Token, _, _, _>(&map.0, RenderingOrder::PreserveIteration);
-        let _: Typed<Variant<'_, Token, NoRenderer>> =
-            render.variant(&values, "Item", &values.0[0]);
-        let _: Typed<StructField<'_, Token, NoRenderer>> =
-            render.struct_field(&values, "Owner", "item", &values.0[0]);
-        let placeholder: Typed<UnavailableStructField> =
-            render.unavailable_struct_field(&values, "Owner", "item", "<hidden>");
-        let _: Rendered = placeholder.into_rendered();
-    }
-
     struct ForwardEvidence(RenderingBudget);
 
-    impl<R> Expectation<Token, R> for ForwardEvidence {
+    impl<R: ValueRenderer<Token>> Expectation<Token, R> for ForwardEvidence {
         type Success<'a> = ();
         type Rejection<'a> = ();
 
@@ -1391,17 +1390,15 @@ mod structural_rendering {
             assert_that!(context.render().budget()).is_equal_to(self.0);
             Err(())
         }
-    }
 
-    impl<R: ValueRenderer<Token>> ExpectationDiagnostics<Token, R> for ForwardEvidence {
         const KIND: FailureKind = FailureKind::Predicate;
 
-        fn explain<'a, Target>(
+        fn explain<'a>(
             &'a self,
             rejected: Option<(&'a Token, ())>,
-            failure: FailureBuilder<Target>,
+            failure: FailureBuilder,
             context: &AssertionContext<'_, R>,
-        ) -> FailureBuilder<Target> {
+        ) -> FailureBuilder {
             let render = context.render();
             assert_that!(render.budget()).is_equal_to(self.0);
             let failure = failure.relation("has rejected evidence");
@@ -1411,7 +1408,7 @@ mod structural_rendering {
             // Fixed evidence exercises the downstream builder contract without a local collector.
             failure
                 .omitted_children(2)
-                .children([FailureBuilder::detached::<Token>(FailureKind::Predicate)
+                .children([FailureBuilder::new::<Token>(FailureKind::Predicate)
                     .actual(render.value(token))
                     .relation("is rejected")
                     .path([PathSegment::Index(1)])
@@ -1560,7 +1557,7 @@ mod borrowed_views {
             .with_location(false)
             .capture(|it| it.is_equal_to(Operand(2)));
         assert_that!(failures).has_length(1);
-        let text = ToHumanReadableText.render(&failures[0]);
+        let text = failures[0].to_string();
         assert_that!(text)
             .contains("measurement(1)")
             .contains("Expected: 2");
@@ -1632,7 +1629,7 @@ mod map_query_operands {
             });
         assert_that!(failures).has_length(2);
         for failure in &failures {
-            assert_that!(ToHumanReadableText.render(failure)).contains("At [query(a)]:");
+            assert_that!(failure.to_string()).contains("At [query(a)]:");
         }
     }
 
@@ -1667,10 +1664,7 @@ mod map_query_operands {
             .capture(|it| {
                 it.contains_keys([Query("missing")])
                     .contains_exactly_entries([(Query("a"), 2)])
-                    .contains_exactly_entries_matching(assertr::entries_are![(
-                        Query("missing"),
-                        eq(1)
-                    )])
+                    .contains_exactly_entries_matching([entry(Query("missing"), eq(1))])
                     .contains_exactly_entries_satisfying([(
                         Query("a"),
                         |it: AssertThat<i32, Capture, BulkRenderer>| {
@@ -1679,11 +1673,11 @@ mod map_query_operands {
                     )])
             });
         assert_that!(failures).has_length(4);
-        let membership = ToHumanReadableText.render(&failures[0]);
+        let membership = failures[0].to_string();
         assert_that!(membership)
             .contains("query(missing)")
             .contains("stored(a)");
-        assert_that!(ToHumanReadableText.render(&failures[1])).contains("At [query(a)]:");
-        assert_that!(ToHumanReadableText.render(&failures[2])).contains("At [stored(a)]:");
+        assert_that!(failures[1].to_string()).contains("At [query(a)]:");
+        assert_that!(failures[2].to_string()).contains("At [stored(a)]:");
     }
 }

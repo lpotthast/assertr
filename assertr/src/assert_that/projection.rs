@@ -4,31 +4,32 @@ use core::future::Future;
 use crate::{AssertThat, actual::Actual, mode::Mode};
 
 impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
-    pub(crate) fn replace_actual_with<'u, U>(
-        self,
-        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
-        // requiring only one type, which is the type we want to map to.
-        new_actual: Actual<'u, U>,
-    ) -> (Actual<'t, T>, AssertThat<'u, U, M, R>)
-    where
-        't: 'u,
-    {
+    /// Takes the owned subject for an operation that consumes it, continuing on a unit subject
+    /// with the same chain state.
+    ///
+    /// # Panics
+    ///
+    /// Panics with `misuse` if the subject is borrowed.
+    #[track_caller]
+    pub(crate) fn take_owned(self, misuse: &'static str) -> (T, AssertThat<'t, (), M, R>) {
         let AssertThat { actual, state } = self;
-        let mapped = AssertThat {
-            actual: new_actual,
-            state,
+        let Actual::Owned(actual) = actual else {
+            panic!("{misuse}")
         };
-        (actual, mapped)
+        (
+            actual,
+            AssertThat {
+                actual: Actual::Owned(()),
+                state,
+            },
+        )
     }
 
     /// Maps the assertion subject while preserving the chain state.
+    // The mapper is an `impl` argument rather than a named type parameter, so callers can name
+    // just the target type, as in `.map::<String>(...)`. The same applies to `map_owned`.
     #[must_use]
-    pub fn map<U>(
-        self,
-        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
-        // requiring only one type, which is the type we want to map to.
-        mapper: impl FnOnce(Actual<T>) -> Actual<U>,
-    ) -> AssertThat<'t, U, M, R> {
+    pub fn map<U>(self, mapper: impl FnOnce(Actual<T>) -> Actual<U>) -> AssertThat<'t, U, M, R> {
         let AssertThat { actual, state } = self;
         AssertThat {
             actual: mapper(actual),
@@ -41,8 +42,6 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     #[must_use]
     pub fn map_owned<U>(
         self,
-        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
-        // requiring only one type, which is the type we want to map to.
         mapper: impl FnOnce(<T as ToOwned>::Owned) -> U,
     ) -> AssertThat<'t, U, M, R>
     where
@@ -60,8 +59,6 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     #[must_use]
     pub async fn map_async<U: 't, Fut>(
         self,
-        // Note: Not using an explicit generic typename allows calls like `.map<String>(...)`,
-        // requiring only one type, which is the type we want to map to.
         mapper: impl FnOnce(Actual<T>) -> Fut,
     ) -> AssertThat<'t, U, M, R>
     where
@@ -104,7 +101,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     {
         AssertThat {
             actual: Actual::Owned(mapper(self.actual())),
-            state: self.state.child(self.state.renderer.clone()),
+            state: self.state.child(),
         }
     }
 
@@ -161,7 +158,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     {
         AssertThat {
             actual: Actual::Borrowed(mapper(self.actual())),
-            state: self.state.child(self.state.renderer.clone()),
+            state: self.state.child(),
         }
     }
 
@@ -194,7 +191,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     {
         AssertThat {
             actual: Actual::Owned(mapper(self.actual()).await),
-            state: self.state.child(self.state.renderer.clone()),
+            state: self.state.child(),
         }
     }
 
@@ -356,7 +353,7 @@ mod tests {
                 )
             });
 
-        assert_that!(ToHumanReadableText.render(&failures[0])).contains(SENTINEL);
+        assert_that!(failures[0].to_string()).contains(SENTINEL);
     }
 
     #[test]
@@ -394,17 +391,14 @@ mod tests {
             root
         });
 
-        assert_that!(failures.as_slice())
+        assert_that!(&failures[..])
             .contains_exactly_matching(crate::expectation::predicate_list([
-                |it: &AssertionFailure| ToHumanReadableText.render(it).contains("Expected: 4"),
+                |it: &AssertionFailure| it.to_string().contains("Expected: 4"),
             ]))
             .contains_exactly_satisfying([|it: AssertThat<AssertionFailure, Capture>| {
-                it.satisfies_owned(
-                    |failure| ToHumanReadableText.render(failure),
-                    |description| {
-                        description.contains("Expected: 4");
-                    },
-                );
+                it.satisfies_owned(ToString::to_string, |description| {
+                    description.contains("Expected: 4");
+                });
             }]);
     }
 
@@ -438,10 +432,8 @@ mod tests {
                 )
             });
 
-        assert_that!(failures.as_slice()).contains_exactly_matching(
-            crate::expectation::predicate_list([|it: &AssertionFailure| {
-                ToHumanReadableText.render(it).contains("xyz")
-            }]),
-        );
+        assert_that!(&failures[..]).contains_exactly_matching(crate::expectation::predicate_list(
+            [|it: &AssertionFailure| it.to_string().contains("xyz")],
+        ));
     }
 }

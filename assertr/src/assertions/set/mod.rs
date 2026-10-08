@@ -200,7 +200,7 @@ mod tests {
         assert_that!(&failures).contains_exactly_satisfying([
             |element: AssertThat<AssertionFailure, Capture>| {
                 element
-                    .derive_owned(|value| ToHumanReadableText.render(value))
+                    .derive_owned(ToString::to_string)
                     .contains("Actual: BTreeSet {");
             },
         ]);

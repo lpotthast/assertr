@@ -13,7 +13,10 @@ mod catalog {
         }
         let expected = partial!(User {
             name: string::Contains::new("da"),
-            roles: all_of((collection::Contains::new("reader"), HasLengthOf::new(2))),
+            roles: all_of(matchers![
+                collection::Contains::new("reader"),
+                HasLengthOf::new(2)
+            ]),
             id: IsSome,
         });
         assert_that!(User {
@@ -312,5 +315,39 @@ mod borrowed_comparisons {
             label: eq(&String::from("point")),
         }));
         assert_that!([&point]).contains_matching(dereferenced(eq(Point(1, 2))));
+    }
+}
+
+/// Matcher evidence belongs to the failure that produced it, never to a later failure.
+mod matcher_differences {
+    use assertr::{matchers::eq, prelude::*};
+
+    #[test]
+    fn matcher_differences_are_scoped_to_the_failure_that_produced_them() {
+        #[derive(Debug, PartialEq)]
+        struct Data {
+            pub age: u32,
+        }
+
+        let failures = assert_that!(Data { age: 30 })
+            .with_location(false)
+            .capture(|it| {
+                it.matches(partial!(Data { age: eq(31) }))
+                    .matches(partial!(Data { age: eq(32) }))
+            });
+
+        assert_that!(&failures).contains_exactly_satisfying([
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(ToString::to_string)
+                    .contains("Expected: 31");
+            },
+            |element: AssertThat<AssertionFailure, Capture>| {
+                element
+                    .derive_owned(ToString::to_string)
+                    .contains("Expected: 32")
+                    .does_not_contain("Expected: 31");
+            },
+        ]);
     }
 }

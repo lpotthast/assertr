@@ -1,26 +1,5 @@
 use core::fmt;
 
-/// How sensitivity-aware assertions prepare values for a renderer.
-///
-/// Reqwest response `has_header_value` and `does_not_have_header` consult this policy before
-/// rendering a header. It does not change generic value rendering, such as direct equality on
-/// a `HeaderValue`, or require assertions to inspect opaque values for sensitive contents.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum SensitiveValuePolicy {
-    /// Pass the original value and its sensitivity metadata to the renderer.
-    ///
-    /// This is the default for custom renderers. The renderer controls redaction in its
-    /// [`ValueRenderer::fmt`] implementation. This policy does not itself mask values.
-    Preserve,
-
-    /// Pass a diagnostic copy with its sensitivity flag cleared to the renderer.
-    ///
-    /// The asserted value stays unchanged. Values not marked sensitive are passed through
-    /// directly. [`DebugRenderer`] selects this policy so header contents appear in test failures.
-    Reveal,
-}
-
 /// Formats individual values in assertion diagnostics.
 ///
 /// A `ValueRenderer<T>` writes one `&T` to a [`fmt::Formatter`]. Assertr controls the surrounding
@@ -45,14 +24,12 @@ pub enum SensitiveValuePolicy {
 ///
 /// Custom leaf assertions access the active renderer through
 /// [`AssertThat::render`](crate::AssertThat::render). Render every value included in their failure
-/// text with [`RenderingContext::value`](crate::renderer::RenderingContext::value),
-/// [`RenderingContext::values`](crate::renderer::RenderingContext::values), or
-/// [`RenderingContext::borrowed_values`](crate::renderer::RenderingContext::borrowed_values) so
+/// text with [`RenderingContext::value`](crate::renderer::RenderingContext::value) or the context's
+/// structural methods, such as
+/// [`RenderingContext::borrowed_values`](crate::renderer::RenderingContext::borrowed_values), so
 /// custom renderers and the chain's [`RenderingBudget`](crate::RenderingBudget) remain effective.
-/// Use [`Typed::with_type_hint`](crate::renderer::Typed::with_type_hint) to customize the type
-/// metadata retained automatically for a leaf value, and
-/// [`Typed::show_type_hint`](crate::renderer::Typed::show_type_hint) to control whether text output
-/// shows it.
+/// Use [`Rendered::show_type_hint`](crate::renderer::Rendered::show_type_hint) to control whether
+/// text output shows a value's short type hint.
 ///
 /// # Render leaf values, not structural wrappers
 ///
@@ -80,9 +57,10 @@ pub enum SensitiveValuePolicy {
 ///
 /// # Pretty-printing
 ///
-/// Assertion templates render values with `{value:#?}`, so the [`fmt::Formatter`] passed to
+/// Assertions render values with `{value:#?}`, so the [`fmt::Formatter`] passed to
 /// [`ValueRenderer::fmt`] carries `f.alternate() == true` (the same flag `{:#?}` sets for
-/// [`fmt::Debug`]). Renderers that want to honor pretty vs. compact output should branch on it.
+/// [`fmt::Debug`]). Inline evidence, such as map keys in failure paths, uses the compact form.
+/// Renderers that want to honor pretty vs. compact output should branch on it.
 /// [`DebugRenderer`] forwards directly to [`fmt::Debug::fmt`], so it honors the flag automatically.
 ///
 /// ```
@@ -118,25 +96,9 @@ pub trait ValueRenderer<T: ?Sized> {
     ///
     /// Returns an error if writing to `f` fails.
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result;
-
-    /// Selects how sensitivity-aware assertions prepare values before calling [`Self::fmt`].
-    ///
-    /// The default, [`SensitiveValuePolicy::Preserve`], passes the original value with its
-    /// sensitivity metadata intact. [`SensitiveValuePolicy::Reveal`] requests a diagnostic copy
-    /// with its sensitivity flag cleared. The original subject is never changed.
-    ///
-    /// Currently, reqwest response `has_header_value` and `does_not_have_header` consult this
-    /// policy. Generic value rendering still calls `fmt` with the original value directly.
-    ///
-    /// Renderer adapters should forward this method when preserving another renderer's policy.
-    #[must_use]
-    fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
-        SensitiveValuePolicy::Preserve
-    }
 }
 
-/// A borrowed renderer renders exactly like the renderer it refers to, including its
-/// [`SensitiveValuePolicy`].
+/// A borrowed renderer renders exactly like the renderer it refers to.
 ///
 /// References are `Copy`, so `with_renderer(&renderer)` satisfies the `Clone` requirement of
 /// derived assertions even when the renderer itself does not implement `Clone`.
@@ -144,17 +106,9 @@ impl<T: ?Sized, R: ValueRenderer<T> + ?Sized> ValueRenderer<T> for &R {
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (**self).fmt(value, f)
     }
-
-    fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
-        (**self).sensitive_value_policy()
-    }
 }
 
 /// The default renderer. Delegates to [`fmt::Debug`].
-///
-/// Selects [`SensitiveValuePolicy::Reveal`] so reqwest response header assertions display
-/// header contents even when marked sensitive, using an unmarked diagnostic copy.
-/// Generic assertions, such as equality on a `HeaderValue`, retain its own `Debug` behavior.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DebugRenderer;
 
@@ -162,10 +116,6 @@ pub struct DebugRenderer;
 impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for DebugRenderer {
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(value, f)
-    }
-
-    fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
-        SensitiveValuePolicy::Reveal
     }
 }
 
@@ -187,12 +137,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloc::format;
     use core::fmt;
 
     use crate::prelude::*;
-
-    use super::SensitiveValuePolicy;
 
     /// Deliberately neither `Clone` nor `Copy`.
     struct Labelled(&'static str);
@@ -201,26 +148,10 @@ mod tests {
         fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{}({value})", self.0)
         }
-
-        fn sensitive_value_policy(&self) -> SensitiveValuePolicy {
-            SensitiveValuePolicy::Reveal
-        }
     }
 
     mod borrowed_renderer {
         use super::*;
-
-        #[test]
-        fn forwards_formatting_and_the_sensitive_value_policy() {
-            let renderer = Labelled("value");
-            let borrowed = &renderer;
-
-            assert_that!(ValueRenderer::<i32>::sensitive_value_policy(&borrowed))
-                .is_equal_to(SensitiveValuePolicy::Reveal);
-            let rendering =
-                crate::renderer::RenderingContext::new(&borrowed, RenderingBudget::default());
-            assert_that!(format!("{:?}", rendering.value(&1))).is_equal_to("value(1)");
-        }
 
         #[test]
         fn renders_derived_assertions_without_a_clone_renderer() {
@@ -235,7 +166,7 @@ mod tests {
                 });
 
             assert_that!(failures).has_length(1);
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains("value(1)");
+            assert_that!(failures[0].to_string()).contains("value(1)");
         }
     }
 }

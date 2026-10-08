@@ -1,10 +1,17 @@
 use super::{
-    AssertThat, AssertionContext, Borrow, FailureBuilder, FailureKind, GroupStyle, KnownLength,
-    LengthBound, Mode, PREVIEW_CAPACITY, PhantomData, Preview, Scan, Tail, ValueRenderer, execute,
+    AssertionContext, Borrow, FailureBuilder, FailureKind, KnownLength, LengthBound,
+    PREVIEW_CAPACITY, PhantomData, RenderingOrder, Scan, Tail, ValueRenderer,
 };
 use crate::Fact;
 
-struct IsEmpty<T>(PhantomData<fn() -> T>);
+/// Requires an iterator to yield no element, consuming at most one.
+pub(crate) struct IsEmpty<T>(PhantomData<fn() -> T>);
+
+impl<T> IsEmpty<T> {
+    pub(crate) const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
 
 impl<T, I, R> Scan<I, R> for IsEmpty<T>
 where
@@ -13,34 +20,44 @@ where
     R: ValueRenderer<T> + ValueRenderer<usize>,
 {
     type Rejection = I::Item;
-    const KIND: FailureKind = FailureKind::Length;
+
+    fn kind(&self) -> FailureKind {
+        FailureKind::Length
+    }
 
     fn observe(
         &self,
         iterator: &mut I,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
-        match iterator.next() {
-            Some(item) => Err(item),
-            None => Ok(()),
-        }
+        iterator.next().map_or(Ok(()), Err)
     }
 
-    fn explain<Target>(
+    fn explain(
         &self,
         item: Self::Rejection,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         failure
-            .actual(render.borrowed_values::<T, _>(core::slice::from_ref(&item), GroupStyle::List))
+            .actual(render.borrowed_values::<T, _>(
+                core::slice::from_ref(&item),
+                RenderingOrder::PreserveIteration,
+            ))
             .relation("is not empty")
             .fact(Fact::labelled("Consumed elements", render.value(&1_usize)))
     }
 }
 
-struct IsNotEmpty<T>(PhantomData<fn() -> T>);
+/// Requires an iterator to yield at least one element, consuming at most one.
+pub(crate) struct IsNotEmpty<T>(PhantomData<fn() -> T>);
+
+impl<T> IsNotEmpty<T> {
+    pub(crate) const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
 
 impl<T, I, R> Scan<I, R> for IsNotEmpty<T>
 where
@@ -49,47 +66,55 @@ where
     R: ValueRenderer<T>,
 {
     type Rejection = ();
-    const KIND: FailureKind = FailureKind::Length;
 
-    fn observe(&self, iterator: &mut I, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if iterator.next().is_some() {
-            Ok(())
-        } else {
-            Err(())
-        }
+    fn kind(&self) -> FailureKind {
+        FailureKind::Length
     }
 
-    fn explain<Target>(
+    fn observe(&self, iterator: &mut I, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        iterator.next().map(drop).ok_or(())
+    }
+
+    fn explain(
         &self,
         (): (),
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let empty: &[I::Item] = &[];
         failure
             .actual(
                 context
                     .render()
-                    .borrowed_values::<T, _>(empty, GroupStyle::List),
+                    .borrowed_values::<T, _>(empty, RenderingOrder::PreserveIteration),
             )
             .relation("is unexpectedly empty")
     }
 }
 
 /// Why a length scan rejected its input.
-enum LengthRejection<Item> {
+pub(crate) enum LengthRejection<Item> {
     /// An exact size hint ruled out the expected length before consuming anything.
     Reported(KnownLength),
     /// Counting decided the rejection. The count is exact if the input ended, and a lower bound
     /// otherwise.
-    Counted { preview: Preview<Item>, exact: bool },
+    Counted { tail: Tail<Item>, exact: bool },
 }
 
 /// Counts at most `expected + 1` elements. An exact size hint can only reject early. A hint that
 /// agrees with the expected length is verified by counting, because hints are not trusted.
-struct LengthScan<T> {
+pub(crate) struct LengthScan<T> {
     expected: usize,
     item: PhantomData<fn() -> T>,
+}
+
+impl<T> LengthScan<T> {
+    pub(crate) const fn new(expected: usize) -> Self {
+        Self {
+            expected,
+            item: PhantomData,
+        }
+    }
 }
 
 impl<T, I, R> Scan<I, R> for LengthScan<T>
@@ -99,7 +124,10 @@ where
     R: ValueRenderer<T> + ValueRenderer<usize>,
 {
     type Rejection = LengthRejection<I::Item>;
-    const KIND: FailureKind = FailureKind::Length;
+
+    fn kind(&self) -> FailureKind {
+        FailureKind::Length
+    }
 
     fn observe(
         &self,
@@ -122,86 +150,46 @@ where
             Ok(())
         } else {
             Err(LengthRejection::Counted {
-                preview: tail.finish(),
+                tail: tail.finish(),
                 exact,
             })
         }
     }
 
-    fn explain<Target>(
+    fn explain(
         &self,
         rejection: Self::Rejection,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let failure = failure
             .relation("does not have the expected length")
             .expected(render.value(&self.expected));
         match rejection {
             LengthRejection::Reported(known) => known.reported_fact(failure, render),
-            LengthRejection::Counted { preview, exact } => {
-                let failure =
-                    failure
-                        .actual(preview.rendered::<T, _>(render))
-                        .fact(Fact::labelled(
-                            if exact {
-                                "Actual length"
-                            } else {
-                                "Minimum actual length"
-                            },
-                            render.value(&preview.consumed),
-                        ));
-                preview.omission(failure)
+            LengthRejection::Counted { tail, exact } => {
+                let failure = failure
+                    .actual(tail.rendered::<T, _>(render))
+                    .fact(Fact::labelled(
+                        if exact {
+                            "Actual length"
+                        } else {
+                            "Minimum actual length"
+                        },
+                        render.value(&tail.consumed),
+                    ));
+                tail.omission(failure)
             }
         }
     }
 }
 
-#[track_caller]
-pub(crate) fn assert_is_empty<S, T, I, M: Mode, R>(this: &AssertThat<'_, S, M, R>, iterator: I)
-where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    R: ValueRenderer<T> + ValueRenderer<usize>,
-{
-    execute(this, iterator, &IsEmpty::<T>(PhantomData));
-}
-
-#[track_caller]
-pub(crate) fn assert_is_not_empty<S, T, I, M: Mode, R>(this: &AssertThat<'_, S, M, R>, iterator: I)
-where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    R: ValueRenderer<T>,
-{
-    execute(this, iterator, &IsNotEmpty::<T>(PhantomData));
-}
-
-#[track_caller]
-pub(crate) fn assert_has_length<S, T, I, M: Mode, R>(
-    this: &AssertThat<'_, S, M, R>,
-    iterator: I,
-    expected: usize,
-) where
-    I: Iterator,
-    I::Item: Borrow<T>,
-    R: ValueRenderer<T> + ValueRenderer<usize>,
-{
-    execute(
-        this,
-        iterator,
-        &LengthScan::<T> {
-            expected,
-            item: PhantomData,
-        },
-    );
-}
-
 #[cfg(test)]
 mod tests {
-    mod assert_has_length {
-        use super::super::assert_has_length;
+    mod length_scan {
+        use super::super::LengthScan;
+        use crate::assertions::iterator::run;
         use crate::{
             AssertionFailures,
             prelude::*,
@@ -251,15 +239,11 @@ mod tests {
             let failures = assert_that!(())
                 .with_renderer(Renderer(&drops))
                 .capture(|it| {
-                    it.track_assertion();
-                    assert_has_length(
-                        &it,
-                        ObservedIterator {
-                            hints: &hints,
-                            drops: &drops,
-                        },
-                        3,
-                    );
+                    let iterator = ObservedIterator {
+                        hints: &hints,
+                        drops: &drops,
+                    };
+                    run(&it, || (iterator, LengthScan::<i32>::new(3)));
                     it
                 });
             assert_that!(hints.get()).is_equal_to(1);
@@ -277,8 +261,7 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(budget)
                 .capture(|it| {
-                    it.track_assertion();
-                    assert_has_length(&it, iterator, expected);
+                    run(&it, || (iterator, LengthScan::<i32>::new(expected)));
                     it
                 })
         }

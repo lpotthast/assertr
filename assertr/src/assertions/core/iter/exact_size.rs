@@ -1,6 +1,6 @@
 use crate::DebugRenderer;
 use crate::{
-    AssertThat, AssertionContext, Expectation, ExpectationDiagnostics, Mode, ValueRenderer,
+    AssertThat, AssertionContext, Expectation, Mode, ValueRenderer,
     failure::{Fact, FailureBuilder, FailureKind},
 };
 
@@ -15,7 +15,10 @@ impl HasRemainingCount {
     }
 }
 
-impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingCount {
+impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingCount
+where
+    R: ValueRenderer<usize>,
+{
     type Success<'a>
         = ()
     where
@@ -39,20 +42,15 @@ impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingCount {
             Err(length)
         }
     }
-}
 
-impl<I: ExactSizeIterator, R> ExpectationDiagnostics<I, R> for HasRemainingCount
-where
-    R: ValueRenderer<usize>,
-{
     const KIND: FailureKind = FailureKind::Length;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a I, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         let failure = match rejected {
             None => failure.relation("has remaining count"),
@@ -71,7 +69,10 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct HasNoRemainingElements;
 
-impl<I: ExactSizeIterator, R> Expectation<I, R> for HasNoRemainingElements {
+impl<I: ExactSizeIterator, R> Expectation<I, R> for HasNoRemainingElements
+where
+    R: ValueRenderer<usize>,
+{
     type Success<'a>
         = ()
     where
@@ -91,20 +92,15 @@ impl<I: ExactSizeIterator, R> Expectation<I, R> for HasNoRemainingElements {
         let length = actual.len();
         if length == 0 { Ok(()) } else { Err(length) }
     }
-}
 
-impl<I: ExactSizeIterator, R> ExpectationDiagnostics<I, R> for HasNoRemainingElements
-where
-    R: ValueRenderer<usize>,
-{
     const KIND: FailureKind = FailureKind::Length;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a I, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
         match rejected {
             None => failure.relation("has no remaining elements"),
@@ -139,17 +135,15 @@ impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingElements {
         let length = actual.len();
         if length != 0 { Ok(()) } else { Err(()) }
     }
-}
 
-impl<I: ExactSizeIterator, R> ExpectationDiagnostics<I, R> for HasRemainingElements {
     const KIND: FailureKind = FailureKind::Length;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a I, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => failure.relation("has remaining elements"),
             Some((_, ())) => failure.relation("has no remaining elements"),
@@ -198,6 +192,18 @@ impl<I: ExactSizeIterator, M: Mode, R> ExactSizeIteratorAssertions<R> for Assert
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            [1, 2].into_iter().must().have_remaining_count(2);
+            [1].into_iter().skip(1).must().have_no_remaining_elements();
+            [1, 2].into_iter().must().have_remaining_elements();
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};
@@ -209,6 +215,19 @@ mod tests {
                     => ExactSizeIteratorAssertions<NoRenderer>
             );
         }
+
+        #[test]
+        fn counts_use_the_active_renderer() {
+            use crate::test_support::{
+                CustomValueRenderer, assert_custom_fact, assert_custom_value,
+            };
+            let failures = assert_that!([1, 2].into_iter())
+                .with_renderer(CustomValueRenderer)
+                .capture(|it| it.has_remaining_count(3).has_no_remaining_elements());
+            assert_custom_value(failures[0].expected.as_ref().unwrap(), &3_usize);
+            assert_custom_fact(&failures[0], "Actual remaining count", 2);
+            assert_custom_fact(&failures[1], "Remaining count", 2);
+        }
     }
 
     mod has_remaining_count {
@@ -216,44 +235,8 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2].into_iter().must().have_remaining_count(2);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!([1, 2].into_iter()), has_remaining_count(3));
-        }
-
-        #[test]
-        fn remaining_counts_are_rendered_usize_values() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{CustomValueRenderer, assert_custom_value};
-            let failures = assert_that!([1, 2].into_iter())
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(|it| it.has_remaining_count(3));
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2].into_iter()`
-
-                does not have the expected remaining count
-
-                Expected: custom(3)
-
-                Details:
-                  - Actual remaining count: custom(2)
-                -------- assertr --------
-            "});
-
-                    assert_custom_value(&element.actual().facts[0].value, &2_usize);
-                    assert_custom_value(element.actual().expected.as_ref().unwrap(), &3_usize);
-                },
-            ]);
         }
 
         #[test]
@@ -293,44 +276,11 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1].into_iter().skip(1).must().have_no_remaining_elements();
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!([1, 2].into_iter()),
                 has_no_remaining_elements()
             );
-        }
-
-        #[test]
-        fn remaining_counts_are_rendered_usize_values() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{CustomValueRenderer, assert_custom_value};
-            let failures = assert_that!([1, 2].into_iter())
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(ExactSizeIteratorAssertions::has_no_remaining_elements);
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2].into_iter()`
-
-                unexpectedly has remaining elements
-
-                Details:
-                  - Remaining count: custom(2)
-                -------- assertr --------
-            "});
-
-                    assert_custom_value(&element.actual().facts[0].value, &2_usize);
-                },
-            ]);
         }
 
         #[test]
@@ -362,12 +312,6 @@ mod tests {
     mod has_remaining_elements {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            [1, 2].into_iter().must().have_remaining_elements();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {

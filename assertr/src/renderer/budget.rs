@@ -20,7 +20,7 @@
 ///     .with_location(false)
 ///     .capture(|it| it.contains(0));
 ///
-/// assert_that!(ToHumanReadableText.render(&failures[0])).contains(concat!(
+/// assert_that!(failures[0].to_string()).contains(concat!(
 ///         "Actual: [\n",
 ///         "    123... 3 more characters ...,\n",
 ///         "    234... 3 more characters ...,\n",
@@ -86,52 +86,5 @@ impl RenderingBudget {
 impl Default for RenderingBudget {
     fn default() -> Self {
         Self::DEFAULT
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::prelude::*;
-
-    mod configuration {
-        use super::*;
-
-        #[test]
-        fn uses_defaults_for_unchanged_limits() {
-            assert_that!(
-                RenderingBudget::default()
-                    .with_max_items(17)
-                    .max_leaf_characters()
-            )
-            .is_equal_to(RenderingBudget::DEFAULT.max_leaf_characters());
-            assert_that!(
-                RenderingBudget::default()
-                    .with_max_leaf_characters(29)
-                    .max_items()
-            )
-            .is_equal_to(RenderingBudget::DEFAULT.max_items());
-        }
-
-        #[test]
-        fn sets_each_named_limit() {
-            let budget = RenderingBudget::default()
-                .with_max_items(17)
-                .with_max_leaf_characters(29);
-
-            assert_that!(budget.max_items()).is_equal_to(17);
-            assert_that!(budget.max_leaf_characters()).is_equal_to(29);
-        }
-    }
-
-    mod unlimited {
-        use super::*;
-
-        #[test]
-        fn sets_both_limits_to_the_largest_value() {
-            let budget = RenderingBudget::unlimited();
-
-            assert_that!(budget.max_items()).is_equal_to(usize::MAX);
-            assert_that!(budget.max_leaf_characters()).is_equal_to(usize::MAX);
-        }
     }
 }

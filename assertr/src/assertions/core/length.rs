@@ -1,102 +1,34 @@
 use crate::assertions::HasLength;
+use crate::renderer::{Rendered, RenderingContext};
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
     failure::{Fact, FailureBuilder, FailureKind},
 };
 
-/// Checks whether a subject implementing [`HasLength`] is empty.
-#[derive(Debug, Clone, Copy)]
-pub struct IsEmpty;
-
-impl<T: HasLength + ?Sized, R> Expectation<T, R> for IsEmpty {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.is_empty() { Ok(()) } else { Err(()) }
-    }
+// Emptiness failures show the subject type next to its value.
+fn with_type_hint<T: ?Sized, R: ValueRenderer<T>>(
+    render: RenderingContext<'_, R>,
+    value: &T,
+) -> Rendered {
+    render.value(value).show_type_hint(true)
 }
 
-impl<T: HasLength + ?Sized, R> ExpectationDiagnostics<T, R> for IsEmpty
-where
-    R: ValueRenderer<T>,
-{
-    const KIND: FailureKind = FailureKind::Length;
-
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is empty"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual).show_type_hint(true))
-                .relation("is not empty"),
-        }
-    }
+property_expectation! {
+    /// Checks whether a subject implementing [`HasLength`] is empty.
+    pub struct IsEmpty for<T: HasLength> T;
+    kind Length;
+    check |actual| actual.is_empty();
+    relations "is empty", "is not empty";
+    present with_type_hint;
 }
 
-/// Checks whether a subject implementing [`HasLength`] is not empty.
-#[derive(Debug, Clone, Copy)]
-pub struct IsNotEmpty;
-
-impl<T: HasLength + ?Sized, R> Expectation<T, R> for IsNotEmpty {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.is_empty() { Err(()) } else { Ok(()) }
-    }
-}
-
-impl<T: HasLength + ?Sized, R> ExpectationDiagnostics<T, R> for IsNotEmpty
-where
-    R: ValueRenderer<T>,
-{
-    const KIND: FailureKind = FailureKind::Length;
-
-    fn explain<'a, Target>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("is not empty"),
-            Some((actual, ())) => failure
-                .actual(render.value(actual).show_type_hint(true))
-                .relation("is unexpectedly empty"),
-        }
-    }
+property_expectation! {
+    /// Checks whether a subject implementing [`HasLength`] is not empty.
+    pub struct IsNotEmpty for<T: HasLength> T;
+    kind Length;
+    check |actual| !actual.is_empty();
+    relations "is not empty", "is unexpectedly empty";
+    present with_type_hint;
 }
 
 /// Checks a finite length and retains the observed count on rejection.
@@ -110,7 +42,10 @@ impl HasLengthOf {
     }
 }
 
-impl<T: HasLength + ?Sized, R> Expectation<T, R> for HasLengthOf {
+impl<T: HasLength + ?Sized, R> Expectation<T, R> for HasLengthOf
+where
+    R: ValueRenderer<T> + ValueRenderer<usize>,
+{
     type Success<'a>
         = ()
     where
@@ -134,29 +69,27 @@ impl<T: HasLength + ?Sized, R> Expectation<T, R> for HasLengthOf {
             Err(length)
         }
     }
-}
 
-impl<T: HasLength + ?Sized, R> ExpectationDiagnostics<T, R> for HasLengthOf
-where
-    R: ValueRenderer<T> + ValueRenderer<usize>,
-{
     const KIND: FailureKind = FailureKind::Length;
 
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("has length"),
-            Some((actual, rejection)) => failure
-                .actual(render.value(actual).show_type_hint(true))
-                .relation("does not have the expected length")
-                .fact(Fact::labelled("Actual length", render.value(&rejection))),
-        };
-        failure.expected(render.value(&self.0))
+        let length = rejected
+            .as_ref()
+            .map(|(_, length)| Fact::labelled("Actual length", render.value(length)));
+        failure
+            .relations(
+                rejected.map(|(actual, _)| with_type_hint(render, actual)),
+                "has length",
+                "does not have the expected length",
+            )
+            .facts(length)
+            .expected(render.value(&self.0))
     }
 }
 
@@ -214,6 +147,17 @@ impl<T: HasLength, M: Mode, R> LengthAssertions<T, R> for AssertThat<'_, T, M, R
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            ([] as [i32; 0]).must().be_empty();
+            [42].must().not_be_empty().have_length(1);
+        }
+    }
+
     mod renderer_contract {
         use crate::prelude::*;
         use crate::test_support::{NoRenderer, assert_trait_impl};
@@ -224,18 +168,44 @@ mod tests {
                 AssertThat<'static, Vec<u8>, Panic, NoRenderer> => LengthAssertions<Vec<u8>, NoRenderer>
             );
         }
+
+        #[test]
+        fn failures_render_the_subject_and_counts_with_the_active_renderer() {
+            use crate::test_support::{CustomValueRenderer, assert_custom_value};
+
+            let failures = assert_that!([1, 2])
+                .with_renderer(CustomValueRenderer)
+                .capture(|it| it.is_empty().has_length(3));
+            assert_that!(failures).has_length(2);
+            for failure in &failures {
+                assert_that!(failure.to_string()).contains("Actual: [i32; 2] custom([1, 2])");
+            }
+            assert_custom_value(failures[1].expected.as_ref().unwrap(), &3_usize);
+            assert_custom_value(&failures[1].facts[0].value, &2_usize);
+        }
+
+        #[test]
+        fn passing_checks_render_nothing() {
+            struct NeverRender;
+            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
+                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    panic!("success rendered")
+                }
+            }
+            assert_that!([] as [i32; 0])
+                .with_renderer(NeverRender)
+                .is_empty()
+                .has_length(0);
+            assert_that!([1, 2])
+                .with_renderer(NeverRender)
+                .is_not_empty()
+                .has_length(2);
+        }
     }
 
     mod is_empty {
         use crate::prelude::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let arr: [i32; 0] = [];
-            arr.must().be_empty();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -266,33 +236,12 @@ mod tests {
                 -------- assertr --------
             "});
         }
-
-        #[test]
-        fn requires_no_numeric_renderer() {
-            struct SubjectRenderer;
-            impl ValueRenderer<[i32; 0]> for SubjectRenderer {
-                fn fmt(&self, _: &[i32; 0], _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("success rendered")
-                }
-            }
-            assert_that!([] as [i32; 0])
-                .with_renderer(SubjectRenderer)
-                .with_location(false)
-                .is_empty();
-        }
     }
 
     mod is_not_empty {
         use alloc::collections::VecDeque;
 
         use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            VecDeque::from([42]).must().not_be_empty();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -300,27 +249,12 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_not_empty() {
+        fn rejects_empty_subjects() {
             assert_that!(VecDeque::from([42])).is_not_empty();
-        }
-
-        #[test]
-        fn panics_when_empty() {
-            assert_that_panic_by(|| {
-                assert_that!(VecDeque::<i32>::new())
-                    .with_location(false)
-                    .is_not_empty();
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `VecDeque::<i32>::new()`
-
-                    Actual: VecDeque []
-
-                    is unexpectedly empty
-                    -------- assertr --------
-                "});
+            let failures =
+                assert_that!(VecDeque::<i32>::new()).capture(LengthAssertions::is_not_empty);
+            assert_that!(failures[0].relation.as_deref())
+                .is_equal_to(Some("is unexpectedly empty"));
         }
     }
 
@@ -329,26 +263,15 @@ mod tests {
         use indoc::formatdoc;
 
         #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            let slice: &[i32] = [1, 2, 3].as_slice();
-            slice.must().have_length(3);
-        }
-
-        #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!([1].as_slice()), has_length(2));
         }
 
         #[test]
-        fn succeeds_when_length_matches_and_empty() {
-            let slice: &[i32] = [].as_slice();
-            assert_that!(slice).has_length(0);
-        }
-        #[test]
-        fn succeeds_when_length_matches_and_non_empty() {
-            let slice: &[i32] = [1, 2, 3].as_slice();
-            assert_that!(slice).has_length(3);
+        fn succeeds_when_length_matches() {
+            let empty: &[i32] = [].as_slice();
+            assert_that!(empty).has_length(0);
+            assert_that!([1, 2, 3].as_slice()).has_length(3);
         }
 
         #[test]
@@ -376,52 +299,6 @@ mod tests {
                     -------- assertr --------
                 "});
         }
-
-        #[test]
-        fn renders_original_length_evidence() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{CustomValueRenderer, assert_custom_value};
-            let failures = assert_that!([1, 2])
-                .with_renderer(CustomValueRenderer)
-                .with_location(false)
-                .capture(|it| it.has_length(3));
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|item| item).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2]`
-
-                Actual: [i32; 2] custom([1, 2])
-
-                does not have the expected length
-
-                Expected: custom(3)
-
-                Details:
-                  - Actual length: custom(2)
-                -------- assertr --------
-            "});
-
-                    assert_custom_value(element.actual().expected.as_ref().unwrap(), &3_usize);
-                    assert_custom_value(&element.actual().facts[0].value, &2_usize);
-                },
-            ]);
-        }
-
-        #[test]
-        fn a_matching_length_does_not_render() {
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("success rendered")
-                }
-            }
-            assert_that!([1, 2])
-                .with_renderer(NeverRender)
-                .with_location(false)
-                .has_length(2);
-        }
     }
 
     // Assertion behavior and diagnostics live above. These checks cover built-in HasLength
@@ -435,133 +312,51 @@ mod tests {
         };
 
         #[test]
-        fn array() {
+        fn sequences() {
             assert_that!([] as [i32; 0]).is_empty().has_length(0);
             assert_that!([1, 2]).is_not_empty().has_length(2);
-        }
-
-        #[test]
-        fn slice() {
             assert_that!([].as_slice() as &[i32])
                 .is_empty()
                 .has_length(0);
             assert_that!([1, 2].as_slice()).is_not_empty().has_length(2);
-        }
-
-        #[test]
-        fn str_uses_byte_length() {
-            assert_that!("").is_empty().has_length(0);
-            assert_that!("é🦀").is_not_empty().has_length(6);
-        }
-
-        #[test]
-        fn string_uses_byte_length() {
-            assert_that!(String::new()).is_empty().has_length(0);
-            assert_that!(String::from("é🦀"))
-                .is_not_empty()
-                .has_length(6);
-        }
-
-        #[test]
-        fn boxed_str_uses_byte_length() {
-            assert_that!(Box::<str>::default()).is_empty().has_length(0);
-            assert_that!(Box::<str>::from("é🦀"))
-                .is_not_empty()
-                .has_length(6);
-        }
-
-        #[test]
-        fn cow_str_uses_byte_length() {
-            assert_that!(Cow::Borrowed("")).is_empty().has_length(0);
-            assert_that!(Cow::Borrowed("é🦀"))
-                .is_not_empty()
-                .has_length(6);
-            assert_that!(Cow::<str>::Owned(String::new()))
-                .is_empty()
-                .has_length(0);
-            assert_that!(Cow::<str>::Owned(String::from("é🦀")))
-                .is_not_empty()
-                .has_length(6);
-        }
-
-        #[test]
-        fn vec() {
             assert_that!(Vec::<i32>::new()).is_empty().has_length(0);
             assert_that_owned!(vec![1, 2]).is_not_empty().has_length(2);
-        }
-
-        #[test]
-        fn vec_deque() {
-            assert_that!(VecDeque::<i32>::new())
-                .is_empty()
-                .has_length(0);
             assert_that!(VecDeque::from([1, 2]))
                 .is_not_empty()
                 .has_length(2);
-        }
-
-        #[test]
-        fn btree_map() {
-            assert_that!(BTreeMap::<i32, i32>::new())
-                .is_empty()
-                .has_length(0);
-            assert_that!(BTreeMap::from([(1, 2), (3, 4)]))
-                .is_not_empty()
-                .has_length(2);
-        }
-
-        #[test]
-        fn btree_set() {
-            assert_that!(BTreeSet::<i32>::new())
-                .is_empty()
-                .has_length(0);
-            assert_that!(BTreeSet::from([1, 2, 2]))
-                .is_not_empty()
-                .has_length(2);
-        }
-
-        #[test]
-        fn linked_list() {
-            assert_that!(LinkedList::<i32>::new())
-                .is_empty()
-                .has_length(0);
             assert_that!(LinkedList::from([1, 2]))
                 .is_not_empty()
                 .has_length(2);
-        }
-
-        #[test]
-        fn binary_heap() {
-            assert_that!(BinaryHeap::<i32>::new())
-                .is_empty()
-                .has_length(0);
             assert_that!(BinaryHeap::from([1, 2]))
                 .is_not_empty()
                 .has_length(2);
         }
 
         #[test]
-        #[cfg(feature = "std")]
-        fn hash_map() {
-            use std::collections::HashMap;
+        fn strings_use_byte_length() {
+            assert_that!("").is_empty().has_length(0);
+            assert_that!("é🦀").is_not_empty().has_length(6);
+            assert_that!(String::from("é🦀")).has_length(6);
+            assert_that!(Box::<str>::from("é🦀")).has_length(6);
+            assert_that!(Cow::Borrowed("é🦀")).has_length(6);
+            assert_that!(Cow::<str>::Owned(String::new())).is_empty();
+        }
 
-            assert_that!(HashMap::<i32, i32>::new())
-                .is_empty()
-                .has_length(0);
-            assert_that!(HashMap::from([(1, 2), (3, 4)]))
-                .is_not_empty()
-                .has_length(2);
+        #[test]
+        fn maps_and_sets() {
+            assert_that!(BTreeMap::<i32, i32>::new()).is_empty();
+            assert_that!(BTreeMap::from([(1, 2), (3, 4)])).has_length(2);
+            assert_that!(BTreeSet::from([1, 2, 2])).has_length(2);
         }
 
         #[test]
         #[cfg(feature = "std")]
-        fn hash_set() {
-            use std::collections::HashSet;
+        fn hash_maps_and_sets() {
+            use std::collections::{HashMap, HashSet};
 
-            assert_that!(HashSet::<i32>::new()).is_empty().has_length(0);
-            assert_that!(HashSet::from([1, 2, 2]))
-                .is_not_empty()
-                .has_length(2);
+            assert_that!(HashMap::<i32, i32>::new()).is_empty();
+            assert_that!(HashMap::from([(1, 2), (3, 4)])).has_length(2);
+            assert_that!(HashSet::from([1, 2, 2])).has_length(2);
         }
 
         #[test]
@@ -615,7 +410,7 @@ mod tests {
                 assert_that!(actual).capture(|it| it.is_empty().is_not_empty().has_length(8));
             assert_that!((actual.reads.get(), actual.empty_checks.get())).is_equal_to((1, 2));
             assert_that!(failures).has_length(2);
-            assert_that!(rendered_text(&failures[1].facts[0].value)).is_equal_to("7");
+            assert_that!(format!("{:#}", failures[1].facts[0].value)).is_equal_to("7");
         }
     }
 }

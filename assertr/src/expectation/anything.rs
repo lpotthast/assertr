@@ -1,5 +1,5 @@
 use crate::{
-    AssertionContext, Expectation, ExpectationDiagnostics,
+    AssertionContext, Expectation,
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -31,15 +31,14 @@ impl<A: ?Sized, R> Expectation<A, R> for Anything {
     ) -> Result<(), core::convert::Infallible> {
         Ok(())
     }
-}
-impl<A: ?Sized, R> ExpectationDiagnostics<A, R> for Anything {
+
     const KIND: FailureKind = FailureKind::Matching;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&A, core::convert::Infallible)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         match rejected {
             None => failure.relation("is anything"),
             Some((_, rejection)) => match rejection {},

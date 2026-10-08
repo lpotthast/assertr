@@ -14,7 +14,7 @@
 //!     .with_debug_format(|id, f| write!(f, "user #{}", id.0))
 //!     .capture(|it| it.is_equal_to(UserId(9)));
 //!
-//! let report = ToHumanReadableText.render(&failures[0]);
+//! let report = failures[0].to_string();
 //! assert_that!(report).contains("user #7").contains("user #9");
 //! ```
 //!
@@ -36,10 +36,10 @@
 //! state which implementations it needs. See [`ValueRenderer`] for details and pretty-printing.
 //!
 //! The resulting [`Rendered`] tree retains leaf text, structure, type information, and omission
-//! counts in the [`AssertionFailure`](crate::AssertionFailure). A failure
-//! [adapter](crate::failure::adapter) reads this tree to produce a complete report. Use
-//! [`with_panic_presentation`](crate::AssertThat::with_panic_presentation) to change panic report
-//! layout. Value renderers apply before either capture or panic handling.
+//! counts in the [`AssertionFailure`](crate::AssertionFailure). The failure's `Display`
+//! implementation prints these trees as the default report, and custom code can inspect them
+//! directly. Use [`with_panic_presentation`](crate::AssertThat::with_panic_presentation) to change
+//! panic report layout. Value renderers apply before either capture or panic handling.
 //!
 //! Lengths, counts, user-supplied expected indices, and errors are evidence too. Methods displaying
 //! numeric evidence require `ValueRenderer<usize>`. Errors retain their original type, including
@@ -86,7 +86,7 @@
 //!     .with_renderer(Counts)
 //!     .capture(|it| it.contains_exactly_satisfying([is_some]));
 //! assert_that!(failures).has_length(1);
-//! assert_that!(ToHumanReadableText.render(&failures[0])).contains("count(2)");
+//! assert_that!(failures[0].to_string()).contains("count(2)");
 //! ```
 //!
 //! `Clone` carries the renderer into callback child chains. Passing a check does not remove its
@@ -97,60 +97,46 @@
 //!
 //! Structural positions and diagnostic paths, matcher branch and expected-slot identifiers,
 //! omission summaries, type names, status-class labels such as `2xx`, and explicit diagnostic prose
-//! are formatted by Assertr. [`IntoRendered`] conversions from strings, formatting arguments, and
+//! are formatted by Assertr. [`Rendered`] conversions from strings, formatting arguments, and
 //! primitives are verbatim and bypass the renderer and budget. Use them only for structural text
-//! or caller-authored prose. Pass evidence through rendering adapters, including notes.
-//!
-//! ## Sensitive values
-//!
-//! [`ValueRenderer::sensitive_value_policy`] controls how sensitivity-aware assertions prepare
-//! values for the renderer's `fmt` method. Currently, reqwest response `has_header_value` and
-//! `does_not_have_header` consult this policy for header values.
-//!
-//! Custom renderers default to [`SensitiveValuePolicy::Preserve`], receiving the original header
-//! and sensitivity flag so their formatter controls redaction. [`DebugRenderer`] chooses
-//! [`SensitiveValuePolicy::Reveal`], displaying header contents for test diagnostics by rendering
-//! an unmarked copy. Custom renderers can opt into the same policy. The response's header stays
-//! unchanged, and rendering budgets still apply. Generic value rendering, including direct
-//! equality on a header, passes the original value to `fmt` without consulting this policy.
+//! or caller-authored prose. Pass evidence through a [`RenderingContext`], including notes.
 //!
 //! ## Limit diagnostic output
 //!
 //! [`RenderingBudget`] bounds retained items and leaf characters without changing whether an
 //! assertion passes. Configure it through
 //! [`AssertThat::with_rendering_budget`](crate::AssertThat::with_rendering_budget), which includes
-//! an example. Derived assertions inherit the budget. Adapters receive the bounded tree, so they
-//! cannot recover omitted values. Use [`RenderingBudget::unlimited`] when complete diagnostics
-//! are needed.
+//! an example. Derived assertions inherit the budget. Captured failures and panic presentations
+//! receive the bounded tree, so they cannot recover omitted values. Use
+//! [`RenderingBudget::unlimited`] when complete diagnostics are needed.
 //!
 //! ## Render values in custom assertions
 //!
 //! Custom assertion implementations use [`AssertThat::render`](crate::AssertThat::render) to apply
 //! the chain's renderer and budget. Expectation definitions obtain the same [`RenderingContext`]
-//! through [`AssertionContext::render`](crate::AssertionContext::render). Pass adapters to the
-//! failure builder or [`Fact`](crate::Fact) constructors:
+//! through [`AssertionContext::render`](crate::AssertionContext::render). Pass the returned
+//! [`Rendered`] trees to the failure builder or [`Fact`](crate::Fact) constructors:
 //!
-//! | Evidence | Adapter |
+//! | Evidence | Method |
 //! | --- | --- |
 //! | One leaf | [`value`](RenderingContext::value) |
-//! | Collection with its presentation and type | [`collection`](RenderingContext::collection), [`borrowed_collection`](RenderingContext::borrowed_collection) |
-//! | Collection with meaningful positions | [`stable_collection`](RenderingContext::stable_collection), [`stable_borrowed_collection`](RenderingContext::stable_borrowed_collection) |
+//! | Collection with its presentation and type | [`collection`](RenderingContext::collection) |
+//! | Collection with meaningful positions | [`stable_collection`](RenderingContext::stable_collection) |
 //! | Map with its ordering policy and type | [`map`](RenderingContext::map) |
-//! | Synthetic list or set | [`values`](RenderingContext::values), [`borrowed_values`](RenderingContext::borrowed_values) |
+//! | Synthetic list | [`borrowed_values`](RenderingContext::borrowed_values) |
 //! | Synthetic key/value tuples | [`entry_list`](RenderingContext::entry_list) |
 //! | One-field tuple variant or named struct | [`variant`](RenderingContext::variant), [`struct_field`](RenderingContext::struct_field) |
 //! | Inaccessible struct field | [`unavailable_struct_field`](RenderingContext::unavailable_struct_field) |
 //!
-//! Synthetic groups have no outer Rust type. Select their diagnostic order with [`RenderingOrder`],
-//! using [`RenderedValues::with_order`] or the `entry_list` argument. Collection adapters follow
-//! [`CollectionPresentation`]. Positional adapters require
-//! [`StableOrder`](crate::assertions::collection::StableOrder) and always preserve iteration order.
+//! Synthetic groups have no outer Rust type. Select their diagnostic order with an explicit
+//! [`RenderingOrder`] argument. Collection methods follow [`CollectionPresentation`]. Positional
+//! rendering requires [`StableOrder`](crate::assertions::collection::StableOrder) and always
+//! preserves iteration order. Use [`RenderingContext::compact`] to render leaves in their compact
+//! form.
 //!
-//! Construction is lazy and needs no renderer capability. Formatting or converting with
-//! [`IntoRendered`] requires only the displayed leaf renderers, traverses the borrowed source,
-//! and applies the budget. Sorted groups order rendered text before retaining the requested
-//! number of items. The budget limits retained output, not traversal work or peak memory.
-//! Reuse the resulting [`Rendered`] tree to avoid rendering again.
+//! Each method requires only the displayed leaf renderers, renders every leaf once, and applies
+//! the budget. Sorted groups order rendered text before retaining the requested number of items.
+//! The budget limits retained output, not traversal work or peak memory.
 //!
 //! [`RenderingContext::budget`] returns a copy of the active limits for custom evidence collectors.
 //! Keep assertion truth independent of retention and record omitted evidence in the failure
@@ -161,17 +147,12 @@ mod budget;
 mod context;
 mod presentation;
 mod rendered;
-mod type_info;
 mod value;
 
 pub use budget::RenderingBudget;
-pub use context::{
-    EntryList, MapEntries, RenderedValue, RenderedValues, RenderingContext, StructField,
-    UnavailableStructField, Variant,
-};
+pub use context::RenderingContext;
 pub use presentation::{CollectionPresentation, GroupStyle, RenderingOrder};
-pub use rendered::{IntoRendered, Rendered, RenderedBody};
-pub use type_info::{TypeHint, Typed};
-pub use value::{CustomRenderer, DebugRenderer, SensitiveValuePolicy, ValueRenderer};
+pub use rendered::{Rendered, RenderedBody};
+pub use value::{CustomRenderer, DebugRenderer, ValueRenderer};
 
 pub(crate) use context::omission;

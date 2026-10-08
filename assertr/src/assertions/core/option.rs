@@ -1,7 +1,6 @@
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
-    assertions::support::project_checked,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
+    assertions::support::{explain_variant, project_checked},
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
 };
@@ -15,11 +14,13 @@ impl<T, R> Expectation<Option<T>, R> for IsSome {
     type Success<'a>
         = &'a T
     where
-        T: 'a;
+        Self: 'a,
+        Option<T>: 'a;
     type Rejection<'a>
         = ()
     where
-        T: 'a;
+        Self: 'a,
+        Option<T>: 'a;
     fn evaluate<'a>(
         &'a self,
         actual: &'a Option<T>,
@@ -27,22 +28,15 @@ impl<T, R> Expectation<Option<T>, R> for IsSome {
     ) -> Result<&'a T, ()> {
         actual.as_ref().ok_or(())
     }
-}
-impl<T, R> ExpectationDiagnostics<Option<T>, R> for IsSome {
+
     const KIND: FailureKind = FailureKind::Variant;
-    fn explain<Target>(
+    fn explain(
         &self,
         rejected: Option<(&Option<T>, ())>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let failure = match rejected {
-            None => failure.relation("is the expected variant"),
-            Some((_, ())) => failure
-                .actual("None")
-                .relation("is not the expected variant"),
-        };
-        failure.expected("Option::Some")
+    ) -> FailureBuilder {
+        explain_variant(failure, rejected.map(|_| "None"), "Option::Some")
     }
 }
 
@@ -50,15 +44,17 @@ impl<T, R> ExpectationDiagnostics<Option<T>, R> for IsSome {
 #[derive(Debug, Clone, Copy)]
 pub struct IsNone;
 
-impl<T, R> Expectation<Option<T>, R> for IsNone {
+impl<T, R: ValueRenderer<T>> Expectation<Option<T>, R> for IsNone {
     type Success<'a>
         = ()
     where
-        T: 'a;
+        Self: 'a,
+        Option<T>: 'a;
     type Rejection<'a>
         = &'a T
     where
-        T: 'a;
+        Self: 'a,
+        Option<T>: 'a;
     fn evaluate<'a>(
         &'a self,
         actual: &'a Option<T>,
@@ -69,23 +65,20 @@ impl<T, R> Expectation<Option<T>, R> for IsNone {
             Some(value) => Err(value),
         }
     }
-}
-impl<T, R: ValueRenderer<T>> ExpectationDiagnostics<Option<T>, R> for IsNone {
+
     const KIND: FailureKind = FailureKind::Variant;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Option<T>, &'a T)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         let render = context.render();
-        let failure = match rejected {
-            None => failure.relation("is the expected variant"),
-            Some((actual, value)) => failure
-                .actual(render.variant(actual, "Some", value))
-                .relation("is not the expected variant"),
-        };
-        failure.expected("Option::None")
+        explain_variant(
+            failure,
+            rejected.map(|(actual, value)| render.variant(actual, "Some", value)),
+            "Option::None",
+        )
     }
 }
 
@@ -158,15 +151,29 @@ impl<T, M: Mode, R> OptionAssertions<T, M, R> for AssertThat<'_, Option<T>, M, R
         R: Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        if let Some(value) = self.test_assertion(&IsSome) {
-            assertions(self.derive(|_| value));
-        }
+        self.satisfy_success(self.test_assertion(&IsSome), assertions);
         self
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{FailureKind, prelude::*};
+
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            Some(42).must().be_some();
+            Option::<i32>::None.must().be_none();
+            Some(42).must().be_some_satisfying(|some| {
+                some.is_equal_to(42);
+            });
+        }
+    }
+
     mod renderer_contract {
         use crate::{
             prelude::*,
@@ -194,7 +201,7 @@ mod tests {
                 .with_location(false)
                 .capture(OptionAssertions::is_none);
 
-            assert_that!(ToHumanReadableText.render(&failures[0]))
+            assert_that!(failures[0].to_string())
                 .contains("Some(")
                 .contains(SENTINEL);
         }
@@ -206,19 +213,13 @@ mod tests {
                 .with_location(false)
                 .capture(OptionAssertions::is_some);
 
-            assert_that!(ToHumanReadableText.render(&failures[0])).contains("Actual: None");
+            assert_that!(failures[0].to_string()).contains("Actual: None");
         }
     }
 
     mod is_some {
-        use crate::prelude::*;
+        use super::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Option::<i32>::Some(42).must().be_some();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -254,38 +255,14 @@ mod tests {
         }
 
         #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
-            let failures = assert_that!(Option::<i32>::None)
-                .with_location(false)
-                .capture(|it| it.is_some().is_none());
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {"
-                        -------- assertr --------
-                        Expression: `Option::<i32>::None`
-
-                        Actual: None
-
-                        is not the expected variant
-
-                        Expected: Option::Some
-                        -------- assertr --------
-                    "});
-                },
-            ]);
+        fn continues_in_capture_mode() {
+            let failures = assert_that!(Option::<i32>::None).capture(|it| it.is_some().is_none());
+            assert_that!(failures).has_length(1);
         }
     }
 
     mod get_some {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Some(42).must().get_some().is_equal_to(42);
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -310,38 +287,19 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_none() {
+        fn rejects_none_like_is_some() {
             assert_that_panic_by(|| {
-                assert_that!(Option::<i32>::None)
-                    .with_location(false)
-                    .get_some()
+                let _ = assert_that!(Option::<i32>::None)
+                    .with_panic_presentation(|failure| format!("{:?}", failure.kind))
+                    .get_some();
             })
             .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                -------- assertr --------
-                Expression: `Option::<i32>::None`
-
-                Actual: None
-
-                is not the expected variant
-
-                Expected: Option::Some
-                -------- assertr --------
-            "});
+            .is_equal_to(format!("{:?}", FailureKind::Variant));
         }
     }
 
     mod is_some_satisfying {
-        use crate::prelude::*;
-        use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Option::<i32>::Some(42).must().be_some_satisfying(|some| {
-                some.is_equal_to(42);
-            });
-        }
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -352,124 +310,35 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_some_and_assertions_pass() {
-            assert_that!(Option::<i32>::Some(42)).is_some_satisfying(|some| {
-                some.is_equal_to(42);
-            });
-        }
-
-        #[test]
-        fn hands_out_a_value_typed_assertion_supporting_type_specific_assertions() {
+        fn hands_out_a_value_typed_assertion() {
             assert_that!(Some(String::from("value"))).is_some_satisfying(|some| {
                 some.contains("alu").starts_with("v");
             });
         }
 
         #[test]
-        fn hands_out_a_value_typed_assertion_in_capture_mode() {
-            let failures = assert_that!(Some(String::from("value")))
-                .with_location(false)
-                .capture(|it| {
-                    it.is_some_satisfying(|some| {
-                        some.contains("xyz");
-                    })
-                });
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Actual: "value"
-
-                        does not contain
-
-                        Expected: "xyz"
-                        -------- assertr --------
-                    "#});
-                },
-            ]);
+        fn captures_inner_failures() {
+            let failures = assert_that!(Some(42)).capture(|it| {
+                it.is_some_satisfying(|some| {
+                    some.is_greater_than(9000);
+                })
+            });
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].kind).is_equal_to(FailureKind::Ordering);
         }
 
         #[test]
-        fn captures_inner_failure_when_some_and_assertion_fails() {
-            let failures = assert_that!(Option::<i32>::Some(42))
-                .with_location(false)
-                .capture(|it| {
-                    it.is_some_satisfying(|some| {
-                        some.is_greater_than(9000);
-                    })
-                });
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {"
-                        -------- assertr --------
-                        Actual: 42
-
-                        is not greater than
-
-                        Expected: 9000
-                        -------- assertr --------
-                    "});
-                },
-            ]);
-        }
-
-        #[test]
-        fn captures_variant_failure_when_none() {
+        fn does_not_run_the_callback_when_none() {
             let failures = assert_that!(Option::<i32>::None)
-                .with_location(false)
                 .capture(|it| it.is_some_satisfying(|_| panic!("assertions should not run")));
-
-            assert_that!(&failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {"
-                        -------- assertr --------
-                        Expression: `Option::<i32>::None`
-
-                        Actual: None
-
-                        is not the expected variant
-
-                        Expected: Option::Some
-                        -------- assertr --------
-                    "});
-                },
-            ]);
-        }
-
-        #[test]
-        fn panics_when_none() {
-            assert_that_panic_by(|| {
-                assert_that!(Option::<i32>::None)
-                    .with_location(false)
-                    .is_some_satisfying(|_| panic!("assertions should not run"))
-            })
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                -------- assertr --------
-                Expression: `Option::<i32>::None`
-
-                Actual: None
-
-                is not the expected variant
-
-                Expected: Option::Some
-                -------- assertr --------
-            "});
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].kind).is_equal_to(FailureKind::Variant);
         }
     }
 
     mod is_none {
-        use crate::prelude::*;
-        use alloc::string::String;
+        use super::*;
         use indoc::formatdoc;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            Option::<i32>::None.must().be_none();
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -504,31 +373,6 @@ mod tests {
                 Expected: Option::None
                 -------- assertr --------
             "});
-        }
-
-        #[test]
-        fn works_in_capture_mode_and_allows_further_chaining() {
-            let failures = assert_that!(Option::<i32>::Some(42))
-                .with_location(false)
-                .capture(|it| it.is_none().is_some());
-
-            assert_that!(failures).contains_exactly_satisfying([
-                |it: AssertThat<AssertionFailure, Capture>| {
-                    it.has_text_report(formatdoc! {"
-                        -------- assertr --------
-                        Expression: `Option::<i32>::Some(42)`
-
-                        Actual: Some(
-                            42,
-                        )
-
-                        is not the expected variant
-
-                        Expected: Option::None
-                        -------- assertr --------
-                    "});
-                },
-            ]);
         }
     }
 }

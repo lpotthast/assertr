@@ -15,5 +15,5 @@ pub(crate) fn assert_that_panic_by<'t, R>(
         .flatten()
         .expect_err("expected the tested function to panic");
 
-    AssertThat::new_panicking(Actual::Owned(PanicValue(panic)))
+    AssertThat::new(Actual::Owned(PanicValue(panic)))
 }

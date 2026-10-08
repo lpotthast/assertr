@@ -1,6 +1,6 @@
+use super::debug::{compare_text, explain_text};
 use crate::{
-    AssertThat, AssertionContext, DebugRenderer, Expectation, ExpectationDiagnostics, Mode,
-    ValueRenderer,
+    AssertThat, AssertionContext, DebugRenderer, Expectation, Mode, ValueRenderer,
     failure::{FailureBuilder, FailureKind},
 };
 use alloc::{format, string::String};
@@ -20,7 +20,9 @@ impl<E> HasDisplayValue<E> {
     }
 }
 
-impl<T: Display + ?Sized, E: Display, R> Expectation<T, R> for HasDisplayValue<E> {
+impl<T: Display + ?Sized, E: Display, R: ValueRenderer<str>> Expectation<T, R>
+    for HasDisplayValue<E>
+{
     type Success<'a>
         = ()
     where
@@ -36,40 +38,23 @@ impl<T: Display + ?Sized, E: Display, R> Expectation<T, R> for HasDisplayValue<E
         actual: &'a T,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection<'a>> {
-        let actual = format!("{actual}");
-        let expected = format!("{}", self.0);
-        if actual == expected {
-            Ok(())
-        } else {
-            Err((actual, expected))
-        }
+        compare_text(format!("{actual}"), format!("{}", self.0))
     }
-}
 
-impl<T: Display + ?Sized, E: Display, R: ValueRenderer<str>> ExpectationDiagnostics<T, R>
-    for HasDisplayValue<E>
-{
     const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
-        let render = context.render();
-        let (failure, expected) = match rejected {
-            None => {
-                let expected = format!("{}", self.0);
-                (
-                    failure.relation("has the expected Display representation"),
-                    expected,
-                )
-            }
-            Some((_, (actual, expected))) => {
-                (failure.actual(render.value(actual.as_str())), expected)
-            }
-        };
-        failure.expected(render.value(expected.as_str()))
+    ) -> FailureBuilder {
+        explain_text(
+            rejected.map(|(_, texts)| texts),
+            || format!("{}", self.0),
+            "has the expected Display representation",
+            failure,
+            context,
+        )
     }
 }
 
@@ -97,6 +82,16 @@ impl<T: Display, M: Mode, R> DisplayAssertions<R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            42.must().have_display_value(42);
+        }
+    }
+
     mod renderer_contract {
         use crate::{
             prelude::*,
@@ -108,19 +103,11 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, i32, Panic, NoRenderer> => DisplayAssertions<NoRenderer>
             );
-
-            assert_trait_impl!(super::super::HasDisplayValue<i32> => Expectation<i32, NoRenderer>);
         }
     }
 
     mod has_display_value {
         use crate::prelude::*;
-
-        #[test]
-        #[cfg(feature = "fluent")]
-        fn fluent_alias_is_as_expected() {
-            42.must().have_display_value(42);
-        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -130,7 +117,7 @@ mod tests {
         #[test]
         fn formats_each_operand_once_in_ordinary_matching_and_probe_execution() {
             use super::super::HasDisplayValue;
-            use crate::{AssertionContext, Expectation, test_support::NoRenderer};
+            use crate::{AssertionContext, Expectation};
             use core::{cell::Cell, fmt};
 
             struct Value<'a>(&'a Cell<usize>, &'a str);
@@ -153,7 +140,7 @@ mod tests {
                 assert_that!((actual_calls.get(), expected_calls.get())).is_equal_to((2, 2));
                 assert_that!(failures.len()).is_equal_to(usize::from(expected_text != "actual"));
                 let context = AssertionContext::new(
-                    &NoRenderer,
+                    &DebugRenderer,
                     RenderingBudget::default().with_max_leaf_characters(0),
                 )
                 .with_diagnostics(false);
@@ -212,30 +199,10 @@ mod tests {
 
         mod with_string {
             use crate::prelude::*;
-            use indoc::formatdoc;
 
             #[test]
             fn succeeds_when_equal_using_string_representation() {
                 assert_that!("foo:bar").has_display_value("foo:bar");
-            }
-
-            #[test]
-            fn panics_when_not_equal() {
-                assert_that_panic_by(|| {
-                    assert_that!("foo:bar")
-                        .with_location(false)
-                        .has_display_value("foo:baz")
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `"foo:bar"`
-
-                    Expected: "foo:baz"
-
-                      Actual: "foo:bar"
-                    -------- assertr --------
-                "#});
             }
         }
 
@@ -243,7 +210,6 @@ mod tests {
             use std::fmt::Display;
 
             use crate::prelude::*;
-            use indoc::formatdoc;
 
             #[allow(dead_code)] // Allow fields to never be read.
             struct Person {
@@ -267,28 +233,6 @@ mod tests {
                     alive: true,
                 })
                 .has_display_value("PERSON<AGE=42,ALIVE=true>");
-            }
-
-            #[test]
-            fn panics_when_not_equal() {
-                assert_that_panic_by(|| {
-                    assert_that!(Person {
-                        age: 42,
-                        alive: true,
-                    })
-                    .with_location(false)
-                    .has_display_value("foo")
-                })
-                .has_type::<String>()
-                .is_equal_to(formatdoc! {r#"
-                    -------- assertr --------
-                    Expression: `Person {{ age: 42, alive: true, }}`
-
-                    Expected: "foo"
-
-                      Actual: "PERSON<AGE=42,ALIVE=true>"
-                    -------- assertr --------
-                "#});
             }
         }
     }

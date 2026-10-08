@@ -2,13 +2,13 @@
 //!
 //! To use built-in checks, start with the [`matchers`](mod@crate::matchers) catalog. It re-exports
 //! every public expectation and groups subject-specific names into namespaces. This module owns
-//! the implementation contracts and composition machinery. A matcher is an expectation used in
+//! the implementation contract and composition machinery. A matcher is an expectation used in
 //! composition, not a separate trait or implementation.
 //!
 //! [`Expectation`] evaluates a subject once and retains its successful observation or rejection.
-//! [`ExpectationDiagnostics::explain`] uses the common [`FailureBuilder`] for both a rejected
-//! observation and an unmet expectation with no subject, such as a missing collection element.
-//! The chain tracks assertions, preserves continuation state, and raises the resulting failures.
+//! [`Expectation::explain`] uses the common [`FailureBuilder`] for both a rejected observation
+//! and an unmet expectation with no subject, such as a missing collection element. The chain
+//! tracks assertions, preserves continuation state, and raises the resulting failures.
 //!
 //! Definitions can be constructed independently. Execution requires an [`AssertionContext`]
 //! supplied by the library. Implementations receive that context to evaluate their children and
@@ -28,11 +28,30 @@ use crate::{
 };
 use alloc::vec::Vec;
 
+/// Declares the associated items of a transparent composition: no success observation, owned
+/// child [`Evidence`] as the rejection, and flattening into the receiving context.
+macro_rules! composite_items {
+    ($subject:ty) => {
+        type Success<'a>
+            = ()
+        where
+            Self: 'a,
+            $subject: 'a;
+        type Rejection<'a>
+            = $crate::expectation::Evidence
+        where
+            Self: 'a,
+            $subject: 'a;
+        const FLATTEN: bool = true;
+    };
+}
+pub(crate) use composite_items;
+
 mod all_of;
 mod any_of;
 mod anything;
-pub(crate) mod assignment;
 mod dereferenced;
+pub(crate) mod field;
 pub(crate) mod lists;
 mod predicate;
 mod satisfying;
@@ -43,44 +62,40 @@ pub use all_of::{AllOf, all_of};
 pub use any_of::{AnyOf, any_of};
 pub use anything::{Anything, anything};
 pub use dereferenced::{Dereferenced, dereferenced};
+pub use field::{Field, field};
 pub use lists::{MatcherList, predicate_list};
 pub use predicate::{Predicate, predicate};
 pub use satisfying::{Satisfying, satisfying};
 
-mod context;
+pub(crate) mod context;
 pub use context::AssertionContext;
 
 /// Owned, bounded child failures from one evaluation, with their omission count.
 ///
-/// Children already carry the complete evaluation path. The group retains no borrowed subjects,
-/// expectation definitions, or guards. Composition transfers it into the common failure builder.
+/// Child paths are relative to the scope that produced them. The group retains no borrowed
+/// subjects, expectation definitions, or guards. Composition transfers it into the common failure
+/// builder.
 #[derive(Debug, Default)]
 pub struct Evidence {
     pub(crate) children: Vec<AssertionFailure>,
     pub(crate) omitted: usize,
-    pub(crate) path_prefix_len: usize,
 }
 
 impl Evidence {
-    /// Attaches child failures with paths relative to the enclosing expectation's subject.
-    /// The context's path prefix is removed once, preserving paths within each child failure.
-    pub fn explain<T>(mut self, failure: FailureBuilder<T>) -> FailureBuilder<T> {
-        for child in &mut self.children {
-            child.path.drain(..self.path_prefix_len);
-        }
+    /// Attaches the child failures and their omission count to the enclosing expectation's failure.
+    pub fn explain(self, failure: FailureBuilder) -> FailureBuilder {
         failure
             .children(self.children)
             .omitted_children(self.omitted)
     }
 }
 
-/// A reusable expectation that evaluates a borrowed subject once.
+/// A reusable expectation that evaluates a borrowed subject once and explains its rejection.
 ///
 /// Evaluation does not track or raise an assertion. The executor supplies the context and decides
-/// whether to continue with a success or explain a rejection. Diagnostic renderer bounds belong
-/// on [`ExpectationDiagnostics`] unless evaluation itself needs those capabilities.
-/// Compositions explain child rejections immediately and retain owned [`Evidence`], releasing
-/// each child's observation before evaluating its siblings.
+/// whether to continue with a success or explain a rejection. Compositions explain child
+/// rejections immediately and retain owned [`Evidence`], releasing each child's observation
+/// before evaluating its siblings.
 pub trait Expectation<T: ?Sized, R = DebugRenderer> {
     /// The original successful observation. Use `()` when no witness is needed.
     type Success<'a>
@@ -94,27 +109,9 @@ pub trait Expectation<T: ?Sized, R = DebugRenderer> {
         Self: 'a,
         T: 'a;
 
-    /// Evaluates once with the executor's context. User panics propagate.
-    ///
-    /// # Errors
-    /// Returns the original rejection when the expectation is not satisfied. Diagnostic budgets
-    /// and probes must never change whether evaluation succeeds.
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>>;
-}
-
-/// Builds every diagnostic for an [`Expectation`] through the common failure pipeline.
-///
-/// `Some((actual, rejection))` explains the original rejected observation. `None` describes an
-/// unmet expectation for which there is no subject to evaluate. It never represents a successful
-/// evaluation. Both cases use the same operand roles, structured fields, renderer, and budget.
-/// Each definition writes its own relations. No generic negation or repeated observation occurs.
-pub trait ExpectationDiagnostics<T: ?Sized, R = DebugRenderer>: Expectation<T, R> {
-    /// The failure family used for both ordinary and nested diagnostics.
-    const KIND: FailureKind;
+    /// The failure family used for both ordinary and nested diagnostics. Custom checks of a domain
+    /// property can keep the default.
+    const KIND: FailureKind = FailureKind::Predicate;
 
     /// Whether composition contributes this definition's children directly, applying the current
     /// context's path to their relative paths.
@@ -126,7 +123,23 @@ pub trait ExpectationDiagnostics<T: ?Sized, R = DebugRenderer>: Expectation<T, R
     /// enclosing failure.
     const FLATTEN: bool = false;
 
+    /// Evaluates once with the executor's context. User panics propagate.
+    ///
+    /// # Errors
+    /// Returns the original rejection when the expectation is not satisfied. Diagnostic budgets
+    /// and probes must never change whether evaluation succeeds.
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>>;
+
     /// Explains a rejected observation or describes a missing expected subject.
+    ///
+    /// `Some((actual, rejection))` explains the original rejected observation. `None` describes an
+    /// unmet expectation for which there is no subject to evaluate. It never represents a
+    /// successful evaluation. Both cases use the same operand roles, structured fields, renderer,
+    /// and budget. Each definition writes its own relations. No generic negation occurs.
     ///
     /// Populate and return the supplied structured builder. Do not track or raise an assertion.
     /// Render shared operands through [`AssertionContext::render`] and reuse retained views from
@@ -140,12 +153,12 @@ pub trait ExpectationDiagnostics<T: ?Sized, R = DebugRenderer>: Expectation<T, R
     /// other observations, or retain guards after returning. The chain executor raises the
     /// completed failure. Child contexts instead build and retain it as evidence for the
     /// enclosing assertion.
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target>;
+    ) -> FailureBuilder;
 }
 
 impl<T: ?Sized, R, D: Expectation<T, R> + ?Sized> Expectation<T, R> for &D {
@@ -160,6 +173,9 @@ impl<T: ?Sized, R, D: Expectation<T, R> + ?Sized> Expectation<T, R> for &D {
         Self: 'a,
         T: 'a;
 
+    const KIND: FailureKind = D::KIND;
+    const FLATTEN: bool = D::FLATTEN;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a T,
@@ -167,18 +183,13 @@ impl<T: ?Sized, R, D: Expectation<T, R> + ?Sized> Expectation<T, R> for &D {
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         (**self).evaluate(actual, context)
     }
-}
 
-impl<T: ?Sized, R, D: ExpectationDiagnostics<T, R> + ?Sized> ExpectationDiagnostics<T, R> for &D {
-    const KIND: FailureKind = D::KIND;
-    const FLATTEN: bool = D::FLATTEN;
-
-    fn explain<'a, Target>(
+    fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder<Target>,
+        failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder<Target> {
+    ) -> FailureBuilder {
         (**self).explain(rejected, failure, context)
     }
 }

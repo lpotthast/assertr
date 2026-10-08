@@ -1,18 +1,8 @@
 //! Renderers and structured evidence checks shared by diagnostic tests.
 
 use crate::prelude::*;
-use crate::{
-    AssertionFailure, ValueRenderer, failure::adapter::ToHumanReadableText, renderer::Rendered,
-};
+use crate::{AssertionFailure, ValueRenderer, renderer::Rendered};
 use core::fmt;
-
-pub(crate) fn rendered_text(value: &Rendered) -> String {
-    let mut text = String::new();
-    value
-        .write(&mut text, true)
-        .expect("writing a rendered value to a String cannot fail");
-    text
-}
 
 pub(crate) struct NoRenderer;
 
@@ -97,7 +87,7 @@ impl<T: ?Sized> ValueRenderer<T> for RedactingRenderer {
 
 pub(crate) fn assert_custom_value<T: fmt::Debug + ?Sized>(rendered: &Rendered, value: &T) {
     assert_that!(rendered.type_name).is_equal_to(Some(core::any::type_name::<T>()));
-    assert_that!(rendered_text(rendered)).is_equal_to(alloc::format!("custom({value:?})"));
+    assert_that!(format!("{rendered:#}")).is_equal_to(alloc::format!("custom({value:?})"));
 }
 
 pub(crate) fn assert_redacted(failure: &AssertionFailure, secrets: &[&str]) {
@@ -123,7 +113,7 @@ pub(crate) fn assert_redacted(failure: &AssertionFailure, secrets: &[&str]) {
         }
     }
     check_tree(failure, secrets);
-    let report = ToHumanReadableText.render(failure);
+    let report = failure.to_string();
     assert_that!(report).contains("<redacted>");
     for secret in secrets {
         assert_that!(report)

@@ -1,9 +1,10 @@
-use super::{ExpectationDiagnostics, Predicate, predicate};
+use super::{Expectation, Predicate, predicate};
 use crate::{
     __private::{Cons, Nil},
     AssertionContext,
 };
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 
 pub(crate) mod sealed {
     pub trait Sealed {}
@@ -11,8 +12,9 @@ pub(crate) mod sealed {
 
 /// A supported heterogeneous or homogeneous list of matchers.
 ///
-/// Implementations are sealed. Use `matchers!`, tuples of up to twelve matchers, arrays, slices, or
-/// vectors. Lists store expectations without boxes or renderer type parameters.
+/// Implementations are sealed. Use [`matchers!`](crate::matchers!) to mix matcher types, or arrays,
+/// slices, and vectors of one matcher type. Lists store expectations without boxes or renderer type
+/// parameters.
 pub trait MatcherList<A: ?Sized, R = crate::DebugRenderer>: sealed::Sealed {
     /// Number of constraints.
     fn len(&self) -> usize;
@@ -34,16 +36,23 @@ pub trait MatcherList<A: ?Sized, R = crate::DebugRenderer>: sealed::Sealed {
 }
 
 /// A borrowed callback list that adapts only the slot being evaluated or described.
-pub(crate) struct SatisfyingList<'a, F>(pub(crate) &'a [F]);
+pub(crate) struct SatisfyingList<L, F>(L, PhantomData<fn() -> F>);
 
-impl<F> sealed::Sealed for SatisfyingList<'_, F> {}
+impl<L: AsRef<[F]>, F> SatisfyingList<L, F> {
+    /// Stores the callbacks without accessing them, so tracking precedes the first borrow.
+    pub(crate) fn new(callbacks: L) -> Self {
+        Self(callbacks, PhantomData)
+    }
+}
 
-impl<A, R: Clone, F> MatcherList<A, R> for SatisfyingList<'_, F>
+impl<L, F> sealed::Sealed for SatisfyingList<L, F> {}
+
+impl<A, R: Clone, L: AsRef<[F]>, F> MatcherList<A, R> for SatisfyingList<L, F>
 where
     F: for<'a> Fn(crate::AssertThat<'a, A, crate::mode::Capture, R>),
 {
     fn len(&self) -> usize {
-        self.0.len()
+        self.0.as_ref().len()
     }
 
     fn describe_at(
@@ -51,11 +60,11 @@ where
         index: usize,
         context: &AssertionContext<'_, R>,
     ) -> crate::AssertionFailure {
-        context.describe(&super::satisfying(&self.0[index]))
+        context.describe(&super::satisfying(&self.0.as_ref()[index]))
     }
 
     fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool {
-        context.evaluate(actual, &super::satisfying(&self.0[index]))
+        context.evaluate(actual, &super::satisfying(&self.0.as_ref()[index]))
     }
 }
 
@@ -79,7 +88,7 @@ impl<A: ?Sized, R> MatcherList<A, R> for Nil {
 
 impl<A: ?Sized, R, H, T> MatcherList<A, R> for Cons<H, T>
 where
-    H: ExpectationDiagnostics<A, R>,
+    H: Expectation<A, R>,
     T: MatcherList<A, R>,
 {
     fn len(&self) -> usize {
@@ -113,7 +122,7 @@ macro_rules! homogeneous {
 
         impl<A: ?Sized, R, M $(, const $size: usize)?> MatcherList<A, R> for $type
         where
-            M: ExpectationDiagnostics<A, R>,
+            M: Expectation<A, R>,
         {
             fn len(&self) -> usize {
                 <[M]>::len(self)
@@ -162,73 +171,6 @@ where
     }
 }
 
-impl sealed::Sealed for () {}
-
-impl<A: ?Sized, R> MatcherList<A, R> for () {
-    fn len(&self) -> usize {
-        0
-    }
-
-    fn describe_at(
-        &self,
-        index: usize,
-        context: &AssertionContext<'_, R>,
-    ) -> crate::AssertionFailure {
-        <Nil as MatcherList<A, R>>::describe_at(&Nil, index, context)
-    }
-
-    fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool {
-        <Nil as MatcherList<A, R>>::evaluate_at(&Nil, index, actual, context)
-    }
-}
-
-macro_rules! tuple {
-    ($length:expr; $($matcher:ident: $slot:tt),+) => {
-        impl<$($matcher),+> sealed::Sealed for ($($matcher,)+) {}
-
-        impl<A: ?Sized, R, $($matcher),+> MatcherList<A, R> for ($($matcher,)+)
-        where
-            $($matcher: ExpectationDiagnostics<A, R>),+
-        {
-            fn len(&self) -> usize {
-                $length
-            }
-
-            fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> crate::AssertionFailure {
-                match index {
-                    $($slot => context.describe(&self.$slot),)+
-                    _ => panic!("matcher slot out of bounds"),
-                }
-            }
-
-            fn evaluate_at(
-                &self,
-                index: usize,
-                actual: &A,
-                context: &mut AssertionContext<'_, R>,
-            ) -> bool {
-                match index {
-                    $($slot => context.evaluate(actual, &self.$slot),)+
-                    _ => panic!("matcher slot out of bounds"),
-                }
-            }
-        }
-    };
-}
-
-tuple!(1; M0: 0);
-tuple!(2; M0: 0, M1: 1);
-tuple!(3; M0: 0, M1: 1, M2: 2);
-tuple!(4; M0: 0, M1: 1, M2: 2, M3: 3);
-tuple!(5; M0: 0, M1: 1, M2: 2, M3: 3, M4: 4);
-tuple!(6; M0: 0, M1: 1, M2: 2, M3: 3, M4: 4, M5: 5);
-tuple!(7; M0: 0, M1: 1, M2: 2, M3: 3, M4: 4, M5: 5, M6: 6);
-tuple!(8; M0: 0, M1: 1, M2: 2, M3: 3, M4: 4, M5: 5, M6: 6, M7: 7);
-tuple!(9; M0: 0, M1: 1, M2: 2, M3: 3, M4: 4, M5: 5, M6: 6, M7: 7, M8: 8);
-tuple!(10; M0: 0, M1: 1, M2: 2, M3: 3, M4: 4, M5: 5, M6: 6, M7: 7, M8: 8, M9: 9);
-tuple!(11; M0: 0, M1: 1, M2: 2, M3: 3, M4: 4, M5: 5, M6: 6, M7: 7, M8: 8, M9: 9, M10: 10);
-tuple!(12; M0: 0, M1: 1, M2: 2, M3: 3, M4: 4, M5: 5, M6: 6, M7: 7, M8: 8, M9: 9, M10: 10, M11: 11);
-
 /// Converts a homogeneous iterable of boolean predicates to a reusable matcher list. For
 /// heterogeneous closures, use `matchers![predicate(...), predicate(...)]`.
 pub fn predicate_list<A, F, I>(predicates: I) -> Vec<Predicate<F>>
@@ -241,7 +183,20 @@ where
 
 /// Constructs a reusable heterogeneous matcher list from explicit expectations.
 ///
-/// Use [`eq`](crate::matchers::eq) or [`equal_to`](crate::matchers::equal_to) for equality.
+/// Use [`eq`](crate::matchers::eq) or [`equal_to`](crate::matchers::equal_to) for equality. The
+/// list's type is an unsupported implementation detail. Let inference pick it, or name the
+/// enclosing check as `impl Expectation<T>` or the list as `impl MatcherList<T>`:
+///
+/// ```
+/// use assertr::matchers::{Expectation, all_of, eq, gt};
+/// use assertr::prelude::*;
+///
+/// fn positive_two() -> impl Expectation<i32> + Clone {
+///     all_of(matchers![gt(0), eq(2)])
+/// }
+///
+/// assert_that!(2).matches(positive_two());
+/// ```
 #[macro_export]
 macro_rules! matchers {
     (@list) => {
@@ -280,7 +235,7 @@ mod tests {
                 .with_renderer(DebugRenderer)
                 .is_true();
         }];
-        let list = SatisfyingList(&callbacks);
+        let list = SatisfyingList::new(&callbacks);
         let mut context = AssertionContext::new(&NoRenderer, RenderingBudget::default());
         assert_that!(list.len()).is_equal_to(1);
         let description = list.describe_at(0, &context);
