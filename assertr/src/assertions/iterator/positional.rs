@@ -12,7 +12,7 @@ use crate::{
     Fact,
     assertions::collection::Placement,
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{Evidence, MatcherList},
+    expectation::{Evidence, MatcherList, context::unsatisfied},
     failure::PathSegment,
 };
 
@@ -171,7 +171,7 @@ where
         if placement == Placement::Suffix {
             windows.append(evidence);
         } else {
-            windows.record_with(|windows| {
+            windows.record(|windows| {
                 evidence
                     .explain(
                         FailureBuilder::new::<I>(FailureKind::Matching)
@@ -241,7 +241,7 @@ where
             let matched = actual.eq(expected);
             if !matched {
                 // Construct indexed evidence only for retained rejections.
-                context.record_with(|context| {
+                context.record(|context| {
                     let render = context.render();
                     FailureBuilder::new::<T>(FailureKind::Equality)
                         .actual(render.value(actual))
@@ -383,7 +383,7 @@ where
                 // Describe the missing position without evaluating its matcher.
                 let mut missing = context.isolated();
                 missing.scoped(PathSegment::Index(consumed), |slot| {
-                    slot.outcome(false, |slot| self.expected.describe_at(consumed, slot))
+                    slot.record(|slot| unsatisfied(self.expected.describe_at(consumed, slot)));
                 });
                 ("is missing a matching position", missing.into_evidence())
             }

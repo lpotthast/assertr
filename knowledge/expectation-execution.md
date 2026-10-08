@@ -92,9 +92,14 @@ It borrows rendering settings and stores child failures, with paths relative to 
 | `isolated` | Start a separate group of evidence with inherited settings and item allowance. Its paths are relative to the scope. Do not clone the renderer. Dropping the scope discards its evidence. |
 | `evaluate` | Evaluate the check and immediately explain a rejection if diagnostics are enabled and the budget permits it. Drop the observed success or rejection before returning the boolean result. |
 | `scoped` | Add one relative path segment for the operation, then append that scope's evidence once. |
-| `record` | Retain an existing failure within the item allowance. |
-| `outcome` | Record a boolean rejection, constructing its constraint description only if needed. |
+| `probe` | Evaluate without recording or rendering evidence. |
 | `into_evidence` | Return owned failures and omission counts without borrowing subjects, definitions, or guards. |
+
+These operations, `render`, and `is_diagnostic` are the public surface. `evaluate` and `probe` are `#[must_use]`
+because a composite that ignores a failing child would wrongly pass. `Evidence` has no public constructor, so downstream
+code can only return evidence that a collector gathered. Built-in matchers also use the private `record`, which takes a
+closure so that a failure is only built when the collector keeps it. `unsatisfied` wraps the description of a constraint
+that has no subject to show as a "does not satisfy the constraint" failure.
 
 Built-in completion discards evidence on success. On rejection, it adds a lazy fallback only if neither retained nor
 omitted evidence exists. Each matcher family decides how to traverse its input and describe that fallback. Empty evidence

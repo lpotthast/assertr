@@ -2,7 +2,7 @@ use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     AssertionContext, Expectation, ValueRenderer,
     assertions::map::{Map, MapLookup},
-    expectation::Evidence,
+    expectation::{Evidence, context::unsatisfied},
     failure::{FailureBuilder, FailureKind, PathSegment},
     renderer::RenderingContext,
 };
@@ -61,11 +61,14 @@ where
             let matched = context.evaluate(value, expected);
             context.complete(matched, |context| context.describe(expected))
         } else {
-            context.outcome(false, |_| {
-                FailureBuilder::new::<()>(FailureKind::Matching)
-                    .relation("contains the required key")
-                    .build()
-            })
+            context.record(|_| {
+                unsatisfied(
+                    FailureBuilder::new::<()>(FailureKind::Matching)
+                        .relation("contains the required key")
+                        .build(),
+                )
+            });
+            false
         }
     };
     let matched = if context.is_diagnostic() {

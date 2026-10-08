@@ -65,10 +65,10 @@ where
         };
         let order = C::PRESENTATION.order();
         for &slot in &result.unmatched_expected {
-            context.record_with(|context| pairs.missing::<C>(slot, order, context));
+            context.record(|context| pairs.missing::<C>(slot, order, context));
         }
         if !result.unmatched_actual.is_empty() {
-            context.record_with(|context| pairs.unexpected::<C>(&result, order, context));
+            context.record(|context| pairs.unexpected::<C>(&result, order, context));
         }
         Err(context.into_evidence())
     }
@@ -159,7 +159,7 @@ where
                     self.explain(index, slot, &mut unexpected);
                 }
             } else {
-                unexpected.record_with(|context| self.surplus(&satisfied, context));
+                unexpected.record(|context| self.surplus(&satisfied, context));
             }
         }
         unexpected
@@ -186,7 +186,7 @@ where
         }
         let mut constraints = context.isolated();
         for &slot in satisfied {
-            constraints.record_with(|constraints| {
+            constraints.record(|constraints| {
                 FailureBuilder::new::<A>(FailureKind::Matching)
                     .fact(Fact::labelled("At slot", constraints.render().value(&slot)))
                     .constraint(self.list.describe_at(slot, constraints))
@@ -524,7 +524,7 @@ mod tests {
                         RenderingBudget::default().with_max_items(prefix + 1),
                     );
                     if prefix > 0 {
-                        context.evaluate(&0, &eq(1));
+                        assert_that!(context.evaluate(&0, &eq(1))).is_false();
                     }
                     assert_that!(context.evaluate(&UnorderedSet(values.to_vec()), &matcher))
                         .is_false();
@@ -764,8 +764,9 @@ mod tests {
                 AssertionContext::new(&NeverRender, RenderingBudget::default().with_max_items(0));
             assert_that!(context.evaluate(&[1, 1, 99], &elements_are_in_any_order![eq(1)]))
                 .is_false();
-            assert_that!(context.omitted).is_equal_to(1);
-            assert_that!(context.into_evidence().children).is_empty();
+            let evidence = context.into_evidence();
+            assert_that!(evidence.omitted).is_equal_to(1);
+            assert_that!(evidence.children).is_empty();
         }
 
         #[test]
@@ -886,8 +887,9 @@ mod tests {
             assert_that!(*calls.borrow()).is_equal_to([0, 0, 0]);
             assert_that!(context.probe(&[1, 1, 99], &elements_are_in_any_order![equal_to(1)]))
                 .is_false();
-            assert_that!(context.omitted).is_equal_to(0);
-            assert_that!(context.into_evidence().children).is_empty();
+            let evidence = context.into_evidence();
+            assert_that!(evidence.omitted).is_equal_to(0);
+            assert_that!(evidence.children).is_empty();
         }
 
         #[test]

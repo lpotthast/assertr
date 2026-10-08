@@ -59,7 +59,7 @@ fn record_value_mismatch<V, Q: ?Sized, EV: ?Sized, R>(
 ) where
     R: ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<EV>,
 {
-    children.record_with(|context| {
+    children.record(|context| {
         let render = context.render();
         FailureBuilder::new::<V>(FailureKind::Equality)
             .actual(render.value(value))

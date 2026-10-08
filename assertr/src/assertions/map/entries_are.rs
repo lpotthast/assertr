@@ -49,7 +49,7 @@ where
         let mut extras = context.isolated_for_order(MapType::RENDERING_ORDER);
         for (key, _) in found.unexpected_entries(actual) {
             entries_match = false;
-            extras.record_with(|context| {
+            extras.record(|context| {
                 FailureBuilder::new::<MapType>(FailureKind::Matching)
                     .path([key_segment(context.render(), key)])
                     .relation("has an unexpected key")
@@ -61,7 +61,7 @@ where
         // duplicate queries can match every entry while the lengths differ.
         let (actual_length, expected_length) = (actual.length(), self.0.len());
         if entries_match && actual_length != expected_length {
-            context.record_with(|context| {
+            context.record(|context| {
                 let render = context.render();
                 FailureBuilder::new::<MapType>(FailureKind::Length)
                     .relation("does not have the required number of entries")

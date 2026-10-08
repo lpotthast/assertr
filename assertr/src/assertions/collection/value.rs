@@ -376,7 +376,7 @@ where
             }) = mismatch
             {
                 let mut child = context.isolated();
-                child.record_with(|context| {
+                child.record(|context| {
                     let render = context.render();
                     FailureBuilder::new::<C::Item>(FailureKind::Equality)
                         .actual(render.value(element))

@@ -417,7 +417,7 @@ where
                         failure = failure.fact(Fact::note(METADATA_NOTE));
                     }
                     let mut child = context.isolated();
-                    child.record_with(|context| {
+                    child.record(|context| {
                         let rendering = context.render().identities();
                         FailureBuilder::new::<U>(FailureKind::Equality)
                             .actual(rendering.value(element))

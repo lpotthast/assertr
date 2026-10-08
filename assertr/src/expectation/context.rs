@@ -11,13 +11,94 @@ use crate::{
 };
 use alloc::string::String;
 
-/// Executor-provided rendering, paths, and isolated expectation evidence.
+/// The settings and evidence collector an [`Expectation`] runs with.
 ///
-/// Evaluation never raises a root assertion. A probe suppresses built-in diagnostic rendering, but
-/// cannot undo side effects or rendering performed by downstream code or assertion closures.
+/// assertr passes a context to [`Expectation::evaluate`] and [`Expectation::explain`]. There is no
+/// public constructor. Run an expectation through an assertion chain, for example with
+/// [`AssertThat::apply_assertion`] or `.matches(..)`.
 ///
-/// There is no public constructor. Use an assertion chain to execute a definition. Downstream
-/// compositions receive this context and can create an [`isolated`](Self::isolated) child scope.
+/// # Checking a single value
+///
+/// Most expectations need only two methods:
+///
+/// - [`render`](Self::render) renders values for the failure report with the chain's renderer and
+///   rendering budget.
+/// - [`is_diagnostic`](Self::is_diagnostic) tells whether evidence is wanted right now. Skip
+///   optional work when it returns `false`.
+///
+/// # Combining expectations
+///
+/// An expectation that runs other expectations, like [`all_of`](crate::matchers::all_of), collects
+/// their failures as evidence:
+///
+/// 1. Start a fresh collector with [`isolated`](Self::isolated).
+/// 2. Run each child with [`evaluate`](Self::evaluate). It returns whether the child passed and
+///    records the child's failure if not. Wrap it in [`scoped`](Self::scoped) to report the failure
+///    at a field, index, or key.
+/// 3. On rejection, return the collected failures from [`into_evidence`](Self::into_evidence) and
+///    attach them in `explain` with [`Evidence::explain`].
+///
+/// To only find out whether a child passes, for example while searching for a matching element,
+/// use [`probe`](Self::probe). It records nothing and renders nothing.
+///
+/// This expectation applies one matcher to both bounds of a range and reports each failing bound
+/// at its field:
+///
+/// ```
+/// use assertr::expectation::Evidence;
+/// use assertr::failure::{FailureBuilder, PathSegment};
+/// use assertr::matchers::ge;
+/// use assertr::prelude::*;
+/// use assertr::{AssertionContext, Expectation, FailureKind};
+///
+/// struct Bounds {
+///     start: u32,
+///     end: u32,
+/// }
+///
+/// struct BothBounds<M>(M);
+///
+/// impl<M: Expectation<u32, R>, R> Expectation<Bounds, R> for BothBounds<M> {
+///     type Success<'a> = () where Self: 'a;
+///     type Rejection<'a> = Evidence where Self: 'a;
+///
+///     const KIND: FailureKind = FailureKind::Matching;
+///
+///     fn evaluate(&self, bounds: &Bounds, context: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+///         let mut children = context.isolated();
+///         let start = children.scoped(PathSegment::Field("start"), |children| {
+///             children.evaluate(&bounds.start, &self.0)
+///         });
+///         let end = children.scoped(PathSegment::Field("end"), |children| {
+///             children.evaluate(&bounds.end, &self.0)
+///         });
+///         if start && end { Ok(()) } else { Err(children.into_evidence()) }
+///     }
+///
+///     fn explain(
+///         &self,
+///         rejected: Option<(&Bounds, Evidence)>,
+///         failure: FailureBuilder,
+///         _: &AssertionContext<'_, R>,
+///     ) -> FailureBuilder {
+///         match rejected {
+///             Some((_, evidence)) => evidence.explain(failure.relation("has a failing bound")),
+///             None => failure.relation("has matching bounds"),
+///         }
+///     }
+/// }
+///
+/// assert_that!(Bounds { start: 1, end: 9 }).apply_assertion(BothBounds(ge(1)));
+///
+/// let failures = assert_that!(Bounds { start: 0, end: 9 })
+///     .with_location(false)
+///     .capture(|it| it.apply_assertion(BothBounds(ge(1))));
+/// assert_that!(failures[0].children).has_length(1);
+/// assert_that!(failures[0].to_string()).contains("At .start:");
+/// ```
+///
+/// Children may run user code with side effects. A probe or a full budget suppresses evidence,
+/// but it cannot undo those effects.
 ///
 /// ```compile_fail
 /// use assertr::{AssertionContext, DebugRenderer, RenderingBudget};
@@ -29,8 +110,8 @@ pub struct AssertionContext<'r, R = DebugRenderer> {
     diagnostic: bool,
     order: EvidenceOrder,
     // Paths are relative to this scope. `scoped` prepends its segment when committing evidence.
-    pub(crate) children: Smallest<Keyed<(Option<String>, usize), AssertionFailure>>,
-    pub(crate) omitted: usize,
+    children: Smallest<Keyed<(Option<String>, usize), AssertionFailure>>,
+    omitted: usize,
 }
 
 /// How a scope ranks the evidence it retains.
@@ -62,6 +143,15 @@ impl EvidenceOrder {
     }
 }
 
+/// Wraps the description of a constraint that has no subject to show, such as an expected element
+/// that is missing, as a "does not satisfy the constraint" failure.
+pub(crate) fn unsatisfied(constraint: AssertionFailure) -> AssertionFailure {
+    FailureBuilder::new::<()>(FailureKind::Matching)
+        .relation("does not satisfy the constraint")
+        .constraint(constraint)
+        .build()
+}
+
 impl<'r, R> AssertionContext<'r, R> {
     /// Creates a diagnostic evaluation with explicit renderer and budget.
     #[cfg(test)]
@@ -86,8 +176,8 @@ impl<'r, R> AssertionContext<'r, R> {
     }
 
     /// Whether captured assertion callbacks retain caller locations.
-    #[must_use]
-    pub fn include_location(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn include_location(&self) -> bool {
         self.include_location
     }
 
@@ -102,7 +192,11 @@ impl<'r, R> AssertionContext<'r, R> {
         !self.diagnostic
     }
 
-    /// Consumes a completed evaluation's bounded evidence. Its paths are relative to this scope.
+    /// Returns the failures this collector recorded, to be attached in
+    /// [`Expectation::explain`] with [`Evidence::explain`].
+    ///
+    /// Paths are relative to this collector. A [`scoped`](Self::scoped) segment added by an
+    /// enclosing collector is applied when it takes over the evidence.
     #[must_use]
     pub fn into_evidence(self) -> Evidence {
         Evidence {
@@ -133,18 +227,18 @@ impl<'r, R> AssertionContext<'r, R> {
         matched: bool,
         fallback: impl FnOnce(&Self) -> AssertionFailure,
     ) -> bool {
-        if !matched && !self.has_evidence() {
-            self.outcome(false, fallback);
+        if !matched && self.children.len() == 0 && self.omitted == 0 {
+            self.record(|context| unsatisfied(fallback(context)));
         }
         matched
     }
 
-    /// Whether this scope has retained or omitted failure evidence.
-    pub(crate) fn has_evidence(&self) -> bool {
-        self.children.len() > 0 || self.omitted > 0
-    }
-
-    /// Executes and immediately explains one definition. Observations cannot escape to siblings.
+    /// Runs a child expectation and returns whether it passed.
+    ///
+    /// A failing child is explained right away and its failure recorded here, unless this is a
+    /// probe or the rendering budget is used up. Either way, the child's observation is dropped
+    /// before this returns, so a guard it held is released before the next child runs.
+    #[must_use = "a failing child must make the combined check fail"]
     pub fn evaluate<A: ?Sized, D: Expectation<A, R> + ?Sized>(
         &mut self,
         actual: &A,
@@ -200,59 +294,42 @@ impl<'r, R> AssertionContext<'r, R> {
             .children((0..retained).map(|index| list.describe_at(index, self)))
     }
 
-    /// Returns the active rendering context.
+    /// Renders values with the chain's renderer and rendering budget. Use it for every value in a
+    /// failure report.
     #[must_use]
     pub fn render(&self) -> RenderingContext<'r, R> {
         self.rendering
     }
 
-    /// Whether evidence is requested. Built-in leaves do not render during probes.
+    /// Whether recorded failures would be kept.
+    ///
+    /// Returns `false` during a [`probe`](Self::probe) and once the rendering budget allows no
+    /// more items. Use it to skip building optional evidence. Never let it change whether a check
+    /// passes.
     #[must_use]
     pub fn is_diagnostic(&self) -> bool {
         self.diagnostic && self.child_limit() > 0
     }
 
-    /// Records detached evidence, preserving structured values and inner assertion metadata.
-    pub fn record(&mut self, failure: AssertionFailure) {
-        self.record_with(|_| failure);
-    }
-
-    /// Builds detached evidence only when this scope can retain it.
-    pub(crate) fn record_with(&mut self, description: impl FnOnce(&Self) -> AssertionFailure) {
+    /// Records the failure built by `failure`. The closure runs only when this collector keeps the
+    /// failure, so no work is spent on failures that the budget or a probe would discard.
+    pub(crate) fn record(&mut self, failure: impl FnOnce(&Self) -> AssertionFailure) {
         if !self.diagnostic {
             return;
         }
         if self.is_diagnostic() {
-            let failure = description(self);
+            let failure = failure(self);
             self.retain(failure);
         } else {
             self.omitted += 1;
         }
     }
 
-    /// Records a leaf constraint when it rejects the subject.
+    /// Returns whether `matcher` accepts `actual`, without recording or rendering anything.
     ///
-    /// `description` must describe the unmet constraint as if no subject existed, for example
-    /// through [`Expectation::explain`] with `None`. The recorded failure wraps it as
-    /// the constraint of a "does not satisfy the constraint" failure. The closure runs only when
-    /// this scope can retain the failure.
-    pub fn outcome(
-        &mut self,
-        matched: bool,
-        description: impl FnOnce(&Self) -> AssertionFailure,
-    ) -> bool {
-        if !matched {
-            self.record_with(|context| {
-                FailureBuilder::new::<()>(FailureKind::Matching)
-                    .relation("does not satisfy the constraint")
-                    .constraint(description(context))
-                    .build()
-            });
-        }
-        matched
-    }
-
-    /// Evaluates truth in isolation without committing evidence.
+    /// Use it to search, for example for the first matching element, before collecting evidence
+    /// for the final result. The matcher still runs, including any user code inside it.
+    #[must_use = "probing records nothing, so its result is the only output"]
     pub fn probe<A: ?Sized, M>(&self, actual: &A, matcher: &M) -> bool
     where
         M: Expectation<A, R>,
@@ -262,12 +339,17 @@ impl<'r, R> AssertionContext<'r, R> {
         matcher.evaluate(actual, &context).is_ok()
     }
 
-    /// Evaluates within one relative path segment and commits that scope's evidence once.
+    /// Runs `f` with a collector whose failures are reported at `path`, such as a field, index,
+    /// or key, and returns what `f` returns.
+    ///
+    /// Recorded failures move into this collector when `f` returns. Nested calls build longer
+    /// paths, such as `At .rows[1]:`.
     pub fn scoped<T>(&mut self, path: PathSegment, f: impl FnOnce(&mut Self) -> T) -> T {
         let mut child = self.isolated();
         child.order.nested = true;
         let result = f(&mut child);
         let mut evidence = child.into_evidence();
+        // The last child takes `path` itself, so only the others need a clone.
         if let Some((last, others)) = evidence.children.split_last_mut() {
             for failure in others {
                 failure.path.insert(0, path.clone());
@@ -278,9 +360,10 @@ impl<'r, R> AssertionContext<'r, R> {
         result
     }
 
-    /// Starts an independent evaluation scope with the remaining evidence budget. Its evidence
-    /// paths are relative to this scope. Dropping it discards its evidence. Consume it with
-    /// [`Self::into_evidence`] to retain children.
+    /// Starts an empty collector with the same settings and the remaining rendering budget.
+    ///
+    /// Return its failures with [`into_evidence`](Self::into_evidence). Dropping it discards
+    /// them, which suits branches that turn out not to matter.
     #[must_use]
     pub fn isolated(&self) -> Self {
         Self {
@@ -324,7 +407,7 @@ impl<'r, R> AssertionContext<'r, R> {
             });
         let matched = failures.is_empty();
         for failure in failures {
-            self.record(failure);
+            self.record(|_| failure);
         }
         matched
     }
@@ -375,7 +458,7 @@ mod tests {
     use crate::{AssertionContext, expectation::predicate, prelude::*};
     use core::cell::Cell;
 
-    mod record_with {
+    mod record {
         use super::*;
         use crate::{
             DebugRenderer, RenderingBudget,
@@ -395,7 +478,7 @@ mod tests {
                     .with_diagnostics(!probe);
                     context.scoped(PathSegment::Field("items"), |context| {
                         for index in 0..3 {
-                            context.record_with(|_| {
+                            context.record(|_| {
                                 calls.set(calls.get() + 1);
                                 FailureBuilder::new::<i32>(FailureKind::Equality)
                                     .path([PathSegment::Index(index)])
@@ -429,7 +512,7 @@ mod tests {
                 AssertionContext::new(&DebugRenderer, RenderingBudget::default().with_max_items(1))
                     .isolated_for_order(RenderingOrder::SortByRenderedText);
             for relation in ["z", "a", "m"] {
-                context.record_with(|_| {
+                context.record(|_| {
                     calls.set(calls.get() + 1);
                     FailureBuilder::new::<i32>(FailureKind::Matching)
                         .relation(relation)
@@ -503,15 +586,16 @@ mod tests {
             use crate::__private::field;
             let mut context = AssertionContext::default();
             context.scoped(PathSegment::Field("value"), |context| {
-                context.evaluate(&1, &Group(equal_to(2)));
-                context.evaluate(
+                assert_that!(context.evaluate(&1, &Group(equal_to(2)))).is_false();
+                assert_that!(context.evaluate(
                     &1,
                     &Group(field(
                         |value: &i32| Some(value),
                         equal_to(2),
                         PathSegment::Field("value"),
                     )),
-                );
+                ))
+                .is_false();
             });
             let failures = context.into_evidence().children;
             assert_that!(failures).has_length(2);
@@ -538,7 +622,7 @@ mod tests {
         fn recording_relative_children_preserves_a_repeated_field_name() {
             let mut context = AssertionContext::default();
             context.scoped(PathSegment::Field("value"), |context| {
-                context.record(
+                context.record(|_| {
                     crate::failure::FailureBuilder::new::<i32>(crate::FailureKind::Matching)
                         .child(
                             crate::failure::FailureBuilder::new::<i32>(
@@ -547,8 +631,8 @@ mod tests {
                             .path([PathSegment::Field("value")])
                             .build(),
                         )
-                        .build(),
-                );
+                        .build()
+                });
             });
             let failure = context.into_evidence().children.remove(0);
             assert_that!(failure.path).is_equal_to([PathSegment::Field("value")]);
@@ -638,7 +722,7 @@ mod tests {
                         RenderingBudget::default().with_max_items(limit),
                     )
                     .isolated_for_order(order);
-                    context.evaluate(&0, &equal_to(9));
+                    assert_that!(context.evaluate(&0, &equal_to(9))).is_false();
                     let matcher = each(equal_to(9));
                     assert_that!(context.evaluate(&[1, 2, 3], &matcher)).is_false();
 
@@ -772,7 +856,7 @@ mod tests {
             let mut context = AssertionContext::default();
             {
                 let mut fork = context.isolated();
-                fork.evaluate(&1, &matcher);
+                assert_that!(fork.evaluate(&1, &matcher)).is_false();
                 context.append(fork.into_evidence());
             }
 

@@ -2,7 +2,7 @@ use crate::expectation::composite_items;
 use crate::{
     AssertionContext, Expectation, Fact,
     assertions::collection::{Placement, StableOrder},
-    expectation::{Evidence, MatcherList},
+    expectation::{Evidence, MatcherList, context::unsatisfied},
     failure::{FailureBuilder, FailureKind, PathSegment},
 };
 use alloc::vec::Vec;
@@ -92,7 +92,7 @@ where
             let mut window_elements = elements.by_ref().skip(start);
             for index in 0..expected_length {
                 if index < unaligned {
-                    window.outcome(false, |context| self.list.describe_at(index, context));
+                    window.record(|context| unsatisfied(self.list.describe_at(index, context)));
                     continue;
                 }
                 let position = start + index - unaligned;
@@ -105,12 +105,13 @@ where
                     if let Some(item) = item {
                         matched &= self.list.evaluate_at(index, item, context);
                     } else {
-                        context.outcome(false, |context| self.list.describe_at(index, context));
+                        context
+                            .record(|context| unsatisfied(self.list.describe_at(index, context)));
                     }
                 });
             }
             if !length_matches {
-                window.record_with(|window| {
+                window.record(|window| {
                     FailureBuilder::new::<C>(FailureKind::Matching)
                         .relation("does not have the required sequence")
                         .fact(Fact::labelled(
@@ -131,7 +132,7 @@ where
             if matches!(self.position, Placement::Contiguous) {
                 // Each rejected window stays one group, so its evidence does not interleave with
                 // the evidence of overlapping windows.
-                alternatives.record_with(|alternatives| {
+                alternatives.record(|alternatives| {
                     evidence
                         .explain(
                             FailureBuilder::new::<C>(FailureKind::Matching)

@@ -208,7 +208,7 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: Expectation<C::Item, 
         for item in actual.elements() {
             if context.probe(item, &self.0) {
                 found = true;
-                context.record_with(|context| {
+                context.record(|context| {
                     FailureBuilder::new::<C::Item>(FailureKind::Membership)
                         .actual(context.render().value(item))
                         .relation("matches the unwanted constraint")

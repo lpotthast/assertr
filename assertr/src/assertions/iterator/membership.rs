@@ -344,7 +344,7 @@ where
         for (index, item) in iterator.enumerate() {
             let mut child = context.isolated();
             if child.probe(item.borrow(), &self.expected) {
-                child.record_with(|child| {
+                child.record(|child| {
                     FailureBuilder::new::<T>(FailureKind::Membership)
                         .actual(child.render().value(item.borrow()))
                         .relation("matches the unwanted constraint")

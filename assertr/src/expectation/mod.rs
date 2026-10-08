@@ -73,19 +73,20 @@ pub use satisfying::{Satisfying, satisfying};
 pub(crate) mod context;
 pub use context::AssertionContext;
 
-/// Owned, bounded child failures from one evaluation, with their omission count.
+/// Failures collected while running child expectations, plus a count of those the rendering
+/// budget left out.
 ///
-/// Child paths are relative to the scope that produced them. The group retains no borrowed
-/// subjects, expectation definitions, or guards. Composition transfers it into the common failure
-/// builder.
-#[derive(Debug, Default)]
+/// Get it from [`AssertionContext::into_evidence`] and attach it to a failure with
+/// [`explain`](Self::explain). It owns its failures and borrows nothing, so it works as the
+/// [`Rejection`](Expectation::Rejection) of a combining expectation.
+#[derive(Debug)]
 pub struct Evidence {
     pub(crate) children: Vec<AssertionFailure>,
     pub(crate) omitted: usize,
 }
 
 impl Evidence {
-    /// Attaches the child failures and their omission count to the enclosing expectation's failure.
+    /// Adds the collected failures and their omission count to `failure` as nested failures.
     pub fn explain(self, failure: FailureBuilder) -> FailureBuilder {
         failure
             .children(self.children)
@@ -93,74 +94,74 @@ impl Evidence {
     }
 }
 
-/// A reusable expectation that evaluates a borrowed subject once and explains its rejection.
+/// A reusable check with its own failure report.
 ///
-/// Evaluation does not track or raise an assertion. The executor supplies the context and decides
-/// whether to continue with a success or explain a rejection. Compositions explain child
-/// rejections immediately and retain owned [`Evidence`], releasing each child's observation
-/// before evaluating its siblings.
+/// [`evaluate`](Self::evaluate) checks a borrowed subject once and keeps what it observed. If the
+/// check fails, [`explain`](Self::explain) turns that observation into a report. The chain counts
+/// the assertion and raises the failure, so neither method does either.
+///
+/// The [custom assertions guide](crate#implement-an-expectation) walks through an implementation.
+/// [`AssertionContext`] shows how to combine expectations.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not an expectation for `{T}`",
     label = "cannot check `{T}` with `{Self}`",
     note = "to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`"
 )]
 pub trait Expectation<T: ?Sized, R = DebugRenderer> {
-    /// The original successful observation. Use `()` when no witness is needed.
+    /// What a passing check observed, such as a parsed value or a lock guard. Use `()` when there
+    /// is nothing to keep. [`AssertThat::test_assertion`](crate::AssertThat::test_assertion)
+    /// returns it.
     type Success<'a>
     where
         Self: 'a,
         T: 'a;
 
-    /// The original rejection, which may borrow the subject or definition.
+    /// What a failing check observed, passed on to [`explain`](Self::explain). It may borrow the
+    /// subject or the expectation.
     type Rejection<'a>
     where
         Self: 'a,
         T: 'a;
 
-    /// The failure family used for both ordinary and nested diagnostics. Custom checks of a domain
-    /// property can keep the default.
+    /// The [`FailureKind`] of every failure this expectation reports. Domain checks can keep the
+    /// default.
     const KIND: FailureKind = FailureKind::Predicate;
 
-    /// Whether composition contributes this definition's children directly, applying the current
-    /// context's path to their relative paths.
+    /// Whether a nested failure of this expectation is replaced by its children.
     ///
-    /// In composition, a flattening definition contributes only its children and omission count.
-    /// Its own relation, actual, expected, unexpected, and facts are not shown. Use it only for
-    /// transparent groups whose children carry the complete explanation. Library probes never call
-    /// [`explain`](Self::explain). Ordinary chain execution still retains the definition's
-    /// enclosing failure.
+    /// Set it for pure grouping expectations, like [`all_of`](crate::matchers::all_of), whose
+    /// children already explain everything. Inside another expectation, only the children and
+    /// their omission count are reported, not this expectation's relation, values, or facts. Run
+    /// directly on a chain, the expectation still reports its own failure.
     const FLATTEN: bool = false;
 
-    /// Evaluates once with the executor's context. User panics propagate.
+    /// Checks `actual` and returns what was observed.
+    ///
+    /// Return `Ok` with the [`Success`](Self::Success) value, or `Err` with what
+    /// [`explain`](Self::explain) needs to describe the failure. Use `context` to run child
+    /// expectations. The result must not depend on the rendering budget or on whether this is a
+    /// [`probe`](AssertionContext::probe). Panics in user code are not caught.
     ///
     /// # Errors
-    /// Returns the original rejection when the expectation is not satisfied. Diagnostic budgets
-    /// and probes must never change whether evaluation succeeds.
+    ///
+    /// Returns the rejection when the check fails.
     fn evaluate<'a>(
         &'a self,
         actual: &'a T,
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>>;
 
-    /// Explains a rejected observation or describes a missing expected subject.
+    /// Fills in the failure report.
     ///
-    /// `Some((actual, rejection))` explains the original rejected observation. `None` describes an
-    /// unmet expectation for which there is no subject to evaluate. It never represents a
-    /// successful evaluation. Both cases use the same operand roles, structured fields, renderer,
-    /// and budget. Each definition writes its own relations. No generic negation occurs.
+    /// `rejected` is `Some((actual, rejection))` after a failed check, with the rejection returned
+    /// by [`evaluate`](Self::evaluate). It is `None` when there is no subject at all, for example
+    /// an expected element missing from a collection. Then describe what was expected. `None`
+    /// never means the check passed.
     ///
-    /// Populate and return the supplied structured builder. Do not track or raise an assertion.
-    /// Render shared operands through [`AssertionContext::render`] and reuse retained views from
-    /// `rejected` when present. Bulk expected lists may be accessed and their operands borrowed
-    /// repeatedly if they describe the same logical list and comparison values. Access counts
-    /// and interleaving with comparisons are unspecified. Constructors store these inputs without
-    /// accessing their views. Library-controlled access occurs after assertion tracking.
-    /// Prepare stateful inputs before the assertion or retain their observation in a custom
-    /// expectation. Scalar borrowing, matcher, callback, guard, and identity contracts are
-    /// unchanged. Do not repeat comparisons, searches, lookups, callbacks, consumption, or
-    /// other observations, or retain guards after returning. The chain executor raises the
-    /// completed failure. Child contexts instead build and retain it as evidence for the
-    /// enclosing assertion.
+    /// Render every value through [`AssertionContext::render`]. Report what the rejection kept
+    /// instead of checking again: never repeat comparisons, lookups, callbacks, or iterator
+    /// consumption. Expected lists may be read again. Release any guard held by the rejection
+    /// before returning. Return the populated builder. The chain raises it.
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
