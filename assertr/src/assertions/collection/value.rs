@@ -977,11 +977,12 @@ mod tests {
 
         #[test]
         fn a_shorter_subject_is_compared_with_the_end_of_the_suffix() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![9, 3])
                     .with_location(false)
                     .ends_with([1, 2, 3]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------

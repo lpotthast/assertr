@@ -741,11 +741,12 @@ mod tests {
 
         #[test]
         fn panics_when_type_does_not_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(report!(TestError("root")))
                     .with_location(false)
                     .has_current_context_type::<String>();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -787,11 +788,12 @@ mod tests {
 
         #[test]
         fn panics_when_display_value_does_not_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(report!(TestError("root")))
                     .with_location(false)
                     .has_current_context_display_value("other");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -840,11 +842,12 @@ mod tests {
 
         #[test]
         fn panics_when_debug_string_does_not_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(report!(TestError("root")))
                     .with_location(false)
                     .has_current_context_debug_string("other");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -940,11 +943,12 @@ mod tests {
 
         #[test]
         fn panics_when_type_does_not_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(report!("root"))
                     .with_location(false)
                     .has_current_context::<String>();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------

@@ -72,10 +72,11 @@ mod tests {
 
     #[test]
     fn dropping_an_unused_assert_during_unwinding_preserves_the_original_panic() {
-        assert_that_panic_by(|| {
+        assert_that!(|| {
             let _assert = assert_that!(42);
             panic!("original panic");
         })
+        .panics()
         .has_type::<&str>()
         .is_equal_to("original panic");
     }

@@ -156,9 +156,10 @@ mod tests {
             let mut cmd = Command::new("foo");
             cmd.arg("--bar");
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(cmd).with_location(false).has_arg("help");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------

@@ -618,7 +618,7 @@ mod tests {
             (false, "does not start with"),
             (true, "does not contain exactly"),
         ] {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let it = assert_that_owned!([1, 2, 3].into_iter()).with_location(false);
                 if exact {
                     it.contains_exactly([1, 9, 3]);
@@ -626,6 +626,7 @@ mod tests {
                     it.starts_with([1, 9, 3]);
                 }
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------

@@ -13,10 +13,10 @@ pub(crate) use alloc::{
 
 #[cfg(feature = "num")]
 pub use crate::assertions::NumAssertions;
+#[cfg(any(feature = "std", test))]
+pub use crate::assertions::{AsyncFnOnceAssertions, FnOnceAssertions};
 #[cfg(feature = "std")]
-pub use crate::assertions::{
-    AsyncFnOnceAssertions, CommandAssertions, FnOnceAssertions, MutexAssertions, PathAssertions,
-};
+pub use crate::assertions::{CommandAssertions, MutexAssertions, PathAssertions};
 #[cfg(feature = "http")]
 pub use crate::assertions::{HttpHeaderValueAssertions, HttpHeaderValueExtractAssertions};
 #[cfg(feature = "program")]
@@ -41,6 +41,13 @@ pub(crate) use crate::test_support::FailureReportAssertions;
 #[cfg(test)]
 pub(crate) use crate::test_support::assert_caller_location;
 pub use crate::{
+    AssertThat,
+    failure::{AssertionFailure, AssertionFailures},
+    renderer::{DebugRenderer, RenderingBudget, ValueRenderer},
+};
+#[cfg(feature = "fluent")]
+pub use crate::{IntoAssertContext, IntoOwnedAssertContext};
+pub use crate::{
     assert_that, assert_that_owned, assert_that_type,
     assertions::{
         BoolAssertions, BoxAssertions, BoxExtractAssertions, CharAssertions, CollectionAssertions,
@@ -58,17 +65,6 @@ pub use crate::{
     mode::{Capture, Mode, Panic},
     pattern,
 };
-// Unit tests capture panics through a private helper backed by the hosted test harness, so they
-// also run without the `std` feature.
-#[cfg(test)]
-pub(crate) use crate::test_support::assert_that_panic_by;
-pub use crate::{
-    AssertThat,
-    failure::{AssertionFailure, AssertionFailures},
-    renderer::{DebugRenderer, RenderingBudget, ValueRenderer},
-};
-#[cfg(feature = "fluent")]
-pub use crate::{IntoAssertContext, IntoOwnedAssertContext};
 
 #[cfg(test)]
 pub(crate) use crate::expectation::AssertionContext;

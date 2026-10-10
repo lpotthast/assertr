@@ -432,7 +432,8 @@ mod tests {
 
         #[test]
         fn panics_when_not_zero() {
-            assert_that_panic_by(|| assert_that!(3).with_location(false).is_zero())
+            assert_that!(|| assert_that!(3).with_location(false).is_zero())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -508,7 +509,8 @@ mod tests {
         fn panics_when_zero_or_positive() {
             let failures = assert_that!(1.23).capture(NumAssertions::is_negative);
             assert_that!(failures).has_length(1);
-            assert_that_panic_by(|| assert_that!(0.0).with_location(false).is_negative())
+            assert_that!(|| assert_that!(0.0).with_location(false).is_negative())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -576,11 +578,12 @@ mod tests {
 
         #[test]
         fn panics_when_outside_allowed_range() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(0.3319)
                     .with_location(false)
                     .is_close_to(0.333, 0.001)
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -636,9 +639,10 @@ mod tests {
             let failures = assert_that!(1.0).capture(|it| it.is_close_to(1.0, f64::NAN));
             assert_that!(failures[0].relation.as_deref())
                 .is_equal_to(Some("was given an invalid allowed deviation"));
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(1_i8).with_location(false).is_close_to(1, -1);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -672,7 +676,8 @@ mod tests {
 
         #[test]
         fn panics_when_not_nan() {
-            assert_that_panic_by(|| assert_that!(1.23).with_location(false).is_nan())
+            assert_that!(|| assert_that!(1.23).with_location(false).is_nan())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -701,9 +706,10 @@ mod tests {
             assert_that!(0.3f32).is_finite();
             let failures = assert_that!(f32::NEG_INFINITY).capture(NumAssertions::is_finite);
             assert_that!(failures).has_length(1);
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(f32::INFINITY).with_location(false).is_finite();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------

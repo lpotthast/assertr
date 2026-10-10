@@ -288,11 +288,12 @@ mod tests {
 
         #[test]
         fn panics_when_not_equal() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(42)
                     .with_location(false)
                     .has_debug_string("foo")
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -376,11 +377,12 @@ mod tests {
             // That's why we also have `has_debug_string`.
             #[test]
             fn distinguishes_a_newline_from_a_literal_escape_sequence() {
-                assert_that_panic_by(|| {
+                assert_that!(|| {
                     assert_that!("\n")
                         .with_location(false)
                         .has_debug_value(r"\n")
                 })
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

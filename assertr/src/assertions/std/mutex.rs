@@ -346,7 +346,8 @@ mod tests {
         #[test]
         fn panics_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that_panic_by(|| assert_that!(mutex).with_location(false).is_locked())
+            assert_that!(|| assert_that!(mutex).with_location(false).is_locked())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -364,7 +365,8 @@ mod tests {
         #[test]
         fn treats_a_poisoned_but_available_mutex_as_not_locked() {
             let mutex = super::poisoned_mutex();
-            assert_that_panic_by(|| assert_that!(mutex).with_location(false).is_locked())
+            assert_that!(|| assert_that!(mutex).with_location(false).is_locked())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -405,7 +407,8 @@ mod tests {
         fn panics_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock();
-            assert_that_panic_by(|| assert_that!(&mutex).with_location(false).is_not_locked())
+            assert_that!(|| assert_that!(&mutex).with_location(false).is_not_locked())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -459,11 +462,12 @@ mod tests {
 
         #[test]
         fn panics_when_not_poisoned() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!(Mutex::new(42))
                     .with_location(false)
                     .is_poisoned()
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------

@@ -8,8 +8,9 @@ difference to that.
 
 `assert_that!(value)` borrows. `assert_that!(&value)` is equivalent for sized values, and both
 produce `AssertThat<Value>`. Unsized targets such as `str` and `[T]` stay references, so
-`assert_that!("text")` produces `AssertThat<&str>`. `assert_that_owned!(value)` takes ownership,
-which only the assertions that consume their subject need.
+`assert_that!("text")` produces `AssertThat<&str>`. Closure literals and `async` blocks are owned,
+because nothing else could use them. `assert_that_owned!(value)` takes ownership of anything else,
+which only the assertions that consume their subject need, such as iterator assertions.
 
 ### Child chains
 
@@ -152,10 +153,10 @@ provides the runtime and awaits the returned future:
 use assertr::prelude::*;
 
 # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
-assert_that_owned!(async || 7_u32)
+assert_that!(async || 7_u32)
     .does_not_panic_async().await
     .is_equal_to(7);
-assert_that_owned!(async || panic!("boom"))
+assert_that!(async || panic!("boom"))
     .panics_async().await
     .has_type::<&str>()
     .is_equal_to("boom");

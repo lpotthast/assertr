@@ -309,7 +309,8 @@ mod tests {
         fn panics_when_insensitive() {
             let actual = HeaderValue::from_static("http/1.1");
 
-            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_sensitive())
+            assert_that!(|| assert_that!(actual).with_location(false).is_sensitive())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -345,7 +346,8 @@ mod tests {
             let mut actual = HeaderValue::from_static("http/1.1");
             actual.set_sensitive(true);
 
-            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_insensitive())
+            assert_that!(|| assert_that!(actual).with_location(false).is_insensitive())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -381,7 +383,8 @@ mod tests {
         fn panics_when_not_ascii() {
             let actual = HeaderValue::from_bytes(&[32, 33, 255]).expect("valid header value");
 
-            assert_that_panic_by(|| assert_that!(actual).with_location(false).is_ascii())
+            assert_that!(|| assert_that!(actual).with_location(false).is_ascii())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -432,7 +435,8 @@ mod tests {
         fn rejects_non_ascii_utf8_values() {
             let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
 
-            assert_that_panic_by(|| assert_that!(actual).with_location(false).get_ascii())
+            assert_that!(|| assert_that!(actual).with_location(false).get_ascii())
+                .panics()
                 .has_type::<String>()
                 .contains(r#"Actual: "\xc3\x84""#);
         }

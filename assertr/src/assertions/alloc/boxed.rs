@@ -291,7 +291,7 @@ mod tests {
 
             for extract in [true, false] {
                 let actual = PanicValue(Box::new("text"));
-                assert_that_panic_by(|| {
+                assert_that!(|| {
                     let assertion = assert_that!(actual).with_panic_presentation(|failure| {
                         assert_that!(failure.kind)
                             .is_equal_to(crate::failure::FailureKind::Variant);
@@ -303,6 +303,7 @@ mod tests {
                         assertion.is_of_type::<u32>();
                     }
                 })
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(type_name::<PanicValue>());
             }
@@ -312,11 +313,12 @@ mod tests {
         fn panics_when_type_of_contained_value_does_not_match_expected_type() {
             let boxed_any: Box<dyn Any> = Box::new("foo");
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(boxed_any)
                     .with_location(false)
                     .has_type::<u32>();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -336,11 +338,11 @@ mod tests {
             struct Foo;
             let boxed_any: Box<dyn Any> = Box::new(Foo);
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!(boxed_any)
                     .with_location(false)
                     .has_type::<u32>();
-            })
+            }).panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -363,9 +365,9 @@ mod tests {
             struct Foo;
             let actual = PanicValue(Box::new(Foo));
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(actual).with_location(false).has_type::<u32>();
-            })
+            }).panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------

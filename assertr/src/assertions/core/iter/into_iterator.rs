@@ -403,11 +403,12 @@ mod tests {
 
         #[test]
         fn panics_when_any_expected_value_is_absent() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
                     .into_iter_contains_all([2, 4]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -450,11 +451,12 @@ mod tests {
 
         #[test]
         fn panics_when_no_element_matches() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
                     .into_iter_contains_matching(matchers::predicate(|it: &i32| *it > 7));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -541,11 +543,12 @@ mod tests {
 
         #[test]
         fn panics_when_expected_is_contained() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
                     .into_iter_does_not_contain(2);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -583,13 +586,14 @@ mod tests {
 
         #[test]
         fn panics_when_an_element_matches() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
                     .into_iter_does_not_contain_matching(matchers::predicate(|it: &i32| {
                         *it % 2 == 0
                     }));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -685,13 +689,14 @@ mod tests {
 
         #[test]
         fn panics_when_a_predicate_stays_unmatched() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
                     .into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
                         is_one, is_two, is_nine,
                     ]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -786,11 +791,12 @@ mod tests {
 
         #[test]
         fn panics_when_not_empty() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1])
                     .with_location(false)
                     .into_iter_is_empty();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -825,11 +831,12 @@ mod tests {
 
         #[test]
         fn panics_when_empty() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Vec::<i32>::new())
                     .with_location(false)
                     .into_iter_is_not_empty();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -859,11 +866,12 @@ mod tests {
 
         #[test]
         fn panics_when_length_differs() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
                     .into_iter_has_length(2);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------

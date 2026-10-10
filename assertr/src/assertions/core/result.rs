@@ -294,11 +294,12 @@ mod tests {
 
         #[test]
         fn panics_when_error() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Result::<i32, String>::Err("someError".to_owned()))
                     .with_location(false)
                     .is_ok();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -341,11 +342,12 @@ mod tests {
 
         #[test]
         fn panics_when_ok() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Result::<i32, String>::Ok(42))
                     .with_location(false)
                     .is_err();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -364,7 +366,8 @@ mod tests {
     }
 
     fn rejected_kind(extract: impl FnOnce()) {
-        assert_that_panic_by(extract)
+        assert_that_owned!(extract)
+            .panics()
             .has_type::<String>()
             .is_equal_to(format!("{:?}", FailureKind::Variant));
     }

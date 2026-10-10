@@ -1063,14 +1063,14 @@ mod tests {
         fn body_errors_render_and_redact_through_the_active_renderer() {
             macro_rules! body_panic {
                 ($subject:expr, $renderer:expr, $extract:ident $(::<$ty:ty>)?) => {
-                    assert_that_panic_by(|| {
+                    assert_that!(|| {
                         block_on(async {
                             assert_that_owned!($subject)
                                 .with_renderer($renderer)
                                 .$extract $(::<$ty>)? ()
                                 .await;
                         });
-                    })
+                    }).panics()
                     .has_type::<String>()
                 };
             }
@@ -1124,11 +1124,12 @@ mod tests {
 
         #[test]
         fn panics_when_status_code_differs() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(response(404, &[], ""))
                     .with_location(false)
                     .has_status_code(reqwest::StatusCode::OK);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -1240,11 +1241,12 @@ mod tests {
 
         #[test]
         fn panics_when_the_header_is_absent() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(response(200, &[("x-api-key", "1234")], ""))
                     .with_location(false)
                     .has_header("content-type");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -1411,11 +1413,12 @@ mod tests {
 
         #[test]
         fn panics_with_the_expected_value_as_a_detail_when_the_header_is_absent() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(response(200, &[], ""))
                     .with_location(false)
                     .has_header_value("content-type", "application/json");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -1467,7 +1470,7 @@ mod tests {
         #[test]
         #[cfg(feature = "http")]
         fn does_not_attach_missing_header_detail_to_later_failures() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(ok_response())
                     .with_location(false)
                     .get_header("content-type")
@@ -1475,6 +1478,7 @@ mod tests {
                         s.is_equal_to("nope");
                     });
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
@@ -1510,10 +1514,10 @@ mod tests {
 
         #[test]
         fn panics_synchronously_when_the_response_is_only_borrowed() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let response = ok_response();
                 drop(assert_that!(response).get_text());
-            })
+            }).panics()
             .has_type::<&str>()
             .is_equal_to(
                 "get_text() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
@@ -1522,7 +1526,7 @@ mod tests {
 
         #[test]
         fn panics_with_the_url_and_error_when_the_body_cannot_be_read() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 block_on(async {
                     assert_that_owned!(failing_response())
                         .with_location(false)
@@ -1530,6 +1534,7 @@ mod tests {
                         .await;
                 });
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -1603,9 +1608,10 @@ mod tests {
             assert_that!(assertion.actual().0).is_equal_to(7);
             assert_that!(CALLS.load(Ordering::Relaxed)).is_equal_to(1);
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 block_on(assert_that_owned!(json_response("0")).get_json::<Decoded>());
             })
+            .panics()
             .has_type::<String>()
             .contains("rejected zero");
             assert_that!(CALLS.load(Ordering::Relaxed)).is_equal_to(2);
@@ -1616,7 +1622,7 @@ mod tests {
             let body = "not json";
             let expected_type = core::any::type_name::<Person>();
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 block_on(async {
                     assert_that_owned!(json_response(body))
                         .with_location(false)
@@ -1624,6 +1630,7 @@ mod tests {
                         .await;
                 });
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
@@ -1643,10 +1650,10 @@ mod tests {
 
         #[test]
         fn panics_synchronously_when_the_response_is_only_borrowed() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let response = json_response(r#"{"name":"Bob","age":42}"#);
                 drop(assert_that!(response).get_json::<Person>());
-            })
+            }).panics()
             .has_type::<&str>()
             .is_equal_to(
                 "get_json() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",

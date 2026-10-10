@@ -564,9 +564,10 @@ mod tests {
 
         #[test]
         fn panics_when_expected_is_not_blank() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!("a").with_location(false).is_blank();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -642,11 +643,12 @@ mod tests {
 
         #[test]
         fn does_not_fold_non_ascii_case_differences() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!("straße")
                     .with_location(false)
                     .is_equal_to_ignoring_ascii_case("STRAẞE");
             })
+            .panics()
             .has_type::<String>()
             .contains("ignoring ASCII case");
         }

@@ -134,11 +134,12 @@ mod tests {
         #[test]
         fn index_and_length_use_the_active_renderer() {
             use crate::test_support::CustomValueRenderer;
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([7])
                     .with_renderer(CustomValueRenderer)
                     .get_at(9);
             })
+            .panics()
             .has_type::<String>()
             .contains("Expected: custom(9)")
             .contains("Actual length: custom(1)");
@@ -161,9 +162,10 @@ mod tests {
 
         #[test]
         fn panics_when_the_index_is_out_of_bounds() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1, 2]).with_location(false).get_at(2);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------

@@ -391,7 +391,8 @@ mod tests {
 
         #[test]
         fn panics_when_not_equal() {
-            assert_that_panic_by(|| assert_that!("foo").with_location(false).is_equal_to("bar"))
+            assert_that!(|| assert_that!("foo").with_location(false).is_equal_to("bar"))
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -423,11 +424,12 @@ mod tests {
 
         #[test]
         fn panics_when_equal() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!("foo")
                     .with_location(false)
                     .is_not_equal_to("foo")
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

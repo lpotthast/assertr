@@ -108,7 +108,8 @@ mod tests {
         fn panics_when_not_zero() {
             let duration: Span = 2.hours().minutes(30);
 
-            assert_that_panic_by(|| assert_that!(duration).with_location(false).is_zero())
+            assert_that!(|| assert_that!(duration).with_location(false).is_zero())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -163,11 +164,12 @@ mod tests {
 
         #[test]
         fn panics_when_negative() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!((-2).hours().minutes(30))
                     .with_location(false)
                     .is_positive();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------

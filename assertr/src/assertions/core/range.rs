@@ -657,7 +657,8 @@ mod tests {
 
         #[test]
         fn fails_when_element_is_not_contained() {
-            assert_that_panic_by(|| assert_that!(2..3).with_location(false).contains_element(1))
+            assert_that!(|| assert_that!(2..3).with_location(false).contains_element(1))
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -717,11 +718,12 @@ mod tests {
 
         #[test]
         fn fails_when_element_is_contained() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(2..3)
                     .with_location(false)
                     .does_not_contain_element(2)
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -755,7 +757,8 @@ mod tests {
 
         #[test]
         fn fails_when_not_in_range() {
-            assert_that_panic_by(|| assert_that!(1).with_location(false).is_in_range(2..3))
+            assert_that!(|| assert_that!(1).with_location(false).is_in_range(2..3))
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -787,7 +790,8 @@ mod tests {
 
         #[test]
         fn fails_when_in_range() {
-            assert_that_panic_by(|| assert_that!(2).with_location(false).is_not_in_range(2..3))
+            assert_that!(|| assert_that!(2).with_location(false).is_not_in_range(2..3))
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------

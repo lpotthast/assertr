@@ -913,7 +913,8 @@ mod tests {
         #[test]
         fn panics_when_absent() {
             let path = Path::new("src/assertions/std/some-non-existing-file.rs");
-            assert_that_panic_by(|| assert_that!(path).with_location(false).exists())
+            assert_that!(|| assert_that!(path).with_location(false).exists())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -964,9 +965,10 @@ mod tests {
         fn panics_when_present() {
             let path = source_path!();
             let path = path.as_path();
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(path).with_location(false).does_not_exist();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -985,9 +987,10 @@ mod tests {
             let path = Path::new("invalid\0path");
             let error = path.try_exists().unwrap_err();
             let error = format!("{error:#?}").replace('\n', "\n    ");
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(path).with_location(false).does_not_exist();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -1082,7 +1085,8 @@ mod tests {
         fn panics_with_the_observed_entry_kind() {
             let path = source_path!();
             let dir = path.parent().unwrap();
-            assert_that_panic_by(|| assert_that!(dir).with_location(false).is_a_file())
+            assert_that!(|| assert_that!(dir).with_location(false).is_a_file())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(indoc::formatdoc! {r"
                     -------- assertr --------
@@ -1117,7 +1121,8 @@ mod tests {
         #[test]
         fn panics_when_relative() {
             let path = Path::new("foo/bar/baz.rs");
-            assert_that_panic_by(|| assert_that!(path).with_location(false).has_a_root())
+            assert_that!(|| assert_that!(path).with_location(false).has_a_root())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -1173,11 +1178,12 @@ mod tests {
         #[test]
         fn panics_when_different() {
             let path = source_relative_path!();
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(path)
                     .with_location(false)
                     .has_file_name("some.json")
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -1198,7 +1204,8 @@ mod tests {
         #[test]
         fn panics_when_path_has_no_component() {
             let path = Path::new("/");
-            assert_that_panic_by(|| assert_that!(path).with_location(false).has_extension("rs"))
+            assert_that!(|| assert_that!(path).with_location(false).has_extension("rs"))
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -1241,11 +1248,12 @@ mod tests {
         #[test]
         fn panics_when_not_a_whole_component_prefix() {
             let path = source_relative_path!();
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(path)
                     .with_location(false)
                     .starts_with("assert")
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------

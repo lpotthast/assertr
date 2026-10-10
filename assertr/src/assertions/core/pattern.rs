@@ -398,13 +398,14 @@ mod tests {
 
         #[test]
         fn panics_with_the_expected_pattern_and_rendered_actual_value() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Result::<(), TestError>::Err(
                     TestError::MissingTokenQueryParam
                 ))
                 .with_location(false)
                 .is_matching(pattern!(Err(TestError::MissingQueryParams)));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -453,11 +454,12 @@ mod tests {
 
         #[test]
         fn panics_with_the_unexpected_pattern_and_rendered_actual_value() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Result::<(), TestError>::Err(TestError::MissingQueryParams))
                     .with_location(false)
                     .is_not_matching(pattern!(Err(TestError::MissingQueryParams)));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------

@@ -437,7 +437,7 @@ mod leaf {
     // `panics()` is only available with the `std` feature.
     #[cfg(feature = "std")]
     fn a_failing_leaf_assertion_panics_in_panic_mode() {
-        let panic = assert_that_owned!(|| {
+        let panic = assert_that!(|| {
             assert_that!(person(12)).with_location(false).is_adult();
         })
         .panics();

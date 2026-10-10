@@ -300,13 +300,14 @@ mod tests {
         async fn panics_when_not_equal() {
             let (_tx, rx) = tokio::sync::watch::channel(Person { name: "bob".into() });
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(rx)
                     .with_location(false)
                     .has_current_value(Person {
                         name: "alice".into(),
                     })
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -421,7 +422,8 @@ mod tests {
         fn panics_with_the_rejected_change_state() {
             let (_sender, mut receiver) = watch::channel(7);
             receiver.mark_unchanged();
-            assert_that_panic_by(|| assert_that!(receiver).with_location(false).has_changed())
+            assert_that!(|| assert_that!(receiver).with_location(false).has_changed())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------

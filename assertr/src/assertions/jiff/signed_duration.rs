@@ -181,9 +181,10 @@ mod tests {
         fn panics_when_not_zero() {
             let duration: SignedDuration = "2h 30m".parse().unwrap();
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(duration).with_location(false).is_zero();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -214,11 +215,12 @@ mod tests {
 
         #[test]
         fn panics_when_zero() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(SignedDuration::ZERO)
                     .with_location(false)
                     .is_negative();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -249,11 +251,12 @@ mod tests {
 
         #[test]
         fn panics_when_negative() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(SignedDuration::from_secs(-5))
                     .with_location(false)
                     .is_positive();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -542,11 +545,12 @@ mod tests {
 
         #[test]
         fn reports_extreme_values_without_overflowing() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(SignedDuration::ZERO)
                     .with_location(false)
                     .is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -566,11 +570,12 @@ mod tests {
 
         #[test]
         fn reports_negative_deviation() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(SignedDuration::ZERO)
                     .with_location(false)
                     .is_close_to(SignedDuration::ZERO, SignedDuration::from_secs(-1));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------

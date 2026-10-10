@@ -361,7 +361,8 @@ mod tests {
         #[test]
         fn panics_when_not_locked() {
             let mutex = Mutex::new(42);
-            assert_that_panic_by(|| assert_that!(mutex).with_location(false).is_locked())
+            assert_that!(|| assert_that!(mutex).with_location(false).is_locked())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -400,7 +401,8 @@ mod tests {
         async fn panics_when_locked() {
             let mutex = Mutex::new(42);
             let guard = mutex.lock().await;
-            assert_that_panic_by(|| assert_that!(&mutex).with_location(false).is_not_locked())
+            assert_that!(|| assert_that!(&mutex).with_location(false).is_not_locked())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -475,13 +477,14 @@ mod tests {
         fn panics_with_the_callback_failure_when_the_value_does_not_satisfy_the_assertions() {
             let mutex = Mutex::new(42);
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(mutex)
                     .with_location(false)
                     .has_value_satisfying(|value| {
                         value.is_equal_to(43);
                     });
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------

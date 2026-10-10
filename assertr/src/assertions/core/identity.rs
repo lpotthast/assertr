@@ -289,12 +289,13 @@ mod tests {
             let values = [Opaque { _byte: 1 }, Opaque { _byte: 1 }];
             let actual = &values[0];
             let expected = &values[1];
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(actual)
                     .with_renderer(NoRenderer)
                     .with_location(false)
                     .is_same_instance_as(expected)
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------

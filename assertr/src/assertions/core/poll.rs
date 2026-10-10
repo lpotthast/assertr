@@ -245,11 +245,12 @@ mod tests {
 
         #[test]
         fn panics_when_not_ready() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Poll::<Foo>::Pending)
                     .with_location(false)
                     .is_ready();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -291,11 +292,12 @@ mod tests {
 
         #[test]
         fn rejects_pending_like_is_ready() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let _ = assert_that!(Poll::<i32>::Pending)
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_ready();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(format!("{:?}", FailureKind::Variant));
         }
@@ -348,11 +350,12 @@ mod tests {
 
         #[test]
         fn panics_when_ready() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Poll::Ready(Foo { val: 42 }))
                     .with_location(false)
                     .is_pending();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------

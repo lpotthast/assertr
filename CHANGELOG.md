@@ -69,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `assert_that!` owns closure literals and `async` blocks, so `assert_that!(|| ..).panics()` and
+  `assert_that!(async || ..).panics_async()` work without `assert_that_owned!`. Other expressions are still borrowed.
 - **Breaking:** Removed `AssertrCondition`, `ConditionAssertions`, `IterableConditionAssertions`, and their `is`,
   `has`, `are`, `have`, and fluent `be` methods. Use `matches` with a matcher or `predicate`.
 - **Breaking:** Equality, ordering, and collection, iterator, and map value comparisons use standard `PartialEq` and
@@ -167,8 +169,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** Tokio watch `has_changed` and `has_not_changed` move to `TokioWatchReceiverAssertions`, supporting panic
   and capture modes without renderer or `Clone` bounds. Replace imports of the removed
   `TokioWatchReceiverExtractAssertions`.
-- **Breaking:** Memory assertions move from `assertions::std::mem` to `assertions::core::mem` and work without `std`.
-  Import `MemAssertions` from the core or crate-wide prelude.
+- **Breaking:** Memory assertions move from `assertions::std::mem` to `assertions::MemAssertions` and work without
+  `std`.
 - **Breaking:** HTTP header values lose their own `is_empty` and `is_not_empty`. `HeaderValue` implements `HasLength`,
   so the same calls and `has_length` resolve to `LengthAssertions` through the prelude and count bytes. `is_sensitive`
   and `is_insensitive` require `ValueRenderer<HeaderValue>` instead of `ValueRenderer<bool> + Clone` and report the
@@ -180,7 +182,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** `jiff` is built without its default features. Enable jiff's time-zone database features in your own
   dependency if your tests look up time zones by name.
 - **Breaking:** `NumAssertions::is_close_to` uses rounded absolute floating-point distance through
-  `assertions::distance::NumericDistance`, retaining overflow-safe integer comparisons without requiring `Clone`.
+  `assertions::NumericDistance`, retaining overflow-safe integer comparisons without requiring `Clone`.
   Generic callers need this bound next to `Num`, and custom numeric types implement `zero_distance` and
   `checked_distance`. Numbers and `jiff::SignedDuration` share one `IsCloseTo` expectation, which needs no optional
   feature and renders its values compactly.
@@ -243,6 +245,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `into_iter_is_empty` respectively.
 - **Breaking:** Removed `Actual::map`. Match on the `Actual` variants instead.
 - **Breaking:** Removed `AssertThat::and()`, which returned the chain unchanged. Chain the next assertion directly.
+- **Breaking:** Every public item has one path. Assertion and capability traits live directly in `assertr::assertions`,
+  for example `assertr::assertions::PartialEqAssertions` and `assertr::assertions::Collection`. The family modules
+  such as `assertions::core` and `assertions::std`, and their `prelude` modules, are private. Expectation types and
+  their constructors live only in `assertr::matchers`. The crate root no longer re-exports `AssertionFailure`,
+  `CustomRenderer`, `DebugRenderer`, and `ValueRenderer`. Import them from `assertr::failure` and `assertr::renderer`,
+  or from `assertr::prelude`.
+- **Breaking:** `AssertThat::with_expression` is no longer public. The entry macros and `#[fluent_expressions]` record
+  the source expression.
 - **Breaking:** Removed `assert_that_panic_by` and `assert_that_panic_by_async`. Use
   `assert_that_owned!(f).panics()` and `assert_that_owned!(f).panics_async().await`, which also record the source
   expression.

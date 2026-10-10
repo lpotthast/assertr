@@ -100,7 +100,8 @@ mod tests {
 
         #[test]
         fn panics_when_false() {
-            assert_that_panic_by(|| assert_that!(false).with_location(false).is_true())
+            assert_that!(|| assert_that!(false).with_location(false).is_true())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -129,7 +130,8 @@ mod tests {
 
         #[test]
         fn panics_when_true() {
-            assert_that_panic_by(|| assert_that!(true).with_location(false).is_false())
+            assert_that!(|| assert_that!(true).with_location(false).is_false())
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(indoc::formatdoc! {r"
                     -------- assertr --------

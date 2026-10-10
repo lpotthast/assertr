@@ -239,11 +239,12 @@ mod tests {
 
         #[test]
         fn panics_when_none() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Option::<i32>::None)
                     .with_location(false)
                     .is_some()
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
@@ -292,11 +293,12 @@ mod tests {
 
         #[test]
         fn rejects_none_like_is_some() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let _ = assert_that!(Option::<i32>::None)
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_some();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(format!("{:?}", FailureKind::Variant));
         }
@@ -358,11 +360,12 @@ mod tests {
 
         #[test]
         fn panics_when_some() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Option::<i32>::Some(42))
                     .with_location(false)
                     .is_none()
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------

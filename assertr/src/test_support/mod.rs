@@ -3,17 +3,14 @@
 mod assertions;
 mod caller_location;
 mod collections;
-mod panic;
 mod rendering;
 
 use alloc::string::String;
 
 pub(crate) use assertions::{FailureReportAssertions, assert_trait_impl};
-#[cfg(feature = "std")]
 pub(crate) use caller_location::block_on;
 pub(crate) use caller_location::{assert_caller_location, check_caller_location};
 pub(crate) use collections::{PreservedBag, UnorderedMap, UnorderedSet};
-pub(crate) use panic::assert_that_panic_by;
 pub(crate) use rendering::{
     ComparisonRenderer, CustomValueRenderer, NoRenderer, NumericRenderer, RedactingRenderer,
     RendererActual, RendererExpected, SENTINEL, SentinelRenderer, assert_custom_fact,

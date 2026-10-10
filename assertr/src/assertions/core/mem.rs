@@ -141,11 +141,11 @@ mod tests {
         fn panics_when_type_does_not_need_drop() {
             struct DoeNotNeedDrop;
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_type::<DoeNotNeedDrop>()
                     .with_location(false)
                     .needs_drop();
-            })
+            }).panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------

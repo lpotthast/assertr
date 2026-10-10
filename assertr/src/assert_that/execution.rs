@@ -63,7 +63,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
 
     /// Applies an expectation to the subject after the adapter has tracked and captured its
     /// caller, for example before invoking user code or awaiting.
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", test))]
     #[track_caller]
     pub(crate) fn apply_assertion_after_tracking<D: Expectation<T, R>>(
         self,
@@ -318,7 +318,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "std")]
     fn tracks_before_evaluation_can_panic() {
         use crate::matchers::predicate;
 

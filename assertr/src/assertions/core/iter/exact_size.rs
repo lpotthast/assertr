@@ -253,11 +253,12 @@ mod tests {
 
         #[test]
         fn panics_when_count_differs() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2].into_iter())
                     .with_location(false)
                     .has_remaining_count(3);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -293,11 +294,12 @@ mod tests {
 
         #[test]
         fn panics_when_elements_remain() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2].into_iter())
                     .with_location(false)
                     .has_no_remaining_elements();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -333,11 +335,12 @@ mod tests {
 
         #[test]
         fn panics_when_no_elements_remain() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1_i32; 0].into_iter())
                     .with_location(false)
                     .has_remaining_elements();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------

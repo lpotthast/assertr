@@ -111,7 +111,7 @@ fn owned_fn<F>(actual: Actual<'_, F>) -> F {
     match actual {
         Actual::Owned(function) => function,
         Actual::Borrowed(_) => panic!(
-            "Function assertions consume the function and therefore need to own it. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead."
+            "Function assertions consume the function and therefore need to own it. Write the closure inside `assert_that!(|| ...)`, or use `assert_that_owned!(f)` (or `f.must_owned()`) for a named closure."
         ),
     }
 }
@@ -156,8 +156,16 @@ where
 /// Assertions that invoke a synchronous `FnOnce` subject.
 ///
 /// These methods are available only in panic mode because they change the subject type. Invoking
-/// `FnOnce` consumes it, so create the assertion with `assert_that_owned!` or `.must_owned()`.
-/// Calling either method on a borrowed subject panics.
+/// `FnOnce` consumes it, so the chain must own the closure. `assert_that!(|| ..)` owns a closure
+/// literal. Use `assert_that_owned!(f)` or `f.must_owned()` for a named closure. Calling either
+/// method on a borrowed subject panics.
+///
+/// ```
+/// use assertr::prelude::*;
+///
+/// assert_that!(|| "x".parse::<u32>().unwrap()).panics();
+/// assert_that!(|| 1 + 1).does_not_panic().is_equal_to(2);
+/// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait FnOnceAssertions<'t, O, R = DebugRenderer> {
     /// Asserts that invoking the function or dropping its output panics, then returns the payload.
@@ -204,8 +212,9 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
 /// Assertions that invoke an async `FnOnce` subject and poll its returned future.
 ///
 /// These methods are available only in panic mode because they change the subject type. Invoking
-/// `FnOnce` consumes it, so create the assertion with `assert_that_owned!` or `.must_owned()`.
-/// Awaiting either method on a borrowed subject panics.
+/// `FnOnce` consumes it, so the chain must own the closure. `assert_that!(async || ..)` owns a
+/// closure literal. Use `assert_that_owned!(f)` or `f.must_owned()` for a named closure. Awaiting
+/// either method on a borrowed subject panics.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait AsyncFnOnceAssertions<'t, O, R = DebugRenderer> {
     /// Asserts that invoking the function, polling its future, or dropping its output panics, then
@@ -293,12 +302,12 @@ mod tests {
 
         #[tokio::test]
         async fn successful_panic_observations_need_no_renderer() {
-            let synchronous = assert_that_owned!(|| panic!("sync"))
+            let synchronous = assert_that!(|| panic!("sync"))
                 .with_renderer(NoRenderer)
                 .panics();
             assert_that!(synchronous.actual().0.is::<&str>()).is_true();
             assert_that!(synchronous.state.records.assertion_count()).is_equal_to(1);
-            let asynchronous = assert_that_owned!(|| async { panic!("async") })
+            let asynchronous = assert_that!(|| async { panic!("async") })
                 .with_renderer(NoRenderer)
                 .panics_async()
                 .await;
@@ -314,12 +323,12 @@ mod tests {
 
             #[test]
             fn caller_location_is_as_expected() {
-                assert_caller_location!(assert_that_owned!(|| 42), panics());
+                assert_caller_location!(assert_that!(|| 42), panics());
             }
 
             #[test]
             fn succeeds_when_panic_occurs() {
-                assert_that_owned!(|| unimplemented!())
+                assert_that!(|| unimplemented!())
                     .panics()
                     .has_type::<&str>()
                     .is_equal_to("not implemented");
@@ -335,7 +344,7 @@ mod tests {
                     }
                 }
 
-                assert_that_owned!(|| PanicsOnDrop)
+                assert_that!(|| PanicsOnDrop)
                     .panics()
                     .has_type::<&str>()
                     .is_equal_to("output drop");
@@ -343,12 +352,13 @@ mod tests {
 
             #[test]
             fn later_failure_does_not_report_that_the_function_did_not_panic() {
-                assert_that_panic_by(|| {
-                    assert_that_owned!(|| panic!("boom"))
+                assert_that!(|| {
+                    assert_that!(|| panic!("boom"))
                         .with_location(false)
                         .panics()
                         .has_type::<String>();
                 })
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -365,7 +375,8 @@ mod tests {
 
             #[test]
             fn panics_when_no_panic_occurs() {
-                assert_that_panic_by(|| assert_that_owned!(|| 42).with_location(false).panics())
+                assert_that!(|| assert_that!(|| 42).with_location(false).panics())
+                    .panics()
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r"
                         -------- assertr --------
@@ -383,10 +394,7 @@ mod tests {
 
             #[test]
             fn caller_location_is_as_expected() {
-                assert_caller_location!(
-                    assert_that_owned!(|| panic!("subject panic")),
-                    does_not_panic()
-                );
+                assert_caller_location!(assert_that!(|| panic!("subject panic")), does_not_panic());
             }
 
             #[test]
@@ -396,8 +404,8 @@ mod tests {
                 use crate::test_support::{CustomValueRenderer, RedactingRenderer};
                 let message = "private-panic-value";
                 for owned in [false, true] {
-                    assert_that_panic_by(|| {
-                        assert_that_owned!(|| if owned {
+                    assert_that!(|| {
+                        assert_that!(|| if owned {
                             std::panic::panic_any(message.to_owned());
                         } else {
                             std::panic::panic_any(message);
@@ -405,7 +413,7 @@ mod tests {
                         .with_renderer(CustomValueRenderer)
                         .with_location(false)
                         .does_not_panic();
-                    })
+                    }).panics()
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
@@ -417,8 +425,8 @@ mod tests {
                           - Panic message: custom("private-panic-value")
                         -------- assertr --------
                     "#});
-                    assert_that_panic_by(|| {
-                        assert_that_owned!(|| if owned {
+                    assert_that!(|| {
+                        assert_that!(|| if owned {
                             std::panic::panic_any(message.to_owned());
                         } else {
                             std::panic::panic_any(message);
@@ -426,7 +434,7 @@ mod tests {
                         .with_renderer(RedactingRenderer)
                         .with_location(false)
                         .does_not_panic();
-                    })
+                    }).panics()
                     .has_type::<String>()
                     .is_equal_to(formatdoc! {r"
                         -------- assertr --------
@@ -443,7 +451,7 @@ mod tests {
 
             #[test]
             fn succeeds_when_no_panic_occurs() {
-                assert_that_owned!(|| 42).does_not_panic();
+                assert_that!(|| 42).does_not_panic();
             }
 
             #[test]
@@ -478,12 +486,13 @@ mod tests {
 
             #[test]
             fn later_failure_does_not_report_that_the_function_panicked() {
-                assert_that_panic_by(|| {
-                    assert_that_owned!(|| "actual")
+                assert_that!(|| {
+                    assert_that!(|| "actual")
                         .with_location(false)
                         .does_not_panic()
                         .is_equal_to("expected");
                 })
+                .panics()
                 .has_type::<String>()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -559,7 +568,7 @@ mod tests {
                         let pending = child.does_not_panic_async();
                         assert_that!(root.state.records.assertion_count()).is_equal_to(0);
                         assert_that!(invocations.get()).is_equal_to(0);
-                        assert_that_owned!(async || {
+                        assert_that!(async || {
                             pending.await;
                         })
                         .panics_async()
@@ -580,12 +589,12 @@ mod tests {
 
             #[test]
             fn caller_location_is_as_expected() {
-                assert_caller_location!(async assert_that_owned!(|| async {}), panics_async());
+                assert_caller_location!(async assert_that!(|| async {}), panics_async());
             }
 
             #[tokio::test]
             async fn succeeds_when_panic_occurs() {
-                assert_that_owned!(async || unimplemented!())
+                assert_that!(async || unimplemented!())
                     .panics_async()
                     .await
                     .has_type::<&str>()
@@ -594,7 +603,7 @@ mod tests {
 
             #[tokio::test]
             async fn succeeds_when_panic_occurs_after_yielding() {
-                assert_that_owned!(async || {
+                assert_that!(async || {
                     tokio::task::yield_now().await;
                     panic!("boom");
                 })
@@ -606,7 +615,7 @@ mod tests {
 
             #[tokio::test]
             async fn succeeds_when_function_panics_before_returning_its_future() {
-                assert_that_owned!(|| -> core::future::Ready<()> { panic!("before future") })
+                assert_that!(|| -> core::future::Ready<()> { panic!("before future") })
                     .panics_async()
                     .await
                     .has_type::<&str>()
@@ -623,7 +632,7 @@ mod tests {
                     }
                 }
 
-                assert_that_owned!(async || PanicsOnDrop)
+                assert_that!(async || PanicsOnDrop)
                     .panics_async()
                     .await
                     .has_type::<&str>()
@@ -632,19 +641,17 @@ mod tests {
 
             #[tokio::test]
             async fn panics_when_no_panic_occurs() {
-                assert_that_owned!(async || {
-                    assert_that_owned!(async || 42).panics_async().await
-                })
-                .panics_async()
-                .await
-                .has_type::<String>()
-                .contains("did not panic");
+                assert_that!(async || { assert_that!(async || 42).panics_async().await })
+                    .panics_async()
+                    .await
+                    .has_type::<String>()
+                    .contains("did not panic");
             }
 
             #[tokio::test]
             async fn later_failure_does_not_report_that_the_function_did_not_panic() {
-                assert_that_owned!(async || {
-                    assert_that_owned!(async || panic!("boom"))
+                assert_that!(async || {
+                    assert_that!(async || panic!("boom"))
                         .panics_async()
                         .await
                         .has_type::<String>();
@@ -661,7 +668,7 @@ mod tests {
 
             #[test]
             fn caller_location_is_as_expected() {
-                assert_caller_location!(async assert_that_owned!(|| async { panic!("subject panic") }), does_not_panic_async());
+                assert_caller_location!(async assert_that!(|| async { panic!("subject panic") }), does_not_panic_async());
             }
 
             #[tokio::test]
@@ -676,8 +683,8 @@ mod tests {
                         }
                         std::panic::panic_any(message)
                     };
-                    assert_that_owned!(async || {
-                        assert_that_owned!(async || panic())
+                    assert_that!(async || {
+                        assert_that!(async || panic())
                             .with_renderer(CustomValueRenderer)
                             .does_not_panic_async()
                             .await;
@@ -686,8 +693,8 @@ mod tests {
                     .await
                     .has_type::<String>()
                     .contains(r#"Panic message: custom("private-async-panic-value")"#);
-                    assert_that_owned!(async || {
-                        assert_that_owned!(async || panic())
+                    assert_that!(async || {
+                        assert_that!(async || panic())
                             .with_renderer(RedactingRenderer)
                             .does_not_panic_async()
                             .await;
@@ -701,12 +708,12 @@ mod tests {
 
             #[tokio::test]
             async fn succeeds_when_no_panic_occurs() {
-                assert_that_owned!(async || 42).does_not_panic_async().await;
+                assert_that!(async || 42).does_not_panic_async().await;
             }
 
             #[tokio::test]
             async fn succeeds_when_future_yields_before_completing() {
-                assert_that_owned!(async || {
+                assert_that!(async || {
                     tokio::task::yield_now().await;
                     42
                 })
@@ -717,8 +724,8 @@ mod tests {
 
             #[tokio::test]
             async fn later_failure_does_not_report_that_the_function_panicked() {
-                assert_that_owned!(async || {
-                    assert_that_owned!(async || "actual")
+                assert_that!(async || {
+                    assert_that!(async || "actual")
                         .does_not_panic_async()
                         .await
                         .is_equal_to("expected");
@@ -731,8 +738,8 @@ mod tests {
 
             #[tokio::test]
             async fn fails_when_function_panics_before_returning_its_future() {
-                assert_that_owned!(async || {
-                    assert_that_owned!(|| -> core::future::Ready<()> { panic!("before future") })
+                assert_that!(async || {
+                    assert_that!(|| -> core::future::Ready<()> { panic!("before future") })
                         .does_not_panic_async()
                         .await
                 })

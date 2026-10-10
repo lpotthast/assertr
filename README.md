@@ -75,9 +75,10 @@ the `serde` features work with `alloc` alone. All other features enable `std`.
 Import the prelude. It brings every assertion trait into scope, so autocomplete can list them.
 Then start a chain with `assert_that!` and add assertions. The first failing assertion panics.
 
-`assert_that!` borrows its argument, so you can keep using a value after asserting on it. A few
-assertions consume their subject, for example running a closure or draining an iterator. Start
-those with `assert_that_owned!`:
+`assert_that!` borrows its argument, so you can keep using a value after asserting on it.
+Closure literals are the exception: `assert_that!` owns them, so `assert_that!(|| ..).panics()`
+can run the closure. For other assertions that consume their subject, such as draining an
+iterator, start with `assert_that_owned!`:
 
 ```rust
 use assertr::prelude::*;
@@ -97,7 +98,7 @@ use assertr::prelude::*;
 
 assert_that!(Some(42)).get_some().is_greater_than(40);
 assert_that!("42".parse::<u32>()).get_ok().is_equal_to(42);
-assert_that_owned!(|| panic!("boom"))
+assert_that!(|| panic!("boom"))
     .panics()
     .has_type::<&str>()
     .is_equal_to("boom");

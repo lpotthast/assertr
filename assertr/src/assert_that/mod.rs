@@ -313,10 +313,9 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "std")]
         fn panic_assertions_still_accept_mutably_captured_state() {
             let mut value = 0;
-            assert_that_owned!(|| {
+            assert_that!(|| {
                 value = 1;
                 panic!("closure panic");
             })
@@ -325,7 +324,7 @@ mod tests {
             .is_equal_to("closure panic");
             assert_that!(value).is_equal_to(1);
 
-            assert_that_owned!(|| {
+            assert_that!(|| {
                 value = 2;
                 value
             })
@@ -335,10 +334,9 @@ mod tests {
         }
 
         #[tokio::test]
-        #[cfg(feature = "std")]
         async fn async_panic_assertions_still_accept_mutably_captured_state() {
             let mut value = 0;
-            assert_that_owned!(async || {
+            assert_that!(async || {
                 value = 1;
                 panic!("async closure panic");
             })
@@ -359,7 +357,7 @@ mod tests {
             let value = String::from("foo");
             let assert = assert_that!(&value).with_location(false).is_equal_to("foo");
 
-            assert_that_panic_by(move || assert.unwrap_inner())
+            assert_that!(move || assert.unwrap_inner()).panics()
                 .has_type::<&str>()
                 .is_equal_to(formatdoc! {r"Cannot unwrap a borrowed value. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead."});
         }

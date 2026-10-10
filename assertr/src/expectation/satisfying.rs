@@ -157,21 +157,23 @@ mod tests {
 
     #[test]
     fn rejects_empty_assertion_closures() {
-        assert_that_panic_by(|| {
+        assert_that!(|| {
             assert_that!(1).matches(satisfying(|_| {}));
         })
+        .panics()
         .has_type::<&str>()
         .is_equal_to("the assertion callback performed no assertions");
     }
 
     #[test]
     fn propagates_user_panics_even_after_capturing_a_failure() {
-        assert_that_panic_by(|| {
+        assert_that!(|| {
             assert_that!(1).matches(satisfying(|it| {
                 it.is_equal_to(2);
                 panic!("callback panic");
             }));
         })
+        .panics()
         .has_type::<&str>()
         .is_equal_to("callback panic");
     }

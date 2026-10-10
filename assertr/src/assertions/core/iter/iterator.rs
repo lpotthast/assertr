@@ -717,11 +717,12 @@ mod tests {
 
         #[test]
         fn panics_when_expected_is_not_contained() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .contains(4);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -758,11 +759,12 @@ mod tests {
 
         #[test]
         fn panics_when_no_element_matches() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .contains_matching(matchers::predicate(|it: &i32| *it > 7));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -859,11 +861,12 @@ mod tests {
 
         #[test]
         fn panics_when_expected_is_contained() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .does_not_contain(2);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -900,11 +903,12 @@ mod tests {
 
         #[test]
         fn panics_when_an_element_matches() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -982,11 +986,12 @@ mod tests {
 
         #[test]
         fn panics_when_prefix_does_not_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .starts_with_matching(matchers::predicate_list([is_one, is_nine]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -1045,11 +1050,12 @@ mod tests {
 
         #[test]
         fn panics_when_suffix_does_not_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .ends_with([2, 9]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -1102,11 +1108,12 @@ mod tests {
 
         #[test]
         fn panics_when_suffix_does_not_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .ends_with_matching(matchers::predicate_list([is_two, is_nine]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -1169,11 +1176,12 @@ mod tests {
 
         #[test]
         fn panics_when_no_contiguous_match_exists() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .contains_contiguous([2, 9]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -1221,11 +1229,12 @@ mod tests {
 
         #[test]
         fn panics_when_no_contiguous_match_exists() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .contains_contiguous_matching(matchers::predicate_list([is_two, is_nine]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -1325,11 +1334,12 @@ mod tests {
 
         #[test]
         fn panics_without_consumption_when_a_known_length_differs() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .contains_exactly([1, 2]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -1376,13 +1386,14 @@ mod tests {
 
         #[test]
         fn panics_when_an_element_does_not_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .contains_exactly_matching(matchers::predicate_list([
                         is_one, is_nine, is_three,
                     ]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -1406,7 +1417,7 @@ mod tests {
 
         #[test]
         fn panics_when_an_extra_element_follows() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter().filter(|_| true))
                     .with_location(false)
                     .contains_exactly_matching(matchers::predicate_list([
@@ -1414,6 +1425,7 @@ mod tests {
                         |it: &i32| *it == 2,
                     ]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -1469,11 +1481,12 @@ mod tests {
 
         #[test]
         fn reports_the_collection_differences_and_the_consumption_of_a_longer_input() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!((1..).filter(|_| true))
                     .with_location(false)
                     .contains_exactly_in_any_order([2, 1]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -1503,11 +1516,12 @@ mod tests {
 
         #[test]
         fn panics_when_an_element_differs() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .contains_exactly_in_any_order([1, 2, 9]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -1589,13 +1603,14 @@ mod tests {
 
         #[test]
         fn panics_when_a_predicate_stays_unmatched() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
                     .contains_exactly_in_any_order_matching(matchers::predicate_list([
                         is_one, is_two, is_nine,
                     ]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------

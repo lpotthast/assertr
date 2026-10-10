@@ -636,22 +636,24 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .capture(|it| it.ends_with([0, 1]));
             assert_custom_fact(&failures[0], "Actual length", 1);
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2])
                     .with_renderer(CustomValueRenderer)
                     .get_single();
             })
+            .panics()
             .has_type::<String>()
             .contains("Actual length: custom(2)");
         }
 
         #[test]
         fn positional_diagnostics_override_sorted_presentation() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(SortedPresentation(vec![3, 1, 2]))
                     .with_location(false)
                     .contains_exactly([3, 1, 9]);
             })
+            .panics()
             .has_type::<String>()
             .contains("Actual: [\n    3,\n    1,\n    2,\n]")
             .does_not_contain("sorted for rendering");
@@ -678,11 +680,12 @@ mod tests {
 
         #[test]
         fn panics_for_an_empty_collection() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Vec::<i32>::new())
                     .with_location(false)
                     .get_first();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -726,9 +729,10 @@ mod tests {
 
         #[test]
         fn panics_when_there_is_more_than_one_element() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(vec![1, 2]).with_location(false).get_single();
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -764,11 +768,12 @@ mod tests {
 
         #[test]
         fn reports_the_whole_collection_and_first_differing_position() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3])
                     .with_location(false)
                     .starts_with([1, 9]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -888,11 +893,12 @@ mod tests {
 
         #[test]
         fn reports_the_mismatching_position() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 3])
                     .with_location(false)
                     .starts_with_matching(matchers::predicate_list([is_one, is_two]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r"
                 -------- assertr --------
@@ -966,11 +972,12 @@ mod tests {
 
         #[test]
         fn reports_the_collection_position_that_differs() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3])
                     .with_location(false)
                     .ends_with([2, 9]);
             })
+            .panics()
             .has_type::<String>()
             .contains("does not end with\n\nExpected: [\n    2,\n    9,\n]")
             .contains("Nested failures:\n  - At [2]:\n    Expected: 9\n\n      Actual: 3\n");
@@ -998,11 +1005,12 @@ mod tests {
 
         #[test]
         fn reports_a_suffix_predicate_mismatch() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 4])
                     .with_location(false)
                     .ends_with_matching(matchers::predicate_list([is_two, is_three]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r"
                 -------- assertr --------
@@ -1058,11 +1066,12 @@ mod tests {
 
         #[test]
         fn reports_the_whole_collection_when_not_found() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3])
                     .with_location(false)
                     .contains_contiguous([1, 3]);
             })
+            .panics()
             .has_type::<String>()
             .contains("Actual: [\n    1,\n    2,\n    3,\n]")
             .contains(
@@ -1146,11 +1155,12 @@ mod tests {
 
         #[test]
         fn panics_when_not_exact_match() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly([2, 3, 4]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -1211,11 +1221,12 @@ mod tests {
 
         #[test]
         fn panics_with_detail_message_when_only_differing_in_order() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly([3, 2, 1]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -1271,11 +1282,12 @@ mod tests {
 
         #[test]
         fn panics_with_missing_and_unexpected_elements_when_multiplicities_differ() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 1, 2].as_slice())
                     .with_location(false)
                     .contains_exactly([1, 2, 2]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
@@ -1337,7 +1349,7 @@ mod tests {
 
         #[test]
         fn panics_when_elements_only_match_in_a_different_order() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly_matching(matchers::predicate_list([
@@ -1346,6 +1358,7 @@ mod tests {
                         move |it: &i32| *it == 2,
                     ]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -1376,11 +1389,12 @@ mod tests {
         #[test]
         fn panics_when_lengths_differ() {
             let predicates: [fn(&i32) -> bool; 2] = [|it| *it == 1, |it| *it == 2];
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly_matching(matchers::predicate_list(predicates));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------

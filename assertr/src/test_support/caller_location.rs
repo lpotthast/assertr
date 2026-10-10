@@ -45,7 +45,7 @@ pub(crate) fn check_caller_location(assertions: impl FnOnce(LocationRecorder)) {
 ///
 /// Choose the macro form according to the assertion method's return type:
 /// - Synchronous: `assert_caller_location!(assert_that!(false), is_true())`.
-/// - Future: `assert_caller_location!(async assert_that_owned!(|| async {}), panics_async())`.
+/// - Future: `assert_caller_location!(async assert_that!(|| async {}), panics_async())`.
 ///
 /// Both forms can be called from a synchronous `#[test]` function. In the `async` form, the macro
 /// creates a Tokio runtime and awaits the method internally using `block_on`. The test itself
@@ -75,7 +75,6 @@ macro_rules! assert_caller_location {
 
 pub(crate) use assert_caller_location;
 
-#[cfg(feature = "std")]
 pub(crate) fn block_on<F: Future>(future: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()
         .build()
@@ -158,7 +157,7 @@ mod tests {
     #[cfg(feature = "std")]
     fn accepts_awaited_failures() {
         assert_caller_location!(
-            async assert_that_owned!(|| async { tokio::task::yield_now().await; }),
+            async assert_that!(|| async { tokio::task::yield_now().await; }),
             panics_async()
         );
     }

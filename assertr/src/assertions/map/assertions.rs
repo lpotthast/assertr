@@ -478,10 +478,11 @@ mod tests {
 
         #[test]
         fn panics_when_key_is_absent() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let map = BTreeMap::from([("foo", "bar")]);
                 assert_that!(map).with_location(false).contains_key("baz");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -518,12 +519,13 @@ mod tests {
 
         #[test]
         fn panics_when_key_is_present() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let map = BTreeMap::from([("foo", "bar")]);
                 assert_that!(map)
                     .with_location(false)
                     .does_not_contain_key("foo");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -567,10 +569,11 @@ mod tests {
 
         #[test]
         fn panics_when_value_is_absent() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let map = BTreeMap::from([("foo", "bar")]);
                 assert_that!(map).with_location(false).contains_value("baz");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -607,12 +610,13 @@ mod tests {
 
         #[test]
         fn panics_when_value_is_present() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let map = BTreeMap::from([("foo", "bar")]);
                 assert_that!(map)
                     .with_location(false)
                     .does_not_contain_value("bar");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -658,12 +662,13 @@ mod tests {
 
         #[test]
         fn reports_a_missing_key_once() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let map = BTreeMap::from([("foo", "bar")]);
                 assert_that!(map)
                     .with_location(false)
                     .contains_entry("baz", "someValue");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -682,12 +687,13 @@ mod tests {
 
         #[test]
         fn reports_a_value_mismatch_at_its_key() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let map = BTreeMap::from([("foo", "bar")]);
                 assert_that!(map)
                     .with_location(false)
                     .contains_entry("foo", "someValue");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -753,12 +759,13 @@ mod tests {
 
         #[test]
         fn panics_when_entry_is_present() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let map = BTreeMap::from([("foo", "bar")]);
                 assert_that!(map)
                     .with_location(false)
                     .does_not_contain_entry("foo", "bar");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -798,12 +805,13 @@ mod tests {
 
         #[test]
         fn panics_when_a_key_is_missing() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let map = BTreeMap::from([("foo", "bar")]);
                 assert_that!(map)
                     .with_location(false)
                     .contains_keys(["foo", "baz"]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------

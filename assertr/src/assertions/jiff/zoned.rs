@@ -280,9 +280,10 @@ mod tests {
             let zdt = fixed_offset();
             let tz = TimeZone::get("Europe/Berlin").expect("valid");
 
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(zdt).with_location(false).is_in_time_zone(tz);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
@@ -335,11 +336,12 @@ mod tests {
         #[test]
         fn panics_when_in_different_time_zone() {
             let zdt = new_york();
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(zdt)
                     .with_location(false)
                     .is_in_time_zone_named("Europe/Berlin");
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------

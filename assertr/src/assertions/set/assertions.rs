@@ -145,11 +145,12 @@ mod tests {
 
         #[test]
         fn panics_with_the_elements_not_in_expected() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(BTreeSet::from(["bar"]))
                     .with_location(false)
                     .is_subset_of(BTreeSet::<&str>::new());
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -193,11 +194,12 @@ mod tests {
 
         #[test]
         fn panics_with_the_elements_not_in_actual() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(BTreeSet::<&str>::new())
                     .with_location(false)
                     .is_superset_of(BTreeSet::from(["bar"]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
@@ -241,11 +243,12 @@ mod tests {
 
         #[test]
         fn panics_with_the_overlapping_elements() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(BTreeSet::from(["foo"]))
                     .with_location(false)
                     .is_disjoint_from(BTreeSet::from(["foo"]));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------

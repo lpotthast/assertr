@@ -199,27 +199,30 @@ mod tests {
         #[test]
         fn checking_and_extracting_failures_use_the_active_renderer() {
             let program = r#"custom(Program("assertr-private-missing-executable-987"))"#;
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!(Program::from(MISSING))
                     .with_renderer(CustomValueRenderer)
                     .exists();
             })
+            .panics()
             .has_type::<String>()
             .contains(program)
             .contains("Reason: custom(CannotFindBinaryPath)");
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let _ = assert_that!(Program::from(MISSING))
                     .with_renderer(CustomValueRenderer)
                     .get_resolved_path();
             })
+            .panics()
             .has_type::<String>()
             .contains(program)
             .contains("Reason: custom(CannotFindBinaryPath)");
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 let _ = assert_that!(Program::from(MISSING))
                     .with_renderer(RedactingRenderer)
                     .get_resolved_path();
             })
+            .panics()
             .has_type::<String>()
             .contains("Actual: <redacted>")
             .contains("Reason: <redacted>");
@@ -261,11 +264,12 @@ mod tests {
 
         #[test]
         fn panics_when_not_existent() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that_owned!(Program::from("someNonexistentProgram"))
                     .with_location(false)
                     .exists()
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------

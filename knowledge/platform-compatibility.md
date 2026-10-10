@@ -34,7 +34,7 @@ each feature enables. [CI](../.github/workflows/ci.yml) and [Justfile](../Justfi
 | `full` | Every optional API and integration. |
 
 Core assertions, capture, structured failures, rendering, tree collections, and iterator scans remain available without `std`.
-Memory assertions (`assertions::core::mem`, `matchers::memory::NeedsDrop`) need no optional feature.
+Memory assertions (`assertions::MemAssertions`, `matchers::memory::NeedsDrop`) need no optional feature.
 
 The published `borrow-for` dependency disables defaults and always enables `alloc` for wrappers, strings, and vectors.
 [Unwind bounds](assertion-lifecycle.md#unwind-safety) use `core` traits. See [failure

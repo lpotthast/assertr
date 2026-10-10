@@ -61,7 +61,7 @@ Implementation: [macro](../assertr-macros/src/fluent_expressions/mod.rs) and
 ### Pending attachment
 
 Capture roots record privately whether expression text can be attached later. Mapping and renderer changes preserve
-that state. Derivation clears it, and `with_expression` overrides it. Until attachment, `AssertionFailures` records which
+that state. Derivation clears it, and an explicit expression from `__private::with_expression` overrides it. Until attachment, `AssertionFailures` records which
 failures can receive the text:
 
 - Public expression fields show `None`, never a placeholder.
@@ -71,6 +71,6 @@ failures can receive the text:
 ### Name collisions
 
 The macro identifies calls by method name. For unrelated verification callbacks and results, its fallback does nothing.
-An unrelated `must()` call may fail compilation when rewriting adds `with_expression`. Keep such calls outside
+An unrelated `must()` call may fail compilation when rewriting passes its result to `__private::with_expression`. Keep such calls outside
 annotated scopes.
 [Fixtures](../assertr-macros/tests/fluent_expressions/) cover syntax and collisions.

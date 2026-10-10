@@ -720,11 +720,12 @@ mod tests {
         #[test]
         fn panic_mode_raises_the_identity_failure() {
             let keys = keys();
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([&keys[0]])
                     .with_renderer(NoRenderer)
                     .contains_same_instance_as(&keys[1]);
             })
+            .panics()
             .has_type::<String>()
             .contains("does not contain the same instance as");
         }

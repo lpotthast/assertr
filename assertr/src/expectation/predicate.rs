@@ -163,9 +163,10 @@ mod tests {
 
     #[test]
     fn propagates_user_panics() {
-        assert_that_panic_by(|| {
+        assert_that!(|| {
             assert_that!(1).matches(predicate(|_: &i32| panic!("user panic")));
         })
+        .panics()
         .has_type::<&str>()
         .is_equal_to("user panic");
     }

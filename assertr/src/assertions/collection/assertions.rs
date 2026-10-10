@@ -398,11 +398,12 @@ mod tests {
 
         #[test]
         fn panics_when_value_is_missing() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains(4);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -473,11 +474,12 @@ mod tests {
 
         #[test]
         fn panics_when_no_element_matches() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_matching(matchers::predicate(|it: &i32| *it > 7));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -557,11 +559,12 @@ mod tests {
 
         #[test]
         fn panics_when_any_expected_value_is_absent() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2].as_slice())
                     .with_location(false)
                     .contains_all([1, 42]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -608,11 +611,12 @@ mod tests {
 
         #[test]
         fn panics_when_elements_match_and_lists_them() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([-1, 7, 12].as_slice())
                     .with_location(false)
                     .does_not_contain_matching(crate::assertions::core::partial_ord::ge(5));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
@@ -673,11 +677,12 @@ mod tests {
 
         #[test]
         fn panics_when_value_is_present() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .does_not_contain(2);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -797,22 +802,24 @@ mod tests {
 
         #[test]
         fn rejects_different_multiplicities() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1].as_slice())
                     .with_location(false)
                     .contains_exactly_in_any_order([1, 1]);
             })
+            .panics()
             .has_type::<String>()
             .contains("Elements not found");
         }
 
         #[test]
         fn panics_when_slice_contains_unknown_data() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly_in_any_order([2, 3, 4]);
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
@@ -897,11 +904,12 @@ mod tests {
         #[test]
         fn rejects_unmatched_predicates() {
             let predicates: [fn(&i32) -> bool; 2] = [|it| *it == 1, |it| *it == 2];
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1].as_slice())
                     .with_location(false)
                     .contains_exactly_in_any_order_matching(matchers::predicate_list(predicates));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(indoc::formatdoc! {r"
                 -------- assertr --------
@@ -930,7 +938,7 @@ mod tests {
 
         #[test]
         fn panics_when_slice_contains_non_matching_data() {
-            assert_that_panic_by(|| {
+            assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
                     .contains_exactly_in_any_order_matching(matchers::predicate_list(
@@ -942,6 +950,7 @@ mod tests {
                         .as_slice(),
                     ));
             })
+            .panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------

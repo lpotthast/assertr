@@ -92,7 +92,7 @@ pub use self::core::bool::BoolAssertions;
 pub use self::core::char::CharAssertions;
 pub use self::core::debug::DebugAssertions;
 pub use self::core::display::DisplayAssertions;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", test))]
 pub use self::core::r#fn::{AsyncFnOnceAssertions, FnOnceAssertions};
 pub use self::core::identity::IdentityAssertions;
 pub use self::core::length::LengthAssertions;
