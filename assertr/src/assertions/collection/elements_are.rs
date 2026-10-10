@@ -23,8 +23,8 @@ use crate::{
 /// | [`contains_contiguous_elements`] | Some contiguous window of elements matches. |
 ///
 /// The list is a [`MatcherList`]: an array, slice, or vector of one matcher type, or
-/// `matchers![..]` for matchers of different types. Rejections report each failing element at its
-/// index. The subject must implement [`StableOrder`]. Use
+/// [`matchers![..]`](crate::matchers!) for matchers of different types. Rejections report each
+/// failing element at its index. The subject must implement [`StableOrder`]. Use
 /// [`elements_are_in_any_order`](crate::matchers::elements_are_in_any_order) when order does not
 /// matter.
 ///

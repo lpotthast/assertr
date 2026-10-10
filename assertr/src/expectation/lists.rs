@@ -178,6 +178,10 @@ where
 
 /// Constructs a reusable heterogeneous matcher list from explicit expectations.
 ///
+/// The matchers themselves live in the [`matchers`](mod@crate::matchers) module. This macro only
+/// lists them, for example for [`all_of`](crate::matchers::all_of) or
+/// [`elements_are`](crate::matchers::elements_are).
+///
 /// Use [`eq`](crate::matchers::eq) for equality. The list's type is an unsupported implementation
 /// detail. Let inference pick it, or name the enclosing check as `impl Expectation<T>` or the list
 /// as [`impl MatcherList<T>`](crate::expectation::MatcherList). For one matcher type, an array

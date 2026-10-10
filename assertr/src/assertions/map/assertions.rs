@@ -174,9 +174,9 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// Asserts that the map contains exactly the given keys and that each value matches the
     /// matcher paired with its key. Missing and unexpected keys are failures.
     ///
-    /// Accepts arrays, slices, and vectors of [`entry`](super::entry) matchers, or a `matchers!`
-    /// list of entries with different matcher types. This is the method form of
-    /// [`entries_are`](super::entries_are).
+    /// Accepts arrays, slices, and vectors of [`entry`](super::entry) matchers, or a
+    /// [`matchers!`](crate::matchers!) list of entries with different matcher types. This is the
+    /// method form of [`entries_are`](super::entries_are).
     ///
     /// ```
     /// use assertr::{matchers::{entry, eq, gt}, prelude::*};

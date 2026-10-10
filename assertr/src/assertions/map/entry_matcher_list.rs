@@ -18,9 +18,9 @@ pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
-/// Supported keyed matcher lists. Use a `matchers!` list of [`entry`](super::entry) values for
-/// heterogeneous entries, or arrays, slices, and vectors of [`Entry`] values for homogeneous
-/// entries.
+/// Supported keyed matcher lists. Use a [`matchers!`](crate::matchers!) list of
+/// [`entry`](super::entry) values for heterogeneous entries, or arrays, slices, and vectors of
+/// [`Entry`] values for homogeneous entries.
 pub trait EntryMatcherList<MapType: Map + ?Sized, R = DebugRenderer>:
     MatcherList<MapType, R> + sealed::Sealed
 {
