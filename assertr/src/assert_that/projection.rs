@@ -1,9 +1,16 @@
 use alloc::borrow::ToOwned;
-use core::future::Future;
+use core::{future::Future, panic::Location};
 
 use crate::{AssertThat, actual::Actual, mode::Mode};
 
 impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
+    /// Locates this child's failures at `caller`, the `satisfies` call handing it to a callback,
+    /// unless an enclosing callback already did.
+    fn located_at_callback(mut self, caller: &'static Location<'static>) -> Self {
+        self.state.settings.callback_caller.get_or_insert(caller);
+        self
+    }
+
     /// Takes the owned subject for an operation that consumes it, continuing on a unit subject
     /// with the same chain state.
     ///
@@ -211,6 +218,11 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// inherits detail messages, rendering budget, location settings, and panic presentation. Its
     /// subject name and source expression start empty and can be set on the child.
     ///
+    /// A closure cannot forward `#[track_caller]`, so failures raised inside `assertions` are
+    /// located at this `satisfies` call rather than at the failing assertion within the closure.
+    /// A `#[track_caller]` custom assertion wrapping `satisfies` therefore reports its own caller.
+    /// Nested calls use the outermost `satisfies`.
+    ///
     /// The variants differ only in how the projection is obtained and typed:
     ///
     /// | Method | Mapper returns | Closure receives | Use when |
@@ -245,19 +257,21 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// domain-specific method can wrap these projections as a [custom
     /// assertion](crate#custom-assertions).
     #[allow(clippy::return_self_not_must_use)]
+    #[track_caller]
     pub fn satisfies<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> &'a U,
         for<'a> A: FnOnce(AssertThat<'a, U, M, R>),
         R: Clone,
     {
-        assertions(self.derive(mapper));
+        assertions(self.derive(mapper).located_at_callback(Location::caller()));
         self
     }
 
     /// Fluent alias of [`AssertThat::satisfies`].
     #[cfg(feature = "fluent")]
     #[allow(clippy::return_self_not_must_use)]
+    #[track_caller]
     pub fn satisfy<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> &'a U,
@@ -274,19 +288,24 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// See [`AssertThat::satisfies`] for a comparison of the whole family and an example.
     #[allow(clippy::return_self_not_must_use)]
+    #[track_caller]
     pub fn satisfies_owned<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
         for<'a> A: FnOnce(AssertThat<'a, U, M, R>),
         R: Clone,
     {
-        assertions(self.derive_owned(mapper));
+        assertions(
+            self.derive_owned(mapper)
+                .located_at_callback(Location::caller()),
+        );
         self
     }
 
     /// Fluent alias of [`AssertThat::satisfies_owned`].
     #[cfg(feature = "fluent")]
     #[allow(clippy::return_self_not_must_use)]
+    #[track_caller]
     pub fn satisfy_owned<U, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> U,
@@ -303,19 +322,24 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// See [`AssertThat::satisfies`] for a comparison of the whole family and an example.
     #[allow(clippy::return_self_not_must_use)]
+    #[track_caller]
     pub fn satisfies_ref<U: ?Sized, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> &'a U,
         for<'a> A: FnOnce(AssertThat<'a, &'a U, M, R>),
         R: Clone,
     {
-        assertions(self.derive_owned(mapper));
+        assertions(
+            self.derive_owned(mapper)
+                .located_at_callback(Location::caller()),
+        );
         self
     }
 
     /// Fluent alias of [`AssertThat::satisfies_ref`].
     #[cfg(feature = "fluent")]
     #[allow(clippy::return_self_not_must_use)]
+    #[track_caller]
     pub fn satisfy_ref<U: ?Sized, F, A>(self, mapper: F, assertions: A) -> Self
     where
         for<'a> F: FnOnce(&'a T) -> &'a U,
@@ -462,5 +486,103 @@ mod tests {
         assert_that!(&failures[..]).contains_exactly_matching(
             [|it: &AssertionFailure| it.to_string().contains("xyz")].map(matchers::predicate),
         );
+    }
+
+    mod callback_location {
+        use core::panic::Location;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn satisfies_locates_callback_failures_at_its_call() {
+            assert_caller_location!(
+                assert_that!(1),
+                satisfies(
+                    |it| it,
+                    |it| {
+                        it.is_equal_to(2);
+                    }
+                )
+            );
+            assert_caller_location!(
+                assert_that!(1),
+                satisfies_owned(
+                    |it| *it,
+                    |it| {
+                        it.is_equal_to(2);
+                    }
+                )
+            );
+            assert_caller_location!(
+                assert_that!(String::from("a")),
+                satisfies_ref(
+                    |it| it.as_str(),
+                    |it| {
+                        it.is_equal_to("b");
+                    }
+                )
+            );
+        }
+
+        /// A custom assertion wrapping `satisfies`, as downstream crates write them.
+        #[track_caller]
+        fn has_first(
+            it: AssertThat<'_, (i32, i32), Capture>,
+            expected: i32,
+        ) -> AssertThat<'_, (i32, i32), Capture> {
+            it.satisfies(
+                |pair| &pair.0,
+                |first| {
+                    first.is_equal_to(expected);
+                },
+            )
+        }
+
+        #[test]
+        fn a_tracked_custom_assertion_reports_its_caller() {
+            let mut caller = None;
+            let failures = assert_that!((1, 2)).capture(|it| {
+                caller = Some(Location::caller());
+                has_first(it, 9)
+            });
+            let caller = caller.unwrap();
+            let location = failures[0].location.unwrap();
+            assert_that!((location.file(), location.line()))
+                .is_equal_to((caller.file(), caller.line() + 1));
+        }
+
+        #[test]
+        fn nested_callbacks_use_the_outermost_call() {
+            let mut outer = None;
+            let failures = assert_that!(((1, 2), 3)).capture(|it| {
+                outer = Some(Location::caller());
+                it.satisfies(
+                    |it| &it.0,
+                    |pair| {
+                        pair.satisfies(
+                            |pair| &pair.1,
+                            |second| {
+                                second.is_equal_to(9);
+                            },
+                        );
+                    },
+                )
+            });
+            let outer = outer.unwrap();
+            assert_that!(failures[0].location.map(Location::line))
+                .is_equal_to(Some(outer.line() + 1));
+        }
+
+        #[test]
+        fn derived_chains_keep_the_location_of_their_own_assertions() {
+            let mut caller = None;
+            let failures = assert_that!((1, 2)).capture(|it| {
+                it.derive(|pair| &pair.0).is_equal_to(9);
+                caller = Some(Location::caller());
+                it
+            });
+            assert_that!(failures[0].location.map(Location::line))
+                .is_equal_to(Some(caller.unwrap().line() - 1));
+        }
     }
 }

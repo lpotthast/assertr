@@ -31,7 +31,7 @@ that reports to its parent.
 | `M: Mode`                         | Compile-time failure handling, sealed to `Panic` and `Capture`.                                      |
 | `R`                               | Active renderer. Methods require only the rendering capabilities they use.                           |
 | `ChainState` (private)            | Mode, renderer, records, and `DiagnosticSettings`. Independent of subject type.                      |
-| `DiagnosticSettings` (private)    | Subject name, expression, location policy, rendering budget, panic presentation. Kept when detached. |
+| `DiagnosticSettings` (private)    | Subject name, expression, location policy and `satisfies` caller, rendering budget, panic presentation. Kept when detached. |
 | `ChainRecords` (private)          | Local messages, assertion count, captured failures, optional parent-record link.                     |
 
 A root has no parent link. A child's link gives it access to ancestor records, but not to ancestor subjects, renderers,
@@ -71,12 +71,16 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 |-------------------------------------------------|---------------------------------------------------------------------------------------------|--------------------------|
 | `map`, `map_owned`, `map_async`                 | Move existing state, including records, name, expression.                                   | Moved, no `Clone` bound. |
 | `derive`, `derive_owned`, `derive_async`        | Create a child with inherited settings, mode, ancestor messages. Clear name and expression. | Cloned.                  |
-| `satisfies`, `satisfies_owned`, `satisfies_ref` | Check a derived child in a callback, then return the original chain.                        | Cloned for child.        |
+| `satisfies`, `satisfies_owned`, `satisfies_ref` | Check a derived child in a callback, then return the original chain. Locate its failures at the outermost `satisfies` call. | Cloned for child.        |
 
 - `map` transforms `Actual<T>` into `Actual<U>`. `map_owned` first copies through `ToOwned`, even for owned input.
   `map_async` awaits a new owned subject.
 - `derive` borrows a sized projection. `derive_owned` and `derive_async` store the mapper's result, which may itself
   reference an unsized target. Derivation does not clone the subject.
+- A closure cannot forward `#[track_caller]`. `satisfies*` therefore record their own caller in the child's diagnostic
+  settings, inherited by its descendants, and every failure completed there uses it instead of the failing assertion's
+  location. An enclosing `satisfies` keeps its caller. A `#[track_caller]` custom assertion wrapping `satisfies` then
+  reports its own caller. Callback failures nested as evidence by `*_satisfying` keep their own locations.
 
 ### Continuation availability
 

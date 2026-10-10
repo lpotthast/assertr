@@ -235,6 +235,26 @@ mod composed {
             },
         ]);
     }
+
+    #[test]
+    fn a_composed_assertion_reports_its_own_call_site() {
+        // The failing `is_equal_to` runs inside the `satisfies` closure of `has_age`. A closure
+        // cannot forward `#[track_caller]`, so `satisfies` locates the failure at its own caller.
+        let person = Person {
+            age: 12,
+            meta: Metadata { alive: true },
+        };
+        let mut caller = None;
+        let failures = assert_that!(&person).capture(|it| {
+            caller = Some(core::panic::Location::caller());
+            it.has_age(30)
+        });
+
+        let caller = caller.unwrap();
+        let location = failures[0].location.expect("location captured by default");
+        assert_that!((location.file(), location.line()))
+            .is_equal_to((caller.file(), caller.line() + 1));
+    }
 }
 
 mod reusable_without_impl {
@@ -556,10 +576,12 @@ mod leaf {
     fn a_leaf_assertion_reports_its_own_call_site() {
         // `#[track_caller]` on the custom method has to reach through the public `failure`, or
         // every custom assertion would blame a line inside assertr.
+        let caller = core::panic::Location::caller();
         let failures = assert_that!(person(12)).capture(|it| it.is_adult());
 
         let location = failures[0].location.expect("location captured by default");
-        assert_that!(location.file()).ends_with("custom_assertions.rs");
+        assert_that!((location.file(), location.line()))
+            .is_equal_to((caller.file(), caller.line() + 1));
     }
 
     #[test]

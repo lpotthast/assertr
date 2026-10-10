@@ -46,6 +46,7 @@ impl DiagnosticSettings {
             subject_name: None,
             expression: Expression::Unset,
             include_location: true,
+            callback_caller: None,
             rendering_budget: RenderingBudget::DEFAULT,
             panic_presentation: None,
         }
@@ -58,6 +59,7 @@ impl DiagnosticSettings {
             subject_name: None,
             expression: Expression::Unset,
             include_location: self.include_location,
+            callback_caller: self.callback_caller,
             rendering_budget: self.rendering_budget,
             panic_presentation: self.panic_presentation.clone(),
         }
@@ -80,7 +82,9 @@ impl DiagnosticSettings {
         location: &'static Location<'static>,
     ) -> AssertionFailure {
         let mut failure = failure.build();
-        failure.location = self.include_location.then_some(location);
+        failure.location = self
+            .include_location
+            .then_some(self.callback_caller.unwrap_or(location));
         failure.subject_name.clone_from(&self.subject_name);
         failure.expression = self.expression.explicit();
         failure

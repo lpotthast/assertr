@@ -357,6 +357,8 @@ To write `.is_adult()` directly on a chain, define a trait and implement it for
   the trait and the impl. Otherwise one method's needs would hide the whole trait. A default of
   `R = DebugRenderer` lets callers name the trait without a renderer.
 - Take and return `Self`, and mark the method `#[track_caller]` so failures point at the caller.
+  This also holds when the body delegates through `satisfies`, which locates failures raised in
+  its closure at its own call.
 
 The body either delegates to existing assertions or applies an expectation. Both handle failure
 reporting and capture mode for you:

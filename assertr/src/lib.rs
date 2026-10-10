@@ -620,6 +620,11 @@ struct DiagnosticSettings {
     /// inherit this setting. Tests can disable it when comparing exact failure reports.
     include_location: bool,
 
+    /// The caller of the outermost `satisfies` call this chain descends from. A callback cannot
+    /// propagate `#[track_caller]`, so failures raised inside it are located at that call instead
+    /// of at the assertion inside the callback. Derived chains inherit it.
+    callback_caller: Option<&'static core::panic::Location<'static>>,
+
     /// Limits items per repeated diagnostic group and characters per rendered leaf. Derived chains
     /// inherit these limits, which the rendering context applies in both panic and capture mode.
     rendering_budget: RenderingBudget,
