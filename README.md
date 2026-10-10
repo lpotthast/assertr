@@ -56,7 +56,7 @@ Everything beyond `std` and `num` is opt-in:
 
 | Feature                                         | Adds                                                                                     |
 |-------------------------------------------------|------------------------------------------------------------------------------------------|
-| `std` (default)                                 | Assertions for `HashMap`, `HashSet`, `Path`, `Command`, `Mutex`, and panicking closures. |
+| `std` (default)                                 | Assertions for hash collections, `Path`, `Command`, `Mutex`, panics, and `eventually`.   |
 | `num` (default)                                 | Numeric assertions such as `is_zero`, `is_positive`, `is_nan`, and `is_close_to`.        |
 | `libm`                                          | Floating-point checks like `is_nan` for `num` in `no_std` builds. Does not enable `num`. |
 | `partial`                                       | The `partial!` macro for matching selected struct fields.                                |
@@ -122,8 +122,8 @@ value differently, see [rendering values](https://docs.rs/assertr/latest/assertr
 
 ## Checking parts of a value
 
-Use `derive` to assert on a field or a computed value. The parent chain stays usable, so you can
-check several fields one after another:
+Use `derive` to assert on a field, or `derive_owned` for a computed value. The parent chain
+stays usable, so you can check several fields one after another:
 
 ```rust
 use assertr::prelude::*;

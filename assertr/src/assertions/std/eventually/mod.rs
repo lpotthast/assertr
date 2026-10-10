@@ -39,7 +39,8 @@ pub struct Fallible;
 /// panicking. They are available in panic mode, and the subject may be borrowed or owned.
 ///
 /// The returned futures keep no chain records. They are `Send` whenever the observation, the
-/// expectation, and the renderer are, and they run in any async runtime. See
+/// expectation, the renderer, and a [`giving_up_on`](Eventually::giving_up_on) closure are, and
+/// they run in any async runtime. See
 /// [`assertions::eventually`](crate::assertions::eventually) for an example.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait EventualAssertions: Sized {

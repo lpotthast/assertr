@@ -35,8 +35,8 @@ use syn::{Item, ItemTrait, parse_macro_input};
 ///   `ends_with` -> `end_with`, `needs_drop` -> `need_drop`.
 /// - `matches` -> `match_expectation`, because `match` is a keyword and `be_matching` belongs to
 ///   `is_matching`.
-/// - Names starting with `get_` are already imperative and get no alias. Other names get an alias
-///   only when one is given explicitly.
+/// - Other names, such as extractions named after the value they continue with (`some`, `first`,
+///   `json`), get an alias only when one is given explicitly.
 ///
 /// Use `#[fluent_alias("custom_name")]` on a method for a custom alias name. Keywords become raw
 /// identifiers. Use `#[no_fluent_alias]` on a method to skip alias generation. A method takes at

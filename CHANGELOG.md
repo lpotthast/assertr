@@ -82,9 +82,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   assertion, and `eventually` then explains the last observation that completed.
   `eventually_ok().giving_up_on(|error| ..)` ends the assertion at the first error no retry can fix instead of
   retrying it until the timeout, and `giving_up_on_any_error()` ends it at any error. The `GiveUp` policy trait is
-  sealed. Eventual assertions run in any async runtime, and their futures are `Send` whenever the observation,
-  expectation, and renderer are. `EventualAssertions` and `Patience` are exported from `assertions` and the prelude,
-  the builders and retry policies from `assertions::eventually`.
+  sealed. Eventual assertions run in any async runtime, and their futures are `Send` whenever the observation, the
+  give-up closure, the expectation, and the renderer are. `EventualAssertions` and `Patience` are exported from
+  `assertions` and the prelude, the builders and retry policies from `assertions::eventually`.
 - `Patience` configures eventual assertions: the `timeout` of `eventually`, the polling `interval`, and the
   `consistency_duration` and per-observation `observation_timeout` of `consistently`. Read them with getters of these
   names and set them with `with_timeout`, `with_interval`, `with_consistency_duration`, and `with_observation_timeout`.
@@ -352,8 +352,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for example `assertr::assertions::PartialEqAssertions` and `assertr::assertions::Collection`. The family modules
   such as `assertions::core` and `assertions::std`, and their `prelude` modules, are private. Expectation types and
   their constructors live only in `assertr::matchers`. The crate root no longer re-exports `AssertionFailure`,
-  `CustomRenderer`, `DebugRenderer`, and `ValueRenderer`. Import them from `assertr::failure` and `assertr::renderer`,
-  or from `assertr::prelude`.
+  `CustomRenderer`, `DebugRenderer`, and `ValueRenderer`. Import them from `assertr::failure` and `assertr::renderer`.
+  `AssertionFailure`, `DebugRenderer`, and `ValueRenderer` are also in `assertr::prelude`.
 - **Breaking:** `AssertThat::with_expression` is no longer public. The entry macros and `#[fluent_expressions]` record
   the source expression.
 - **Breaking:** Removed `assert_that_panic_by` and `assert_that_panic_by_async`. Use

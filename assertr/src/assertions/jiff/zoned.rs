@@ -123,7 +123,12 @@ impl<E> IsInTimeZoneNamed<E> {
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait ZonedAssertions<R = DebugRenderer> {
-    /// Asserts that the subject uses the same time-zone rules as `expected`.
+    /// Asserts that the subject's time zone equals `expected`.
+    ///
+    /// This uses jiff's `TimeZone` equality, which compares how a zone is represented rather than
+    /// its rules. Zones with identical rules from different sources can differ, for example
+    /// `TimeZone::get("Etc/UTC")` and `TimeZone::UTC`. Use
+    /// [`is_in_time_zone_named`](Self::is_in_time_zone_named) to compare IANA names instead.
     fn is_in_time_zone<E: BorrowFor<TimeZone, View = TimeZone>>(self, expected: E) -> Self
     where
         R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>;

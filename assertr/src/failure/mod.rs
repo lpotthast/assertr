@@ -186,7 +186,9 @@ pub struct AssertionFailure {
     /// Number of diagnostic children omitted by the rendering budget.
     pub omitted_children: usize,
     /// Where the failing assertion was invoked. `None` when location printing was disabled via
-    /// `with_location(false)`, and for nested failures, which their [`path`](Self::path) locates.
+    /// `with_location(false)`, and for nested failures that a matcher builds, which their
+    /// [`path`](Self::path) locates. Nested failures of assertion callbacks, as run by
+    /// `satisfying` or the `*_satisfying` methods, keep the location of the callback's assertion.
     pub location: Option<&'static core::panic::Location<'static>>,
 
     /// The name given to the assertion's subject via `with_subject_name`, if any.

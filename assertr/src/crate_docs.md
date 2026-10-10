@@ -228,8 +228,9 @@ defaults are fast (1 s, 10 ms, 100 ms, 1 s). Set your own for a whole test suite
 `consistently_ok` for observations returning a `Result`. An observation still pending at its
 deadline is abandoned instead of hanging the assertion, and `eventually` then explains the last
 observation that completed. `try_matches` returns the failure instead of panicking, for shared
-helpers that propagate it with `?`. Eventual assertions need no particular
-runtime, and their futures are `Send` when the observation, the expectation, and the renderer are.
+helpers that propagate it with `?`. Eventual assertions need no particular runtime, and their
+futures are `Send` when the observation, the expectation, the renderer, and a `giving_up_on`
+closure are.
 
 ### Browser elements (`thirtyfour`)
 

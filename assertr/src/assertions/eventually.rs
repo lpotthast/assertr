@@ -13,9 +13,9 @@
 //! the [`GiveUp`] policies deciding which failed observations of
 //! [`eventually_ok`](crate::assertions::EventualAssertions::eventually_ok) end the assertion.
 //!
-//! The futures of eventual assertions hold the observation, the expectation, and the renderer, but
-//! no chain records. They are `Send` whenever those three are, so a test may move between threads
-//! while it waits. They run in any async runtime.
+//! The futures of eventual assertions hold the observation, the expectation, the renderer, and an
+//! `eventually_ok` give-up closure, but no chain records. They are `Send` whenever those are, so a
+//! test may move between threads while it waits. They run in any async runtime.
 //!
 //! ```rust
 //! use assertr::prelude::*;

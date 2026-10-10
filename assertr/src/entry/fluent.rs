@@ -70,8 +70,8 @@ use crate::{
 ///   `ends_with` -> `end_with`, `needs_drop` -> `need_drop`.
 /// - `matches` -> `match_expectation`, because `match` is a keyword and `be_matching` belongs to
 ///   `is_matching`.
-/// - Names starting with `get_` are already imperative and get no alias. Other names get an alias
-///   only when one is given explicitly.
+/// - Other names, such as extractions named after the value they continue with (`some`, `first`,
+///   `json`), get an alias only when one is given explicitly.
 ///
 /// This trait is re-exported by [`crate::prelude`]. Import the prelude and use method syntax rather
 /// than implementing this trait downstream.
