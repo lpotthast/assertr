@@ -833,6 +833,9 @@ mod generic_num_traits_bounds {
                     .is_equal_to(Some("40 cents"));
                 element
                     .derive_owned(|item| super::text_opt(Some(&item.facts[0].value)))
+                    .is_equal_to(Some("2 cents"));
+                element
+                    .derive_owned(|item| super::text_opt(Some(&item.facts[1].value)))
                     .is_equal_to(Some("1 cents"));
             },
         ]);

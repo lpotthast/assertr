@@ -268,7 +268,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `assertions::NumericDistance`, retaining overflow-safe integer comparisons without requiring `Clone`.
   Generic callers need this bound next to `Num`, and custom numeric types implement `zero_distance` and
   `checked_distance`. Numbers and `jiff::SignedDuration` share one `IsCloseTo` expectation, which needs no optional
-  feature and renders its values compactly.
+  feature and renders its values compactly. Failures report the computed distance, and the public `CloseToRejection`
+  retains it beside the compared operands.
 - **Breaking:** `SignedDurationAssertions::is_close_to` takes `BorrowFor<SignedDuration>` operands instead of concrete
   `SignedDuration` parameters, so untyped `.into()` or `Default::default()` arguments no longer infer. It compares exact
   inclusive nanosecond distances without arithmetic panics at extreme values and fails explicitly for a negative

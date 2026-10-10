@@ -176,19 +176,30 @@ pub const fn close_to<E, D>(expected: E, allowed_deviation: D) -> IsCloseTo<E, D
     IsCloseTo::new(expected, allowed_deviation)
 }
 
-/// Why [`IsCloseTo`] rejected a subject.
+/// Why [`IsCloseTo`] rejected a subject, with the borrowed operands it compared.
 ///
-/// The expectation's rejection is `(&T, &T, CloseToRejection)`: the borrowed expected value, the
-/// borrowed allowed deviation, and this reason. Explanation uses the reason to choose between
-/// reporting an invalid deviation and reporting the distance, so it never has to compare again.
-/// Match on it to tell a misconfigured tolerance from a value that is too far away.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Explanation reports from it without comparing again. Match on it to tell a misconfigured
+/// tolerance from a value that is too far away, or to read the computed distance.
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum CloseToRejection {
-    /// The deviation was negative or incomparable with zero.
-    InvalidDeviation,
-    /// The distance exceeded the deviation or could not be computed.
-    OutsideDeviation,
+pub enum CloseToRejection<'a, T> {
+    /// The deviation was negative or incomparable with zero, so no distance was computed.
+    #[non_exhaustive]
+    InvalidDeviation {
+        /// The allowed deviation.
+        allowed_deviation: &'a T,
+    },
+    /// The subject lies farther from the expected value than the allowed deviation.
+    #[non_exhaustive]
+    OutsideDeviation {
+        /// The expected value.
+        expected: &'a T,
+        /// The allowed deviation.
+        allowed_deviation: &'a T,
+        /// The distance between the subject and the expected value, or `None` when
+        /// [`NumericDistance::checked_distance`] cannot compute or represent it, as for NaN.
+        distance: Option<T>,
+    },
 }
 
 impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R: ValueRenderer<T>>
@@ -200,7 +211,7 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
         Self: 'a,
         T: 'a;
     type Rejection<'a>
-        = (&'a T, &'a T, CloseToRejection)
+        = CloseToRejection<'a, T>
     where
         Self: 'a,
         T: 'a;
@@ -211,18 +222,22 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
     ) -> Result<(), Self::Rejection<'a>> {
         let expected = borrow_for::<T, _>(&self.expected);
         let allowed_deviation = borrow_for::<T, _>(&self.allowed_deviation);
-        let reject = |reason| Err((expected, allowed_deviation, reason));
         // A NaN deviation is incomparable with zero and therefore invalid, like a negative one.
         if !allowed_deviation.ge(&T::zero_distance()) {
-            return reject(CloseToRejection::InvalidDeviation);
+            return Err(CloseToRejection::InvalidDeviation { allowed_deviation });
         }
-        if actual
-            .checked_distance(expected)
-            .is_some_and(|distance| &distance <= allowed_deviation)
+        let distance = actual.checked_distance(expected);
+        if distance
+            .as_ref()
+            .is_some_and(|distance| distance <= allowed_deviation)
         {
             Ok(())
         } else {
-            reject(CloseToRejection::OutsideDeviation)
+            Err(CloseToRejection::OutsideDeviation {
+                expected,
+                allowed_deviation,
+                distance,
+            })
         }
     }
 
@@ -237,32 +252,37 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
         // way.
         let render = context.render().compact();
         let allowed = |deviation: &T| Fact::labelled("Allowed deviation", render.value(deviation));
-        let (actual, expected, allowed_deviation) = match rejected {
-            None => (
-                None,
-                borrow_for::<T, _>(&self.expected),
-                borrow_for::<T, _>(&self.allowed_deviation),
-            ),
-            Some((_, (_, allowed_deviation, CloseToRejection::InvalidDeviation))) => {
-                return failure
-                    .relation("was given an invalid allowed deviation")
+        match rejected {
+            None => failure
+                .relation("is close to")
+                .expected(render.value(borrow_for::<T, _>(&self.expected)))
+                .fact(allowed(borrow_for::<T, _>(&self.allowed_deviation))),
+            Some((_, CloseToRejection::InvalidDeviation { allowed_deviation })) => failure
+                .relation("was given an invalid allowed deviation")
+                .fact(allowed(allowed_deviation))
+                .fact(Fact::note(
+                    "The allowed deviation must be zero or positive.",
+                )),
+            Some((
+                actual,
+                CloseToRejection::OutsideDeviation {
+                    expected,
+                    allowed_deviation,
+                    distance,
+                },
+            )) => {
+                let distance = match distance {
+                    Some(distance) => Fact::labelled("Distance", render.value(&distance)),
+                    None => Fact::note("The distance cannot be computed."),
+                };
+                failure
+                    .actual(render.value(actual))
+                    .relation("is not close to")
+                    .expected(render.value(expected))
+                    .fact(distance)
                     .fact(allowed(allowed_deviation))
-                    .fact(Fact::note(
-                        "The allowed deviation must be zero or positive.",
-                    ));
             }
-            Some((actual, (expected, allowed_deviation, CloseToRejection::OutsideDeviation))) => {
-                (Some(actual), expected, allowed_deviation)
-            }
-        };
-        failure
-            .relations(
-                actual.map(|actual| render.value(actual)),
-                "is close to",
-                "is not close to",
-            )
-            .expected(render.value(expected))
-            .fact(allowed(allowed_deviation))
+        }
     }
 }
 
@@ -538,7 +558,7 @@ mod tests {
 
         use indoc::formatdoc;
 
-        use super::super::{IsCloseTo, close_to};
+        use super::super::{CloseToRejection, IsCloseTo, close_to};
         use crate::{borrow_for::BorrowFor, expectation::Expectation, prelude::*};
 
         #[test]
@@ -557,9 +577,49 @@ mod tests {
                 Expected: 10
 
                 Details:
+                  - Distance: 3
                   - Allowed deviation: 2
                 -------- assertr --------
             "});
+        }
+
+        #[test]
+        fn reports_a_distance_that_cannot_be_computed() {
+            let failures = assert_that!(f64::NAN)
+                .with_location(false)
+                .capture(|it| it.matches(close_to(1.0, 0.5)));
+            assert_that!(&failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `f64::NAN`
+
+                Actual: NaN
+
+                is not close to
+
+                Expected: 1.0
+
+                Details:
+                  - The distance cannot be computed.
+                  - Allowed deviation: 0.5
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn rejection_retains_the_operands_and_the_distance() {
+            let context = AssertionContext::default();
+            let matcher = close_to(10, 2);
+            let rejection = Expectation::<i32, _>::evaluate(&matcher, &13, &context);
+            assert_that!(rejection).is_equal_to(Err(CloseToRejection::OutsideDeviation {
+                expected: &10,
+                allowed_deviation: &2,
+                distance: Some(3),
+            }));
+            let invalid = close_to(10, -1);
+            let rejection = Expectation::<i32, _>::evaluate(&invalid, &13, &context);
+            assert_that!(rejection).is_equal_to(Err(CloseToRejection::InvalidDeviation {
+                allowed_deviation: &-1,
+            }));
         }
 
         #[test]

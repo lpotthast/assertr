@@ -417,6 +417,7 @@ mod tests {
                 Expected: 2562047788015215h 30m 7s 999ms 999µs 999ns
 
                 Details:
+                  - Distance: 2562047788015215h 30m 7s 999ms 999µs 999ns
                   - Allowed deviation: 1s
                 -------- assertr --------
             "});
@@ -434,7 +435,8 @@ mod tests {
             let rendered = |value: &crate::renderer::Rendered| format!("{value:#}");
             assert_that!(rendered(failures[0].actual.as_ref().unwrap())).is_equal_to(SENTINEL);
             assert_that!(rendered(failures[0].expected.as_ref().unwrap())).is_equal_to(SENTINEL);
-            assert_that!(rendered(&failures[0].facts[0].value)).is_equal_to(SENTINEL);
+            // The distance between the extremes cannot be represented, so the first fact is a note.
+            assert_that!(rendered(&failures[0].facts[1].value)).is_equal_to(SENTINEL);
             assert_that!(rendered(&failures[1].facts[0].value)).is_equal_to(SENTINEL);
         }
 
