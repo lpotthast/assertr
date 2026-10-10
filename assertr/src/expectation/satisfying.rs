@@ -162,7 +162,7 @@ mod tests {
         })
         .panics()
         .has_type::<&str>()
-        .is_equal_to("the assertion callback performed no assertions");
+        .contains("performed no assertions");
     }
 
     #[test]

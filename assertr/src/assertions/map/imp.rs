@@ -498,10 +498,16 @@ where
     }
 }
 
-/// Retained missing keys, unexpected entries, and unequal values from an exact map comparison.
-/// The fields remain private so diagnostics consume the original observations without repeating
-/// lookup or value comparison. Missing and mismatched keys are selected query views, while
-/// unexpected entries retain their stored keys and values.
+/// The rejection of [`ContainsExactlyEntries`]: the missing keys, unexpected entries, and unequal
+/// values of an exact map comparison.
+///
+/// `K` and `V` are the map's key and value types, and `EK` and `EV` the borrowed views of the
+/// expected keys and values. Missing and mismatched keys are the expected key views. Mismatches
+/// also borrow the expected and stored values, while unexpected entries borrow their stored keys
+/// and values. The rejection also records the map's length. The contents are private, so
+/// explanation consumes the original observations without repeating any lookup or value
+/// comparison. Pass the rejection back to the `explain` method of the expectation that produced
+/// it.
 #[derive(Debug)]
 pub struct ExactEntriesRejection<'a, K, V, EK: ?Sized, EV: ?Sized> {
     length: usize,

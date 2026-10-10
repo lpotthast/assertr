@@ -13,13 +13,69 @@ use crate::{
     util::matching::{assign_exactly, match_bipartite},
 };
 
-/// Retained missing expected operands, such as elements or map keys, from a membership rejection.
+/// The rejection of [`ContainsAll`] and [`map::ContainsKeys`](crate::matchers::map::ContainsKeys):
+/// the expected operands that the subject did not contain.
+///
+/// It borrows each missing element or key view from the expectation, in expected order, so
+/// explanation lists exactly what evaluation found missing without searching the subject again.
+/// The contents are private. Pass the rejection back to the `explain` method of the expectation
+/// that produced it, which reports the missing operands under "Elements not found" or
+/// "Keys not found".
+///
+/// Name this type when a concrete matcher delegates to a built-in one and declares its own
+/// [`Expectation::Rejection`]:
+///
+/// ```
+/// use assertr::{
+///     expectation::{AssertionContext, Expectation},
+///     failure::FailureBuilder,
+///     matchers::collection::{ContainsAll, MissingElementsRejection},
+///     prelude::*,
+/// };
+///
+/// /// Requires the ports every service of ours listens on.
+/// struct OpensRequiredPorts(ContainsAll<u16>);
+///
+/// impl Expectation<Vec<u16>> for OpensRequiredPorts {
+///     type Success<'a> = ();
+///     type Rejection<'a> = MissingElementsRejection<'a, u16>;
+///
+///     fn evaluate<'a>(
+///         &'a self,
+///         actual: &'a Vec<u16>,
+///         context: &AssertionContext<'_>,
+///     ) -> Result<(), Self::Rejection<'a>> {
+///         self.0.evaluate(actual, context)
+///     }
+///
+///     fn explain<'a>(
+///         &'a self,
+///         rejected: Option<(&'a Vec<u16>, Self::Rejection<'a>)>,
+///         failure: FailureBuilder,
+///         context: &AssertionContext<'_>,
+///     ) -> FailureBuilder {
+///         self.0.explain(rejected, failure, context)
+///     }
+/// }
+///
+/// let required = OpensRequiredPorts(ContainsAll::new(vec![80, 443]));
+/// assert_that!(vec![22, 80, 443]).matches(&required);
+/// ```
 #[derive(Debug)]
 pub struct MissingElementsRejection<'a, E: ?Sized> {
     pub(crate) missing: Vec<&'a E>,
 }
 
-/// Retained length and first mismatch from a prefix or suffix rejection.
+/// The rejection of [`StartsWith`] and [`EndsWith`]: the subject's length and the first
+/// mismatching position.
+///
+/// `A` is the collection item type and `E` the borrowed view of an expected element. The
+/// rejection records the subject's length and, when a compared position differs, borrows the
+/// actual element and the expected view at the first such index. A subject shorter than the
+/// expected prefix or suffix is rejected even when no compared position differs. Explanation
+/// names the index and both values without traversing the subject again.
+/// The contents are private. Pass the rejection back to the `explain` method of the expectation
+/// that produced it.
 #[derive(Debug)]
 pub struct PositionalRejection<'a, A: ?Sized, E: ?Sized> {
     length: usize,
@@ -66,8 +122,15 @@ where
     }
 }
 
-/// Retained unmatched occurrences from an exact collection rejection.
-/// Diagnostic assignment is omitted during probes.
+/// The rejection of [`ContainsExactly`] and [`ContainsExactlyInAnyOrder`]: the occurrences left
+/// unmatched by an exact comparison.
+///
+/// `A` is the collection item type and `E` the borrowed view of an expected element. The
+/// rejection borrows the actual elements no expected element claimed and the expected elements
+/// no actual element claimed, and records whether only their order differs. Explanation reports
+/// them under "Elements not found" and "Elements not expected" without comparing the elements
+/// again. Probes, which are never explained, skip computing this assignment. The contents are
+/// private. Pass the rejection back to the `explain` method of the expectation that produced it.
 #[derive(Debug)]
 pub struct ExactElementsRejection<'a, A: ?Sized, E: ?Sized> {
     unexpected: Vec<&'a A>,

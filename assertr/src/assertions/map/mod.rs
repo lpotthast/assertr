@@ -26,7 +26,7 @@ pub use entry_matcher_list::EntryMatcherList;
 pub(crate) use imp::FoundEntries;
 pub use imp::{
     ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
-    DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue,
+    DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue, ExactEntriesRejection,
 };
 pub use matching::{ContainsEntryMatching, ContainsValueMatching};
 pub use projection::{MapKeys, MapProjectionAssertions, MapValues};

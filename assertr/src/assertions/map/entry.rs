@@ -18,7 +18,16 @@ pub struct Entry<K, M> {
     pub(super) matcher: M,
 }
 
-/// The original stored key and scoped value evidence from a rejected entry expectation.
+/// The rejection of [`entry`](crate::matchers::entry) and
+/// [`map::ContainsEntryMatching`](crate::matchers::map::ContainsEntryMatching): the stored key
+/// that was found, if any, and the evidence explaining the rejection.
+///
+/// `K` is the map's key type. When the key is present but its value was rejected, the rejection
+/// borrows the stored key and holds the value matcher's nested failures. When the key is missing,
+/// it holds no stored key and a "contains the required key" failure instead. Diagnostic
+/// evaluation scopes this evidence under the key's path. Explanation reports it without looking
+/// the key up or evaluating the value again. The contents are private. Pass the
+/// rejection back to the `explain` method of the expectation that produced it.
 #[derive(Debug)]
 pub struct EntryRejection<'a, K: ?Sized> {
     key: Option<&'a K>,

@@ -37,6 +37,12 @@ type, so neither bounds its target. Lists built by `matchers!`, `elements_are!`,
 that are `Debug`, `Clone`, and `Copy` when their matchers are, and print like arrays. Arrays, slices, and vectors of
 matchers keep these traits too.
 
+A dedicated `Success` or `Rejection` type of a public expectation is public in the same `matchers` namespace as the
+expectation, such as `matchers::collection::MissingElementsRejection`, so a concrete composite can name it. Its fields
+stay private unless reading them is part of the contract, as for the `CloseToRejection`, `HeaderRejection`, and
+`ValueRejection` variants and the `LockObservation` state. It implements `Debug`, and identity rejections show
+addresses.
+
 ## Evaluation and failure evidence
 
 Each composite matcher decides which checks run, in what order, and how to describe a failure when no child evidence is

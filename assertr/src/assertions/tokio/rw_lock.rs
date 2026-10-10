@@ -8,8 +8,15 @@ use crate::{
     renderer::{DebugRenderer, ValueRenderer},
 };
 
-/// The immediate acquisition state of a Tokio read-write lock.
-/// Acquired guards keep the observed value stable until the observation is consumed.
+/// The immediate acquisition state of a Tokio read-write lock, observed by [`IsNotLocked`],
+/// [`IsReadLocked`], and [`IsWriteLocked`].
+///
+/// These expectations return the observation both as their success and as their rejection.
+/// Evaluation first tries to acquire a write guard, then a read guard. An acquired guard keeps the
+/// observed value stable until the observation is dropped, so explanation renders the value that
+/// matched the observed state. Match on the variant to read the state, and drop the observation
+/// promptly, because its guard holds the lock.
+#[derive(Debug)]
 pub enum LockObservation<'a, T> {
     /// A write guard could be acquired.
     Unlocked(tokio::sync::RwLockWriteGuard<'a, T>),

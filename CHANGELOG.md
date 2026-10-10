@@ -105,11 +105,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   its ordering through `RenderingOrder`. Only strings and `format_args!` convert into `Rendered` directly, as verbatim
   text for labels and prose, so numbers and other values always pass through the active renderer and budget.
 - docs.rs shows the features required by feature-gated items.
+- Rejection types of the built-in matchers are public beside their expectations in `matchers`, for example
+  `matchers::collection::MissingElementsRejection`, `matchers::EntryRejection`, `matchers::CloseToRejection`, and
+  `matchers::mutex::UnlockedRejection`, so custom composites can name them as their own `Expectation::Rejection`.
 - Public expectation types implement `Debug` and `Clone`, bounded on their operands and nested matchers, and `Copy`
   when they hold no data, only concrete copyable data, or only borrowed targets. Callback definitions such as
   `Predicate`, `Satisfying`, and `Pattern` are `Clone` when their callback is and omit it from `Debug`. Identity
-  definitions show addresses. Rejection types such as `MissingElementsRejection` and `EntryRejection` implement
-  `Debug`, as do `AssertionContext`, `RenderingContext`, and `CustomRenderer`. Generic property expectations such as
+  definitions show addresses. Rejection types of the built-in matchers implement `Debug`, and identity rejections show
+  addresses too. `AssertionContext`, `RenderingContext`, and `CustomRenderer` implement `Debug` as well. Generic property expectations such as
   `IsEmpty`, `IsNotEmpty`, and `IsZero` accept unsized subjects where their bound allows, for example
   `dereferenced(IsEmpty)` on a `String`.
 - `#[fluent_expressions(crate = <path>)]` names a re-exported runtime, so expression capture works in crates that

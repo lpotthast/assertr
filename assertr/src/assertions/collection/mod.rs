@@ -27,7 +27,8 @@ pub use elements_are::{
 pub use elements_are_in_any_order::{ElementsAreInAnyOrder, elements_are_in_any_order};
 pub use identity::{
     ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs,
-    DoesNotContainSameInstanceAs,
+    DoesNotContainSameInstanceAs, ExactIdentityRejection, IdentityMembershipRejection,
+    UnorderedIdentityRejection,
 };
 pub use matching::{
     ContainsMatching, DoesNotContainMatching, contains_matching, does_not_contain_matching,
@@ -36,10 +37,10 @@ pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
 pub use stable_order::{
     HasFirst, HasLast, HasSingle, StableOrderAssertions, StableOrderExtractAssertions,
 };
-pub(crate) use value::MissingElementsRejection;
 pub use value::{
     Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
-    DoesNotContain, EndsWith, StartsWith,
+    DoesNotContain, EndsWith, ExactElementsRejection, MissingElementsRejection,
+    PositionalRejection, StartsWith,
 };
 
 use crate::{

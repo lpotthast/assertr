@@ -111,7 +111,15 @@ impl<F> HasValueSatisfying<F> {
     }
 }
 
-/// Evidence from a rejected mutex value check.
+/// The rejection of [`HasValueSatisfying`]: why the guarded value could not be accepted.
+///
+/// The `Rejected` variant holds the guard acquired for the callback, so explanation renders the
+/// same value the callback saw, and the callback's captured failures as [`Evidence`]. Explanation
+/// releases the guard after rendering it. Drop the rejection promptly if a composite does not
+/// explain it, because the guard keeps the mutex locked.
+///
+/// [`Evidence`]: crate::expectation::Evidence
+#[derive(Debug)]
 pub enum ValueRejection<'a, T> {
     /// The mutex could not be acquired.
     Locked,

@@ -176,7 +176,12 @@ pub const fn close_to<E, D>(expected: E, allowed_deviation: D) -> IsCloseTo<E, D
     IsCloseTo::new(expected, allowed_deviation)
 }
 
-/// The reason a numeric tolerance was rejected.
+/// Why [`IsCloseTo`] rejected a subject.
+///
+/// The expectation's rejection is `(&T, &T, CloseToRejection)`: the borrowed expected value, the
+/// borrowed allowed deviation, and this reason. Explanation uses the reason to choose between
+/// reporting an invalid deviation and reporting the distance, so it never has to compare again.
+/// Match on it to tell a misconfigured tolerance from a value that is too far away.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CloseToRejection {

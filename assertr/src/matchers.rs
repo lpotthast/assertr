@@ -227,6 +227,12 @@
 //! guide](crate#custom-assertions) walks through all options, and the
 //! [`expectation`](crate::expectation) module describes the contract.
 //!
+//! When a built-in matcher retains its failed observation in a dedicated type, that type is
+//! public beside the matcher, such as [`collection::MissingElementsRejection`] or
+//! [`CloseToRejection`]. A concrete composite can then name it as its own
+//! [`Expectation::Rejection`](crate::expectation::Expectation::Rejection) and pass it back to the
+//! built-in matcher's `explain`.
+//!
 //! Failures name the field, position, or key that failed in
 //! [`AssertionFailure::path`](crate::failure::AssertionFailure::path). Use
 //! [`capture`](crate::AssertThat::capture) to inspect them, and see the [rendering
@@ -259,8 +265,8 @@ pub use crate::{
             partial_eq::{EqualTo, IsOneOf, NotEqualTo, eq, one_of},
             partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
         },
-        distance::{IsCloseTo, close_to},
-        map::{EntriesAre, Entry, entries_are, entry},
+        distance::{CloseToRejection, IsCloseTo, close_to},
+        map::{EntriesAre, Entry, EntryRejection, entries_are, entry},
     },
     expectation::{
         all_of::{AllOf, all_of},
@@ -290,24 +296,27 @@ pub mod string {
     };
 }
 
-/// Element membership, ordering, identity, and projection expectations.
+/// Element membership, ordering, identity, and projection expectations, with the rejections
+/// they retain.
 pub mod collection {
     #[doc(inline)]
     pub use crate::assertions::collection::{
         Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
         ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder,
         ContainsSameInstanceAs, DoesNotContain, DoesNotContainSameInstanceAs, EndsWith,
-        HasElementAt, HasFirst, HasLast, HasSingle, StartsWith,
+        ExactElementsRejection, ExactIdentityRejection, HasElementAt, HasFirst, HasLast, HasSingle,
+        IdentityMembershipRejection, MissingElementsRejection, PositionalRejection, StartsWith,
+        UnorderedIdentityRejection,
     };
 }
 
-/// Key, value, entry, and exact map expectations.
+/// Key, value, entry, and exact map expectations, with the rejection of exact map comparisons.
 pub mod map {
     #[doc(inline)]
     pub use crate::assertions::map::{
         ContainsEntry, ContainsEntryMatching, ContainsExactlyEntries, ContainsKey, ContainsKeys,
         ContainsValue, ContainsValueMatching, DoesNotContainEntry, DoesNotContainKey,
-        DoesNotContainValue,
+        DoesNotContainValue, ExactEntriesRejection,
     };
 }
 
@@ -365,11 +374,14 @@ pub mod memory {
     pub use crate::assertions::core::mem::NeedsDrop;
 }
 
-/// Lock and poison-state expectations for standard mutexes. Requires `std`.
+/// Lock and poison-state expectations for standard mutexes, with the rejection retaining an
+/// acquired guard. Requires `std`.
 #[cfg(feature = "std")]
 pub mod mutex {
     #[doc(inline)]
-    pub use crate::assertions::std::mutex::{IsLocked, IsNotLocked, IsNotPoisoned, IsPoisoned};
+    pub use crate::assertions::std::mutex::{
+        IsLocked, IsNotLocked, IsNotPoisoned, IsPoisoned, UnlockedRejection,
+    };
 }
 
 /// Filesystem state and path-component expectations. Requires `std`.
@@ -441,18 +453,23 @@ pub mod report {
     };
 }
 
-/// Lock-state and value-callback expectations for Tokio mutexes. Requires `tokio`.
+/// Lock-state and value-callback expectations for Tokio mutexes, with the rejection of value
+/// callbacks. Requires `tokio`.
 #[cfg(feature = "tokio")]
 pub mod tokio_mutex {
     #[doc(inline)]
-    pub use crate::assertions::tokio::mutex::{HasValueSatisfying, IsLocked, IsNotLocked};
+    pub use crate::assertions::tokio::mutex::{
+        HasValueSatisfying, IsLocked, IsNotLocked, ValueRejection,
+    };
 }
 
-/// Read/write lock-state expectations. Requires `tokio`.
+/// Read/write lock-state expectations, with the lock observation they retain. Requires `tokio`.
 #[cfg(feature = "tokio")]
 pub mod tokio_rw_lock {
     #[doc(inline)]
-    pub use crate::assertions::tokio::rw_lock::{IsNotLocked, IsReadLocked, IsWriteLocked};
+    pub use crate::assertions::tokio::rw_lock::{
+        IsNotLocked, IsReadLocked, IsWriteLocked, LockObservation,
+    };
 }
 
 /// Watch value and change-state expectations. Requires `tokio`.

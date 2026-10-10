@@ -89,8 +89,15 @@ fn with_poison_note(failure: FailureBuilder, poisoned: bool) -> FailureBuilder {
 #[derive(Debug, Clone, Copy)]
 pub struct IsLocked;
 
-/// An acquired guard and the observed poison state from a rejected lock expectation.
-/// Explanation releases the guard before the executor raises or evaluates another child.
+/// The rejection of [`IsLocked`]: the guard acquired while observing that the mutex was not
+/// locked, and whether it was poisoned.
+///
+/// Holding the guard keeps the observed value unchanged until explanation renders it, so the
+/// report shows the value that made the mutex acquirable. Explanation releases the guard before
+/// the executor raises the failure or evaluates another child, so drop the rejection promptly if
+/// a composite does not explain it. The contents are private. Pass the rejection back to
+/// [`IsLocked`]'s `explain` method.
+#[derive(Debug)]
 pub struct UnlockedRejection<'a, T> {
     guard: MutexGuard<'a, T>,
     poisoned: bool,

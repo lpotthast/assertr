@@ -67,7 +67,15 @@ impl<'a, U: ?Sized> ObservedTargets<'a, U> {
     }
 }
 
-/// Retained borrowed-target evidence from an identity membership rejection.
+/// The rejection of [`ContainsSameInstanceAs`] and [`DoesNotContainSameInstanceAs`]: the borrowed
+/// targets that evaluation visited.
+///
+/// `U` is the borrowed target type compared by address. The rejection keeps the targets already
+/// visited, in iteration order, and whether an element had the same data address but different
+/// pointer metadata. Explanation shows those addresses and completes the list within the
+/// rendering budget without borrowing a visited element twice. Probes retain no targets. The
+/// contents are private. Pass the rejection back to the `explain` method of the expectation that
+/// produced it.
 pub struct IdentityMembershipRejection<'a, U: ?Sized> {
     observed: ObservedTargets<'a, U>,
     same_address: bool,
@@ -80,7 +88,14 @@ struct IdentityMismatch<'a, U: ?Sized> {
     same_address: bool,
 }
 
-/// Retained length, first mismatch, and bounded evidence from an ordered identity rejection.
+/// The rejection of [`ContainsExactlySameInstances`]: the subject's length, the first position
+/// holding a different instance, and the visited targets.
+///
+/// `U` is the borrowed target type compared by address. The rejection borrows the expected
+/// targets, the actual and expected target at the first differing index, and the targets visited
+/// before evaluation stopped. Explanation reports the index, both addresses, and the observed
+/// targets within the rendering budget without traversing the subject again. The contents are
+/// private. Pass the rejection back to the `explain` method of the expectation that produced it.
 pub struct ExactIdentityRejection<'a, U: ?Sized> {
     expected: &'a [&'a U],
     length: usize,
@@ -88,8 +103,14 @@ pub struct ExactIdentityRejection<'a, U: ?Sized> {
     observed: ObservedTargets<'a, U>,
 }
 
-/// Retained target assignment from an unordered identity rejection.
-/// Diagnostic assignment is omitted during probes.
+/// The rejection of [`ContainsExactlySameInstancesInAnyOrder`]: the instances left unmatched by
+/// an exact unordered identity comparison.
+///
+/// `U` is the borrowed target type compared by address. The rejection borrows the expected and
+/// observed targets, the expected instances no element claimed, and the elements no expected
+/// instance claimed. Explanation reports those addresses without comparing again. Probes, which
+/// are never explained, skip computing this assignment. The contents are private. Pass the
+/// rejection back to the `explain` method of the expectation that produced it.
 pub struct UnorderedIdentityRejection<'a, U: ?Sized> {
     expected: &'a [&'a U],
     observed: Vec<&'a U>,
@@ -106,6 +127,46 @@ impl<U: ?Sized> core::fmt::Debug for Addresses<'_, U> {
         formatter
             .debug_list()
             .entries(self.0.iter().map(|target| ptr::from_ref(*target)))
+            .finish()
+    }
+}
+
+// Identity rejections show target addresses, like the identity expectations, so `U` needs no
+// `Debug`.
+impl<U: ?Sized> core::fmt::Debug for IdentityMembershipRejection<'_, U> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("IdentityMembershipRejection")
+            .field("observed", &Addresses(&self.observed.targets))
+            .field("same_address", &self.same_address)
+            .finish()
+    }
+}
+
+impl<U: ?Sized> core::fmt::Debug for ExactIdentityRejection<'_, U> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("ExactIdentityRejection")
+            .field("expected", &Addresses(self.expected))
+            .field("length", &self.length)
+            .field(
+                "mismatch_index",
+                &self.mismatch.as_ref().map(|mismatch| mismatch.index),
+            )
+            .field("observed", &Addresses(&self.observed.targets))
+            .finish()
+    }
+}
+
+impl<U: ?Sized> core::fmt::Debug for UnorderedIdentityRejection<'_, U> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("UnorderedIdentityRejection")
+            .field("expected", &Addresses(self.expected))
+            .field("observed", &Addresses(&self.observed))
+            .field("missing", &Addresses(&self.missing))
+            .field("unexpected", &Addresses(&self.unexpected))
+            .field("same_address", &self.same_address)
             .finish()
     }
 }
@@ -1298,6 +1359,41 @@ mod tests {
                     assert_that!(*omitted).is_equal_to(targets.len() - limit);
                 }
             }
+        }
+
+        #[test]
+        fn rejections_debug_format_target_addresses() {
+            let targets = keys();
+            let missing = Opaque { _byte: 1 };
+            let context = AssertionContext::new(&DebugRenderer, RenderingBudget::unlimited());
+            let first = format!("{:p}", &targets[0]);
+
+            let membership_matcher = ContainsSameInstanceAs::new(&missing);
+            let membership = membership_matcher
+                .evaluate(&targets, &context)
+                .err()
+                .unwrap();
+            assert_that!(format!("{membership:?}")).is_equal_to(format!(
+                "IdentityMembershipRejection {{ observed: [{first}, {:p}, {:p}], same_address: false }}",
+                &targets[1], &targets[2],
+            ));
+
+            let exact_matcher = ContainsExactlySameInstances::new(vec![&missing]);
+            let exact = exact_matcher.evaluate(&targets, &context).err().unwrap();
+            assert_that!(format!("{exact:?}"))
+                .starts_with("ExactIdentityRejection { expected: [")
+                .contains("length: 3, mismatch_index: Some(0)")
+                .contains(first.as_str());
+
+            let unordered_matcher = ContainsExactlySameInstancesInAnyOrder::new(vec![&missing]);
+            let unordered = unordered_matcher
+                .evaluate(&targets, &context)
+                .err()
+                .unwrap();
+            assert_that!(format!("{unordered:?}"))
+                .starts_with("UnorderedIdentityRejection { expected: [")
+                .contains(first.as_str())
+                .ends_with("same_address: false }");
         }
 
         #[test]
