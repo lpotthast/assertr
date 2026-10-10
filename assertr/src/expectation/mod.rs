@@ -42,8 +42,22 @@
 //! assert_that!(2).matches(all_of(small_positive()));
 //! ```
 
+pub(crate) mod all_of;
+pub(crate) mod any_of;
+pub(crate) mod anything;
+pub(crate) mod context;
+pub(crate) mod dereferenced;
+pub(crate) mod field;
+pub(crate) mod lists;
+pub(crate) mod predicate;
+pub(crate) mod satisfying;
+
 use alloc::vec::Vec;
 
+pub use context::AssertionContext;
+pub use lists::MatcherList;
+
+pub use crate::assertions::map::EntryMatcherList;
 use crate::{
     failure::{AssertionFailure, FailureBuilder, FailureKind},
     renderer::DebugRenderer,
@@ -65,6 +79,7 @@ macro_rules! evidence_items {
             $subject: 'a;
     };
 }
+
 pub(crate) use evidence_items;
 
 /// Declares the associated items of a transparent composition: the [`evidence_items!`] plus
@@ -75,27 +90,13 @@ macro_rules! composite_items {
         const FLATTEN: bool = true;
     };
 }
+
 pub(crate) use composite_items;
 
 /// Converts the outcome of a check that retains no observation into an evaluation result.
 pub(crate) const fn passed(condition: bool) -> Result<(), ()> {
     if condition { Ok(()) } else { Err(()) }
 }
-
-pub(crate) mod all_of;
-pub(crate) mod any_of;
-pub(crate) mod anything;
-pub(crate) mod dereferenced;
-pub(crate) mod field;
-pub(crate) mod lists;
-pub(crate) mod predicate;
-pub(crate) mod satisfying;
-
-pub(crate) mod context;
-pub use context::AssertionContext;
-pub use lists::MatcherList;
-
-pub use crate::assertions::map::EntryMatcherList;
 
 /// Failures collected while running child expectations, plus a count of those the rendering
 /// budget left out.

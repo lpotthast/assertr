@@ -12,6 +12,15 @@ use crate::{
 /// Checks command arguments and retains their observed views on rejection.
 #[derive(Debug, Clone)]
 pub struct HasArg<E>(E);
+
+impl<E> HasArg<E> {
+    /// Expects this argument.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
 impl<E, R> Expectation<Command, R> for HasArg<E>
 where
     E: AsRef<OsStr>,
@@ -27,6 +36,7 @@ where
     where
         Self: 'a,
         Command: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Command,
@@ -42,6 +52,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Membership;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Command, Self::Rejection<'a>)>,
@@ -60,14 +71,6 @@ where
                 .relation("does not contain")
                 .expected(render.value(expected)),
         }
-    }
-}
-
-impl<E> HasArg<E> {
-    /// Expects this argument.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
     }
 }
 

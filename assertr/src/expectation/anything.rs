@@ -24,6 +24,7 @@ impl<A: ?Sized, R> Expectation<A, R> for Anything {
     where
         Self: 'a,
         A: 'a;
+
     fn evaluate(
         &self,
         _: &A,
@@ -33,6 +34,7 @@ impl<A: ?Sized, R> Expectation<A, R> for Anything {
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&A, core::convert::Infallible)>,

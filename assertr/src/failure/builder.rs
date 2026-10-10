@@ -226,6 +226,42 @@ mod tests {
         }
     }
 
+    mod omitted_children {
+        use super::*;
+
+        #[test]
+        fn accumulates_across_calls() {
+            let failure = FailureBuilder::new::<()>(FailureKind::Other)
+                .omitted_children(2)
+                .omitted_children(0)
+                .omitted_children(3)
+                .build();
+
+            assert_that!(failure.omitted_children).is_equal_to(5);
+        }
+    }
+
+    mod relations {
+        use super::*;
+
+        #[test]
+        fn states_the_relation_without_a_subject_and_the_negation_with_one() {
+            let rendering = RenderingContext::new(&DebugRenderer, RenderingBudget::default());
+            let described = FailureBuilder::new::<i32>(FailureKind::Predicate)
+                .relations(None, "is even", "is odd")
+                .build();
+            assert_that!(described.relation.as_deref()).is_equal_to(Some("is even"));
+            assert_that!(described.actual).is_none();
+
+            let rejected = FailureBuilder::new::<i32>(FailureKind::Predicate)
+                .relations(Some(rendering.value(&3)), "is even", "is odd")
+                .build();
+            assert_that!(rejected.relation.as_deref()).is_equal_to(Some("is odd"));
+            assert_that!(rejected.actual.map(|actual| actual.to_string()))
+                .is_equal_to(Some("3".into()));
+        }
+    }
+
     mod fact {
         use super::*;
 
@@ -272,42 +308,6 @@ mod tests {
         fn preserves_note_evidence_without_rendering_again() {
             let failure = assert_preserved(Fact::note, "evi... 5 more characters ...");
             assert_that!(failure.facts[0].label).is_none();
-        }
-    }
-
-    mod relations {
-        use super::*;
-
-        #[test]
-        fn states_the_relation_without_a_subject_and_the_negation_with_one() {
-            let rendering = RenderingContext::new(&DebugRenderer, RenderingBudget::default());
-            let described = FailureBuilder::new::<i32>(FailureKind::Predicate)
-                .relations(None, "is even", "is odd")
-                .build();
-            assert_that!(described.relation.as_deref()).is_equal_to(Some("is even"));
-            assert_that!(described.actual).is_none();
-
-            let rejected = FailureBuilder::new::<i32>(FailureKind::Predicate)
-                .relations(Some(rendering.value(&3)), "is even", "is odd")
-                .build();
-            assert_that!(rejected.relation.as_deref()).is_equal_to(Some("is odd"));
-            assert_that!(rejected.actual.map(|actual| actual.to_string()))
-                .is_equal_to(Some("3".into()));
-        }
-    }
-
-    mod omitted_children {
-        use super::*;
-
-        #[test]
-        fn accumulates_across_calls() {
-            let failure = FailureBuilder::new::<()>(FailureKind::Other)
-                .omitted_children(2)
-                .omitted_children(0)
-                .omitted_children(3)
-                .build();
-
-            assert_that!(failure.omitted_children).is_equal_to(5);
         }
     }
 

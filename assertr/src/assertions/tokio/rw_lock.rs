@@ -8,6 +8,9 @@ use crate::{
     renderer::{DebugRenderer, ValueRenderer},
 };
 
+/// The label of the fact naming the observed lock state.
+const LOCK_STATE: &str = "Lock state";
+
 /// The immediate acquisition state of a Tokio read-write lock, observed by [`IsNotLocked`],
 /// [`IsReadLocked`], and [`IsWriteLocked`].
 ///
@@ -25,6 +28,7 @@ pub enum LockObservation<'a, T> {
     /// Neither guard could be acquired.
     WriteLocked,
 }
+
 impl<T> LockObservation<'_, T> {
     fn observe(actual: &RwLock<T>) -> LockObservation<'_, T> {
         match actual.try_write() {
@@ -35,6 +39,7 @@ impl<T> LockObservation<'_, T> {
             },
         }
     }
+
     fn explain<R: ValueRenderer<T>>(
         self,
         actual: &RwLock<T>,
@@ -53,12 +58,14 @@ impl<T> LockObservation<'_, T> {
         failure.actual(data).fact(Fact::labelled(LOCK_STATE, state))
     }
 }
+
 /// Generates a Tokio read-write lock expectation from its accepted state and relations.
 macro_rules! lock_state_expectation {
     ($(#[$meta:meta])* $name:ident, $state:pat, $met:literal, $unmet:literal) => {
         $(#[$meta])*
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
+
         impl<T, R> Expectation<RwLock<T>, R> for $name
         where
             R: ValueRenderer<T>,
@@ -73,6 +80,7 @@ macro_rules! lock_state_expectation {
             where
                 Self: 'a,
                 RwLock<T>: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a RwLock<T>,
@@ -87,6 +95,7 @@ macro_rules! lock_state_expectation {
             }
 
             const KIND: FailureKind = FailureKind::Other;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a RwLock<T>, Self::Rejection<'a>)>,
@@ -101,7 +110,6 @@ macro_rules! lock_state_expectation {
                 }
             }
         }
-
     };
 }
 
@@ -162,9 +170,6 @@ pub trait TokioRwLockAssertions<T, R = DebugRenderer> {
     where
         R: ValueRenderer<T>;
 }
-
-/// The label of the fact naming the observed lock state.
-const LOCK_STATE: &str = "Lock state";
 
 impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M, R> {
     #[track_caller]

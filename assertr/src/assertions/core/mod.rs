@@ -29,10 +29,10 @@ pub mod char;
 pub mod debug;
 /// Assertions over a value's `Display` representation.
 pub mod display;
+/// Assertions that invoke synchronous or asynchronous functions.
 // Unit tests use these assertions even without the `std` feature, because the hosted test harness
 // links `std`.
 #[cfg(any(feature = "std", test))]
-/// Assertions that invoke synchronous or asynchronous functions.
 pub mod r#fn;
 /// Reference-identity assertions without equality or rendering bounds.
 pub mod identity;

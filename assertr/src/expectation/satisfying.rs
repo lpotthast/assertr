@@ -1,6 +1,6 @@
 use crate::{
     AssertThat,
-    expectation::{AssertionContext, Evidence, Expectation},
+    expectation::{AssertionContext, Evidence, Expectation, composite_items},
     failure::{FailureBuilder, FailureKind},
     mode::Capture,
 };
@@ -88,6 +88,7 @@ where
     F: for<'a> Fn(AssertThat<'a, A, Capture, R>),
 {
     composite_items!(A);
+
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated();
         let matched = context.run_assertions(actual, &self.0);
@@ -95,6 +96,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,

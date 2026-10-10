@@ -29,12 +29,22 @@ use crate::{
 /// Compares the observed response status code.
 #[derive(Debug, Clone, Copy)]
 pub struct HasStatusCode(reqwest::StatusCode);
+
+impl HasStatusCode {
+    /// Expects this status code.
+    #[must_use]
+    pub const fn new(expected: reqwest::StatusCode) -> Self {
+        Self(expected)
+    }
+}
+
 impl<R> Expectation<reqwest::Response, R> for HasStatusCode
 where
     R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
 {
     type Success<'a> = ();
     type Rejection<'a> = reqwest::StatusCode;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a reqwest::Response,
@@ -49,6 +59,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Equality;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
@@ -68,13 +79,6 @@ where
     }
 }
 
-impl HasStatusCode {
-    /// Expects this status code.
-    #[must_use]
-    pub const fn new(expected: reqwest::StatusCode) -> Self {
-        Self(expected)
-    }
-}
 /// Generates a status-class expectation from its predicate, relations, and class label.
 macro_rules! status_class_expectation {
     (
@@ -88,12 +92,14 @@ macro_rules! status_class_expectation {
         $(#[$meta])*
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
+
         impl<R> Expectation<reqwest::Response, R> for $name
         where
             R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
         {
             type Success<'a> = ();
             type Rejection<'a> = reqwest::StatusCode;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a reqwest::Response,
@@ -108,6 +114,7 @@ macro_rules! status_class_expectation {
             }
 
             const KIND: FailureKind = FailureKind::Other;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
@@ -124,7 +131,6 @@ macro_rules! status_class_expectation {
                 }
             }
         }
-
     };
 }
 
@@ -191,6 +197,15 @@ pub enum HeaderRejection<'a, T> {
 /// is not a valid HTTP header name is rejected as invalid.
 #[derive(Debug, Clone)]
 pub struct HasHeader<E>(E);
+
+impl<E> HasHeader<E> {
+    /// Expects a header with this name to be present.
+    #[must_use]
+    pub const fn new(name: E) -> Self {
+        Self(name)
+    }
+}
+
 impl<E, R> Expectation<reqwest::Response, R> for HasHeader<E>
 where
     E: AsRef<str>,
@@ -206,6 +221,7 @@ where
     where
         Self: 'a,
         reqwest::Response: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a reqwest::Response,
@@ -216,6 +232,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Membership;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
@@ -237,19 +254,21 @@ where
     }
 }
 
-impl<E> HasHeader<E> {
-    /// Expects a header with this name to be present.
-    #[must_use]
-    pub const fn new(name: E) -> Self {
-        Self(name)
-    }
-}
 /// Checks that the response does not contain a header.
 ///
 /// Rejection retains the looked-up name and the header's first value. A name that is not a valid
 /// HTTP header name is rejected as invalid instead of passing as absent.
 #[derive(Debug, Clone)]
 pub struct DoesNotHaveHeader<E>(E);
+
+impl<E> DoesNotHaveHeader<E> {
+    /// Expects no header with this name.
+    #[must_use]
+    pub const fn new(name: E) -> Self {
+        Self(name)
+    }
+}
+
 impl<E, R> Expectation<reqwest::Response, R> for DoesNotHaveHeader<E>
 where
     E: AsRef<str>,
@@ -265,6 +284,7 @@ where
     where
         Self: 'a,
         reqwest::Response: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a reqwest::Response,
@@ -278,6 +298,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Membership;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
@@ -302,13 +323,6 @@ where
     }
 }
 
-impl<E> DoesNotHaveHeader<E> {
-    /// Expects no header with this name.
-    #[must_use]
-    pub const fn new(name: E) -> Self {
-        Self(name)
-    }
-}
 /// Compares the first header value with the expected raw UTF-8 bytes.
 ///
 /// A name that is not a valid HTTP header name is rejected as invalid.
@@ -317,6 +331,15 @@ pub struct HasHeaderValue<N, E> {
     name: N,
     expected: E,
 }
+
+impl<N, E> HasHeaderValue<N, E> {
+    /// Expects this header and value.
+    #[must_use]
+    pub const fn new(name: N, expected: E) -> Self {
+        Self { name, expected }
+    }
+}
+
 impl<N, E, R> Expectation<reqwest::Response, R> for HasHeaderValue<N, E>
 where
     N: AsRef<str>,
@@ -333,6 +356,7 @@ where
     where
         Self: 'a,
         reqwest::Response: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a reqwest::Response,
@@ -347,6 +371,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Equality;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
@@ -375,14 +400,6 @@ where
                 .fact(url_fact(render, actual))
                 .fact(Fact::labelled("Header", render.value(name))),
         }
-    }
-}
-
-impl<N, E> HasHeaderValue<N, E> {
-    /// Expects this header and value.
-    #[must_use]
-    pub const fn new(name: N, expected: E) -> Self {
-        Self { name, expected }
     }
 }
 
@@ -742,20 +759,6 @@ fn render_header_names<R: ValueRenderer<str>>(
     render.borrowed_values::<str, _>(&names, RenderingOrder::PreserveIteration)
 }
 
-/// Explains a missing header by listing the present header names.
-fn explain_missing_header<R: ValueRenderer<str>>(
-    failure: FailureBuilder,
-    render: RenderingContext<'_, R>,
-    actual: &reqwest::Response,
-    name: &str,
-) -> FailureBuilder {
-    failure
-        .actual(render_header_names(render, actual))
-        .relation("does not contain the header")
-        .expected(render.value(name))
-        .fact(url_fact(render, actual))
-}
-
 /// Looks up the first value of the header `name`, rejecting a name that no header can have.
 ///
 /// `HeaderMap` lookups treat an invalid name as absent. Checking it first keeps
@@ -768,6 +771,20 @@ fn first_value<'a, T>(
         Ok(header) => Ok(actual.headers().get(&header)),
         Err(_) => Err(HeaderRejection::InvalidName(name)),
     }
+}
+
+/// Explains a missing header by listing the present header names.
+fn explain_missing_header<R: ValueRenderer<str>>(
+    failure: FailureBuilder,
+    render: RenderingContext<'_, R>,
+    actual: &reqwest::Response,
+    name: &str,
+) -> FailureBuilder {
+    failure
+        .actual(render_header_names(render, actual))
+        .relation("does not contain the header")
+        .expected(render.value(name))
+        .fact(url_fact(render, actual))
 }
 
 /// Explains a header expectation given a name that is not a valid HTTP header name.
@@ -926,11 +943,13 @@ mod tests {
 
         /// Renders everything a response assertion can need, except the response itself.
         struct EvidenceRenderer;
+
         impl ValueRenderer<str> for EvidenceRenderer {
             fn fmt(&self, value: &str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 core::fmt::Debug::fmt(value, f)
             }
         }
+
         impl ValueRenderer<reqwest::StatusCode> for EvidenceRenderer {
             fn fmt(
                 &self,
@@ -940,6 +959,7 @@ mod tests {
                 core::fmt::Debug::fmt(value, f)
             }
         }
+
         impl ValueRenderer<reqwest::Error> for EvidenceRenderer {
             fn fmt(
                 &self,
@@ -949,6 +969,7 @@ mod tests {
                 core::fmt::Debug::fmt(value, f)
             }
         }
+
         #[cfg(feature = "serde-json")]
         impl ValueRenderer<serde_json::Error> for EvidenceRenderer {
             fn fmt(
@@ -1738,6 +1759,10 @@ mod tests {
 
     #[cfg(feature = "serde-json")]
     mod json {
+        use core::sync::atomic::{AtomicUsize, Ordering};
+
+        use serde::de::Error;
+
         use super::{Person, block_on, json_response};
         use crate::prelude::*;
 
@@ -1772,10 +1797,6 @@ mod tests {
 
         #[test]
         fn deserialization_runs_once_for_success_and_rejection() {
-            use core::sync::atomic::{AtomicUsize, Ordering};
-
-            use serde::de::Error;
-
             static CALLS: AtomicUsize = AtomicUsize::new(0);
             struct Decoded(u32);
 

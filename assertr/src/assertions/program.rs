@@ -14,49 +14,6 @@ use crate::{
     renderer::{DebugRenderer, ValueRenderer},
 };
 
-/// Resolves an executable program once, returning its path or lookup error.
-#[derive(Debug, Clone, Copy)]
-pub struct Exists;
-impl<'p, R> Expectation<Program<'p>, R> for Exists
-where
-    R: ValueRenderer<Program<'p>> + ValueRenderer<which::Error>,
-{
-    type Success<'a>
-        = PathBuf
-    where
-        Self: 'a,
-        Program<'p>: 'a;
-    type Rejection<'a>
-        = which::Error
-    where
-        Self: 'a,
-        Program<'p>: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Program<'p>,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        which::which(actual.as_ref())
-    }
-
-    const KIND: FailureKind = FailureKind::Other;
-    fn explain<'a>(
-        &'a self,
-        rejected: Option<(&'a Program<'p>, Self::Rejection<'a>)>,
-        failure: FailureBuilder,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("can be resolved"),
-            Some((actual, error)) => failure
-                .actual(render.value(actual))
-                .relation("cannot be resolved")
-                .fact(Fact::labelled("Reason", render.value(&error))),
-        }
-    }
-}
-
 /// A program name or path to resolve with [`which::which`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program<'a>(Cow<'a, OsStr>);
@@ -107,6 +64,52 @@ impl AsRef<OsStr> for Program<'_> {
     }
 }
 
+/// Resolves an executable program once, returning its path or lookup error.
+#[derive(Debug, Clone, Copy)]
+pub struct Exists;
+
+impl<'p, R> Expectation<Program<'p>, R> for Exists
+where
+    R: ValueRenderer<Program<'p>> + ValueRenderer<which::Error>,
+{
+    type Success<'a>
+        = PathBuf
+    where
+        Self: 'a,
+        Program<'p>: 'a;
+    type Rejection<'a>
+        = which::Error
+    where
+        Self: 'a,
+        Program<'p>: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Program<'p>,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        which::which(actual.as_ref())
+    }
+
+    const KIND: FailureKind = FailureKind::Other;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a Program<'p>, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let render = context.render();
+        match rejected {
+            None => failure.relation("can be resolved"),
+            Some((actual, error)) => failure
+                .actual(render.value(actual))
+                .relation("cannot be resolved")
+                .fact(Fact::labelled("Reason", render.value(&error))),
+        }
+    }
+}
+
 /// Non-extracting assertions for [`Program`] subjects.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
@@ -152,7 +155,12 @@ impl<'t, 'a, R> ProgramExtractAssertions<'t, 'a, R> for AssertThat<'t, Program<'
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::Cow;
+    use std::ffi::{OsStr, OsString};
+
     use crate::prelude::*;
+
+    const MISSING: &str = "assertr-private-missing-executable-987";
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
@@ -163,8 +171,6 @@ mod tests {
             Program::from("ls").must().exist();
         }
     }
-
-    const MISSING: &str = "assertr-private-missing-executable-987";
 
     mod renderer_contract {
         use super::*;
@@ -235,9 +241,6 @@ mod tests {
 
     #[test]
     fn programs_convert_from_owned_and_borrowed_strings() {
-        use alloc::borrow::Cow;
-        use std::ffi::{OsStr, OsString};
-
         let ls = Program::from("ls");
         for program in [
             Program::new(OsStr::new("ls")),

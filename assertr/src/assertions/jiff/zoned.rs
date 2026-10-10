@@ -9,138 +9,6 @@ use crate::{
     renderer::{DebugRenderer, ValueRenderer},
 };
 
-/// Compares the observed time-zone rules with an expected [`TimeZone`].
-///
-/// The expected operand selects a `TimeZone` view through [`BorrowFor`].
-#[derive(Debug, Clone)]
-pub struct IsInTimeZone<E>(E);
-impl<E, R> Expectation<Zoned, R> for IsInTimeZone<E>
-where
-    E: BorrowFor<TimeZone, View = TimeZone>,
-    R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Zoned: 'a;
-    type Rejection<'a>
-        = (&'a TimeZone, &'a TimeZone)
-    where
-        Self: 'a,
-        Zoned: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Zoned,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<TimeZone, _>(&self.0);
-        let actual = actual.time_zone();
-        if actual == expected {
-            Ok(())
-        } else {
-            Err((actual, expected))
-        }
-    }
-
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a>(
-        &'a self,
-        rejected: Option<(&'a Zoned, Self::Rejection<'a>)>,
-        failure: FailureBuilder,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder {
-        let expected = rejected.map_or_else(
-            || borrow_for::<TimeZone, _>(&self.0),
-            |(_, (_, expected))| expected,
-        );
-        explain_time_zone(expected, rejected, failure, context)
-    }
-}
-
-impl<E> IsInTimeZone<E> {
-    /// Expects the time-zone rules of this time zone.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-/// Compares the observed time zone's IANA name with an expected name.
-///
-/// A time zone without an IANA name, such as a fixed offset, never matches.
-#[derive(Debug, Clone)]
-pub struct IsInTimeZoneNamed<E>(E);
-impl<E, R> Expectation<Zoned, R> for IsInTimeZoneNamed<E>
-where
-    E: AsRef<str>,
-    R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>,
-{
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Zoned: 'a;
-    type Rejection<'a>
-        = (&'a TimeZone, &'a str)
-    where
-        Self: 'a,
-        Zoned: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a Zoned,
-        _context: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = self.0.as_ref();
-        let actual = actual.time_zone();
-        if actual.iana_name() == Some(expected) {
-            Ok(())
-        } else {
-            Err((actual, expected))
-        }
-    }
-
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a>(
-        &'a self,
-        rejected: Option<(&'a Zoned, Self::Rejection<'a>)>,
-        failure: FailureBuilder,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder {
-        let expected = rejected.map_or_else(|| self.0.as_ref(), |(_, (_, expected))| expected);
-        explain_time_zone(expected, rejected, failure, context)
-    }
-}
-
-impl<E> IsInTimeZoneNamed<E> {
-    /// Expects a time zone with this IANA name.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
-
-/// Assertions for [`Zoned`] date-times.
-#[allow(clippy::return_self_not_must_use)]
-#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ZonedAssertions<R = DebugRenderer> {
-    /// Asserts that the subject's time zone equals `expected`.
-    ///
-    /// This uses jiff's `TimeZone` equality, which compares how a zone is represented rather than
-    /// its rules. Zones with identical rules from different sources can differ, for example
-    /// `TimeZone::get("Etc/UTC")` and `TimeZone::UTC`. Use
-    /// [`is_in_time_zone_named`](Self::is_in_time_zone_named) to compare IANA names instead.
-    fn is_in_time_zone<E: BorrowFor<TimeZone, View = TimeZone>>(self, expected: E) -> Self
-    where
-        R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>;
-
-    /// Asserts that the subject has an IANA time-zone name equal to `expected`.
-    ///
-    /// A subject using an unnamed fixed-offset or POSIX time zone fails this assertion.
-    fn is_in_time_zone_named(self, expected: impl AsRef<str>) -> Self
-    where
-        R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>;
-}
-
 /// Explains a time-zone comparison, naming the subject's time zone on rejection.
 fn explain_time_zone<X: ?Sized, R>(
     expected: &X,
@@ -165,6 +33,145 @@ where
             failure.fact(Fact::labelled("Actual time zone", render.value(zone)))
         }
     }
+}
+
+/// Compares the observed time-zone rules with an expected [`TimeZone`].
+///
+/// The expected operand selects a `TimeZone` view through [`BorrowFor`].
+#[derive(Debug, Clone)]
+pub struct IsInTimeZone<E>(E);
+
+impl<E> IsInTimeZone<E> {
+    /// Expects the time-zone rules of this time zone.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
+impl<E, R> Expectation<Zoned, R> for IsInTimeZone<E>
+where
+    E: BorrowFor<TimeZone, View = TimeZone>,
+    R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Zoned: 'a;
+    type Rejection<'a>
+        = (&'a TimeZone, &'a TimeZone)
+    where
+        Self: 'a,
+        Zoned: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Zoned,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = borrow_for::<TimeZone, _>(&self.0);
+        let actual = actual.time_zone();
+        if actual == expected {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+
+    const KIND: FailureKind = FailureKind::Equality;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a Zoned, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let expected = rejected.map_or_else(
+            || borrow_for::<TimeZone, _>(&self.0),
+            |(_, (_, expected))| expected,
+        );
+        explain_time_zone(expected, rejected, failure, context)
+    }
+}
+
+/// Compares the observed time zone's IANA name with an expected name.
+///
+/// A time zone without an IANA name, such as a fixed offset, never matches.
+#[derive(Debug, Clone)]
+pub struct IsInTimeZoneNamed<E>(E);
+
+impl<E> IsInTimeZoneNamed<E> {
+    /// Expects a time zone with this IANA name.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
+impl<E, R> Expectation<Zoned, R> for IsInTimeZoneNamed<E>
+where
+    E: AsRef<str>,
+    R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        Zoned: 'a;
+    type Rejection<'a>
+        = (&'a TimeZone, &'a str)
+    where
+        Self: 'a,
+        Zoned: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a Zoned,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let expected = self.0.as_ref();
+        let actual = actual.time_zone();
+        if actual.iana_name() == Some(expected) {
+            Ok(())
+        } else {
+            Err((actual, expected))
+        }
+    }
+
+    const KIND: FailureKind = FailureKind::Equality;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a Zoned, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let expected = rejected.map_or_else(|| self.0.as_ref(), |(_, (_, expected))| expected);
+        explain_time_zone(expected, rejected, failure, context)
+    }
+}
+
+/// Assertions for [`Zoned`] date-times.
+#[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+pub trait ZonedAssertions<R = DebugRenderer> {
+    /// Asserts that the subject's time zone equals `expected`.
+    ///
+    /// This uses jiff's `TimeZone` equality, which compares how a zone is represented rather than
+    /// its rules. Zones with identical rules from different sources can differ, for example
+    /// `TimeZone::get("Etc/UTC")` and `TimeZone::UTC`. Use
+    /// [`is_in_time_zone_named`](Self::is_in_time_zone_named) to compare IANA names instead.
+    fn is_in_time_zone<E: BorrowFor<TimeZone, View = TimeZone>>(self, expected: E) -> Self
+    where
+        R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>;
+
+    /// Asserts that the subject has an IANA time-zone name equal to `expected`.
+    ///
+    /// A subject using an unnamed fixed-offset or POSIX time zone fails this assertion.
+    fn is_in_time_zone_named(self, expected: impl AsRef<str>) -> Self
+    where
+        R: ValueRenderer<Zoned> + ValueRenderer<TimeZone> + ValueRenderer<str>;
 }
 
 impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {

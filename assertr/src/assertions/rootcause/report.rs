@@ -17,6 +17,7 @@ use crate::{
 /// Compares the observed direct child count.
 #[derive(Debug, Clone, Copy)]
 pub struct HasChildCount(usize);
+
 impl HasChildCount {
     /// Expects this count.
     #[must_use]
@@ -28,6 +29,7 @@ impl HasChildCount {
 /// Compares the observed direct attachment count.
 #[derive(Debug, Clone, Copy)]
 pub struct HasAttachmentCount(usize);
+
 impl HasAttachmentCount {
     /// Expects this count.
     #[must_use]
@@ -39,6 +41,7 @@ impl HasAttachmentCount {
 /// Compares the rootcause-formatted current context display value once.
 #[derive(Debug, Clone)]
 pub struct HasCurrentContextDisplayValue<E>(E);
+
 impl<E> HasCurrentContextDisplayValue<E> {
     /// Expects this formatted current context.
     #[must_use]
@@ -50,6 +53,7 @@ impl<E> HasCurrentContextDisplayValue<E> {
 /// Compares the rootcause-formatted current context debug string once.
 #[derive(Debug, Clone)]
 pub struct HasCurrentContextDebugString<E>(E);
+
 impl<E> HasCurrentContextDebugString<E> {
     /// Expects this formatted current context.
     #[must_use]
@@ -60,6 +64,7 @@ impl<E> HasCurrentContextDebugString<E> {
 
 /// Checks the concrete type of a report's current context.
 pub struct HasCurrentContextType<E>(core::marker::PhantomData<fn() -> E>);
+
 impl<E> HasCurrentContextType<E> {
     /// Expects the current context to have type `E`.
     #[must_use]
@@ -67,15 +72,18 @@ impl<E> HasCurrentContextType<E> {
         Self(core::marker::PhantomData)
     }
 }
+
 impl<E> Default for HasCurrentContextType<E> {
     fn default() -> Self {
         Self::new()
     }
 }
+
 type_selection_traits!(HasCurrentContextType);
 
 /// Downcasts the current context once and returns its borrowed value.
 pub struct HasCurrentContext<E>(core::marker::PhantomData<fn() -> E>);
+
 impl<E> HasCurrentContext<E> {
     /// Expects and borrows a current context of type `E`.
     #[must_use]
@@ -83,11 +91,13 @@ impl<E> HasCurrentContext<E> {
         Self(core::marker::PhantomData)
     }
 }
+
 impl<E> Default for HasCurrentContext<E> {
     fn default() -> Self {
         Self::new()
     }
 }
+
 type_selection_traits!(HasCurrentContext);
 
 /// Assertions for rootcause reports and report references.
@@ -175,6 +185,7 @@ macro_rules! report_impls {
             where
                 Self: 'a,
                 rootcause::$report<$($lt,)? C, O, T>: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a rootcause::$report<$($lt,)? C, O, T>,
@@ -185,6 +196,7 @@ macro_rules! report_impls {
             }
 
             const KIND: FailureKind = FailureKind::Length;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a rootcause::$report<$($lt,)? C, O, T>, usize)>,
@@ -216,6 +228,7 @@ macro_rules! report_impls {
             where
                 Self: 'a,
                 rootcause::$report<$($lt,)? C, O, T>: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a rootcause::$report<$($lt,)? C, O, T>,
@@ -226,6 +239,7 @@ macro_rules! report_impls {
             }
 
             const KIND: FailureKind = FailureKind::Length;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a rootcause::$report<$($lt,)? C, O, T>, usize)>,
@@ -261,6 +275,7 @@ macro_rules! report_impls {
             where
                 Self: 'a,
                 rootcause::$report<$($lt,)? C, O, T>: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a rootcause::$report<$($lt,)? C, O, T>,
@@ -276,6 +291,7 @@ macro_rules! report_impls {
             }
 
             const KIND: FailureKind = FailureKind::Equality;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a rootcause::$report<$($lt,)? C, O, T>, (String, String))>,
@@ -315,6 +331,7 @@ macro_rules! report_impls {
             where
                 Self: 'a,
                 rootcause::$report<$($lt,)? C, O, T>: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a rootcause::$report<$($lt,)? C, O, T>,
@@ -329,6 +346,7 @@ macro_rules! report_impls {
             }
 
             const KIND: FailureKind = FailureKind::Equality;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a rootcause::$report<$($lt,)? C, O, T>, String)>,
@@ -363,6 +381,7 @@ macro_rules! report_impls {
             where
                 Self: 'a,
                 rootcause::$report<$($lt,)? C, O, T>: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a rootcause::$report<$($lt,)? C, O, T>,
@@ -376,6 +395,7 @@ macro_rules! report_impls {
             }
 
             const KIND: FailureKind = FailureKind::Variant;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a rootcause::$report<$($lt,)? C, O, T>, &'static str)>,
@@ -401,6 +421,7 @@ macro_rules! report_impls {
             where
                 Self: 'a,
                 rootcause::$report<$($lt,)? Dynamic, O, T>: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a rootcause::$report<$($lt,)? Dynamic, O, T>,
@@ -412,6 +433,7 @@ macro_rules! report_impls {
             }
 
             const KIND: FailureKind = FailureKind::Variant;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a rootcause::$report<$($lt,)? Dynamic, O, T>, &'static str)>,
@@ -544,9 +566,15 @@ fn explain_context_type<E>(
 #[cfg(test)]
 mod tests {
     use indoc::formatdoc;
-    use rootcause::prelude::*;
+    use rootcause::{
+        markers::{Dynamic, SendSync},
+        prelude::*,
+        report_attachment::ReportAttachment,
+        report_attachments::ReportAttachments,
+        report_collection::ReportCollection,
+    };
 
-    use crate::prelude::*;
+    use crate::{assertions::HasLength, prelude::*};
 
     #[derive(Debug)]
     struct TestError(&'static str);
@@ -657,15 +685,6 @@ mod tests {
 
     #[test]
     fn report_collections_and_attachments_have_lengths() {
-        use rootcause::{
-            markers::{Dynamic, SendSync},
-            report_attachment::ReportAttachment,
-            report_attachments::ReportAttachments,
-            report_collection::ReportCollection,
-        };
-
-        use crate::assertions::HasLength;
-
         let mut collection: ReportCollection<Dynamic, SendSync> = ReportCollection::new();
         assert_that!(&collection).has_length(0).is_empty();
         collection.push(report!("child").into_cloneable());

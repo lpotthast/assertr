@@ -176,8 +176,8 @@ where
     }
 }
 
-// Evaluates one keyed operand and commits its scoped children, returning truth and the stored key.
-// A present key is returned even when its value rejects, so exact checks never look it up again.
+/// Evaluates one keyed operand and commits its scoped children, returning truth and the stored key.
+/// A present key is returned even when its value rejects, so exact checks never look it up again.
 pub(super) fn record_entry<'a, Mp, StoredKey, K, M, R>(
     key: &'a K,
     matcher: &M,

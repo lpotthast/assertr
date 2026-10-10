@@ -12,6 +12,22 @@ use crate::{
 };
 
 property_expectation! {
+    /// Checks whether a numeric value is zero.
+    pub struct IsZero for<T: Num> T;
+    kind Equality;
+    check |actual| actual.is_zero();
+    expected T::zero(), "is zero";
+}
+
+property_expectation! {
+    /// Checks whether a numeric value is one.
+    pub struct IsOne for<T: Num> T;
+    kind Equality;
+    check |actual| actual.is_one();
+    expected T::one(), "is one";
+}
+
+property_expectation! {
     /// Checks that a numeric value is less than zero. Zero, `-0.0`, and NaN are not negative.
     pub struct IsNegative for<T: [Num + PartialOrd]> T;
     kind Ordering;
@@ -41,6 +57,15 @@ property_expectation! {
     kind Predicate;
     check |actual| actual.is_sign_positive();
     relations "has a positive sign", "does not have a positive sign";
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+property_expectation! {
+    /// Checks whether a numeric value is NaN.
+    pub struct IsNan for<T: Float> T;
+    kind Predicate;
+    check |actual| actual.is_nan();
+    relations "is NaN", "is not NaN";
 }
 
 #[cfg(any(feature = "std", feature = "libm"))]
@@ -77,31 +102,6 @@ property_expectation! {
     kind Predicate;
     check |actual| actual.is_subnormal();
     relations "is subnormal", "is not subnormal";
-}
-
-property_expectation! {
-    /// Checks whether a numeric value is zero.
-    pub struct IsZero for<T: Num> T;
-    kind Equality;
-    check |actual| actual.is_zero();
-    expected T::zero(), "is zero";
-}
-
-property_expectation! {
-    /// Checks whether a numeric value is one.
-    pub struct IsOne for<T: Num> T;
-    kind Equality;
-    check |actual| actual.is_one();
-    expected T::one(), "is one";
-}
-
-#[cfg(any(feature = "std", feature = "libm"))]
-property_expectation! {
-    /// Checks whether a numeric value is NaN.
-    pub struct IsNan for<T: Float> T;
-    kind Predicate;
-    check |actual| actual.is_nan();
-    relations "is NaN", "is not NaN";
 }
 
 /// Assertions for numeric values not already handled by [`crate::prelude::PartialEqAssertions`] and
@@ -333,6 +333,14 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(feature = "std", feature = "libm"))]
+    use core::fmt::Debug;
+
+    #[cfg(any(feature = "std", feature = "libm"))]
+    use ::num_traits::Float;
+
+    use crate::prelude::*;
+
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
         use crate::prelude::*;
@@ -375,8 +383,6 @@ mod tests {
 
     #[test]
     fn quick_type_check() {
-        use crate::prelude::*;
-
         assert_that!(0u8).is_zero();
         assert_that!(0i8).is_zero();
         assert_that!(0u16).is_zero();
@@ -428,12 +434,6 @@ mod tests {
     #[test]
     #[cfg(any(feature = "std", feature = "libm"))]
     fn quick_float_type_check() {
-        use core::fmt::Debug;
-
-        use ::num_traits::Float;
-
-        use crate::prelude::*;
-
         fn assert_classification<T: Float + Debug>(nan: T, finite: T, infinite: T) {
             assert_that!(nan).is_nan();
             assert_that!(finite).is_finite();
@@ -625,7 +625,8 @@ mod tests {
     mod is_close_to {
         // The NumericDistance tests own the primitive arithmetic and special-value matrices.
         // These tests cover tolerance handling, diagnostics, and integration.
-        use crate::prelude::*;
+        use super::super::IsCloseTo;
+        use crate::{failure::Fact, prelude::*};
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -634,9 +635,6 @@ mod tests {
 
         #[test]
         fn description_labels_the_allowed_deviation() {
-            use super::super::IsCloseTo;
-            use crate::failure::Fact;
-
             let description =
                 AssertionContext::default().describe::<i32, _>(&IsCloseTo::new(42, 2));
             assert_that!(description.relation.as_deref()).is_equal_to(Some("is close to"));

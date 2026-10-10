@@ -172,11 +172,13 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R
     where
         Self: 'a,
         B: 'a;
+
     fn evaluate<'a>(&'a self, actual: &'a B, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         passed(self.0.contains(actual))
     }
 
     const KIND: FailureKind = FailureKind::Ordering;
+
     fn explain(
         &self,
         rejected: Option<(&B, ())>,
@@ -220,11 +222,13 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R
     where
         Self: 'a,
         B: 'a;
+
     fn evaluate<'a>(&'a self, actual: &'a B, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         passed(!self.0.contains(actual))
     }
 
     const KIND: FailureKind = FailureKind::Ordering;
+
     fn explain(
         &self,
         rejected: Option<(&B, ())>,
@@ -334,9 +338,9 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, R>
     }
 }
 
-// Standard ranges with borrowed bounds implement both RangeBounds<B> and RangeBounds<&B>.
-// Inherent methods select the pointee view before borrowing the operand, avoiding ambiguity
-// in the blanket assertion trait. Custom ranges keep using that trait unchanged.
+/// Standard ranges with borrowed bounds implement both `RangeBounds<B>` and `RangeBounds<&B>`.
+/// Inherent methods select the pointee view before borrowing the operand, avoiding ambiguity
+/// in the blanket assertion trait. Custom ranges keep using that trait unchanged.
 macro_rules! borrowed_range_assertions {
     ($($range:ty),+ $(,)?) => {$(
         #[allow(clippy::return_self_not_must_use)]

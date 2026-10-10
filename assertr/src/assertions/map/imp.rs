@@ -84,6 +84,7 @@ impl<Q: ?Sized> Clone for ContainsKey<'_, Q> {
 }
 
 impl<Q: ?Sized> Copy for ContainsKey<'_, Q> {}
+
 impl<'e, Q: ?Sized> ContainsKey<'e, Q> {
     /// Borrows a query for the map's native lookup.
     #[must_use]
@@ -148,6 +149,7 @@ impl<Q: ?Sized> Clone for DoesNotContainKey<'_, Q> {
 }
 
 impl<Q: ?Sized> Copy for DoesNotContainKey<'_, Q> {}
+
 impl<'e, Q: ?Sized> DoesNotContainKey<'e, Q> {
     /// Borrows a query for the map's native lookup.
     #[must_use]
@@ -265,6 +267,7 @@ impl<Q: ?Sized, E: Clone> Clone for ContainsEntry<'_, Q, E> {
         }
     }
 }
+
 impl<'e, Q: ?Sized, E> ContainsEntry<'e, Q, E> {
     /// Borrows the query and owns the expected value.
     #[must_use]
@@ -355,6 +358,7 @@ impl<Q: ?Sized, E: Clone> Clone for DoesNotContainEntry<'_, Q, E> {
         }
     }
 }
+
 impl<'e, Q: ?Sized, E> DoesNotContainEntry<'e, Q, E> {
     /// Borrows the query and owns the expected value.
     #[must_use]
@@ -533,6 +537,7 @@ pub struct ContainsExactlyEntries<EK, EV, B = Vec<(EK, EV)>> {
     operands: PhantomData<fn() -> (EK, EV)>,
 }
 expected_operands_traits!(ContainsExactlyEntries<EK, EV, B>, operands);
+
 impl<EK, EV, B: AsRef<[(EK, EV)]>> ContainsExactlyEntries<EK, EV, B> {
     /// Stores [repeatable expected entries](crate#expected-lists) without accessing their
     /// views.

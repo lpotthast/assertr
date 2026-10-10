@@ -1000,6 +1000,61 @@ mod tests {
             .map(|fact| fact.value.to_string())
     }
 
+    mod renderer_contract {
+        use core::future::Ready;
+
+        use super::*;
+        use crate::{
+            matchers::eq,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
+
+        #[derive(PartialEq)]
+        struct Secret(u32);
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, fn() -> Ready<u32>, Panic, NoRenderer> => EventualAssertions
+            );
+        }
+
+        #[tokio::test]
+        async fn builders_work_without_renderer_support() {
+            let observe = || async { 1 };
+            let _eventually = assert_that!(observe)
+                .with_renderer(NoRenderer)
+                .eventually()
+                .within(Duration::ZERO)
+                .polling_every(Duration::ZERO)
+                .with_patience(QUICK);
+            let _consistently = assert_that!(observe)
+                .with_renderer(NoRenderer)
+                .consistently_ok()
+                .for_at_least(Duration::ZERO)
+                .polling_every(Duration::ZERO)
+                .with_patience(QUICK);
+        }
+
+        #[tokio::test]
+        async fn failures_render_observed_values_with_the_active_renderer() {
+            let failure = raised(|presentation| async move {
+                let observe = || async { Secret(1) };
+                assert_that!(observe)
+                    .with_panic_presentation(presentation)
+                    .with_renderer(SentinelRenderer)
+                    .eventually()
+                    .with_patience(QUICK.with_timeout(Duration::ZERO))
+                    .matches(eq(Secret(2)))
+                    .await;
+            })
+            .await;
+
+            assert_that!(failure.actual.as_ref().map(ToString::to_string))
+                .is_equal_to(Some(SENTINEL.to_owned()));
+        }
+    }
+
     mod eventually_try_matches {
         use super::*;
         use crate::matchers::eq;
@@ -1934,61 +1989,6 @@ mod tests {
             })
             .await;
             assert_that!(fact(&failure, "Held")).is_equal_to(Some("never".to_owned()));
-        }
-    }
-
-    mod renderer_contract {
-        use core::future::Ready;
-
-        use super::*;
-        use crate::{
-            matchers::eq,
-            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
-        };
-
-        #[derive(PartialEq)]
-        struct Secret(u32);
-
-        #[test]
-        fn trait_is_implemented_without_renderer_support() {
-            assert_trait_impl!(
-                AssertThat<'static, fn() -> Ready<u32>, Panic, NoRenderer> => EventualAssertions
-            );
-        }
-
-        #[tokio::test]
-        async fn builders_work_without_renderer_support() {
-            let observe = || async { 1 };
-            let _eventually = assert_that!(observe)
-                .with_renderer(NoRenderer)
-                .eventually()
-                .within(Duration::ZERO)
-                .polling_every(Duration::ZERO)
-                .with_patience(QUICK);
-            let _consistently = assert_that!(observe)
-                .with_renderer(NoRenderer)
-                .consistently_ok()
-                .for_at_least(Duration::ZERO)
-                .polling_every(Duration::ZERO)
-                .with_patience(QUICK);
-        }
-
-        #[tokio::test]
-        async fn failures_render_observed_values_with_the_active_renderer() {
-            let failure = raised(|presentation| async move {
-                let observe = || async { Secret(1) };
-                assert_that!(observe)
-                    .with_panic_presentation(presentation)
-                    .with_renderer(SentinelRenderer)
-                    .eventually()
-                    .with_patience(QUICK.with_timeout(Duration::ZERO))
-                    .matches(eq(Secret(2)))
-                    .await;
-            })
-            .await;
-
-            assert_that!(failure.actual.as_ref().map(ToString::to_string))
-                .is_equal_to(Some(SENTINEL.to_owned()));
         }
     }
 }

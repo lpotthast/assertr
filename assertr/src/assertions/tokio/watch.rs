@@ -11,6 +11,15 @@ use crate::{
 /// Compares the current watch value without marking it seen.
 #[derive(Debug, Clone)]
 pub struct HasCurrentValue<E>(E);
+
+impl<E> HasCurrentValue<E> {
+    /// Expects this current value using its borrowed comparison view.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
 impl<T, E, R> Expectation<Receiver<T>, R> for HasCurrentValue<E>
 where
     T: PartialEq<E::View>,
@@ -27,6 +36,7 @@ where
     where
         Self: 'a,
         Receiver<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Receiver<T>,
@@ -42,6 +52,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Equality;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Receiver<T>, Self::Rejection<'a>)>,
@@ -60,13 +71,6 @@ where
     }
 }
 
-impl<E> HasCurrentValue<E> {
-    /// Expects this current value using its borrowed comparison view.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
-}
 /// Defines a change-state expectation that observes `has_changed` once, rejecting closed channels.
 /// Its rejection records whether the channel was closed.
 macro_rules! change_state {
@@ -86,6 +90,7 @@ macro_rules! change_state {
             where
                 Self: 'a,
                 Receiver<T>: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a Receiver<T>,
@@ -99,6 +104,7 @@ macro_rules! change_state {
             }
 
             const KIND: FailureKind = FailureKind::Other;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a Receiver<T>, bool)>,
@@ -119,6 +125,7 @@ change_state!(
     /// Checks whether the receiver has changed, rejecting closed channels.
     HasChanged: true, "has changed", "has not changed"
 );
+
 change_state!(
     /// Checks whether the receiver has not changed, rejecting closed channels.
     HasNotChanged: false, "has not changed", "has unexpectedly changed"
@@ -172,6 +179,11 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R> for AssertThat<'_, Receiv
 
 #[cfg(test)]
 mod tests {
+    #[derive(Debug, PartialEq)]
+    struct Person {
+        name: String,
+    }
+
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
         use super::Person;
@@ -202,9 +214,11 @@ mod tests {
         use crate::prelude::*;
 
         struct Expected<'a>(&'a Cell<usize>);
+
         impl borrow_for::BorrowFor<i32> for Expected<'_> {
             type View = i32;
         }
+
         impl Borrow<i32> for Expected<'_> {
             fn borrow(&self) -> &i32 {
                 self.0.set(self.0.get() + 1);
@@ -266,11 +280,6 @@ mod tests {
                 .capture(|it| it.has_changed().has_not_changed());
             assert_that!(failures).has_length(1);
         }
-    }
-
-    #[derive(Debug, PartialEq)]
-    struct Person {
-        name: String,
     }
 
     mod has_current_value {

@@ -370,7 +370,8 @@ where
     }
 }
 
-/// Requires exact borrowed-target identity, including multiplicity and pointer metadata.
+/// Requires exact borrowed-target identity in the expected order, including multiplicity and
+/// pointer metadata.
 pub struct ContainsExactlySameInstances<'e, U: ?Sized + 'e, B = Vec<&'e U>> {
     expected: B,
     target: PhantomData<&'e U>,
@@ -488,7 +489,8 @@ where
     }
 }
 
-/// Requires exact borrowed-target identity, including multiplicity and pointer metadata.
+/// Requires exact borrowed-target identity in any order, including multiplicity and pointer
+/// metadata.
 pub struct ContainsExactlySameInstancesInAnyOrder<'e, U: ?Sized + 'e, B = Vec<&'e U>> {
     expected: B,
     target: PhantomData<&'e U>,
@@ -818,6 +820,7 @@ mod tests {
 
     mod contains_exactly_same_instances {
         use super::*;
+        use crate::test_support::assert_custom_value;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -939,7 +942,6 @@ mod tests {
 
         #[test]
         fn length_facts_need_only_a_numeric_renderer() {
-            use crate::test_support::assert_custom_value;
             struct Numbers;
             impl ValueRenderer<usize> for Numbers {
                 fn fmt(
@@ -1196,6 +1198,7 @@ mod tests {
 
     mod rendering {
         use super::*;
+        use crate::assertions::HasLength;
 
         #[test]
         fn sorts_order_free_evidence_using_presentation_metadata() {
@@ -1236,8 +1239,6 @@ mod tests {
 
         #[test]
         fn positional_evidence_ignores_presentation_sorting() {
-            use crate::assertions::HasLength;
-
             struct SortedPresentation<'a>([&'a Opaque; 2]);
             impl HasLength for SortedPresentation<'_> {
                 fn length(&self) -> usize {
@@ -1436,6 +1437,7 @@ mod tests {
             values: [&'a Opaque; 1],
             views: &'a Cell<usize>,
         }
+
         impl<'a> AsRef<[&'a Opaque]> for Expected<'a> {
             fn as_ref(&self) -> &[&'a Opaque] {
                 self.views.set(self.views.get() + 1);
@@ -1460,6 +1462,7 @@ mod tests {
             assert_that!(views.get()).is_equal_to(2);
             assert_that!(failures).has_length(2);
         }
+
         #[test]
         fn rejection_diagnostics_do_not_borrow_inspected_targets_again() {
             struct Target<'a> {

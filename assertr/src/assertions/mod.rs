@@ -83,13 +83,9 @@ pub(crate) mod set;
 pub(crate) mod std;
 #[cfg(feature = "thirtyfour")]
 pub mod thirtyfour;
-#[cfg(feature = "thirtyfour")]
-pub use thirtyfour::element::ThirtyfourWebElementAssertions;
 #[cfg(feature = "tokio")]
 pub(crate) mod tokio;
 
-// Capabilities that make the assertion families available for a type.
-// Boxed `Any` values and panic payloads.
 pub use alloc::boxed::{BoxAssertions, BoxExtractAssertions};
 
 pub use collection::{
@@ -118,23 +114,23 @@ pub use rootcause::report::{
     RootcauseReportAssertions,
 };
 pub use set::{SetAssertions, SetLookup};
+#[cfg(feature = "thirtyfour")]
+pub use thirtyfour::element::ThirtyfourWebElementAssertions;
 #[cfg(feature = "tokio")]
 pub use tokio::{
     mutex::TokioMutexAssertions, rw_lock::TokioRwLockAssertions,
     watch::TokioWatchReceiverAssertions,
 };
 
-// Values, references, and core types.
-pub use self::core::bool::BoolAssertions;
 #[cfg(any(feature = "std", test))]
 pub use self::core::r#fn::{AsyncFnOnceAssertions, FnOnceAssertions};
-// Iterators, collections, sets, and maps.
-pub use self::core::iter::{ExactSizeIteratorAssertions, IteratorAssertions};
 pub use self::core::{
+    bool::BoolAssertions,
     char::CharAssertions,
     debug::DebugAssertions,
     display::DisplayAssertions,
     identity::IdentityAssertions,
+    iter::{ExactSizeIteratorAssertions, IteratorAssertions},
     length::LengthAssertions,
     mem::MemAssertions,
     option::{OptionAssertions, OptionExtractAssertions},
@@ -147,7 +143,6 @@ pub use self::core::{
     result::{ResultAssertions, ResultExtractAssertions},
     string::StrAssertions,
 };
-// Feature integrations.
 #[cfg(feature = "std")]
 pub use self::std::{
     command::CommandAssertions,

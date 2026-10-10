@@ -5,6 +5,8 @@ use core::{
     fmt,
 };
 
+use Entry::{Callback, Equality, Matcher};
+
 use crate::{failure::AssertionFailures, matchers::eq, prelude::*};
 
 #[derive(Default)]
@@ -17,6 +19,26 @@ struct State {
     iterations: Cell<usize>,
     callbacks: Cell<usize>,
     clones: Cell<usize>,
+}
+
+impl State {
+    fn observe<I>(&self, inner: I, exact_hint: bool) -> Observed<'_, I> {
+        self.iterations.set(self.iterations.get() + 1);
+        Observed {
+            inner,
+            state: self,
+            exact_hint,
+            _resource: self.resource.borrow_mut(),
+        }
+    }
+
+    fn verify(&self, next: usize, hints: usize) {
+        assert_that!(self.next.get()).is_equal_to(next);
+        assert_that!(self.hints.get()).is_equal_to(hints);
+        assert_that!(self.iterations.get()).is_equal_to(1);
+        assert_that!(self.drops.get()).is_equal_to(1);
+        assert_that!(self.resource.try_borrow_mut()).is_ok();
+    }
 }
 
 struct Observed<'a, I> {
@@ -50,42 +72,12 @@ impl<I> Drop for Observed<'_, I> {
     }
 }
 
-impl State {
-    fn observe<I>(&self, inner: I, exact_hint: bool) -> Observed<'_, I> {
-        self.iterations.set(self.iterations.get() + 1);
-        Observed {
-            inner,
-            state: self,
-            exact_hint,
-            _resource: self.resource.borrow_mut(),
-        }
-    }
-
-    fn verify(&self, next: usize, hints: usize) {
-        assert_that!(self.next.get()).is_equal_to(next);
-        assert_that!(self.hints.get()).is_equal_to(hints);
-        assert_that!(self.iterations.get()).is_equal_to(1);
-        assert_that!(self.drops.get()).is_equal_to(1);
-        assert_that!(self.resource.try_borrow_mut()).is_ok();
-    }
-}
-
 struct ResourceRenderer<'a>(&'a State);
 
 impl Clone for ResourceRenderer<'_> {
     fn clone(&self) -> Self {
         self.0.clones.set(self.0.clones.get() + 1);
         Self(self.0)
-    }
-}
-
-fn callback<'s>(
-    state: &'s State,
-    expected: i32,
-) -> impl for<'a> Fn(AssertThat<'a, i32, Capture, ResourceRenderer<'s>>) {
-    move |it| {
-        state.callbacks.set(state.callbacks.get() + 1);
-        it.is_equal_to(expected);
     }
 }
 
@@ -111,6 +103,16 @@ impl ValueRenderer<usize> for ResourceRenderer<'_> {
     }
 }
 
+fn callback<'s>(
+    state: &'s State,
+    expected: i32,
+) -> impl for<'a> Fn(AssertThat<'a, i32, Capture, ResourceRenderer<'s>>) {
+    move |it| {
+        state.callbacks.set(state.callbacks.get() + 1);
+        it.is_equal_to(expected);
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 enum Operation {
     Contains,
@@ -128,7 +130,6 @@ enum Entry {
     Matcher,
     Callback,
 }
-use Entry::{Callback, Equality, Matcher};
 
 fn verify_failure(failures: &AssertionFailures, state: &State, failed: bool) {
     assert_that!(failures.len()).is_equal_to(usize::from(failed));
@@ -327,6 +328,7 @@ mod release {
 
     impl Iterator for Guarded<'_> {
         type Item = i32;
+
         fn next(&mut self) -> Option<i32> {
             Some(1)
         }
@@ -420,6 +422,8 @@ mod string_views {
 }
 
 mod callbacks {
+    use Operation::{Contains, Contiguous, Exact, Prefix, Suffix, Unordered};
+
     use super::*;
     use crate::{
         failure::{FailureKind, PathSegment},
@@ -464,7 +468,6 @@ mod callbacks {
     #[test]
     fn adapters_propagate_callback_evidence_and_clone_the_renderer_for_opaque_items() {
         use Adapter::{Iterator, StableOrder};
-        use Operation::{Contains, Contiguous, Exact, Prefix, Suffix, Unordered};
 
         // Each adapter runs one candidate. The callback has two failing assertions on a
         // projection. Capture clones for its root and child, then the projection clones again.

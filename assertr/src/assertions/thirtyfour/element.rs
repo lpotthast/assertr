@@ -295,6 +295,7 @@ struct AttributePresent(String);
 impl<R: ValueRenderer<str>> Expectation<Option<String>, R> for AttributePresent {
     type Success<'a> = &'a String;
     type Rejection<'a> = ();
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Option<String>,
@@ -304,6 +305,7 @@ impl<R: ValueRenderer<str>> Expectation<Option<String>, R> for AttributePresent 
     }
 
     const KIND: FailureKind = FailureKind::Membership;
+
     fn explain(
         &self,
         rejected: Option<(&Option<String>, ())>,
@@ -474,6 +476,41 @@ mod tests {
         future
     }
 
+    /// The structured failure that `action` raises with the presentation it installs.
+    fn failure(action: impl FnOnce(crate::test_support::LocationRecorder)) -> AssertionFailure {
+        crate::test_support::raised_failure(action).expect("structured assertion failure")
+    }
+
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use super::*;
+
+        #[test]
+        fn are_as_expected() {
+            let (element, _) = element([ok(json!("yes"))]);
+            block_on(async {
+                element
+                    .must()
+                    .have_attribute("label")
+                    .await
+                    .is_equal_to("yes");
+            });
+        }
+    }
+
+    mod renderer_contract {
+        use super::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn trait_is_implemented_without_renderer_support() {
+            assert_trait_impl!(
+                AssertThat<'static, WebElement, Panic, NoRenderer>
+                    => ThirtyfourWebElementAssertions<'static, NoRenderer>
+            );
+        }
+    }
+
     mod has_attribute {
         use super::*;
 
@@ -541,39 +578,296 @@ mod tests {
         }
     }
 
-    mod renderer_contract {
+    mod property {
         use super::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
 
         #[test]
-        fn trait_is_implemented_without_renderer_support() {
-            assert_trait_impl!(
-                AssertThat<'static, WebElement, Panic, NoRenderer>
-                    => ThirtyfourWebElementAssertions<'static, NoRenderer>
-            );
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), property("value"));
         }
-    }
-
-    #[cfg(feature = "fluent")]
-    mod fluent_aliases {
-        use super::*;
 
         #[test]
-        fn are_as_expected() {
-            let (element, _) = element([ok(json!("yes"))]);
-            block_on(async {
-                element
-                    .must()
-                    .have_attribute("label")
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!("42"))]);
+            block_on(send(async {
+                assert_that!(element)
+                    .property("value")
                     .await
-                    .is_equal_to("yes");
-            });
+                    .some()
+                    .is_equal_to("42");
+            }));
+            assert_that!(transport.paths())
+                .is_equal_to(["/session/session/element/node/property/value"]);
         }
     }
 
-    /// The structured failure that `action` raises with the presentation it installs.
-    fn failure(action: impl FnOnce(crate::test_support::LocationRecorder)) -> AssertionFailure {
-        crate::test_support::raised_failure(action).expect("structured assertion failure")
+    mod text {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), text());
+        }
+
+        #[test]
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!("WebDriver text"))]);
+            block_on(send(async {
+                assert_that!(element)
+                    .text()
+                    .await
+                    .is_equal_to("WebDriver text");
+            }));
+            assert_that!(transport.paths()).is_equal_to(["/session/session/element/node/text"]);
+        }
+    }
+
+    mod text_content {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), text_content());
+        }
+
+        #[test]
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!("DOM text"))]);
+            block_on(send(async {
+                assert_that!(element)
+                    .text_content()
+                    .await
+                    .some()
+                    .is_equal_to("DOM text");
+            }));
+            assert_that!(transport.paths())
+                .is_equal_to(["/session/session/element/node/property/textContent"]);
+        }
+    }
+
+    mod inner_text {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), inner_text());
+        }
+
+        #[test]
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!("  inner text  "))]);
+            block_on(send(async {
+                assert_that!(element)
+                    .inner_text()
+                    .await
+                    .is_equal_to("inner text");
+            }));
+            assert_that!(transport.paths())
+                .is_equal_to(["/session/session/element/node/property/innerText"]);
+        }
+    }
+
+    mod displayed {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), displayed());
+        }
+
+        #[test]
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!(true))]);
+            block_on(send(async {
+                assert_that!(element).displayed().await.is_true();
+            }));
+            assert_that!(transport.paths())
+                .is_equal_to(["/session/session/element/node/displayed"]);
+        }
+    }
+
+    mod enabled {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), enabled());
+        }
+
+        #[test]
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!(false))]);
+            block_on(send(async {
+                assert_that!(element).enabled().await.is_false();
+            }));
+            assert_that!(transport.paths()).is_equal_to(["/session/session/element/node/enabled"]);
+        }
+    }
+
+    mod selected {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), selected());
+        }
+
+        #[test]
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!(true))]);
+            block_on(send(async {
+                assert_that!(element).selected().await.is_true();
+            }));
+            assert_that!(transport.paths()).is_equal_to(["/session/session/element/node/selected"]);
+        }
+    }
+
+    mod focused {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), focused());
+        }
+
+        #[test]
+        fn compares_remote_identity_in_the_same_session() {
+            let (element, transport) = element([
+                ok(json!("button")),
+                ok(json!({"element-6066-11e4-a52e-4f735466cecf":"node"})),
+                ok(json!("button")),
+                ok(json!({"element-6066-11e4-a52e-4f735466cecf":"another"})),
+            ]);
+
+            block_on(async {
+                assert_that!(element).focused().await.is_true();
+                assert_that!(element).focused().await.is_false();
+            });
+
+            assert_that!(transport.paths()).is_equal_to([
+                "/session/session/element/node/name",
+                "/session/session/element/active",
+                "/session/session/element/node/name",
+                "/session/session/element/active",
+            ]);
+        }
+    }
+
+    mod accessible_name {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), accessible_name());
+        }
+
+        #[test]
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!("Open menu"))]);
+            block_on(send(async {
+                assert_that!(element)
+                    .accessible_name()
+                    .await
+                    .starts_with("Open");
+            }));
+            assert_that!(transport.paths())
+                .is_equal_to(["/session/session/element/node/computedlabel"]);
+        }
+    }
+
+    mod accessible_role {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), accessible_role());
+        }
+
+        #[test]
+        fn projects_native_value_once() {
+            let (element, transport) = element([ok(json!("button"))]);
+
+            block_on(send(async {
+                assert_that!(element)
+                    .accessible_role()
+                    .await
+                    .is_equal_to("button");
+            }));
+
+            assert_that!(transport.paths())
+                .is_equal_to(["/session/session/element/node/computedrole"]);
+        }
+    }
+
+    #[cfg(feature = "thirtyfour-cdp")]
+    mod accessible_description {
+        use super::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let (element, _) = element([stale()]);
+            assert_caller_location!(async assert_that!(element), accessible_description());
+        }
+
+        fn acquired() -> [Reply; 2] {
+            [
+                ok(Value::Null),
+                ok(json!({"result":{"type":"object", "objectId":"object-1"}})),
+            ]
+        }
+
+        #[test]
+        fn releases_object_on_success_and_on_tree_failure() {
+            for (tree, expected) in [
+                (
+                    ok(json!({"nodes":[{"description":{"value":"Details"}}]})),
+                    Some("Details"),
+                ),
+                (stale(), None),
+                (ok(json!({"nodes":[]})), None),
+            ] {
+                let (element, transport) =
+                    element(acquired().into_iter().chain([tree, ok(json!({}))]));
+                let result = block_on(read::accessible_description(&element));
+                assert_that!(result.ok()).is_equal_to(expected.map(String::from));
+                assert_that!(transport.commands()).is_equal_to([
+                    "Runtime.evaluate",
+                    "Accessibility.getPartialAXTree",
+                    "Runtime.releaseObject",
+                ]);
+            }
+        }
+
+        #[test]
+        fn missing_description_is_empty_and_release_errors_propagate() {
+            let (element, _) = element(
+                acquired()
+                    .into_iter()
+                    .chain([ok(json!({"nodes":[{}]})), ok(json!({}))]),
+            );
+            block_on(async {
+                assert_that!(element)
+                    .accessible_description()
+                    .await
+                    .is_empty();
+            });
+            let (element, _) = super::element(
+                acquired()
+                    .into_iter()
+                    .chain([ok(json!({"nodes":[{}]})), stale()]),
+            );
+            assert_that!(block_on(read::accessible_description(&element))).is_err();
+        }
     }
 
     mod diagnostics {
@@ -776,298 +1070,6 @@ mod tests {
             );
             assert_that!(result).is_err();
             assert_that!(transport.paths()).has_length(2);
-        }
-    }
-
-    mod property {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), property("value"));
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!("42"))]);
-            block_on(send(async {
-                assert_that!(element)
-                    .property("value")
-                    .await
-                    .some()
-                    .is_equal_to("42");
-            }));
-            assert_that!(transport.paths())
-                .is_equal_to(["/session/session/element/node/property/value"]);
-        }
-    }
-
-    mod text {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), text());
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!("WebDriver text"))]);
-            block_on(send(async {
-                assert_that!(element)
-                    .text()
-                    .await
-                    .is_equal_to("WebDriver text");
-            }));
-            assert_that!(transport.paths()).is_equal_to(["/session/session/element/node/text"]);
-        }
-    }
-
-    mod text_content {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), text_content());
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!("DOM text"))]);
-            block_on(send(async {
-                assert_that!(element)
-                    .text_content()
-                    .await
-                    .some()
-                    .is_equal_to("DOM text");
-            }));
-            assert_that!(transport.paths())
-                .is_equal_to(["/session/session/element/node/property/textContent"]);
-        }
-    }
-
-    mod inner_text {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), inner_text());
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!("  inner text  "))]);
-            block_on(send(async {
-                assert_that!(element)
-                    .inner_text()
-                    .await
-                    .is_equal_to("inner text");
-            }));
-            assert_that!(transport.paths())
-                .is_equal_to(["/session/session/element/node/property/innerText"]);
-        }
-    }
-
-    mod displayed {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), displayed());
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!(true))]);
-            block_on(send(async {
-                assert_that!(element).displayed().await.is_true();
-            }));
-            assert_that!(transport.paths())
-                .is_equal_to(["/session/session/element/node/displayed"]);
-        }
-    }
-
-    mod enabled {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), enabled());
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!(false))]);
-            block_on(send(async {
-                assert_that!(element).enabled().await.is_false();
-            }));
-            assert_that!(transport.paths()).is_equal_to(["/session/session/element/node/enabled"]);
-        }
-    }
-
-    mod selected {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), selected());
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!(true))]);
-            block_on(send(async {
-                assert_that!(element).selected().await.is_true();
-            }));
-            assert_that!(transport.paths()).is_equal_to(["/session/session/element/node/selected"]);
-        }
-    }
-
-    mod accessible_name {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), accessible_name());
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!("Open menu"))]);
-            block_on(send(async {
-                assert_that!(element)
-                    .accessible_name()
-                    .await
-                    .starts_with("Open");
-            }));
-            assert_that!(transport.paths())
-                .is_equal_to(["/session/session/element/node/computedlabel"]);
-        }
-    }
-
-    mod accessible_role {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), accessible_role());
-        }
-
-        #[test]
-        fn projects_native_value_once() {
-            let (element, transport) = element([ok(json!("button"))]);
-
-            block_on(send(async {
-                assert_that!(element)
-                    .accessible_role()
-                    .await
-                    .is_equal_to("button");
-            }));
-
-            assert_that!(transport.paths())
-                .is_equal_to(["/session/session/element/node/computedrole"]);
-        }
-    }
-
-    mod focused {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), focused());
-        }
-
-        #[test]
-        fn compares_remote_identity_in_the_same_session() {
-            let (element, transport) = element([
-                ok(json!("button")),
-                ok(json!({"element-6066-11e4-a52e-4f735466cecf":"node"})),
-                ok(json!("button")),
-                ok(json!({"element-6066-11e4-a52e-4f735466cecf":"another"})),
-            ]);
-
-            block_on(async {
-                assert_that!(element).focused().await.is_true();
-                assert_that!(element).focused().await.is_false();
-            });
-
-            assert_that!(transport.paths()).is_equal_to([
-                "/session/session/element/node/name",
-                "/session/session/element/active",
-                "/session/session/element/node/name",
-                "/session/session/element/active",
-            ]);
-        }
-    }
-
-    #[cfg(feature = "thirtyfour-cdp")]
-    mod accessible_description {
-        use super::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let (element, _) = element([stale()]);
-            assert_caller_location!(async assert_that!(element), accessible_description());
-        }
-
-        fn acquired() -> [Reply; 2] {
-            [
-                ok(Value::Null),
-                ok(json!({"result":{"type":"object", "objectId":"object-1"}})),
-            ]
-        }
-
-        #[test]
-        fn releases_object_on_success_and_on_tree_failure() {
-            for (tree, expected) in [
-                (
-                    ok(json!({"nodes":[{"description":{"value":"Details"}}]})),
-                    Some("Details"),
-                ),
-                (stale(), None),
-                (ok(json!({"nodes":[]})), None),
-            ] {
-                let (element, transport) =
-                    element(acquired().into_iter().chain([tree, ok(json!({}))]));
-                let result = block_on(read::accessible_description(&element));
-                assert_that!(result.ok()).is_equal_to(expected.map(String::from));
-                assert_that!(transport.commands()).is_equal_to([
-                    "Runtime.evaluate",
-                    "Accessibility.getPartialAXTree",
-                    "Runtime.releaseObject",
-                ]);
-            }
-        }
-
-        #[test]
-        fn missing_description_is_empty_and_release_errors_propagate() {
-            let (element, _) = element(
-                acquired()
-                    .into_iter()
-                    .chain([ok(json!({"nodes":[{}]})), ok(json!({}))]),
-            );
-            block_on(async {
-                assert_that!(element)
-                    .accessible_description()
-                    .await
-                    .is_empty();
-            });
-            let (element, _) = super::element(
-                acquired()
-                    .into_iter()
-                    .chain([ok(json!({"nodes":[{}]})), stale()]),
-            );
-            assert_that!(block_on(read::accessible_description(&element))).is_err();
         }
     }
 

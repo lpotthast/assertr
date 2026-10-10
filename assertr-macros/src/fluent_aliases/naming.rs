@@ -26,9 +26,9 @@ const VERBS: [(&str, &str); 7] = [
 /// Negated methods put `not` first in their alias, matching the English imperative ("must not be
 /// equal to", "must not have changed"): `is_not_*` becomes `not_be_*`, `has_not_*` becomes
 /// `not_have_*`, and `does_not_*` becomes `not_*`. The possessive `has_no_*` keeps its word order
-/// as `have_no_*` ("must have no remaining elements"). Returns `None` for names
-/// outside these rules, for example extractions named after what they continue with, such as
-/// `some`, `first`, or `json`.
+/// as `have_no_*` ("must have no remaining elements"). Returns `None` for names outside these
+/// rules, for example extractions named after what they continue with, such as `some`, `first`, or
+/// `json`.
 pub(super) fn automatic_alias(name: &str) -> Option<String> {
     // `match` is a keyword and `be_matching` belongs to `is_matching`, so `matches` gets the
     // explicit `match_expectation`.

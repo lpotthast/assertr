@@ -57,6 +57,7 @@ macro_rules! existence_expectation {
         /// the path again.
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
+
         impl<P: Deref<Target = Path>, R> Expectation<P, R> for $name
         where
             R: ValueRenderer<P> + ValueRenderer<io::Error>,
@@ -71,6 +72,7 @@ macro_rules! existence_expectation {
             where
                 Self: 'a,
                 P: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a P,
@@ -85,6 +87,7 @@ macro_rules! existence_expectation {
             }
 
             const KIND: FailureKind = FailureKind::Other;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a P, io::Result<bool>)>,
@@ -192,6 +195,7 @@ macro_rules! entry_kind_expectation {
         /// prevented inspecting the path.
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
+
         impl<P: Deref<Target = Path>, R> Expectation<P, R> for $name
         where
             R: ValueRenderer<P> + ValueRenderer<io::Error>,
@@ -206,6 +210,7 @@ macro_rules! entry_kind_expectation {
             where
                 Self: 'a,
                 P: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a P,
@@ -218,6 +223,7 @@ macro_rules! entry_kind_expectation {
             }
 
             const KIND: FailureKind = FailureKind::Variant;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a P, io::Result<FileType>)>,
@@ -274,6 +280,15 @@ macro_rules! component_expectation {
         $(#[$meta])*
         #[derive(Debug, Clone)]
         pub struct $name<E>(E);
+
+        impl<E> $name<E> {
+            /// Expects this path component.
+            #[must_use]
+            pub const fn new(expected: E) -> Self {
+                Self(expected)
+            }
+        }
+
         impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for $name<E>
         where
             E: AsRef<OsStr>,
@@ -289,6 +304,7 @@ macro_rules! component_expectation {
             where
                 Self: 'a,
                 P: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a P,
@@ -304,6 +320,7 @@ macro_rules! component_expectation {
             }
 
             const KIND: FailureKind = FailureKind::Equality;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a P, ComponentRejection<'a>)>,
@@ -324,14 +341,6 @@ macro_rules! component_expectation {
                         concat!("Actual ", $component),
                         component.map_or_else(|| Rendered::from("<none>"), |value| render.value(value)),
                     ))
-            }
-        }
-
-        impl<E> $name<E> {
-            /// Expects this path component.
-            #[must_use]
-            pub const fn new(expected: E) -> Self {
-                Self(expected)
             }
         }
     };
@@ -364,6 +373,15 @@ macro_rules! affix_expectation {
         $(#[$meta])*
         #[derive(Debug, Clone)]
         pub struct $name<E>(E);
+
+        impl<E> $name<E> {
+            /// Expects these whole path components.
+            #[must_use]
+            pub const fn new(expected: E) -> Self {
+                Self(expected)
+            }
+        }
+
         impl<P: Deref<Target = Path>, E, R> Expectation<P, R> for $name<E>
         where
             E: AsRef<Path>,
@@ -379,6 +397,7 @@ macro_rules! affix_expectation {
             where
                 Self: 'a,
                 P: 'a;
+
             fn evaluate<'a>(
                 &'a self,
                 actual: &'a P,
@@ -393,6 +412,7 @@ macro_rules! affix_expectation {
             }
 
             const KIND: FailureKind = FailureKind::Membership;
+
             fn explain<'a>(
                 &'a self,
                 rejected: Option<(&'a P, &'a Path)>,
@@ -405,14 +425,6 @@ macro_rules! affix_expectation {
                     .relations(rejected.map(|(actual, _)| render.value(actual)), $met, $unmet)
                     .expected(render.value(expected))
                     .fact(Fact::note("Only whole path components are matched."))
-            }
-        }
-
-        impl<E> $name<E> {
-            /// Expects these whole path components.
-            #[must_use]
-            pub const fn new(expected: E) -> Self {
-                Self(expected)
             }
         }
     };
@@ -844,7 +856,7 @@ mod tests {
         use std::{ffi::OsStr, io, path::PathBuf};
 
         use crate::{
-            assertions::std::path::DoesNotExist,
+            assertions::std::path::{DoesNotExist, existence_confirmed},
             failure::{FailureBuilder, FailureKind},
             prelude::*,
             test_support::{CustomValueRenderer, assert_custom_value},
@@ -852,7 +864,6 @@ mod tests {
 
         #[test]
         fn evaluation_confirms_existence_only_from_conclusive_observations() {
-            use super::super::existence_confirmed;
             let error = |kind| Err(io::Error::from(kind));
             for (observed, exists, absent) in [
                 (Ok(true), true, false),
@@ -867,6 +878,7 @@ mod tests {
         }
 
         struct Expected<F>(F);
+
         impl<F: Fn()> AsRef<OsStr> for Expected<F> {
             fn as_ref(&self) -> &OsStr {
                 (self.0)();

@@ -188,6 +188,8 @@ where
 #[cfg(test)]
 mod tests {
     mod count_scan {
+        use core::{cell::Cell, fmt};
+
         use indoc::formatdoc;
 
         use super::super::CountScan;
@@ -201,8 +203,6 @@ mod tests {
 
         #[test]
         fn the_iterator_stays_alive_through_explanation_without_repeating_its_hint() {
-            use core::{cell::Cell, fmt};
-
             struct ObservedIterator<'a> {
                 hints: &'a Cell<usize>,
                 drops: &'a Cell<usize>,
@@ -266,6 +266,7 @@ mod tests {
                     it
                 })
         }
+
         #[test]
         fn reports_exact_size_hints_without_consuming_elements() {
             let failures = length([1, 2].into_iter(), 3, RenderingBudget::default());
@@ -290,6 +291,7 @@ mod tests {
                 },
             ]);
         }
+
         #[test]
         fn reports_a_minimum_length_when_the_scan_stops_early() {
             let failures = length(
@@ -321,6 +323,7 @@ mod tests {
                 },
             ]);
         }
+
         #[test]
         fn limits_evidence_without_changing_consumption() {
             let mut iterator = [1, 2, 3].into_iter().filter(|_| true);
@@ -368,11 +371,12 @@ mod tests {
         struct Lying<'a> {
             remaining: i32,
             hint: usize,
-            next_calls: &'a core::cell::Cell<usize>,
+            next_calls: &'a Cell<usize>,
         }
 
         impl Iterator for Lying<'_> {
             type Item = i32;
+
             fn next(&mut self) -> Option<i32> {
                 self.next_calls.set(self.next_calls.get() + 1);
                 (self.remaining > 0).then(|| {
@@ -380,6 +384,7 @@ mod tests {
                     self.remaining
                 })
             }
+
             fn size_hint(&self) -> (usize, Option<usize>) {
                 (self.hint, Some(self.hint))
             }
@@ -390,7 +395,7 @@ mod tests {
             for (remaining, expected, next_calls, failed) in
                 [(3, 0, 1, true), (3, 2, 3, true), (2, 2, 3, false)]
             {
-                let calls = core::cell::Cell::new(0);
+                let calls = Cell::new(0);
                 let iterator = Lying {
                     remaining,
                     hint: expected,
@@ -401,7 +406,7 @@ mod tests {
                 assert_that!(failures.len()).is_equal_to(usize::from(failed));
             }
 
-            let calls = core::cell::Cell::new(0);
+            let calls = Cell::new(0);
             let failures = length(
                 Lying {
                     remaining: 3,

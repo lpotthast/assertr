@@ -114,6 +114,7 @@ impl<T, R: ValueRenderer<T>> Expectation<Mutex<T>, R> for IsLocked {
     where
         Self: 'a,
         Mutex<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Mutex<T>,
@@ -133,6 +134,7 @@ impl<T, R: ValueRenderer<T>> Expectation<Mutex<T>, R> for IsLocked {
     }
 
     const KIND: FailureKind = FailureKind::Other;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
@@ -167,6 +169,7 @@ impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
     where
         Self: 'a,
         Mutex<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Mutex<T>,
@@ -180,6 +183,7 @@ impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
     }
 
     const KIND: FailureKind = FailureKind::Other;
+
     fn explain(
         &self,
         rejected: Option<(&Mutex<T>, bool)>,
@@ -254,6 +258,24 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use crate::prelude::*;
+
+    fn poisoned_mutex() -> Mutex<i32> {
+        let mutex = Mutex::new(42);
+        std::thread::scope(|scope| {
+            let panic = scope
+                .spawn(|| {
+                    let _guard = mutex.lock().expect("the mutex should initially be healthy");
+                    panic!("poison the mutex");
+                })
+                .join();
+            assert_that!(panic).is_err();
+        });
+        mutex
+    }
+
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
         use std::sync::Mutex;
@@ -274,10 +296,6 @@ mod tests {
             Mutex::new(42).must().not_be_poisoned();
         }
     }
-
-    use std::sync::Mutex;
-
-    use crate::prelude::*;
 
     mod renderer_contract {
         use std::sync::Mutex;
@@ -331,20 +349,6 @@ mod tests {
                 .matches(all_of(matchers![IsNotLocked, IsNotLocked]));
             assert_that!(mutex.try_lock()).is_ok();
         }
-    }
-
-    fn poisoned_mutex() -> Mutex<i32> {
-        let mutex = Mutex::new(42);
-        std::thread::scope(|scope| {
-            let panic = scope
-                .spawn(|| {
-                    let _guard = mutex.lock().expect("the mutex should initially be healthy");
-                    panic!("poison the mutex");
-                })
-                .join();
-            assert_that!(panic).is_err();
-        });
-        mutex
     }
 
     mod is_locked {

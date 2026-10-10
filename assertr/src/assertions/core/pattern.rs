@@ -77,11 +77,13 @@ where
     where
         Self: 'a,
         A: 'a;
+
     fn evaluate(&self, actual: &A, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         passed((self.predicate)(actual))
     }
 
     const KIND: FailureKind = FailureKind::Predicate;
+
     fn explain(
         &self,
         rejected: Option<(&A, ())>,
@@ -141,11 +143,13 @@ impl<T: ?Sized, R: ValueRenderer<T>, P: Fn(&T) -> bool> Expectation<T, R>
     where
         Self: 'a,
         T: 'a;
+
     fn evaluate(&self, actual: &T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         passed(!(self.0.predicate)(actual))
     }
 
     const KIND: FailureKind = FailureKind::Predicate;
+
     fn explain(
         &self,
         rejected: Option<(&T, ())>,

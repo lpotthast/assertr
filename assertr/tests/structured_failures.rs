@@ -94,14 +94,19 @@ fn mapping_inside_the_capture_closure_is_supported() {
 
 /// Failure-field routing stays here. Structural rendering behavior lives beside the renderer.
 mod fields {
-    use assertr::renderer::{Rendered, RenderedBody};
+    use std::collections::BTreeMap;
+    #[cfg(feature = "std")]
+    use std::collections::HashSet;
+
+    use assertr::{
+        failure::{FailureBuilder, PathSegment},
+        renderer::{Rendered, RenderedBody, RenderingOrder},
+    };
 
     use super::*;
 
     #[test]
     fn an_unexpected_map_entry_retains_a_structured_tuple() {
-        use std::collections::BTreeMap;
-
         let failures = assert_that!(BTreeMap::from([("a", 1)]))
             .with_location(false)
             .capture(|it| it.does_not_contain_entry("a", 1));
@@ -122,11 +127,6 @@ mod fields {
 
     #[test]
     fn a_structural_key_path_retains_its_tree_and_renders_inline() {
-        use assertr::{
-            failure::{FailureBuilder, PathSegment},
-            renderer::RenderingOrder,
-        };
-
         let failures = assert_that!([4, 6]).with_location(false).capture(|it| {
             it.track_assertion();
             it.raise(it.failure(FailureKind::Other).path(
@@ -162,8 +162,6 @@ mod fields {
     #[test]
     #[cfg(feature = "std")]
     fn children_of_an_order_free_subject_carry_no_index_and_are_sorted_by_rendered_text() {
-        use std::collections::HashSet;
-
         let failures = assert_that!(HashSet::from([3, 1, 2]))
             .with_location(false)
             .capture(|it| {
@@ -210,14 +208,15 @@ mod fields {
 }
 
 mod matcher_metadata {
+    use assertr::{
+        failure::PathSegment,
+        matchers::{all_of, eq, predicate},
+    };
+
     use super::*;
 
     #[test]
     fn matcher_paths_and_constraints_preserve_metadata() {
-        use assertr::{
-            failure::PathSegment,
-            matchers::{all_of, eq, predicate},
-        };
         let failures = assert_that!([1])
             .with_subject_name("rows")
             .with_detail_message("request context")

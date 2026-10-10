@@ -89,6 +89,25 @@ struct ElementMismatch<'a, A: ?Sized, E: ?Sized> {
     expected: &'a E,
 }
 
+/// The rejection of [`ContainsExactly`] and [`ContainsExactlyInAnyOrder`]: the occurrences left
+/// unmatched by an exact comparison.
+///
+/// `A` is the collection item type and `E` the borrowed view of an expected element. The
+/// rejection borrows the actual elements no expected element claimed and the expected elements
+/// no actual element claimed, and records whether only their order differs. An ordered
+/// comparison also retains its first mismatching position, reported as a child failure. Explanation
+/// reports them under "Elements not found" and "Elements not expected" without comparing the
+/// elements again. Probes, which are never explained, skip computing this assignment. The contents
+/// are private. Pass the rejection back to the `explain` method of the expectation that produced
+/// it.
+#[derive(Debug)]
+pub struct ExactElementsRejection<'a, A: ?Sized, E: ?Sized> {
+    unexpected: Vec<&'a A>,
+    missing: Vec<&'a E>,
+    only_order_differs: bool,
+    mismatch: Option<ElementMismatch<'a, A, E>>,
+}
+
 /// Labels for the values an exact element comparison left unmatched.
 const ELEMENTS: [&str; 2] = ["Elements not found", "Elements not expected"];
 
@@ -120,25 +139,6 @@ where
             render.borrowed_values::<A, _>(unexpected, unexpected_order),
         ))
     }
-}
-
-/// The rejection of [`ContainsExactly`] and [`ContainsExactlyInAnyOrder`]: the occurrences left
-/// unmatched by an exact comparison.
-///
-/// `A` is the collection item type and `E` the borrowed view of an expected element. The
-/// rejection borrows the actual elements no expected element claimed and the expected elements
-/// no actual element claimed, and records whether only their order differs. An ordered
-/// comparison also retains its first mismatching position, reported as a child failure. Explanation
-/// reports them under "Elements not found" and "Elements not expected" without comparing the
-/// elements again. Probes, which are never explained, skip computing this assignment. The contents
-/// are private. Pass the rejection back to the `explain` method of the expectation that produced
-/// it.
-#[derive(Debug)]
-pub struct ExactElementsRejection<'a, A: ?Sized, E: ?Sized> {
-    unexpected: Vec<&'a A>,
-    missing: Vec<&'a E>,
-    only_order_differs: bool,
-    mismatch: Option<ElementMismatch<'a, A, E>>,
 }
 
 /// Checks collection membership with the actual element's `PartialEq` implementation and a borrowed
@@ -932,6 +932,7 @@ mod tests {
             value: i32,
             comparisons: &'a Cell<usize>,
         }
+
         impl PartialEq for Compared<'_> {
             fn eq(&self, other: &Self) -> bool {
                 self.comparisons.set(self.comparisons.get() + 1);
@@ -940,12 +941,14 @@ mod tests {
         }
 
         struct Renderer<'a>(&'a Cell<usize>);
+
         impl ValueRenderer<Compared<'_>> for Renderer<'_> {
             fn fmt(&self, value: &Compared<'_>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 self.0.set(self.0.get() + 1);
                 write!(f, "{}", value.value)
             }
         }
+
         impl ValueRenderer<usize> for Renderer<'_> {
             fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(f, "{value}")
@@ -1151,51 +1154,6 @@ mod tests {
         }
     }
 
-    mod contains_exactly_in_any_order {
-        use core::cell::Cell;
-
-        use super::super::ContainsExactlyInAnyOrder;
-        use crate::{expectation::AssertionContext, prelude::*};
-
-        #[derive(Debug)]
-        struct Counted<'a> {
-            value: i32,
-            comparisons: &'a Cell<usize>,
-        }
-        impl PartialEq for Counted<'_> {
-            fn eq(&self, other: &Self) -> bool {
-                self.comparisons.set(self.comparisons.get() + 1);
-                self.value == other.value
-            }
-        }
-
-        #[test]
-        fn probes_reject_unequal_lengths_without_comparing_and_skip_diagnostic_assignment() {
-            let comparisons = Cell::new(0);
-            let actual = [1, 2, 3].map(|value| Counted {
-                value,
-                comparisons: &comparisons,
-            });
-            let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
-            assert_that!(context.probe(
-                &actual,
-                &ContainsExactlyInAnyOrder::new([&actual[0], &actual[1]])
-            ))
-            .is_false();
-            assert_that!(comparisons.get()).is_equal_to(0);
-            assert_that!(context.probe(
-                &actual,
-                &ContainsExactlyInAnyOrder::new([&actual[2], &actual[0], &actual[1]])
-            ))
-            .is_true();
-            assert_that!(context.probe(
-                &actual,
-                &ContainsExactlyInAnyOrder::new([&actual[2], &actual[2], &actual[1]])
-            ))
-            .is_false();
-        }
-    }
-
     mod contains_exactly {
         use core::cell::Cell;
 
@@ -1207,6 +1165,7 @@ mod tests {
             value: i32,
             comparisons: &'a Cell<usize>,
         }
+
         impl PartialEq for Counted<'_> {
             fn eq(&self, other: &Self) -> bool {
                 self.comparisons.set(self.comparisons.get() + 1);
@@ -1246,11 +1205,60 @@ mod tests {
         }
     }
 
+    mod contains_exactly_in_any_order {
+        use core::cell::Cell;
+
+        use super::super::ContainsExactlyInAnyOrder;
+        use crate::{expectation::AssertionContext, prelude::*};
+
+        #[derive(Debug)]
+        struct Counted<'a> {
+            value: i32,
+            comparisons: &'a Cell<usize>,
+        }
+
+        impl PartialEq for Counted<'_> {
+            fn eq(&self, other: &Self) -> bool {
+                self.comparisons.set(self.comparisons.get() + 1);
+                self.value == other.value
+            }
+        }
+
+        #[test]
+        fn probes_reject_unequal_lengths_without_comparing_and_skip_diagnostic_assignment() {
+            let comparisons = Cell::new(0);
+            let actual = [1, 2, 3].map(|value| Counted {
+                value,
+                comparisons: &comparisons,
+            });
+            let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
+            assert_that!(context.probe(
+                &actual,
+                &ContainsExactlyInAnyOrder::new([&actual[0], &actual[1]])
+            ))
+            .is_false();
+            assert_that!(comparisons.get()).is_equal_to(0);
+            assert_that!(context.probe(
+                &actual,
+                &ContainsExactlyInAnyOrder::new([&actual[2], &actual[0], &actual[1]])
+            ))
+            .is_true();
+            assert_that!(context.probe(
+                &actual,
+                &ContainsExactlyInAnyOrder::new([&actual[2], &actual[2], &actual[1]])
+            ))
+            .is_false();
+        }
+    }
+
     mod borrowed_operands {
         use core::cell::Cell;
 
         use super::super::*;
-        use crate::{prelude::*, test_support::BorrowSpy};
+        use crate::{
+            prelude::*,
+            test_support::{BorrowSpy, StrOperand, StringRenderer},
+        };
 
         #[test]
         #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed temporaries are the contract under test.
@@ -1315,8 +1323,6 @@ mod tests {
 
         #[test]
         fn unsized_operands_are_accessed_after_tracking_through_explanation() {
-            use crate::test_support::{StrOperand, StringRenderer};
-
             for method in 0..8 {
                 let calls = Cell::new(0);
                 let failures = assert_that!([String::from("a")])
@@ -1447,19 +1453,23 @@ mod tests {
 
         #[derive(Debug)]
         struct Actual<'a>(&'a Cell<usize>);
+
         impl PartialEq<i32> for Actual<'_> {
             fn eq(&self, _: &i32) -> bool {
                 self.0.set(self.0.get() + 1);
                 false
             }
         }
+
         struct Operand<'a>(&'a Cell<usize>);
+
         impl Borrow<i32> for Operand<'_> {
             fn borrow(&self) -> &i32 {
                 self.0.set(self.0.get() + 1);
                 &9
             }
         }
+
         impl BorrowFor<Actual<'_>> for Operand<'_> {
             type View = i32;
         }

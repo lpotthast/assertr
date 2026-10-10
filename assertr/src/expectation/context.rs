@@ -129,44 +129,6 @@ impl<R> fmt::Debug for AssertionContext<'_, R> {
     }
 }
 
-/// How a scope ranks the evidence it retains.
-///
-/// Sorted scopes rank complete child reports, including paths. Retained paths are relative to
-/// their scope, but ranking must not depend on that: a scope below a path segment ranks each
-/// report as if rendered beneath that (shared) prefix, so retention agrees with every enclosing
-/// scope.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct EvidenceOrder {
-    sorted: bool,
-    nested: bool,
-}
-
-impl EvidenceOrder {
-    /// The sort key text for a retained failure, or `None` when iteration order is preserved.
-    pub(crate) fn text(self, failure: &mut AssertionFailure) -> Option<String> {
-        if !self.sorted {
-            return None;
-        }
-        if !self.nested {
-            return Some(report::child_text(failure));
-        }
-        // Any common prefix ranks the remaining text identically, so a placeholder suffices.
-        failure.path.insert(0, PathSegment::Field(""));
-        let text = report::child_text(failure);
-        failure.path.remove(0);
-        Some(text)
-    }
-}
-
-/// Wraps the description of a constraint that has no subject to show, such as an expected element
-/// that is missing, as a "does not satisfy the constraint" failure.
-pub(crate) fn unsatisfied(constraint: AssertionFailure) -> AssertionFailure {
-    FailureBuilder::new::<()>(FailureKind::Matching)
-        .relation("does not satisfy the constraint")
-        .constraint(constraint)
-        .build()
-}
-
 impl<'r, R> AssertionContext<'r, R> {
     /// Creates a diagnostic evaluation with explicit renderer and budget.
     #[cfg(test)]
@@ -520,6 +482,44 @@ impl Default for AssertionContext<'static, DebugRenderer> {
     }
 }
 
+/// How a scope ranks the evidence it retains.
+///
+/// Sorted scopes rank complete child reports, including paths. Retained paths are relative to
+/// their scope, but ranking must not depend on that: a scope below a path segment ranks each
+/// report as if rendered beneath that (shared) prefix, so retention agrees with every enclosing
+/// scope.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct EvidenceOrder {
+    sorted: bool,
+    nested: bool,
+}
+
+impl EvidenceOrder {
+    /// The sort key text for a retained failure, or `None` when iteration order is preserved.
+    pub(crate) fn text(self, failure: &mut AssertionFailure) -> Option<String> {
+        if !self.sorted {
+            return None;
+        }
+        if !self.nested {
+            return Some(report::child_text(failure));
+        }
+        // Any common prefix ranks the remaining text identically, so a placeholder suffices.
+        failure.path.insert(0, PathSegment::Field(""));
+        let text = report::child_text(failure);
+        failure.path.remove(0);
+        Some(text)
+    }
+}
+
+/// Wraps the description of a constraint that has no subject to show, such as an expected element
+/// that is missing, as a "does not satisfy the constraint" failure.
+pub(crate) fn unsatisfied(constraint: AssertionFailure) -> AssertionFailure {
+    FailureBuilder::new::<()>(FailureKind::Matching)
+        .relation("does not satisfy the constraint")
+        .constraint(constraint)
+        .build()
+}
+
 #[cfg(test)]
 mod tests {
     use core::cell::Cell;
@@ -595,10 +595,12 @@ mod tests {
     }
 
     mod assertion_children {
+        use alloc::collections::BTreeSet;
         use core::fmt;
 
         use super::*;
         use crate::{
+            __private::field,
             assertions::{collection::each, core::partial_eq::eq},
             failure::PathSegment,
             matchers::all_of,
@@ -651,7 +653,6 @@ mod tests {
 
         #[test]
         fn grouped_evidence_has_relative_paths_without_losing_repeated_field_names() {
-            use crate::__private::field;
             let mut context = AssertionContext::default();
             context.scoped(PathSegment::Field("value"), |context| {
                 assert_that!(context.evaluate(&1, &Group(eq(2)))).is_false();
@@ -739,7 +740,6 @@ mod tests {
 
         #[test]
         fn scoped_paths_participate_in_sorting_before_truncation() {
-            use alloc::collections::BTreeSet;
             let actual = BTreeSet::from([[1]]);
             let matcher = each(all_of(matchers![eq([9]), crate::elements_are![eq(9)]]));
             let paths = [
@@ -820,7 +820,7 @@ mod tests {
         use crate::{
             expectation::Evidence,
             failure::{FailureBuilder, FailureKind},
-            matchers::all_of,
+            matchers::{all_of, each, eq},
         };
 
         struct Flat<'a>(&'a Cell<usize>);
@@ -862,11 +862,8 @@ mod tests {
 
             assert_that!(context.probe(&1, &all_of(matchers![Flat(&explanations)]))).is_false();
             assert_that!(explanations.get()).is_equal_to(0);
-            assert_that!(context.probe(
-                &[1],
-                &matchers::each(all_of(matchers![Flat(&explanations)]))
-            ))
-            .is_false();
+            assert_that!(context.probe(&[1], &each(all_of(matchers![Flat(&explanations)]))))
+                .is_false();
             assert_that!(explanations.get()).is_equal_to(0);
 
             let mut context = AssertionContext::default();
@@ -917,8 +914,6 @@ mod tests {
 
         #[test]
         fn keeps_a_flattened_rejection_without_evidence_whole() {
-            use crate::matchers::{each, eq};
-
             let conjunction = assert_that!(2)
                 .with_location(false)
                 .capture(|it| it.matches(all_of(matchers![Odd, eq(2)])));

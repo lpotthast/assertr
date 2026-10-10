@@ -1,6 +1,8 @@
 use alloc::{boxed::Box, string::String};
 use core::any::{Any, type_name, type_name_of_val};
 
+use payload::Payload;
+
 use crate::{
     AssertThat, PanicValue,
     actual::Actual,
@@ -63,8 +65,6 @@ mod payload {
         }
     }
 }
-
-use payload::Payload;
 
 /// Checks a boxed `Any` value's or captured panic payload's concrete type, returning a borrowed
 /// value. Both ordinary checks and downcasting assertions execute this definition without a
@@ -318,6 +318,30 @@ mod tests {
         }
     }
 
+    mod renderer_contract {
+        use super::*;
+        use crate::test_support::{NoRenderer, assert_trait_impl};
+
+        #[test]
+        fn traits_are_implemented_without_renderer_support() {
+            assert_trait_impl!(AssertThat<'static, Box<dyn Any>, Capture, NoRenderer> => BoxAssertions);
+            assert_trait_impl!(AssertThat<'static, Box<dyn Any + Send>, Capture, NoRenderer> => BoxAssertions);
+            assert_trait_impl!(AssertThat<'static, PanicValue, Capture, NoRenderer> => BoxAssertions);
+            assert_trait_impl!(
+                AssertThat<'static, Box<dyn Any>, Panic, NoRenderer>
+                    => BoxExtractAssertions<'static, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, Box<dyn Any + Send + Sync>, Panic, NoRenderer>
+                    => BoxExtractAssertions<'static, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, PanicValue, Panic, NoRenderer>
+                    => BoxExtractAssertions<'static, NoRenderer>
+            );
+        }
+    }
+
     mod is_of_type {
         use super::*;
 
@@ -366,6 +390,8 @@ mod tests {
     }
 
     mod has_type {
+        use core::any::type_name;
+
         use super::*;
 
         #[test]
@@ -391,8 +417,6 @@ mod tests {
 
         #[test]
         fn reports_the_subject_like_is_of_type() {
-            use core::any::type_name;
-
             for extract in [true, false] {
                 let actual = PanicValue(Box::new("text"));
                 assert_that!(|| {
@@ -594,30 +618,6 @@ mod tests {
             assert_that_owned!(payload)
                 .has_type::<&str>()
                 .is_equal_to("joined");
-        }
-    }
-
-    mod renderer_contract {
-        use super::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
-
-        #[test]
-        fn traits_are_implemented_without_renderer_support() {
-            assert_trait_impl!(AssertThat<'static, Box<dyn Any>, Capture, NoRenderer> => BoxAssertions);
-            assert_trait_impl!(AssertThat<'static, Box<dyn Any + Send>, Capture, NoRenderer> => BoxAssertions);
-            assert_trait_impl!(AssertThat<'static, PanicValue, Capture, NoRenderer> => BoxAssertions);
-            assert_trait_impl!(
-                AssertThat<'static, Box<dyn Any>, Panic, NoRenderer>
-                    => BoxExtractAssertions<'static, NoRenderer>
-            );
-            assert_trait_impl!(
-                AssertThat<'static, Box<dyn Any + Send + Sync>, Panic, NoRenderer>
-                    => BoxExtractAssertions<'static, NoRenderer>
-            );
-            assert_trait_impl!(
-                AssertThat<'static, PanicValue, Panic, NoRenderer>
-                    => BoxExtractAssertions<'static, NoRenderer>
-            );
         }
     }
 }

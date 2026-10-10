@@ -12,6 +12,7 @@ use crate::{
 /// Checks constant-time indexed access and returns the borrowed element when present.
 #[derive(Debug, Clone, Copy)]
 pub struct HasElementAt(usize);
+
 impl HasElementAt {
     /// Requires an element at this zero-based index.
     #[must_use]
@@ -117,7 +118,7 @@ mod tests {
     mod renderer_contract {
         use crate::{
             prelude::*,
-            test_support::{NoRenderer, assert_trait_impl},
+            test_support::{CustomValueRenderer, NoRenderer, assert_trait_impl},
         };
 
         #[test]
@@ -130,7 +131,6 @@ mod tests {
 
         #[test]
         fn index_and_length_use_the_active_renderer() {
-            use crate::test_support::CustomValueRenderer;
             assert_that!(|| {
                 assert_that!([7]).with_renderer(CustomValueRenderer).at(9);
             })
@@ -144,7 +144,7 @@ mod tests {
     mod at {
         use indoc::formatdoc;
 
-        use crate::prelude::*;
+        use crate::{prelude::*, renderer::RenderedBody, test_support::CustomValueRenderer};
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -184,7 +184,6 @@ mod tests {
 
         #[test]
         fn extraction_preserves_the_renderer_and_budget() {
-            use crate::{renderer::RenderedBody, test_support::CustomValueRenderer};
             let subject = [7];
             let chain = assert_that!(subject)
                 .with_renderer(CustomValueRenderer)

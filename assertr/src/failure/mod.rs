@@ -36,13 +36,13 @@
 
 mod builder;
 mod failures;
-pub use failures::AssertionFailures;
 pub(crate) mod panic_presentation;
 pub(crate) mod report;
 
 use alloc::{borrow::Cow, boxed::Box, string::String, vec::Vec};
 
 pub use builder::FailureBuilder;
+pub use failures::AssertionFailures;
 
 use crate::{AssertThat, mode::Mode, renderer::Rendered};
 
@@ -180,11 +180,13 @@ impl Fact {
 pub struct AssertionFailure {
     /// An unmet expectation with no subject, using the same diagnostic fields as a rejection.
     pub constraint: Option<Box<AssertionFailure>>,
+
     /// Relative path from the parent subject.
     pub path: Vec<PathSegment>,
 
     /// Number of diagnostic children omitted by the rendering budget.
     pub omitted_children: usize,
+
     /// Where the failing assertion was invoked. `None` when location printing was disabled via
     /// `with_location(false)`, and for nested failures that a matcher builds, which their
     /// [`path`](Self::path) locates. Nested failures of assertion callbacks, as run by
@@ -248,6 +250,20 @@ pub struct AssertionFailure {
     /// The assertion family that raised this failure.
     pub kind: FailureKind,
 }
+
+impl core::fmt::Display for AssertionFailure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        report::write_failure(self, f)
+    }
+}
+
+impl core::fmt::Debug for AssertionFailure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(self, f)
+    }
+}
+
+impl core::error::Error for AssertionFailure {}
 
 impl crate::ChainRecords<'_> {
     /// Stores a captured failure on the root of this chain.
@@ -341,17 +357,3 @@ pub(crate) fn present_and_panic(
     let text = panic_presentation::render(failure, presentation);
     panic!("{text}");
 }
-
-impl core::fmt::Display for AssertionFailure {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        report::write_failure(self, f)
-    }
-}
-
-impl core::fmt::Debug for AssertionFailure {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Display::fmt(self, f)
-    }
-}
-
-impl core::error::Error for AssertionFailure {}

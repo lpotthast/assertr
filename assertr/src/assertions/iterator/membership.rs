@@ -10,30 +10,6 @@ use crate::{
     renderer::CollectionPresentation,
 };
 
-/// Borrows only those stored operands selected for display by the rendering context.
-struct Missing<'a, E> {
-    expected: &'a [E],
-    found: &'a [bool],
-    remaining: usize,
-}
-
-impl<E> HasLength for Missing<'_, E> {
-    fn length(&self) -> usize {
-        self.remaining
-    }
-}
-
-impl<E> Collection for Missing<'_, E> {
-    type Item = E;
-    const PRESENTATION: CollectionPresentation = <[E] as Collection>::PRESENTATION;
-    fn elements(&self) -> impl Iterator<Item = &E> {
-        self.expected
-            .iter()
-            .zip(self.found)
-            .filter_map(|(expected, found)| (!found).then_some(expected))
-    }
-}
-
 /// Requires an element equal to a borrowed view, stopping at the first match.
 pub(crate) struct ContainsScan<'e, T, E: ?Sized> {
     expected: &'e E,
@@ -90,6 +66,31 @@ where
             .relation("does not contain")
             .expected(render.value(self.expected));
         tail.facts(failure, render, None)
+    }
+}
+
+/// Borrows only those stored operands selected for display by the rendering context.
+struct Missing<'a, E> {
+    expected: &'a [E],
+    found: &'a [bool],
+    remaining: usize,
+}
+
+impl<E> HasLength for Missing<'_, E> {
+    fn length(&self) -> usize {
+        self.remaining
+    }
+}
+
+impl<E> Collection for Missing<'_, E> {
+    type Item = E;
+    const PRESENTATION: CollectionPresentation = <[E] as Collection>::PRESENTATION;
+
+    fn elements(&self) -> impl Iterator<Item = &E> {
+        self.expected
+            .iter()
+            .zip(self.found)
+            .filter_map(|(expected, found)| (!found).then_some(expected))
     }
 }
 
@@ -370,12 +371,14 @@ mod tests {
         value: i32,
         borrows: &'a Cell<usize>,
     }
+
     impl Borrow<i32> for Operand<'_> {
         fn borrow(&self) -> &i32 {
             self.borrows.set(self.borrows.get() + 1);
             &self.value
         }
     }
+
     impl BorrowFor<i32> for Operand<'_> {
         type View = i32;
     }
@@ -417,7 +420,7 @@ mod tests {
     }
 
     mod matcher_budget {
-        use core::cell::Cell;
+        use core::{cell::Cell, fmt};
 
         use crate::{failure::PathSegment, matchers::eq, prelude::*};
 
@@ -443,8 +446,6 @@ mod tests {
 
         #[test]
         fn rejected_candidates_render_within_the_budget_when_a_later_candidate_matches() {
-            use core::fmt;
-
             struct Counting<'a>(&'a Cell<usize>);
             impl ValueRenderer<i32> for Counting<'_> {
                 fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -3,7 +3,7 @@
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     hint::black_box,
 };
 
@@ -11,8 +11,6 @@ use assertr::{
     matchers::{collection, map},
     prelude::*,
 };
-
-struct CountingAllocator;
 
 thread_local! {
     static ALLOCATED: Cell<Option<usize>> = const { Cell::new(None) };
@@ -25,6 +23,8 @@ fn record(bytes: usize) {
         }
     });
 }
+
+struct CountingAllocator;
 
 // SAFETY: Every allocation operation is forwarded unchanged to the system allocator.
 unsafe impl GlobalAlloc for CountingAllocator {
@@ -155,7 +155,6 @@ fn iterator_prefix_and_exact_allocation_is_constant_beyond_preview_capacity() {
 
 #[test]
 fn successful_suffix_allocates_only_for_incremental_window_growth() {
-    use std::collections::VecDeque;
     for length in [16, 128, 4096] {
         let values = vec![1_u64; length];
         let required = allocated(|| {
@@ -275,31 +274,39 @@ mod working_storage {
 
     #[derive(Clone, Copy, Debug)]
     struct Item(u64);
+
     impl PartialEq<u64> for Item {
         fn eq(&self, expected: &u64) -> bool {
             self.0 == *expected
         }
     }
+
     impl PartialEq<[u64]> for Item {
         fn eq(&self, expected: &[u64]) -> bool {
             expected == [self.0]
         }
     }
+
     struct Thin(u64);
+
     impl Borrow<u64> for Thin {
         fn borrow(&self) -> &u64 {
             &self.0
         }
     }
+
     impl BorrowFor<Item> for Thin {
         type View = u64;
     }
+
     struct Wide([u64; 1]);
+
     impl Borrow<[u64]> for Wide {
         fn borrow(&self) -> &[u64] {
             &self.0
         }
     }
+
     impl BorrowFor<Item> for Wide {
         type View = [u64];
     }

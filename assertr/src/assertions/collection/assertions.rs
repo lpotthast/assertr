@@ -617,6 +617,48 @@ mod tests {
         }
     }
 
+    mod does_not_contain {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1, 2, 3].as_slice()), does_not_contain(2));
+        }
+
+        #[test]
+        fn succeeds_when_value_is_absent() {
+            assert_that!([1, 2, 3].as_slice()).does_not_contain(4);
+        }
+
+        #[test]
+        fn panics_when_value_is_present() {
+            assert_that!(|| {
+                assert_that!([1, 2, 3].as_slice())
+                    .with_location(false)
+                    .does_not_contain(2);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    contains
+
+                    Unexpected: 2
+                    -------- assertr --------
+                "});
+        }
+    }
+
     mod does_not_contain_matching {
         use indoc::formatdoc;
 
@@ -685,48 +727,6 @@ mod tests {
                     it.is_greater_than(1);
                 })
             );
-        }
-    }
-
-    mod does_not_contain {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!([1, 2, 3].as_slice()), does_not_contain(2));
-        }
-
-        #[test]
-        fn succeeds_when_value_is_absent() {
-            assert_that!([1, 2, 3].as_slice()).does_not_contain(4);
-        }
-
-        #[test]
-        fn panics_when_value_is_present() {
-            assert_that!(|| {
-                assert_that!([1, 2, 3].as_slice())
-                    .with_location(false)
-                    .does_not_contain(2);
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `[1, 2, 3].as_slice()`
-
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
-
-                    contains
-
-                    Unexpected: 2
-                    -------- assertr --------
-                "});
         }
     }
 
@@ -831,6 +831,7 @@ mod tests {
         impl<R> Expectation<Actual, R> for WildcardExpected {
             type Success<'a> = ();
             type Rejection<'a> = ();
+
             fn evaluate(&self, actual: &Actual, _: &AssertionContext<'_, R>) -> Result<(), ()> {
                 match self {
                     Self::Any => Ok(()),
@@ -840,6 +841,7 @@ mod tests {
             }
 
             const KIND: crate::failure::FailureKind = crate::failure::FailureKind::Matching;
+
             fn explain(
                 &self,
                 rejected: Option<(&Actual, ())>,

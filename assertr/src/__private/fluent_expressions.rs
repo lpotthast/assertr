@@ -44,6 +44,8 @@ impl<T> AttachExpressionFallback for AttachExpression<'_, T> {
 
 #[cfg(test)]
 mod tests {
+    use core::cell::RefCell;
+
     use crate::prelude::*;
 
     fn assert_string_panic_contains(panic: std::thread::Result<()>, expected: &str) {
@@ -288,8 +290,6 @@ mod tests {
 
         #[test]
         fn preserve_evaluation_order_and_evaluate_callbacks_once() {
-            use core::cell::RefCell;
-
             fn receiver(events: &RefCell<Vec<&'static str>>) -> i32 {
                 events.borrow_mut().push("receiver");
                 2
@@ -356,8 +356,6 @@ mod tests {
     #[crate::fluent_expressions]
     #[test]
     fn fluent_attribute_preserves_receiver_and_callback_evaluation_order() {
-        use core::cell::RefCell;
-
         struct User(i32);
         impl User {
             fn verify(self, operation: fn(i32) -> i32) -> i32 {

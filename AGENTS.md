@@ -15,6 +15,16 @@ fit.
   unstage, reset, commit, publish, or alter unrelated changes without explicit instruction.
 - Prefer sentences to em dashes and semicolons.
 
+## Module layout
+
+- Put all `mod` declarations, `use` and `pub use` items, and `extern crate` items at the top of a module, before any
+  other item. This includes inline modules such as `mod tests { .. }`. Declare all `mod`s first, then group `use` and
+  `pub use` items by origin: `alloc`, `core`, and `std` first, then external crates, then `crate`, `super`, and `self`.
+  Never add an import next to the code that needs it.
+- The only exception is a `macro_rules!` re-export (`pub(crate) use name;`), which must follow its definition. Child
+  modules import such macros by path (`use super::name;`) instead of relying on textual macro scope, so `mod`
+  declarations never have to follow a macro definition.
+
 ## Testing
 
 - Write test assertions using assertr.

@@ -85,6 +85,11 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
         E: BorrowFor<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
+    /// Asserts that some map value matches `expected`.
+    fn contains_value_matching<E>(self, expected: E) -> Self
+    where
+        E: Expectation<V, R>;
+
     /// Asserts that no map value equals `not_expected`.
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
@@ -107,6 +112,24 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
         V: PartialEq<E::View>,
         E: BorrowFor<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E::View>;
+
+    /// Asserts that the map has `key` and its value matches `expected`.
+    ///
+    /// The key is looked up natively. A missing key or a rejected value fails with one nested
+    /// failure located at the key. Extra entries are allowed.
+    ///
+    /// ```
+    /// use assertr::{matchers::gt, prelude::*};
+    /// use std::collections::BTreeMap;
+    ///
+    /// assert_that!(BTreeMap::from([("retries", 3)])).contains_entry_matching("retries", gt(0));
+    /// ```
+    fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
+    where
+        Q: ?Sized,
+        Self::Map: MapLookup<Q>,
+        E: Expectation<V, R>,
+        R: ValueRenderer<Q>;
 
     /// Asserts that the map has `key` and its value satisfies `assertions`.
     ///
@@ -211,29 +234,6 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
         Self::Map: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone;
-
-    /// Asserts that the map has `key` and its value matches `expected`.
-    ///
-    /// The key is looked up natively. A missing key or a rejected value fails with one nested
-    /// failure located at the key. Extra entries are allowed.
-    ///
-    /// ```
-    /// use assertr::{matchers::gt, prelude::*};
-    /// use std::collections::BTreeMap;
-    ///
-    /// assert_that!(BTreeMap::from([("retries", 3)])).contains_entry_matching("retries", gt(0));
-    /// ```
-    fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
-    where
-        Q: ?Sized,
-        Self::Map: MapLookup<Q>,
-        E: Expectation<V, R>,
-        R: ValueRenderer<Q>;
-
-    /// Asserts that some map value matches `expected`.
-    fn contains_value_matching<E>(self, expected: E) -> Self
-    where
-        E: Expectation<V, R>;
 }
 
 // Explicit stored key and value parameters keep mutually dependent method bounds cycle-free.
@@ -275,6 +275,14 @@ where
     }
 
     #[track_caller]
+    fn contains_value_matching<E>(self, expected: E) -> Self
+    where
+        E: Expectation<V, R>,
+    {
+        self.matches(ContainsValueMatching::new(expected))
+    }
+
+    #[track_caller]
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
         V: PartialEq<E::View>,
@@ -294,6 +302,17 @@ where
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E::View>,
     {
         self.matches(imp::ContainsEntry::new(key, value))
+    }
+
+    #[track_caller]
+    fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
+    where
+        Q: ?Sized,
+        Mp: MapLookup<Q>,
+        E: Expectation<V, R>,
+        R: ValueRenderer<Q>,
+    {
+        self.matches(ContainsEntryMatching::new(key, expected))
     }
 
     #[track_caller]
@@ -363,25 +382,6 @@ where
         R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone,
     {
         self.matches(entries_are(SatisfyingEntryList::new(assertions)))
-    }
-
-    #[track_caller]
-    fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
-    where
-        Q: ?Sized,
-        Mp: MapLookup<Q>,
-        E: Expectation<V, R>,
-        R: ValueRenderer<Q>,
-    {
-        self.matches(ContainsEntryMatching::new(key, expected))
-    }
-
-    #[track_caller]
-    fn contains_value_matching<E>(self, expected: E) -> Self
-    where
-        E: Expectation<V, R>,
-    {
-        self.matches(ContainsValueMatching::new(expected))
     }
 }
 
@@ -633,6 +633,97 @@ mod tests {
         }
     }
 
+    mod contains_value_matching {
+        use super::*;
+        use crate::{
+            assertions::{core::partial_eq::eq, map::ContainsValueMatching},
+            matchers::{all_of, predicate},
+            test_support::UnorderedMap,
+        };
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeMap::from([("a", 1)])),
+                contains_value_matching(eq(2))
+            );
+        }
+
+        #[test]
+        fn stays_one_nested_group_inside_compositions() {
+            let failures = assert_that!(BTreeMap::from([("a", 2), ("b", 3)]))
+                .with_location(false)
+                .capture(|it| {
+                    it.matches(all_of(matchers![
+                        ContainsValueMatching::new(predicate(|x: &i32| *x == 1)),
+                        ContainsValueMatching::new(predicate(|x: &i32| *x == 4))
+                    ]))
+                });
+            assert_that!(failures).contains_exactly_satisfying([
+                |failure: AssertThat<AssertionFailure, Capture>| {
+                    failure.has_text_report(indoc::indoc! {r#"
+                    -------- assertr --------
+                    Expression: `BTreeMap::from([("a", 2), ("b", 3)])`
+
+                    does not match
+
+                    Nested failures:
+                      - does not contain a matching value
+
+                        Nested failures:
+                          - Actual: 2
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+
+                          - Actual: 3
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+
+                      - does not contain a matching value
+
+                        Nested failures:
+                          - Actual: 2
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+
+                          - Actual: 3
+
+                            does not satisfy the constraint
+
+                            Constraint:
+                                satisfies the predicate
+                    -------- assertr --------
+                    "#});
+                },
+            ]);
+        }
+
+        #[test]
+        fn sorts_candidate_evidence_before_limiting_it() {
+            let capture = |entries| {
+                let actual = UnorderedMap(entries);
+                assert_that!(actual)
+                    .with_location(false)
+                    .with_rendering_budget(RenderingBudget::default().with_max_items(1))
+                    .capture(|it| it.contains_value_matching(eq(9)))
+            };
+            let expected = capture(vec![(1, 1), (2, 2), (3, 3)]);
+            let actual = capture(vec![(3, 3), (2, 2), (1, 1)]);
+            assert_that!(actual[0].children).has_length(1);
+            assert_that!(actual[0].omitted_children).is_equal_to(2);
+            assert_that!(actual[0].to_string()).is_equal_to(expected[0].to_string());
+        }
+    }
+
     mod does_not_contain_value {
         use indoc::formatdoc;
 
@@ -756,6 +847,80 @@ mod tests {
                       Actual: "bar"
                 -------- assertr --------
             "#});
+        }
+    }
+
+    mod contains_entry_matching {
+        use super::*;
+        use crate::{assertions::core::partial_eq::eq, matchers::anything};
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(BTreeMap::from([("a", 1)])),
+                contains_entry_matching("a", eq(2))
+            );
+        }
+
+        #[test]
+        fn panics_when_key_is_absent() {
+            assert_that!(|| {
+                let map = BTreeMap::from([("a", 1)]);
+                assert_that!(map)
+                    .with_location(false)
+                    .contains_entry_matching("b", eq(1));
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(indoc::formatdoc! {r#"
+                -------- assertr --------
+                Expression: `map`
+
+                does not contain a matching entry
+
+                Nested failures:
+                  - At ["b"]:
+                    does not satisfy the constraint
+
+                    Constraint:
+                        contains the required key
+                -------- assertr --------
+            "#});
+        }
+
+        #[test]
+        fn panics_when_value_does_not_match() {
+            assert_that!(|| {
+                let map = BTreeMap::from([("a", 1)]);
+                assert_that!(map)
+                    .with_location(false)
+                    .contains_entry_matching("a", eq(2));
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(indoc::formatdoc! {r#"
+                -------- assertr --------
+                Expression: `map`
+
+                does not contain a matching entry
+
+                Nested failures:
+                  - At ["a"]:
+                    Expected: 2
+
+                      Actual: 1
+                -------- assertr --------
+            "#});
+        }
+
+        #[test]
+        fn preserves_borrowed_lookup_and_key_paths() {
+            let map = BTreeMap::from([(String::from("a"), 1)]);
+            assert_that!(map).contains_entry_matching("a", eq(1));
+            let failures =
+                assert_that!(map).capture(|it| it.contains_entry_matching("b", anything()));
+            assert_that!(&failures[0].children[0].path[0])
+                .is_matching(pattern!(crate::failure::PathSegment::Key(_)));
         }
     }
 
@@ -887,6 +1052,7 @@ mod tests {
         use indoc::formatdoc;
 
         use super::*;
+        use crate::assertions::map::MapLookup;
 
         fn report(expected: &[(&'static str, i32)]) -> String {
             let map = BTreeMap::from([("a", 1)]);
@@ -1047,8 +1213,6 @@ mod tests {
 
         #[test]
         fn limits_nested_value_failures_in_the_maps_diagnostic_order() {
-            use crate::assertions::map::MapLookup;
-
             fn check(
                 map: impl MapLookup<&'static str, Key = &'static str, Value = i32>,
                 keys: [&str; 3],
@@ -1086,13 +1250,13 @@ mod tests {
         }
     }
 
-    #[allow(clippy::trivially_copy_pass_by_ref)]
     mod contains_exactly_entries_matching {
         use indoc::formatdoc;
 
         use super::*;
         use crate::matchers::{entry, eq, predicate};
 
+        #[allow(clippy::trivially_copy_pass_by_ref)]
         fn is_one(value: &i32) -> bool {
             *value == 1
         }
@@ -1287,171 +1451,6 @@ mod tests {
         }
     }
 
-    mod contains_entry_matching {
-        use super::*;
-        use crate::{assertions::core::partial_eq::eq, matchers::anything};
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that!(BTreeMap::from([("a", 1)])),
-                contains_entry_matching("a", eq(2))
-            );
-        }
-
-        #[test]
-        fn panics_when_key_is_absent() {
-            assert_that!(|| {
-                let map = BTreeMap::from([("a", 1)]);
-                assert_that!(map)
-                    .with_location(false)
-                    .contains_entry_matching("b", eq(1));
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r#"
-                -------- assertr --------
-                Expression: `map`
-
-                does not contain a matching entry
-
-                Nested failures:
-                  - At ["b"]:
-                    does not satisfy the constraint
-
-                    Constraint:
-                        contains the required key
-                -------- assertr --------
-            "#});
-        }
-
-        #[test]
-        fn panics_when_value_does_not_match() {
-            assert_that!(|| {
-                let map = BTreeMap::from([("a", 1)]);
-                assert_that!(map)
-                    .with_location(false)
-                    .contains_entry_matching("a", eq(2));
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(indoc::formatdoc! {r#"
-                -------- assertr --------
-                Expression: `map`
-
-                does not contain a matching entry
-
-                Nested failures:
-                  - At ["a"]:
-                    Expected: 2
-
-                      Actual: 1
-                -------- assertr --------
-            "#});
-        }
-
-        #[test]
-        fn preserves_borrowed_lookup_and_key_paths() {
-            let map = BTreeMap::from([(String::from("a"), 1)]);
-            assert_that!(map).contains_entry_matching("a", eq(1));
-            let failures =
-                assert_that!(map).capture(|it| it.contains_entry_matching("b", anything()));
-            assert_that!(&failures[0].children[0].path[0])
-                .is_matching(pattern!(crate::failure::PathSegment::Key(_)));
-        }
-    }
-
-    mod contains_value_matching {
-        use super::*;
-        use crate::matchers::predicate;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that!(BTreeMap::from([("a", 1)])),
-                contains_value_matching(crate::assertions::core::partial_eq::eq(2))
-            );
-        }
-
-        #[test]
-        fn stays_one_nested_group_inside_compositions() {
-            use crate::{assertions::map::ContainsValueMatching, matchers::all_of};
-
-            let failures = assert_that!(BTreeMap::from([("a", 2), ("b", 3)]))
-                .with_location(false)
-                .capture(|it| {
-                    it.matches(all_of(matchers![
-                        ContainsValueMatching::new(predicate(|x: &i32| *x == 1)),
-                        ContainsValueMatching::new(predicate(|x: &i32| *x == 4))
-                    ]))
-                });
-            assert_that!(failures).contains_exactly_satisfying([
-                |failure: AssertThat<AssertionFailure, Capture>| {
-                    failure.has_text_report(indoc::indoc! {r#"
-                    -------- assertr --------
-                    Expression: `BTreeMap::from([("a", 2), ("b", 3)])`
-
-                    does not match
-
-                    Nested failures:
-                      - does not contain a matching value
-
-                        Nested failures:
-                          - Actual: 2
-
-                            does not satisfy the constraint
-
-                            Constraint:
-                                satisfies the predicate
-
-                          - Actual: 3
-
-                            does not satisfy the constraint
-
-                            Constraint:
-                                satisfies the predicate
-
-                      - does not contain a matching value
-
-                        Nested failures:
-                          - Actual: 2
-
-                            does not satisfy the constraint
-
-                            Constraint:
-                                satisfies the predicate
-
-                          - Actual: 3
-
-                            does not satisfy the constraint
-
-                            Constraint:
-                                satisfies the predicate
-                    -------- assertr --------
-                    "#});
-                },
-            ]);
-        }
-
-        #[test]
-        fn sorts_candidate_evidence_before_limiting_it() {
-            use crate::{assertions::core::partial_eq::eq, test_support::UnorderedMap};
-
-            let capture = |entries| {
-                let actual = UnorderedMap(entries);
-                assert_that!(actual)
-                    .with_location(false)
-                    .with_rendering_budget(RenderingBudget::default().with_max_items(1))
-                    .capture(|it| it.contains_value_matching(eq(9)))
-            };
-            let expected = capture(vec![(1, 1), (2, 2), (3, 3)]);
-            let actual = capture(vec![(3, 3), (2, 2), (1, 1)]);
-            assert_that!(actual[0].children).has_length(1);
-            assert_that!(actual[0].omitted_children).is_equal_to(2);
-            assert_that!(actual[0].to_string()).is_equal_to(expected[0].to_string());
-        }
-    }
-
     mod operands {
         use core::cell::Cell;
 
@@ -1459,7 +1458,7 @@ mod tests {
         use crate::{
             assertions::map::{
                 ContainsEntry, ContainsExactlyEntries, ContainsValue, DoesNotContainEntry,
-                DoesNotContainValue,
+                DoesNotContainKey, DoesNotContainValue,
             },
             matchers::{entries_are, entry, eq},
             test_support::{StrOperand, StringRenderer},
@@ -1540,8 +1539,6 @@ mod tests {
 
         #[test]
         fn missing_subject_descriptions_preserve_negative_operand_roles() {
-            use crate::assertions::map::DoesNotContainKey;
-
             let map = BTreeMap::<i32, i32>::new();
             let root = assert_that!(map);
             let context = root.assertion_context();

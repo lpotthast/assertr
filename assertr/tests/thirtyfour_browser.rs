@@ -1,5 +1,6 @@
 //! Real browser contracts, explicitly invoked with an existing Chromium `WebDriver` endpoint.
 #![cfg(feature = "thirtyfour-cdp")]
+
 use assertr::prelude::*;
 use thirtyfour::{By, DesiredCapabilities, WebDriver, prelude::*};
 

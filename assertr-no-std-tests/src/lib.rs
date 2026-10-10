@@ -9,22 +9,96 @@
 //! builds. Only `capture_errors_compile_without_std` is compile-only.
 
 extern crate alloc;
+#[cfg(all(test, not(feature = "std")))]
+extern crate std;
 
-use alloc::{boxed::Box, string::String};
+use alloc::{
+    boxed::Box,
+    collections::{BTreeMap, BTreeSet, LinkedList},
+    string::{String, ToString},
+    vec,
+};
+use core::{
+    cell::Cell,
+    panic::{RefUnwindSafe, UnwindSafe},
+};
 
+#[cfg(feature = "num")]
+use assertr::{assertions::NumericDistance, matchers::IsCloseTo};
 use assertr::{
-    matchers::{entry, predicate},
+    expectation::AssertionContext,
+    failure::{Fact, FailureBuilder, FailureKind},
+    matchers::{
+        ContainsMatching, EqualTo, GreaterOrEqual, HasDebugString, HasLengthOf, IsOfType, IsOk,
+        IsReady, IsSome, all_of,
+        cell::{IsBorrowed, IsNotMutablyBorrowed},
+        collection, dereferenced, each, entry, eq, field, ge, iterator, map,
+        memory::NeedsDrop,
+        predicate,
+        range::{ContainsElement, DoesNotContainElement},
+        set,
+        string::StartsWith,
+    },
     prelude::*,
 };
 
+#[derive(Clone)]
+struct NumericRenderer;
+
+impl ValueRenderer<usize> for NumericRenderer {
+    fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(value, f)
+    }
+}
+
+// Tests renderer-independent evaluation through the same boundary available downstream.
+struct InContext<F>(F);
+
+impl<R, F: Fn(&AssertionContext<'_, R>)> Expectation<(), R> for InContext<F> {
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        (): 'a;
+    type Rejection<'a>
+        = core::convert::Infallible
+    where
+        Self: 'a,
+        (): 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        (): &'a (),
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), core::convert::Infallible> {
+        (self.0)(context);
+        Ok(())
+    }
+
+    const KIND: FailureKind = FailureKind::Other;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a (), core::convert::Infallible)>,
+        failure: FailureBuilder,
+        _: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        match rejected {
+            None => failure.relation("evaluates with the supplied context"),
+            Some(((), never)) => match never {},
+        }
+    }
+}
+
+fn with_context<R, F: Fn(&AssertionContext<'_, R>)>(renderer: R, f: F) {
+    assert_that!(())
+        .with_renderer(renderer)
+        .matches(InContext(f));
+}
+
 #[cfg_attr(test, test)]
 fn memory_assertions_compile_without_std() {
-    use alloc::string::String;
-
-    use assertr::{
-        assertions::MemAssertions, matchers::memory::NeedsDrop,
-        prelude::MemAssertions as PreludeMemAssertions,
-    };
+    use assertr::{assertions::MemAssertions, prelude::MemAssertions as PreludeMemAssertions};
 
     struct NoRenderer;
     fn check<A: MemAssertions>(assertion: A) -> A {
@@ -73,7 +147,7 @@ fn projections_compile_without_renderer_support() {
         });
     assert_that!(failures).is_empty();
 
-    let fact = assertr::failure::Fact::note("evidence");
+    let fact = Fact::note("evidence");
     assert_that!(fact)
         .with_renderer(NoRenderer)
         .derive(|fact| &fact.value.body)
@@ -82,10 +156,6 @@ fn projections_compile_without_renderer_support() {
 
 #[cfg_attr(test, test)]
 fn unwind_safe_projections_compile_without_std() {
-    use core::{
-        cell::Cell,
-        panic::{RefUnwindSafe, UnwindSafe},
-    };
     fn both<T: UnwindSafe + RefUnwindSafe>(_: &T) {}
     struct NoRenderer;
 
@@ -103,8 +173,6 @@ fn unwind_safe_projections_compile_without_std() {
 #[cfg(feature = "num")]
 #[cfg_attr(test, test)]
 fn numeric_assertions_compile_without_std() {
-    use assertr::{assertions::NumericDistance, matchers::IsCloseTo};
-
     // The tolerance expectation needs only `NumericDistance`, not the `num` feature's traits.
     fn assert_close<T: NumericDistance + core::fmt::Debug>(actual: T, expected: T, deviation: T) {
         assert_that_owned!(actual).matches(IsCloseTo::new(expected, deviation));
@@ -126,7 +194,6 @@ fn numeric_assertions_compile_without_std() {
 /// Compile-only, because it deliberately returns the captured failures as an error.
 #[allow(dead_code)]
 fn capture_errors_compile_without_std() -> Result<(), Box<dyn core::error::Error + Send + Sync>> {
-    use alloc::string::ToString;
     let failures = assert_that_owned!(0..).capture(|it| it.starts_with([1, 2]));
     let _report = failures.to_string();
     let single = assert_that!(failures).single().actual().clone();
@@ -148,7 +215,7 @@ fn identity_assertions_compile_without_std() {
         .with_renderer(NoRenderer)
         .is_same_instance_as(&keys[1])
         .is_not_same_instance_as(&keys[0]);
-    assert_that!(alloc::collections::LinkedList::from(candidates))
+    assert_that!(LinkedList::from(candidates))
         .with_renderer(NumericRenderer)
         .contains_same_instance_as(&keys[1])
         .does_not_contain_same_instance_as(&keys[2])
@@ -162,8 +229,6 @@ fn identity_assertions_compile_without_std() {
 
 #[cfg_attr(test, test)]
 fn panic_presentation_compiles_without_std() {
-    use alloc::string::ToString;
-
     struct NoRenderer;
 
     let _assertion = assert_that!(1)
@@ -221,13 +286,10 @@ fn callback_assertions_compile_without_subject_renderers() {
     assert_that_owned!([Some(Secret)].into_iter())
         .with_renderer(NumericRenderer)
         .contains_exactly_satisfying([is_some]);
-    assert_that!(alloc::collections::BTreeMap::from([(
-        1_usize,
-        Some(Secret)
-    )]))
-    .with_renderer(NumericRenderer)
-    .contains_entry_satisfying(&1_usize, is_some)
-    .contains_exactly_entries_satisfying([(1_usize, is_some)]);
+    assert_that!(BTreeMap::from([(1_usize, Some(Secret))]))
+        .with_renderer(NumericRenderer)
+        .contains_entry_satisfying(&1_usize, is_some)
+        .contains_exactly_entries_satisfying([(1_usize, is_some)]);
 
     let failures = assert_that!([None::<Secret>])
         .with_renderer(NoRenderer)
@@ -239,10 +301,6 @@ fn callback_assertions_compile_without_subject_renderers() {
 /// into `no_std` builds.
 #[cfg_attr(test, test)]
 fn set_and_map_assertions_compile_without_std() {
-    use alloc::collections::{BTreeMap, BTreeSet};
-
-    use assertr::{expectation::Expectation, matchers::ContainsMatching};
-
     #[allow(clippy::trivially_copy_pass_by_ref)]
     fn is_one(value: &i32) -> bool {
         *value == 1
@@ -292,8 +350,6 @@ fn set_and_map_assertions_compile_without_std() {
 /// A `LinkedList` is an ordered collection, so it gets the order-sensitive assertions too.
 #[cfg_attr(test, test)]
 fn linked_list_assertions_compile_without_std() {
-    use alloc::collections::LinkedList;
-
     let list = [1, 2, 3].into_iter().collect::<LinkedList<_>>();
     assert_that!(list)
         .contains(2)
@@ -305,7 +361,6 @@ fn linked_list_assertions_compile_without_std() {
 /// Exercises shared candidate selection and routing on hosted and embedded alloc targets.
 #[cfg_attr(test, test)]
 fn bounded_unordered_matching_without_std() {
-    use assertr::matchers::{eq, ge};
     for limit in [0, 1, 2, usize::MAX] {
         let failures = assert_that!([1, 2, 99])
             .with_rendering_budget(RenderingBudget::unlimited().with_max_items(limit))
@@ -321,7 +376,6 @@ fn bounded_unordered_matching_without_std() {
 #[cfg(feature = "partial")]
 #[cfg_attr(test, test)]
 fn structural_matchers_without_std() {
-    use assertr::{matchers::eq, prelude::*};
     struct Hidden;
     #[allow(dead_code)]
     struct Child {
@@ -339,7 +393,7 @@ fn structural_matchers_without_std() {
             id: matchers::anything(),
             ..
         }));
-    let map = alloc::collections::BTreeMap::from([(
+    let map = BTreeMap::from([(
         "child",
         Child {
             id: 1,
@@ -349,22 +403,8 @@ fn structural_matchers_without_std() {
     assert_that!(map).matches(entries_are![("child", partial!(Child { id: eq(1), .. }))]);
 }
 
-#[derive(Clone)]
-struct NumericRenderer;
-impl ValueRenderer<usize> for NumericRenderer {
-    fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Debug::fmt(value, f)
-    }
-}
-
 #[cfg_attr(test, test)]
 fn typed_rejections_and_numeric_evidence_compile_without_std() {
-    use assertr::{
-        expectation::{AssertionContext, Expectation},
-        failure::{Fact, FailureBuilder, FailureKind},
-        matchers::each,
-    };
-
     struct OpaqueError(u32);
     struct Reject;
     impl<R: ValueRenderer<OpaqueError>> Expectation<u32, R> for Reject {
@@ -431,8 +471,6 @@ fn typed_rejections_and_numeric_evidence_compile_without_std() {
 
 #[cfg_attr(test, test)]
 fn reusable_checks_compile_without_std() {
-    use assertr::matchers::{field, predicate};
-
     struct Person {
         name: String,
     }
@@ -453,16 +491,6 @@ fn reusable_checks_compile_without_std() {
 
 #[cfg_attr(test, test)]
 fn assertion_definitions_compile_without_std() {
-    use alloc::string::String;
-
-    use assertr::{
-        expectation::Expectation,
-        matchers::{
-            EqualTo, GreaterOrEqual, HasDebugString, IsOfType, IsOk, IsReady, IsSome,
-            cell::{IsBorrowed, IsNotMutablyBorrowed},
-            string::StartsWith,
-        },
-    };
     with_context(DebugRenderer, |context| {
         // One definition per leaf capability.
         assert_that!(EqualTo::new(3).evaluate(&3, context).is_ok()).is_true();
@@ -500,11 +528,6 @@ fn assertion_definitions_compile_without_std() {
 
 #[cfg_attr(test, test)]
 fn collection_assertion_definitions_compile_without_std() {
-    use assertr::{
-        expectation::Expectation,
-        matchers::{HasLengthOf, collection, iterator, map, set},
-    };
-
     with_context(DebugRenderer, |context| {
         let values = [1, 2];
         assert_that!(HasLengthOf::new(2).evaluate(&values, context).is_ok()).is_true();
@@ -519,7 +542,7 @@ fn collection_assertion_definitions_compile_without_std() {
         let index = collection::HasElementAt::new(1);
         let second = index.evaluate(&values, context).unwrap();
         assert_that!(second).is_same_instance_as(&values[1]);
-        let map = alloc::collections::BTreeMap::from([(1, 2)]);
+        let map = BTreeMap::from([(1, 2)]);
         assert_that!(
             map::ContainsEntry::new(&1, 2)
                 .evaluate(&map, context)
@@ -532,7 +555,7 @@ fn collection_assertion_definitions_compile_without_std() {
                 .is_ok()
         )
         .is_true();
-        let set = alloc::collections::BTreeSet::from([1]);
+        let set = BTreeSet::from([1]);
         assert_that!(set::IsSubsetOf::new(&set).evaluate(&set, context).is_ok()).is_true();
         assert_that!(
             iterator::HasRemainingCount::new(2)
@@ -542,51 +565,6 @@ fn collection_assertion_definitions_compile_without_std() {
         .is_true();
         assert_that!([&values[0]]).matches(collection::ContainsSameInstanceAs::new(&values[0]));
     });
-}
-
-// Tests renderer-independent evaluation through the same boundary available downstream.
-struct InContext<F>(F);
-
-impl<R, F: Fn(&assertr::expectation::AssertionContext<'_, R>)> Expectation<(), R> for InContext<F> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        (): 'a;
-    type Rejection<'a>
-        = core::convert::Infallible
-    where
-        Self: 'a,
-        (): 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        (): &'a (),
-        context: &assertr::expectation::AssertionContext<'_, R>,
-    ) -> Result<(), core::convert::Infallible> {
-        (self.0)(context);
-        Ok(())
-    }
-
-    const KIND: assertr::failure::FailureKind = assertr::failure::FailureKind::Other;
-
-    fn explain<'a>(
-        &'a self,
-        rejected: Option<(&'a (), core::convert::Infallible)>,
-        failure: assertr::failure::FailureBuilder,
-        _: &assertr::expectation::AssertionContext<'_, R>,
-    ) -> assertr::failure::FailureBuilder {
-        match rejected {
-            None => failure.relation("evaluates with the supplied context"),
-            Some(((), never)) => match never {},
-        }
-    }
-}
-
-fn with_context<R, F: Fn(&assertr::expectation::AssertionContext<'_, R>)>(renderer: R, f: F) {
-    assert_that!(())
-        .with_renderer(renderer)
-        .matches(InContext(f));
 }
 
 // Keep the alloc-only API boundary here. Detailed rendering behavior is tested in the renderer.
@@ -652,22 +630,22 @@ mod structural_rendering {
 }
 
 struct TextOperand<'a>(&'a str);
+
 impl core::borrow::Borrow<str> for TextOperand<'_> {
     fn borrow(&self) -> &str {
         self.0
     }
 }
+
 impl assertr::borrow_for::BorrowFor<String> for TextOperand<'_> {
     type View = str;
 }
 
 #[cfg_attr(test, test)]
 fn reusable_bulk_views_compile_without_std() {
-    use alloc::{collections::BTreeMap, string::String, vec};
-
     // Borrow non-Clone custom operands as a Vec and a slice, and reuse their matcher.
     let operands = vec![TextOperand("hello")];
-    let expected_list = matchers::collection::ContainsAll::new(&operands);
+    let expected_list = collection::ContainsAll::new(&operands);
     assert_that!([String::from("hello")])
         .contains_all(operands.as_slice())
         .matches(&expected_list);
@@ -677,28 +655,19 @@ fn reusable_bulk_views_compile_without_std() {
     let actual = BTreeMap::from([(String::from("key"), String::from("hello"))]);
     assert_that!(actual)
         .contains_keys(&keys)
-        .matches(matchers::map::ContainsExactlyEntries::new(
-            entries.as_slice(),
-        ));
+        .matches(map::ContainsExactlyEntries::new(entries.as_slice()));
 }
 
 #[cfg_attr(test, test)]
 fn borrowed_views_compile_without_std() {
-    use alloc::{collections::BTreeMap, string::String, vec};
-
-    use assertr::matchers::{
-        EqualTo, all_of, dereferenced, each,
-        range::{ContainsElement, DoesNotContainElement},
-    };
-
     // Native map lookup accepts both built-in slice views and downstream text views.
     let bytes = BTreeMap::from([(vec![1_u8, 2], 3)]);
     let query = &[1_u8, 2][..];
     assert_that!(bytes)
         .contains_key(query)
-        .matches(assertr::entries_are![(query, matchers::eq(3))]);
+        .matches(assertr::entries_are![(query, eq(3))]);
     assert_that!(BTreeMap::from([(String::from("key"), 1)]))
-        .matches(entry(TextOperand("key"), matchers::eq(1)));
+        .matches(entry(TextOperand("key"), eq(1)));
 
     // Cover borrowed and unsized operands across collection, iterator, map, and ordering bounds.
     let expected = String::from("hello");
@@ -758,9 +727,6 @@ fn borrowed_views_compile_without_std() {
 }
 
 #[cfg(all(test, not(feature = "std")))]
-extern crate std;
-
-#[cfg(all(test, not(feature = "std")))]
 mod tests {
     use alloc::{
         string::{String, ToString},
@@ -786,12 +752,6 @@ mod tests {
             .has_message()
     }
 
-    #[test]
-    fn runtime_matchers_need_no_features() {
-        assert_that!([1, 2]).matches(elements_are![eq(1), eq(2)]);
-        assert_that!(3).matches(ge(2));
-    }
-
     fn counting(
         count: &Arc<AtomicUsize>,
     ) -> impl Fn(&AssertionFailure) -> String + core::panic::RefUnwindSafe + Send + Sync + 'static
@@ -801,6 +761,12 @@ mod tests {
             count.fetch_add(1, Ordering::Relaxed);
             failure.to_string()
         }
+    }
+
+    #[test]
+    fn runtime_matchers_need_no_features() {
+        assert_that!([1, 2]).matches(elements_are![eq(1), eq(2)]);
+        assert_that!(3).matches(ge(2));
     }
 
     #[test]

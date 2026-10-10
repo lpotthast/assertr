@@ -19,11 +19,13 @@ impl<T, R> Expectation<Type<T>, R> for NeedsDrop {
     where
         Self: 'a,
         Type<T>: 'a;
+
     fn evaluate<'a>(&'a self, actual: &'a Type<T>, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         passed(actual.needs_drop())
     }
 
     const KIND: FailureKind = FailureKind::Predicate;
+
     fn explain(
         &self,
         rejected: Option<(&Type<T>, ())>,
@@ -95,7 +97,7 @@ mod tests {
     mod needs_drop {
         use indoc::formatdoc;
 
-        use crate::{assert_that_type, prelude::*};
+        use crate::{assert_that_type, prelude::*, test_support::NoRenderer};
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -116,8 +118,6 @@ mod tests {
 
         #[test]
         fn capture_continues_without_renderer_support() {
-            use crate::test_support::NoRenderer;
-
             let failures = assert_that_type::<String>()
                 .with_renderer(NoRenderer)
                 .capture(MemAssertions::needs_drop);

@@ -100,10 +100,9 @@ pub fn fluent_aliases(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Callback arguments are never rewritten, so they keep their type, call traits, and coercions.
 /// For `verify` and `verify_owned`, the expression reaches failures raised directly on the
 /// callback's input chain. Derived chains keep their own expressions, and results of other methods
-/// with these names are returned unchanged. A
-/// user-defined zero-argument `must` or `must_owned` method that does not return an assertion chain
-/// fails to compile, because its result receives the expression too. Keep such calls outside
-/// annotated scopes.
+/// with these names are returned unchanged. A user-defined zero-argument `must` or `must_owned`
+/// method that does not return an assertion chain fails to compile, because its result receives the
+/// expression too. Keep such calls outside annotated scopes.
 ///
 /// Limitation: a user-defined `#[track_caller]` `verify` or `verify_owned` method that returns the
 /// failures of an inner Assertr verification reports them at its own call site. Those failures

@@ -15,11 +15,6 @@ pub(crate) struct MatchingItem {
     pub(crate) does_not_contain: &'static str,
 }
 
-pub(crate) const MATCHING_ELEMENT: MatchingItem = MatchingItem {
-    contains: "contains a matching element",
-    does_not_contain: "does not contain a matching element",
-};
-
 impl MatchingItem {
     /// Evaluates `matcher` against each item until one matches, retaining every rejected branch
     /// in `order`. A subject without items rejects with the described expectation as evidence.
@@ -96,6 +91,11 @@ impl MatchingItem {
     }
 }
 
+pub(crate) const MATCHING_ELEMENT: MatchingItem = MatchingItem {
+    contains: "contains a matching element",
+    does_not_contain: "does not contain a matching element",
+};
+
 /// A reusable collection membership assertion requiring at least one matching element.
 ///
 /// Evaluation stops at the first match. On rejection, it retains the original child failures,
@@ -116,20 +116,20 @@ impl MatchingItem {
 #[derive(Debug, Clone)]
 pub struct ContainsMatching<M>(M);
 
-/// Matches collections containing at least one matching element.
-///
-/// This is a convenience constructor for [`ContainsMatching::new`].
-#[must_use]
-pub const fn contains_matching<M>(matcher: M) -> ContainsMatching<M> {
-    ContainsMatching::new(matcher)
-}
-
 impl<M> ContainsMatching<M> {
     /// Owns the element matcher. Pass a reference to reuse a borrowed matcher.
     #[must_use]
     pub const fn new(matcher: M) -> Self {
         Self(matcher)
     }
+}
+
+/// Matches collections containing at least one matching element.
+///
+/// This is a convenience constructor for [`ContainsMatching::new`].
+#[must_use]
+pub const fn contains_matching<M>(matcher: M) -> ContainsMatching<M> {
+    ContainsMatching::new(matcher)
 }
 
 impl<C: Collection + ?Sized, R, M> Expectation<C, R> for ContainsMatching<M>
@@ -182,20 +182,20 @@ where
 #[derive(Debug, Clone)]
 pub struct DoesNotContainMatching<M>(M);
 
-/// Matches collections in which no element matches.
-///
-/// This is a convenience constructor for [`DoesNotContainMatching::new`].
-#[must_use]
-pub const fn does_not_contain_matching<M>(matcher: M) -> DoesNotContainMatching<M> {
-    DoesNotContainMatching::new(matcher)
-}
-
 impl<M> DoesNotContainMatching<M> {
     /// Owns the element matcher. Pass a reference to reuse a borrowed matcher.
     #[must_use]
     pub const fn new(matcher: M) -> Self {
         Self(matcher)
     }
+}
+
+/// Matches collections in which no element matches.
+///
+/// This is a convenience constructor for [`DoesNotContainMatching::new`].
+#[must_use]
+pub const fn does_not_contain_matching<M>(matcher: M) -> DoesNotContainMatching<M> {
+    DoesNotContainMatching::new(matcher)
 }
 
 impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: Expectation<C::Item, R>>
@@ -251,7 +251,7 @@ mod tests {
 
         use crate::{
             assertions::{collection::contains_matching, core::partial_eq::eq},
-            matchers::all_of,
+            matchers::{all_of, predicate},
             prelude::*,
             test_support::{NoRenderer, UnorderedSet, assert_bounded_order, bounded_failures},
         };
@@ -295,8 +295,6 @@ mod tests {
 
         #[test]
         fn stays_one_nested_group_inside_compositions() {
-            use crate::{matchers::predicate, test_support::FailureReportAssertions};
-
             let failures = assert_that!(vec![vec![2, 3], vec![4]])
                 .with_location(false)
                 .capture(|it| {

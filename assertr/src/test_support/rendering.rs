@@ -43,6 +43,7 @@ impl RendererExpected {
         Self(RendererActual(value))
     }
 }
+
 impl borrow_for::BorrowFor<RendererActual> for RendererExpected {
     type View = RendererActual;
 }
@@ -55,21 +56,25 @@ impl core::borrow::Borrow<RendererActual> for RendererExpected {
 
 /// Renders comparison targets and structural leaves, with no operand-wrapper implementation.
 pub(crate) struct ComparisonRenderer;
+
 impl ValueRenderer<RendererActual> for ComparisonRenderer {
     fn fmt(&self, _: &RendererActual, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(SENTINEL)
     }
 }
+
 impl ValueRenderer<usize> for ComparisonRenderer {
     fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{value}")
     }
 }
+
 impl ValueRenderer<str> for ComparisonRenderer {
     fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(value)
     }
 }
+
 impl ValueRenderer<&str> for ComparisonRenderer {
     fn fmt(&self, value: &&str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(value)
@@ -78,6 +83,7 @@ impl ValueRenderer<&str> for ComparisonRenderer {
 
 /// Only renders numeric evidence, never referenced identity targets.
 pub(crate) struct NumericRenderer;
+
 impl ValueRenderer<usize> for NumericRenderer {
     fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(value, f)
@@ -86,6 +92,7 @@ impl ValueRenderer<usize> for NumericRenderer {
 
 #[derive(Clone, Copy)]
 pub(crate) struct CustomValueRenderer;
+
 impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for CustomValueRenderer {
     fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "custom({value:?})")
@@ -94,15 +101,47 @@ impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for CustomValueRenderer {
 
 #[derive(Clone, Copy)]
 pub(crate) struct RedactingRenderer;
+
 impl<T: ?Sized> ValueRenderer<T> for RedactingRenderer {
     fn fmt(&self, _: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("<redacted>")
     }
 }
 
+/// Renders the string comparison leaves and indexes, without a wrapper renderer.
+#[derive(Clone)]
+pub(crate) struct StringRenderer;
+
+impl ValueRenderer<str> for StringRenderer {
+    fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{value:?}")
+    }
+}
+
+impl ValueRenderer<String> for StringRenderer {
+    fn fmt(&self, value: &String, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        ValueRenderer::<str>::fmt(self, value, f)
+    }
+}
+
+impl ValueRenderer<usize> for StringRenderer {
+    fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{value}")
+    }
+}
+
 pub(crate) fn assert_custom_value<T: fmt::Debug + ?Sized>(rendered: &Rendered, value: &T) {
     assert_that!(rendered.type_name).is_equal_to(Some(core::any::type_name::<T>()));
     assert_that!(format!("{rendered:#}")).is_equal_to(alloc::format!("custom({value:?})"));
+}
+
+pub(crate) fn assert_custom_fact(failure: &AssertionFailure, label: &str, expected: usize) {
+    let fact = failure
+        .facts
+        .iter()
+        .find(|fact| fact.label.as_deref() == Some(label))
+        .unwrap();
+    assert_custom_value(&fact.value, &expected);
 }
 
 pub(crate) fn assert_redacted(failure: &AssertionFailure, secrets: &[&str]) {
@@ -134,33 +173,5 @@ pub(crate) fn assert_redacted(failure: &AssertionFailure, secrets: &[&str]) {
         assert_that!(report)
             .with_detail_message(format!("report contains {secret}: {report}"))
             .does_not_contain(secret);
-    }
-}
-
-pub(crate) fn assert_custom_fact(failure: &AssertionFailure, label: &str, expected: usize) {
-    let fact = failure
-        .facts
-        .iter()
-        .find(|fact| fact.label.as_deref() == Some(label))
-        .unwrap();
-    assert_custom_value(&fact.value, &expected);
-}
-
-/// Renders the string comparison leaves and indexes, without a wrapper renderer.
-#[derive(Clone)]
-pub(crate) struct StringRenderer;
-impl ValueRenderer<str> for StringRenderer {
-    fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{value:?}")
-    }
-}
-impl ValueRenderer<String> for StringRenderer {
-    fn fmt(&self, value: &String, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        ValueRenderer::<str>::fmt(self, value, f)
-    }
-}
-impl ValueRenderer<usize> for StringRenderer {
-    fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{value}")
     }
 }

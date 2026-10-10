@@ -9,10 +9,9 @@ mod operands;
 mod rendering;
 
 pub(crate) use assertions::{FailureReportAssertions, assert_trait_impl, rejected_kind};
-pub(crate) use caller_location::block_on;
 #[cfg(feature = "std")]
 pub(crate) use caller_location::{LocationRecorder, raised_failure, recording_presentation};
-pub(crate) use caller_location::{assert_caller_location, check_caller_location};
+pub(crate) use caller_location::{assert_caller_location, block_on, check_caller_location};
 pub(crate) use collections::{PreservedBag, UnorderedMap, UnorderedSet};
 pub(crate) use evidence::{assert_bounded_order, bounded_failures};
 pub(crate) use expectations::opaque_predicate;

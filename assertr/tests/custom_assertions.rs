@@ -378,6 +378,7 @@ mod leaf {
     trait PersonAssertions<R = DebugRenderer> {
         #[allow(clippy::wrong_self_convention)]
         fn is_adult(self) -> Self;
+
         #[allow(clippy::wrong_self_convention)]
         fn is_older_than(self, other: &Person) -> Self
         where
@@ -456,6 +457,7 @@ mod leaf {
             write!(f, "Person(age={})", value.age)
         }
     }
+
     impl ValueRenderer<u32> for AgeRenderer {
         fn fmt(&self, value: &u32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{value} years")
@@ -1110,6 +1112,7 @@ mod matcher_authoring {
 
     // No Clone, subject renderer, or formatting traits on the subject or rejection are needed.
     struct ErrorRenderer;
+
     impl ValueRenderer<OpaqueError> for ErrorRenderer {
         fn fmt(&self, error: &OpaqueError, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "error({})", error.0)
@@ -1350,6 +1353,7 @@ mod structural_rendering {
     impl<T> Collection for Bag<T> {
         type Item = T;
         const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+
         fn elements(&self) -> impl Iterator<Item = &T> {
             self.0.iter()
         }
@@ -1470,40 +1474,49 @@ mod borrowed_views {
     #[derive(PartialEq, PartialOrd)]
     struct Measurement(i32);
     struct Operand(i32);
+
     impl Borrow<i32> for Operand {
         fn borrow(&self) -> &i32 {
             &self.0
         }
     }
+
     impl BorrowFor<Measurement> for Operand {
         type View = i32;
     }
+
     impl PartialEq<i32> for Measurement {
         fn eq(&self, other: &i32) -> bool {
             self.0 == *other
         }
     }
+
     impl PartialOrd<i32> for Measurement {
         fn partial_cmp(&self, other: &i32) -> Option<Ordering> {
             self.0.partial_cmp(other)
         }
     }
+
     impl PartialEq<Measurement> for i32 {
         fn eq(&self, other: &Measurement) -> bool {
             *self == other.0
         }
     }
+
     impl PartialOrd<Measurement> for i32 {
         fn partial_cmp(&self, other: &Measurement) -> Option<Ordering> {
             self.partial_cmp(&other.0)
         }
     }
+
     struct Renderer;
+
     impl ValueRenderer<Measurement> for Renderer {
         fn fmt(&self, value: &Measurement, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "measurement({})", value.0)
         }
     }
+
     impl ValueRenderer<i32> for Renderer {
         fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{value}")
@@ -1595,38 +1608,46 @@ mod map_query_operands {
 
     #[derive(PartialEq, Eq, PartialOrd, Ord)]
     struct StoredKey(String);
+
     impl Borrow<str> for StoredKey {
         fn borrow(&self) -> &str {
             &self.0
         }
     }
+
     // The operand and stored key are deliberately opaque to renderers.
     struct Query<'a>(&'a str);
+
     impl Borrow<str> for Query<'_> {
         fn borrow(&self) -> &str {
             self.0
         }
     }
+
     impl BorrowFor<StoredKey> for Query<'_> {
         type View = str;
     }
+
     // Reference operands opt in separately. BorrowFor does not forward a wrapper's selection.
     impl Borrow<str> for &Query<'_> {
         fn borrow(&self) -> &str {
             self.0
         }
     }
+
     impl BorrowFor<StoredKey> for &Query<'_> {
         type View = str;
     }
 
     #[derive(Clone)]
     struct QueryRenderer;
+
     impl ValueRenderer<str> for QueryRenderer {
         fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "query({value})")
         }
     }
+
     impl ValueRenderer<i32> for QueryRenderer {
         fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{value}")
@@ -1655,21 +1676,25 @@ mod map_query_operands {
 
     #[derive(Clone)]
     struct BulkRenderer;
+
     impl ValueRenderer<str> for BulkRenderer {
         fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             QueryRenderer.fmt(value, f)
         }
     }
+
     impl ValueRenderer<i32> for BulkRenderer {
         fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             QueryRenderer.fmt(value, f)
         }
     }
+
     impl ValueRenderer<StoredKey> for BulkRenderer {
         fn fmt(&self, value: &StoredKey, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "stored({})", value.0)
         }
     }
+
     impl ValueRenderer<usize> for BulkRenderer {
         fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{value}")
@@ -1704,7 +1729,14 @@ mod map_query_operands {
 
 /// Downstream subjects that implement only the public capability traits.
 mod custom_capabilities {
-    use assertr::prelude::*;
+    use core::borrow::Borrow;
+    use std::collections::BTreeMap;
+
+    use assertr::{
+        assertions::{Collection, HasLength, Map, MapLookup, RandomAccess, SetLookup, StableOrder},
+        prelude::*,
+        renderer::{CollectionPresentation, RenderingOrder},
+    };
 
     struct NumericRenderer;
 
@@ -1716,13 +1748,6 @@ mod custom_capabilities {
 
     #[test]
     fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
-        use core::borrow::Borrow;
-
-        use assertr::{
-            assertions::{Collection, HasLength, StableOrder},
-            renderer::CollectionPresentation,
-        };
-
         struct Key {
             _byte: u8,
         }
@@ -1778,11 +1803,6 @@ mod custom_capabilities {
 
     #[test]
     fn a_custom_collection_gets_every_collection_assertion() {
-        use assertr::{
-            assertions::{Collection, HasLength, RandomAccess, StableOrder},
-            renderer::CollectionPresentation,
-        };
-
         /// A downstream collection type, implementing only the extension traits.
         #[derive(Debug)]
         struct Ring(Vec<i32>);
@@ -1849,11 +1869,6 @@ mod custom_capabilities {
 
     #[test]
     fn a_custom_bag_gets_only_order_free_collection_assertions() {
-        use assertr::{
-            assertions::{Collection, HasLength},
-            renderer::{CollectionPresentation, RenderingOrder},
-        };
-
         #[derive(Debug)]
         struct Multiset(Vec<i32>);
 
@@ -1889,11 +1904,6 @@ mod custom_capabilities {
 
     #[test]
     fn a_custom_set_gets_every_set_and_collection_assertion() {
-        use assertr::{
-            assertions::{Collection, HasLength, SetLookup},
-            renderer::CollectionPresentation,
-        };
-
         /// A downstream set type, implementing only the extension traits.
         #[derive(Debug)]
         struct CustomSet(Vec<i32>);
@@ -1967,14 +1977,6 @@ mod custom_capabilities {
 
     #[test]
     fn a_custom_map_gets_every_map_assertion() {
-        use core::borrow::Borrow;
-        use std::collections::BTreeMap;
-
-        use assertr::{
-            assertions::{HasLength, Map, MapLookup},
-            renderer::RenderingOrder,
-        };
-
         /// A downstream map type, implementing only the extension traits.
         #[derive(Debug)]
         struct Config(BTreeMap<String, i32>);

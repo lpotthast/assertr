@@ -1,5 +1,6 @@
 use jiff::Span;
 
+use super::sign_expectations;
 use crate::{
     AssertThat,
     mode::Mode,

@@ -40,6 +40,7 @@ where
     L: MatcherList<A, R>,
 {
     composite_items!(A);
+
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         // A wrong shape skips the fields. The structural fallback stays within the variant scope,
         // so a rejection always leaves evidence there.
@@ -71,6 +72,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,
@@ -96,18 +98,15 @@ mod tests {
 
     use super::partial_match;
     use crate::{
-        failure::PathSegment,
+        __private::field,
+        assertions::{collection::elements_are_in_any_order, core::partial_eq::eq},
+        failure::{FailureKind, PathSegment},
         prelude::*,
         test_support::{NoRenderer, opaque_predicate},
     };
 
     #[test]
     fn missing_subject_descriptions_preserve_nested_field_and_variant_paths() {
-        use crate::{
-            __private::field,
-            assertions::{collection::elements_are_in_any_order, core::partial_eq::eq},
-            failure::FailureKind,
-        };
         let matcher = field(
             |row: &((i32,),)| Some(&row.0),
             partial_match(
@@ -145,15 +144,15 @@ mod tests {
         let actual: [Row; 0] = [];
         let failures = assert_that!(actual).capture(|it| {
             it.matches(crate::elements_are_in_any_order![crate::partial!(Row {
-                age: matchers::eq(1),
-                score: matchers::eq(2)
+                age: eq(1),
+                score: eq(2)
             })])
         });
         let description = failures[0].children[0].constraint.as_ref().unwrap();
         assert_that!(description.children).has_length(2);
         for (child, name) in description.children.iter().zip(["age", "score"]) {
             assert_that!(child.path).is_equal_to([PathSegment::Field(name)]);
-            assert_that!(child.kind).is_equal_to(crate::failure::FailureKind::Equality);
+            assert_that!(child.kind).is_equal_to(FailureKind::Equality);
         }
     }
 

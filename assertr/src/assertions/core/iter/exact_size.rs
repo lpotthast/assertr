@@ -8,6 +8,7 @@ use crate::{
 /// Requires [`ExactSizeIterator::len`] to equal an expected count, without advancing the iterator.
 #[derive(Debug, Clone, Copy)]
 pub struct HasRemainingCount(usize);
+
 impl HasRemainingCount {
     /// Requires exactly this many remaining items.
     #[must_use]
@@ -129,10 +130,12 @@ pub trait ExactSizeIteratorAssertions<R = DebugRenderer> {
     fn has_remaining_count(self, expected: usize) -> Self
     where
         R: ValueRenderer<usize>;
+
     /// Asserts that no elements remain without advancing the iterator.
     fn has_no_remaining_elements(self) -> Self
     where
         R: ValueRenderer<usize>;
+
     /// Asserts that at least one element remains without advancing the iterator.
     fn has_remaining_elements(self) -> Self;
 }
@@ -177,7 +180,10 @@ mod tests {
     mod renderer_contract {
         use crate::{
             prelude::*,
-            test_support::{NoRenderer, assert_trait_impl},
+            test_support::{
+                CustomValueRenderer, NoRenderer, assert_custom_fact, assert_custom_value,
+                assert_trait_impl,
+            },
         };
 
         #[test]
@@ -190,9 +196,6 @@ mod tests {
 
         #[test]
         fn counts_use_the_active_renderer() {
-            use crate::test_support::{
-                CustomValueRenderer, assert_custom_fact, assert_custom_value,
-            };
             let failures = assert_that!([1, 2].into_iter())
                 .with_renderer(CustomValueRenderer)
                 .capture(|it| it.has_remaining_count(3).has_no_remaining_elements());
@@ -288,7 +291,7 @@ mod tests {
     mod has_remaining_elements {
         use indoc::formatdoc;
 
-        use crate::prelude::*;
+        use crate::{prelude::*, test_support::NoRenderer};
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -325,7 +328,6 @@ mod tests {
 
         #[test]
         fn requires_no_numeric_renderer() {
-            use crate::test_support::NoRenderer;
             assert_that!([1].into_iter())
                 .with_renderer(NoRenderer)
                 .with_location(false)

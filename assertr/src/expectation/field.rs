@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::{
-    expectation::{AssertionContext, Evidence, Expectation},
+    expectation::{AssertionContext, Evidence, Expectation, composite_items},
     failure::{FailureBuilder, FailureKind, PathSegment},
 };
 
@@ -118,6 +118,7 @@ where
     M: Expectation<T, R>,
 {
     composite_items!(A);
+
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated();
         let matched = (self.select)(&self.projection, actual).is_some_and(|value| {
@@ -133,6 +134,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,

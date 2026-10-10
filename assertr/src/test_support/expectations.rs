@@ -25,11 +25,13 @@ impl<A: ?Sized, R, F: Fn(&A) -> bool> Expectation<A, R> for OpaquePredicate<F> {
     where
         Self: 'a,
         A: 'a;
+
     fn evaluate(&self, actual: &A, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         passed((self.0)(actual))
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&A, ())>,

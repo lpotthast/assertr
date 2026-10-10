@@ -93,11 +93,13 @@ where
     where
         Self: 'a,
         A: 'a;
+
     fn evaluate(&self, actual: &A, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         passed((self.callback)(actual))
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&A, ())>,
@@ -120,12 +122,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::predicate;
-    use crate::prelude::*;
+    use crate::{
+        prelude::*,
+        test_support::{CustomValueRenderer, assert_custom_value},
+    };
 
     #[test]
     fn renders_the_rejected_subject_through_the_active_renderer() {
-        use crate::test_support::{CustomValueRenderer, assert_custom_value};
-
         let failures = assert_that!([1, 7])
             .with_renderer(CustomValueRenderer)
             .capture(|it| it.matches(matchers::each(predicate(|x: &i32| *x < 5))));

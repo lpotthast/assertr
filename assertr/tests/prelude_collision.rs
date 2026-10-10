@@ -2,7 +2,10 @@
 //! own modules, so their bare names stay usable next to other glob-imported preludes. Downstream
 //! capability implementations are covered in `custom_assertions.rs`.
 
+use core::task::Poll;
+
 use assertr::prelude::*;
+use downstream_prelude::*;
 
 /// Stand-in for a downstream prelude exporting its own collection names.
 mod downstream_prelude {
@@ -26,8 +29,6 @@ mod downstream_prelude {
         pub size: usize,
     }
 }
-
-use downstream_prelude::*;
 
 // `Collection` is the name of assertr's collection extension trait, but it is not re-exported
 // from the prelude, so the bare name stays unambiguous next to another glob import.
@@ -76,13 +77,16 @@ mod matcher_names {
     mod foreign_prelude {
         pub struct ConstraintDescription;
         pub struct Matcher;
+
         pub fn eq() -> bool {
             true
         }
+
         pub fn anything() -> bool {
             true
         }
     }
+
     #[test]
     fn matcher_names_remain_available_to_other_preludes() {
         use assertr::prelude::*;
@@ -97,8 +101,6 @@ mod matcher_names {
 /// `at`. These short names must resolve to exactly one prelude trait for each subject type.
 #[test]
 fn extraction_names_resolve_unambiguously_through_the_prelude() {
-    use core::task::Poll;
-
     assert_that!(Some(vec![1, 2, 3]))
         .some()
         .first()

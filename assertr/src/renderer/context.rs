@@ -63,19 +63,6 @@ impl<R> Clone for RenderingContext<'_, R> {
 
 impl<R> Copy for RenderingContext<'_, R> {}
 
-/// Identity evidence is an address, independent of any ability to render the pointee.
-pub(crate) struct IdentityRenderer;
-
-impl<T: ?Sized> ValueRenderer<T> for IdentityRenderer {
-    fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Print only the memory address, using the same format for all output styles and Rust
-        // versions. Pointers may also carry extra information, such as a slice's length. If that
-        // information differs despite equal addresses, the assertion explains the mismatch in a
-        // separate note.
-        write!(f, "{:p}", core::ptr::from_ref(value).cast::<()>())
-    }
-}
-
 impl<'r, R> RenderingContext<'r, R> {
     /// Creates a context with an explicit renderer and budget, rendering pretty leaves.
     pub const fn new(renderer: &'r R, budget: RenderingBudget) -> Self {
@@ -432,6 +419,19 @@ impl<'r, R> RenderingContext<'r, R> {
     }
 }
 
+/// Identity evidence is an address, independent of any ability to render the pointee.
+pub(crate) struct IdentityRenderer;
+
+impl<T: ?Sized> ValueRenderer<T> for IdentityRenderer {
+    fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Print only the memory address, using the same format for all output styles and Rust
+        // versions. Pointers may also carry extra information, such as a slice's length. If that
+        // information differs despite equal addresses, the assertion explains the mismatch in a
+        // separate note.
+        write!(f, "{:p}", core::ptr::from_ref(value).cast::<()>())
+    }
+}
+
 /// Adapts a formatting closure to `Debug`, so the formatter's alternate flag can be selected.
 struct FormatterFn<F>(F);
 
@@ -593,7 +593,7 @@ mod tests {
 
         use super::*;
 
-        // A full sort, applied to trees built by iteration-preserving paths.
+        /// A full sort, applied to trees built by iteration-preserving paths.
         fn full_sort(mut tree: Rendered, limit: usize, pretty: bool) -> Rendered {
             match &mut tree.body {
                 RenderedBody::Group {

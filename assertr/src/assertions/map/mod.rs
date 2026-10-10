@@ -508,6 +508,11 @@ mod tests {
     use alloc::{
         borrow::Cow, boxed::Box, collections::BTreeMap, rc::Rc, string::String, sync::Arc, vec::Vec,
     };
+    #[cfg(feature = "std")]
+    use std::{
+        collections::HashMap,
+        hash::{BuildHasherDefault, DefaultHasher},
+    };
 
     use super::{
         Map, MapLookup, RenderingOrder,
@@ -576,8 +581,6 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn iteration_based_assertions_on_a_hash_map_need_no_hasher_bound() {
-        use std::collections::HashMap;
-
         fn helper<S>(map: &HashMap<&str, i32, S>) {
             assert_that!(map).contains_value(1).has_length(1);
         }
@@ -660,11 +663,6 @@ mod tests {
     #[test]
     #[allow(clippy::mutable_key_type)]
     fn hash_map_adapter_uses_hashed_lookup_instead_of_scanning_entries() {
-        use std::{
-            collections::HashMap,
-            hash::{BuildHasherDefault, DefaultHasher},
-        };
-
         let events = Events::default();
         let map = counting_keys(&events, 8)
             .map(|key| (key, 0))
@@ -768,7 +766,7 @@ mod tests {
             #[derive(Debug, Clone, PartialEq, Eq, Hash)]
             struct HashOnlyKey(u32);
             check(
-                std::collections::HashMap::from([(HashOnlyKey(1), 1), (HashOnlyKey(2), 2)]),
+                HashMap::from([(HashOnlyKey(1), 1), (HashOnlyKey(2), 2)]),
                 HashOnlyKey,
             );
         }
@@ -777,11 +775,6 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn hash_map_adapter_supports_custom_hashers_and_references() {
-        use std::{
-            collections::HashMap,
-            hash::{BuildHasherDefault, DefaultHasher},
-        };
-
         let mut map: HashMap<String, i32, BuildHasherDefault<DefaultHasher>> =
             HashMap::with_hasher(BuildHasherDefault::default());
         map.insert(String::from("alpha"), 1);

@@ -6,7 +6,7 @@ use crate::{
     renderer::{DebugRenderer, Rendered, RenderingContext, ValueRenderer},
 };
 
-// Emptiness failures show the subject type next to its value.
+/// Emptiness failures show the subject type next to its value.
 fn with_type_hint<T: ?Sized, R: ValueRenderer<T>>(
     render: RenderingContext<'_, R>,
     value: &T,
@@ -35,6 +35,7 @@ property_expectation! {
 /// Checks a finite length and retains the observed count on rejection.
 #[derive(Debug, Clone, Copy)]
 pub struct HasLengthOf(usize);
+
 impl HasLengthOf {
     /// Requires exactly this many elements or bytes according to the subject's native length.
     #[must_use]
@@ -162,7 +163,9 @@ mod tests {
     mod renderer_contract {
         use crate::{
             prelude::*,
-            test_support::{NoRenderer, assert_trait_impl},
+            test_support::{
+                CustomValueRenderer, NoRenderer, assert_custom_value, assert_trait_impl,
+            },
         };
 
         #[test]
@@ -174,8 +177,6 @@ mod tests {
 
         #[test]
         fn failures_render_the_subject_and_counts_with_the_active_renderer() {
-            use crate::test_support::{CustomValueRenderer, assert_custom_value};
-
             let failures = assert_that!([1, 2])
                 .with_renderer(CustomValueRenderer)
                 .capture(|it| it.is_empty().has_length(3));
@@ -203,7 +204,10 @@ mod tests {
     mod is_empty {
         use indoc::formatdoc;
 
-        use crate::prelude::*;
+        use crate::{
+            matchers::{IsEmpty, IsNotEmpty, dereferenced},
+            prelude::*,
+        };
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -218,8 +222,6 @@ mod tests {
 
         #[test]
         fn matchers_accept_unsized_subjects() {
-            use crate::matchers::{IsEmpty, IsNotEmpty, dereferenced};
-
             assert_that!(String::new()).matches(dereferenced(IsEmpty));
             assert_that!(vec![1]).matches(dereferenced(IsNotEmpty));
             let failures =
@@ -321,6 +323,8 @@ mod tests {
             boxed::Box,
             collections::{BTreeMap, BTreeSet, BinaryHeap, LinkedList, VecDeque},
         };
+        #[cfg(feature = "std")]
+        use std::collections::{HashMap, HashSet};
 
         use crate::prelude::*;
 
@@ -365,8 +369,6 @@ mod tests {
         #[test]
         #[cfg(feature = "std")]
         fn hash_maps_and_sets() {
-            use std::collections::{HashMap, HashSet};
-
             assert_that!(HashMap::<i32, i32>::new()).is_empty();
             assert_that!(HashMap::from([(1, 2), (3, 4)])).has_length(2);
             assert_that!(HashSet::from([1, 2, 2])).has_length(2);
@@ -405,11 +407,13 @@ mod tests {
             reads: Cell<usize>,
             empty_checks: Cell<usize>,
         }
+
         impl HasLength for Length {
             fn length(&self) -> usize {
                 self.reads.set(self.reads.get() + 1);
                 7
             }
+
             fn is_empty(&self) -> bool {
                 self.empty_checks.set(self.empty_checks.get() + 1);
                 false

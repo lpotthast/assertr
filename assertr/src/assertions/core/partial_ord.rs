@@ -445,8 +445,10 @@ mod tests {
             matchers::{ge, gt, le, lt},
             prelude::*,
         };
+
         #[derive(Debug, PartialEq, PartialOrd)]
         struct Point(i32, i32);
+
         #[test]
         #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed temporaries are the contract under test.
         fn reusable_borrowed_matchers_and_temporaries() {

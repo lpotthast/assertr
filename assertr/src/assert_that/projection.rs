@@ -4,13 +4,6 @@ use core::{future::Future, panic::Location};
 use crate::{AssertThat, actual::Actual, mode::Mode};
 
 impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
-    /// Locates this child's failures at `caller`, the `satisfies` call handing it to a callback,
-    /// unless an enclosing callback already did.
-    fn located_at_callback(mut self, caller: &'static Location<'static>) -> Self {
-        self.state.settings.callback_caller.get_or_insert(caller);
-        self
-    }
-
     /// Takes the owned subject for an operation that consumes it, continuing on a unit subject
     /// with the same chain state.
     ///
@@ -347,6 +340,13 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         R: Clone,
     {
         self.satisfies_ref(mapper, assertions)
+    }
+
+    /// Locates this child's failures at `caller`, the `satisfies` call handing it to a callback,
+    /// unless an enclosing callback already did.
+    fn located_at_callback(mut self, caller: &'static Location<'static>) -> Self {
+        self.state.settings.callback_caller.get_or_insert(caller);
+        self
     }
 }
 

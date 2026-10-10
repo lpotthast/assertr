@@ -496,7 +496,8 @@ mod tests {
             prelude::*,
             renderer::{CollectionPresentation, RenderingOrder},
             test_support::{
-                ComparisonRenderer, NoRenderer, RendererActual, RendererExpected, assert_trait_impl,
+                ComparisonRenderer, CustomValueRenderer, NoRenderer, RendererActual,
+                RendererExpected, assert_custom_fact, assert_trait_impl,
             },
         };
 
@@ -544,7 +545,6 @@ mod tests {
 
         #[test]
         fn lengths_use_the_active_renderer() {
-            use crate::test_support::{CustomValueRenderer, assert_custom_fact};
             let failures = assert_that!([1])
                 .with_renderer(CustomValueRenderer)
                 .capture(|it| it.ends_with([0, 1]));
@@ -565,62 +565,13 @@ mod tests {
         }
     }
 
-    mod first {
-        use alloc::{collections::LinkedList, vec::Vec};
-
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(Vec::<i32>::new()), first());
-        }
-
-        #[test]
-        fn returns_the_first_element_of_a_stable_order_collection() {
-            assert_that!(LinkedList::from([1, 2, 3]))
-                .first()
-                .is_equal_to(1);
-        }
-
-        #[test]
-        fn panics_for_an_empty_collection() {
-            assert_that!(|| {
-                assert_that!(Vec::<i32>::new()).with_location(false).first();
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `Vec::<i32>::new()`
-
-                    Actual: []
-
-                    has no first element
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod last {
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!([] as [i32; 0]), last());
-        }
-
-        #[test]
-        fn returns_the_last_element() {
-            assert_that!(vec![1, 2, 3]).last().is_equal_to(3);
-        }
-    }
-
     mod starts_with {
         use indoc::formatdoc;
 
-        use crate::prelude::*;
+        use crate::{
+            prelude::*,
+            test_support::{CustomValueRenderer, assert_custom_value},
+        };
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -669,9 +620,6 @@ mod tests {
 
         #[test]
         fn reports_a_shorter_subject_with_its_rendered_length() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{CustomValueRenderer, assert_custom_value};
             let failures = assert_that!([1])
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
@@ -1147,14 +1095,11 @@ mod tests {
     mod contains_exactly_matching {
         use indoc::formatdoc;
 
-        use crate::prelude::*;
+        use crate::{assertions::core::partial_eq::eq, matchers::anything, prelude::*};
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that!([1]),
-                contains_exactly_matching([crate::assertions::core::partial_eq::eq(2)])
-            );
+            assert_caller_location!(assert_that!([1]), contains_exactly_matching([eq(2)]));
         }
 
         #[test]
@@ -1164,9 +1109,7 @@ mod tests {
                 id: u32,
             }
             let failures = assert_that!([Record { id: 1 }]).capture(|it| {
-                it.contains_exactly_matching(matchers![partial!(Record {
-                    id: matchers::eq(2)
-                })])
+                it.contains_exactly_matching(matchers![partial!(Record { id: eq(2) })])
             });
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
@@ -1193,21 +1136,13 @@ mod tests {
             }
             let records = [Record { id: 1 }, Record { id: 2 }];
             assert_that!(records).contains_exactly_in_any_order_matching(matchers![
-                partial!(Record {
-                    id: matchers::eq(2)
-                }),
-                partial!(Record {
-                    id: matchers::eq(1)
-                })
+                partial!(Record { id: eq(2) }),
+                partial!(Record { id: eq(1) })
             ]);
             let failures = assert_that!(records).capture(|it| {
                 it.contains_exactly_matching(matchers![
-                    partial!(Record {
-                        id: matchers::eq(2)
-                    }),
-                    partial!(Record {
-                        id: matchers::eq(1)
-                    })
+                    partial!(Record { id: eq(2) }),
+                    partial!(Record { id: eq(1) })
                 ])
             });
             assert_that!(failures[0].children).has_length(2);
@@ -1215,7 +1150,6 @@ mod tests {
 
         #[test]
         fn wildcard_constraints_distinguish_positions_from_unordered_assignments() {
-            use crate::{assertions::core::partial_eq::eq, matchers::anything};
             let failures = assert_that!([2, 1])
                 .capture(|it| it.contains_exactly_matching(matchers![anything(), eq(2)]));
             assert_that!(failures[0].children).contains_exactly_satisfying([
@@ -1309,6 +1243,58 @@ mod tests {
                     it.is_equal_to(1);
                 }])
             );
+        }
+    }
+
+    mod first {
+        use alloc::{collections::LinkedList, vec::Vec};
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Vec::<i32>::new()), first());
+        }
+
+        #[test]
+        fn returns_the_first_element_of_a_stable_order_collection() {
+            assert_that!(LinkedList::from([1, 2, 3]))
+                .first()
+                .is_equal_to(1);
+        }
+
+        #[test]
+        fn panics_for_an_empty_collection() {
+            assert_that!(|| {
+                assert_that!(Vec::<i32>::new()).with_location(false).first();
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `Vec::<i32>::new()`
+
+                    Actual: []
+
+                    has no first element
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod last {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([] as [i32; 0]), last());
+        }
+
+        #[test]
+        fn returns_the_last_element() {
+            assert_that!(vec![1, 2, 3]).last().is_equal_to(3);
         }
     }
 

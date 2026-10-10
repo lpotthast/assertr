@@ -46,6 +46,7 @@ where
     L: MatcherList<C::Item, R>,
 {
     composite_items!(C);
+
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated();
         let actual = actual.elements().collect::<Vec<_>>();
@@ -74,6 +75,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&C, Evidence)>,
@@ -254,10 +256,16 @@ mod tests {
     mod evaluate {
         use core::cell::{Cell, RefCell};
 
-        use indoc::indoc;
+        use indoc::{formatdoc, indoc};
 
         use super::*;
-        use crate::matchers::{predicate, satisfying};
+        use crate::{
+            __private::field,
+            failure::PathSegment,
+            matchers::{all_of, predicate, satisfying},
+            renderer::{RenderedBody, RenderingOrder},
+            test_support::UnorderedSet,
+        };
 
         #[test]
         fn reports_rejected_and_surplus_occurrences() {
@@ -329,7 +337,6 @@ mod tests {
 
         #[test]
         fn candidate_failures_reuse_rendered_leaves_and_inherited_order() {
-            use crate::renderer::{RenderedBody, RenderingOrder};
             struct Renderer(Cell<usize>);
             impl ValueRenderer<i32> for Renderer {
                 fn fmt(&self, value: &i32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -378,13 +385,13 @@ mod tests {
         mod description_fidelity {
             use super::*;
             use crate::{
+                assertions::core::{debug::HasDebugString, display::HasDisplayValue},
                 expectation::Expectation,
                 failure::{Fact, FailureBuilder, FailureKind},
             };
 
             #[test]
             fn formatting_constraints_remain_distinguishable_in_candidate_failures() {
-                use crate::assertions::core::{debug::HasDebugString, display::HasDisplayValue};
                 let debug = assert_that!([1]).with_location(false).capture(|it| {
                     it.matches(crate::assertions::collection::elements_are_in_any_order(
                         matchers![HasDebugString::new("2")],
@@ -416,6 +423,7 @@ mod tests {
                 relation: &'static str,
                 detailed: bool,
             }
+
             impl Expectation<i32> for EqualityDescription {
                 type Success<'a>
                     = ()
@@ -427,11 +435,13 @@ mod tests {
                 where
                     Self: 'a,
                     i32: 'a;
+
                 fn evaluate(&self, actual: &i32, _: &AssertionContext<'_>) -> Result<(), ()> {
                     crate::expectation::passed(*actual == 99)
                 }
 
                 const KIND: FailureKind = FailureKind::Equality;
+
                 fn explain<'a>(
                     &'a self,
                     rejected: Option<(&'a i32, ())>,
@@ -491,7 +501,6 @@ mod tests {
 
         #[test]
         fn candidate_failures_preserve_field_rejection_paths() {
-            use crate::{__private::field, assertions::core::partial_eq::eq, failure::PathSegment};
             struct Row {
                 id: i32,
             }
@@ -510,7 +519,6 @@ mod tests {
 
         #[test]
         fn candidate_failures_count_all_omitted_rejections() {
-            use crate::{matchers::all_of, test_support::UnorderedSet};
             let matcher = elements_are_in_any_order![all_of(matchers![
                 eq(99),
                 predicate(|value: &i32| *value != 2)
@@ -692,7 +700,6 @@ mod tests {
 
         #[test]
         fn surplus_groups_preserve_the_enclosing_path_once() {
-            use crate::failure::PathSegment;
             let mut context = AssertionContext::default();
             let result = context.scoped(PathSegment::Field("items"), |context| {
                 context.evaluate(&[1, 1], &elements_are_in_any_order![eq(1)])
@@ -765,7 +772,6 @@ mod tests {
 
         #[test]
         fn a_zero_item_budget_preserves_length_failure_without_rendering_evidence() {
-            use indoc::formatdoc;
             let failures = assert_that!([1, 2])
                 .with_renderer(crate::test_support::PanickingRenderer(
                     "rendered omitted evidence",
@@ -796,7 +802,6 @@ mod tests {
             matrix: &'a [[bool; M]],
             calls: &'a RefCell<Vec<(usize, usize)>>,
         ) -> impl crate::expectation::MatcherList<usize, DebugRenderer> + 'a {
-            use crate::matchers::{all_of, predicate};
             (0..M)
                 .map(|slot| {
                     all_of(matchers![
@@ -854,13 +859,13 @@ mod tests {
     }
 
     mod probe {
+        use core::cell::{Cell, RefCell};
+
         use super::*;
+        use crate::matchers::predicate;
 
         #[test]
         fn surplus_search_does_not_complete_unvisited_pairs_or_render() {
-            use core::cell::RefCell;
-
-            use crate::{assertions::core::partial_eq::eq, matchers::predicate};
             let calls = RefCell::new([0; 3]);
             let matcher = elements_are_in_any_order![predicate(|index: &usize| {
                 calls.borrow_mut()[*index] += 1;
@@ -881,8 +886,6 @@ mod tests {
 
         #[test]
         fn stops_at_the_first_unassignable_occurrence() {
-            use core::cell::Cell;
-
             let calls = Cell::new(0);
             let counted = |expected: usize| {
                 let calls = &calls;
@@ -891,9 +894,8 @@ mod tests {
                     *actual == expected
                 }
             };
-            let matcher = super::super::elements_are_in_any_order(
-                [counted(1), counted(2)].map(matchers::predicate),
-            );
+            let matcher =
+                super::super::elements_are_in_any_order([counted(1), counted(2)].map(predicate));
             let context = AssertionContext::default();
 
             assert_that!(context.probe(&[0, 1], &matcher)).is_false();

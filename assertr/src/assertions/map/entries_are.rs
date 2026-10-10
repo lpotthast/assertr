@@ -46,6 +46,7 @@ where
     L: EntryMatcherList<MapType, R>,
 {
     composite_items!(MapType);
+
     fn evaluate(
         &self,
         actual: &MapType,
@@ -92,6 +93,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&MapType, Evidence)>,

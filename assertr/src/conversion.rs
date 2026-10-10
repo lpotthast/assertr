@@ -60,6 +60,8 @@ impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
 mod tests {
     use core::cell::Cell;
 
+    use serde::ser::{Error, SerializeStruct};
+
     use crate::{
         Actual,
         prelude::*,
@@ -71,9 +73,9 @@ mod tests {
         calls: &'a Cell<usize>,
         fail: bool,
     }
+
     impl serde::Serialize for Serialized<'_> {
         fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            use serde::ser::{Error, SerializeStruct};
             self.calls.set(self.calls.get() + 1);
             if self.fail {
                 return Err(S::Error::custom("private-serialization-value"));
@@ -87,7 +89,10 @@ mod tests {
     macro_rules! conversion_tests {
         ($module:ident, $method:ident) => {
             mod $module {
+                use indoc::indoc;
+
                 use super::*;
+
                 #[test]
                 fn serializes_once_without_renderer_in_both_modes_and_ownership_forms() {
                     for fail in [false, true] {
@@ -130,10 +135,9 @@ mod tests {
                         assert_that!(calls.get()).is_equal_to(4);
                     }
                 }
+
                 #[test]
                 fn result_assertions_keep_renderer_budget_and_chain_state() {
-                    use indoc::indoc;
-
                     let calls = Cell::new(0);
                     let subject = Serialized {
                         calls: &calls,
@@ -206,6 +210,7 @@ mod tests {
             }
         };
     }
+
     #[cfg(feature = "serde-json")]
     conversion_tests!(as_json, as_json);
     #[cfg(feature = "serde-toml")]

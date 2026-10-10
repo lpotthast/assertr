@@ -111,6 +111,7 @@ impl From<AssertionFailure> for AssertionFailures {
 
 impl Deref for AssertionFailures {
     type Target = [AssertionFailure];
+
     fn deref(&self) -> &Self::Target {
         &self.failures
     }
@@ -125,6 +126,7 @@ impl AsRef<[AssertionFailure]> for AssertionFailures {
 impl IntoIterator for AssertionFailures {
     type Item = AssertionFailure;
     type IntoIter = alloc::vec::IntoIter<AssertionFailure>;
+
     fn into_iter(self) -> Self::IntoIter {
         self.failures.into_iter()
     }
@@ -133,6 +135,7 @@ impl IntoIterator for AssertionFailures {
 impl<'a> IntoIterator for &'a AssertionFailures {
     type Item = &'a AssertionFailure;
     type IntoIter = slice::Iter<'a, AssertionFailure>;
+
     fn into_iter(self) -> Self::IntoIter {
         self.failures.iter()
     }
@@ -147,6 +150,7 @@ impl HasLength for AssertionFailures {
 impl Collection for AssertionFailures {
     type Item = AssertionFailure;
     const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+
     fn elements(&self) -> impl Iterator<Item = &Self::Item> {
         self.iter()
     }

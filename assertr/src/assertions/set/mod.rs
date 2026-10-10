@@ -155,6 +155,11 @@ where
 #[cfg(test)]
 mod tests {
     use alloc::{collections::BTreeSet, vec::Vec};
+    #[cfg(feature = "std")]
+    use std::{
+        collections::HashSet,
+        hash::{BuildHasherDefault, DefaultHasher},
+    };
 
     use super::SetLookup;
     use crate::prelude::*;
@@ -242,8 +247,6 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn element_assertions_on_a_hash_set_need_no_hasher_bound() {
-        use std::collections::HashSet;
-
         fn helper<S>(set: &HashSet<i32, S>) {
             assert_that!(set)
                 .contains(1)
@@ -257,11 +260,6 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn hash_set_adapter_supports_custom_hashers_and_references() {
-        use std::{
-            collections::HashSet,
-            hash::{BuildHasherDefault, DefaultHasher},
-        };
-
         let mut set: HashSet<i32, BuildHasherDefault<DefaultHasher>> =
             HashSet::with_hasher(BuildHasherDefault::default());
         set.extend([1, 2, 3]);

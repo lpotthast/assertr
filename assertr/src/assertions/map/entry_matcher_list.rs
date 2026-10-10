@@ -35,6 +35,7 @@ pub trait EntryMatcherList<MapType: Map + ?Sized, R = DebugRenderer>:
 }
 
 impl sealed::Sealed for Nil {}
+
 impl<MapType: Map + ?Sized, R> EntryMatcherList<MapType, R> for Nil {
     fn evaluate_entry_at<'a>(
         &'a self,
@@ -47,6 +48,7 @@ impl<MapType: Map + ?Sized, R> EntryMatcherList<MapType, R> for Nil {
 }
 
 impl<K, M, T> sealed::Sealed for Cons<Entry<K, M>, T> {}
+
 impl<MapType, StoredKey, R, K, M, T> EntryMatcherList<MapType, R> for Cons<Entry<K, M>, T>
 where
     MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
@@ -98,6 +100,7 @@ homogeneous!(Vec<Entry<K, M>>);
 homogeneous!([Entry<K, M>; N], N);
 
 impl<L: ?Sized> sealed::Sealed for &L {}
+
 impl<MapType: Map + ?Sized, R, L: EntryMatcherList<MapType, R> + ?Sized>
     EntryMatcherList<MapType, R> for &L
 {

@@ -109,7 +109,7 @@ mod tests {
     mod renderer_contract {
         use crate::{
             prelude::*,
-            test_support::{NoRenderer, assert_trait_impl},
+            test_support::{CustomValueRenderer, NoRenderer, assert_trait_impl},
         };
 
         #[test]
@@ -122,7 +122,6 @@ mod tests {
 
         #[test]
         fn length_uses_the_active_renderer() {
-            use crate::test_support::CustomValueRenderer;
             assert_that!(|| {
                 assert_that!([1, 2])
                     .with_renderer(CustomValueRenderer)
@@ -136,6 +135,8 @@ mod tests {
 
     mod single {
         use alloc::collections::{BTreeMap, BTreeSet};
+        #[cfg(feature = "std")]
+        use std::collections::HashSet;
 
         use indoc::formatdoc;
 
@@ -163,8 +164,6 @@ mod tests {
         #[cfg(feature = "std")]
         #[test]
         fn renders_an_unordered_collection_with_its_presentation() {
-            use std::collections::HashSet;
-
             assert_that!(|| {
                 assert_that!(HashSet::from([3, 1, 2]))
                     .with_location(false)

@@ -29,6 +29,7 @@ impl<Q: ?Sized, E: Clone> Clone for ContainsEntryMatching<'_, Q, E> {
         }
     }
 }
+
 impl<'e, Q: ?Sized, E> ContainsEntryMatching<'e, Q, E> {
     /// Borrows a native key query and stores its value expectation.
     #[must_use]

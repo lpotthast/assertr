@@ -1,5 +1,6 @@
 //! Public API and Send boundaries, compiled without internal chain access.
 #![cfg(feature = "thirtyfour")]
+
 use assertr::prelude::*;
 use thirtyfour::WebElement;
 

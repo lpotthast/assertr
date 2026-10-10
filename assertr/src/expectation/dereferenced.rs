@@ -30,6 +30,7 @@ where
     where
         Self: 'a,
         T: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a T,
@@ -40,6 +41,7 @@ where
 
     const KIND: FailureKind = <M as Expectation<T::Target, R>>::KIND;
     const FLATTEN: bool = <M as Expectation<T::Target, R>>::FLATTEN;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,

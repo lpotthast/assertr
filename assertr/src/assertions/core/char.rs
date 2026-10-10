@@ -20,11 +20,13 @@ impl EqualToIgnoringAsciiCase {
 impl<R: ValueRenderer<char>> Expectation<char, R> for EqualToIgnoringAsciiCase {
     type Success<'a> = ();
     type Rejection<'a> = ();
+
     fn evaluate<'a>(&'a self, actual: &'a char, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         passed(actual.eq_ignore_ascii_case(&self.0))
     }
 
     const KIND: FailureKind = FailureKind::Equality;
+
     fn explain(
         &self,
         rejected: Option<(&char, ())>,

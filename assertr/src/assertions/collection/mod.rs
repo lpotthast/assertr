@@ -181,6 +181,7 @@ pub trait Collection: HasLength {
 /// [`StableOrderExtractAssertions`](crate::assertions::StableOrderExtractAssertions) adds
 /// `first` and `last`. Prefix, suffix, and exact comparisons name the index of the first
 /// mismatching element.
+///
 /// The trait has no methods. It only declares that [`Collection::elements`] yields elements in
 /// their meaningful order.
 ///
@@ -486,7 +487,10 @@ mod tests {
     };
 
     use super::{RandomAccess, StableOrder};
-    use crate::prelude::*;
+    use crate::{
+        prelude::*,
+        test_support::{NoRenderer, assert_trait_impl},
+    };
 
     struct Holder {
         deque: VecDeque<i32>,
@@ -622,8 +626,6 @@ mod tests {
 
     #[test]
     fn mutable_reference_subjects_implement_every_family_without_renderer_support() {
-        use crate::test_support::{NoRenderer, assert_trait_impl};
-
         assert_trait_impl!(
             AssertThat<'static, &'static mut Vec<i32>, Panic, NoRenderer>
                 => CollectionAssertions<i32, NoRenderer>

@@ -9,6 +9,10 @@ pub mod assert_that_macro;
 pub mod fluent_expressions;
 pub(crate) mod partial_match;
 
+#[cfg(feature = "partial")]
+pub use assertr_macros::__partial as partial;
+pub use partial_match::{PartialMatch, partial_match};
+
 use crate::{AssertThat, assertions::core::pattern::Pattern, mode::Mode};
 
 /// Records the source expression of a chain. Called by `assert_that!`, `assert_that_owned!`, and
@@ -33,6 +37,7 @@ pub fn new_pattern<P>(description: &'static str, predicate: P) -> Pattern<P> {
 /// Empty tail of a macro-generated heterogeneous list.
 #[derive(Clone, Copy)]
 pub struct Nil;
+
 /// One element of a macro-generated heterogeneous list.
 #[derive(Clone, Copy)]
 pub struct Cons<H, T>(pub H, pub T);
@@ -68,8 +73,6 @@ impl<H: core::fmt::Debug, T: ListEntries> core::fmt::Debug for Cons<H, T> {
     }
 }
 
-#[cfg(feature = "partial")]
-pub use assertr_macros::__partial as partial;
 /// Constructor behind `partial!` field selection.
 pub fn field<A: ?Sized, T: ?Sized, F, M>(
     projection: F,
@@ -81,5 +84,3 @@ where
 {
     crate::expectation::field::projected(projection, matcher, path)
 }
-pub use partial_match::PartialMatch;
-pub use partial_match::partial_match;

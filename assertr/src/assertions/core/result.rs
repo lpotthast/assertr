@@ -23,6 +23,7 @@ impl<T, E, R: ValueRenderer<E>> Expectation<Result<T, E>, R> for IsOk {
     where
         Self: 'a,
         Result<T, E>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Result<T, E>,
@@ -32,6 +33,7 @@ impl<T, E, R: ValueRenderer<E>> Expectation<Result<T, E>, R> for IsOk {
     }
 
     const KIND: FailureKind = FailureKind::Variant;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Result<T, E>, &'a E)>,
@@ -63,6 +65,7 @@ impl<T, E, R: ValueRenderer<T>> Expectation<Result<T, E>, R> for IsErr {
     where
         Self: 'a,
         Result<T, E>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Result<T, E>,
@@ -75,6 +78,7 @@ impl<T, E, R: ValueRenderer<T>> Expectation<Result<T, E>, R> for IsErr {
     }
 
     const KIND: FailureKind = FailureKind::Variant;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Result<T, E>, &'a T)>,
@@ -87,49 +91,6 @@ impl<T, E, R: ValueRenderer<T>> Expectation<Result<T, E>, R> for IsErr {
             rejected.map(|(actual, value)| render.variant(actual, "Ok", value)),
             "Result::Err",
         )
-    }
-}
-
-/// Panic-mode extraction from `Result` subjects.
-///
-/// A failed variant assertion cannot produce the requested subject type. Use
-/// [`ResultAssertions::is_ok_satisfying`] or [`ResultAssertions::is_err_satisfying`] in capture
-/// mode. Use the non-extracting [`ResultAssertions::is_ok`] or [`ResultAssertions::is_err`] when
-/// the contained value is irrelevant.
-#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait ResultExtractAssertions<'t, T, E, R = DebugRenderer> {
-    /// Asserts that the subject is `Ok`, then returns an assertion over its value.
-    ///
-    /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
-    fn ok(self) -> AssertThat<'t, T, Panic, R>
-    where
-        R: ValueRenderer<E>;
-
-    /// Asserts that the subject is `Err`, then returns an assertion over its error.
-    ///
-    /// A borrowed subject yields a borrowed error. An owned subject yields an owned error.
-    fn err(self) -> AssertThat<'t, E, Panic, R>
-    where
-        R: ValueRenderer<T>;
-}
-
-impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result<T, E>, Panic, R> {
-    #[track_caller]
-    fn ok(self) -> AssertThat<'t, T, Panic, R>
-    where
-        R: ValueRenderer<E>,
-    {
-        self.matches(IsOk)
-            .map(|actual| project_checked(actual, Result::ok, |it| it.as_ref().ok()))
-    }
-
-    #[track_caller]
-    fn err(self) -> AssertThat<'t, E, Panic, R>
-    where
-        R: ValueRenderer<T>,
-    {
-        self.matches(IsErr)
-            .map(|actual| project_checked(actual, Result::err, |it| it.as_ref().err()))
     }
 }
 
@@ -207,6 +168,49 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
     {
         self.satisfy_success(self.test_assertion(&IsErr), assertions);
         self
+    }
+}
+
+/// Panic-mode extraction from `Result` subjects.
+///
+/// A failed variant assertion cannot produce the requested subject type. Use
+/// [`ResultAssertions::is_ok_satisfying`] or [`ResultAssertions::is_err_satisfying`] in capture
+/// mode. Use the non-extracting [`ResultAssertions::is_ok`] or [`ResultAssertions::is_err`] when
+/// the contained value is irrelevant.
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+pub trait ResultExtractAssertions<'t, T, E, R = DebugRenderer> {
+    /// Asserts that the subject is `Ok`, then returns an assertion over its value.
+    ///
+    /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
+    fn ok(self) -> AssertThat<'t, T, Panic, R>
+    where
+        R: ValueRenderer<E>;
+
+    /// Asserts that the subject is `Err`, then returns an assertion over its error.
+    ///
+    /// A borrowed subject yields a borrowed error. An owned subject yields an owned error.
+    fn err(self) -> AssertThat<'t, E, Panic, R>
+    where
+        R: ValueRenderer<T>;
+}
+
+impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result<T, E>, Panic, R> {
+    #[track_caller]
+    fn ok(self) -> AssertThat<'t, T, Panic, R>
+    where
+        R: ValueRenderer<E>,
+    {
+        self.matches(IsOk)
+            .map(|actual| project_checked(actual, Result::ok, |it| it.as_ref().ok()))
+    }
+
+    #[track_caller]
+    fn err(self) -> AssertThat<'t, E, Panic, R>
+    where
+        R: ValueRenderer<T>,
+    {
+        self.matches(IsErr)
+            .map(|actual| project_checked(actual, Result::err, |it| it.as_ref().err()))
     }
 }
 

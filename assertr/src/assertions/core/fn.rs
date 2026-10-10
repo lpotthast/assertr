@@ -439,9 +439,14 @@ mod tests {
         }
 
         mod does_not_panic {
+            use core::cell::Cell;
+
             use indoc::formatdoc;
 
-            use crate::prelude::*;
+            use crate::{
+                prelude::*,
+                test_support::{CustomValueRenderer, RedactingRenderer},
+            };
 
             #[test]
             fn caller_location_is_as_expected() {
@@ -450,7 +455,6 @@ mod tests {
 
             #[test]
             fn string_payloads_use_the_active_renderer() {
-                use crate::test_support::{CustomValueRenderer, RedactingRenderer};
                 let message = "private-panic-value";
                 for owned in [false, true] {
                     assert_that!(|| {
@@ -505,8 +509,6 @@ mod tests {
 
             #[test]
             fn invokes_once_after_tracking_and_retains_the_output() {
-                use core::cell::Cell;
-
                 struct Output<'a>(&'a Cell<usize>);
                 impl Drop for Output<'_> {
                     fn drop(&mut self) {
@@ -573,6 +575,7 @@ mod tests {
 
             impl Future for PanickingFuture<'_> {
                 type Output = ();
+
                 fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
                     self.polls.set(self.polls.get() + 1);
                     if self.polls.get() == 1 {
@@ -714,7 +717,10 @@ mod tests {
         }
 
         mod does_not_panic {
-            use crate::prelude::*;
+            use crate::{
+                prelude::*,
+                test_support::{CustomValueRenderer, RedactingRenderer},
+            };
 
             #[test]
             fn caller_location_is_as_expected() {
@@ -723,8 +729,6 @@ mod tests {
 
             #[tokio::test]
             async fn string_payloads_use_the_active_renderer() {
-                use crate::test_support::{CustomValueRenderer, RedactingRenderer};
-
                 let message = "private-async-panic-value";
                 for owned in [false, true] {
                     let panic = || -> () {

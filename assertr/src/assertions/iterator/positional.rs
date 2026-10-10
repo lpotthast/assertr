@@ -438,18 +438,33 @@ mod tests {
     use super::*;
     use crate::{failure::PathSegment, prelude::*};
 
+    #[derive(Debug)]
+    struct Compared<'a> {
+        value: i32,
+        comparisons: &'a Cell<usize>,
+    }
+
+    impl PartialEq for Compared<'_> {
+        fn eq(&self, other: &Self) -> bool {
+            self.comparisons.set(self.comparisons.get() + 1);
+            self.value == other.value
+        }
+    }
+
     mod evidence_budget {
         use core::fmt;
 
         use super::*;
 
         struct Renderer<'a>(&'a Cell<usize>);
+
         impl ValueRenderer<Compared<'_>> for Renderer<'_> {
             fn fmt(&self, value: &Compared<'_>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 self.0.set(self.0.get() + 1);
                 write!(f, "{}", value.value)
             }
         }
+
         impl ValueRenderer<usize> for Renderer<'_> {
             fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(f, "{value}")
@@ -664,19 +679,6 @@ mod tests {
         }
     }
 
-    #[derive(Debug)]
-    struct Compared<'a> {
-        value: i32,
-        comparisons: &'a Cell<usize>,
-    }
-
-    impl PartialEq for Compared<'_> {
-        fn eq(&self, other: &Self) -> bool {
-            self.comparisons.set(self.comparisons.get() + 1);
-            self.value == other.value
-        }
-    }
-
     #[test]
     fn prefix_and_exact_scans_bound_the_preview_and_compare_each_item_once() {
         for placement in [Placement::Prefix, Placement::Exact] {
@@ -714,7 +716,7 @@ mod tests {
             failure::{FailureBuilder, FailureKind},
             prelude::*,
             renderer::{Rendered, RenderedBody},
-            test_support::CustomValueRenderer,
+            test_support::{CustomValueRenderer, assert_custom_fact},
         };
 
         mod evidence_budget {
@@ -795,11 +797,13 @@ mod tests {
             where
                 Self: 'a,
                 i32: 'a;
+
             fn evaluate(&self, _: &i32, _: &AssertionContext<'_, R>) -> Result<(), ()> {
                 panic!("an incomplete window must not evaluate matchers")
             }
 
             const KIND: FailureKind = FailureKind::Matching;
+
             fn explain(
                 &self,
                 rejected: Option<(&i32, ())>,
@@ -937,8 +941,6 @@ mod tests {
 
         #[test]
         fn short_scans_describe_the_missing_constraints_and_observed_length() {
-            use crate::test_support::assert_custom_fact;
-
             // Prefix/exact retain the first missing slot. Suffix/contiguous describe the full
             // missing window. Both cases use the same diagnostics for empty and short iterators.
             for consumed in 0..=1 {

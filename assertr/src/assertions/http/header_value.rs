@@ -31,12 +31,14 @@ pub(crate) fn reveal<R: ValueRenderer<http::HeaderValue>>(
 /// Checks printable ASCII and horizontal tabs, returning the accepted header string.
 #[derive(Debug, Clone, Copy)]
 pub struct IsAscii;
+
 impl<R> Expectation<http::HeaderValue, R> for IsAscii
 where
     R: ValueRenderer<http::HeaderValue>,
 {
     type Success<'a> = &'a str;
     type Rejection<'a> = ();
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a http::HeaderValue,
@@ -46,6 +48,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Predicate;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a http::HeaderValue, Self::Rejection<'a>)>,
@@ -202,6 +205,10 @@ impl<'t, R> HttpHeaderValueExtractAssertions<'t, R>
 
 #[cfg(test)]
 mod tests {
+    use http::HeaderValue;
+
+    use crate::prelude::*;
+
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
         use http::HeaderValue;
@@ -282,10 +289,6 @@ mod tests {
 
     #[test]
     fn length_assertions_count_header_bytes() {
-        use http::HeaderValue;
-
-        use crate::prelude::*;
-
         assert_that!(HeaderValue::from_static("")).is_empty();
         assert_that!(HeaderValue::from_static("http/1.1"))
             .is_not_empty()
@@ -423,37 +426,6 @@ mod tests {
         }
     }
 
-    mod ascii {
-        use http::header::HeaderValue;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
-            assert_caller_location!(assert_that!(actual), ascii());
-        }
-
-        #[test]
-        fn extracts_visible_ascii_values() {
-            let actual = HeaderValue::from_static("http/1.1");
-            assert_that!(actual).ascii().is_equal_to("http/1.1");
-
-            let actual = HeaderValue::from_bytes(&[32, 33, 34]).expect("valid header value");
-            assert_that!(actual).ascii().is_equal_to(" !\"");
-        }
-
-        #[test]
-        fn rejects_non_ascii_utf8_values() {
-            let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
-
-            assert_that!(|| assert_that!(actual).with_location(false).ascii())
-                .panics()
-                .has_message()
-                .contains(r#"Actual: "\xc3\x84""#);
-        }
-    }
-
     mod is_ascii_satisfying {
         use http::header::HeaderValue;
 
@@ -497,6 +469,37 @@ mod tests {
             });
             assert_that!(failures).has_length(1);
             assert_that!(failures[0].to_string()).contains("is not ASCII");
+        }
+    }
+
+    mod ascii {
+        use http::header::HeaderValue;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
+            assert_caller_location!(assert_that!(actual), ascii());
+        }
+
+        #[test]
+        fn extracts_visible_ascii_values() {
+            let actual = HeaderValue::from_static("http/1.1");
+            assert_that!(actual).ascii().is_equal_to("http/1.1");
+
+            let actual = HeaderValue::from_bytes(&[32, 33, 34]).expect("valid header value");
+            assert_that!(actual).ascii().is_equal_to(" !\"");
+        }
+
+        #[test]
+        fn rejects_non_ascii_utf8_values() {
+            let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
+
+            assert_that!(|| assert_that!(actual).with_location(false).ascii())
+                .panics()
+                .has_message()
+                .contains(r#"Actual: "\xc3\x84""#);
         }
     }
 }

@@ -328,21 +328,6 @@ mod tests {
         }
     }
 
-    mod require {
-        use crate::{matchers::IsSome, prelude::*};
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(None::<i32>), require(&IsSome));
-        }
-
-        #[test]
-        fn returns_the_successful_observation() {
-            let chain = assert_that!(Some(7));
-            assert_that!(chain.require(&IsSome)).is_equal_to(7);
-        }
-    }
-
     mod one_use {
         use core::cell::RefCell;
 
@@ -403,6 +388,21 @@ mod tests {
             assert_that!(explanations.get()).is_equal_to(1);
             assert_that!(failures).has_length(1);
             assert_that!(failures[0].to_string()).contains("Actual: 7");
+        }
+    }
+
+    mod require {
+        use crate::{matchers::IsSome, prelude::*};
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(None::<i32>), require(&IsSome));
+        }
+
+        #[test]
+        fn returns_the_successful_observation() {
+            let chain = assert_that!(Some(7));
+            assert_that!(chain.require(&IsSome)).is_equal_to(7);
         }
     }
 }

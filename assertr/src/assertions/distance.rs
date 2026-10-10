@@ -215,6 +215,7 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
     where
         Self: 'a,
         T: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a T,
@@ -242,6 +243,7 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
     }
 
     const KIND: FailureKind = FailureKind::Ordering;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
@@ -515,7 +517,7 @@ mod tests {
     mod wrapping {
         use core::num::Wrapping;
 
-        use super::assert_distance;
+        use super::{super::IsCloseTo, assert_distance};
         use crate::prelude::*;
 
         #[test]
@@ -536,8 +538,6 @@ mod tests {
 
         #[test]
         fn enables_is_close_to() {
-            use super::super::IsCloseTo;
-
             assert_that!(Wrapping(5)).matches(IsCloseTo::new(Wrapping(4), Wrapping(1)));
             assert_that!(Wrapping(5_u64)).matches(IsCloseTo::new(&Wrapping(7), Wrapping(2)));
 

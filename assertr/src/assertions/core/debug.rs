@@ -62,6 +62,7 @@ impl<T: Debug + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> Expectation<T, R>
     where
         Self: 'a,
         T: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a T,
@@ -71,6 +72,7 @@ impl<T: Debug + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> Expectation<T, R>
     }
 
     const KIND: FailureKind = FailureKind::Equality;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a T, Self::Rejection<'a>)>,
@@ -352,6 +354,9 @@ mod tests {
     }
 
     mod has_debug_value {
+        use core::{cell::Cell, fmt};
+
+        use super::super::HasDebugValue;
         use crate::prelude::*;
 
         #[test]
@@ -361,11 +366,6 @@ mod tests {
 
         #[test]
         fn formats_each_operand_once_in_ordinary_matching_and_probe_execution() {
-            use core::{cell::Cell, fmt};
-
-            use super::super::HasDebugValue;
-            use crate::expectation::{AssertionContext, Expectation};
-
             struct Value<'a>(&'a Cell<usize>, &'a str);
             impl fmt::Debug for Value<'_> {
                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

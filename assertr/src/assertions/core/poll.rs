@@ -39,6 +39,7 @@ impl<T, R> Expectation<Poll<T>, R> for IsReady {
     where
         Self: 'a,
         Poll<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Poll<T>,
@@ -48,6 +49,7 @@ impl<T, R> Expectation<Poll<T>, R> for IsReady {
     }
 
     const KIND: FailureKind = FailureKind::Variant;
+
     fn explain(
         &self,
         rejected: Option<(&Poll<T>, ())>,
@@ -73,6 +75,7 @@ impl<T, R: ValueRenderer<T>> Expectation<Poll<T>, R> for IsPending {
     where
         Self: 'a,
         Poll<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Poll<T>,
@@ -85,6 +88,7 @@ impl<T, R: ValueRenderer<T>> Expectation<Poll<T>, R> for IsPending {
     }
 
     const KIND: FailureKind = FailureKind::Variant;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Poll<T>, &'a T)>,

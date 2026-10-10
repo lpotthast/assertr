@@ -21,30 +21,6 @@ struct SetRelation {
     offending: &'static str,
 }
 
-const SUBSET: SetRelation = SetRelation {
-    expected_elements: false,
-    reject_members: false,
-    holds: "is a subset of",
-    fails: "is not a subset of",
-    offending: "Elements not in expected",
-};
-
-const SUPERSET: SetRelation = SetRelation {
-    expected_elements: true,
-    reject_members: false,
-    holds: "is a superset of",
-    fails: "is not a superset of",
-    offending: "Elements not in actual",
-};
-
-const DISJOINT: SetRelation = SetRelation {
-    expected_elements: false,
-    reject_members: true,
-    holds: "is disjoint from",
-    fails: "is not disjoint from",
-    offending: "Overlapping elements",
-};
-
 impl SetRelation {
     /// Collects the inspected elements that violate the relation.
     fn evaluate<'a, S, O>(&self, actual: &'a S, expected: &'a O) -> Result<(), Vec<&'a S::Item>>
@@ -104,6 +80,30 @@ impl SetRelation {
         failure.expected(render.collection(expected))
     }
 }
+
+const SUBSET: SetRelation = SetRelation {
+    expected_elements: false,
+    reject_members: false,
+    holds: "is a subset of",
+    fails: "is not a subset of",
+    offending: "Elements not in expected",
+};
+
+const SUPERSET: SetRelation = SetRelation {
+    expected_elements: true,
+    reject_members: false,
+    holds: "is a superset of",
+    fails: "is not a superset of",
+    offending: "Elements not in actual",
+};
+
+const DISJOINT: SetRelation = SetRelation {
+    expected_elements: false,
+    reject_members: true,
+    holds: "is disjoint from",
+    fails: "is not disjoint from",
+    offending: "Overlapping elements",
+};
 
 /// Implements a public set relation expectation by delegating to its [`SetRelation`].
 macro_rules! set_relation {
@@ -176,6 +176,7 @@ set_relation!(
     IsSubsetOf,
     SUBSET
 );
+
 set_relation!(
     /// Checks that a set is a superset of another set using native lookup.
     ///
@@ -194,6 +195,7 @@ set_relation!(
     IsSupersetOf,
     SUPERSET
 );
+
 set_relation!(
     /// Checks that a set is disjoint from another set using native lookup.
     ///

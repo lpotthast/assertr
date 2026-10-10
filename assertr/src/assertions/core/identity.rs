@@ -143,18 +143,6 @@ impl<T, M: Mode, R> IdentityAssertions<T> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "fluent")]
-    mod fluent_aliases {
-        use crate::prelude::*;
-
-        #[test]
-        fn are_as_expected() {
-            let values = [1, 1];
-            values[0].must().be_same_instance_as(&values[0]);
-            values[0].must().not_be_same_instance_as(&values[1]);
-        }
-    }
-
     use indoc::formatdoc;
 
     use crate::{
@@ -166,6 +154,18 @@ mod tests {
 
     struct Opaque {
         _byte: u8,
+    }
+
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            let values = [1, 1];
+            values[0].must().be_same_instance_as(&values[0]);
+            values[0].must().not_be_same_instance_as(&values[1]);
+        }
     }
 
     mod renderer_contract {

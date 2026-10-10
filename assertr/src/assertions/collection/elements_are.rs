@@ -101,6 +101,7 @@ where
     L: MatcherList<C::Item, R>,
 {
     composite_items!(C);
+
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         // A contiguous search discards the evidence of rejected windows once one matches. Probe
         // first, so a passing search explains none of them. Only a failing search evaluates the
@@ -199,6 +200,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&C, Evidence)>,
@@ -246,7 +248,11 @@ macro_rules! elements_are {
 mod tests {
     use core::{cell::Cell, fmt};
 
-    use crate::{matchers::eq, prelude::*};
+    use super::{
+        ElementsAre,
+        Placement::{Contiguous, Exact, Prefix, Suffix},
+    };
+    use crate::{assertions::collection::ends_with_elements, matchers::eq, prelude::*};
 
     struct CountingRenderer<'a>(&'a Cell<usize>);
 
@@ -266,11 +272,6 @@ mod tests {
 
     #[test]
     fn positional_policies_cover_empty_short_reordered_and_overlapping_sequences() {
-        use super::{
-            ElementsAre,
-            Placement::{Contiguous, Exact, Prefix, Suffix},
-        };
-
         // Outcomes are exact, prefix, suffix, and contiguous respectively. Exercise the
         // shared algorithm here. Public adapters retain diagnostics and boundary checks.
         let cases: &[(&[i32], &[i32], [bool; 4])] = &[
@@ -304,7 +305,6 @@ mod tests {
 
     #[test]
     fn short_suffixes_align_from_the_right() {
-        use crate::assertions::collection::ends_with_elements;
         let failures = assert_that!([2, 3])
             .with_location(false)
             .capture(|it| it.matches(ends_with_elements([eq(1), eq(2), eq(3)])));
@@ -317,7 +317,6 @@ mod tests {
 
     #[test]
     fn short_suffixes_report_aligned_mismatches_at_their_actual_positions() {
-        use crate::assertions::collection::ends_with_elements;
         let failures = assert_that!([2, 4])
             .with_location(false)
             .capture(|it| it.matches(ends_with_elements([eq(1), eq(2), eq(3)])));
@@ -404,15 +403,18 @@ mod tests {
             value: i32,
             comparisons: &'a Cell<usize>,
         }
+
         impl borrow_for::BorrowFor<Compared<'_>> for i32 {
             type View = i32;
         }
+
         impl PartialEq<i32> for Compared<'_> {
             fn eq(&self, other: &i32) -> bool {
                 self.comparisons.set(self.comparisons.get() + 1);
                 self.value == *other
             }
         }
+
         impl ValueRenderer<Compared<'_>> for CountingRenderer<'_> {
             fn fmt(&self, value: &Compared<'_>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 self.0.set(self.0.get() + 1);
@@ -512,12 +514,13 @@ mod tests {
     }
 
     mod evaluate {
+        use indoc::formatdoc;
+
         use super::*;
         use crate::{matchers::all_of, renderer::RenderedBody, test_support::CustomValueRenderer};
+
         #[test]
         fn preserves_sequence_length_metadata_and_budget_in_nested_failures() {
-            use indoc::formatdoc;
-
             let failures = assert_that!([1, 2])
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
@@ -560,7 +563,6 @@ mod tests {
 
         #[test]
         fn a_zero_item_budget_preserves_length_failure_without_rendering_evidence() {
-            use indoc::formatdoc;
             let failures = assert_that!([1, 2])
                 .with_renderer(crate::test_support::PanickingRenderer(
                     "rendered omitted evidence",
@@ -591,6 +593,7 @@ mod tests {
     mod probe {
         use super::*;
         use crate::expectation::AssertionContext;
+
         #[test]
         fn length_mismatches_do_not_render_numeric_evidence() {
             let context = AssertionContext::new(

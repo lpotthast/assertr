@@ -1,5 +1,12 @@
 //! Assertions for `jiff` durations, spans, and zoned date-times.
 
+/// Assertions for signed durations.
+pub mod signed_duration;
+/// Assertions for spans.
+pub mod span;
+/// Assertions for zoned date-times.
+pub mod zoned;
+
 /// Generates the `IsZero`, `IsNegative`, and `IsPositive` expectations for a signed `jiff` type.
 ///
 /// `present` optionally wraps every rendered value, for example to keep a compact form.
@@ -34,9 +41,4 @@ macro_rules! sign_expectations {
     };
 }
 
-/// Assertions for signed durations.
-pub mod signed_duration;
-/// Assertions for spans.
-pub mod span;
-/// Assertions for zoned date-times.
-pub mod zoned;
+use sign_expectations;

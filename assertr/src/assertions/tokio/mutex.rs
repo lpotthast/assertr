@@ -11,6 +11,7 @@ use crate::{
 /// Observes a locked Tokio mutex, retaining any acquired guard on rejection.
 #[derive(Debug, Clone, Copy)]
 pub struct IsLocked;
+
 impl<T, R> Expectation<Mutex<T>, R> for IsLocked
 where
     R: ValueRenderer<T>,
@@ -25,6 +26,7 @@ where
     where
         Self: 'a,
         Mutex<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Mutex<T>,
@@ -34,6 +36,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Other;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
@@ -55,6 +58,7 @@ where
 /// Acquires an available Tokio mutex and returns its guard.
 #[derive(Debug, Clone, Copy)]
 pub struct IsNotLocked;
+
 impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
     type Success<'a>
         = tokio::sync::MutexGuard<'a, T>
@@ -66,6 +70,7 @@ impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
     where
         Self: 'a,
         Mutex<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Mutex<T>,
@@ -75,6 +80,7 @@ impl<T, R> Expectation<Mutex<T>, R> for IsNotLocked {
     }
 
     const KIND: FailureKind = FailureKind::Other;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,
@@ -171,6 +177,7 @@ where
     where
         Self: 'a,
         Mutex<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Mutex<T>,
@@ -180,6 +187,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Predicate;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Mutex<T>, Self::Rejection<'a>)>,

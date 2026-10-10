@@ -59,7 +59,6 @@ macro_rules! str_expectation {
                 )
             }
         }
-
     };
     (
         $(#[$attr:meta])*
@@ -126,7 +125,6 @@ macro_rules! str_expectation {
                     .$role(render.value(operand))
             }
         }
-
     };
 }
 
@@ -401,6 +399,7 @@ mod tests {
             value: &'a str,
             calls: &'a Cell<usize>,
         }
+
         impl AsRef<str> for Text<'_> {
             fn as_ref(&self) -> &str {
                 self.calls.set(self.calls.get() + 1);
@@ -455,9 +454,14 @@ mod tests {
     }
 
     mod renderer_contract {
+        use indoc::formatdoc;
+
         use crate::{
             prelude::*,
-            test_support::{NoRenderer, assert_trait_impl},
+            test_support::{
+                CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
+                assert_redacted, assert_trait_impl,
+            },
         };
 
         #[test]
@@ -470,12 +474,6 @@ mod tests {
 
         #[test]
         fn operand_methods_render_and_redact_the_string_views() {
-            use indoc::formatdoc;
-
-            use crate::test_support::{
-                CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
-            };
-
             let subject = String::from("private-value");
             macro_rules! case {
                 ($method:ident, $operand:literal, $relation:literal, $role:ident, $label:literal) => {{
@@ -586,29 +584,6 @@ mod tests {
         }
     }
 
-    mod is_ascii_blank {
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!("a"), is_ascii_blank());
-        }
-
-        #[test]
-        fn succeeds_when_blank() {
-            assert_that!("").is_ascii_blank();
-            assert_that!(" ").is_ascii_blank();
-            assert_that!("\t \n").is_ascii_blank();
-            assert_that!(String::from("\t \n")).is_ascii_blank();
-        }
-
-        #[test]
-        fn identifies_unicode_whitespace_as_non_ascii_whitespace() {
-            let failures = assert_that!("\u{a0}").capture(StrAssertions::is_ascii_blank);
-            assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not ASCII blank"));
-        }
-    }
-
     mod is_not_blank {
         use crate::prelude::*;
 
@@ -629,6 +604,29 @@ mod tests {
             let failures = assert_that!("\t \n").capture(StrAssertions::is_not_blank);
             assert_that!(failures[0].relation.as_deref())
                 .is_equal_to(Some("is unexpectedly blank"));
+        }
+    }
+
+    mod is_ascii_blank {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("a"), is_ascii_blank());
+        }
+
+        #[test]
+        fn succeeds_when_blank() {
+            assert_that!("").is_ascii_blank();
+            assert_that!(" ").is_ascii_blank();
+            assert_that!("\t \n").is_ascii_blank();
+            assert_that!(String::from("\t \n")).is_ascii_blank();
+        }
+
+        #[test]
+        fn identifies_unicode_whitespace_as_non_ascii_whitespace() {
+            let failures = assert_that!("\u{a0}").capture(StrAssertions::is_ascii_blank);
+            assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not ASCII blank"));
         }
     }
 
@@ -692,7 +690,9 @@ mod tests {
     }
 
     mod starts_with {
-        use crate::prelude::*;
+        use core::{cell::Cell, fmt};
+
+        use crate::{assertions::core::string::StartsWith, prelude::*};
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -701,8 +701,6 @@ mod tests {
 
         #[test]
         fn accepts_unsized_strings() {
-            use crate::assertions::core::string::StartsWith;
-
             let matcher = StartsWith::new("hel");
             let mut context = AssertionContext::default();
 
@@ -711,10 +709,6 @@ mod tests {
 
         #[test]
         fn matcher_renders_retained_string_views_without_subject_renderer_bounds() {
-            use core::{cell::Cell, fmt};
-
-            use crate::assertions::core::string::StartsWith;
-
             struct Text<'a>(&'a str, Cell<usize>);
             impl AsRef<str> for Text<'_> {
                 fn as_ref(&self) -> &str {

@@ -52,6 +52,7 @@ mod named_fields {
             core::fmt::Debug::fmt(v, f)
         }
     }
+
     impl ValueRenderer<u32> for Scalar {
         fn fmt(&self, x: &u32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             write!(f, "id={x}")
@@ -136,12 +137,12 @@ mod named_fields {
 }
 
 mod maps {
-    use assertr::{matchers::eq, prelude::*};
+    use std::collections::BTreeMap;
+
+    use assertr::{failure::PathSegment, matchers::eq, prelude::*};
 
     #[test]
     fn nested_maps_and_borrowed_values() {
-        use std::collections::BTreeMap;
-
         struct Row<'a> {
             name: &'a str,
         }
@@ -152,17 +153,15 @@ mod maps {
 
     #[test]
     fn nested_map_paths_compose_once() {
-        use assertr::failure::PathSegment;
-
         struct Item {
             id: u32,
         }
 
         struct Root {
-            items: std::collections::BTreeMap<&'static str, Item>,
+            items: BTreeMap<&'static str, Item>,
         }
         let root = Root {
-            items: std::collections::BTreeMap::from([("x", Item { id: 1 })]),
+            items: BTreeMap::from([("x", Item { id: 1 })]),
         };
         let failures = assert_that!(root).capture(|it| {
             it.matches(partial!(Root {
@@ -258,6 +257,7 @@ mod borrowed_comparisons {
 
     #[derive(Debug, PartialEq, PartialOrd)]
     struct Point(i32, i32);
+
     struct Row<'a> {
         value: &'a Point,
         label: String,

@@ -63,19 +63,6 @@ pub(crate) fn assign_exactly(
     }
 }
 
-/// One value on the alternating path an augmenting search is building.
-struct PathStep {
-    /// The actual value looking for an expected slot.
-    actual: usize,
-    /// The slot this value currently holds and gives up if the search succeeds. `None` for the
-    /// value that started the search, which holds no slot yet.
-    via: Option<usize>,
-    /// Whether the free slots were already scanned for this value.
-    scanned_free_slots: bool,
-    /// The first slot not yet considered for reassignment.
-    next_candidate: usize,
-}
-
 /// Finds a maximum one-to-one matching between actual and expected values.
 ///
 /// A greedy matcher is insufficient when predicates overlap: an early actual value may match
@@ -165,6 +152,19 @@ fn assign(
     }
 
     Some(expected_to_actual)
+}
+
+/// One value on the alternating path an augmenting search is building.
+struct PathStep {
+    /// The actual value looking for an expected slot.
+    actual: usize,
+    /// The slot this value currently holds and gives up if the search succeeds. `None` for the
+    /// value that started the search, which holds no slot yet.
+    via: Option<usize>,
+    /// Whether the free slots were already scanned for this value.
+    scanned_free_slots: bool,
+    /// The first slot not yet considered for reassignment.
+    next_candidate: usize,
 }
 
 /// Assigns `root_actual` to a slot, shifting earlier assignments along an alternating path when

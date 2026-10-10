@@ -657,14 +657,17 @@ struct ChainRecords<'t> {
     // Keep the exemptions on these fields so future fields must establish their own unwind safety.
     /// Local messages, collected before ancestor messages.
     detail_messages: AssertUnwindSafe<RefCell<Vec<String>>>,
+
     /// Includes assertions attempted on derived chains, even when an assertion panics.
     ///
     /// [`AssertThat::capture`] uses the count to reject capture closures that perform no
     /// assertions. In panic mode, unused assertion chains are flagged instead, by
     /// `unused_must_use` warnings from the `#[must_use]` annotations on the entry points.
     number_of_assertions: AssertUnwindSafe<Cell<usize>>,
+
     /// Captured failures owned by this chain. Children forward failures through `parent`.
     failures: AssertUnwindSafe<RefCell<AssertionFailures>>,
+
     /// Ancestor messages retained when `capture` detached this chain from its parent. They are
     /// collected after local messages, exactly where the detached parent's messages would appear.
     /// This field is never mutated after construction and needs no unwind exemption.

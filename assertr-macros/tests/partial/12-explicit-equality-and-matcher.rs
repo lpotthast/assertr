@@ -25,6 +25,7 @@ impl<R> renamed_assertr::expectation::Expectation<i32, R> for Both {
     where
         Self: 'a,
         i32: 'a;
+
     fn evaluate(
         &self,
         actual: &i32,
@@ -34,6 +35,7 @@ impl<R> renamed_assertr::expectation::Expectation<i32, R> for Both {
     }
 
     const KIND: renamed_assertr::failure::FailureKind = renamed_assertr::failure::FailureKind::Ordering;
+
     fn explain(
         &self,
         rejected: Option<(&i32, ())>,

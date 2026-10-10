@@ -618,9 +618,11 @@ mod tests {
 
     mod renderer_contract {
         use crate::{
+            matchers::eq,
             prelude::*,
             test_support::{
-                ComparisonRenderer, NoRenderer, RendererActual, RendererExpected, assert_trait_impl,
+                ComparisonRenderer, CustomValueRenderer, NoRenderer, RendererActual,
+                RendererExpected, assert_custom_fact, assert_trait_impl,
             },
         };
 
@@ -634,11 +636,6 @@ mod tests {
 
         #[test]
         fn numeric_evidence_uses_the_active_renderer() {
-            use crate::{
-                matchers::eq,
-                test_support::{CustomValueRenderer, assert_custom_fact},
-            };
-
             // Iterators with and without an exact size hint.
             let hinted = || [1, 2].into_iter();
             let unhinted = || [1, 2].into_iter().filter(|_| true);
@@ -804,162 +801,6 @@ mod tests {
         }
     }
 
-    mod is_exhausted {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that_owned!([1].into_iter()), is_exhausted());
-        }
-
-        #[test]
-        fn succeeds_without_elements() {
-            assert_that_owned!([1, 2].iter().filter(|it| **it > 2)).is_exhausted();
-        }
-
-        #[test]
-        fn panics_with_the_first_element() {
-            assert_that!(|| {
-                assert_that_owned!([1, 2].into_iter())
-                    .with_location(false)
-                    .is_exhausted();
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `[1, 2].into_iter()`
-
-                    Actual: [
-                        1,
-                    ]
-
-                    is not exhausted
-
-                    Details:
-                      - Consumed elements: 1
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod is_not_exhausted {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that_owned!(core::iter::empty::<i32>()),
-                is_not_exhausted()
-            );
-        }
-
-        #[test]
-        fn succeeds_on_an_infinite_iterator() {
-            assert_that_owned!(0..).is_not_exhausted();
-        }
-
-        #[test]
-        fn panics_without_elements() {
-            assert_that!(|| {
-                assert_that_owned!(core::iter::empty::<i32>())
-                    .with_location(false)
-                    .is_not_exhausted();
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `core::iter::empty::<i32>()`
-
-                    Actual: []
-
-                    is unexpectedly exhausted
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod has_count {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that_owned!([1, 2, 3].into_iter()), has_count(2));
-        }
-
-        #[test]
-        fn succeeds_when_the_count_matches() {
-            assert_that_owned!([1, 2, 3].iter().filter(|it| **it > 1)).has_count(2);
-        }
-
-        #[test]
-        fn fails_on_an_infinite_iterator_after_one_extra_element() {
-            let mut iterator = 0..;
-            let failures = assert_that_owned!(&mut iterator).capture(|it| it.has_count(2));
-            assert_that!(failures).has_length(1);
-            assert_that!(iterator.next()).is_equal_to(Some(3));
-        }
-
-        #[test]
-        fn panics_with_the_counted_elements() {
-            assert_that!(|| {
-                assert_that_owned!([1, 2, 3].iter().filter(|it| **it > 0))
-                    .with_location(false)
-                    .has_count(2);
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `[1, 2, 3].iter().filter(|it| **it > 0)`
-
-                    Actual: [
-                        1,
-                        2,
-                        3,
-                    ]
-
-                    does not have the expected count
-
-                    Expected: 2
-
-                    Details:
-                      - Minimum actual count: 3
-                    -------- assertr --------
-                "});
-        }
-
-        #[test]
-        fn rejects_an_exact_size_hint_without_consuming() {
-            assert_that!(|| {
-                assert_that_owned!([1, 2, 3].into_iter())
-                    .with_location(false)
-                    .has_count(2);
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `[1, 2, 3].into_iter()`
-
-                    does not have the expected count
-
-                    Expected: 2
-
-                    Details:
-                      - Reported length: 3
-                    -------- assertr --------
-                "});
-        }
-    }
-
     mod contains_matching {
         use indoc::formatdoc;
 
@@ -1050,118 +891,6 @@ mod tests {
 
         fn is_seven(it: AssertThat<i32, Capture>) {
             it.is_equal_to(7);
-        }
-    }
-
-    mod does_not_contain {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that_owned!([1, 2, 3].into_iter()),
-                does_not_contain(2)
-            );
-        }
-
-        #[test]
-        fn succeeds_when_expected_is_not_contained() {
-            assert_that_owned!([1, 2, 3].into_iter()).does_not_contain(4);
-        }
-
-        #[test]
-        fn compiles_for_string_values() {
-            assert_that_owned!(vec!["foo".to_owned()].into_iter()).does_not_contain("bar");
-        }
-
-        #[test]
-        fn panics_when_expected_is_contained() {
-            assert_that!(|| {
-                assert_that_owned!([1, 2, 3].into_iter())
-                    .with_location(false)
-                    .does_not_contain(2);
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {"
-                    -------- assertr --------
-                    Expression: `[1, 2, 3].into_iter()`
-
-                    Actual: [
-                        1,
-                        2,
-                    ]
-
-                    contains
-
-                    Unexpected: 2
-
-                    Details:
-                      - Consumed elements: 2
-                      - Decisive index: 1
-                    -------- assertr --------
-                "});
-        }
-    }
-
-    mod does_not_contain_matching {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that_owned!([1, 2, 3].into_iter()),
-                does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0))
-            );
-        }
-
-        #[test]
-        fn panics_when_an_element_matches() {
-            assert_that!(|| {
-                assert_that_owned!([1, 2, 3].into_iter())
-                    .with_location(false)
-                    .does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0));
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `[1, 2, 3].into_iter()`
-
-                contains an unexpected matching element
-
-                Details:
-                  - Consumed elements: 2
-                Nested failures:
-                  - At [1]:
-                    Actual: 2
-
-                    matches the unwanted constraint
-
-                    Constraint:
-                        satisfies the predicate
-                -------- assertr --------
-            "});
-        }
-    }
-
-    mod does_not_contain_satisfying {
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(
-                assert_that_owned!([1, 2, 3].into_iter()),
-                does_not_contain_satisfying(is_two)
-            );
-        }
-
-        fn is_two(it: AssertThat<i32, Capture>) {
-            it.is_equal_to(2);
         }
     }
 
@@ -1529,6 +1258,118 @@ mod tests {
 
         fn is_nine(it: AssertThat<i32, Capture>) {
             it.is_equal_to(9);
+        }
+    }
+
+    mod does_not_contain {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                does_not_contain(2)
+            );
+        }
+
+        #[test]
+        fn succeeds_when_expected_is_not_contained() {
+            assert_that_owned!([1, 2, 3].into_iter()).does_not_contain(4);
+        }
+
+        #[test]
+        fn compiles_for_string_values() {
+            assert_that_owned!(vec!["foo".to_owned()].into_iter()).does_not_contain("bar");
+        }
+
+        #[test]
+        fn panics_when_expected_is_contained() {
+            assert_that!(|| {
+                assert_that_owned!([1, 2, 3].into_iter())
+                    .with_location(false)
+                    .does_not_contain(2);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
+                    Actual: [
+                        1,
+                        2,
+                    ]
+
+                    contains
+
+                    Unexpected: 2
+
+                    Details:
+                      - Consumed elements: 2
+                      - Decisive index: 1
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod does_not_contain_matching {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0))
+            );
+        }
+
+        #[test]
+        fn panics_when_an_element_matches() {
+            assert_that!(|| {
+                assert_that_owned!([1, 2, 3].into_iter())
+                    .with_location(false)
+                    .does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0));
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `[1, 2, 3].into_iter()`
+
+                contains an unexpected matching element
+
+                Details:
+                  - Consumed elements: 2
+                Nested failures:
+                  - At [1]:
+                    Actual: 2
+
+                    matches the unwanted constraint
+
+                    Constraint:
+                        satisfies the predicate
+                -------- assertr --------
+            "});
+        }
+    }
+
+    mod does_not_contain_satisfying {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                does_not_contain_satisfying(is_two)
+            );
+        }
+
+        fn is_two(it: AssertThat<i32, Capture>) {
+            it.is_equal_to(2);
         }
     }
 
@@ -1909,6 +1750,162 @@ mod tests {
 
         fn positive(it: AssertThat<i32, Capture>) {
             it.is_greater_than(0);
+        }
+    }
+
+    mod is_exhausted {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that_owned!([1].into_iter()), is_exhausted());
+        }
+
+        #[test]
+        fn succeeds_without_elements() {
+            assert_that_owned!([1, 2].iter().filter(|it| **it > 2)).is_exhausted();
+        }
+
+        #[test]
+        fn panics_with_the_first_element() {
+            assert_that!(|| {
+                assert_that_owned!([1, 2].into_iter())
+                    .with_location(false)
+                    .is_exhausted();
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2].into_iter()`
+
+                    Actual: [
+                        1,
+                    ]
+
+                    is not exhausted
+
+                    Details:
+                      - Consumed elements: 1
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod is_not_exhausted {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!(core::iter::empty::<i32>()),
+                is_not_exhausted()
+            );
+        }
+
+        #[test]
+        fn succeeds_on_an_infinite_iterator() {
+            assert_that_owned!(0..).is_not_exhausted();
+        }
+
+        #[test]
+        fn panics_without_elements() {
+            assert_that!(|| {
+                assert_that_owned!(core::iter::empty::<i32>())
+                    .with_location(false)
+                    .is_not_exhausted();
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `core::iter::empty::<i32>()`
+
+                    Actual: []
+
+                    is unexpectedly exhausted
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod has_count {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that_owned!([1, 2, 3].into_iter()), has_count(2));
+        }
+
+        #[test]
+        fn succeeds_when_the_count_matches() {
+            assert_that_owned!([1, 2, 3].iter().filter(|it| **it > 1)).has_count(2);
+        }
+
+        #[test]
+        fn fails_on_an_infinite_iterator_after_one_extra_element() {
+            let mut iterator = 0..;
+            let failures = assert_that_owned!(&mut iterator).capture(|it| it.has_count(2));
+            assert_that!(failures).has_length(1);
+            assert_that!(iterator.next()).is_equal_to(Some(3));
+        }
+
+        #[test]
+        fn panics_with_the_counted_elements() {
+            assert_that!(|| {
+                assert_that_owned!([1, 2, 3].iter().filter(|it| **it > 0))
+                    .with_location(false)
+                    .has_count(2);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2, 3].iter().filter(|it| **it > 0)`
+
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    does not have the expected count
+
+                    Expected: 2
+
+                    Details:
+                      - Minimum actual count: 3
+                    -------- assertr --------
+                "});
+        }
+
+        #[test]
+        fn rejects_an_exact_size_hint_without_consuming() {
+            assert_that!(|| {
+                assert_that_owned!([1, 2, 3].into_iter())
+                    .with_location(false)
+                    .has_count(2);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
+                    does not have the expected count
+
+                    Expected: 2
+
+                    Details:
+                      - Reported length: 3
+                    -------- assertr --------
+                "});
         }
     }
 }

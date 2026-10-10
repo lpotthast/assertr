@@ -19,6 +19,7 @@ where
     M: Expectation<C::Item, R>,
 {
     composite_items!(C);
+
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated_for_order(C::PRESENTATION.order());
         let mut matched = true;
@@ -29,6 +30,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&C, Evidence)>,

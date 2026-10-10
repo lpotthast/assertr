@@ -98,6 +98,14 @@ pub(crate) use operand_expectation;
 #[derive(Debug, Clone)]
 pub struct EqualTo<E>(E);
 
+impl<E> EqualTo<E> {
+    /// Owns an expected operand. Pass a reference to reuse an expected value.
+    #[must_use]
+    pub const fn new(expected: E) -> Self {
+        Self(expected)
+    }
+}
+
 /// Matches values equal to `expected` through the actual value's `PartialEq` implementation.
 ///
 /// This is a convenience constructor for [`EqualTo::new`].
@@ -110,14 +118,6 @@ pub struct EqualTo<E>(E);
 #[must_use]
 pub const fn eq<E>(expected: E) -> EqualTo<E> {
     EqualTo::new(expected)
-}
-
-impl<E> EqualTo<E> {
-    /// Owns an expected operand. Pass a reference to reuse an expected value.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
 }
 
 /// An explicit inequality assertion, with evidence identifying the unexpectedly equal value.
@@ -372,50 +372,6 @@ mod tests {
         }
     }
 
-    mod is_one_of {
-        use indoc::formatdoc;
-
-        use crate::{matchers::one_of, prelude::*};
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(1), is_one_of([2, 3]));
-        }
-
-        #[test]
-        fn succeeds_for_any_listed_candidate_borrowing_each() {
-            assert_that!(String::from("b")).is_one_of(["a", "b"]);
-            assert_that!(String::from("b")).matches(one_of(vec!["b"]));
-            let candidates = [String::from("a"), String::from("b")];
-            assert_that!("a").is_one_of(&candidates[..]);
-        }
-
-        #[test]
-        fn panics_with_the_candidates() {
-            assert_that!(|| {
-                assert_that!(String::from("c"))
-                    .with_location(false)
-                    .is_one_of(["a", "b"]);
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `String::from("c")`
-
-                Actual: "c"
-
-                is not one of
-
-                Expected: [
-                    "a",
-                    "b",
-                ]
-                -------- assertr --------
-            "#});
-        }
-    }
-
     mod diagnostics {
         use core::cell::RefCell;
 
@@ -426,6 +382,7 @@ mod tests {
         };
 
         struct RecordingRenderer<'a>(&'a RefCell<Vec<i32>>);
+
         impl ValueRenderer<i32> for RecordingRenderer<'_> {
             fn fmt(&self, value: &i32, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 self.0.borrow_mut().push(*value);
@@ -517,6 +474,8 @@ mod tests {
     }
 
     mod is_equal_to {
+        use alloc::borrow::Cow;
+
         use indoc::formatdoc;
 
         use crate::prelude::*;
@@ -541,8 +500,6 @@ mod tests {
 
         #[test]
         fn cow_strings_compare_with_string_literals() {
-            use alloc::borrow::Cow;
-
             assert_that!(Cow::<str>::Borrowed("hello")).is_equal_to("hello");
             assert_that!(Cow::<str>::Owned(String::from("hello"))).is_equal_to("hello");
         }
@@ -619,6 +576,50 @@ mod tests {
         }
     }
 
+    mod is_one_of {
+        use indoc::formatdoc;
+
+        use crate::{matchers::one_of, prelude::*};
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1), is_one_of([2, 3]));
+        }
+
+        #[test]
+        fn succeeds_for_any_listed_candidate_borrowing_each() {
+            assert_that!(String::from("b")).is_one_of(["a", "b"]);
+            assert_that!(String::from("b")).matches(one_of(vec!["b"]));
+            let candidates = [String::from("a"), String::from("b")];
+            assert_that!("a").is_one_of(&candidates[..]);
+        }
+
+        #[test]
+        fn panics_with_the_candidates() {
+            assert_that!(|| {
+                assert_that!(String::from("c"))
+                    .with_location(false)
+                    .is_one_of(["a", "b"]);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `String::from("c")`
+
+                Actual: "c"
+
+                is not one of
+
+                Expected: [
+                    "a",
+                    "b",
+                ]
+                -------- assertr --------
+            "#});
+        }
+    }
+
     // `operand_expectation!` is shared by the equality, ordering, range, and map value operands.
     // These tests cover its borrowing contract once.
     mod borrowed_operands {
@@ -632,6 +633,7 @@ mod tests {
             x: i32,
             y: i32,
         }
+
         fn point() -> Point {
             Point { x: 1, y: 2 }
         }

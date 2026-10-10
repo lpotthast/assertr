@@ -1,8 +1,9 @@
 use jiff::SignedDuration;
 
+use super::sign_expectations;
 use crate::{
     AssertThat,
-    assertions::distance::NumericDistance,
+    assertions::distance::{IsCloseTo, NumericDistance},
     borrow_for::BorrowFor,
     mode::Mode,
     renderer::{DebugRenderer, Rendered, RenderingContext, ValueRenderer},
@@ -17,8 +18,6 @@ fn compact<R: ValueRenderer<SignedDuration>>(
 }
 
 sign_expectations!(SignedDuration, zero: SignedDuration::ZERO, present: compact);
-
-use crate::assertions::distance::IsCloseTo;
 
 /// Exact, overflow-checked distance between durations. A distance larger than
 /// `SignedDuration::MAX` cannot be represented and therefore never satisfies a deviation.
@@ -281,6 +280,7 @@ mod tests {
         use jiff::SignedDuration;
 
         use crate::{
+            assertions::distance::IsCloseTo,
             prelude::*,
             test_support::{SENTINEL, SentinelRenderer},
         };
@@ -297,7 +297,6 @@ mod tests {
         // Borrowed forms are the API contract being tested, even for Copy durations.
         #[allow(clippy::needless_borrows_for_generic_args)]
         fn accepts_owned_borrowed_and_independently_typed_operands() {
-            use crate::assertions::distance::IsCloseTo;
             const TYPED: IsCloseTo<SignedDuration> =
                 IsCloseTo::new(SignedDuration::ZERO, SignedDuration::ZERO);
             let expected = SignedDuration::from_secs(3);

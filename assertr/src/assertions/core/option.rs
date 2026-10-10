@@ -23,6 +23,7 @@ impl<T, R> Expectation<Option<T>, R> for IsSome {
     where
         Self: 'a,
         Option<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Option<T>,
@@ -32,6 +33,7 @@ impl<T, R> Expectation<Option<T>, R> for IsSome {
     }
 
     const KIND: FailureKind = FailureKind::Variant;
+
     fn explain(
         &self,
         rejected: Option<(&Option<T>, ())>,
@@ -57,6 +59,7 @@ impl<T, R: ValueRenderer<T>> Expectation<Option<T>, R> for IsNone {
     where
         Self: 'a,
         Option<T>: 'a;
+
     fn evaluate<'a>(
         &'a self,
         actual: &'a Option<T>,
@@ -69,6 +72,7 @@ impl<T, R: ValueRenderer<T>> Expectation<Option<T>, R> for IsNone {
     }
 
     const KIND: FailureKind = FailureKind::Variant;
+
     fn explain<'a>(
         &'a self,
         rejected: Option<(&'a Option<T>, &'a T)>,
@@ -81,27 +85,6 @@ impl<T, R: ValueRenderer<T>> Expectation<Option<T>, R> for IsNone {
             rejected.map(|(actual, value)| render.variant(actual, "Some", value)),
             "Option::None",
         )
-    }
-}
-
-/// Panic-mode extraction from `Option` subjects.
-#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait OptionExtractAssertions<'t, T, R = DebugRenderer> {
-    /// Asserts that the subject is `Some`, then returns an assertion over its value.
-    ///
-    /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
-    ///
-    /// This is available only in `Panic` mode because `None` cannot produce a `T`. Use
-    /// [`OptionAssertions::is_some_satisfying`] for capture mode, or the non-extracting
-    /// [`OptionAssertions::is_some`] when the contained value is irrelevant.
-    fn some(self) -> AssertThat<'t, T, Panic, R>;
-}
-
-impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, Panic, R> {
-    #[track_caller]
-    fn some(self) -> AssertThat<'t, T, Panic, R> {
-        self.matches(IsSome)
-            .map(|actual| project_checked(actual, |it| it, Option::as_ref))
     }
 }
 
@@ -155,6 +138,27 @@ impl<T, M: Mode, R> OptionAssertions<T, M, R> for AssertThat<'_, Option<T>, M, R
     {
         self.satisfy_success(self.test_assertion(&IsSome), assertions);
         self
+    }
+}
+
+/// Panic-mode extraction from `Option` subjects.
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+pub trait OptionExtractAssertions<'t, T, R = DebugRenderer> {
+    /// Asserts that the subject is `Some`, then returns an assertion over its value.
+    ///
+    /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
+    ///
+    /// This is available only in `Panic` mode because `None` cannot produce a `T`. Use
+    /// [`OptionAssertions::is_some_satisfying`] for capture mode, or the non-extracting
+    /// [`OptionAssertions::is_some`] when the contained value is irrelevant.
+    fn some(self) -> AssertThat<'t, T, Panic, R>;
+}
+
+impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, Panic, R> {
+    #[track_caller]
+    fn some(self) -> AssertThat<'t, T, Panic, R> {
+        self.matches(IsSome)
+            .map(|actual| project_checked(actual, |it| it, Option::as_ref))
     }
 }
 

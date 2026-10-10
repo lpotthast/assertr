@@ -1,6 +1,6 @@
 use super::lists::MatcherList;
 use crate::{
-    expectation::{AssertionContext, Evidence, Expectation},
+    expectation::{AssertionContext, Evidence, Expectation, evidence_items},
     failure::{Fact, FailureBuilder, FailureKind},
 };
 
@@ -24,6 +24,7 @@ where
     R: crate::renderer::ValueRenderer<usize>,
 {
     evidence_items!(A);
+
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         // Probe first, so a passing disjunction explains no rejected branch. Only a failing one
         // evaluates the branches again to collect evidence.
@@ -49,6 +50,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,
@@ -68,15 +70,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use core::cell::Cell;
+    use core::{cell::Cell, fmt};
 
     use super::any_of;
-    use crate::{assertions::core::partial_eq::eq, matchers::predicate, prelude::*};
+    use crate::{
+        assertions::core::partial_eq::eq,
+        matchers::{all_of, predicate},
+        prelude::*,
+        test_support::SentinelRenderer,
+    };
 
     #[test]
     fn a_passing_disjunction_explains_no_rejected_branch() {
-        use core::fmt;
-
         struct CountingRenderer<'a>(&'a Cell<usize>);
         impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for CountingRenderer<'_> {
             fn fmt(&self, value: &T, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -107,7 +112,6 @@ mod tests {
 
     #[test]
     fn branch_numbers_use_the_active_renderer_and_budget() {
-        use crate::{renderer::RenderingBudget, test_support::SentinelRenderer};
         let failures = assert_that!(0)
             .with_renderer(SentinelRenderer)
             .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(2))
@@ -118,7 +122,6 @@ mod tests {
 
     #[test]
     fn stays_nested_within_a_conjunction() {
-        use crate::matchers::all_of;
         let failures = assert_that!(3)
             .with_location(false)
             .capture(|it| it.matches(all_of(matchers![any_of(matchers![eq(1), eq(2)]), eq(5)])));

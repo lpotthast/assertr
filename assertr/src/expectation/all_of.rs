@@ -1,6 +1,6 @@
 use super::lists::MatcherList;
 use crate::{
-    expectation::{AssertionContext, Evidence, Expectation},
+    expectation::{AssertionContext, Evidence, Expectation, composite_items},
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -19,6 +19,7 @@ where
     L: MatcherList<A, R>,
 {
     composite_items!(A);
+
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         let mut context = settings.isolated();
         let mut matched = true;
@@ -29,6 +30,7 @@ where
     }
 
     const KIND: FailureKind = FailureKind::Matching;
+
     fn explain(
         &self,
         rejected: Option<(&A, Evidence)>,
