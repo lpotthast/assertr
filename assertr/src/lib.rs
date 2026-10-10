@@ -348,7 +348,7 @@ use core::{
 pub use ::borrow_for;
 use actual::Actual;
 #[cfg(feature = "fluent")]
-pub use assertr_macros::fluent_expressions;
+pub use assertr_macros::{fluent_aliases, fluent_expressions};
 #[cfg(feature = "fluent")]
 pub use entry::{FluentEntry, OwnedFluentEntry};
 pub use entry::{PanicValue, Type, assert_that_type};
@@ -380,15 +380,17 @@ use renderer::{DebugRenderer, RenderingBudget};
 /// [`matchers::satisfying`](crate::matchers::satisfying) to check a field with existing assertion
 /// methods.
 ///
-/// Without `..`, every field must be listed. Omitted fields need no comparison or rendering
-/// support. Neither the whole type nor ignored fields need `PartialEq` or `Debug`, and private
-/// fields follow ordinary Rust visibility rules. Field expectation expressions are evaluated
-/// once when the matcher is constructed. Pass `&matcher` to reuse it.
+/// Without `..`, every field must be listed. Write `field: _` to list a field without checking
+/// it, which keeps the pattern exhaustive, so adding a field to the type breaks the test at compile
+/// time. Omitted fields need no comparison or rendering support. Neither the whole type nor ignored
+/// fields need `PartialEq` or `Debug`, and private fields follow ordinary Rust visibility rules.
+/// Field expectation expressions are evaluated once when the matcher is constructed. Pass
+/// `&matcher` to reuse it.
 ///
 /// Named structs, tuple structs, enum variants, and unit constructors are supported. Tuple `_`
-/// positions are wildcards, and a tuple `..` must be final. Nested collection and map expectations
-/// use [`elements_are!`], [`elements_are_in_any_order!`], [`each`](crate::matchers::each), and
-/// [`entries_are!`].
+/// positions are wildcards like named `_` fields, and a tuple `..` must be final. Nested collection
+/// and map expectations use [`elements_are!`], [`elements_are_in_any_order!`],
+/// [`each`](crate::matchers::each), and [`entries_are!`].
 ///
 /// Prefix a constructor with `variant` to include its variant in diagnostic paths. Qualified
 /// paths, including `variant crate::Message::Ready` and `variant ::core::option::Option::None`,

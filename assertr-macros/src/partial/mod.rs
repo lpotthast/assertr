@@ -1,3 +1,6 @@
+//! Implementation of `assertr::partial!`, which builds structural matchers from constructor
+//! patterns.
+
 use std::collections::BTreeSet;
 
 use proc_macro2::{Delimiter, Group, Span, TokenStream, TokenTree};
@@ -12,87 +15,46 @@ mod keyword {
     syn::custom_keyword!(variant);
 }
 
+/// Parsed matcher input after the forwarded runtime path.
 struct Input {
+    /// Whether the constructor was prefixed with `variant`.
     variant: bool,
     path: Path,
     shape: Shape,
 }
+
 /// Field shapes keep the span of their delimiters for compiler suggestions on the pattern.
 enum Shape {
-    Named(Vec<(Ident, Expr)>, bool, Span),
-    Tuple(Vec<Option<Expr>>, Span),
+    Named {
+        fields: Vec<(Ident, Expr)>,
+        /// Whether the fields end with `..`.
+        rest: bool,
+        delimiter: Span,
+    },
+    /// Positions are `None` for `..`.
+    Tuple {
+        fields: Vec<Option<Expr>>,
+        delimiter: Span,
+    },
     Unit,
 }
 
 impl Parse for Input {
     fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
-        let variant = if input.peek(keyword::variant) {
+        // `variant` is a marker only when a constructor path follows. Otherwise it names the
+        // constructor itself.
+        let variant = input.peek(keyword::variant) && {
             let fork = input.fork();
-            fork.parse::<keyword::variant>()?;
-            if fork.parse::<Path>().is_ok() {
-                input.parse::<keyword::variant>()?;
-                true
-            } else {
-                false
-            }
-        } else {
-            false
+            fork.parse::<keyword::variant>().is_ok() && fork.parse::<Path>().is_ok()
         };
+        if variant {
+            input.parse::<keyword::variant>()?;
+        }
         let path = input.parse::<Path>()?;
         let shape = if input.peek(syn::token::Brace) {
-            let content;
-            let delimiter = syn::braced!(content in input).span.join();
-            let mut fields = Vec::new();
-            let mut rest = false;
-            let mut names = BTreeSet::new();
-            while !content.is_empty() {
-                if content.peek(Token![..]) {
-                    content.parse::<Token![..]>()?;
-                    rest = true;
-                    if content.peek(Token![,]) {
-                        content.parse::<Token![,]>()?;
-                    }
-                    if !content.is_empty() {
-                        return Err(content.error("`..` must be the final field"));
-                    }
-                    break;
-                }
-                let name: Ident = content.parse()?;
-                if !names.insert(name.unraw().to_string()) {
-                    return Err(syn::Error::new(name.span(), "duplicate matcher field"));
-                }
-                content.parse::<Token![:]>()?;
-                let expression: Expr = content.parse()?;
-                fields.push((name, expression));
-                if content.is_empty() {
-                    break;
-                }
-                content.parse::<Token![,]>()?;
-            }
-            Shape::Named(fields, rest, delimiter)
+            parse_named(input)?
         } else if input.peek(syn::token::Paren) {
-            let content;
-            let delimiter = syn::parenthesized!(content in input).span.join();
-            let mut fields = Vec::new();
-            let mut rest = false;
-            while !content.is_empty() {
-                if content.peek(Token![..]) {
-                    content.parse::<Token![..]>()?;
-                    rest = true;
-                    fields.push(None);
-                } else {
-                    fields.push(Some(content.parse()?));
-                }
-                if content.is_empty() {
-                    break;
-                }
-                content.parse::<Token![,]>()?;
-                if rest && !content.is_empty() {
-                    return Err(content
-                        .error("tuple `..` must be final so selected tuple indexes remain exact"));
-                }
-            }
-            Shape::Tuple(fields, delimiter)
+            parse_tuple(input)?
         } else {
             Shape::Unit
         };
@@ -105,6 +67,77 @@ impl Parse for Input {
             shape,
         })
     }
+}
+
+/// Parses `{ name: expectation, .., }` with an optional final `..`.
+fn parse_named(input: ParseStream<'_>) -> syn::Result<Shape> {
+    let content;
+    let delimiter = syn::braced!(content in input).span.join();
+    let mut fields = Vec::new();
+    let mut rest = false;
+    let mut names = BTreeSet::new();
+    while !content.is_empty() {
+        if content.peek(Token![..]) {
+            content.parse::<Token![..]>()?;
+            rest = true;
+            if content.peek(Token![,]) {
+                content.parse::<Token![,]>()?;
+            }
+            if !content.is_empty() {
+                return Err(content.error("`..` must be the final field"));
+            }
+            break;
+        }
+        let name: Ident = content.parse()?;
+        if !names.insert(name.unraw().to_string()) {
+            return Err(syn::Error::new(name.span(), "duplicate matcher field"));
+        }
+        content.parse::<Token![:]>()?;
+        let expression: Expr = content.parse()?;
+        fields.push((name, expression));
+        if content.is_empty() {
+            break;
+        }
+        content.parse::<Token![,]>()?;
+    }
+    Ok(Shape::Named {
+        fields,
+        rest,
+        delimiter,
+    })
+}
+
+/// Parses `(expectation, _, ..)`, where a `..` must be final.
+fn parse_tuple(input: ParseStream<'_>) -> syn::Result<Shape> {
+    let content;
+    let delimiter = syn::parenthesized!(content in input).span.join();
+    let mut fields = Vec::new();
+    let mut rest = false;
+    while !content.is_empty() {
+        if content.peek(Token![..]) {
+            content.parse::<Token![..]>()?;
+            rest = true;
+            fields.push(None);
+        } else {
+            fields.push(Some(content.parse()?));
+        }
+        if content.is_empty() {
+            break;
+        }
+        content.parse::<Token![,]>()?;
+        if rest && !content.is_empty() {
+            return Err(
+                content.error("tuple `..` must be final so selected tuple indexes remain exact")
+            );
+        }
+    }
+    Ok(Shape::Tuple { fields, delimiter })
+}
+
+/// Returns whether a field expectation is the `_` wildcard, which lists a field without
+/// checking it.
+fn is_wildcard(expression: &Expr) -> bool {
+    matches!(expression, Expr::Infer(_))
 }
 
 /// Splits the runtime crate path, forwarded by `assertr::partial!` as `$crate`, from the matcher
@@ -141,6 +174,7 @@ fn delimited(delimiter: Delimiter, fields: TokenStream, span: Span) -> TokenStre
     group.into_token_stream()
 }
 
+/// Names the constructor in diagnostics, without raw-identifier prefixes.
 fn constructor_label(path: &Path) -> String {
     path.segments
         .iter()
@@ -149,6 +183,7 @@ fn constructor_label(path: &Path) -> String {
         .join("::")
 }
 
+/// Expands `partial!` input, prefixed with the forwarded runtime path, into a partial matcher.
 pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
     let (runtime, input, span) = split_runtime(input)?;
     let Input {
@@ -160,34 +195,43 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
     let actual = Ident::new("__assertr_actual", Span::mixed_site().located_at(span));
     let value = Ident::new("__assertr_value", Span::mixed_site().located_at(span));
     let field = |projection: TokenStream, expression: &Expr, path: TokenStream| quote_spanned!(span=> #runtime::__private::field(#projection,#expression,#path));
+    // Selects one field through `pattern`, which binds it to `value`.
+    let projection = |span: Span, pattern: TokenStream| {
+        quote_spanned!(span=> |#actual| {
+            #[allow(unreachable_patterns)]
+            match #actual {
+                #pattern => ::core::option::Option::Some(#value),
+                _ => ::core::option::Option::None,
+            }
+        })
+    };
     let mut matcher_fields = Vec::new();
-    let pattern;
-    match shape {
-        Shape::Named(fields, rest, delimiter) => {
-            let names = fields.iter().map(|(name, _)| name).collect::<Vec<_>>();
-            let rest = rest.then(|| quote_spanned!(span=> ..));
-            let fields_pattern = delimited(
-                Delimiter::Brace,
-                quote_spanned!(span=> #(#names: _,)* #rest),
-                delimiter,
-            );
-            pattern = quote_spanned!(span=> #path #fields_pattern);
-            for (name, expression) in &fields {
+    let fields_pattern = match shape {
+        Shape::Named {
+            fields,
+            rest,
+            delimiter,
+        } => {
+            for (name, expression) in fields.iter().filter(|(_, e)| !is_wildcard(e)) {
                 let field_name = name.unraw().to_string();
                 matcher_fields.push(field(
-                    quote_spanned!(name.span()=> |#actual| {
-                        #[allow(unreachable_patterns)]
-                        match #actual {
-                            #path { #name: #value, .. } => ::core::option::Option::Some(#value),
-                            _ => ::core::option::Option::None,
-                        }
-                    }),
+                    projection(
+                        name.span(),
+                        quote_spanned!(name.span()=> #path { #name: #value, .. }),
+                    ),
                     expression,
                     quote_spanned!(span=> #runtime::failure::PathSegment::Field(#field_name)),
                 ));
             }
+            let names = fields.iter().map(|(name, _)| name);
+            let rest = rest.then(|| quote_spanned!(span=> ..));
+            delimited(
+                Delimiter::Brace,
+                quote_spanned!(span=> #(#names: _,)* #rest),
+                delimiter,
+            )
         }
-        Shape::Tuple(fields, delimiter) => {
+        Shape::Tuple { fields, delimiter } => {
             let slots = fields
                 .iter()
                 .map(|field| {
@@ -198,39 +242,28 @@ pub(crate) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
                     }
                 })
                 .collect::<Vec<_>>();
-            let fields_pattern = delimited(
-                Delimiter::Parenthesis,
-                quote_spanned!(span=> #(#slots),*),
-                delimiter,
-            );
-            pattern = quote_spanned!(span=> #path #fields_pattern);
             for (index, expression) in fields.iter().enumerate() {
-                let Some(expression) = expression else {
+                let Some(expression) = expression.as_ref().filter(|e| !is_wildcard(e)) else {
                     continue;
                 };
-                if matches!(expression, Expr::Infer(_)) {
-                    continue;
-                }
-                let mut projection = slots.clone();
-                projection[index] = quote_spanned!(span=> #value);
+                let mut selected = slots.clone();
+                selected[index] = quote_spanned!(span=> #value);
                 matcher_fields.push(field(
-                    quote_spanned!(span=> |#actual| {
-                        #[allow(unreachable_patterns)]
-                        match #actual {
-                            #path (#(#projection),*) => ::core::option::Option::Some(#value),
-                            _ => ::core::option::Option::None,
-                        }
-                    }),
+                    projection(span, quote_spanned!(span=> #path (#(#selected),*))),
                     expression,
                     quote_spanned!(span=> #runtime::failure::PathSegment::TupleIndex(#index)),
                 ));
             }
+            delimited(
+                Delimiter::Parenthesis,
+                quote_spanned!(span=> #(#slots),*),
+                delimiter,
+            )
         }
-        Shape::Unit => {
-            // Braces force constructor resolution even for a single unqualified identifier.
-            pattern = quote_spanned!(span=> #path {});
-        }
-    }
+        // Braces force constructor resolution even for a single unqualified identifier.
+        Shape::Unit => quote_spanned!(span=> {}),
+    };
+    let pattern = quote_spanned!(span=> #path #fields_pattern);
     // Keep expectations in one expression so borrowed temporaries live through the caller's
     // statement. Nested constructor arguments evaluate each expectation once in source order.
     let list = matcher_fields.into_iter().rev().fold(

@@ -25,7 +25,7 @@ Choose an extension point based on what you need to change. The
 | Existing operations on a custom subject | Implement [behavioral capabilities](collection-semantics.md#capability-model). |
 | A check usable on its own or in a matcher | Combine [existing matchers](matcher-composition.md), such as `predicate` with `described_as` and `rejected_as`, `field`, or `satisfying`, and return the result as `impl Expectation`. |
 | A check that retains an observation or reports custom evidence | Implement [evaluation and explanation](expectation-execution.md#evaluation-and-explanation). |
-| New chain method | Extend a capability family first. Use a type-specific trait only for type-specific behavior. Select a [public executor entry](expectation-execution.md#chain-execution). |
+| New chain method | Extend a capability family first. Use a type-specific trait only for type-specific behavior. Select a [public executor entry](expectation-execution.md#chain-execution). Apply `assertr::fluent_aliases` for [fluent spellings](fluent-entry.md#borrowing-and-ownership). |
 | Invocation, polling, or consumption | Use an [execution adapter](observation-boundaries.md#execution-adapters). |
 | New subject or extraction | Choose [mapping, derivation, and continuation mode](assertion-lifecycle.md#projections-and-continuation). |
 | A wrapper for expected values | Implement [borrowed-view selection](comparison-operands.md#borrowed-views). |

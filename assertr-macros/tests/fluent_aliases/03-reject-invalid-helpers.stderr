@@ -1,0 +1,35 @@
+error: `fluent_alias` and `no_fluent_alias` cannot be combined
+ --> tests/fluent_aliases/03-reject-invalid-helpers.rs:4:7
+  |
+4 |     #[no_fluent_alias]
+  |       ^^^^^^^^^^^^^^^
+
+error: duplicate `fluent_alias`
+ --> tests/fluent_aliases/03-reject-invalid-helpers.rs:8:23
+  |
+8 |     #[cfg_attr(all(), fluent_alias("be_finished"))]
+  |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `no_fluent_alias` takes no arguments
+  --> tests/fluent_aliases/03-reject-invalid-helpers.rs:11:7
+   |
+11 |     #[no_fluent_alias(always)]
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `no_fluent_alias` applies only to trait methods
+  --> tests/fluent_aliases/03-reject-invalid-helpers.rs:14:7
+   |
+14 |     #[no_fluent_alias]
+   |       ^^^^^^^^^^^^^^^
+
+error: fluent alias `be_open` of `is_open` collides with another item of this trait
+  --> tests/fluent_aliases/03-reject-invalid-helpers.rs:18:8
+   |
+18 |     fn is_open(self) -> Self;
+   |        ^^^^^^^
+
+error: fluent alias `is_closed` of `is_closed` collides with another item of this trait
+  --> tests/fluent_aliases/03-reject-invalid-helpers.rs:22:20
+   |
+22 |     #[fluent_alias("is_closed")]
+   |                    ^^^^^^^^^^^

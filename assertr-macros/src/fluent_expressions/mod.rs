@@ -1,8 +1,10 @@
+//! Implementation of the `fluent_expressions` attribute macro.
+
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
-    Expr, Ident, Item, LitStr, Path, Token,
+    Expr, ExprMethodCall, Ident, Item, LitStr, Path, Token,
     parse::{Parse, ParseStream},
     visit_mut::{self, VisitMut},
 };
@@ -53,6 +55,8 @@ impl Parse for Arguments {
     }
 }
 
+/// Rewrites the visible fluent entry calls of a function or inline module so their failures
+/// record the receiver expression.
 pub(crate) fn fluent_expressions_impl(
     arguments: Arguments,
     mut item: Item,
@@ -83,12 +87,27 @@ pub(crate) fn fluent_expressions_impl(
     Ok(quote!(#item))
 }
 
+/// A fluent entry call whose receiver expression is captured.
 #[derive(Clone, Copy)]
 enum EntryCall {
+    /// `must()` or `must_owned()`.
     Must,
+    /// `verify(callback)` or `verify_owned(callback)`.
     Verify,
 }
 
+impl EntryCall {
+    /// Recognizes an entry call by its method name and argument count.
+    fn of(call: &ExprMethodCall) -> Option<Self> {
+        match (call.method.to_string().as_str(), call.args.len()) {
+            ("must" | "must_owned", 0) => Some(Self::Must),
+            ("verify" | "verify_owned", 1) => Some(Self::Verify),
+            _ => None,
+        }
+    }
+}
+
+/// Visitor rewriting fluent entry calls, holding the path of the `assertr` runtime.
 struct FluentExpressions {
     assertr: TokenStream,
 }
@@ -96,26 +115,8 @@ struct FluentExpressions {
 impl VisitMut for FluentExpressions {
     fn visit_expr_mut(&mut self, expression: &mut Expr) {
         let rewrite = match expression {
-            Expr::MethodCall(call)
-                if (call.method == "must" || call.method == "must_owned")
-                    && call.args.is_empty() =>
-            {
-                Some((
-                    EntryCall::Must,
-                    receiver_tokens(&call.receiver),
-                    call.method.span(),
-                ))
-            }
-            Expr::MethodCall(call)
-                if (call.method == "verify" || call.method == "verify_owned")
-                    && call.args.len() == 1 =>
-            {
-                Some((
-                    EntryCall::Verify,
-                    receiver_tokens(&call.receiver),
-                    call.method.span(),
-                ))
-            }
+            Expr::MethodCall(call) => EntryCall::of(call)
+                .map(|entry| (entry, receiver_tokens(&call.receiver), call.method.span())),
             _ => None,
         };
 
@@ -169,6 +170,8 @@ impl VisitMut for FluentExpressions {
     }
 }
 
+/// Resolves the `assertr` runtime from the calling crate's manifest, including a renamed
+/// dependency, and falls back to `::assertr`.
 fn assertr_path() -> TokenStream {
     match crate_name("assertr") {
         Ok(FoundCrate::Name(name)) => {
@@ -179,6 +182,9 @@ fn assertr_path() -> TokenStream {
     }
 }
 
+/// Reproduces the receiver's source text where available, so `stringify!` reports it as written.
+///
+/// Falls back to the receiver's tokens when the text cannot be recovered or reparsed.
 fn receiver_tokens(receiver: &Expr) -> TokenStream {
     let fallback = quote!(#receiver);
     let mut source = String::new();
@@ -189,11 +195,12 @@ fn receiver_tokens(receiver: &Expr) -> TokenStream {
         if previous_was_word && is_word {
             source.push(' ');
         }
-        if let Some(token_source) = token.span().source_text() {
-            source.push_str(&token_source);
-        } else {
-            source.push_str(&token.to_string());
-        }
+        source.push_str(
+            &token
+                .span()
+                .source_text()
+                .unwrap_or_else(|| token.to_string()),
+        );
         previous_was_word = is_word;
     }
 

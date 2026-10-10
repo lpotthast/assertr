@@ -158,14 +158,11 @@ mod ownership {
     fn an_erased_presentation_preserves_context_unwind_safety() {
         let count = Arc::new(AtomicUsize::new(0));
         let context = assert_that!(1).with_panic_presentation(counting(&count));
-        assert_that!(
-            catch_unwind(|| {
-                context.derive(|value| value).is_equal_to(2);
-            })
-            .is_err()
-        )
-        .is_true();
-        assert_that!(catch_unwind(move || context.is_equal_to(3)).is_err()).is_true();
+        assert_that!(catch_unwind(|| {
+            context.derive(|value| value).is_equal_to(2);
+        }))
+        .is_err();
+        assert_that!(catch_unwind(move || drop(context.is_equal_to(3)))).is_err();
         assert_that!(count.load(Ordering::Relaxed)).is_equal_to(2);
     }
 

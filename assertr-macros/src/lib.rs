@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(missing_docs)]
-#![allow(clippy::needless_continue)]
 //! Procedural macros for `assertr`.
 //!
 //! Use these macros through `assertr`, which re-exports them behind its features:
@@ -10,9 +9,8 @@
 //!   captures receiver expressions of fluent entry calls in a test scope.
 //! - `partial!`, available as `assertr::partial!` with the `partial` feature, builds structural
 //!   matchers. Its documentation lives in `assertr`.
-//! - [`fluent_aliases`] generates fluent aliases for assertion traits. `assertr` applies it to its
-//!   own traits when the `fluent` feature is enabled. Authors of custom assertion traits can apply
-//!   it directly by depending on this crate.
+//! - [`fluent_aliases`], available as `assertr::fluent_aliases` with the `fluent` feature,
+//!   generates fluent aliases for assertion traits, including custom ones.
 
 mod fluent_aliases;
 mod fluent_expressions;
@@ -42,7 +40,11 @@ use syn::{Item, ItemTrait, parse_macro_input};
 ///   only when one is given explicitly.
 ///
 /// Use `#[fluent_alias("custom_name")]` on a method for a custom alias name. Keywords become raw
-/// identifiers. Use `#[no_fluent_alias]` on a method to skip alias generation.
+/// identifiers. Use `#[no_fluent_alias]` on a method to skip alias generation. A method takes at
+/// most one of these helpers. Repeated or combined helpers, helpers on items other than methods,
+/// and aliases that collide with another item of the trait are compile errors. A method gated by
+/// `#[cfg]` is checked only against items without `#[cfg]`, because gated items may share a name
+/// across configurations.
 ///
 /// Aliases are documented as aliases of their original method. They copy its other attributes,
 /// including `must_use`, `deprecated`, and `cfg`, track the caller, and require `Self: Sized`.
@@ -50,7 +52,7 @@ use syn::{Item, ItemTrait, parse_macro_input};
 /// its helper attributes conditionally:
 ///
 /// ```ignore
-/// #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+/// #[cfg_attr(feature = "fluent", assertr::fluent_aliases)]
 /// pub trait ReadinessAssertions {
 ///     fn is_ready(self) -> Self; // Alias: `be_ready`.
 ///

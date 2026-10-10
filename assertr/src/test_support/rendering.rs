@@ -1,5 +1,6 @@
 //! Renderers and structured evidence checks shared by diagnostic tests.
 
+use alloc::string::String;
 use core::fmt;
 
 use crate::{
@@ -143,4 +144,23 @@ pub(crate) fn assert_custom_fact(failure: &AssertionFailure, label: &str, expect
         .find(|fact| fact.label.as_deref() == Some(label))
         .unwrap();
     assert_custom_value(&fact.value, &expected);
+}
+
+/// Renders the string comparison leaves and indexes, without a wrapper renderer.
+#[derive(Clone)]
+pub(crate) struct StringRenderer;
+impl ValueRenderer<str> for StringRenderer {
+    fn fmt(&self, value: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{value:?}")
+    }
+}
+impl ValueRenderer<String> for StringRenderer {
+    fn fmt(&self, value: &String, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        ValueRenderer::<str>::fmt(self, value, f)
+    }
+}
+impl ValueRenderer<usize> for StringRenderer {
+    fn fmt(&self, value: &usize, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{value}")
+    }
 }

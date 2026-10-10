@@ -3,6 +3,7 @@ fn fluent_aliases() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/fluent_aliases/01-reject-non-string-alias.rs");
     t.compile_fail("tests/fluent_aliases/02-reject-invalid-alias.rs");
+    t.compile_fail("tests/fluent_aliases/03-reject-invalid-helpers.rs");
 }
 
 #[test]
@@ -40,6 +41,7 @@ mod partial {
         t.pass("tests/partial/16-infer-empty-matcher-list.rs");
         t.pass("tests/partial/30-qualified-variants.rs");
         t.pass("tests/partial/31-invoke-through-reexport.rs");
+        t.pass("tests/partial/32-named-wildcards.rs");
 
         // Invalid syntax and fields come before lifetime, inference, and capability boundaries.
         t.compile_fail("tests/partial/17-reject-duplicate-fields.rs");

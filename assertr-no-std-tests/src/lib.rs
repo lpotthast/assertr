@@ -1,9 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+// Embedded builds compile the checks without running them.
+#![cfg_attr(not(test), allow(dead_code))]
 
 //! Downstream compatibility checks for `core`, `alloc`, and optional features.
 //! Keep representative capabilities, borrowed views, and observation types here. Assertion
-//! behavior belongs in the owning unit tests. `cfg_attr(test, test)` runs compile checks on the
-//! host while keeping their bodies available to embedded builds.
+//! behavior belongs in the owning unit tests. Every check is a function marked
+//! `cfg_attr(test, test)`, so it runs on the host while its body stays available to embedded
+//! builds. Only `capture_errors_compile_without_std` is compile-only.
 
 extern crate alloc;
 
@@ -14,7 +17,6 @@ use assertr::{
     prelude::*,
 };
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn memory_assertions_compile_without_std() {
     use alloc::string::String;
@@ -42,7 +44,6 @@ fn memory_assertions_compile_without_std() {
     }
 }
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn projections_compile_without_renderer_support() {
     struct Field {
@@ -79,7 +80,6 @@ fn projections_compile_without_renderer_support() {
         .is_same_instance_as(&fact.value.body);
 }
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn unwind_safe_projections_compile_without_std() {
     use core::{
@@ -101,7 +101,6 @@ fn unwind_safe_projections_compile_without_std() {
 }
 
 #[cfg(feature = "num")]
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn numeric_assertions_compile_without_std() {
     use assertr::{assertions::NumericDistance, matchers::IsCloseTo};
@@ -124,6 +123,7 @@ fn numeric_assertions_compile_without_std() {
     });
 }
 
+/// Compile-only, because it deliberately returns the captured failures as an error.
 #[allow(dead_code)]
 fn capture_errors_compile_without_std() -> Result<(), Box<dyn core::error::Error + Send + Sync>> {
     use alloc::string::ToString;
@@ -136,7 +136,7 @@ fn capture_errors_compile_without_std() -> Result<(), Box<dyn core::error::Error
     Ok(())
 }
 
-#[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn identity_assertions_compile_without_std() {
     struct Key {
         _byte: u8,
@@ -160,7 +160,7 @@ fn identity_assertions_compile_without_std() {
         .contains_exactly_same_instances_in_any_order([&data[..], &data[..1]]);
 }
 
-#[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn panic_presentation_compiles_without_std() {
     use alloc::string::ToString;
 
@@ -171,12 +171,12 @@ fn panic_presentation_compiles_without_std() {
         .with_panic_presentation(ToString::to_string);
 }
 
-#[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn pattern_assertions_compile_without_std() {
     assert_that!(Some(42)).is_matching(pattern!(Some(42)));
 }
 
-#[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn iterator_assertions_compile_without_std() {
     fn positive(it: AssertThat<i32, Capture>) {
         it.is_greater_than(0);
@@ -196,7 +196,6 @@ fn iterator_assertions_compile_without_std() {
         .into_iter_contains_exactly_in_any_order([2, 1]);
 }
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn callback_assertions_compile_without_subject_renderers() {
     struct Secret;
@@ -239,7 +238,7 @@ fn callback_assertions_compile_without_subject_renderers() {
 
 /// The set and map families live outside the `std` module, so `BTreeSet` and `BTreeMap` carry them
 /// into `no_std` builds.
-#[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn set_and_map_assertions_compile_without_std() {
     use alloc::collections::{BTreeMap, BTreeSet};
 
@@ -292,7 +291,7 @@ fn set_and_map_assertions_compile_without_std() {
 }
 
 /// A `LinkedList` is an ordered collection, so it gets the order-sensitive assertions too.
-#[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn linked_list_assertions_compile_without_std() {
     use alloc::collections::LinkedList;
 
@@ -304,149 +303,8 @@ fn linked_list_assertions_compile_without_std() {
         .has_length(3);
 }
 
-#[cfg(all(test, not(feature = "std")))]
-extern crate std;
-
-#[cfg(all(test, not(feature = "std")))]
-mod tests {
-    use assertr::{assert_that, prelude::StrAssertions};
-
-    use crate::NumericRenderer;
-
-    mod matchers {
-        use assertr::{
-            matchers::{eq, ge},
-            prelude::*,
-        };
-
-        #[cfg(feature = "partial")]
-        #[test]
-        fn structural_matchers_work_with_alloc() {
-            crate::structural_matchers_without_std();
-        }
-
-        #[test]
-        fn runtime_matchers_need_no_features() {
-            assert_that!([1, 2]).matches(elements_are![eq(1), eq(2)]);
-            assert_that!(3).matches(ge(2));
-            crate::bounded_unordered_matching_without_std();
-        }
-    }
-
-    use alloc::{
-        string::{String, ToString},
-        sync::Arc,
-    };
-    use core::sync::atomic::{AtomicUsize, Ordering};
-
-    use assertr::{
-        failure::AssertionFailure,
-        prelude::{
-            CollectionAssertions, IdentityAssertions, LengthAssertions, PartialEqAssertions,
-            StableOrderAssertions,
-        },
-    };
-
-    fn counting(
-        count: &Arc<AtomicUsize>,
-    ) -> impl Fn(&AssertionFailure) -> String + core::panic::RefUnwindSafe + Send + Sync + 'static
-    {
-        let count = Arc::clone(count);
-        move |failure| {
-            count.fetch_add(1, Ordering::Relaxed);
-            failure.to_string()
-        }
-    }
-
-    #[test]
-    fn opaque_identity_assertions_capture_and_panic_without_std() {
-        struct Key {
-            _byte: u8,
-        }
-        struct NoRenderer;
-        super::identity_assertions_compile_without_std();
-        let keys = [Key { _byte: 1 }, Key { _byte: 1 }, Key { _byte: 1 }];
-        let failures = assertr::assert_that!(keys[0])
-            .with_renderer(NoRenderer)
-            .capture(|it| {
-                it.is_same_instance_as(&keys[1])
-                    .is_not_same_instance_as(&keys[0])
-            });
-        assert_that!(failures).has_length(2);
-        let failures = assertr::assert_that!([&keys[0], &keys[1]])
-            .with_renderer(NumericRenderer)
-            .capture(|it| {
-                it.contains_same_instance_as(&keys[2])
-                    .does_not_contain_same_instance_as(&keys[0])
-                    .contains_exactly_same_instances([&keys[1], &keys[0]])
-                    .contains_exactly_same_instances_in_any_order([&keys[0], &keys[0]])
-            });
-        assert_that!(failures).has_length(4);
-        let panic = std::panic::catch_unwind(|| {
-            assertr::assert_that!(keys[0])
-                .with_renderer(NoRenderer)
-                .is_same_instance_as(&keys[1]);
-        })
-        .unwrap_err();
-        assert_that!(panic.downcast_ref::<String>().unwrap())
-            .contains("is not the same instance as");
-    }
-
-    #[test]
-    fn a_presentation_runs_only_in_panic_mode_without_std() {
-        let count = Arc::new(AtomicUsize::new(0));
-        let failures = assertr::assert_that!(1)
-            .with_panic_presentation(counting(&count))
-            .capture(|it| it.is_equal_to(2));
-        assert_that!(failures).has_length(1);
-        assert_that!(count.load(Ordering::Relaxed)).is_equal_to(0);
-
-        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            assertr::assert_that!(1)
-                .with_panic_presentation(counting(&count))
-                .is_equal_to(2);
-        }))
-        .unwrap_err();
-
-        assert_that!(panic.downcast_ref::<String>().unwrap())
-            .contains("Expected: 2\n\n  Actual: 1");
-        assert_that!(count.load(Ordering::Relaxed)).is_equal_to(1);
-    }
-
-    #[test]
-    fn a_panicking_presentation_propagates_without_std() {
-        crate::panic_presentation_compiles_without_std();
-        let panic = std::panic::catch_unwind(|| {
-            assertr::assert_that!(1)
-                .with_panic_presentation(|_| panic!("presentation exploded"))
-                .is_equal_to(2);
-        })
-        .unwrap_err();
-        assert_that!(*panic.downcast_ref::<&str>().unwrap()).is_equal_to("presentation exploded");
-    }
-
-    #[test]
-    // The `if` around the panic keeps the closure's return type inferable; an `assert!` would
-    // change the panic payload.
-    #[allow(clippy::manual_assert)]
-    fn a_panic_inside_a_capture_closure_preserves_the_original_panic() {
-        let panic = std::panic::catch_unwind(|| {
-            let _failures = assertr::assert_that!(42).capture(|it| {
-                let it = it.is_equal_to(43);
-                if it.actual() == &42 {
-                    panic!("original panic");
-                }
-                it
-            });
-        })
-        .expect_err("the closure should panic");
-
-        assertr::assert_that!(panic.downcast_ref::<&str>()).is_equal_to(Some(&"original panic"));
-    }
-}
-
 /// Exercises shared candidate selection and routing on hosted and embedded alloc targets.
-#[allow(dead_code)]
+#[cfg_attr(test, test)]
 fn bounded_unordered_matching_without_std() {
     use assertr::matchers::{eq, ge};
     for limit in [0, 1, 2, usize::MAX] {
@@ -462,7 +320,8 @@ fn bounded_unordered_matching_without_std() {
 
 /// Structural matching remains available with alloc and no std.
 #[cfg(feature = "partial")]
-pub fn structural_matchers_without_std() {
+#[cfg_attr(test, test)]
+fn structural_matchers_without_std() {
     use assertr::{matchers::eq, prelude::*};
     struct Hidden;
     #[allow(dead_code)]
@@ -499,7 +358,6 @@ impl ValueRenderer<usize> for NumericRenderer {
     }
 }
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn typed_rejections_and_numeric_evidence_compile_without_std() {
     use assertr::{
@@ -572,7 +430,6 @@ fn typed_rejections_and_numeric_evidence_compile_without_std() {
     });
 }
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn reusable_checks_compile_without_std() {
     use assertr::matchers::{field, predicate};
@@ -595,7 +452,6 @@ fn reusable_checks_compile_without_std() {
     assert_that!(failures[0].children[0].relation.as_deref()).is_equal_to(Some("is empty"));
 }
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn assertion_definitions_compile_without_std() {
     use alloc::string::String;
@@ -643,7 +499,6 @@ fn assertion_definitions_compile_without_std() {
     });
 }
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn collection_assertion_definitions_compile_without_std() {
     use assertr::{
@@ -736,7 +591,6 @@ fn with_context<R, F: Fn(&assertr::expectation::AssertionContext<'_, R>)>(render
 }
 
 // Keep the alloc-only API boundary here. Detailed rendering behavior is tested in the renderer.
-#[allow(dead_code)]
 mod structural_rendering {
     use alloc::collections::{BTreeMap, BTreeSet};
     use core::{cell::RefCell, fmt};
@@ -758,7 +612,8 @@ mod structural_rendering {
         }
     }
 
-    fn verify() {
+    #[cfg_attr(test, test)]
+    fn public_structural_rendering_works_with_alloc() {
         let map = BTreeMap::from([(Token(1), Token(10))]);
         let set = BTreeSet::from([Token(1)]);
         let failures = assert_that!(map).with_renderer(LeafRenderer).capture(|it| {
@@ -795,11 +650,6 @@ mod structural_rendering {
         let _: Rendered = RenderingContext::new(&NoRenderer, RenderingBudget::default())
             .unavailable_struct_field(&cell, "RefCell", "value", "<borrowed>");
     }
-
-    #[test]
-    fn public_structural_rendering_works_with_alloc() {
-        verify();
-    }
 }
 
 struct TextOperand<'a>(&'a str);
@@ -812,6 +662,7 @@ impl assertr::borrow_for::BorrowFor<String> for TextOperand<'_> {
     type View = str;
 }
 
+#[cfg_attr(test, test)]
 fn reusable_bulk_views_compile_without_std() {
     use alloc::{collections::BTreeMap, string::String, vec};
 
@@ -832,7 +683,6 @@ fn reusable_bulk_views_compile_without_std() {
         ));
 }
 
-#[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn borrowed_views_compile_without_std() {
     use alloc::{collections::BTreeMap, string::String, vec};
@@ -850,8 +700,6 @@ fn borrowed_views_compile_without_std() {
         .matches(assertr::entries_are![(query, matchers::eq(3))]);
     assert_that!(BTreeMap::from([(String::from("key"), 1)]))
         .matches(entry(TextOperand("key"), matchers::eq(1)));
-
-    reusable_bulk_views_compile_without_std();
 
     // Cover borrowed and unsized operands across collection, iterator, map, and ordering bounds.
     let expected = String::from("hello");
@@ -907,5 +755,111 @@ fn borrowed_views_compile_without_std() {
         let value = 10;
         let deviation = 2;
         assert_that!(11).is_close_to(&value, &deviation);
+    }
+}
+
+#[cfg(all(test, not(feature = "std")))]
+extern crate std;
+
+#[cfg(all(test, not(feature = "std")))]
+mod tests {
+    use alloc::{
+        string::{String, ToString},
+        sync::Arc,
+    };
+    use core::{
+        panic::UnwindSafe,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+
+    use assertr::{
+        failure::AssertionFailure,
+        matchers::{eq, ge},
+        prelude::*,
+    };
+
+    use crate::NumericRenderer;
+
+    /// The message of the panic raised by `action`.
+    fn panic_message(action: impl FnOnce() + UnwindSafe) -> AssertThat<'static, String, Panic> {
+        assert_that_owned!(std::panic::catch_unwind(action))
+            .get_err()
+            .has_message()
+    }
+
+    #[test]
+    fn runtime_matchers_need_no_features() {
+        assert_that!([1, 2]).matches(elements_are![eq(1), eq(2)]);
+        assert_that!(3).matches(ge(2));
+    }
+
+    fn counting(
+        count: &Arc<AtomicUsize>,
+    ) -> impl Fn(&AssertionFailure) -> String + core::panic::RefUnwindSafe + Send + Sync + 'static
+    {
+        let count = Arc::clone(count);
+        move |failure| {
+            count.fetch_add(1, Ordering::Relaxed);
+            failure.to_string()
+        }
+    }
+
+    #[test]
+    fn opaque_identity_assertions_capture_and_panic_without_std() {
+        struct Key {
+            _byte: u8,
+        }
+        struct NoRenderer;
+        let keys = [Key { _byte: 1 }, Key { _byte: 1 }, Key { _byte: 1 }];
+        let failures = assert_that!(keys[0])
+            .with_renderer(NoRenderer)
+            .capture(|it| {
+                it.is_same_instance_as(&keys[1])
+                    .is_not_same_instance_as(&keys[0])
+            });
+        assert_that!(failures).has_length(2);
+        let failures = assert_that!([&keys[0], &keys[1]])
+            .with_renderer(NumericRenderer)
+            .capture(|it| {
+                it.contains_same_instance_as(&keys[2])
+                    .does_not_contain_same_instance_as(&keys[0])
+                    .contains_exactly_same_instances([&keys[1], &keys[0]])
+                    .contains_exactly_same_instances_in_any_order([&keys[0], &keys[0]])
+            });
+        assert_that!(failures).has_length(4);
+        panic_message(|| {
+            assert_that!(keys[0])
+                .with_renderer(NoRenderer)
+                .is_same_instance_as(&keys[1]);
+        })
+        .contains("is not the same instance as");
+    }
+
+    #[test]
+    fn a_presentation_runs_only_in_panic_mode_without_std() {
+        let count = Arc::new(AtomicUsize::new(0));
+        let failures = assert_that!(1)
+            .with_panic_presentation(counting(&count))
+            .capture(|it| it.is_equal_to(2));
+        assert_that!(failures).has_length(1);
+        assert_that!(count.load(Ordering::Relaxed)).is_equal_to(0);
+
+        panic_message(core::panic::AssertUnwindSafe(|| {
+            assert_that!(1)
+                .with_panic_presentation(counting(&count))
+                .is_equal_to(2);
+        }))
+        .contains("Expected: 2\n\n  Actual: 1");
+        assert_that!(count.load(Ordering::Relaxed)).is_equal_to(1);
+    }
+
+    #[test]
+    fn a_panicking_presentation_propagates_without_std() {
+        panic_message(|| {
+            assert_that!(1)
+                .with_panic_presentation(|_| panic!("presentation exploded"))
+                .is_equal_to(2);
+        })
+        .is_equal_to("presentation exploded");
     }
 }

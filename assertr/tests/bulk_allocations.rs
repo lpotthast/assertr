@@ -77,57 +77,43 @@ fn million_element_prefix_allocates_nothing() {
 fn successful_collections_and_keys_use_existing_expected_storage() {
     let values = [1, 2, 3, 4];
     let keys = BTreeMap::from(values.map(|key| (key, key)));
-    for reusable in [false, true] {
-        for method in 0..5 {
-            let bytes = allocated(|| {
-                let it = assert_that!(black_box(&values));
-                if reusable {
-                    match method {
-                        0 => {
-                            black_box(it.matches(collection::StartsWith::new(black_box(&values))));
-                        }
-                        1 => {
-                            black_box(it.matches(collection::EndsWith::new(black_box(&values))));
-                        }
-                        2 => {
-                            black_box(
-                                it.matches(collection::ContainsExactly::new(black_box(&values))),
-                            );
-                        }
-                        3 => {
-                            black_box(it.matches(collection::ContainsAll::new(black_box(&values))));
-                        }
-                        _ => {
-                            black_box(
-                                assert_that!(black_box(&keys))
-                                    .matches(map::ContainsKeys::new(black_box(&values))),
-                            );
-                        }
-                    }
-                } else {
-                    match method {
-                        0 => {
-                            black_box(it.starts_with(black_box(&values)));
-                        }
-                        1 => {
-                            black_box(it.ends_with(black_box(&values)));
-                        }
-                        2 => {
-                            black_box(it.contains_exactly(black_box(&values)));
-                        }
-                        3 => {
-                            black_box(it.contains_all(black_box(&values)));
-                        }
-                        _ => {
-                            black_box(
-                                assert_that!(black_box(&keys)).contains_keys(black_box(&values)),
-                            );
-                        }
-                    }
-                }
-            });
-            assert_that!(bytes).is_equal_to(0);
-        }
+    let actual = || assert_that!(black_box(&values));
+    let expected = || black_box(&values);
+    // Trait-object references keep the checks in one list without allocating.
+    let checks: [&dyn Fn(); 10] = [
+        &|| {
+            black_box(actual().starts_with(expected()));
+        },
+        &|| {
+            black_box(actual().ends_with(expected()));
+        },
+        &|| {
+            black_box(actual().contains_exactly(expected()));
+        },
+        &|| {
+            black_box(actual().contains_all(expected()));
+        },
+        &|| {
+            black_box(assert_that!(black_box(&keys)).contains_keys(expected()));
+        },
+        &|| {
+            black_box(actual().matches(collection::StartsWith::new(expected())));
+        },
+        &|| {
+            black_box(actual().matches(collection::EndsWith::new(expected())));
+        },
+        &|| {
+            black_box(actual().matches(collection::ContainsExactly::new(expected())));
+        },
+        &|| {
+            black_box(actual().matches(collection::ContainsAll::new(expected())));
+        },
+        &|| {
+            black_box(assert_that!(black_box(&keys)).matches(map::ContainsKeys::new(expected())));
+        },
+    ];
+    for check in checks {
+        assert_that!(allocated(check)).is_equal_to(0);
     }
 }
 

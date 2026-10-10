@@ -35,8 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   child that has no subject with `AssertionContext::describe`.
 - `partial!` matches selected struct or enum fields without derives or attributes on domain types and renders only the
   selected leaves. Each selected field requires an explicit matcher, such as `eq(value)` or a nested `partial!`.
+  `field: _` and tuple `_` list a field without checking it, keeping the pattern exhaustive without `..`.
   Qualified constructor paths work with the optional `variant` prefix. It also works through facade crates that
   re-export `assertr`. Enable the new `partial` feature, which supports `no_std` with `alloc`.
+- `assertr::fluent_aliases` (`fluent` feature) re-exports the attribute that generates fluent aliases, so custom
+  assertion traits get spellings such as `be_ready` without a direct `assertr-macros` dependency.
 - Map assertions `contains_entry_matching` and `contains_value_matching` accept composed value matchers.
 - `MapProjectionAssertions::keys` and `values` project a map onto order-free collection views (`MapKeys`,
   `MapValues`), so collection assertions and matchers such as `each` apply to its keys or values. The keys view also
@@ -158,9 +161,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   update their dependency and replace `assertr_derive::` paths with `assertr_macros::`. Use `assertr::partial!` for
   structural matching.
 - **Breaking:** `#[fluent_aliases]` no longer wraps generated aliases in `#[cfg(feature = "fluent")]`. Trait authors
-  make aliases optional with `#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]`. `#[fluent_alias(..)]`
+  make aliases optional with `#[cfg_attr(feature = "fluent", assertr::fluent_aliases)]`. `#[fluent_alias(..)]`
   reports compile errors for names that are not string literals or identifiers, keyword names become raw identifiers,
-  and generated aliases link to their original method instead of repeating its documentation.
+  and generated aliases link to their original method instead of repeating its documentation. Repeated helpers,
+  `fluent_alias` combined with `no_fluent_alias`, `no_fluent_alias` with arguments, helpers on items other than
+  methods, and aliases colliding with another item of the trait are compile errors instead of being ignored or
+  reported as duplicate definitions. Errors in generated aliases point at the original method.
 - **Breaking:** Collection, iterator, and map `*_matching` methods and fluent aliases accept matchers instead of bare
   predicates. Wrap closures with `matchers::predicate`, predicate arrays with `[..].map(matchers::predicate)`, and keyed
   matcher lists with `[entry(..)]`, `matchers![entry(..), ..]`, or `[..].map(|(key, matcher)| entry(key, matcher))`.

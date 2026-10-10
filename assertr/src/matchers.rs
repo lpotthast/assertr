@@ -135,8 +135,9 @@
 //! semicolon. All of its assertions must pass, and it must run at least one.
 //!
 //! `..` skips the remaining fields. Skipped fields need no `PartialEq` or `Debug`, which is why
-//! `secret` above needs neither. Without `..`, every field must be listed. Private fields follow
-//! the usual visibility rules.
+//! `secret` above needs neither. Without `..`, every field must be listed. `field: _` lists a field
+//! without checking it, keeping the pattern exhaustive so a newly added field fails to compile.
+//! Private fields follow the usual visibility rules.
 //!
 //! Tuple structs and enum variants work too. In tuples, `_` skips one field and a final `..` skips
 //! the rest. Prefix an enum constructor with `variant` to include the variant name in failure

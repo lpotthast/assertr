@@ -8,22 +8,14 @@
 //! - Values become owned rendered trees when failures are built. Adapters decide how to use those
 //!   trees at the panic boundary or after capture.
 
+mod support;
+
 use assertr::{
     failure::{Fact, FailureKind},
     prelude::*,
-    renderer::Rendered,
 };
 
-fn text(value: &Rendered) -> &str {
-    match &value.body {
-        assertr::renderer::RenderedBody::Text { text, .. } => text,
-        body => panic!("expected a text node, got {body:?}"),
-    }
-}
-
-fn text_opt(value: Option<&Rendered>) -> Option<&str> {
-    value.map(text)
-}
+use self::support::{text, text_opt};
 
 #[test]
 fn failures_arrive_in_assertion_order_and_carry_the_messages_provided_up_to_them() {
@@ -100,46 +92,11 @@ fn mapping_inside_the_capture_closure_is_supported() {
     ]);
 }
 
-#[test]
-fn a_capture_closure_performing_no_assertions_panics() {
-    let result = std::panic::catch_unwind(|| {
-        let _ = assert_that!(42).capture(|it| it);
-    });
-
-    let panic = result.expect_err("expected a panic");
-    assert_that!(panic.downcast_ref::<&str>())
-        .is_equal_to(Some(&"the assertion callback performed no assertions"));
-}
-
-#[test]
-// The `if` around the panic keeps the closure's return type inferable; an `assert!` would change
-// the panic payload.
-#[allow(clippy::manual_assert)]
-fn a_panic_inside_the_capture_closure_propagates_without_a_double_panic() {
-    let result = std::panic::catch_unwind(|| {
-        let _ = assert_that!(42).capture(|it| {
-            // Record a failure first, so unwinding happens while failures are held.
-            let it = it.is_equal_to(43);
-            if it.actual() == &42 {
-                panic!("original panic");
-            }
-            it
-        });
-    });
-
-    let panic = result.expect_err("expected a panic");
-    assert_that!(panic.downcast_ref::<&str>()).is_equal_to(Some(&"original panic"));
-}
-
 /// Failure-field routing stays here. Structural rendering behavior lives beside the renderer.
 mod fields {
-    use assertr::{
-        failure::{Fact, FailureKind},
-        prelude::*,
-        renderer::{Rendered, RenderedBody},
-    };
+    use assertr::renderer::{Rendered, RenderedBody};
 
-    use super::{text, text_opt};
+    use super::*;
 
     #[test]
     fn an_unexpected_map_entry_retains_a_structured_tuple() {

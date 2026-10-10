@@ -180,6 +180,46 @@ mod tests {
         assert_that!(1.verify(|it| it.be_equal_to(1))).is_empty();
     }
 
+    mod panics {
+        use alloc::string::String;
+
+        use super::*;
+
+        fn panic_message(
+            action: impl FnOnce() + core::panic::UnwindSafe,
+        ) -> AssertThat<'static, String, Panic> {
+            assert_that_owned!(std::panic::catch_unwind(action))
+                .get_err()
+                .has_message()
+        }
+
+        #[test]
+        fn a_callback_performing_no_assertions_panics() {
+            panic_message(|| {
+                let _ = assert_that!(42).capture(|it| it);
+            })
+            .is_equal_to("the assertion callback performed no assertions");
+        }
+
+        #[test]
+        #[allow(clippy::manual_assert)]
+        fn a_callback_panic_propagates_while_failures_are_held() {
+            panic_message(|| {
+                let _ = assert_that!(42).capture(|it| {
+                    // Record a failure first, so unwinding happens while failures are held.
+                    let it = it.is_equal_to(43);
+                    // Panic conditionally so the returned chain stays reachable. `assert!`
+                    // would read as a test assertion.
+                    if it.actual() == &42 {
+                        panic!("original panic");
+                    }
+                    it
+                });
+            })
+            .is_equal_to("original panic");
+        }
+    }
+
     #[test]
     fn capture_yields_failures_and_does_not_panic() {
         let failures = assert_that!(42)

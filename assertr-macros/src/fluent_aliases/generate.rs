@@ -54,15 +54,10 @@ pub(super) fn generate_alias(original: &TraitItemFn, alias_name: Ident) -> Trait
     let generics = generic_arguments(original);
     let arguments = value_arguments(&mut alias);
     let await_delegation = original.sig.asyncness.map(|_| quote! { .await });
-    alias.default = if generics.is_empty() {
-        Some(syn::parse_quote! {
-            { self.#original_name(#(#arguments),*) #await_delegation }
-        })
-    } else {
-        Some(syn::parse_quote! {
-            { self.#original_name::<#(#generics),*>(#(#arguments),*) #await_delegation }
-        })
-    };
+    let turbofish = (!generics.is_empty()).then(|| quote! { ::<#(#generics),*> });
+    alias.default = Some(syn::parse_quote! {
+        { self.#original_name #turbofish (#(#arguments),*) #await_delegation }
+    });
     alias.semi_token = None;
     alias
 }

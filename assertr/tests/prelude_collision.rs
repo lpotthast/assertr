@@ -1,70 +1,8 @@
-//! Coverage for collision-prone extension-point names. Capability traits, including `HasLength`,
-//! remain in their own modules, so their bare names stay usable next to other glob-imported
-//! preludes.
+//! Coverage for collision-prone names. Capability traits, including `HasLength`, remain in their
+//! own modules, so their bare names stay usable next to other glob-imported preludes. Downstream
+//! capability implementations are covered in `custom_assertions.rs`.
 
 use assertr::prelude::*;
-
-#[test]
-fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
-    use core::borrow::Borrow;
-
-    use assertr::{
-        assertions::{Collection as AssertrCollection, HasLength, StableOrder},
-        renderer::CollectionPresentation,
-    };
-
-    struct Key {
-        _byte: u8,
-    }
-    struct Stored {
-        key: Key,
-    }
-    impl Borrow<Key> for Stored {
-        fn borrow(&self) -> &Key {
-            &self.key
-        }
-    }
-    struct Candidates([Stored; 2]);
-    impl HasLength for Candidates {
-        fn length(&self) -> usize {
-            self.0.len()
-        }
-    }
-    impl AssertrCollection for Candidates {
-        type Item = Stored;
-        const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
-        fn elements(&self) -> impl Iterator<Item = &Stored> {
-            self.0.iter()
-        }
-    }
-    impl StableOrder for Candidates {}
-    struct NoRenderer;
-
-    let candidates = Candidates([
-        Stored {
-            key: Key { _byte: 1 },
-        },
-        Stored {
-            key: Key { _byte: 1 },
-        },
-    ]);
-    let other = Key { _byte: 1 };
-    let expected = [&candidates.0[0].key, &candidates.0[1].key];
-    assert_that!(expected[0])
-        .with_renderer(NoRenderer)
-        .is_same_instance_as(expected[0])
-        .is_not_same_instance_as(expected[1]);
-    assert_that!(candidates)
-        .with_renderer(NumericRenderer)
-        .contains_same_instance_as(expected[0])
-        .does_not_contain_same_instance_as(&other)
-        .contains_exactly_same_instances(expected)
-        .contains_exactly_same_instances_in_any_order([expected[1], expected[0]]);
-    let failures = assert_that!(candidates)
-        .with_renderer(NoRenderer)
-        .capture(|it| it.contains_same_instance_as(&other));
-    assert_that!(failures).has_length(1);
-}
 
 /// Stand-in for a downstream prelude exporting its own collection names.
 mod downstream_prelude {
@@ -81,6 +19,10 @@ mod downstream_prelude {
     }
 
     pub struct Map {
+        pub size: usize,
+    }
+
+    pub struct HasLength {
         pub size: usize,
     }
 }
@@ -100,128 +42,17 @@ fn bare_collection_name_stays_usable_next_to_a_second_glob_imported_prelude() {
 
 #[test]
 fn the_collection_assertions_work_without_the_collection_trait_in_scope() {
-    // Only `CollectionAssertions` comes from the prelude; `Collection` itself is never named.
+    // Only `CollectionAssertions` comes from the prelude. `Collection` itself is never named.
     assert_that!(vec![1, 2, 3])
         .contains(2)
         .contains_exactly([1, 2, 3]);
 }
 
+/// The capability traits behind the length, set, and map families are as collision-prone as
+/// `Collection`, so they are kept out of the prelude for the same reason. A downstream `HasLength`,
+/// `Set`, or `Map` must stay usable as a bare name next to a glob-imported `assertr::prelude::*`.
 #[test]
-fn a_custom_collection_gets_every_collection_assertion() {
-    use assertr::{
-        assertions::{Collection as AssertrCollection, HasLength, RandomAccess, StableOrder},
-        renderer::CollectionPresentation,
-    };
-
-    /// A downstream collection type, implementing only the extension traits.
-    #[derive(Debug)]
-    struct Ring(Vec<i32>);
-
-    impl HasLength for Ring {
-        fn length(&self) -> usize {
-            self.0.len()
-        }
-    }
-
-    impl AssertrCollection for Ring {
-        type Item = i32;
-        const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
-
-        fn elements(&self) -> impl Iterator<Item = &i32> {
-            self.0.iter()
-        }
-    }
-
-    impl StableOrder for Ring {}
-
-    impl RandomAccess for Ring {
-        fn element_at(&self, index: usize) -> Option<&i32> {
-            self.0.get(index)
-        }
-    }
-
-    let ring = Ring(vec![1, 2, 3]);
-    assert_that!(ring)
-        .contains(2)
-        .does_not_contain(4)
-        .starts_with([1, 2])
-        .ends_with([2, 3])
-        .contains_contiguous([1, 2])
-        .contains_exactly([1, 2, 3])
-        .contains_exactly_in_any_order([3, 2, 1])
-        .has_length(3);
-    assert_that!(ring).get_first().is_equal_to(1);
-    assert_that!(ring).get_last().is_equal_to(3);
-    assert_that!(ring).get_at(1).is_equal_to(2);
-    assert_that!(Ring(vec![42])).get_single().is_equal_to(42);
-
-    let failures = assert_that!(Ring(vec![1, 2, 3]))
-        .with_location(false)
-        .capture(|it| it.contains(4));
-    assert_that!(&failures).contains_exactly_satisfying([
-        |element: AssertThat<AssertionFailure, Capture>| {
-            element
-                .derive_owned(ToString::to_string)
-                .contains("Actual: [");
-        },
-    ]);
-
-    #[cfg(feature = "fluent")]
-    {
-        let mut ring = Ring(vec![1, 2, 3]);
-        (&mut ring)
-            .must()
-            .contain(2)
-            .contain_exactly([1, 2, 3])
-            .have_length(3);
-    }
-}
-
-#[test]
-fn a_custom_bag_gets_only_order_free_collection_assertions() {
-    use assertr::{
-        assertions::{Collection as AssertrCollection, HasLength},
-        renderer::{CollectionPresentation, RenderingOrder},
-    };
-
-    #[derive(Debug)]
-    struct Multiset(Vec<i32>);
-
-    impl HasLength for Multiset {
-        fn length(&self) -> usize {
-            self.0.len()
-        }
-    }
-
-    impl AssertrCollection for Multiset {
-        type Item = i32;
-        const PRESENTATION: CollectionPresentation = CollectionPresentation::list()
-            .with_type_hint(true)
-            .with_order(RenderingOrder::SortByRenderedText);
-
-        fn elements(&self) -> impl Iterator<Item = &i32> {
-            self.0.iter()
-        }
-    }
-
-    assert_that!(Multiset(vec![2, 1, 1]))
-        .contains(1)
-        .contains_exactly_in_any_order([1, 2, 1])
-        .has_length(3);
-
-    let failures = assert_that!(Multiset(vec![2, 1, 1]))
-        .with_location(false)
-        .capture(|it| it.contains(3));
-    assert_that!(failures[0].to_string())
-        .contains("Actual: Multiset [")
-        .contains("(sorted for rendering)");
-}
-
-/// The extension traits behind the set and map families are as collision-prone as `Collection`, so
-/// they are kept out of the prelude for the same reason: a downstream `Set` or `Map` must stay
-/// usable as a bare name next to a glob-imported `assertr::prelude::*`.
-#[test]
-fn bare_set_and_map_names_stay_usable_next_to_a_second_glob_imported_prelude() {
+fn bare_capability_names_stay_usable_next_to_a_second_glob_imported_prelude() {
     fn size_of_sequence(value: &Sequence) -> usize {
         value.size
     }
@@ -231,165 +62,14 @@ fn bare_set_and_map_names_stay_usable_next_to_a_second_glob_imported_prelude() {
     fn size_of_map(value: &Map) -> usize {
         value.size
     }
+    fn size_of_length(value: &HasLength) -> usize {
+        value.size
+    }
 
     assert_that!(size_of_sequence(&Sequence { size: 1 })).is_equal_to(1);
     assert_that!(size_of_set(&Set { size: 2 })).is_equal_to(2);
     assert_that!(size_of_map(&Map { size: 3 })).is_equal_to(3);
-}
-
-#[test]
-fn a_custom_set_gets_every_set_and_collection_assertion() {
-    use assertr::{
-        assertions::{Collection as AssertrCollection, HasLength, SetLookup},
-        renderer::CollectionPresentation,
-    };
-
-    /// A downstream set type, implementing only the extension traits.
-    #[derive(Debug)]
-    struct CustomSet(Vec<i32>);
-
-    impl HasLength for CustomSet {
-        fn length(&self) -> usize {
-            self.0.len()
-        }
-    }
-
-    impl AssertrCollection for CustomSet {
-        type Item = i32;
-        const PRESENTATION: CollectionPresentation =
-            CollectionPresentation::set().with_type_hint(true);
-
-        fn elements(&self) -> impl Iterator<Item = &i32> {
-            self.0.iter()
-        }
-    }
-
-    impl SetLookup for CustomSet {
-        fn contains_element(&self, element: &i32) -> bool {
-            self.0.contains(element)
-        }
-    }
-
-    let set = CustomSet(vec![1, 2, 3]);
-    assert_that!(set)
-        .contains(2)
-        .does_not_contain(4)
-        .contains_all([1, 3])
-        .contains_exactly_in_any_order([3, 2, 1])
-        .is_subset_of(CustomSet(vec![1, 2, 3, 4]))
-        .is_superset_of(CustomSet(vec![1]))
-        .is_disjoint_from(CustomSet(vec![9]))
-        .has_length(3);
-
-    let failures = assert_that!(CustomSet(vec![1, 2, 3]))
-        .with_location(false)
-        .capture(|it| it.contains(4));
-    assert_that!(&failures).contains_exactly_satisfying([
-        |element: AssertThat<AssertionFailure, Capture>| {
-            element
-                .derive_owned(ToString::to_string)
-                .contains("Actual: CustomSet {");
-        },
-    ]);
-
-    let relation_failures = assert_that!(CustomSet(vec![1, 2]))
-        .with_location(false)
-        .capture(|it| it.is_subset_of(CustomSet(vec![1])));
-    assert_that!(&relation_failures).contains_exactly_satisfying([
-        |element: AssertThat<AssertionFailure, Capture>| {
-            element
-                .derive_owned(ToString::to_string)
-                .contains("Actual: CustomSet {")
-                .contains("Expected: CustomSet {");
-        },
-    ]);
-
-    #[cfg(feature = "fluent")]
-    {
-        let mut set = CustomSet(vec![1, 2, 3]);
-        (&mut set)
-            .must()
-            .contain(2)
-            .be_subset_of(CustomSet(vec![1, 2, 3, 4]))
-            .have_length(3);
-    }
-}
-
-#[test]
-fn a_custom_map_gets_every_map_assertion() {
-    use core::borrow::Borrow;
-    use std::collections::BTreeMap;
-
-    use assertr::{
-        assertions::{HasLength, Map as AssertrMap, MapLookup as AssertrMapLookup},
-        renderer::RenderingOrder,
-    };
-
-    /// A downstream map type, implementing only the extension traits.
-    #[derive(Debug)]
-    struct Config(BTreeMap<String, i32>);
-
-    impl HasLength for Config {
-        fn length(&self) -> usize {
-            self.0.len()
-        }
-    }
-
-    impl AssertrMap for Config {
-        type Key = String;
-        type Value = i32;
-        const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
-
-        fn entries(&self) -> impl Iterator<Item = (&String, &i32)> {
-            self.0.iter()
-        }
-    }
-
-    /// One generic impl carrying the wrapped map's own lookup bounds.
-    impl<Q> AssertrMapLookup<Q> for Config
-    where
-        Q: Ord + ?Sized,
-        String: Borrow<Q>,
-    {
-        fn get_key_value(&self, key: &Q) -> Option<(&String, &i32)> {
-            self.0.get_key_value(key)
-        }
-    }
-
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn is_three(value: &i32) -> bool {
-        *value == 3
-    }
-
-    fn satisfies_three(it: AssertThat<i32, Capture>) {
-        it.is_equal_to(3);
-    }
-
-    let config = Config(BTreeMap::from([("retries".to_owned(), 3)]));
-    assert_that!(config)
-        .contains_key("retries")
-        .does_not_contain_key("timeout")
-        .contains_value(3)
-        .does_not_contain_value(9)
-        .contains_entry("retries", 3)
-        .contains_entry_satisfying("retries", satisfies_three)
-        .contains_keys(["retries"])
-        .contains_exactly_entries([("retries", 3)])
-        .contains_exactly_entries_matching(
-            [("retries", is_three)].map(|(key, p)| matchers::entry(key, matchers::predicate(p))),
-        )
-        .contains_exactly_entries_satisfying([("retries", satisfies_three)])
-        .has_length(1);
-
-    #[cfg(feature = "fluent")]
-    {
-        let mut config = Config(BTreeMap::from([("retries".to_owned(), 3)]));
-        (&mut config)
-            .must()
-            .contain_key("retries")
-            .contain_entry("retries", 3)
-            .have_length(1);
-    }
+    assert_that!(size_of_length(&HasLength { size: 4 })).is_equal_to(4);
 }
 
 mod matcher_names {
@@ -410,12 +90,5 @@ mod matcher_names {
         let _ = (ConstraintDescription, Matcher);
         assert_that!(eq() && anything()).is_true();
         assert_that!(1).matches(matchers::eq(1));
-    }
-}
-
-struct NumericRenderer;
-impl ValueRenderer<usize> for NumericRenderer {
-    fn fmt(&self, value: &usize, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Debug::fmt(value, f)
     }
 }

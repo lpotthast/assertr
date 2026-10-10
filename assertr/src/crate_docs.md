@@ -425,6 +425,74 @@ complete example.
 Assertr's own `*Assertions` traits are public for method discovery only. Do not implement them for
 your types. See [API stability](#api-stability).
 
+#### Fluent aliases
+
+With the `fluent` feature,
+[`fluent_aliases`](https://docs.rs/assertr/latest/assertr/attr.fluent_aliases.html) gives a custom
+trait the same imperative spellings as the built-in assertions, so `value.must().be_ready()` works
+next to `.is_ready()`. Each alias delegates to its method, keeps its bounds and attributes, and
+tracks the caller. `is_x` becomes `be_x`, `has_x` becomes `have_x`, and `is_not_x` becomes
+`not_be_x`. The attribute documents the complete naming rules. Name an alias explicitly with
+`#[fluent_alias("..")]`, or skip a method with `#[no_fluent_alias]`:
+
+```
+# #[cfg(feature = "fluent")]
+# fn main() {
+use assertr::prelude::*;
+
+struct Service {
+    ready: bool,
+    initialized: bool,
+}
+
+#[assertr::fluent_aliases]
+trait ServiceAssertions<R = DebugRenderer> {
+    // Alias: `be_ready`.
+    fn is_ready(self) -> Self
+    where
+        R: Clone + ValueRenderer<bool>;
+
+    #[fluent_alias("be_set_up")]
+    fn is_initialized(self) -> Self
+    where
+        R: Clone + ValueRenderer<bool>;
+}
+
+impl<M: Mode, R> ServiceAssertions<R> for AssertThat<'_, Service, M, R> {
+    #[track_caller]
+    fn is_ready(self) -> Self
+    where
+        R: Clone + ValueRenderer<bool>,
+    {
+        self.satisfies(|service| &service.ready, |ready| {
+            ready.is_true();
+        })
+    }
+
+    #[track_caller]
+    fn is_initialized(self) -> Self
+    where
+        R: Clone + ValueRenderer<bool>,
+    {
+        self.satisfies(|service| &service.initialized, |initialized| {
+            initialized.is_true();
+        })
+    }
+}
+
+let service = Service { ready: true, initialized: true };
+service.must().be_ready().be_set_up();
+# }
+# #[cfg(not(feature = "fluent"))]
+# fn main() {}
+```
+
+To keep aliases optional in your own crate, apply the attribute and its helpers conditionally, as
+in `#[cfg_attr(feature = "fluent", assertr::fluent_aliases)]` and
+`#[cfg_attr(feature = "fluent", fluent_alias("be_set_up"))]`, where your `fluent` feature enables
+`assertr/fluent`. Conflicting or repeated helpers, and aliases that collide with another item of
+the trait, are compile errors.
+
 ### Implement an expectation
 
 Implement [`Expectation`](expectation::Expectation) when a check needs its own failure report, or when it produces a value

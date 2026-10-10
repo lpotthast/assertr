@@ -183,23 +183,6 @@ mod maps {
     }
 }
 
-mod tuple_structs {
-    use assertr::{matchers::eq, prelude::*};
-
-    #[allow(dead_code)]
-    struct Pair(i32, i32);
-
-    #[test]
-    fn accepts_wildcard_fields() {
-        assert_that!(Pair(1, 2)).matches(partial!(Pair(eq(1), _)));
-    }
-
-    #[test]
-    fn accepts_final_rest() {
-        assert_that!(Pair(1, 2)).matches(partial!(Pair(eq(1), ..)));
-    }
-}
-
 mod unit_structs {
     use assertr::prelude::*;
 
@@ -222,8 +205,8 @@ mod enum_variants {
         prelude::*,
     };
 
+    // Positive forms of each constructor shape are trybuild fixtures in `assertr-macros`.
     enum Example {
-        Named { value: i32 },
         Tuple(i32),
         Unit,
     }
@@ -247,22 +230,6 @@ mod enum_variants {
             .with_renderer(NoRenderer)
             .capture(|it| it.matches(partial!(Example::Tuple(anything()))));
         assert_that!(failures).has_length(1);
-    }
-
-    #[test]
-    fn accepts_named_variants() {
-        assert_that!(Example::Named { value: 1 })
-            .matches(partial!(Example::Named { value: eq(1) }));
-    }
-
-    #[test]
-    fn accepts_tuple_variants() {
-        assert_that!(Example::Tuple(2)).matches(partial!(Example::Tuple(eq(2))));
-    }
-
-    #[test]
-    fn accepts_unit_variants() {
-        assert_that!(Example::Unit).matches(partial!(Example::Unit));
     }
 
     #[test]

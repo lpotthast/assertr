@@ -5,6 +5,7 @@ use alloc::string::ToString;
 use crate::{
     AssertThat, Mode,
     failure::{AssertionFailure, FailureKind},
+    prelude::*,
 };
 
 pub(crate) trait FailureReportAssertions {
@@ -26,6 +27,18 @@ impl<M: Mode, R> FailureReportAssertions for AssertThat<'_, AssertionFailure, M,
         }
         self
     }
+}
+
+/// Asserts that `extract` panics with exactly the `Debug` text of `kind`.
+///
+/// The chain under test installs `with_panic_presentation(|failure| format!("{:?}",
+/// failure.kind))`, so its panic carries only the failure kind. This pins that an extracting
+/// assertion rejects like its non-extracting counterpart.
+pub(crate) fn rejected_kind(kind: FailureKind, extract: impl FnOnce()) {
+    assert_that_owned!(extract)
+        .panics()
+        .has_message()
+        .is_equal_to(alloc::format!("{kind:?}"));
 }
 
 macro_rules! assert_trait_impl {

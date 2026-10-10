@@ -6,6 +6,7 @@ sources:
   - assertr/src/__private/fluent_expressions.rs
   - assertr/src/failure/failures.rs
   - assertr-macros/src/fluent_aliases/naming.rs
+  - assertr-macros/src/fluent_aliases/mod.rs
   - assertr-macros/src/fluent_expressions/mod.rs
   - assertr-macros/tests/fluent_expressions/02-user-must.rs
   - assertr-macros/tests/fluent_expressions/03-callback-types.rs
@@ -36,7 +37,10 @@ See [entry rustdoc](../assertr/src/entry/fluent.rs) for method-resolution exampl
 
 Aliases preserve behavior and bounds. [Naming rules](../assertr-macros/src/fluent_aliases/naming.rs) derive spellings
 such as `is_equal_to` → `be_equal_to`, `contains` → `contain`, and `matches` → `match_expectation`. Explicit overrides
-cover unsupported names.
+cover unsupported names. Custom traits get aliases from the re-exported `assertr::fluent_aliases`. The macro rejects
+repeated or combined helpers, helpers on items other than methods, and aliases that collide with another trait item. A
+method gated by `#[cfg]` is checked only against ungated items, because gated items may share a name across
+configurations.
 
 ## Scoped expression capture
 

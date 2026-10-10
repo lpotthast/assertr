@@ -64,9 +64,9 @@ pub(crate) fn check_caller_location(assertions: impl FnOnce(LocationRecorder)) {
 /// - Future after a builder step: `assert_caller_location!(async assert_that!(observe),
 ///   eventually().matches(eq(1)))`.
 ///
-/// Both forms can be called from a synchronous `#[test]` function. In the `async` form, the macro
+/// Every form can be called from a synchronous `#[test]` function. In the `async` form, the macro
 /// creates a Tokio runtime and awaits the method internally using `block_on`. The test itself
-/// stays synchronous. This form requires the `std` feature.
+/// stays synchronous. The `async` forms require the `std` feature.
 ///
 /// Keep the method separate from its receiver: reconstructing the call's punctuation gives it
 /// the macro invocation's span, even when arguments span multiple lines. Forwarding an opaque
