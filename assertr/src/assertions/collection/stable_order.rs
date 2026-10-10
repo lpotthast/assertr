@@ -1149,6 +1149,15 @@ mod tests {
         }
 
         #[test]
+        fn compares_nested_sequences_of_owned_and_borrowed_elements() {
+            let owned = vec![vec![String::from("a")], vec![], vec![String::from("b")]];
+            assert_that!(owned.as_slice()).contains_exactly([vec!["a"], vec![], vec!["b"]]);
+            let borrowed = vec![vec!["a"], vec![], vec!["b"]];
+            assert_that!(borrowed.as_slice()).contains_exactly(&owned);
+            assert_that!(vec![String::from("a")]).matches(matchers::eq(vec!["a"]));
+        }
+
+        #[test]
         fn succeeds_when_exact_match_provided_as_slice() {
             assert_that!([1, 2, 3].as_slice()).contains_exactly([1, 2, 3]);
         }

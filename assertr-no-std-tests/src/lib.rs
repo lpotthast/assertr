@@ -326,8 +326,8 @@ mod tests {
     }
 
     use alloc::{
-        rc::Rc,
         string::{String, ToString},
+        sync::Arc,
     };
     use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -338,9 +338,10 @@ mod tests {
     };
 
     fn counting(
-        count: &Rc<AtomicUsize>,
-    ) -> impl Fn(&AssertionFailure) -> String + core::panic::RefUnwindSafe + 'static {
-        let count = Rc::clone(count);
+        count: &Arc<AtomicUsize>,
+    ) -> impl Fn(&AssertionFailure) -> String + core::panic::RefUnwindSafe + Send + Sync + 'static
+    {
+        let count = Arc::clone(count);
         move |failure| {
             count.fetch_add(1, Ordering::Relaxed);
             failure.to_string()
@@ -382,8 +383,8 @@ mod tests {
     }
 
     #[test]
-    fn a_non_sync_presentation_runs_only_in_panic_mode_without_std() {
-        let count = Rc::new(AtomicUsize::new(0));
+    fn a_presentation_runs_only_in_panic_mode_without_std() {
+        let count = Arc::new(AtomicUsize::new(0));
         let failures = assertr::assert_that!(1)
             .with_panic_presentation(counting(&count))
             .capture(|it| it.is_equal_to(2));

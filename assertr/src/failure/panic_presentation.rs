@@ -11,8 +11,10 @@ use super::AssertionFailure;
 ///
 /// The `'static` bound keeps the owned closure's destructor independent of subject borrows,
 /// allowing those borrows to end at the assertion context's last use.
-/// Preserve unwind safety when erasing the closure type, including through the shared `Rc`.
-pub(crate) type PanicPresentation = dyn Fn(&AssertionFailure) -> String + RefUnwindSafe + 'static;
+/// Preserve unwind safety when erasing the closure type, including through the shared `Arc`. It is
+/// `Send` and `Sync`, so that assertions awaiting an observation can move between threads.
+pub(crate) type PanicPresentation =
+    dyn Fn(&AssertionFailure) -> String + RefUnwindSafe + Send + Sync + 'static;
 
 /// Produces panic text, preserving the assertion report if the presentation panics.
 pub(crate) fn render(

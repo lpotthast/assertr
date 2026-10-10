@@ -17,6 +17,7 @@
 //! | Closures (`std`) | `FnOnceAssertions`, `AsyncFnOnceAssertions` |
 //! | Numbers (`num`) | `NumAssertions` |
 //! | `Path`, `Command`, `Mutex` (`std`) | `PathAssertions`, `CommandAssertions`, `MutexAssertions` |
+//! | Observations, closures returning a future of a changing value (`std`) | `EventualAssertions` |
 //! | Integrations | `HttpHeaderValueAssertions` (`http`), `SignedDurationAssertions`, `SpanAssertions`, `ZonedAssertions` (`jiff`), `ProgramAssertions` (`program`), `ReqwestResponseAssertions` (`reqwest`), `RootcauseReportAssertions` (`rootcause`), `TokioMutexAssertions`, `TokioRwLockAssertions`, `TokioWatchReceiverAssertions` (`tokio`) |
 //!
 //! Feature-gated traits appear in the list below when their feature is enabled.
@@ -123,7 +124,12 @@ pub use alloc::boxed::{BoxAssertions, BoxExtractAssertions};
 
 // Feature integrations.
 #[cfg(feature = "std")]
-pub use self::std::{command::CommandAssertions, mutex::MutexAssertions, path::PathAssertions};
+pub use self::std::{
+    command::CommandAssertions,
+    eventually::{Consistently, EventualAssertions, Eventually, Fallible, Patience, Plain},
+    mutex::MutexAssertions,
+    path::PathAssertions,
+};
 #[cfg(feature = "http")]
 pub use http::header_value::{HttpHeaderValueAssertions, HttpHeaderValueExtractAssertions};
 #[cfg(feature = "jiff")]

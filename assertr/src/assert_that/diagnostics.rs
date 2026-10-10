@@ -1,4 +1,4 @@
-use alloc::{rc::Rc, string::String};
+use alloc::{string::String, sync::Arc};
 
 use crate::{AssertThat, mode::Mode};
 
@@ -40,13 +40,15 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// produces, or build any other representation from the failure's structured fields.
     ///
     /// The closure must be `'static`, so it cannot borrow stack-local data. Move data into it,
-    /// clone owned values such as [`String`], or share owned data through [`Rc`]. This bound does
+    /// clone owned values such as [`String`], or share owned data through [`Arc`]. This bound does
     /// not require the closure to live forever. It is dropped when the last context using it is
     /// dropped, and the subject's borrow can still end at the context's last use.
     ///
-    /// It runs on the asserting thread and needs neither `Send`, `Sync`, nor `Clone`. Mapped and
-    /// derived assertions share the closure through an internal [`Rc`]. Calling this method again
-    /// replaces the selected presentation for this context.
+    /// It must be `Send` and `Sync`, because an [eventual
+    /// assertion](crate::assertions::EventualAssertions) keeps it while awaiting, possibly on
+    /// another thread. It needs no `Clone`: mapped and derived assertions share the closure
+    /// through an internal [`Arc`]. Calling this method again replaces the selected
+    /// presentation for this context.
     ///
     /// The closure must implement [`RefUnwindSafe`](core::panic::RefUnwindSafe), since its
     /// concrete type is erased and shared by contexts that may cross a `catch_unwind` boundary. A
@@ -73,9 +75,11 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         mut self,
         presentation: impl Fn(&crate::failure::AssertionFailure) -> String
         + core::panic::RefUnwindSafe
+        + Send
+        + Sync
         + 'static,
     ) -> Self {
-        self.state.panic_presentation = Some(Rc::new(presentation));
+        self.state.panic_presentation = Some(Arc::new(presentation));
         self
     }
 }

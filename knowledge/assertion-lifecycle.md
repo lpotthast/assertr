@@ -91,9 +91,11 @@ ownership. Borrowed payloads remain borrowed.
 
 ### Async constraints
 
-Chains are neither `Send` nor `Sync`: their state contains an `Rc` for panic presentation and interior-mutable records.
+Chains are neither `Send` nor `Sync`: their records are interior-mutable and may borrow parent records.
 A future retaining a chain across suspension cannot be `Send`. Async projections can be awaited locally. For a `Send` task,
 construct and finish the chain after required awaits. Capture callbacks return chains, never futures.
+[Eventual assertions](observation-boundaries.md#eventual-observations) are the exception: they detach the chain before
+their first suspension, so their futures are `Send` whenever the observation, expectation, and renderer are.
 The [async compile-fail examples](../assertr/src/crate_docs.md#async-code) demonstrate these limits.
 See [invocation and polling](observation-boundaries.md#invocation-and-polling) for operation timing and cancellation.
 

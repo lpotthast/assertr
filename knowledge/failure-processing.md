@@ -85,8 +85,9 @@ tests live in [report.rs](../assertr/src/failure/report.rs).
 
 After capture, the caller chooses how to present the failures, for example through `to_string()`. Capture and panic
 presentation never write to streams. Panic mode uses the default report unless `with_panic_presentation` installs an
-owned `'static + RefUnwindSafe` closure from `&AssertionFailure` to `String`. Derived chains share it through `Rc`. It
-requires none of `Send`, `Sync`, or `Clone`. The private `PanicPresentation` type preserves the unwind-safety bound.
+owned `'static + RefUnwindSafe + Send + Sync` closure from `&AssertionFailure` to `String`. Derived chains share it
+through `Arc`, and [eventual assertions](observation-boundaries.md#eventual-observations) keep it in futures that may
+move between threads. It need not be `Clone`. The private `PanicPresentation` type preserves these bounds.
 
 | Presentation outcome | Behavior |
 |---|---|

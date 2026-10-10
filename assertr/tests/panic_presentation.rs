@@ -3,7 +3,7 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::{
     panic::{AssertUnwindSafe, RefUnwindSafe, catch_unwind},
-    rc::Rc,
+    sync::Arc,
 };
 
 use assertr::prelude::*;
@@ -24,9 +24,9 @@ fn panic_text(action: impl FnOnce()) -> String {
 /// Counts its invocations and produces the default report. The closure is neither `Send`,
 /// `Sync`, nor `Clone`.
 fn counting(
-    count: &Rc<AtomicUsize>,
-) -> impl Fn(&AssertionFailure) -> String + RefUnwindSafe + 'static {
-    let count = Rc::clone(count);
+    count: &Arc<AtomicUsize>,
+) -> impl Fn(&AssertionFailure) -> String + RefUnwindSafe + Send + Sync + 'static {
+    let count = Arc::clone(count);
     move |failure| {
         count.fetch_add(1, Ordering::Relaxed);
         failure.to_string()
@@ -130,7 +130,7 @@ mod inheritance {
 
     #[test]
     fn a_non_clone_presentation_is_shared_with_derived_assertions() {
-        let count = Rc::new(AtomicUsize::new(0));
+        let count = Arc::new(AtomicUsize::new(0));
         let assertion = assert_that_owned!(1)
             .with_location(false)
             .with_panic_presentation(counting(&count));
@@ -147,7 +147,7 @@ mod inheritance {
         assert_that!(parent_message).is_equal_to(DEFAULT_MESSAGE);
         assert_that!(count.load(Ordering::Relaxed)).is_equal_to(2);
         // All contexts have dropped, releasing the presentation's shared state.
-        assert_that!(Rc::strong_count(&count)).is_equal_to(1);
+        assert_that!(Arc::strong_count(&count)).is_equal_to(1);
     }
 }
 
@@ -156,7 +156,7 @@ mod ownership {
 
     #[test]
     fn an_erased_presentation_preserves_context_unwind_safety() {
-        let count = Rc::new(AtomicUsize::new(0));
+        let count = Arc::new(AtomicUsize::new(0));
         let context = assert_that!(1).with_panic_presentation(counting(&count));
         assert_that!(
             catch_unwind(|| {
@@ -171,7 +171,7 @@ mod ownership {
 
     #[test]
     fn an_owned_presentation_does_not_extend_the_subject_borrow_until_drop() {
-        let count = Rc::new(AtomicUsize::new(0));
+        let count = Arc::new(AtomicUsize::new(0));
         let mut values = vec![1];
         let assertion = assert_that!(values).with_panic_presentation(counting(&count));
         let first = assertion.get_first();
@@ -216,7 +216,7 @@ mod capture {
 
     #[test]
     fn capture_and_success_do_not_invoke_the_presentation() {
-        let count = Rc::new(AtomicUsize::new(0));
+        let count = Arc::new(AtomicUsize::new(0));
         assert_that!(1)
             .with_panic_presentation(counting(&count))
             .is_equal_to(1);

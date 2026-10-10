@@ -48,8 +48,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Configure it with `with_max_items` and `with_max_leaf_characters`, apply it with `with_rendering_budget`, or disable
   both limits with `RenderingBudget::unlimited()`. Reports state how many items or nested failures were omitted.
   Limits never change assertion outcomes.
-- `with_panic_presentation` installs an owned `'static + RefUnwindSafe` closure producing the panic text from a failure,
-  shared by derived assertions. With `std`, a panicking presentation falls back to the built-in report.
+- `with_panic_presentation` installs an owned `'static + RefUnwindSafe + Send + Sync` closure producing the panic text
+  from a failure, shared by derived assertions. With `std`, a panicking presentation falls back to the built-in report.
+- Eventual assertions (`std`) on an observation, a closure returning a future of a changing value:
+  `assert_that!(|| log.text()).eventually().matches(eq("done")).await` observes until the expectation holds, and
+  `consistently()` requires it to keep holding. `eventually_ok` and `consistently_ok` take observations returning
+  `Result`. They end with any matcher (`matches`) or assertion callback (`satisfies`) and continue on the observed
+  value. Failures add how long and how often the value was observed, and the values seen. `Patience` sets the timeout,
+  polling interval, and consistency duration: fast defaults (1 s, 10 ms, 100 ms), `Patience::set_global` for a test
+  suite, and `within`, `polling_every`, `for_at_least`, and `with_patience` for one chain. They run in any async
+  runtime, and their futures are `Send` whenever the observation, expectation, and renderer are.
 - `AssertionFailure` and `AssertionFailures` implement `core::error::Error` with readable `Display` and `Debug` reports.
   `Fact` and `renderer::Rendered` expose their diagnostic data as public fields.
 - `RenderingContext` renders values, collections, maps, synthetic value and key/value lists, and one-field variants and
@@ -77,7 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `PartialOrd` with owned or borrowed operands selected by `BorrowFor` from the `borrow-for` crate, re-exported as
   `assertr::borrow_for`. Ordinary values and references work automatically. String literals remain usable for equality
   with `String` subjects, elements, and map values without allocation. Arrays compare with vectors, and vectors compare
-  with slice subjects. Custom operand wrappers opt in by declaring their borrowed view. Range containment accepts owned
+  with slice subjects. Vectors and slices of `&str` compare with those of `String`, in both directions, also as
+  collection elements (`contains_exactly([vec!["a"]])` on a `Vec<Vec<String>>`), as do the `CStr`, `Path`, and
+  `OsStr` families. Custom operand wrappers opt in by declaring their borrowed view. Range containment accepts owned
   or borrowed operands with owned or borrowed range subjects. The unbounded range `..` needs an explicit bound type.
   This replaces `AssertrPartialEq` and the public `cmp` API, including `Eq`, `eq`, `any`, `EqContext`, and
   `Differences`. Replace the former root and prelude `eq(value)` with `matchers::eq(value)`, and `any()` with

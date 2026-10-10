@@ -1,10 +1,15 @@
 //! Core construction and basic operations for assertion chains.
 
 mod capture;
+#[cfg(feature = "std")]
+mod detached;
 mod diagnostics;
 mod execution;
 mod projection;
 mod rendering;
+
+#[cfg(feature = "std")]
+pub(crate) use detached::DetachedChain;
 
 use alloc::vec::Vec;
 use core::{

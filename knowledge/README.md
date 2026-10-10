@@ -46,7 +46,7 @@ Each page covers one part of the library. The [glossary](glossary.md) defines th
 | [Iterator execution](iterator-execution.md) | How much input iterator assertions consume, what they retain, and when they release the iterator. |
 | [Matcher composition](matcher-composition.md) | How matchers combine checks, callbacks, lists, and structural patterns. |
 | [Reference identity](reference-identity.md) | Which addresses same-instance assertions compare and what pointer equality can establish. |
-| [Observation boundaries](observation-boundaries.md) | When assertions invoke functions, poll futures, inspect files or locks, and consume responses. |
+| [Observation boundaries](observation-boundaries.md) | When assertions invoke functions, poll futures, observe changing values over time, inspect files or locks, and consume responses. |
 | [Diagnostic rendering](diagnostic-rendering.md) | How values become diagnostic trees, with renderer bounds, ordering, and size limits. |
 | [Failure processing](failure-processing.md) | How structured failures become reports and panics, and how panic presentation is customized. |
 | [Fluent entry](fluent-entry.md) | How fluent methods borrow values, provide aliases, and capture expression text. |

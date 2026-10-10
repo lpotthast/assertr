@@ -80,9 +80,7 @@ checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
 name = "borrow-for"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb7b3f4da0655a547b55a6ab43f04627af4732d6b80dc9c7aa8f8f177f2f2dd8"
+version = "0.1.2"
 
 [[package]]
 name = "bumpalo"

@@ -186,6 +186,47 @@ requires_send(async {
 When a task must be `Send`, await the input first, then build and finish the chain without another
 `.await` in between.
 
+### Values that change over time
+
+For state that changes asynchronously, such as a page, a cache, or a background job, assert on an
+observation: a closure returning a future of the current value. `eventually` observes it until the
+expectation holds and continues with that value. `consistently` requires it to keep holding. Both end
+with any matcher or assertion callback:
+
+```
+# #[cfg(feature = "std")]
+# {
+use assertr::{matchers::ge, prelude::*};
+use std::{sync::atomic::{AtomicU32, Ordering}, time::Duration};
+
+# tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
+let processed = AtomicU32::new(0);
+let observe = || async { processed.fetch_add(1, Ordering::SeqCst) + 1 };
+
+assert_that!(observe)
+    .eventually()
+    .within(Duration::from_millis(500))
+    .matches(ge(3))
+    .await
+    .is_less_than(10);
+assert_that!(observe)
+    .consistently()
+    .satisfies(|count| {
+        count.is_greater_than(3);
+    })
+    .await;
+# });
+# }
+```
+
+A failure shows the expectation's report, how long and how often the value was observed, and the
+values seen. [`Patience`](crate::assertions::Patience) configures the timeout, the polling interval,
+and the consistency duration. The defaults are fast (1 s, 10 ms, 100 ms). Set your own for a whole
+test suite with `Patience::set_global`, and override them for one assertion with `within`,
+`polling_every`, `for_at_least`, or `with_patience`. Use `eventually_ok` and `consistently_ok` for
+observations returning a `Result`. Eventual assertions need no particular runtime, and their futures
+are `Send` when the observation is.
+
 ## Custom assertions
 
 Before writing new code, check whether existing tools cover the case:

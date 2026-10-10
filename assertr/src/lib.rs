@@ -595,9 +595,9 @@ struct ChainState<'t, M: Mode, R> {
     rendering_budget: RenderingBudget,
 
     /// An inherited context override for panic text. `None` uses the failure's `Display` report.
-    /// Capture mode never invokes presentation. Local closures need not be thread-safe. `Rc`
-    /// shares the closure with derived contexts without requiring it to be `Clone`.
-    panic_presentation: Option<alloc::rc::Rc<failure::panic_presentation::PanicPresentation>>,
+    /// Capture mode never invokes presentation. `Arc` shares the closure with derived contexts
+    /// without requiring it to be `Clone`, and keeps it `Send` for assertions that await.
+    panic_presentation: Option<alloc::sync::Arc<failure::panic_presentation::PanicPresentation>>,
 
     /// Compile-time marker selecting immediate panics or failure collection. Derived chains retain
     /// the same mode.

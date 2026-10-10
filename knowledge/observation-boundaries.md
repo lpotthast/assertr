@@ -10,6 +10,8 @@ sources:
   - assertr/src/entry/panic.rs
   - assertr/src/assertions/std/mutex.rs
   - assertr/src/assertions/std/path.rs
+  - assertr/src/assertions/std/eventually/mod.rs
+  - assertr/src/assert_that/detached.rs
   - assertr/src/assertions/tokio/mutex.rs
   - assertr/src/assertions/tokio/rw_lock.rs
   - assertr/src/assertions/tokio/watch.rs
@@ -67,6 +69,30 @@ Async assertions are adapters awaited in the calling task, under the chain's
 [async constraints](assertion-lifecycle.md#async-constraints).
 The [function tests](../assertr/src/assertions/core/fn.rs), including
 `invocation_is_lazy_and_panicked_futures_are_never_repolled` and caller-location pins, verify timing, not cancellation safety.
+
+## Eventual observations
+
+`EventualAssertions` take an observation, a closure returning a future of the current value, and observe it
+repeatedly in panic mode. Their builders configure the [patience](glossary.md#execution-and-presentation). The final
+`matches` or `satisfies` call is the assertion:
+
+| Assertion | Passes | Fails |
+|---|---|---|
+| `eventually` | At the first observation meeting the expectation. Continues with that value. | When the last observation at or after the timeout does not. |
+| `consistently` | When every observation until the consistency duration ends meets it. Continues with the last value. | At the first observation that does not. |
+| `_ok` variants | Same, for an observation returning `Result`: `eventually_ok` retries an `Err`, `consistently_ok` fails on it. | An `Err` fails with relation "could not be observed" and an `Error` fact. |
+
+The final call captures the caller location, tracks one assertion on the chain and its ancestors, resolves the patience
+(global patience with the chain's overrides), and [detaches](glossary.md#chain-state) the chain: ancestor
+messages are collected as in `capture`, and the future keeps only the observation, the diagnostic settings, and the
+renderer. It is therefore `Send` whenever they are, unlike other async adapters. The continuation is a new root chain on
+the observed value. Panic mode raises immediately, so it needs neither the records nor the parent link.
+
+Expectations are evaluated on every observation, but explained only for the failing one. Each observation is rendered
+for the history. A failure is the expectation's own failure plus a `Waited` or `Held` fact (duration and number of
+observations) and, when the value changed, `Observed values`: up to eight distinct values with their offsets. Pauses
+use a private timer thread rather than a runtime's timer, so any executor can await them. Cancelling the future stops
+observing. [Eventual tests](../assertr/src/assertions/std/eventually/mod.rs) cover timing, reports, messages, and `Send`.
 
 ## Filesystem existence observations
 

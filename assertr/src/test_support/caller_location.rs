@@ -6,25 +6,26 @@ use crate::{
 };
 use alloc::{
     boxed::Box,
-    rc::Rc,
     string::{String, ToString},
+    sync::Arc,
     vec::Vec,
 };
 use core::panic::{Location, RefUnwindSafe};
 use std::sync::Mutex;
 
 /// A panic presentation recording the failure's location before producing the default report.
-pub(crate) type LocationRecorder = Box<dyn Fn(&AssertionFailure) -> String + RefUnwindSafe>;
+pub(crate) type LocationRecorder =
+    Box<dyn Fn(&AssertionFailure) -> String + RefUnwindSafe + Send + Sync>;
 
 /// Runs an assertion with a recording presentation, then checks its captured caller location.
 #[track_caller]
 pub(crate) fn check_caller_location(assertions: impl FnOnce(LocationRecorder)) {
     let expected = Location::caller();
-    let recorded_locations = Rc::new(Mutex::new(Vec::new()));
+    let recorded_locations = Arc::new(Mutex::new(Vec::new()));
 
     // The assertion context owns its presentation. Retain a handle to the recorded locations so
     // they survive unwinding and can be checked after the assertion panics.
-    let recorder = Rc::clone(&recorded_locations);
+    let recorder = Arc::clone(&recorded_locations);
     let outcome = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
         assertions(Box::new(move |failure: &AssertionFailure| {
             recorder.lock().unwrap().push(failure.location);
@@ -46,6 +47,8 @@ pub(crate) fn check_caller_location(assertions: impl FnOnce(LocationRecorder)) {
 /// Choose the macro form according to the assertion method's return type:
 /// - Synchronous: `assert_caller_location!(assert_that!(false), is_true())`.
 /// - Future: `assert_caller_location!(async assert_that!(|| async {}), panics_async())`.
+/// - Future after a builder step: `assert_caller_location!(async assert_that!(observe),
+///   eventually().matches(eq(1)))`.
 ///
 /// Both forms can be called from a synchronous `#[test]` function. In the `async` form, the macro
 /// creates a Tokio runtime and awaits the method internally using `block_on`. The test itself
@@ -55,6 +58,16 @@ pub(crate) fn check_caller_location(assertions: impl FnOnce(LocationRecorder)) {
 /// the macro invocation's span, even when arguments span multiple lines. Forwarding an opaque
 /// call expression would retain that expression's span.
 macro_rules! assert_caller_location {
+    (async $context:expr, $builder:ident ($($builder_arg:expr),* $(,)?) . $method:ident $(::<$($ty:ty),+>)? ($($arg:expr),* $(,)?) $(,)?) => {{
+        $crate::test_support::check_caller_location(|presentation| {
+            $crate::test_support::block_on(async {
+                ($context)
+                    .with_panic_presentation(presentation)
+                    .$builder($($builder_arg),*)
+                    .$method $(::<$($ty),+>)? ($($arg),*).await;
+            });
+        });
+    }};
     (async $context:expr, $method:ident $(::<$($ty:ty),+>)? ($($arg:expr),* $(,)?) $(,)?) => {{
         $crate::test_support::check_caller_location(|presentation| {
             $crate::test_support::block_on(async {

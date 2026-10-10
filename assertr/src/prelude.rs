@@ -16,7 +16,9 @@ pub use crate::assertions::NumAssertions;
 #[cfg(any(feature = "std", test))]
 pub use crate::assertions::{AsyncFnOnceAssertions, FnOnceAssertions};
 #[cfg(feature = "std")]
-pub use crate::assertions::{CommandAssertions, MutexAssertions, PathAssertions};
+pub use crate::assertions::{
+    CommandAssertions, EventualAssertions, MutexAssertions, PathAssertions, Patience,
+};
 #[cfg(feature = "http")]
 pub use crate::assertions::{HttpHeaderValueAssertions, HttpHeaderValueExtractAssertions};
 #[cfg(feature = "program")]
