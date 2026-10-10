@@ -5,9 +5,6 @@ edition = "2024"
 rust-version = "1.89.0"
 publish = false
 
-[lints]
-workspace = true
-
 [features]
 # Keep the fixture no-std by default. Workspace-wide commands exclude it so the dependency's
 # features cannot be unified with those selected for the main `assertr` package.
@@ -18,3 +15,6 @@ std = ["assertr/std"]
 
 [dependencies]
 assertr = { path = "../assertr", default-features = false }
+
+[lints]
+workspace = true

@@ -20,9 +20,6 @@ include = ["/src/**", "/LICENSE-*"]
 [lib]
 proc-macro = true
 
-[lints]
-workspace = true
-
 [dependencies]
 proc-macro-crate = "3.5.0"
 proc-macro2 = "1.0.107"
@@ -34,6 +31,9 @@ renamed_assertr = { package = "assertr", path = "../assertr", features = ["std",
 # Unit tests compare and print syntax trees.
 syn = { version = "3.0.3", features = ["extra-traits"] }
 trybuild = { version = "1.0.103", features = ["diff"] }
+
+[lints]
+workspace = true
 
 [[test]]
 name = "tests"

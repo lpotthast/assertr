@@ -19,9 +19,6 @@ include = ["/src/**", "/tests/**", "/LICENSE-*"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[lints]
-workspace = true
-
 [features]
 # The `?/std` and `?/libm` edges are deliberately weak: enabling `std` or `libm` must not pull in
 # an optional integration and its dependency behind the user's back. A strong `num-traits/std`
@@ -88,7 +85,6 @@ which = { version = "8.0.0", optional = true, default-features = false, features
 
 [dev-dependencies]
 async-trait = "0.1.92"
-serde_json = "1.0.140"
 # The reqwest tests build responses from `http::Response` instead of running a mock server. A custom
 # `http_body::Body` with `bytes::Bytes` data makes a body read fail. These tests only compile with
 # the `reqwest` feature, so tools analyzing default features report `bytes` and `http-body` unused.
@@ -101,7 +97,11 @@ indoc = "2.0.5"
 jiff = "0.2.13"
 # Tests and docs use derives. Production derives are enabled only by thirtyfour-cdp.
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.140"
 # `#[tokio::test]` needs a current-thread runtime and the attribute macro. `sync` is needed by the
 # `program` tests, which reach for a `tokio::sync::RwLock` while the `tokio` feature (and with it
 # the normal dependency that would supply `sync`) is off.
 tokio = { version = "1.53.1", default-features = false, features = ["macros", "rt", "sync"] }
+
+[lints]
+workspace = true
