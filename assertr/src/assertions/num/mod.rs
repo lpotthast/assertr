@@ -2,7 +2,7 @@
 
 #[cfg(any(feature = "std", feature = "libm"))]
 use num_traits::Float;
-use num_traits::{Num, Signed};
+use num_traits::{Num, float::FloatCore};
 
 pub use super::distance::{IsCloseTo, NumericDistance};
 use crate::{
@@ -12,19 +12,35 @@ use crate::{
 };
 
 property_expectation! {
-    /// Checks [`Signed::is_negative`], including the sign bit of floating-point values.
-    pub struct IsNegative for<T: Signed> T;
+    /// Checks that a numeric value is less than zero. Zero, `-0.0`, and NaN are not negative.
+    pub struct IsNegative for<T: [Num + PartialOrd]> T;
     kind Ordering;
-    check |actual| actual.is_negative();
+    check |actual| *actual < T::zero();
     relations "is negative", "is not negative";
 }
 
 property_expectation! {
-    /// Checks [`Signed::is_positive`], including the sign bit of floating-point values.
-    pub struct IsPositive for<T: Signed> T;
+    /// Checks that a numeric value is greater than zero. Zero, `0.0`, and NaN are not positive.
+    pub struct IsPositive for<T: [Num + PartialOrd]> T;
     kind Ordering;
-    check |actual| actual.is_positive();
+    check |actual| *actual > T::zero();
     relations "is positive", "is not positive";
+}
+
+property_expectation! {
+    /// Checks that a floating-point value has a negative sign bit, as `-0.0` and `-NaN` do.
+    pub struct IsSignNegative for<T: FloatCore> T;
+    kind Predicate;
+    check |actual| actual.is_sign_negative();
+    relations "has a negative sign", "does not have a negative sign";
+}
+
+property_expectation! {
+    /// Checks that a floating-point value has a positive sign bit, as `0.0` and `NaN` do.
+    pub struct IsSignPositive for<T: FloatCore> T;
+    kind Predicate;
+    check |actual| actual.is_sign_positive();
+    relations "has a positive sign", "does not have a positive sign";
 }
 
 #[cfg(any(feature = "std", feature = "libm"))]
@@ -103,22 +119,38 @@ pub trait NumAssertions<T: Num, R = DebugRenderer> {
     where
         R: ValueRenderer<T>;
 
-    /// Asserts that [`Signed::is_negative`] returns true for the subject.
+    /// Asserts that the subject is less than zero.
     ///
-    /// For floating-point values this tests the sign bit, so `-0.0` and a negative-sign NaN are
-    /// considered negative.
+    /// Zero is neither negative nor positive, and neither is NaN. Use
+    /// [`is_sign_negative`](Self::is_sign_negative) to test the sign bit of a floating-point
+    /// value, which is set for `-0.0`.
     fn is_negative(self) -> Self
     where
-        T: Signed,
+        T: PartialOrd,
         R: ValueRenderer<T>;
 
-    /// Asserts that [`Signed::is_positive`] returns true for the subject.
+    /// Asserts that the subject is greater than zero.
     ///
-    /// For floating-point values this tests the sign bit, so `0.0` and a positive-sign NaN are
-    /// considered positive.
+    /// Zero is neither negative nor positive, and neither is NaN. Unsigned integers are supported.
+    /// Use [`is_sign_positive`](Self::is_sign_positive) to test the sign bit of a floating-point
+    /// value, which is clear for `0.0`.
     fn is_positive(self) -> Self
     where
-        T: Signed,
+        T: PartialOrd,
+        R: ValueRenderer<T>;
+
+    /// Asserts that the sign bit of a floating-point subject is set, as for negative values,
+    /// `-0.0`, and a negative-sign NaN.
+    fn is_sign_negative(self) -> Self
+    where
+        T: FloatCore,
+        R: ValueRenderer<T>;
+
+    /// Asserts that the sign bit of a floating-point subject is clear, as for positive values,
+    /// `0.0`, and a positive-sign NaN.
+    fn is_sign_positive(self) -> Self
+    where
+        T: FloatCore,
         R: ValueRenderer<T>;
 
     /// Asserts that the subject is within `allowed_deviation` of `expected`.
@@ -202,7 +234,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_negative(self) -> Self
     where
-        T: Signed,
+        T: PartialOrd,
         R: ValueRenderer<T>,
     {
         self.matches(IsNegative)
@@ -211,10 +243,28 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
     #[track_caller]
     fn is_positive(self) -> Self
     where
-        T: Signed,
+        T: PartialOrd,
         R: ValueRenderer<T>,
     {
         self.matches(IsPositive)
+    }
+
+    #[track_caller]
+    fn is_sign_negative(self) -> Self
+    where
+        T: FloatCore,
+        R: ValueRenderer<T>,
+    {
+        self.matches(IsSignNegative)
+    }
+
+    #[track_caller]
+    fn is_sign_positive(self) -> Self
+    where
+        T: FloatCore,
+        R: ValueRenderer<T>,
+    {
+        self.matches(IsSignPositive)
     }
 
     #[track_caller]
@@ -293,6 +343,8 @@ mod tests {
             1_i32.must().be_one();
             (-0.01_f64).must().be_negative();
             0.01_f64.must().be_positive();
+            (-0.0_f64).must().be_sign_negative();
+            0.0_f64.must().be_sign_positive();
             0.333_f64.must().be_close_to(0.333, 0.001);
             #[cfg(any(feature = "std", feature = "libm"))]
             {
@@ -456,9 +508,19 @@ mod tests {
         }
 
         #[test]
-        fn uses_the_float_sign_bit() {
-            assert_that!(-0.0).is_negative();
-            assert_that!(-f64::NAN).is_negative();
+        fn rejects_zero_and_nan_regardless_of_their_sign() {
+            for value in [0.0, -0.0, f64::NAN, -f64::NAN] {
+                let failures = assert_that!(value).capture(NumAssertions::is_negative);
+                assert_that!(failures).has_length(1);
+            }
+            let failures = assert_that!(0_i32).capture(NumAssertions::is_negative);
+            assert_that!(failures).has_length(1);
+        }
+
+        #[test]
+        fn rejects_every_unsigned_value() {
+            let failures = assert_that!(0_u8).capture(NumAssertions::is_negative);
+            assert_that!(failures).has_length(1);
         }
 
         #[test]
@@ -489,11 +551,73 @@ mod tests {
         }
 
         #[test]
-        fn uses_the_float_sign_bit() {
+        fn succeeds_when_greater_than_zero() {
             assert_that!(0.01).is_positive();
-            assert_that!(0.0).is_positive();
-            assert_that!(f64::NAN).is_positive();
-            let failures = assert_that!(-0.0).capture(NumAssertions::is_positive);
+            assert_that!(1_i32).is_positive();
+            assert_that!(1_u64).is_positive();
+        }
+
+        #[test]
+        fn rejects_zero_and_nan_regardless_of_their_sign() {
+            for value in [0.0, -0.0, f64::NAN, -f64::NAN] {
+                let failures = assert_that!(value).capture(NumAssertions::is_positive);
+                assert_that!(failures).has_length(1);
+            }
+            let failures = assert_that!(0_u32).capture(NumAssertions::is_positive);
+            assert_that!(failures).has_length(1);
+        }
+    }
+
+    mod is_sign_negative {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(0.0), is_sign_negative());
+        }
+
+        #[test]
+        fn tests_the_sign_bit() {
+            assert_that!(-1.0).is_sign_negative();
+            assert_that!(-0.0_f32).is_sign_negative();
+            assert_that!(-f64::NAN).is_sign_negative();
+            assert_that!(f64::NEG_INFINITY).is_sign_negative();
+        }
+
+        #[test]
+        fn panics_for_a_clear_sign_bit() {
+            assert_that!(|| assert_that!(0.0).with_location(false).is_sign_negative())
+                .panics()
+                .has_type::<String>()
+                .is_equal_to(formatdoc! {r"
+                    -------- assertr --------
+                    Expression: `0.0`
+
+                    Actual: 0.0
+
+                    does not have a negative sign
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod is_sign_positive {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(-0.0), is_sign_positive());
+        }
+
+        #[test]
+        fn tests_the_sign_bit() {
+            assert_that!(1.0).is_sign_positive();
+            assert_that!(0.0_f32).is_sign_positive();
+            assert_that!(f64::NAN).is_sign_positive();
+            assert_that!(f64::INFINITY).is_sign_positive();
+            let failures = assert_that!(-0.0).capture(NumAssertions::is_sign_positive);
             assert_that!(failures).has_length(1);
         }
     }

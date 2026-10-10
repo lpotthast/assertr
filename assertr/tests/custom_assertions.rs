@@ -796,7 +796,7 @@ mod generic_num_traits_bounds {
         assert_that!(value).is_close_to(expected, deviation);
     }
 
-    fn assert_sign<T: Num + Signed + Debug>(negative: T, positive: T) {
+    fn assert_sign<T: Num + PartialOrd + Debug>(negative: T, positive: T) {
         assert_that!(negative).is_negative();
         assert_that!(positive).is_positive();
     }

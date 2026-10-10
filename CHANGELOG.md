@@ -264,6 +264,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   work on embedded `no_std` targets with `alloc`.
 - **Breaking:** `jiff` is built without its default features. Enable jiff's time-zone database features in your own
   dependency if your tests look up time zones by name.
+- **Breaking:** `NumAssertions::is_positive` and `is_negative` compare strictly with zero and require `PartialOrd`
+  instead of `num_traits::Signed`, so unsigned integers support them. `0.0`, `-0.0`, and NaN are neither positive nor
+  negative. The new `is_sign_positive` and `is_sign_negative` (`matchers::numeric::IsSignPositive` and
+  `IsSignNegative`) test the sign bit of floating-point values without `std` or `libm`.
 - **Breaking:** `NumAssertions::is_close_to` uses rounded absolute floating-point distance through
   `assertions::NumericDistance`, retaining overflow-safe integer comparisons without requiring `Clone`.
   Generic callers need this bound next to `Num`, and custom numeric types implement `zero_distance` and

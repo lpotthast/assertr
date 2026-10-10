@@ -358,7 +358,9 @@ pub mod numeric {
     #[doc(inline)]
     pub use crate::assertions::num::{IsFinite, IsInfinite, IsNan, IsNormal, IsSubnormal};
     #[doc(inline)]
-    pub use crate::assertions::num::{IsNegative, IsOne, IsPositive, IsZero};
+    pub use crate::assertions::num::{
+        IsNegative, IsOne, IsPositive, IsSignNegative, IsSignPositive, IsZero,
+    };
 }
 
 /// Command argument expectations. Requires `std`.

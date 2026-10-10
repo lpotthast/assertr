@@ -25,6 +25,15 @@ use crate::{
 macro_rules! property_expectation {
     (
         $(#[$attr:meta])*
+        pub struct $name:ident for<$param:ident: [$($bound:tt)+]> $subject:ty;
+        $($rest:tt)*
+    ) => {
+        property_expectation!(
+            @define [$(#[$attr])*] $name [$param] [$param: $($bound)+,] $subject; $($rest)*
+        );
+    };
+    (
+        $(#[$attr:meta])*
         pub struct $name:ident for<$($param:ident $(: $bound:path)?),+> $subject:ty;
         $($rest:tt)*
     ) => {
