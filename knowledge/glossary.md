@@ -130,3 +130,7 @@ for detailed requirements and exceptions.
 | [Eventual assertion](observation-boundaries.md#eventual-observations) | `eventually` or `consistently`: observes repeatedly until an expectation holds, or while it keeps holding. |
 | [Give-up policy](observation-boundaries.md#eventual-observations) | `GiveUp` implementation deciding which failed observations end `eventually_ok`: `KeepRetrying`, `AnyError`, or a closure. |
 | [Patience](observation-boundaries.md#eventual-observations) | Timeout, polling interval, consistency duration, and observation timeout of eventual assertions: global, overridden per chain. |
+| [Timeout](observation-boundaries.md#eventual-observations) | How long `eventually` keeps observing before it fails. Also the deadline of each of its observations. Set per chain with `within`. |
+| [Polling interval](observation-boundaries.md#eventual-observations) | Pause between two observations, never extending a deadline. Set per chain with `polling_every`. |
+| [Consistency duration](observation-boundaries.md#eventual-observations) | How long `consistently` requires the expectation to hold. Set per chain with `for_at_least`. |
+| [Observation timeout](observation-boundaries.md#eventual-observations) | How long `consistently` waits for one observation, measured from its start. A pending observation fails the assertion. Set per chain with `each_observation_within`. |

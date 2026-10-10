@@ -14,19 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Reusable expectations. An `Expectation` evaluates a subject once and explains a rejection or describes an unmet
   expectation through the structured failure builder. Apply one to a chain with `matches` (fluent alias
   `match_expectation`), with `test_assertion`, which also returns the successful observation, or in panic mode with
-  `require`, which returns the successful observation without an `Option`. Every
-  built-in assertion family is backed by public expectations that compose the same way as custom definitions.
+  `require`, which returns the successful observation without an `Option`. Every built-in assertion family is backed by
+  public expectations that compose the same way as custom definitions.
 - The `matchers` catalog re-exports every public expectation, with common checks at its root and subject namespaces for
-  family-specific names. Combine them with `all_of`, `any_of`, `anything`, `predicate`, `satisfying`
-  (assertion callbacks), `dereferenced` (any `Deref` subject), `each`, `elements_are!`, `elements_are_in_any_order!`,
-  `entries_are!`, `matchers!` (heterogeneous matcher lists), and `pattern!`. Use `eq`, `lt`,
-  `gt`, `le`, and `ge` for comparisons, and `close_to` for tolerances. Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a
-  pattern negatively. Matcher lists and keyed value expectations require explicit matchers. `matchers![..]` builds
-  heterogeneous lists, including keyed `matchers![entry(..), ..]` lists. Arrays, slices, and vectors hold one matcher
-  type, such as `[is_one, is_two].map(predicate)`. The sealed list traits `MatcherList` and `EntryMatcherList` live in
-  `assertr::expectation`. Passing a plain value where a matcher is expected produces a compile error that suggests `eq(value)`.
-  Collection matcher constructors such as `each`, `elements_are`, and `contains_matching` are `const` and warn when
-  their result is unused. All of this works without optional features or `std`.
+  family-specific names. Combine them with `all_of`, `any_of`, `anything`, `predicate`, `satisfying` (assertion
+  callbacks), `dereferenced` (any `Deref` subject), `each`, `elements_are!`, `elements_are_in_any_order!`,
+  `entries_are!`, and `pattern!`. Use `eq`, `lt`, `gt`, `le`, and `ge` for comparisons, and `close_to` for tolerances.
+  Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a pattern negatively. Matcher lists and
+  keyed value expectations require explicit matchers. Arrays, slices, and vectors hold one matcher type, such as
+  `[is_one, is_two].map(predicate)`, and `matchers![..]` builds heterogeneous lists, including keyed
+  `matchers![entry(..), ..]` lists. The sealed list traits `MatcherList` and `EntryMatcherList` live in
+  `assertr::expectation`. Passing a plain value where a matcher is expected produces a compile error that suggests
+  `eq(value)`. Collection matcher constructors such as `each`, `elements_are`, and `contains_matching` are `const` and
+  warn when their result is unused. All of this works without optional features or `std`.
 - Domain checks need no trait implementation: `predicate(..).described_as(..).rejected_as(..)` names a boolean check
   and its rejection, and `matchers::field` applies a matcher to one field and reports evidence at that field. Return
   them from a function as `impl Expectation`. Full implementations can keep the default `Expectation::KIND`
@@ -73,19 +73,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `assert_that!(|| log.text()).eventually().matches(eq("done")).await` observes until the expectation holds, and
   `consistently()` requires it to keep holding. `eventually_ok` and `consistently_ok` take observations returning
   `Result`. They end with any matcher (`matches`) or assertion callback (`satisfies`) and continue on the observed
-  value. Failures add how long and how often the value was observed, and the values seen. `Patience` sets the timeout
-  of `eventually`, the polling interval, and the consistency duration and per-observation timeout of `consistently`,
-  with `with_timeout`, `with_interval`, `with_consistency_duration`, and `with_observation_timeout`, and getters of the
-  same names. It has fast defaults (1 s, 10 ms, 100 ms, 1 s), and `Patience::set_global` sets it for a test suite.
-  `with_patience` replaces it for one chain, and `within`, `polling_every`, `for_at_least`, and
-  `each_observation_within` override single settings in any order. An observation still pending at its deadline
-  fails the assertion instead of hanging it. They run in any async runtime, and their futures are `Send` whenever the
-  observation, expectation, and renderer are. `eventually_ok().giving_up_on(|error| ..)` ends the assertion at the
-  first error no retry can fix instead of retrying it until the timeout, and `giving_up_on_any_error()` ends it at
-  any error. The `GiveUp` policy trait is sealed. `EventualAssertions` and `Patience` are exported from `assertions`
-  and the prelude, the builders and retry policies from `assertions::eventually`. `try_matches` instead returns the
-  observed value or a boxed `AssertionFailure`, with the same retry policy, deadlines, caller metadata, and
-  observation history as `matches`.
+  value. `try_matches` instead returns the observed value or a boxed `AssertionFailure`, with the same retry policy,
+  deadlines, caller metadata, and observation history as `matches`. Failures add how long and how often the value was
+  observed, and the values seen. An observation still pending at its deadline fails the assertion instead of hanging
+  it. `eventually_ok().giving_up_on(|error| ..)` ends the assertion at the first error no retry can fix instead of
+  retrying it until the timeout, and `giving_up_on_any_error()` ends it at any error. The `GiveUp` policy trait is
+  sealed. Eventual assertions run in any async runtime, and their futures are `Send` whenever the observation,
+  expectation, and renderer are. `EventualAssertions` and `Patience` are exported from `assertions` and the prelude,
+  the builders and retry policies from `assertions::eventually`.
+- `Patience` configures eventual assertions: the `timeout` of `eventually`, the polling `interval`, and the
+  `consistency_duration` and per-observation `observation_timeout` of `consistently`. Read them with getters of these
+  names and set them with `with_timeout`, `with_interval`, `with_consistency_duration`, and `with_observation_timeout`.
+  Every chain starts from the fast `Patience::DEFAULT` (1 s, 10 ms, 100 ms, 1 s) until `Patience::set_global` replaces
+  it for a test suite. `with_patience` replaces it for one chain, and `within`, `polling_every`, `for_at_least`, and
+  `each_observation_within` override single settings in any order.
 - `PathAssertions::is_absolute` and `matchers::path::IsAbsolute` check `Path::is_absolute`.
 - Optional `thirtyfour` integration extracts browser element attributes, properties, text, state, and computed
   accessibility into ordinary assertion chains through `ThirtyfourWebElementAssertions` in `assertions` and the
@@ -112,9 +113,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   when they hold no data, only concrete copyable data, or only borrowed targets. Callback definitions such as
   `Predicate`, `Satisfying`, and `Pattern` are `Clone` when their callback is and omit it from `Debug`. Identity
   definitions show addresses. Rejection types of the built-in matchers implement `Debug`, and identity rejections show
-  addresses too. `AssertionContext`, `RenderingContext`, and `CustomRenderer` implement `Debug` as well. Generic property expectations such as
-  `IsEmpty`, `IsNotEmpty`, and `IsZero` accept unsized subjects where their bound allows, for example
-  `dereferenced(IsEmpty)` on a `String`.
+  addresses too. `AssertionContext`, `RenderingContext`, and `CustomRenderer` implement `Debug` as well. Generic
+  property expectations such as `IsEmpty`, `IsNotEmpty`, and `IsZero` accept unsized subjects where their bound allows,
+  for example `dereferenced(IsEmpty)` on a `String`.
 - `#[fluent_expressions(crate = <path>)]` names a re-exported runtime, so expression capture works in crates that
   reach `assertr` only through a facade crate:
   `#[my_facade::assertr::fluent_expressions(crate = ::my_facade::assertr)]`. Without the argument, the attribute still
@@ -244,18 +245,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `TokioWatchReceiverExtractAssertions`.
 - **Breaking:** Memory assertions move from `assertions::std::mem` to `assertions::MemAssertions` and work without
   `std`.
-- **Breaking:** HTTP header values lose their own `is_empty` and `is_not_empty`. `HeaderValue` implements `HasLength`,
-  so the same calls and `has_length` resolve to `LengthAssertions` through the prelude and count bytes. `is_sensitive`
-  and `is_not_sensitive` require `ValueRenderer<HeaderValue>` instead of `ValueRenderer<bool> + Clone` and report the
-  header value.
-- **Breaking:** `HttpHeaderValueAssertions::is_insensitive` is renamed to `is_not_sensitive` (fluent alias
-  `not_be_sensitive`), and its expectation `matchers::header_value::IsInsensitive` to `IsNotSensitive`.
+- **Breaking:** Renamed `HttpHeaderValueAssertions::is_insensitive` and its fluent alias `be_insensitive` to
+  `is_not_sensitive` and `not_be_sensitive`. `is_sensitive` and `is_not_sensitive` require `ValueRenderer<HeaderValue>`
+  instead of `ValueRenderer<bool> + Clone` and report the header value. HTTP header values lose their own `is_empty`
+  and `is_not_empty`. `HeaderValue` implements `HasLength`, so the same calls and `has_length` resolve to
+  `LengthAssertions` through the prelude and count bytes.
 - Failing HTTP header checks show header values, including values marked sensitive, and escape non-ASCII bytes. This
   covers reqwest `has_header_value` and `does_not_have_header`, and `HeaderValue` checks such as `is_ascii`.
 - **Breaking:** Reqwest header assertions and expectations (`has_header`, `does_not_have_header`, `has_header_value`,
-  and the `header` extraction) fail with "was given an invalid header name" for a name that is not a valid HTTP header name,
-  instead of treating it as absent. `does_not_have_header` no longer passes for such a name. Their rejections are
-  `matchers::response::HeaderRejection` values.
+  and the `header` extraction) fail with "was given an invalid header name" for a name that is not a valid HTTP header
+  name, instead of treating it as absent. `does_not_have_header` no longer passes for such a name. Their rejections
+  are `matchers::response::HeaderRejection` values.
 - The `reqwest` feature enables `http`, so values extracted by `header` always support
   `HttpHeaderValueAssertions`.
 - Reqwest `text()` and `json()` futures are `Send` when the renderer is.

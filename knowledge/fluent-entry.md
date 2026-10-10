@@ -11,7 +11,6 @@ sources:
   - assertr-macros/tests/fluent_expressions/02-user-must.rs
   - assertr-macros/tests/fluent_expressions/03-callback-types.rs
   - assertr-macros/tests/fluent_expressions/04-facade-runtime-path.rs
-  - assertr/tests/expression_capture.rs
 ---
 
 # Fluent entry and expression capture

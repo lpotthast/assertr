@@ -6,7 +6,6 @@ sources:
   - assertr/src/expectation/context.rs
   - assertr/src/assert_that/execution.rs
   - assertr/src/tracking.rs
-  - assertr/src/assertions/matcher.rs
   - assertr/src/assertions/collection/elements_are.rs
   - assertr/tests/custom_assertions.rs
 ---
