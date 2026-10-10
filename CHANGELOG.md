@@ -48,8 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   have been seen, so it also works on infinite iterators.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
   exact comparisons of borrowed targets that preserve duplicate counts, without equality or target renderer bounds.
-- Borrowed panic-mode element projections `first`, `last`, and `single` for `StableOrder` collections, and
-  `at` for `RandomAccess` collections.
+- Borrowed panic-mode element projections `single` for any collection, including sets and map views, `first` and
+  `last` for `StableOrder` collections, and `at` for `RandomAccess` collections.
 - `BinaryHeap` supports length and order-free collection assertions.
 - Collection, set, and map assertions work on `&mut` subjects, such as `assert_that_owned!(&mut vec)`.
 - `Box<dyn Any + Send>` and `Box<dyn Any + Send + Sync>` support `is_of_type`, `has_type`, and `has_type_ref`, for

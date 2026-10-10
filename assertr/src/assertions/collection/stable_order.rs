@@ -14,7 +14,7 @@ use crate::{
     AssertThat, Mode,
     borrow_for::BorrowFor,
     expectation::{AssertionContext, Expectation, lists::SatisfyingList},
-    failure::{Fact, FailureBuilder, FailureKind},
+    failure::{FailureBuilder, FailureKind},
     mode::{Capture, Panic},
     renderer::{DebugRenderer, ValueRenderer},
 };
@@ -392,60 +392,6 @@ where
     }
 }
 
-/// Requires that a stable-order collection contains exactly one element, returning its borrowed
-/// element.
-#[derive(Debug, Clone, Copy)]
-pub struct HasSingle;
-
-impl<C: StableOrder + ?Sized, R> Expectation<C, R> for HasSingle
-where
-    R: ValueRenderer<C::Item> + ValueRenderer<usize>,
-{
-    type Success<'a>
-        = &'a C::Item
-    where
-        Self: 'a,
-        C: 'a;
-    type Rejection<'a>
-        = usize
-    where
-        Self: 'a,
-        C: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a C,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let length = actual.length();
-        if length != 1 {
-            return Err(length);
-        }
-        Ok(actual
-            .elements()
-            .next()
-            .unwrap_or_else(|| unreachable!("validated collection had no element")))
-    }
-
-    const KIND: FailureKind = FailureKind::Length;
-
-    fn explain<'a>(
-        &'a self,
-        rejected: Option<(&'a C, Self::Rejection<'a>)>,
-        failure: FailureBuilder,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder {
-        let render = context.render();
-        match rejected {
-            None => failure.relation("contains exactly one element"),
-            Some((actual, rejection)) => failure
-                .actual(render.stable_collection(actual))
-                .relation("does not contain exactly one element")
-                .fact(Fact::labelled("Actual length", render.value(&rejection))),
-        }
-    }
-}
-
 /// Panic-mode element extraction from collections with [`StableOrder`].
 ///
 /// These methods borrow the assertion chain and return an assertion borrowing the selected element.
@@ -471,11 +417,6 @@ pub trait StableOrderExtractAssertions<'t, T, R = DebugRenderer> {
     fn last(&'t self) -> AssertThat<'t, T, Panic, R>
     where
         R: ValueRenderer<T> + Clone;
-
-    /// Asserts that the collection contains exactly one element, then returns an assertion over it.
-    fn single(&'t self) -> AssertThat<'t, T, Panic, R>
-    where
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
 }
 
 impl<'t, C, R> StableOrderExtractAssertions<'t, C::Item, R> for AssertThat<'t, C, Panic, R>
@@ -497,15 +438,6 @@ where
         R: ValueRenderer<C::Item> + Clone,
     {
         let element = self.require(&HasLast);
-        self.derive(|_| element)
-    }
-
-    #[track_caller]
-    fn single(&'t self) -> AssertThat<'t, C::Item, Panic, R>
-    where
-        R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
-    {
-        let element = self.require(&HasSingle);
         self.derive(|_| element)
     }
 }
@@ -535,7 +467,6 @@ mod tests {
         fn are_as_expected() {
             vec![1].must().first().be_equal_to(1);
             vec![1].must().last().be_equal_to(1);
-            vec![1].must().single().be_equal_to(1);
             let values = [1, 2, 3];
             values.must().start_with([1, 2]);
             values.must().start_with_matching([eq(1), eq(2)]);
@@ -618,14 +549,6 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .capture(|it| it.ends_with([0, 1]));
             assert_custom_fact(&failures[0], "Actual length", 1);
-            assert_that!(|| {
-                assert_that!([1, 2])
-                    .with_renderer(CustomValueRenderer)
-                    .single();
-            })
-            .panics()
-            .has_type::<String>()
-            .contains("Actual length: custom(2)");
         }
 
         #[test]
@@ -691,46 +614,6 @@ mod tests {
         #[test]
         fn returns_the_last_element() {
             assert_that!(vec![1, 2, 3]).last().is_equal_to(3);
-        }
-    }
-
-    mod single {
-        use indoc::formatdoc;
-
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(vec![1, 2]), single());
-        }
-
-        #[test]
-        fn returns_the_only_element() {
-            assert_that!(vec![2]).single().is_equal_to(2);
-        }
-
-        #[test]
-        fn panics_when_there_is_more_than_one_element() {
-            assert_that!(|| {
-                assert_that!(vec![1, 2]).with_location(false).single();
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `vec![1, 2]`
-
-                    Actual: [
-                        1,
-                        2,
-                    ]
-
-                    does not contain exactly one element
-
-                    Details:
-                      - Actual length: 2
-                    -------- assertr --------
-                "});
         }
     }
 

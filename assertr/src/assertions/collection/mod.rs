@@ -7,6 +7,7 @@ mod assertions;
 mod each;
 mod elements_are;
 mod elements_are_in_any_order;
+mod extract;
 mod identity;
 pub(crate) mod matching;
 mod random_access;
@@ -25,6 +26,7 @@ pub use elements_are::{
     starts_with_elements,
 };
 pub use elements_are_in_any_order::{ElementsAreInAnyOrder, elements_are_in_any_order};
+pub use extract::{CollectionExtractAssertions, HasSingle};
 pub use identity::{
     ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs,
     DoesNotContainSameInstanceAs, ExactIdentityRejection, IdentityMembershipRejection,
@@ -34,9 +36,7 @@ pub use matching::{
     ContainsMatching, DoesNotContainMatching, contains_matching, does_not_contain_matching,
 };
 pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
-pub use stable_order::{
-    HasFirst, HasLast, HasSingle, StableOrderAssertions, StableOrderExtractAssertions,
-};
+pub use stable_order::{HasFirst, HasLast, StableOrderAssertions, StableOrderExtractAssertions};
 pub use value::{
     Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
     DoesNotContain, EndsWith, ExactElementsRejection, MissingElementsRejection,
@@ -67,8 +67,9 @@ pub(crate) enum Placement {
 /// Implementing `Collection` for your own type makes
 /// [`CollectionAssertions`](crate::assertions::CollectionAssertions) available on it: `contains`,
 /// `does_not_contain`, `contains_all`, `contains_exactly_in_any_order`, their `_matching` and
-/// `_satisfying` variants, and the identity checks such as `contains_same_instance_as`. Element
-/// matchers such as [`each`](crate::matchers::each) and
+/// `_satisfying` variants, and the identity checks such as `contains_same_instance_as`. In panic
+/// mode, [`CollectionExtractAssertions`](crate::assertions::CollectionExtractAssertions) adds
+/// `single`. Element matchers such as [`each`](crate::matchers::each) and
 /// [`contains_matching`](crate::matchers::contains_matching) work on it too. The [`HasLength`]
 /// supertrait adds `is_empty`, `is_not_empty`, and `has_length`.
 ///
@@ -178,7 +179,7 @@ pub trait Collection: HasLength {
 /// `ends_with`, `contains_contiguous`, `contains_exactly`, their `_matching` and `_satisfying`
 /// variants, and `contains_exactly_same_instances`. In panic mode,
 /// [`StableOrderExtractAssertions`](crate::assertions::StableOrderExtractAssertions) adds
-/// `first`, `last`, and `single`. Failures name the index of a mismatching element.
+/// `first` and `last`. Failures name the index of a mismatching element.
 /// The trait has no methods. It only declares that [`Collection::elements`] yields elements in
 /// their meaningful order.
 ///

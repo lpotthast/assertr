@@ -10,7 +10,7 @@
 //! | `bool`, `char`, strings | [`BoolAssertions`], [`CharAssertions`], [`StrAssertions`] |
 //! | `Option`, `Result`, `Poll` | [`OptionAssertions`], [`ResultAssertions`], [`PollAssertions`] and their `*ExtractAssertions` |
 //! | Ranges, `RefCell`, lengths, types | [`RangeAssertions`], [`RangeBoundAssertions`], [`RefCellAssertions`], [`LengthAssertions`], [`MemAssertions`] |
-//! | Collections | [`CollectionAssertions`], [`StableOrderAssertions`], [`StableOrderExtractAssertions`], [`RandomAccessExtractAssertions`] |
+//! | Collections | [`CollectionAssertions`], [`CollectionExtractAssertions`], [`StableOrderAssertions`], [`StableOrderExtractAssertions`], [`RandomAccessExtractAssertions`] |
 //! | Iterators | [`IteratorAssertions`], [`IntoIteratorAssertions`], [`ExactSizeIteratorAssertions`] |
 //! | Sets and maps | [`SetAssertions`], [`MapAssertions`], [`MapProjectionAssertions`] |
 //! | Boxed `Any` and panic payloads | [`BoxAssertions`], [`BoxExtractAssertions`] |
@@ -93,8 +93,9 @@ pub(crate) mod tokio;
 pub use alloc::boxed::{BoxAssertions, BoxExtractAssertions};
 
 pub use collection::{
-    Collection, CollectionAssertions, RandomAccess, RandomAccessExtractAssertions, StableOrder,
-    StableOrderAssertions, StableOrderExtractAssertions,
+    Collection, CollectionAssertions, CollectionExtractAssertions, RandomAccess,
+    RandomAccessExtractAssertions, StableOrder, StableOrderAssertions,
+    StableOrderExtractAssertions,
 };
 pub use distance::NumericDistance;
 pub use has_length::HasLength;
