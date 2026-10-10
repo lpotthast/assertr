@@ -16,7 +16,7 @@ mod imp;
 mod matching;
 mod projection;
 
-use alloc::collections::BTreeMap;
+use alloc::{boxed::Box, collections::BTreeMap};
 use core::borrow::Borrow;
 
 pub use assertions::MapAssertions;
@@ -297,6 +297,30 @@ where
     }
 }
 
+/// Makes boxed subjects maps, mirroring the shared-reference implementation.
+impl<M> Map for Box<M>
+where
+    M: Map + ?Sized,
+{
+    type Key = M::Key;
+    type Value = M::Value;
+    const RENDERING_ORDER: RenderingOrder = M::RENDERING_ORDER;
+
+    fn entries(&self) -> impl Iterator<Item = (&M::Key, &M::Value)> {
+        M::entries(self)
+    }
+}
+
+impl<M, Q> MapLookup<Q> for Box<M>
+where
+    M: MapLookup<Q> + ?Sized,
+    Q: ?Sized,
+{
+    fn get_key_value(&self, key: &Q) -> Option<(&M::Key, &M::Value)> {
+        M::get_key_value(self, key)
+    }
+}
+
 /// Instrumented maps, keys, and operands that record every observation in one shared log.
 #[cfg(test)]
 pub(super) mod fixture {
@@ -561,6 +585,14 @@ mod tests {
         assert_map_contract(&&map, false);
         assert_map_contract(&&mut map, false);
         assert_that_owned!(&mut map)
+            .contains_key("alpha")
+            .contains_value(2)
+            .contains_entry("beta", 2)
+            .contains_exactly_entries([("alpha", 1), ("beta", 2)]);
+
+        let boxed = Box::new(map);
+        assert_map_contract(&boxed, false);
+        assert_that!(boxed)
             .contains_key("alpha")
             .contains_value(2)
             .contains_entry("beta", 2)

@@ -1,4 +1,3 @@
-use alloc::borrow::ToOwned;
 use core::{future::Future, panic::Location};
 
 use crate::{AssertThat, actual::Actual, mode::Mode};
@@ -37,19 +36,17 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         }
     }
 
-    /// Creates an owned copy of the subject with [`ToOwned`], maps it, and preserves the chain
-    /// state.
+    /// Maps the subject by value and preserves the chain state.
+    ///
+    /// An owned subject is moved into the mapper. A borrowed subject is cloned first.
     #[must_use]
-    pub fn map_owned<U>(
-        self,
-        mapper: impl FnOnce(<T as ToOwned>::Owned) -> U,
-    ) -> AssertThat<'t, U, M, R>
+    pub fn map_owned<U>(self, mapper: impl FnOnce(T) -> U) -> AssertThat<'t, U, M, R>
     where
-        T: ToOwned,
+        T: Clone,
     {
         let AssertThat { actual, state } = self;
         AssertThat {
-            actual: Actual::Owned(mapper(actual.borrowed().to_owned())),
+            actual: Actual::Owned(mapper(actual.into_owned())),
             state,
         }
     }
@@ -583,6 +580,39 @@ mod tests {
             });
             assert_that!(failures[0].location.map(Location::line))
                 .is_equal_to(Some(caller.unwrap().line() - 1));
+        }
+    }
+
+    mod map_owned {
+        use core::cell::Cell;
+
+        use crate::prelude::*;
+
+        /// Counts its clones in a shared cell.
+        struct Counted<'a>(&'a Cell<usize>);
+
+        impl Clone for Counted<'_> {
+            fn clone(&self) -> Self {
+                self.0.set(self.0.get() + 1);
+                Self(self.0)
+            }
+        }
+
+        #[test]
+        fn moves_an_owned_subject() {
+            let clones = Cell::new(0);
+            assert_that_owned!(Counted(&clones))
+                .map_owned(|counted| counted.0.get())
+                .is_equal_to(0);
+        }
+
+        #[test]
+        fn clones_a_borrowed_subject_once() {
+            let clones = Cell::new(0);
+            let counted = Counted(&clones);
+            assert_that!(&counted)
+                .map_owned(|counted| counted.0.get())
+                .is_equal_to(1);
         }
     }
 }

@@ -54,12 +54,6 @@ impl<T> From<T> for Actual<'_, T> {
     }
 }
 
-impl<'t, T> From<&'t T> for Actual<'t, T> {
-    fn from(value: &'t T) -> Self {
-        Actual::Borrowed(value)
-    }
-}
-
 impl<T> AsRef<T> for Actual<'_, T> {
     fn as_ref(&self) -> &T {
         self.borrowed()

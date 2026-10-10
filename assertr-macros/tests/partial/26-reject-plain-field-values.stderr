@@ -13,10 +13,10 @@ error[E0277]: `{integer}` is not an expectation for `i32`
              `AllOf<L>` implements `Expectation<A, R>`
              `AnyOf<L>` implements `Expectation<A, R>`
              `Anything` implements `Expectation<A, R>`
+             `Box<D>` implements `Expectation<T, R>`
              `ContainsAll<E, B>` implements `Expectation<C, R>`
              `ContainsContiguous<E, B>` implements `Expectation<C, R>`
              `ContainsElement<B, E>` implements `Expectation<Range, R>`
-             `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
            and $N others
    = note: required for `assertr::matchers::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>` to implement `Expectation<Named>`
    = note: required for `assertr::__private::Cons<assertr::matchers::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Named>`
@@ -43,10 +43,10 @@ error[E0277]: `{integer}` is not an expectation for `i32`
              `AllOf<L>` implements `Expectation<A, R>`
              `AnyOf<L>` implements `Expectation<A, R>`
              `Anything` implements `Expectation<A, R>`
+             `Box<D>` implements `Expectation<T, R>`
              `ContainsAll<E, B>` implements `Expectation<C, R>`
              `ContainsContiguous<E, B>` implements `Expectation<C, R>`
              `ContainsElement<B, E>` implements `Expectation<Range, R>`
-             `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
            and $N others
    = note: required for `assertr::matchers::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>` to implement `Expectation<Tuple>`
    = note: required for `assertr::__private::Cons<assertr::matchers::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Tuple>`

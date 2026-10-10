@@ -23,8 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `[is_one, is_two].map(predicate)`, and `matchers![..]` builds heterogeneous lists, including keyed
   `matchers![entry(..), ..]` lists. The sealed list traits `MatcherList` and `EntryMatcherList` live in
   `assertr::expectation`. Passing a plain value where a matcher is expected produces a compile error that suggests
-  `eq(value)`. Collection matcher constructors such as `each`, `elements_are`, and `contains_matching` are `const` and
-  warn when their result is unused. All of this works without optional features or `std`.
+  `eq(value)`. References and boxes of expectations are expectations. Collection matcher constructors such as `each`,
+  `elements_are`, and `contains_matching` are `const` and warn when their result is unused. All of this works without
+  optional features or `std`.
 - Domain checks need no trait implementation: `predicate(..).described_as(..).rejected_as(..)` names a boolean check
   and its rejection, and `matchers::field` applies a matcher to one field and reports evidence at that field. Return
   them from a function as `impl Expectation`. Full implementations can keep the default `Expectation::KIND`
@@ -138,7 +139,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   The synchronous `panics` and `does_not_panic` never poll a returned future. A `panics` failure for a function
   returning a future points to `panics_async`.
 - **Breaking:** Renamed the fluent entry traits `IntoAssertContext` and `IntoOwnedAssertContext` to `FluentEntry` and
-  `OwnedFluentEntry`. Code using the prelude and method syntax is unaffected.
+  `OwnedFluentEntry`. `FluentEntry` is sealed. Code using the prelude and method syntax is unaffected.
+- **Breaking:** `map_owned` requires `T: Clone` instead of `T: ToOwned` and passes the subject itself to the mapper.
+  An owned subject is moved instead of cloned. Only a borrowed subject is cloned.
+- **Breaking:** Removed `From<&T> for Actual`, which made `Actual::from` ambiguous for reference values. Use
+  `Actual::Borrowed`.
 - **Breaking:** Renamed `Type::get_type_name` to `Type::type_name`.
 - **Breaking:** Extracting assertions no longer use a `get_` prefix. Renamed `get_some`, `get_ok`, `get_err`,
   `get_ready`, and `get_ascii` to `some`, `ok`, `err`, `ready`, and `ascii`, and the reqwest response extractions
@@ -197,13 +202,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `STYLE` and `TYPE_NAME` with `PRESENTATION: CollectionPresentation`, and replace map `TYPE_NAME` with
   `RENDERING_ORDER: RenderingOrder`, using the types in `renderer`. Custom set implementations and bounds must rename
   `Set` to `SetLookup`. `Collection`, `StableOrder`, `RandomAccess`, `SetLookup`, `Map`, and `MapLookup` gain blanket
-  `&mut C` implementations, which conflict with downstream implementations for `&mut` types.
-- **Breaking:** `&R` implements `ValueRenderer<T>` whenever `R` does, so `with_renderer(&renderer)` works with derived
-  assertions for renderers that are not `Clone`. Renderers implementing `ValueRenderer` for both a type and its
-  references must remove the reference implementations.
-- **Breaking:** `HasLength` covers `str` and `[T]` directly and forwards through blanket `&T` and `&mut T`
-  implementations. Downstream types implementing it for both a value and its references must remove their reference
-  implementations. Length and element assertions on `HashSet` and `HashMap` no longer require `S: BuildHasher`.
+  `&mut C` and `Box<C>` implementations, which conflict with downstream implementations for `&mut` and `Box` types.
+  Boxed slices and boxed collections support the collection, set, and map assertions of their contents.
+- **Breaking:** `&R` and `Box<R>` implement `ValueRenderer<T>` whenever `R` does, so `with_renderer(&renderer)` works
+  with derived assertions for renderers that are not `Clone`, and `Box<dyn ValueRenderer<T>>` selects a renderer at
+  runtime. Renderers implementing `ValueRenderer` for both a type and its references or boxes must remove those
+  implementations.
+- **Breaking:** `HasLength` covers `str` and `[T]` directly and forwards through blanket `&T`, `&mut T`, and `Box<T>`
+  implementations, so `Box<[T]>` has a length too. Downstream types implementing it for both a value and its
+  references or boxes must remove those implementations. Length and element assertions on `HashSet` and `HashMap` no
+  longer require `S: BuildHasher`.
 - **Breaking:** `HasLength` is no longer part of the prelude, like the other capability traits, so its `length()` no
   longer appears on standard types in test code. Import `assertr::assertions::HasLength` to implement it. Its
   redundant `is_not_empty` method is removed. Use `!value.is_empty()`, or the `is_not_empty` assertion.

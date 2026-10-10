@@ -73,7 +73,8 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 | `derive`, `derive_owned`, `derive_async`        | Create a child with inherited settings, mode, ancestor messages. Clear name and expression. | Cloned.                  |
 | `satisfies`, `satisfies_owned`, `satisfies_ref` | Check a derived child in a callback, then return the original chain. Locate its failures at the outermost `satisfies` call. | Cloned for child.        |
 
-- `map` transforms `Actual<T>` into `Actual<U>`. `map_owned` first copies through `ToOwned`, even for owned input.
+- `map` transforms `Actual<T>` into `Actual<U>`. `map_owned` moves an owned subject into its mapper and clones only a
+  borrowed one.
   `map_async` awaits a new owned subject.
 - `derive` borrows a sized projection. `derive_owned` and `derive_async` store the mapper's result, which may itself
   reference an unsized target. Derivation does not clone the subject.

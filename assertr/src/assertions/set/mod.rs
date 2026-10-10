@@ -5,7 +5,7 @@
 mod assertions;
 mod imp;
 
-use alloc::collections::BTreeSet;
+use alloc::{boxed::Box, collections::BTreeSet};
 
 pub use assertions::SetAssertions;
 pub use imp::{IsDisjointFrom, IsSubsetOf, IsSupersetOf};
@@ -152,9 +152,19 @@ where
     }
 }
 
+/// Makes boxed subjects sets, mirroring the shared-reference implementation.
+impl<S> SetLookup for Box<S>
+where
+    S: SetLookup + ?Sized,
+{
+    fn contains_element(&self, element: &S::Item) -> bool {
+        S::contains_element(self, element)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use alloc::{collections::BTreeSet, vec::Vec};
+    use alloc::{boxed::Box, collections::BTreeSet, vec::Vec};
     #[cfg(feature = "std")]
     use std::{
         collections::HashSet,
@@ -239,6 +249,17 @@ mod tests {
 
         assert_set_contract(&&mut set, &[1, 2, 3]);
         assert_that_owned!(&mut set)
+            .contains(2)
+            .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
+            .is_disjoint_from(BTreeSet::from([9]));
+    }
+
+    #[test]
+    fn boxed_adapter_follows_the_set_contract() {
+        let set = Box::new(BTreeSet::from([1, 2, 3]));
+
+        assert_set_contract(&set, &[1, 2, 3]);
+        assert_that!(set)
             .contains(2)
             .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
             .is_disjoint_from(BTreeSet::from([9]));

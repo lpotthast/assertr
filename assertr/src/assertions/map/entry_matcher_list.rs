@@ -24,8 +24,12 @@ pub(crate) mod sealed {
 pub trait EntryMatcherList<MapType: Map + ?Sized, R = DebugRenderer>:
     MatcherList<MapType, R> + sealed::Sealed
 {
-    /// Evaluates one entry and retains its evidence, returning truth and the original stored key.
-    /// A present key is returned even when its value rejects. The index must be less than `len()`.
+    /// Evaluates the entry in slot `index` and retains its evidence, returning truth and the
+    /// original stored key. A present key is returned even when its value rejects.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= self.len()`.
     fn evaluate_entry_at<'a>(
         &'a self,
         index: usize,

@@ -18,6 +18,10 @@ pub(crate) mod sealed {
 /// slices, and vectors of one matcher type. References reuse an existing list. Lists store
 /// expectations without boxes or renderer type parameters.
 ///
+/// A custom composite expectation drives a list slot by slot. [`describe_at`](Self::describe_at)
+/// and [`evaluate_at`](Self::evaluate_at) run one slot like [`AssertionContext::describe`] and
+/// [`AssertionContext::evaluate`] run one expectation.
+///
 /// ```
 /// use assertr::{expectation::MatcherList, matchers::{eq, predicate}, prelude::*};
 ///

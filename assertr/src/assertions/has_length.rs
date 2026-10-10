@@ -74,12 +74,6 @@ impl HasLength for String {
     }
 }
 
-impl HasLength for Box<str> {
-    fn length(&self) -> usize {
-        str::len(self)
-    }
-}
-
 impl HasLength for Cow<'_, str> {
     fn length(&self) -> usize {
         str::len(self)
@@ -174,6 +168,19 @@ where
     }
 }
 
+impl<T> HasLength for Box<T>
+where
+    T: HasLength + ?Sized,
+{
+    fn length(&self) -> usize {
+        T::length(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        T::is_empty(self)
+    }
+}
+
 macro_rules! impl_has_length_for_integer_ranges {
     ($($type:ty),+ $(,)?) => {$(
         impl HasLength for Range<$type> {
@@ -214,6 +221,8 @@ impl_has_length_for_integer_ranges!(
 
 #[cfg(test)]
 mod tests {
+    use alloc::{boxed::Box, string::String};
+
     use super::HasLength;
     use crate::prelude::*;
 
@@ -224,6 +233,16 @@ mod tests {
 
         assert_that!(value.length()).is_equal_to(3);
         assert_that!(value.is_empty()).is_false();
+    }
+
+    #[test]
+    fn boxes_forward_the_length_of_their_contents() {
+        let boxed_str: Box<str> = Box::from("abc");
+        let boxed_slice: Box<[i32]> = Box::new([1, 2]);
+
+        assert_that!(boxed_str.length()).is_equal_to(3);
+        assert_that!(boxed_slice).has_length(2);
+        assert_that!(Box::new(String::new())).is_empty();
     }
 
     #[test]

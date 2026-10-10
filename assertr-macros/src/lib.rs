@@ -28,11 +28,10 @@ use syn::{Item, ItemTrait, parse_macro_input};
 ///   `have_no_x`.
 /// - Negations put `not` first, as in "must not be equal to": `is_not_x` -> `not_be_x`, `has_not_x`
 ///   -> `not_have_x`, and `does_not_x` -> `not_x`.
-/// - `contains`, `exists`, `panics`, and `satisfies` turn imperative, alone or as a prefix:
-///   `contains` -> `contain`, `exists` -> `exist`, `panics_async` -> `panic_async`, `satisfies` ->
-///   `satisfy`.
-/// - The prefixes `starts_`, `ends_`, and `needs_` turn imperative: `starts_with` -> `start_with`,
-///   `ends_with` -> `end_with`, `needs_drop` -> `need_drop`.
+/// - `contains`, `ends`, `exists`, `needs`, `panics`, `satisfies`, and `starts` turn imperative,
+///   alone or as the first word: `contains` -> `contain`, `ends_with` -> `end_with`, `exists` ->
+///   `exist`, `needs_drop` -> `need_drop`, `panics_async` -> `panic_async`, `satisfies` ->
+///   `satisfy`, `starts_with` -> `start_with`.
 /// - `matches` -> `match_expectation`, because `match` is a keyword and `be_matching` belongs to
 ///   `is_matching`.
 /// - Other names, such as extractions named after the value they continue with (`some`, `first`,

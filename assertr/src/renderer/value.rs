@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use core::fmt;
 
 /// Formats individual values in assertion diagnostics.
@@ -108,6 +109,14 @@ impl<T: ?Sized, R: ValueRenderer<T> + ?Sized> ValueRenderer<T> for &R {
     }
 }
 
+/// A boxed renderer renders exactly like the renderer it holds, so a renderer chosen at runtime
+/// can be used as `Box<dyn ValueRenderer<T>>`.
+impl<T: ?Sized, R: ValueRenderer<T> + ?Sized> ValueRenderer<T> for Box<R> {
+    fn fmt(&self, value: &T, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(value, f)
+    }
+}
+
 /// The default renderer. Delegates to [`fmt::Debug`].
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DebugRenderer;
@@ -155,6 +164,24 @@ mod tests {
     impl ValueRenderer<i32> for Labelled {
         fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{}({value})", self.0)
+        }
+    }
+
+    mod boxed_renderer {
+        use alloc::boxed::Box;
+
+        use super::*;
+
+        #[test]
+        fn renders_through_a_renderer_chosen_at_runtime() {
+            let renderer: Box<dyn ValueRenderer<i32>> = Box::new(Labelled("boxed"));
+
+            let failures = assert_that!(1)
+                .with_renderer(renderer)
+                .capture(|it| it.is_equal_to(2));
+
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].to_string()).contains("boxed(1)");
         }
     }
 

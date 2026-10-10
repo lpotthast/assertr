@@ -13,10 +13,10 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `AllOf<L>` implements `Expectation<A, R>`
             `AnyOf<L>` implements `Expectation<A, R>`
             `Anything` implements `Expectation<A, R>`
+            `Box<D>` implements `Expectation<T, R>`
             `ContainsAll<E, B>` implements `Expectation<C, R>`
             `ContainsContiguous<E, B>` implements `Expectation<C, R>`
             `ContainsElement<B, E>` implements `Expectation<Range, R>`
-            `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
   = note: required for `ElementsAre<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `Expectation<[{integer}; 1]>`
@@ -41,10 +41,10 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `AllOf<L>` implements `Expectation<A, R>`
             `AnyOf<L>` implements `Expectation<A, R>`
             `Anything` implements `Expectation<A, R>`
+            `Box<D>` implements `Expectation<T, R>`
             `ContainsAll<E, B>` implements `Expectation<C, R>`
             `ContainsContiguous<E, B>` implements `Expectation<C, R>`
             `ContainsElement<B, E>` implements `Expectation<Range, R>`
-            `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
   = note: required for `ElementsAreInAnyOrder<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `Expectation<[{integer}; 1]>`
@@ -69,10 +69,10 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `AllOf<L>` implements `Expectation<A, R>`
             `AnyOf<L>` implements `Expectation<A, R>`
             `Anything` implements `Expectation<A, R>`
+            `Box<D>` implements `Expectation<T, R>`
             `ContainsAll<E, B>` implements `Expectation<C, R>`
             `ContainsContiguous<E, B>` implements `Expectation<C, R>`
             `ContainsElement<B, E>` implements `Expectation<Range, R>`
-            `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
 note: required by a bound in `assertr::assertions::StableOrderAssertions::contains_exactly_matching`
@@ -99,10 +99,10 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `AllOf<L>` implements `Expectation<A, R>`
             `AnyOf<L>` implements `Expectation<A, R>`
             `Anything` implements `Expectation<A, R>`
+            `Box<D>` implements `Expectation<T, R>`
             `ContainsAll<E, B>` implements `Expectation<C, R>`
             `ContainsContiguous<E, B>` implements `Expectation<C, R>`
             `ContainsElement<B, E>` implements `Expectation<Range, R>`
-            `ContainsEntry<'_, Q, E>` implements `Expectation<Mp, R>`
           and $N others
   = note: required for `assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>` to implement `EntryMatcherList<BTreeMap<&str, {integer}>>`
   = note: required for `EntriesAre<assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>>` to implement `Expectation<BTreeMap<&str, {integer}>>`

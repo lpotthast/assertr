@@ -52,7 +52,7 @@ pub(crate) mod lists;
 pub(crate) mod predicate;
 pub(crate) mod satisfying;
 
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 
 pub use context::AssertionContext;
 pub use lists::MatcherList;
@@ -219,5 +219,62 @@ impl<T: ?Sized, R, D: Expectation<T, R> + ?Sized> Expectation<T, R> for &D {
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
         (**self).explain(rejected, failure, context)
+    }
+}
+
+/// A boxed expectation evaluates and explains exactly like the expectation it holds.
+impl<T: ?Sized, R, D: Expectation<T, R> + ?Sized> Expectation<T, R> for Box<D> {
+    type Success<'a>
+        = D::Success<'a>
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = D::Rejection<'a>
+    where
+        Self: 'a,
+        T: 'a;
+
+    const KIND: FailureKind = D::KIND;
+    const FLATTEN: bool = D::FLATTEN;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        (**self).evaluate(actual, context)
+    }
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        (**self).explain(rejected, failure, context)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    mod boxed_expectation {
+        use alloc::boxed::Box;
+
+        use crate::{matchers::eq, prelude::*};
+
+        #[test]
+        fn evaluates_and_explains_like_the_boxed_expectation() {
+            assert_that!(2).matches(Box::new(eq(2)));
+
+            let failures = assert_that!(1)
+                .with_location(false)
+                .capture(|it| it.matches(Box::new(eq(2))));
+            let direct = assert_that!(1)
+                .with_location(false)
+                .capture(|it| it.matches(eq(2)));
+
+            assert_that!(failures.to_string()).is_equal_to(direct.to_string());
+        }
     }
 }

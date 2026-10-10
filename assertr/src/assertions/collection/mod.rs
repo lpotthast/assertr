@@ -15,6 +15,7 @@ mod stable_order;
 mod value;
 
 use alloc::{
+    boxed::Box,
     collections::{BinaryHeap, LinkedList, VecDeque},
     vec::Vec,
 };
@@ -479,9 +480,35 @@ where
     }
 }
 
+/// Makes boxed subjects such as `AssertThat<Box<[T]>>` collections, mirroring the
+/// shared-reference implementation.
+impl<C> Collection for Box<C>
+where
+    C: Collection + ?Sized,
+{
+    type Item = C::Item;
+    const PRESENTATION: CollectionPresentation = C::PRESENTATION;
+
+    fn elements(&self) -> impl Iterator<Item = &C::Item> {
+        C::elements(self)
+    }
+}
+
+impl<C> StableOrder for Box<C> where C: StableOrder + ?Sized {}
+
+impl<C> RandomAccess for Box<C>
+where
+    C: RandomAccess + ?Sized,
+{
+    fn element_at(&self, index: usize) -> Option<&Self::Item> {
+        C::element_at(self, index)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::{
+        boxed::Box,
         collections::{BinaryHeap, LinkedList, VecDeque},
         vec::Vec,
     };
@@ -622,6 +649,50 @@ mod tests {
             .has_length(3);
         assert_that_owned!(&mut list).ends_with([2, 3]);
         assert_that_owned!(&mut vec).at(2).is_equal_to(3);
+    }
+
+    #[test]
+    fn boxed_adapters_forward_collection_and_sequence_contracts() {
+        let boxed_slice: Box<[i32]> = Box::new([1, 2, 3]);
+        let boxed_vec = Box::new(vec![1, 2, 3]);
+        let boxed_list = Box::new([1, 2, 3].into_iter().collect::<LinkedList<_>>());
+
+        assert_collection_contract(&boxed_slice, &[1, 2, 3]);
+        assert_random_access_contract(&boxed_slice, &[1, 2, 3]);
+        assert_random_access_contract(&boxed_vec, &[1, 2, 3]);
+        assert_collection_contract(&boxed_list, &[1, 2, 3]);
+
+        assert_that!(boxed_slice)
+            .contains(1)
+            .starts_with([1, 2])
+            .contains_exactly_in_any_order([3, 2, 1])
+            .has_length(3);
+        assert_that!(boxed_list).ends_with([2, 3]);
+        assert_that!(boxed_vec).at(2).is_equal_to(3);
+    }
+
+    #[test]
+    fn boxed_subjects_implement_every_family_without_renderer_support() {
+        assert_trait_impl!(
+            AssertThat<'static, Box<[i32]>, Panic, NoRenderer>
+                => CollectionAssertions<i32, NoRenderer>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, Box<[i32]>, Panic, NoRenderer>
+                => StableOrderAssertions<i32, NoRenderer>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, Box<[i32]>, Panic, NoRenderer>
+                => RandomAccessExtractAssertions<'static, i32, NoRenderer>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, Box<alloc::collections::BTreeSet<i32>>, Panic, NoRenderer>
+                => SetAssertions<i32, NoRenderer>
+        );
+        assert_trait_impl!(
+            AssertThat<'static, Box<alloc::collections::BTreeMap<i32, i32>>, Panic, NoRenderer>
+                => MapAssertions<i32, i32, NoRenderer>
+        );
     }
 
     #[test]

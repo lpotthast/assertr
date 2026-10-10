@@ -184,6 +184,7 @@ status_class_expectation!(
 /// `T` is what the expectation retains for a valid header name, for example the looked-up name
 /// of a missing header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum HeaderRejection<'a, T> {
     /// The looked-up name is not a valid HTTP header name, so no header can have it.
     InvalidName(&'a str),
