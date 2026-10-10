@@ -129,6 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `assert_that!` owns closure literals and `async` blocks, so `assert_that!(|| ..).panics()` and
   `assert_that!(async || ..).panics_async()` work without `assert_that_owned!`. Other expressions are still borrowed.
+  The synchronous `panics` and `does_not_panic` never poll a returned future. A `panics` failure for a function
+  returning a future points to `panics_async`.
 - **Breaking:** Renamed the fluent entry traits `IntoAssertContext` and `IntoOwnedAssertContext` to `FluentEntry` and
   `OwnedFluentEntry`. Code using the prelude and method syntax is unaffected.
 - **Breaking:** Renamed `Type::get_type_name` to `Type::type_name`.

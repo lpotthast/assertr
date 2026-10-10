@@ -53,6 +53,7 @@ Function assertions require ownership and panic mode:
 |---|---|
 | `panics` | Catch panics while invoking the function or dropping its output. |
 | `does_not_panic` | Catch panics while invoking the function. A later panic from dropping the returned output is not caught. |
+| Synchronous function returning a future | Only create the future. Its body never runs, so `does_not_panic` passes and `panics` fails with a hint at `panics_async` when the output type name looks like a future. |
 | Async variants | Also catch panics while polling. Never poll a panicked future again. `panics_async` also catches panics from dropping the output. |
 
 ### Tracking and caller timing

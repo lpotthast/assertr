@@ -20,7 +20,11 @@ use crate::{
 // resulting observation, so explaining a rejection can never invoke or poll user code again.
 type Invocation<O> = Result<O, Box<dyn Any + Send>>;
 
-struct Panicked;
+/// Requires a panic. `returned_future` adds a hint for a function whose output looks like a future
+/// that the synchronous assertion never polled.
+struct Panicked {
+    returned_future: bool,
+}
 
 impl<R> Expectation<Invocation<()>, R> for Panicked {
     type Success<'a> = &'a Box<dyn Any + Send>;
@@ -45,12 +49,25 @@ impl<R> Expectation<Invocation<()>, R> for Panicked {
         failure: FailureBuilder,
         _: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
-        failure.relation(if rejected.is_some() {
-            "did not panic"
+        if rejected.is_none() {
+            return failure.relation("panics");
+        }
+        let failure = failure.relation("did not panic");
+        if self.returned_future {
+            failure.fact(Fact::note(
+                "The function returned a future, which is never polled. Use `panics_async` to run it.",
+            ))
         } else {
-            "panics"
-        })
+            failure
+        }
     }
+}
+
+/// Whether `O` is probably a future, judged by its type name. The result only selects a hint, so
+/// an unusual name merely omits or adds it.
+fn looks_like_future<O>() -> bool {
+    let name = core::any::type_name::<O>();
+    name.contains("{async") || name.contains("future") || name.contains("Future")
 }
 
 struct DidNotPanic;
@@ -157,14 +174,26 @@ where
 /// assert_that!(|| "x".parse::<u32>().unwrap()).panics();
 /// assert_that!(|| 1 + 1).does_not_panic().is_equal_to(2);
 /// ```
+///
+/// # Functions returning a future
+///
+/// A function returning a future, such as `async || ..` or `|| async { .. }`, only creates the
+/// future here. Its body never runs, so `does_not_panic` passes and `panics` fails whatever the
+/// body does. Use [`AsyncFnOnceAssertions`] (`panics_async` and `does_not_panic_async`) to await
+/// it. A `panics` failure hints at this when the output looks like a future.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait FnOnceAssertions<'t, O, R = DebugRenderer> {
     /// Asserts that invoking the function or dropping its output panics, then returns the payload.
+    ///
+    /// A returned future is not polled. See
+    /// [functions returning a future](Self#functions-returning-a-future).
     fn panics(self) -> AssertThat<'t, PanicValue, Panic, R>;
 
     /// Asserts that invoking the function does not panic, then returns its output.
     ///
-    /// Dropping the output is outside the caught unwind boundary.
+    /// Dropping the output is outside the caught unwind boundary. A returned future is not polled,
+    /// so this passes without running its body. See
+    /// [functions returning a future](Self#functions-returning-a-future).
     fn does_not_panic(self) -> AssertThat<'t, O, Panic, R>
     where
         R: ValueRenderer<str>;
@@ -178,7 +207,12 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
             let invocation = std::panic::catch_unwind(AssertUnwindSafe(owned_fn(function)));
             Actual::Owned(drop_output(invocation))
         })
-        .apply_assertion_after_tracking(Panicked, Location::caller())
+        .apply_assertion_after_tracking(
+            Panicked {
+                returned_future: looks_like_future::<O>(),
+            },
+            Location::caller(),
+        )
         .map(panic_value)
     }
 
@@ -238,7 +272,12 @@ where
                 async move { drop_output(invoke_async(function).await) }
             })
             .await
-            .apply_assertion_after_tracking(Panicked, location)
+            .apply_assertion_after_tracking(
+                Panicked {
+                    returned_future: false,
+                },
+                location,
+            )
             .map(panic_value)
         }
     }
@@ -365,6 +404,23 @@ mod tests {
                     Expected: alloc::string::String
                     -------- assertr --------
                 "#});
+            }
+
+            #[test]
+            fn hints_at_panics_async_when_the_function_returns_a_future() {
+                const HINT: &str = "The function returned a future, which is never polled. Use `panics_async` to run it.";
+                assert_that!(|| assert_that!(async || panic!("never runs")).panics())
+                    .panics()
+                    .has_type::<String>()
+                    .contains(HINT);
+                assert_that!(|| assert_that!(|| async { panic!("never runs") }).panics())
+                    .panics()
+                    .has_type::<String>()
+                    .contains(HINT);
+                assert_that!(|| assert_that!(|| 42).panics())
+                    .panics()
+                    .has_type::<String>()
+                    .does_not_contain(HINT);
             }
 
             #[test]
