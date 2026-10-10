@@ -102,6 +102,15 @@ where
 {
     composite_items!(C);
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+        // A contiguous search discards the evidence of rejected windows once one matches. Probe
+        // first, so a passing search explains none of them. Only a failing search evaluates the
+        // windows again to collect evidence.
+        if self.placement == Placement::Contiguous
+            && !settings.is_probe()
+            && self.evaluate(actual, &settings.probing()).is_ok()
+        {
+            return Ok(());
+        }
         let actual_length = actual.length();
         let expected_length = self.list.len();
         let mut elements = actual.elements();
@@ -426,9 +435,11 @@ mod tests {
                     .with_renderer(CountingRenderer(&renders))
                     .with_rendering_budget(RenderingBudget::default().with_max_items(1))
                     .capture(|it| it.matches(contains_contiguous_elements([eq(9)])));
-                assert_that!(comparisons.get()).is_equal_to(20);
+                // A passing search only probes. A failing one evaluates every window again.
+                assert_that!(comparisons.get()).is_equal_to(if later_success { 20 } else { 40 });
                 // Only the first window is retained. It renders its start, actual, and expected.
-                assert_that!(renders.get()).is_equal_to(3);
+                // A passing search renders nothing.
+                assert_that!(renders.get()).is_equal_to(if later_success { 0 } else { 3 });
                 assert_that!(&failures).has_length(usize::from(!later_success));
                 if !later_success {
                     assert_that!(failures[0].children).has_length(1);

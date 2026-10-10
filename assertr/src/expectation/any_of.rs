@@ -25,6 +25,11 @@ where
 {
     evidence_items!(A);
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+        // Probe first, so a passing disjunction explains no rejected branch. Only a failing one
+        // evaluates the branches again to collect evidence.
+        if !settings.is_probe() && self.evaluate(actual, &settings.probing()).is_ok() {
+            return Ok(());
+        }
         let render = settings.render();
         let mut context = settings.isolated();
         for index in 0..self.0.len() {
@@ -67,6 +72,25 @@ mod tests {
 
     use super::any_of;
     use crate::{assertions::core::partial_eq::eq, matchers::predicate, prelude::*};
+
+    #[test]
+    fn a_passing_disjunction_explains_no_rejected_branch() {
+        use core::fmt;
+
+        struct CountingRenderer<'a>(&'a Cell<usize>);
+        impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for CountingRenderer<'_> {
+            fn fmt(&self, value: &T, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.set(self.0.get() + 1);
+                write!(formatter, "{value:?}")
+            }
+        }
+
+        let renders = Cell::new(0);
+        assert_that!(5)
+            .with_renderer(CountingRenderer(&renders))
+            .matches(any_of(matchers![eq(1), eq(2), eq(5)]));
+        assert_that!(renders.get()).is_equal_to(0);
+    }
 
     #[test]
     fn stops_at_the_first_matching_branch() {

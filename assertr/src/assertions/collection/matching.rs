@@ -23,9 +23,12 @@ pub(crate) const MATCHING_ELEMENT: MatchingItem = MatchingItem {
 impl MatchingItem {
     /// Evaluates `matcher` against each item until one matches, retaining every rejected branch
     /// in `order`. A subject without items rejects with the described expectation as evidence.
-    pub(crate) fn find<'i, T, R, M>(
+    ///
+    /// A diagnostic search first probes the items, so a passing search explains no rejected
+    /// candidate. Only a failing search evaluates them again to collect evidence.
+    pub(crate) fn find<'i, T, R, M, I>(
         &self,
-        items: impl IntoIterator<Item = &'i T>,
+        items: impl Fn() -> I,
         matcher: &M,
         order: RenderingOrder,
         settings: &AssertionContext<'_, R>,
@@ -33,9 +36,16 @@ impl MatchingItem {
     where
         T: ?Sized + 'i,
         M: Expectation<T, R>,
+        I: Iterator<Item = &'i T>,
     {
+        if !settings.is_probe() {
+            let probe = settings.probing();
+            if items().any(|item| probe.probe(item, matcher)) {
+                return Ok(());
+            }
+        }
         let mut context = settings.isolated_for_order(order);
-        for item in items {
+        for item in items() {
             let mut branch = context.isolated();
             if branch.evaluate(item, matcher) {
                 return Ok(());
@@ -130,7 +140,7 @@ where
 
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         MATCHING_ELEMENT.find(
-            actual.elements(),
+            || actual.elements(),
             &self.0,
             C::PRESENTATION.order(),
             settings,
@@ -260,6 +270,22 @@ mod tests {
             assert_that!([1, 2])
                 .with_renderer(NoRenderer)
                 .matches(contains_matching(matchers::anything()));
+        }
+
+        #[test]
+        fn a_passing_search_explains_no_rejected_candidate() {
+            let renders = Cell::new(0);
+            let values = UnorderedSet((0..100).collect());
+            assert_that!(&values)
+                .with_renderer(ReverseRenderer(&renders))
+                .matches(contains_matching(eq(99)));
+            assert_that!(renders.get()).is_equal_to(0);
+
+            let failures = assert_that!(&values)
+                .with_renderer(ReverseRenderer(&renders))
+                .capture(|it| it.matches(contains_matching(eq(100))));
+            assert_that!(failures).has_length(1);
+            assert_that!(renders.get()).is_greater_than(0);
         }
 
         #[test]

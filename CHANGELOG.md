@@ -130,6 +130,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `satisfies`, `satisfies_owned`, and `satisfies_ref` locate failures raised in their closure at their own call, the
   outermost one when nested. A `#[track_caller]` custom assertion wrapping them now reports its caller instead of a
   line inside its implementation.
+- Passing searches (`contains_matching`, `contains_value_matching`, `any_of`, and contiguous `elements_are`) probe
+  their candidates without explaining or rendering rejected ones. A failing search evaluates them again for evidence,
+  so matchers and callbacks of rejected candidates can run twice.
 - Collection `contains_exactly` failures also name the first mismatching position as a nested `At [index]` failure,
   as `starts_with`, `ends_with`, and the iterator form do.
 - `assert_that!` owns closure literals and `async` blocks, so `assert_that!(|| ..).panics()` and

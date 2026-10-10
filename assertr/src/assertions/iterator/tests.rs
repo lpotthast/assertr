@@ -516,8 +516,11 @@ mod callbacks {
                             _ => unreachable!(),
                         })
                 };
-                // Unordered assignment probes the pair, then evaluates it again to explain it.
-                let evaluations = if matches!(operation, Unordered) { 2 } else { 1 };
+                // Unordered assignment and the collection's contiguous search probe first, then
+                // evaluate again to explain the rejection. A streaming iterator cannot rescan.
+                let probes_first = matches!(operation, Unordered)
+                    || matches!((adapter, operation), (StableOrder, Contiguous));
+                let evaluations = if probes_first { 2 } else { 1 };
                 assert_that!(calls.get()).is_equal_to(evaluations);
                 assert_that!(clones.get()).is_equal_to(3 * evaluations);
                 assert_that!(failures).has_length(1);

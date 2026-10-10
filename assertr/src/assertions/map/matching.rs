@@ -108,7 +108,7 @@ where
         settings: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         MATCHING_VALUE.find(
-            actual.entries().map(|(_, value)| value),
+            || actual.entries().map(|(_, value)| value),
             &self.0,
             Mp::RENDERING_ORDER,
             settings,

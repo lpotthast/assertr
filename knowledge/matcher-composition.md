@@ -98,6 +98,15 @@ Ordinary assertion callbacks may accept `FnOnce` and retain their method's mode.
 [`AssertThat::satisfies`](assertion-lifecycle.md#projections-and-continuation) projects and continues immediately.
 `satisfying` constructs an expectation for later evaluation.
 
+## Searches
+
+`contains_matching`, `contains_value_matching`, `any_of`, and contiguous `elements_are` stop at the first candidate
+that matches and would discard the evidence of earlier rejections. In a diagnostic context they therefore probe their
+candidates first, so a passing search explains and renders nothing, even in a sorted scope whose child limit never
+caps retention. Only a failing search evaluates its candidates again with diagnostics, so matchers and callbacks of
+rejected candidates can run twice on the failure path. Inside a probe the search runs once. Streaming iterator scans
+cannot restart and evaluate each candidate once, keeping evidence within the budget.
+
 ## Exact unordered assignment
 
 An exact unordered match pairs actual occurrences with expected slots so that every occurrence and every slot is used
