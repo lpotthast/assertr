@@ -3,7 +3,8 @@ use std::sync::{PoisonError, RwLock};
 
 /// How long and how often [eventual assertions](super::EventualAssertions) observe their subject.
 ///
-/// - [`within`](Self::within): how long `eventually` waits for the expectation before failing.
+/// - [`within`](Self::within): how long `eventually` waits for the expectation before failing, and
+///   how long `consistently` waits for one observation to complete.
 /// - [`polling_every`](Self::polling_every): the pause between two observations.
 /// - [`consistently_for`](Self::consistently_for): how long `consistently` requires the expectation
 ///   to hold.
@@ -45,7 +46,8 @@ impl Patience {
         consistently_for: Duration::from_millis(100),
     };
 
-    /// Sets how long `eventually` waits for the expectation before failing.
+    /// Sets how long `eventually` waits for the expectation before failing, and how long
+    /// `consistently` waits for one observation to complete.
     #[must_use]
     pub const fn within(mut self, timeout: Duration) -> Self {
         self.within = timeout;
@@ -66,7 +68,8 @@ impl Patience {
         self
     }
 
-    /// How long `eventually` waits for the expectation before failing.
+    /// How long `eventually` waits for the expectation before failing, and how long
+    /// `consistently` waits for one observation to complete.
     #[must_use]
     pub const fn timeout(&self) -> Duration {
         self.within

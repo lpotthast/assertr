@@ -66,6 +66,10 @@ jobs:
           - serde-json
           - serde-toml
           - std
+          - thirtyfour
+          - thirtyfour-cdp
+          - thirtyfour,fluent
+          - thirtyfour-cdp,fluent
           - tokio
     steps:
       - uses: actions/checkout@v7

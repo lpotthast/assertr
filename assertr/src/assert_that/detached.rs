@@ -5,7 +5,7 @@ use crate::{
     AssertThat, ChainRecords, ChainState, Expression,
     actual::Actual,
     expectation::AssertionContext,
-    failure::{FailureBuilder, panic_presentation::PanicPresentation},
+    failure::{AssertionFailure, FailureBuilder, panic_presentation::PanicPresentation},
     mode::Panic,
     renderer::{RenderingBudget, RenderingContext},
 };
@@ -29,7 +29,7 @@ pub(crate) struct DetachedChain<R> {
 
 impl<'t, T, R> AssertThat<'t, T, Panic, R> {
     /// Separates the subject from the chain's diagnostic settings, see [`DetachedChain`].
-    pub(crate) fn detach(self) -> (Actual<'t, T>, DetachedChain<R>) {
+    pub(crate) fn into_parts(self) -> (Actual<'t, T>, DetachedChain<R>) {
         let state = self.state;
         let mut messages = Vec::new();
         state.records.collect_messages(&mut messages);
@@ -66,6 +66,16 @@ impl<R> DetachedChain<R> {
     ) -> ! {
         self.attach(Actual::Owned(())).raise_at(failure, location);
         unreachable!("a panic-mode chain panics when it raises a failure")
+    }
+
+    /// Completes a returned failure with exactly the metadata used by panic mode.
+    pub(crate) fn complete_at(
+        self,
+        failure: FailureBuilder,
+        location: &'static Location<'static>,
+    ) -> AssertionFailure {
+        self.attach(Actual::Owned(()))
+            .complete_failure(failure, location)
     }
 
     /// Continues as a chain on `actual`, keeping the collected messages.

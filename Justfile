@@ -1,7 +1,7 @@
 # Every feature of the `assertr` crate, checked one at a time by `check-each-feature` and
 # friends. Cargo unifies features across a single invocation, so an integration that silently
 # depends on another feature only shows up when it is the only feature enabled.
-features := "fluent http jiff libm num partial program reqwest rootcause serde serde-json serde-toml std tokio"
+features := "fluent http jiff libm num partial program reqwest rootcause serde serde-json serde-toml std thirtyfour thirtyfour-cdp tokio"
 
 # Lists all available commands.
 list:
@@ -124,3 +124,8 @@ verify:
     just build-docs
     just audit
     just semver-checks
+
+# Explicit real-browser contract test. The caller supplies a running Chromium WebDriver endpoint.
+# ASSERTR_WEBDRIVER_URL=http://localhost:9515 ASSERTR_CHROME_BINARY=/path/to/chrome just test-browser
+test-browser:
+    cargo test -p assertr --no-default-features --features thirtyfour-cdp,thirtyfour/reqwest --test thirtyfour_browser -- --ignored
