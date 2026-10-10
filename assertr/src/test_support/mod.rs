@@ -9,9 +9,9 @@ mod rendering;
 use alloc::string::String;
 
 pub(crate) use assertions::{FailureReportAssertions, assert_trait_impl};
-#[cfg(feature = "std")]
-pub(crate) use caller_location::LocationRecorder;
 pub(crate) use caller_location::block_on;
+#[cfg(feature = "std")]
+pub(crate) use caller_location::{LocationRecorder, raised_failure, recording_presentation};
 pub(crate) use caller_location::{assert_caller_location, check_caller_location};
 pub(crate) use collections::{PreservedBag, UnorderedMap, UnorderedSet};
 pub(crate) use evidence::{assert_bounded_order, bounded_failures};

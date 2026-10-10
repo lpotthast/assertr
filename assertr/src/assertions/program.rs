@@ -202,15 +202,15 @@ mod tests {
 
         #[test]
         fn checking_and_extracting_failures_use_the_active_renderer() {
-            let program = r#"custom(Program("assertr-private-missing-executable-987"))"#;
+            let program = format!("custom(Program({MISSING:?}))");
             assert_that!(|| {
                 assert_that!(Program::from(MISSING))
                     .with_renderer(CustomValueRenderer)
                     .exists();
             })
             .panics()
-            .has_type::<String>()
-            .contains(program)
+            .has_message()
+            .contains(program.as_str())
             .contains("Reason: custom(CannotFindBinaryPath)");
             assert_that!(|| {
                 let _ = assert_that!(Program::from(MISSING))
@@ -218,8 +218,8 @@ mod tests {
                     .get_resolved_path();
             })
             .panics()
-            .has_type::<String>()
-            .contains(program)
+            .has_message()
+            .contains(program.as_str())
             .contains("Reason: custom(CannotFindBinaryPath)");
             assert_that!(|| {
                 let _ = assert_that!(Program::from(MISSING))
@@ -227,7 +227,7 @@ mod tests {
                     .get_resolved_path();
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .contains("Actual: <redacted>")
             .contains("Reason: <redacted>");
         }
@@ -275,7 +275,7 @@ mod tests {
                     .exists()
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `Program::from("someNonexistentProgram")`
@@ -303,13 +303,11 @@ mod tests {
 
         #[test]
         fn continues_on_the_resolved_path() {
-            #[cfg(target_os = "linux")]
-            let expected = "/usr/bin/ls";
-            #[cfg(target_os = "macos")]
-            let expected = "/bin/ls";
             assert_that!(Program::from("ls"))
                 .get_resolved_path()
-                .has_debug_value(expected);
+                .is_absolute()
+                .is_a_file()
+                .has_file_stem("ls");
         }
     }
 }

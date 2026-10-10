@@ -10,7 +10,9 @@ sources:
   - assertr/src/entry/panic.rs
   - assertr/src/assertions/std/mutex.rs
   - assertr/src/assertions/std/path.rs
+  - assertr/src/assertions/eventually.rs
   - assertr/src/assertions/std/eventually/mod.rs
+  - assertr/src/assertions/std/eventually/patience.rs
   - assertr/src/assert_that/detached.rs
   - assertr/src/assertions/tokio/mutex.rs
   - assertr/src/assertions/tokio/rw_lock.rs
@@ -74,7 +76,7 @@ The [function tests](../assertr/src/assertions/core/fn.rs), including
 
 `EventualAssertions` take an observation, a closure returning a future of the current value, and observe it
 repeatedly in panic mode. Their builders configure the [patience](glossary.md#execution-and-presentation). The final
-`matches` or `satisfies` call is the assertion:
+`matches`, `satisfies`, or `try_matches` call is the assertion:
 
 | Assertion | Passes | Fails |
 |---|---|---|
@@ -82,8 +84,14 @@ repeatedly in panic mode. Their builders configure the [patience](glossary.md#ex
 | `consistently` | When every observation until the consistency duration ends meets it. Continues with the last value. | At the first observation that does not. |
 | `_ok` variants | Same, for an observation returning `Result`: `eventually_ok` retries an `Err` unless `giving_up_on` accepts it or `giving_up_on_any_error` is set, `consistently_ok` fails on it. | An `Err` fails with relation "could not be observed" and an `Error` fact: at the timeout, or at once when given up on. |
 
-The final call captures the caller location, tracks one assertion on the chain and its ancestors, resolves the patience
-(global patience with the chain's overrides), and splits the chain with `into_parts`: ancestor
+`Patience` holds four settings: the timeout of `eventually`, the polling interval, and the consistency duration and
+observation timeout of `consistently`. A chain starts from the global patience, or from the one passed to
+`with_patience`. The single-setting builders `within`, `polling_every`, `for_at_least`, and `each_observation_within`
+override it regardless of the order in which they are called. `giving_up_on` accepts closures. `GiveUp` is sealed, so
+`KeepRetrying`, `AnyError`, and closures are the only retry policies.
+
+The final call captures the caller location, tracks one assertion on the chain and its ancestors, resolves the patience,
+and splits the chain with `into_parts`: ancestor
 messages are collected as in `capture`, and the future keeps only the observation, the diagnostic settings, and the
 renderer. It is therefore `Send` whenever they are, unlike other async adapters. The continuation is a new root chain on
 the observed value. Panic mode raises immediately, so it needs neither the records nor the parent link.
@@ -98,8 +106,8 @@ for the history. A failure is the expectation's own failure plus a `Waited` or `
 observations) and, when the value changed, `Observed values`: up to eight distinct values with their offsets. `Held`
 counts only the observations before the failing one, and reads `never` when there were none.
 
-Every observation runs against a deadline: the timeout for `eventually`, and the timeout from the observation's start
-for `consistently`. An observation still pending at its deadline is dropped, and the assertion fails with relation
+Every observation runs against a deadline: the timeout for `eventually`, and the observation timeout from the
+observation's start for `consistently`. An observation still pending at its deadline is dropped, and the assertion fails with relation
 "could not be observed" and a note. An observation ready at the deadline still counts. Only a future returning
 `Pending` can be abandoned. An observation that blocks its thread synchronously cannot be interrupted. Pauses last one
 interval but end at the timeout or the end of the consistency duration, so a long interval never extends the

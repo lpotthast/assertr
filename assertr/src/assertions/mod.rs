@@ -61,6 +61,8 @@ pub(crate) mod alloc;
 pub(crate) mod collection;
 pub(crate) mod core;
 pub(crate) mod distance;
+#[cfg(feature = "std")]
+pub mod eventually;
 mod has_length;
 #[cfg(feature = "http")]
 pub(crate) mod http;
@@ -79,8 +81,6 @@ pub(crate) mod rootcause;
 pub(crate) mod set;
 #[cfg(feature = "std")]
 pub(crate) mod std;
-#[cfg(feature = "std")]
-pub use self::std::eventually;
 #[cfg(feature = "thirtyfour")]
 pub mod thirtyfour;
 #[cfg(feature = "thirtyfour")]

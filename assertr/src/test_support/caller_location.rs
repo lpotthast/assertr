@@ -4,7 +4,6 @@ use alloc::{
     boxed::Box,
     string::{String, ToString},
     sync::Arc,
-    vec::Vec,
 };
 use core::panic::{Location, RefUnwindSafe};
 use std::sync::Mutex;
@@ -14,33 +13,47 @@ use crate::{
     prelude::{PartialEqAssertions, ResultAssertions, assert_that},
 };
 
-/// A panic presentation recording the failure's location before producing the default report.
+/// A panic presentation recording the failure before producing the default report.
 pub(crate) type LocationRecorder =
     Box<dyn Fn(&AssertionFailure) -> String + RefUnwindSafe + Send + Sync>;
+
+/// A presentation recording the presented failure, and the slot it records into.
+///
+/// The assertion chain owns its presentation. The returned slot survives unwinding, so the
+/// failure can be inspected after the assertion panicked.
+pub(crate) fn recording_presentation() -> (LocationRecorder, Arc<Mutex<Option<AssertionFailure>>>) {
+    let slot = Arc::new(Mutex::new(None));
+    let recorder = Arc::clone(&slot);
+    let presentation: LocationRecorder = Box::new(move |failure: &AssertionFailure| {
+        *recorder.lock().unwrap() = Some(failure.clone());
+        failure.to_string()
+    });
+    (presentation, slot)
+}
+
+/// Runs `action` with a recording presentation and returns the structured failure it raised.
+///
+/// Panics with "expected an assertion failure" when `action` does not panic. Returns `None` when
+/// it panicked without presenting a structured failure.
+pub(crate) fn raised_failure(action: impl FnOnce(LocationRecorder)) -> Option<AssertionFailure> {
+    let (presentation, slot) = recording_presentation();
+    let outcome = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| action(presentation)));
+    assert_that!(outcome)
+        .with_detail_message("expected an assertion failure")
+        .is_err();
+    slot.lock().unwrap().take()
+}
 
 /// Runs an assertion with a recording presentation, then checks its captured caller location.
 #[track_caller]
 pub(crate) fn check_caller_location(assertions: impl FnOnce(LocationRecorder)) {
     let expected = Location::caller();
-    let recorded_locations = Arc::new(Mutex::new(Vec::new()));
-
-    // The assertion context owns its presentation. Retain a handle to the recorded locations so
-    // they survive unwinding and can be checked after the assertion panics.
-    let recorder = Arc::clone(&recorded_locations);
-    let outcome = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
-        assertions(Box::new(move |failure: &AssertionFailure| {
-            recorder.lock().unwrap().push(failure.location);
-            failure.to_string()
-        }));
-    }));
-    assert_that!(outcome)
-        .with_detail_message("expected an assertion failure")
-        .is_err();
-    assert_that!(*recorded_locations.lock().unwrap())
+    let location = raised_failure(assertions).map(|failure| failure.location);
+    assert_that!(location)
         .with_detail_message(
             "incorrect assertion caller location (or no structured assertion failure)",
         )
-        .is_equal_to([Some(expected)]);
+        .is_equal_to(Some(Some(expected)));
 }
 
 /// Checks one failing assertion method's exact caller location.

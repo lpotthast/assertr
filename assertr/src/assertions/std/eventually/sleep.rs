@@ -195,7 +195,7 @@ mod tests {
         let mut cx = Context::from_waker(Waker::noop());
         let mut pause = until(Instant::now().checked_add(Duration::from_secs(3600)));
         for _ in 0..100 {
-            assert_that!(Pin::new(&mut pause).poll(&mut cx).is_pending()).is_true();
+            assert_that!(Pin::new(&mut pause).poll(&mut cx)).is_pending();
         }
         let registration = pause.registration;
         assert_that!(registration).is_some();
@@ -209,7 +209,7 @@ mod tests {
     fn without_a_deadline_it_never_completes_and_never_registers() {
         let mut cx = Context::from_waker(Waker::noop());
         let mut pause = until(None);
-        assert_that!(Pin::new(&mut pause).poll(&mut cx).is_pending()).is_true();
+        assert_that!(Pin::new(&mut pause).poll(&mut cx)).is_pending();
         assert_that!(pause.registration).is_none();
     }
 

@@ -133,7 +133,15 @@ property_expectation! {
 }
 
 property_expectation! {
-    /// Checks whether a path is relative.
+    /// Checks whether a path is absolute, using [`Path::is_absolute`].
+    pub struct IsAbsolute for<P: Deref<Target = Path>> P;
+    kind Other;
+    check |actual| actual.is_absolute();
+    relations "is absolute", "is not absolute";
+}
+
+property_expectation! {
+    /// Checks whether a path is relative, that is not absolute, using [`Path::is_relative`].
     pub struct IsRelative for<P: Deref<Target = Path>> P;
     kind Other;
     check |actual| actual.is_relative();
@@ -446,8 +454,8 @@ pub trait PathAssertions<P: Deref<Target = Path>, R = DebugRenderer> {
 
     /// Asserts that the path does not exist.
     ///
-    /// Passes when [`Path::try_exists`] returns `Ok(false)` or an
-    /// [`io::ErrorKind::NotADirectory`] error, which confirms that an ancestor is not a
+    /// Passes when [`Path::try_exists`] returns `Ok(false)`, or an [`io::ErrorKind::NotFound`] or
+    /// [`io::ErrorKind::NotADirectory`] error. The latter means that an ancestor is not a
     /// directory. An existing path or any other I/O error while checking existence is reported as
     /// an assertion failure, retaining the error as a fact.
     ///
@@ -485,7 +493,26 @@ pub trait PathAssertions<P: Deref<Target = Path>, R = DebugRenderer> {
     where
         R: ValueRenderer<P>;
 
-    /// Asserts that the path has no root component.
+    /// Asserts that the path is absolute, as decided by [`Path::is_absolute`].
+    ///
+    /// On Windows, an absolute path needs both a prefix and a root, such as `C:\data`.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use std::path::Path;
+    ///
+    /// # #[cfg(unix)]
+    /// assert_that!(Path::new("/etc/hosts")).is_absolute();
+    /// ```
+    fn is_absolute(self) -> Self
+    where
+        R: ValueRenderer<P>;
+
+    /// Asserts that the path is relative, that is not absolute, as decided by
+    /// [`Path::is_relative`].
+    ///
+    /// A relative path may still have a root component. On Windows, `\data` has a root but no
+    /// prefix, so it is relative. Use [`has_a_root`](Self::has_a_root) to check the root alone.
     fn is_relative(self) -> Self
     where
         R: ValueRenderer<P>;
@@ -566,6 +593,14 @@ impl<P: Deref<Target = Path>, M: Mode, R> PathAssertions<P, R> for AssertThat<'_
     }
 
     #[track_caller]
+    fn is_absolute(self) -> Self
+    where
+        R: ValueRenderer<P>,
+    {
+        self.matches(IsAbsolute)
+    }
+
+    #[track_caller]
     fn is_relative(self) -> Self
     where
         R: ValueRenderer<P>,
@@ -626,13 +661,9 @@ mod tests {
     }
 
     macro_rules! source_path {
-        () => {{
-            let source = std::path::Path::new(file!());
-            let package_relative = source
-                .strip_prefix(env!("CARGO_PKG_NAME"))
-                .unwrap_or(source);
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(package_relative)
-        }};
+        () => {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(source_relative_path!())
+        };
     }
 
     /// Creates a symlink to this source file in the temp dir and removes it on drop.
@@ -668,6 +699,7 @@ mod tests {
             path.as_path()
                 .must()
                 .exist()
+                .be_absolute()
                 .be_a_file()
                 .have_file_name("path.rs")
                 .have_file_stem("path")
@@ -896,6 +928,54 @@ mod tests {
             assert_that!(failure.actual).is_none();
             assert_that!(failure.facts).is_empty();
         }
+
+        #[test]
+        fn entry_kind_rejections_describe_the_observed_entry() {
+            let file = source_path!();
+            let dir = file.parent().unwrap();
+            let invalid = std::path::Path::new("invalid\0path");
+            let failures = assert_that!(dir).capture(|it| it.is_a_file().is_a_symlink());
+            let failures = failures
+                .into_iter()
+                .chain(assert_that!(file.as_path()).capture(PathAssertions::is_a_directory))
+                .chain(
+                    assert_that!(std::path::Path::new("assertr-missing-path"))
+                        .capture(PathAssertions::is_a_file),
+                )
+                .chain(
+                    assert_that!(invalid)
+                        .capture(|it| it.is_a_file().is_a_directory().is_a_symlink()),
+                )
+                .map(|failure| {
+                    let fact = &failure.facts[0];
+                    let fact = match &fact.label {
+                        None => format!("{:#}", fact.value),
+                        Some(label) => label.to_string(),
+                    };
+                    (failure.relation.unwrap().into_owned(), fact)
+                })
+                .collect::<Vec<_>>();
+            let expected = [
+                ("is not a file", "The path is a directory."),
+                ("is not a symlink", "The path is a directory."),
+                ("is not a directory", "The path is a file."),
+                ("is not a file", "The path does not exist."),
+                (
+                    "could not determine whether the path is a file",
+                    "I/O error",
+                ),
+                (
+                    "could not determine whether the path is a directory",
+                    "I/O error",
+                ),
+                (
+                    "could not determine whether the path is a symlink",
+                    "I/O error",
+                ),
+            ]
+            .map(|(relation, fact)| (relation.to_owned(), fact.to_owned()));
+            assert_that!(failures).is_equal_to(expected);
+        }
     }
 
     mod exists {
@@ -925,7 +1005,7 @@ mod tests {
             let path = Path::new("src/assertions/std/some-non-existing-file.rs");
             assert_that!(|| assert_that!(path).with_location(false).exists())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `path`
@@ -981,7 +1061,7 @@ mod tests {
                 assert_that!(path).with_location(false).does_not_exist();
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `path`
@@ -1003,7 +1083,7 @@ mod tests {
                 assert_that!(path).with_location(false).does_not_exist();
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `path`
@@ -1019,78 +1099,19 @@ mod tests {
         }
     }
 
-    mod entry_kinds {
-        use std::path::Path;
-
+    mod is_a_file {
         use crate::prelude::*;
 
         #[test]
-        fn caller_locations_are_as_expected() {
+        fn caller_location_is_as_expected() {
             let path = source_path!();
-            let dir = path.parent().unwrap();
-            assert_caller_location!(assert_that!(dir), is_a_file());
-            assert_caller_location!(assert_that!(path.as_path()), is_a_directory());
-            assert_caller_location!(assert_that!(path.as_path()), is_a_symlink());
+            assert_caller_location!(assert_that!(path.parent().unwrap()), is_a_file());
         }
 
         #[test]
-        fn succeed_for_the_matching_kind() {
+        fn succeeds_for_a_file() {
             let path = source_path!();
             assert_that!(path.as_path()).is_a_file();
-            assert_that!(path.parent().unwrap()).is_a_directory();
-            #[cfg(unix)]
-            {
-                let link = super::TempSymlink::new("path-succeeds");
-                assert_that!(link.0.as_path()).is_a_symlink().is_a_file();
-            }
-        }
-
-        #[test]
-        fn rejections_describe_the_observed_entry() {
-            let file = source_path!();
-            let dir = file.parent().unwrap();
-            let invalid = Path::new("invalid\0path");
-            let failures = assert_that!(dir).capture(|it| it.is_a_file().is_a_symlink());
-            let failures = failures
-                .into_iter()
-                .chain(assert_that!(file.as_path()).capture(PathAssertions::is_a_directory))
-                .chain(
-                    assert_that!(Path::new("assertr-missing-path"))
-                        .capture(PathAssertions::is_a_file),
-                )
-                .chain(
-                    assert_that!(invalid)
-                        .capture(|it| it.is_a_file().is_a_directory().is_a_symlink()),
-                )
-                .map(|failure| {
-                    let fact = &failure.facts[0];
-                    let fact = match &fact.label {
-                        None => format!("{:#}", fact.value),
-                        Some(label) => label.to_string(),
-                    };
-                    (failure.relation.unwrap().into_owned(), fact)
-                })
-                .collect::<Vec<_>>();
-            let expected = [
-                ("is not a file", "The path is a directory."),
-                ("is not a symlink", "The path is a directory."),
-                ("is not a directory", "The path is a file."),
-                ("is not a file", "The path does not exist."),
-                (
-                    "could not determine whether the path is a file",
-                    "I/O error",
-                ),
-                (
-                    "could not determine whether the path is a directory",
-                    "I/O error",
-                ),
-                (
-                    "could not determine whether the path is a symlink",
-                    "I/O error",
-                ),
-            ]
-            .map(|(relation, fact)| (relation.to_owned(), fact.to_owned()));
-            assert_that!(failures).is_equal_to(expected);
         }
 
         #[test]
@@ -1099,7 +1120,7 @@ mod tests {
             let dir = path.parent().unwrap();
             assert_that!(|| assert_that!(dir).with_location(false).is_a_file())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(indoc::formatdoc! {r"
                     -------- assertr --------
                     Expression: `dir`
@@ -1112,6 +1133,39 @@ mod tests {
                       - The path is a directory.
                     -------- assertr --------
                 "});
+        }
+    }
+
+    mod is_a_directory {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let path = source_path!();
+            assert_caller_location!(assert_that!(path.as_path()), is_a_directory());
+        }
+
+        #[test]
+        fn succeeds_for_a_directory() {
+            let path = source_path!();
+            assert_that!(path.parent().unwrap()).is_a_directory();
+        }
+    }
+
+    mod is_a_symlink {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let path = source_path!();
+            assert_caller_location!(assert_that!(path.as_path()), is_a_symlink());
+        }
+
+        #[test]
+        #[cfg(unix)]
+        fn succeeds_for_a_symlink_without_following_it() {
+            let link = super::TempSymlink::new("path-succeeds");
+            assert_that!(link.0.as_path()).is_a_symlink().is_a_file();
         }
     }
 
@@ -1137,7 +1191,7 @@ mod tests {
             let path = Path::new("foo/bar/baz.rs");
             assert_that!(|| assert_that!(path).with_location(false).has_a_root())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `path`
@@ -1147,6 +1201,26 @@ mod tests {
                     does not have a root
                     -------- assertr --------
                 "#});
+        }
+    }
+
+    mod is_absolute {
+        use std::path::Path;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Path::new("foo/bar/baz.rs")), is_absolute());
+        }
+
+        #[test]
+        fn accepts_absolute_paths_only() {
+            let path = source_path!();
+            assert_that!(path).is_absolute();
+            let failures =
+                assert_that!(Path::new("foo/bar/baz.rs")).capture(PathAssertions::is_absolute);
+            assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not absolute"));
         }
     }
 
@@ -1169,7 +1243,7 @@ mod tests {
         }
     }
 
-    mod components {
+    mod has_file_name {
         use std::path::Path;
 
         use indoc::formatdoc;
@@ -1177,19 +1251,13 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        fn caller_locations_are_as_expected() {
-            let path = Path::new("/");
-            assert_caller_location!(assert_that!(path), has_file_name("foo"));
-            assert_caller_location!(assert_that!(path), has_file_stem("foo"));
-            assert_caller_location!(assert_that!(path), has_extension("rs"));
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Path::new("/")), has_file_name("foo"));
         }
 
         #[test]
-        fn succeed_when_equal() {
-            assert_that!(source_relative_path!())
-                .has_file_name("path.rs")
-                .has_file_stem("path")
-                .has_extension("rs");
+        fn succeeds_when_equal() {
+            assert_that!(source_relative_path!()).has_file_name("path.rs");
         }
 
         #[test]
@@ -1201,7 +1269,7 @@ mod tests {
                     .has_file_name("some.json")
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `path`
@@ -1217,13 +1285,47 @@ mod tests {
                 -------- assertr --------
             "#});
         }
+    }
+
+    mod has_file_stem {
+        use std::path::Path;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Path::new("/")), has_file_stem("foo"));
+        }
+
+        #[test]
+        fn succeeds_when_equal() {
+            assert_that!(source_relative_path!()).has_file_stem("path");
+        }
+    }
+
+    mod has_extension {
+        use std::path::Path;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(Path::new("/")), has_extension("rs"));
+        }
+
+        #[test]
+        fn succeeds_when_equal() {
+            assert_that!(source_relative_path!()).has_extension("rs");
+        }
 
         #[test]
         fn panics_when_path_has_no_component() {
             let path = Path::new("/");
             assert_that!(|| assert_that!(path).with_location(false).has_extension("rs"))
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `path`
@@ -1241,26 +1343,19 @@ mod tests {
         }
     }
 
-    mod affixes {
+    mod starts_with {
         use indoc::formatdoc;
 
         use crate::prelude::*;
 
         #[test]
-        fn caller_locations_are_as_expected() {
-            let path = source_relative_path!();
-            assert_caller_location!(assert_that!(path), starts_with("assert"));
-            assert_caller_location!(assert_that!(path), ends_with("ath.rs"));
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(source_relative_path!()), starts_with("assert"));
         }
 
         #[test]
-        fn match_whole_components_only() {
-            let path = source_relative_path!();
-            assert_that!(path)
-                .starts_with("src")
-                .ends_with("std/path.rs");
-            let failures = assert_that!(path).capture(|it| it.ends_with("ath.rs"));
-            assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not end with"));
+        fn succeeds_for_whole_leading_components() {
+            assert_that!(source_relative_path!()).starts_with("src/assertions");
         }
 
         #[test]
@@ -1272,7 +1367,7 @@ mod tests {
                     .starts_with("assert")
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `path`
@@ -1287,6 +1382,23 @@ mod tests {
                   - Only whole path components are matched.
                 -------- assertr --------
             "#});
+        }
+    }
+
+    mod ends_with {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(source_relative_path!()), ends_with("ath.rs"));
+        }
+
+        #[test]
+        fn matches_whole_trailing_components_only() {
+            let path = source_relative_path!();
+            assert_that!(path).ends_with("std/path.rs");
+            let failures = assert_that!(path).capture(|it| it.ends_with("ath.rs"));
+            assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("does not end with"));
         }
     }
 

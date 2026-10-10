@@ -1,14 +1,17 @@
+use tokio::sync::watch::{Receiver, Ref};
+
 use crate::{
+    AssertThat, Mode,
     borrow_for::{BorrowFor, borrow_for},
     expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
-    prelude::*,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Compares the current watch value without marking it seen.
 #[derive(Debug, Clone)]
 pub struct HasCurrentValue<E>(E);
-impl<T, E, R> Expectation<tokio::sync::watch::Receiver<T>, R> for HasCurrentValue<E>
+impl<T, E, R> Expectation<Receiver<T>, R> for HasCurrentValue<E>
 where
     T: PartialEq<E::View>,
     E: BorrowFor<T>,
@@ -18,18 +21,18 @@ where
         = ()
     where
         Self: 'a,
-        tokio::sync::watch::Receiver<T>: 'a;
+        Receiver<T>: 'a;
     type Rejection<'a>
-        = (tokio::sync::watch::Ref<'a, T>, &'a E::View)
+        = (Ref<'a, T>, &'a E::View)
     where
         Self: 'a,
-        tokio::sync::watch::Receiver<T>: 'a;
+        Receiver<T>: 'a;
     fn evaluate<'a>(
         &'a self,
-        actual: &'a tokio::sync::watch::Receiver<T>,
+        actual: &'a Receiver<T>,
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let actual = tokio::sync::watch::Receiver::borrow(actual);
+        let actual = Receiver::borrow(actual);
         let expected = borrow_for::<T, _>(&self.0);
         if *actual == *expected {
             Ok(())
@@ -41,7 +44,7 @@ where
     const KIND: FailureKind = FailureKind::Equality;
     fn explain<'a>(
         &'a self,
-        rejected: Option<(&'a tokio::sync::watch::Receiver<T>, Self::Rejection<'a>)>,
+        rejected: Option<(&'a Receiver<T>, Self::Rejection<'a>)>,
         failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
@@ -72,20 +75,20 @@ macro_rules! change_state {
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
 
-        impl<T, R> Expectation<tokio::sync::watch::Receiver<T>, R> for $name {
+        impl<T, R> Expectation<Receiver<T>, R> for $name {
             type Success<'a>
                 = ()
             where
                 Self: 'a,
-                tokio::sync::watch::Receiver<T>: 'a;
+                Receiver<T>: 'a;
             type Rejection<'a>
                 = bool
             where
                 Self: 'a,
-                tokio::sync::watch::Receiver<T>: 'a;
+                Receiver<T>: 'a;
             fn evaluate<'a>(
                 &'a self,
-                actual: &'a tokio::sync::watch::Receiver<T>,
+                actual: &'a Receiver<T>,
                 _context: &AssertionContext<'_, R>,
             ) -> Result<(), bool> {
                 match actual.has_changed() {
@@ -98,7 +101,7 @@ macro_rules! change_state {
             const KIND: FailureKind = FailureKind::Other;
             fn explain<'a>(
                 &'a self,
-                rejected: Option<(&'a tokio::sync::watch::Receiver<T>, bool)>,
+                rejected: Option<(&'a Receiver<T>, bool)>,
                 failure: FailureBuilder,
                 _context: &AssertionContext<'_, R>,
             ) -> FailureBuilder {
@@ -121,7 +124,7 @@ change_state!(
     HasNotChanged: false, "has not changed", "has unexpectedly changed"
 );
 
-/// Non-extracting assertions for [`tokio::sync::watch::Receiver`].
+/// Non-extracting assertions for [`Receiver`].
 ///
 /// These checks support panic and capture modes without changing the receiver's seen state.
 #[allow(clippy::return_self_not_must_use)]
@@ -145,9 +148,7 @@ pub trait TokioWatchReceiverAssertions<T, R = DebugRenderer> {
     fn has_not_changed(self) -> Self;
 }
 
-impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R>
-    for AssertThat<'_, tokio::sync::watch::Receiver<T>, M, R>
-{
+impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R> for AssertThat<'_, Receiver<T>, M, R> {
     #[track_caller]
     fn has_current_value<E>(self, expected: E) -> Self
     where
@@ -314,7 +315,7 @@ mod tests {
                     })
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `rx`
@@ -395,9 +396,13 @@ mod tests {
                 it
             });
             match sender {
-                Some(_) => assert_that!(receiver.has_changed().unwrap()).is_equal_to(changed),
-                None => assert_that!(receiver.has_changed().is_err()).is_true(),
-            };
+                Some(_) => {
+                    assert_that!(receiver.has_changed().unwrap()).is_equal_to(changed);
+                }
+                None => {
+                    assert_that!(receiver.has_changed()).is_err();
+                }
+            }
             assert_that!(*Receiver::borrow(&receiver)).is_equal_to(7);
             failures
                 .iter()
@@ -432,7 +437,7 @@ mod tests {
             receiver.mark_unchanged();
             assert_that!(|| assert_that!(receiver).with_location(false).has_changed())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `receiver`

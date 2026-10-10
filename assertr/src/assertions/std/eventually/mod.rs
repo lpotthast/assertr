@@ -1,34 +1,7 @@
-//! Assertions on a value that changes over time: [`eventually`](EventualAssertions::eventually)
-//! meets an expectation, or [`consistently`](EventualAssertions::consistently) keeps meeting it.
+//! Eventual assertions: observation, patience, and the private timer behind them.
 //!
-//! The subject is an observation: a closure returning a future of the current value, such as
-//! `|| log.text()`. The assertion observes it repeatedly, with the [`Patience`] configured globally
-//! or for the chain, and applies any [matcher](mod@crate::matchers) or assertion callback to every
-//! observed value.
-//!
-//! [`EventualAssertions`] and [`Patience`] are also exported from [`assertions`](crate::assertions)
-//! and the prelude. This module holds the builders they return, [`Eventually`] and
-//! [`Consistently`], and the [`GiveUp`] policies deciding which failed observations of
-//! [`eventually_ok`](EventualAssertions::eventually_ok) end the assertion.
-//!
-//! ```rust
-//! use assertr::prelude::*;
-//! use std::sync::atomic::{AtomicU32, Ordering};
-//!
-//! # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
-//! let counter = AtomicU32::new(0);
-//! let observe = || async { counter.fetch_add(1, Ordering::SeqCst) + 1 };
-//!
-//! // Waits until the counter has reached 3, then continues with the observed value.
-//! assert_that!(observe)
-//!     .eventually()
-//!     .satisfies(|count| {
-//!         count.is_greater_or_equal_to(3);
-//!     })
-//!     .await
-//!     .is_less_than(100);
-//! # });
-//! ```
+//! The public builders and retry policies are re-exported from
+//! [`assertions::eventually`](crate::assertions::eventually), which documents them.
 
 mod patience;
 mod sleep;
@@ -62,8 +35,12 @@ pub struct Fallible;
 /// Eventual assertions on an observation: a closure returning a future of the current value.
 ///
 /// These methods start a builder that configures the [`Patience`] for this chain and ends with the
-/// assertion itself, `matches` or `satisfies`. They are available in panic mode, and the subject
-/// may be borrowed or owned.
+/// assertion itself: `matches` or `satisfies`, or `try_matches` to return the failure instead of
+/// panicking. They are available in panic mode, and the subject may be borrowed or owned.
+///
+/// The returned futures keep no chain records. They are `Send` whenever the observation, the
+/// expectation, and the renderer are, and they run in any async runtime. See
+/// [`assertions::eventually`](crate::assertions::eventually) for an example.
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait EventualAssertions: Sized {
     /// Observes the subject until the assertion holds, failing after the [`Patience`]'s timeout
@@ -141,9 +118,21 @@ pub struct AnyError;
 /// Decides which failed observations end an [`eventually_ok`](EventualAssertions::eventually_ok)
 /// assertion at once instead of being retried. Implemented by [`KeepRetrying`], [`AnyError`],
 /// and closures `Fn(&E) -> bool`.
-pub trait GiveUp<E> {
+///
+/// This trait is sealed. Pass a closure to [`giving_up_on`](Eventually::giving_up_on) for a
+/// custom policy.
+pub trait GiveUp<E>: sealed::Sealed<E> {
     /// Whether no retry can turn this observation's `error` into a value.
     fn gives_up_on(&self, error: &E) -> bool;
+}
+
+mod sealed {
+    /// Restricts [`GiveUp`](super::GiveUp) to the policies of this module.
+    pub trait Sealed<E> {}
+
+    impl<E> Sealed<E> for super::KeepRetrying {}
+    impl<E> Sealed<E> for super::AnyError {}
+    impl<E, P: Fn(&E) -> bool> Sealed<E> for P {}
 }
 
 impl<E> GiveUp<E> for KeepRetrying {
@@ -176,21 +165,26 @@ impl<C, K> Eventually<C, K> {
 }
 
 impl<C, K, G> Eventually<C, K, G> {
-    /// Waits up to `timeout` instead of the [`Patience`]'s timeout.
+    /// Waits up to `timeout` for the expectation instead of the [`Patience`]'s
+    /// [timeout](Patience::timeout).
     pub fn within(mut self, timeout: Duration) -> Self {
-        self.overrides = self.overrides.within(timeout);
+        self.overrides = self.overrides.with_timeout(timeout);
         self
     }
 
-    /// Pauses `interval` between two observations instead of the [`Patience`]'s interval.
+    /// Pauses `interval` between two observations instead of the [`Patience`]'s
+    /// [interval](Patience::interval).
     pub fn polling_every(mut self, interval: Duration) -> Self {
-        self.overrides = self.overrides.polling_every(interval);
+        self.overrides = self.overrides.with_interval(interval);
         self
     }
 
-    /// Uses `patience` instead of the global one.
+    /// Starts from `patience` instead of the [global](Patience::global) patience.
+    ///
+    /// [`within`](Self::within) and [`polling_every`](Self::polling_every) override single
+    /// settings of it, whether they are called before or after this method.
     pub fn with_patience(mut self, patience: Patience) -> Self {
-        self.overrides = Overrides::all(patience);
+        self.overrides = self.overrides.with_base(patience);
         self
     }
 }
@@ -204,22 +198,37 @@ impl<C, K> Consistently<C, K> {
         }
     }
 
-    /// Requires the assertion to hold for `duration` instead of the [`Patience`]'s consistency
-    /// duration, e.g. past a timer the check must outlast.
+    /// Requires the assertion to hold for `duration` instead of the [`Patience`]'s
+    /// [consistency duration](Patience::consistency_duration), for example past a timer the check
+    /// must outlast.
     pub fn for_at_least(mut self, duration: Duration) -> Self {
-        self.overrides = self.overrides.consistently_for(duration);
+        self.overrides = self.overrides.with_consistency_duration(duration);
         self
     }
 
-    /// Pauses `interval` between two observations instead of the [`Patience`]'s interval.
+    /// Waits up to `timeout` for each observation to complete instead of the [`Patience`]'s
+    /// [observation timeout](Patience::observation_timeout). An observation still pending after
+    /// it fails the assertion.
+    pub fn each_observation_within(mut self, timeout: Duration) -> Self {
+        self.overrides = self.overrides.with_observation_timeout(timeout);
+        self
+    }
+
+    /// Pauses `interval` between two observations instead of the [`Patience`]'s
+    /// [interval](Patience::interval).
     pub fn polling_every(mut self, interval: Duration) -> Self {
-        self.overrides = self.overrides.polling_every(interval);
+        self.overrides = self.overrides.with_interval(interval);
         self
     }
 
-    /// Uses `patience` instead of the global one.
+    /// Starts from `patience` instead of the [global](Patience::global) patience.
+    ///
+    /// [`for_at_least`](Self::for_at_least),
+    /// [`each_observation_within`](Self::each_observation_within), and
+    /// [`polling_every`](Self::polling_every) override single settings of it, whether they are
+    /// called before or after this method.
     pub fn with_patience(mut self, patience: Patience) -> Self {
-        self.overrides = Overrides::all(patience);
+        self.overrides = self.overrides.with_base(patience);
         self
     }
 }
@@ -231,9 +240,9 @@ where
 {
     /// Starts observing at the assertion's call, keeping the give-up policy for the extractor.
     #[track_caller]
-    fn start(self) -> (Observation<'t, F, R>, G) {
-        let observation = Observation::start(self.chain, Location::caller(), self.overrides);
-        (observation, self.give_up)
+    fn start(self) -> (EventualRun<'t, F, R>, G) {
+        let run = EventualRun::start(self.chain, Location::caller(), self.overrides);
+        (run, self.give_up)
     }
 }
 
@@ -252,17 +261,36 @@ where
     where
         R: ValueRenderer<T>,
     {
-        let (observation, KeepRetrying) = self.start();
-        let outcome = observation.until(expected, plain);
+        let (run, KeepRetrying) = self.start();
+        let outcome = run.until(expected, plain);
         async move { outcome.await.into_chain() }
     }
 
     /// Returns the observed value or a structured assertion failure, without panicking.
     /// User code panics are not caught. Timing, retry policy, rendering and caller metadata
-    /// are the same as `matches`.
+    /// are the same as `matches`. Pass `satisfying(|it| ..)` to use an assertion callback.
     ///
     /// # Errors
     /// Returns the structured assertion failure when observation or the expectation fails.
+    ///
+    /// # Examples
+    /// A shared helper can propagate the failure with `?` instead of panicking:
+    ///
+    /// ```rust
+    /// use assertr::{failure::AssertionFailure, matchers::eq, prelude::*};
+    ///
+    /// async fn wait_until_ready(
+    ///     status: impl Fn() -> std::future::Ready<&'static str>,
+    /// ) -> Result<(), Box<AssertionFailure>> {
+    ///     assert_that!(status).eventually().try_matches(eq("ready")).await?;
+    ///     Ok(())
+    /// }
+    ///
+    /// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
+    /// assert_that!(wait_until_ready(|| std::future::ready("ready")).await).is_ok();
+    /// assert_that!(wait_until_ready(|| std::future::ready("starting")).await).is_err();
+    /// # });
+    /// ```
     #[track_caller]
     pub fn try_matches<D: Expectation<T, R>>(
         self,
@@ -271,8 +299,8 @@ where
     where
         R: ValueRenderer<T>,
     {
-        let (observation, KeepRetrying) = self.start();
-        let outcome = observation.until(expected, plain);
+        let (run, KeepRetrying) = self.start();
+        let outcome = run.until(expected, plain);
         async move { outcome.await.into_result() }
     }
 
@@ -297,6 +325,28 @@ where
     /// Ends the assertion at the first failed observation whose error `give_up` accepts, instead
     /// of retrying it until the timeout: for errors no retry can fix, such as an element the page
     /// removed. The failure shows that error.
+    ///
+    /// ```rust
+    /// use assertr::{matchers::eq, prelude::*};
+    ///
+    /// #[derive(Debug)]
+    /// enum ReadError {
+    ///     NotYetAvailable,
+    ///     Removed,
+    /// }
+    ///
+    /// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
+    /// let read = || async { Err::<u32, _>(ReadError::Removed) };
+    /// let failure = assert_that!(read)
+    ///     .eventually_ok()
+    ///     .giving_up_on(|error| matches!(error, ReadError::Removed))
+    ///     .try_matches(eq(1))
+    ///     .await
+    ///     .unwrap_err();
+    /// assert_that!(failure.relation.as_deref()).is_equal_to(Some("could not be observed"));
+    /// # let _ = ReadError::NotYetAvailable;
+    /// # });
+    /// ```
     pub fn giving_up_on<G>(self, give_up: G) -> Eventually<AssertThat<'t, F, Panic, R>, Fallible, G>
     where
         G: Fn(&E) -> bool,
@@ -341,14 +391,14 @@ where
     where
         R: ValueRenderer<T> + ValueRenderer<E>,
     {
-        let (observation, give_up) = self.start();
-        let outcome = observation.until(expected, fallible(give_up));
+        let (run, give_up) = self.start();
+        let outcome = run.until(expected, fallible(give_up));
         async move { outcome.await.into_chain() }
     }
 
     /// Returns the observed value or a structured assertion failure, without panicking.
     /// User code panics are not caught. Timing, retry policy, rendering and caller metadata
-    /// are the same as `matches`.
+    /// are the same as `matches`. Pass `satisfying(|it| ..)` to use an assertion callback.
     ///
     /// # Errors
     /// Returns the structured assertion failure when observation or the expectation fails.
@@ -360,8 +410,8 @@ where
     where
         R: ValueRenderer<T> + ValueRenderer<E>,
     {
-        let (observation, give_up) = self.start();
-        let outcome = observation.until(expected, fallible(give_up));
+        let (run, give_up) = self.start();
+        let outcome = run.until(expected, fallible(give_up));
         async move { outcome.await.into_result() }
     }
 
@@ -384,8 +434,8 @@ where
 {
     /// Starts observing at the assertion's call.
     #[track_caller]
-    fn start(self) -> Observation<'t, F, R> {
-        Observation::start(self.chain, Location::caller(), self.overrides)
+    fn start(self) -> EventualRun<'t, F, R> {
+        EventualRun::start(self.chain, Location::caller(), self.overrides)
     }
 }
 
@@ -410,7 +460,7 @@ where
 
     /// Returns the observed value or a structured assertion failure, without panicking.
     /// User code panics are not caught. Timing, retry policy, rendering and caller metadata
-    /// are the same as `matches`.
+    /// are the same as `matches`. Pass `satisfying(|it| ..)` to use an assertion callback.
     ///
     /// # Errors
     /// Returns the structured assertion failure when observation or the expectation fails.
@@ -453,13 +503,13 @@ where
     where
         R: ValueRenderer<T> + ValueRenderer<E>,
     {
-        let outcome = self.start().throughout(expected, fallible(|_: &E| true));
+        let outcome = self.start().throughout(expected, fallible(AnyError));
         async move { outcome.await.into_chain() }
     }
 
     /// Returns the observed value or a structured assertion failure, without panicking.
     /// User code panics are not caught. Timing, retry policy, rendering and caller metadata
-    /// are the same as `matches`.
+    /// are the same as `matches`. Pass `satisfying(|it| ..)` to use an assertion callback.
     ///
     /// # Errors
     /// Returns the structured assertion failure when observation or the expectation fails.
@@ -471,7 +521,7 @@ where
     where
         R: ValueRenderer<T> + ValueRenderer<E>,
     {
-        let outcome = self.start().throughout(expected, fallible(|_: &E| true));
+        let outcome = self.start().throughout(expected, fallible(AnyError));
         async move { outcome.await.into_result() }
     }
 
@@ -529,14 +579,14 @@ enum Step<T> {
 /// Shared execution result. Public boundaries choose propagation or panic presentation.
 struct Outcome<T, R> {
     result: Result<T, FailureBuilder>,
-    chain: DetachedChain<R>,
+    detached_chain: DetachedChain<R>,
     location: &'static Location<'static>,
 }
 
 impl<T, R> Outcome<T, R> {
     fn into_result(self) -> Result<T, Box<AssertionFailure>> {
         self.result
-            .map_err(|failure| Box::new(self.chain.complete_at(failure, self.location)))
+            .map_err(|failure| Box::new(self.detached_chain.complete_at(failure, self.location)))
     }
 
     fn into_chain<'t>(self) -> AssertThat<'t, T, Panic, R>
@@ -544,8 +594,8 @@ impl<T, R> Outcome<T, R> {
         T: 't,
     {
         match self.result {
-            Ok(value) => self.chain.attach(Actual::Owned(value)),
-            Err(failure) => self.chain.raise_at(failure, self.location),
+            Ok(value) => self.detached_chain.attach(Actual::Owned(value)),
+            Err(failure) => self.detached_chain.raise_at(failure, self.location),
         }
     }
 }
@@ -553,14 +603,14 @@ impl<T, R> Outcome<T, R> {
 /// A started eventual assertion: the observation, separated from its [detached](DetachedChain)
 /// chain. It holds no chain records, so its future is `Send` whenever the observation, the
 /// expectation and the renderer are.
-struct Observation<'t, F, R> {
+struct EventualRun<'t, F, R> {
     actual: Actual<'t, F>,
     detached_chain: DetachedChain<R>,
     location: &'static Location<'static>,
     patience: Patience,
 }
 
-impl<'t, F, Fut, R> Observation<'t, F, R>
+impl<'t, F, Fut, R> EventualRun<'t, F, R>
 where
     F: Fn() -> Fut,
     Fut: Future,
@@ -572,10 +622,10 @@ where
         overrides: Overrides,
     ) -> Self {
         chain.track_assertion();
-        let (actual, chain) = chain.into_parts();
+        let (actual, detached_chain) = chain.into_parts();
         Self {
             actual,
-            detached_chain: chain,
+            detached_chain,
             location,
             patience: overrides.resolve(),
         }
@@ -620,7 +670,8 @@ where
     }
 
     /// Observes for the consistency duration, failing with the first observation that does not
-    /// meet `expected`. An observation still pending after the timeout fails the assertion.
+    /// meet `expected`. An observation still pending after the observation timeout fails the
+    /// assertion.
     async fn throughout<T: 't, D>(
         self,
         expected: D,
@@ -631,15 +682,18 @@ where
         R: ValueRenderer<T>,
     {
         let mut history = History::start();
-        let deadline = history.started.checked_add(self.patience.consistency());
+        let deadline = history
+            .started
+            .checked_add(self.patience.consistency_duration());
         loop {
-            let observation_deadline = Instant::now().checked_add(self.patience.timeout());
+            let observation_deadline =
+                Instant::now().checked_add(self.patience.observation_timeout());
             let Some(output) =
                 sleep::before((self.actual.borrowed())(), observation_deadline).await
             else {
                 let failure = not_observed::<T>().fact(Fact::note(format!(
                     "The observation did not complete within {}.",
-                    format_duration(self.patience.timeout())
+                    format_duration(self.patience.observation_timeout())
                 )));
                 let held = history.held(history.observations);
                 return self.finish(Err(failure.fact(held)), &history);
@@ -671,7 +725,7 @@ where
     fn finish<T>(self, result: Result<T, FailureBuilder>, history: &History) -> Outcome<T, R> {
         Outcome {
             result: result.map_err(|failure| failure.facts(history.changes_fact())),
-            chain: self.detached_chain,
+            detached_chain: self.detached_chain,
             location: self.location,
         }
     }
@@ -828,19 +882,22 @@ fn format_duration(duration: Duration) -> String {
 
 #[cfg(test)]
 mod tests {
-    use alloc::sync::Arc;
     use core::cell::Cell;
-    use std::sync::Mutex;
 
     use super::*;
-    use crate::{failure::AssertionFailure, prelude::*};
+    use crate::{
+        failure::AssertionFailure,
+        prelude::*,
+        test_support::{LocationRecorder, recording_presentation},
+    };
 
     /// A patience short enough for tests. Tests pass it explicitly, so a test changing the global
     /// patience never affects them.
     const QUICK: Patience = Patience::DEFAULT
-        .within(Duration::from_millis(200))
-        .polling_every(Duration::from_millis(5))
-        .consistently_for(Duration::from_millis(40));
+        .with_timeout(Duration::from_millis(200))
+        .with_interval(Duration::from_millis(5))
+        .with_consistency_duration(Duration::from_millis(40))
+        .with_observation_timeout(Duration::from_millis(200));
 
     /// An observation counting its calls, starting at 1.
     fn counter(calls: &Cell<u32>) -> impl Fn() -> core::future::Ready<u32> + '_ {
@@ -851,18 +908,15 @@ mod tests {
     }
 
     /// The structured failure that the eventual assertion built by `assertion` raises.
+    ///
+    /// The async counterpart of [`crate::test_support::raised_failure`] for `#[tokio::test]`s.
     async fn raised<Fut: Future>(
-        assertion: impl FnOnce(crate::test_support::LocationRecorder) -> Fut,
+        assertion: impl FnOnce(LocationRecorder) -> Fut,
     ) -> AssertionFailure {
-        let raised_failure = Arc::new(Mutex::new(None));
-        let sink = Arc::clone(&raised_failure);
-        let pending = assertion(Box::new(move |failure: &AssertionFailure| {
-            *sink.lock().unwrap() = Some(failure.clone());
-            failure.to_string()
-        }));
-        assert_that_owned!(move || pending).panics_async().await;
-        raised_failure
-            .lock()
+        let (presentation, slot) = recording_presentation();
+        let pending = assertion(presentation);
+        assert_that!(move || pending).panics_async().await;
+        slot.lock()
             .unwrap()
             .take()
             .expect("the assertion raised a failure")
@@ -872,6 +926,21 @@ mod tests {
     fn on_line<D>(recorded: &Cell<u32>, line: u32, expected: D) -> D {
         recorded.set(line);
         expected
+    }
+
+    /// Asserts that `failure` was raised on `line` of this file.
+    fn assert_raised_on(failure: &AssertionFailure, line: u32) {
+        assert_that!(
+            failure
+                .location
+                .map(|location| (location.file(), location.line()))
+        )
+        .is_equal_to(Some((file!(), line)));
+    }
+
+    /// Requires `future` to be `Send`, so a test awaiting it may move between threads.
+    fn requires_send<F: Future + Send>(future: F) -> F {
+        future
     }
 
     fn fact(failure: &AssertionFailure, label: &str) -> Option<String> {
@@ -903,29 +972,20 @@ mod tests {
                 .try_matches(on_line(&line, line!(), eq(2)))
                 .await
                 .unwrap_err();
-            assert_that!(failure.location.unwrap().line()).is_equal_to(line.get());
+            assert_raised_on(&failure, line.get());
         }
 
         #[tokio::test]
-        async fn returns_values_and_structured_failures() {
-            let value = assert_that!(|| async { 1 })
-                .eventually()
-                .within(Duration::ZERO)
-                .try_matches(eq(1))
-                .await
-                .unwrap();
-            assert_that!(value).is_equal_to(1);
-            let failure = assert_that!(|| async { 1 })
-                .with_subject_name("sample")
-                .with_detail_message("context")
-                .with_panic_presentation(|_| panic!("must not present a returned failure"))
+        async fn returns_the_value_or_the_failure() {
+            let observe = || async { 1 };
+            let passing = assert_that!(observe).eventually().within(Duration::ZERO);
+            assert_that!(passing.try_matches(eq(1)).await.ok()).is_equal_to(Some(1));
+            let failure = assert_that!(observe)
                 .eventually()
                 .within(Duration::ZERO)
                 .try_matches(eq(2))
                 .await
                 .unwrap_err();
-            assert_that!(failure.subject_name.as_deref()).is_equal_to(Some("sample"));
-            assert_that!(failure.messages).contains("context".to_owned());
             assert_that!(failure.kind).is_equal_to(FailureKind::Equality);
         }
     }
@@ -943,29 +1003,20 @@ mod tests {
                 .try_matches(on_line(&line, line!(), eq(2)))
                 .await
                 .unwrap_err();
-            assert_that!(failure.location.unwrap().line()).is_equal_to(line.get());
+            assert_raised_on(&failure, line.get());
         }
 
         #[tokio::test]
-        async fn returns_values_and_structured_failures() {
-            let value = assert_that!(|| async { Ok::<_, &str>(1) })
-                .eventually_ok()
-                .within(Duration::ZERO)
-                .try_matches(eq(1))
-                .await
-                .unwrap();
-            assert_that!(value).is_equal_to(1);
-            let failure = assert_that!(|| async { Ok::<_, &str>(1) })
-                .with_subject_name("sample")
-                .with_detail_message("context")
-                .with_panic_presentation(|_| panic!("must not present a returned failure"))
+        async fn returns_the_value_or_the_failure() {
+            let observe = || async { Ok::<_, &str>(1) };
+            let passing = assert_that!(observe).eventually_ok().within(Duration::ZERO);
+            assert_that!(passing.try_matches(eq(1)).await.ok()).is_equal_to(Some(1));
+            let failure = assert_that!(observe)
                 .eventually_ok()
                 .within(Duration::ZERO)
                 .try_matches(eq(2))
                 .await
                 .unwrap_err();
-            assert_that!(failure.subject_name.as_deref()).is_equal_to(Some("sample"));
-            assert_that!(failure.messages).contains("context".to_owned());
             assert_that!(failure.kind).is_equal_to(FailureKind::Equality);
         }
     }
@@ -983,29 +1034,22 @@ mod tests {
                 .try_matches(on_line(&line, line!(), eq(2)))
                 .await
                 .unwrap_err();
-            assert_that!(failure.location.unwrap().line()).is_equal_to(line.get());
+            assert_raised_on(&failure, line.get());
         }
 
         #[tokio::test]
-        async fn returns_values_and_structured_failures() {
-            let value = assert_that!(|| async { 1 })
+        async fn returns_the_value_or_the_failure() {
+            let observe = || async { 1 };
+            let passing = assert_that!(observe)
                 .consistently()
-                .for_at_least(Duration::ZERO)
-                .try_matches(eq(1))
-                .await
-                .unwrap();
-            assert_that!(value).is_equal_to(1);
-            let failure = assert_that!(|| async { 1 })
-                .with_subject_name("sample")
-                .with_detail_message("context")
-                .with_panic_presentation(|_| panic!("must not present a returned failure"))
+                .for_at_least(Duration::ZERO);
+            assert_that!(passing.try_matches(eq(1)).await.ok()).is_equal_to(Some(1));
+            let failure = assert_that!(observe)
                 .consistently()
                 .for_at_least(Duration::ZERO)
                 .try_matches(eq(2))
                 .await
                 .unwrap_err();
-            assert_that!(failure.subject_name.as_deref()).is_equal_to(Some("sample"));
-            assert_that!(failure.messages).contains("context".to_owned());
             assert_that!(failure.kind).is_equal_to(FailureKind::Equality);
         }
     }
@@ -1023,36 +1067,45 @@ mod tests {
                 .try_matches(on_line(&line, line!(), eq(2)))
                 .await
                 .unwrap_err();
-            assert_that!(failure.location.unwrap().line()).is_equal_to(line.get());
+            assert_raised_on(&failure, line.get());
         }
 
         #[tokio::test]
-        async fn returns_values_and_structured_failures() {
-            let value = assert_that!(|| async { Ok::<_, &str>(1) })
+        async fn returns_the_value_or_the_failure() {
+            let observe = || async { Ok::<_, &str>(1) };
+            let passing = assert_that!(observe)
                 .consistently_ok()
-                .for_at_least(Duration::ZERO)
-                .try_matches(eq(1))
-                .await
-                .unwrap();
-            assert_that!(value).is_equal_to(1);
-            let failure = assert_that!(|| async { Ok::<_, &str>(1) })
-                .with_subject_name("sample")
-                .with_detail_message("context")
-                .with_panic_presentation(|_| panic!("must not present a returned failure"))
+                .for_at_least(Duration::ZERO);
+            assert_that!(passing.try_matches(eq(1)).await.ok()).is_equal_to(Some(1));
+            let failure = assert_that!(observe)
                 .consistently_ok()
                 .for_at_least(Duration::ZERO)
                 .try_matches(eq(2))
                 .await
                 .unwrap_err();
-            assert_that!(failure.subject_name.as_deref()).is_equal_to(Some("sample"));
-            assert_that!(failure.messages).contains("context".to_owned());
             assert_that!(failure.kind).is_equal_to(FailureKind::Equality);
         }
     }
 
+    /// Behavior shared by every `try_matches`, which all return through the same outcome.
     mod try_matches_execution {
         use super::*;
         use crate::matchers::eq;
+
+        #[tokio::test]
+        async fn returned_failures_keep_the_chain_metadata_without_presenting_them() {
+            let failure = assert_that!(|| async { 1 })
+                .with_subject_name("sample")
+                .with_detail_message("context")
+                .with_panic_presentation(|_| panic!("must not present a returned failure"))
+                .eventually()
+                .within(Duration::ZERO)
+                .try_matches(eq(2))
+                .await
+                .unwrap_err();
+            assert_that!(failure.subject_name.as_deref()).is_equal_to(Some("sample"));
+            assert_that!(failure.messages).contains("context".to_owned());
+        }
 
         #[tokio::test]
         async fn returns_terminal_observation_errors_without_retrying() {
@@ -1072,14 +1125,11 @@ mod tests {
 
         #[tokio::test]
         async fn returned_futures_are_send_and_pending_reads_time_out() {
-            fn send<F: Future + Send>(future: F) -> F {
-                future
-            }
             let future = assert_that_owned!(std::future::pending::<u8>)
                 .eventually()
                 .with_patience(QUICK)
                 .try_matches(eq(1));
-            let failure = send(future).await.unwrap_err();
+            let failure = requires_send(future).await.unwrap_err();
             assert_that!(failure.relation.as_deref()).is_equal_to(Some("could not be observed"));
         }
     }
@@ -1133,7 +1183,7 @@ mod tests {
                         .with_panic_presentation(presentation)
                         .with_subject_name("the counter")
                         .eventually()
-                        .with_patience(QUICK.polling_every(Duration::from_millis(20)))
+                        .with_patience(QUICK.with_interval(Duration::from_millis(20)))
                         .matches(eq(0))
                         .await;
                 }
@@ -1156,29 +1206,14 @@ mod tests {
                 .starts_with("(")
                 .contains(format!(": {last}"));
         }
-
-        #[tokio::test]
-        async fn uses_the_global_patience_with_local_overrides() {
-            let previous = Patience::global();
-            QUICK.within(Duration::from_millis(30)).set_global();
-            let resolved = Overrides::default()
-                .polling_every(Duration::from_millis(1))
-                .resolve();
-            previous.set_global();
-
-            assert_that!(resolved.timeout()).is_equal_to(Duration::from_millis(30));
-            assert_that!(resolved.interval()).is_equal_to(Duration::from_millis(1));
-            assert_that!(resolved.consistency()).is_equal_to(QUICK.consistency());
-        }
     }
 
     mod futures {
+        use alloc::sync::Arc;
+        use std::sync::Mutex;
+
         use super::*;
         use crate::matchers::eq;
-
-        fn requires_send<F: Future + Send>(future: F) -> F {
-            future
-        }
 
         #[tokio::test]
         async fn are_send_while_awaiting_so_tests_may_move_between_threads() {
@@ -1211,7 +1246,7 @@ mod tests {
                     .derive(|observe| observe)
                     .with_detail_message("the child's message")
                     .eventually()
-                    .with_patience(QUICK.within(Duration::ZERO))
+                    .with_patience(QUICK.with_timeout(Duration::ZERO))
                     .matches(eq(2))
                     .await;
             })
@@ -1257,7 +1292,7 @@ mod tests {
                 assert_that!(observe)
                     .with_panic_presentation(presentation)
                     .eventually()
-                    .with_patience(QUICK.within(Duration::from_millis(20)))
+                    .with_patience(QUICK.with_timeout(Duration::from_millis(20)))
                     .satisfies(|count| {
                         count.is_less_than(3);
                     })
@@ -1308,21 +1343,19 @@ mod tests {
         #[test]
         fn giving_up_keeps_the_caller_location() {
             let expected_line = Cell::new(0);
-            let failure = crate::test_support::block_on(raised(|presentation| async {
-                let observe = || async { Err::<u32, _>("gone") };
-                assert_that!(observe)
-                    .with_panic_presentation(presentation)
-                    .eventually_ok()
-                    .giving_up_on(|error: &&str| *error == "gone")
-                    .matches(on_line(&expected_line, line!(), eq(1)))
-                    .await;
-            }));
-            assert_that!(
-                failure
-                    .location
-                    .map(|location| (location.file(), location.line()))
-            )
-            .is_equal_to(Some((file!(), expected_line.get())));
+            let failure = crate::test_support::raised_failure(|presentation| {
+                crate::test_support::block_on(async {
+                    let observe = || async { Err::<u32, _>("gone") };
+                    assert_that!(observe)
+                        .with_panic_presentation(presentation)
+                        .eventually_ok()
+                        .giving_up_on(|error: &&str| *error == "gone")
+                        .matches(on_line(&expected_line, line!(), eq(1)))
+                        .await;
+                });
+            })
+            .expect("the assertion raised a failure");
+            assert_raised_on(&failure, expected_line.get());
         }
 
         #[tokio::test]
@@ -1342,7 +1375,7 @@ mod tests {
                     assert_that!(observe)
                         .with_panic_presentation(presentation)
                         .eventually_ok()
-                        .with_patience(QUICK.within(Duration::from_secs(10)))
+                        .with_patience(QUICK.with_timeout(Duration::from_secs(10)))
                         .giving_up_on(|error: &&str| *error == "gone")
                         .matches(eq(1_u32))
                         .await;
@@ -1381,7 +1414,7 @@ mod tests {
                 assert_that!(observe)
                     .with_panic_presentation(presentation)
                     .eventually_ok()
-                    .with_patience(QUICK.within(Duration::from_millis(20)))
+                    .with_patience(QUICK.with_timeout(Duration::from_millis(20)))
                     .matches(eq(1))
                     .await;
             })
@@ -1412,7 +1445,7 @@ mod tests {
                     assert_that!(observe)
                         .with_panic_presentation(presentation)
                         .eventually_ok()
-                        .with_patience(QUICK.within(Duration::from_secs(10)))
+                        .with_patience(QUICK.with_timeout(Duration::from_secs(10)))
                         .giving_up_on_any_error()
                         .matches(eq(0_u32))
                         .await;
@@ -1485,7 +1518,7 @@ mod tests {
                 .matches(lt(1000))
                 .await
                 .is_equal_to(calls.get());
-            assert_that!(started.elapsed()).is_greater_or_equal_to(QUICK.consistency());
+            assert_that!(started.elapsed()).is_greater_or_equal_to(QUICK.consistency_duration());
             assert_that!(calls.get()).is_greater_than(1);
         }
 
@@ -1498,7 +1531,7 @@ mod tests {
                     assert_that!(observe)
                         .with_panic_presentation(presentation)
                         .consistently()
-                        .with_patience(QUICK.consistently_for(Duration::from_secs(10)))
+                        .with_patience(QUICK.with_consistency_duration(Duration::from_secs(10)))
                         .matches(lt(3))
                         .await;
                 }
@@ -1554,7 +1587,7 @@ mod tests {
                     assert_that!(observe)
                         .with_panic_presentation(presentation)
                         .consistently()
-                        .with_patience(QUICK.consistently_for(Duration::from_secs(10)))
+                        .with_patience(QUICK.with_consistency_duration(Duration::from_secs(10)))
                         .satisfies(|count| {
                             count.is_less_than(2);
                         })
@@ -1612,7 +1645,7 @@ mod tests {
                     assert_that!(observe)
                         .with_panic_presentation(presentation)
                         .consistently_ok()
-                        .with_patience(QUICK.consistently_for(Duration::from_secs(10)))
+                        .with_patience(QUICK.with_consistency_duration(Duration::from_secs(10)))
                         .matches(eq(1))
                         .await;
                 }
@@ -1665,7 +1698,7 @@ mod tests {
                 assert_that!(observe)
                     .with_panic_presentation(presentation)
                     .eventually()
-                    .with_patience(QUICK.within(Duration::from_millis(20)))
+                    .with_patience(QUICK.with_timeout(Duration::from_millis(20)))
                     .matches(eq(1))
                     .await;
             })
@@ -1682,7 +1715,7 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn fail_consistently_after_the_timeout() {
+        async fn fail_consistently_after_the_observation_timeout() {
             let calls = Cell::new(0);
             let started = Instant::now();
             let failure = raised(|presentation| {
@@ -1700,11 +1733,9 @@ mod tests {
                     assert_that!(observe)
                         .with_panic_presentation(presentation)
                         .consistently()
-                        .with_patience(
-                            QUICK
-                                .within(Duration::from_millis(20))
-                                .consistently_for(Duration::from_secs(10)),
-                        )
+                        .with_patience(QUICK)
+                        .for_at_least(Duration::from_secs(10))
+                        .each_observation_within(Duration::from_millis(20))
                         .matches(eq(1))
                         .await;
                 }
@@ -1738,8 +1769,8 @@ mod tests {
                         .eventually()
                         .with_patience(
                             QUICK
-                                .within(Duration::from_millis(20))
-                                .polling_every(Duration::from_secs(60)),
+                                .with_timeout(Duration::from_millis(20))
+                                .with_interval(Duration::from_secs(60)),
                         )
                         .matches(eq(0))
                         .await;
@@ -1757,7 +1788,7 @@ mod tests {
             let observe = || async { 1 };
             assert_that!(observe)
                 .consistently()
-                .with_patience(QUICK.polling_every(Duration::from_secs(60)))
+                .with_patience(QUICK.with_interval(Duration::from_secs(60)))
                 .matches(eq(1))
                 .await;
             assert_that!(started.elapsed()).is_less_than(Duration::from_secs(1));
@@ -1770,9 +1801,10 @@ mod tests {
                 .eventually()
                 .with_patience(
                     Patience::DEFAULT
-                        .within(Duration::MAX)
-                        .polling_every(Duration::MAX)
-                        .consistently_for(Duration::MAX),
+                        .with_timeout(Duration::MAX)
+                        .with_interval(Duration::MAX)
+                        .with_consistency_duration(Duration::MAX)
+                        .with_observation_timeout(Duration::MAX),
                 )
                 .matches(eq(1))
                 .await;
@@ -1783,9 +1815,10 @@ mod tests {
                     .consistently()
                     .with_patience(
                         QUICK
-                            .within(Duration::MAX)
-                            .polling_every(Duration::MAX)
-                            .consistently_for(Duration::MAX),
+                            .with_timeout(Duration::MAX)
+                            .with_interval(Duration::MAX)
+                            .with_consistency_duration(Duration::MAX)
+                            .with_observation_timeout(Duration::MAX),
                     )
                     .matches(eq(2))
                     .await;
@@ -1839,7 +1872,7 @@ mod tests {
                     .with_panic_presentation(presentation)
                     .with_renderer(SentinelRenderer)
                     .eventually()
-                    .with_patience(QUICK.within(Duration::ZERO))
+                    .with_patience(QUICK.with_timeout(Duration::ZERO))
                     .matches(eq(Secret(2)))
                     .await;
             })

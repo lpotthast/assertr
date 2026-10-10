@@ -514,21 +514,7 @@ mod tests {
 
     /// The structured failure that `action` raises with the presentation it installs.
     fn failure(action: impl FnOnce(crate::test_support::LocationRecorder)) -> AssertionFailure {
-        let result = Arc::new(Mutex::new(None));
-        let recorded = result.clone();
-        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            action(Box::new(move |failure| {
-                *recorded.lock().unwrap() = Some(failure.clone());
-                failure.to_string()
-            }));
-        }));
-
-        assert_that!(outcome.is_err()).is_true();
-        result
-            .lock()
-            .unwrap()
-            .take()
-            .expect("structured assertion failure")
+        crate::test_support::raised_failure(action).expect("structured assertion failure")
     }
 
     mod diagnostics {

@@ -2,7 +2,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     AssertThat, Mode,
-    assertions::std::mutex::{explain_acquired_lock, explain_held_lock},
+    assertions::std::mutex::{explain_acquired_lock, explain_held_lock, lock_data},
     expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
     renderer::{DebugRenderer, ValueRenderer},
@@ -137,14 +137,13 @@ fn explain_value<T, R: ValueRenderer<T>>(
     failure: FailureBuilder,
     context: &AssertionContext<'_, R>,
 ) -> FailureBuilder {
-    let render = context.render();
     match rejected {
         None => failure.relation("contains a value that satisfies the assertions"),
         Some((actual, ValueRejection::Locked)) => {
             explain_held_lock(actual, "Mutex", failure, context)
         }
         Some((actual, ValueRejection::Rejected(guard, evidence))) => failure
-            .actual(render.struct_field(actual, "Mutex", "data", &*guard))
+            .actual(lock_data(context.render(), actual, "Mutex", &*guard))
             .relation("contains a value that does not satisfy the assertions")
             .evidence(evidence),
     }
@@ -306,7 +305,7 @@ mod tests {
                 .with_rendering_budget(budget)
                 .capture(|it| it.matches(definition));
             assert_that!(composed[0].omitted_children).is_equal_to(2);
-            assert_that!(lock.try_lock().is_ok()).is_true();
+            assert_that!(lock.try_lock()).is_ok();
         }
 
         #[test]
@@ -326,7 +325,7 @@ mod tests {
                 .capture(|it| it.matches(all_of(matchers![&definition, &definition])));
             assert_that!(failures[0].children).has_length(2);
             assert_that!(calls.get()).is_equal_to(2);
-            assert_that!(lock.try_lock().is_ok()).is_true();
+            assert_that!(lock.try_lock()).is_ok();
         }
     }
 
@@ -372,7 +371,7 @@ mod tests {
             let mutex = Mutex::new(42);
             assert_that!(|| assert_that!(mutex).with_location(false).is_locked())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `mutex`
@@ -412,7 +411,7 @@ mod tests {
             let guard = mutex.lock().await;
             assert_that!(|| assert_that!(&mutex).with_location(false).is_not_locked())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `&mutex`
@@ -494,7 +493,7 @@ mod tests {
                     });
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 43

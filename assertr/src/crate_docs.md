@@ -220,13 +220,15 @@ assert_that!(observe)
 ```
 
 A failure shows the expectation's report, how long and how often the value was observed, and the
-values seen. [`Patience`](crate::assertions::Patience) configures the timeout, the polling interval,
-and the consistency duration. The defaults are fast (1 s, 10 ms, 100 ms). Set your own for a whole
-test suite with `Patience::set_global`, and override them for one assertion with `within`,
-`polling_every`, `for_at_least`, or `with_patience`. Use `eventually_ok` and `consistently_ok` for
-observations returning a `Result`. An observation still pending at the timeout fails the assertion
-instead of hanging it. Eventual assertions need no particular runtime, and their futures are `Send`
-when the observation is.
+values seen. [`Patience`](crate::assertions::Patience) configures the timeout of `eventually`, the
+polling interval, and the consistency duration and per-observation timeout of `consistently`. The
+defaults are fast (1 s, 10 ms, 100 ms, 1 s). Set your own for a whole test suite with
+`Patience::set_global`. Override them for one assertion with `within`, `polling_every`,
+`for_at_least`, `each_observation_within`, or `with_patience`, in any order. Use `eventually_ok` and
+`consistently_ok` for observations returning a `Result`. An observation still pending at its
+deadline fails the assertion instead of hanging it. `try_matches` returns the failure instead of
+panicking, for shared helpers that propagate it with `?`. Eventual assertions need no particular
+runtime, and their futures are `Send` when the observation, the expectation, and the renderer are.
 
 ### Browser elements (`thirtyfour`)
 

@@ -129,4 +129,4 @@ for detailed requirements and exceptions.
 | [Observation](observation-boundaries.md#eventual-observations) | Closure returning a future of a changing value, the subject of an eventual assertion. |
 | [Eventual assertion](observation-boundaries.md#eventual-observations) | `eventually` or `consistently`: observes repeatedly until an expectation holds, or while it keeps holding. |
 | [Give-up policy](observation-boundaries.md#eventual-observations) | `GiveUp` implementation deciding which failed observations end `eventually_ok`: `KeepRetrying`, `AnyError`, or a closure. |
-| [Patience](observation-boundaries.md#eventual-observations) | Timeout, polling interval, and consistency duration of eventual assertions: global, overridden per chain. |
+| [Patience](observation-boundaries.md#eventual-observations) | Timeout, polling interval, consistency duration, and observation timeout of eventual assertions: global, overridden per chain. |

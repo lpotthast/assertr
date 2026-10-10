@@ -2,7 +2,7 @@ use tokio::sync::RwLock;
 
 use crate::{
     AssertThat, Mode,
-    assertions::std::mutex::locked_data,
+    assertions::std::mutex::{lock_data, locked_data},
     expectation::{AssertionContext, Expectation},
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::{DebugRenderer, ValueRenderer},
@@ -35,17 +35,15 @@ impl<T> LockObservation<'_, T> {
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
         let render = context.render();
-        match self {
-            Self::Unlocked(guard) => failure
-                .actual(render.struct_field(actual, "RwLock", "data", &*guard))
-                .fact(Fact::labelled(LOCK_STATE, "unlocked")),
-            Self::ReadLocked(guard) => failure
-                .actual(render.struct_field(actual, "RwLock", "data", &*guard))
-                .fact(Fact::labelled(LOCK_STATE, "read-locked")),
-            Self::WriteLocked => failure
-                .actual(locked_data(render, actual, "RwLock"))
-                .fact(Fact::labelled(LOCK_STATE, "write-locked")),
-        }
+        // Each guard is released at the end of its arm, after its data has been rendered.
+        let (data, state) = match self {
+            Self::Unlocked(guard) => (lock_data(render, actual, "RwLock", &*guard), "unlocked"),
+            Self::ReadLocked(guard) => {
+                (lock_data(render, actual, "RwLock", &*guard), "read-locked")
+            }
+            Self::WriteLocked => (locked_data(render, actual, "RwLock"), "write-locked"),
+        };
+        failure.actual(data).fact(Fact::labelled(LOCK_STATE, state))
     }
 }
 /// Generates a Tokio read-write lock expectation from its accepted state and relations.
@@ -189,6 +187,24 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
 
 #[cfg(test)]
 mod tests {
+    use core::fmt;
+
+    use tokio::sync::RwLock;
+
+    use crate::{prelude::*, renderer::ValueRenderer};
+
+    /// Renders values only while their lock's write guard is held.
+    struct WriteGuardCheckingRenderer<'a>(&'a RwLock<i32>);
+
+    impl ValueRenderer<i32> for WriteGuardCheckingRenderer<'_> {
+        fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            assert_that!(self.0.try_read())
+                .with_detail_message("the write guard must remain held while rendering")
+                .is_err();
+            write!(f, "guarded({value})")
+        }
+    }
+
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
         use tokio::sync::RwLock;
@@ -214,7 +230,6 @@ mod tests {
         }
     }
 
-    use crate::prelude::*;
     mod observations {
         use tokio::sync::RwLock;
 
@@ -228,23 +243,6 @@ mod tests {
                 .capture(|it| it.matches(all_of(matchers![IsReadLocked, IsWriteLocked])));
             assert_that!(failures[0].children).has_length(2);
             assert_that!(lock).matches(all_of(matchers![IsNotLocked, IsNotLocked]));
-        }
-    }
-
-    use core::fmt;
-
-    use tokio::sync::RwLock;
-
-    use crate::renderer::ValueRenderer;
-
-    struct WriteGuardCheckingRenderer<'a>(&'a RwLock<i32>);
-
-    impl ValueRenderer<i32> for WriteGuardCheckingRenderer<'_> {
-        fn fmt(&self, value: &i32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            assert_that!(self.0.try_read().is_err())
-                .with_detail_message("the write guard must remain held while rendering")
-                .is_true();
-            write!(f, "guarded({value})")
         }
     }
 
@@ -309,7 +307,7 @@ mod tests {
 
             assert_that!(|| assert_that!(&rw_lock).with_location(false).is_not_locked())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `&rw_lock`
@@ -335,7 +333,7 @@ mod tests {
 
             assert_that!(|| assert_that!(&rw_lock).with_location(false).is_not_locked())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `&rw_lock`
@@ -391,24 +389,15 @@ mod tests {
                 .with_location(false)
                 .capture(|it| it.is_read_locked().is_not_locked());
 
-            assert_that!(failures).contains_exactly_satisfying([
-                |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expression: `rw_lock`
-
-                Actual: RwLock {{
-                    data: guarded(42),
-                }}
-
-                is not read-locked
-
-                Details:
-                  - Lock state: unlocked
-                -------- assertr --------
-            "});
-                },
-            ]);
+            // The renderer checks the guard. `panics_when_not_locked_at_all` pins the report.
+            assert_that!(failures).has_length(1);
+            assert_that!(
+                failures[0]
+                    .actual
+                    .as_ref()
+                    .map(|value| format!("{value:#}"))
+            )
+            .is_equal_to(Some("RwLock {\n    data: guarded(42),\n}".to_owned()));
         }
 
         #[tokio::test]
@@ -425,7 +414,7 @@ mod tests {
 
             assert_that!(|| assert_that!(rw_lock).with_location(false).is_read_locked())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `rw_lock`

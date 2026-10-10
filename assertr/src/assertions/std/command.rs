@@ -168,7 +168,7 @@ mod tests {
                 assert_that!(cmd).with_location(false).has_arg("help");
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `cmd`

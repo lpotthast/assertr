@@ -70,16 +70,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `assert_that!(|| log.text()).eventually().matches(eq("done")).await` observes until the expectation holds, and
   `consistently()` requires it to keep holding. `eventually_ok` and `consistently_ok` take observations returning
   `Result`. They end with any matcher (`matches`) or assertion callback (`satisfies`) and continue on the observed
-  value. Failures add how long and how often the value was observed, and the values seen. `Patience` sets the timeout,
-  polling interval, and consistency duration: fast defaults (1 s, 10 ms, 100 ms), `Patience::set_global` for a test
-  suite, and `within`, `polling_every`, `for_at_least`, and `with_patience` for one chain. An observation still
-  pending at the timeout fails the assertion instead of hanging it. They run in any async runtime, and their futures
-  are `Send` whenever the observation, expectation, and renderer are.
-  `eventually_ok().giving_up_on(|error| ..)` ends the assertion at the first error no retry can fix instead of
-  retrying it until the timeout, and `giving_up_on_any_error()` ends it at any error. `EventualAssertions` and
-  `Patience` are exported from `assertions` and the prelude, the builders and retry policies from
-  `assertions::eventually`. `try_matches` instead returns the observed value or a boxed `AssertionFailure`, with
-  the same retry policy, deadlines, caller metadata, and observation history as `matches`.
+  value. Failures add how long and how often the value was observed, and the values seen. `Patience` sets the timeout
+  of `eventually`, the polling interval, and the consistency duration and per-observation timeout of `consistently`,
+  with `with_timeout`, `with_interval`, `with_consistency_duration`, and `with_observation_timeout`, and getters of the
+  same names. It has fast defaults (1 s, 10 ms, 100 ms, 1 s), and `Patience::set_global` sets it for a test suite.
+  `with_patience` replaces it for one chain, and `within`, `polling_every`, `for_at_least`, and
+  `each_observation_within` override single settings in any order. An observation still pending at its deadline
+  fails the assertion instead of hanging it. They run in any async runtime, and their futures are `Send` whenever the
+  observation, expectation, and renderer are. `eventually_ok().giving_up_on(|error| ..)` ends the assertion at the
+  first error no retry can fix instead of retrying it until the timeout, and `giving_up_on_any_error()` ends it at
+  any error. The `GiveUp` policy trait is sealed. `EventualAssertions` and `Patience` are exported from `assertions`
+  and the prelude, the builders and retry policies from `assertions::eventually`. `try_matches` instead returns the
+  observed value or a boxed `AssertionFailure`, with the same retry policy, deadlines, caller metadata, and
+  observation history as `matches`.
+- `PathAssertions::is_absolute` and `matchers::path::IsAbsolute` check `Path::is_absolute`.
 - Optional `thirtyfour` integration extracts browser element attributes, properties, text, state, and computed
   accessibility into ordinary assertion chains. `has_attribute` checks presence and continues on the string for
   equality, prefixes, and other assertions. Async reads preserve caller diagnostics and support `Send` futures.

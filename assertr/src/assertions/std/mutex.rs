@@ -34,6 +34,19 @@ pub(crate) fn locked_data<O: ?Sized, R>(
     render.unavailable_struct_field(actual, lock, "data", "<locked>")
 }
 
+/// Renders lock data observed through an acquired guard.
+///
+/// Shared by the standard and Tokio lock expectations. The caller keeps the guard alive until
+/// this returns.
+pub(crate) fn lock_data<O: ?Sized, T: ?Sized, R: ValueRenderer<T>>(
+    render: RenderingContext<'_, R>,
+    actual: &O,
+    lock: &'static str,
+    data: &T,
+) -> Rendered {
+    render.struct_field(actual, lock, "data", data)
+}
+
 /// Explains a rejected "is locked" check with the data observed through an acquired guard.
 ///
 /// Shared by the standard and Tokio lock expectations. The caller releases the guard after
@@ -46,7 +59,7 @@ pub(crate) fn explain_acquired_lock<O: ?Sized, T: ?Sized, R: ValueRenderer<T>>(
     context: &AssertionContext<'_, R>,
 ) -> FailureBuilder {
     failure
-        .actual(context.render().struct_field(actual, lock, "data", data))
+        .actual(lock_data(context.render(), actual, lock, data))
         .relation("is not locked")
 }
 
@@ -304,12 +317,12 @@ mod tests {
                     .with_rendering_budget(RenderingBudget::default().with_max_items(limit))
                     .capture(|it| it.matches(any_of(matchers![IsLocked, IsLocked])));
                 assert_that!(failures).has_length(1);
-                assert_that!(mutex.is_poisoned()).is_false();
+                assert_that!(mutex).is_not_poisoned();
             }
             assert_that!(mutex)
                 .with_renderer(NoRenderer)
                 .matches(all_of(matchers![IsNotLocked, IsNotLocked]));
-            assert_that!(mutex.try_lock().is_ok()).is_true();
+            assert_that!(mutex.try_lock()).is_ok();
         }
     }
 
@@ -353,7 +366,7 @@ mod tests {
             let mutex = Mutex::new(42);
             assert_that!(|| assert_that!(mutex).with_location(false).is_locked())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `mutex`
@@ -372,7 +385,7 @@ mod tests {
             let mutex = super::poisoned_mutex();
             assert_that!(|| assert_that!(mutex).with_location(false).is_locked())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `mutex`
@@ -416,7 +429,7 @@ mod tests {
             let guard = mutex.lock();
             assert_that!(|| assert_that!(&mutex).with_location(false).is_not_locked())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `&mutex`
@@ -478,7 +491,7 @@ mod tests {
                     .is_poisoned()
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Expression: `Mutex::new(42)`

@@ -377,7 +377,7 @@ pub mod path {
     #[doc(inline)]
     pub use crate::assertions::std::path::{
         DoesNotExist, EndsWith, Exists, HasARoot, HasExtension, HasFileName, HasFileStem,
-        IsADirectory, IsAFile, IsASymlink, IsRelative, StartsWith,
+        IsADirectory, IsAFile, IsASymlink, IsAbsolute, IsRelative, StartsWith,
     };
 }
 
