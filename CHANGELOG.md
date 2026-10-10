@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Qualified constructor paths work with the optional `variant` prefix. It also works through facade crates that
   re-export `assertr`. Enable the new `partial` feature, which supports `no_std` with `alloc`.
 - Map assertions `contains_entry_matching` and `contains_value_matching` accept composed value matchers.
+- `MapProjectionAssertions::keys` and `values` project a map onto order-free collection views (`MapKeys`,
+  `MapValues`), so collection assertions and matchers such as `each` apply to its keys or values. The keys view also
+  supports set relations through the map's native lookup.
+- `IteratorAssertions::contains_all` checks that an owned iterator yields every expected value and stops as soon as all
+  have been seen, so it also works on infinite iterators.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
   exact comparisons of borrowed targets that preserve duplicate counts, without equality or target renderer bounds.
 - Borrowed panic-mode element projections `get_first`, `get_last`, and `get_single` for `StableOrder` collections, and
@@ -137,6 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `BorrowFor<K>::View` with the stored key as context, plus `Borrow<View>`. Custom renderers render the selected query
   view instead of the operand wrapper. Native `MapLookup` requirements and single-key `&Q` calls are preserved. Slice
   operands now work with vector keys.
+- **Breaking:** `IteratorAssertions` methods no longer take a separate result lifetime parameter and return
+  `AssertThat<'t, (), M, R>`. Only code naming that lifetime explicitly is affected.
 - **Breaking:** Map entry methods take the key query first in turbofish order: `contains_entry::<Q, E>`,
   `does_not_contain_entry::<Q, E>`, and `contains_entry_satisfying::<Q, A>`. The value parameter `E` of
   `contains_entry` and `does_not_contain_entry` is now the operand type instead of the borrowed value target.
@@ -151,8 +158,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and generated aliases link to their original method instead of repeating its documentation.
 - **Breaking:** Collection, iterator, and map `*_matching` methods and fluent aliases accept matchers instead of bare
   predicates. Wrap closures with `matchers::predicate`, predicate arrays with `[..].map(matchers::predicate)`, and keyed
-  matcher lists with `[entry(..)]`, `matchers![entry(..), ..]`, or `matchers::entry_matchers`. Predicate rejections
-  render the rejected subject, so their diagnostics require a renderer for it.
+  matcher lists with `[entry(..)]`, `matchers![entry(..), ..]`, or `[..].map(|(key, matcher)| entry(key, matcher))`.
+  Predicate rejections render the rejected subject, so their diagnostics require a renderer for it.
 - **Breaking:** `StableOrder` and `StableOrderAssertions` replace `Sequence` and `SequenceAssertions` and own positional
   prefix, suffix, contiguous, and exact comparisons. Removed `into_iter_starts_with`, `into_iter_ends_with`,
   `into_iter_contains_contiguous`, and `into_iter_contains_exactly`, including their `_matching` and `_satisfying`

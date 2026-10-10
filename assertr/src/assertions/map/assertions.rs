@@ -23,8 +23,8 @@ use crate::{
 /// and custom maps impose their own bounds. There is no fallback to an equality scan.
 ///
 /// The renderer must render the selected query view, plus the stored keys and values used in
-/// diagnostics. Operand wrappers need no renderer or `Clone`. Keyed matchers render the same query for lookup
-/// and paths. Exact keyed checks also render stored keys to identify unexpected entries.
+/// diagnostics. Operand wrappers need no renderer or `Clone`. Keyed matchers render the same query
+/// for lookup and paths. Exact keyed checks also render stored keys to identify unexpected entries.
 ///
 /// # Bulk query views
 ///

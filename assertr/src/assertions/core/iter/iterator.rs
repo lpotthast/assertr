@@ -502,10 +502,10 @@ where
 /// `scan` runs after tracking, so expected operands and lists are accessed only then. The
 /// iterator is released before failure handling, and the terminal `()` assertion is returned.
 #[track_caller]
-fn consume<'t, I, D, M: Mode, R>(
-    this: AssertThat<'t, I, M, R>,
+fn consume<I, D, M: Mode, R>(
+    this: AssertThat<'_, I, M, R>,
     scan: impl FnOnce() -> D,
-) -> AssertThat<'t, (), M, R>
+) -> AssertThat<'_, (), M, R>
 where
     I: Iterator,
     D: Scan<I, R>,

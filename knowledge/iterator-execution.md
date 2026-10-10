@@ -20,7 +20,7 @@ explain a failure, so they retain the values and observations needed for diagnos
 
 | Family | Input and result |
 |---|---|
-| `into_iter_*` | Create a fresh iterator borrowing the subject for each call. Return the original chain. |
+| `into_iter_*` | Require `&Subject: IntoIterator<Item = &T>`. Create a fresh iterator borrowing the subject for each call. Return the original chain. Maps yield `(&K, &V)` pairs and use map assertions instead. |
 | Terminal `IteratorAssertions` | Require an owned iterator. Consume the needed input, drop the rest, and return a chain over `()`. |
 | `ExactSizeIterator` length checks | Read `len()` without consuming items. |
 
@@ -74,7 +74,8 @@ displaying them.
 ## Observation lifetime
 
 The [execution adapter](../assertr/src/assertions/iterator/mod.rs) keeps one iterator alive throughout the scan and its
-diagnostics. Neither the iterator nor its items need `Clone`.
+diagnostics. Neither the iterator nor its items need `Clone`. The private `consume` helper of `IteratorAssertions` and
+`traverse` helper of `IntoIteratorAssertions` create each scan inside the adapter, after tracking.
 
 1. Track the assertion, then access the expected list before scanning. Borrow operands as comparisons reach them.
 2. Scan through `&mut I` and retain the result. Explanation must not call `next` or `size_hint` again.

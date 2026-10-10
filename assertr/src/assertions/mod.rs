@@ -12,7 +12,7 @@
 //! | Ranges, `RefCell`, lengths, types | [`RangeAssertions`], [`RangeBoundAssertions`], [`RefCellAssertions`], [`LengthAssertions`], [`MemAssertions`] |
 //! | Collections | [`CollectionAssertions`], [`StableOrderAssertions`], [`StableOrderExtractAssertions`], [`RandomAccessExtractAssertions`] |
 //! | Iterators | [`IteratorAssertions`], [`IntoIteratorAssertions`], [`ExactSizeIteratorAssertions`] |
-//! | Sets and maps | [`SetAssertions`], [`MapAssertions`] |
+//! | Sets and maps | [`SetAssertions`], [`MapAssertions`], [`MapProjectionAssertions`] |
 //! | Boxed `Any` and panic payloads | [`BoxAssertions`], [`BoxExtractAssertions`] |
 //! | Closures (`std`) | `FnOnceAssertions`, `AsyncFnOnceAssertions` |
 //! | Numbers (`num`) | `NumAssertions` |
@@ -104,7 +104,7 @@ pub use http::header_value::{HttpHeaderValueAssertions, HttpHeaderValueExtractAs
 pub use jiff::{
     signed_duration::SignedDurationAssertions, span::SpanAssertions, zoned::ZonedAssertions,
 };
-pub use map::{Map, MapAssertions, MapLookup};
+pub use map::{Map, MapAssertions, MapKeys, MapLookup, MapProjectionAssertions, MapValues};
 #[cfg(feature = "num")]
 pub use num::NumAssertions;
 #[cfg(feature = "program")]

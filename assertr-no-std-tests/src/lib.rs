@@ -284,7 +284,7 @@ fn set_and_map_assertions_compile_without_std() {
             .contains_exactly_entries_satisfying([("a", satisfies_one)])
             .has_length(1);
 
-        let expected = [matchers::entry("a", predicate(is_one))];
+        let expected = [entry("a", predicate(is_one))];
         assert_that!(BTreeMap::from([("a", 1)]))
             .contains_exactly_entries_matching(&expected[..])
             .matches(matchers::entries_are(expected));
@@ -849,7 +849,7 @@ fn borrowed_views_compile_without_std() {
         .contains_key(query)
         .matches(assertr::entries_are![(query, matchers::eq(3))]);
     assert_that!(BTreeMap::from([(String::from("key"), 1)]))
-        .matches(matchers::entry(TextOperand("key"), matchers::eq(1)));
+        .matches(entry(TextOperand("key"), matchers::eq(1)));
 
     reusable_bulk_views_compile_without_std();
 

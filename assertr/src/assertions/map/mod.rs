@@ -1,7 +1,8 @@
 //! Map assertions for `BTreeMap`, `HashMap`, and custom map types.
 //!
-//! [`MapAssertions`] is blanket-implemented for every [`Map`]. Maps have their own family because
-//! their entries are key/value pairs rather than plain collection elements.
+//! [`MapAssertions`] and [`MapProjectionAssertions`] are blanket-implemented for every [`Map`].
+//! Maps have their own family because their entries are key/value pairs rather than plain
+//! collection elements.
 //!
 //! Implement [`Map`] and [`MapLookup`] for a custom map. Bulk operands select their query view
 //! through [`BorrowFor`](crate::borrow_for::BorrowFor) with the stored key as context.
@@ -13,6 +14,7 @@ mod entry;
 mod entry_matcher_list;
 mod imp;
 mod matching;
+mod projection;
 
 use alloc::collections::BTreeMap;
 use core::borrow::Borrow;
@@ -27,16 +29,81 @@ pub use imp::{
     DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue,
 };
 pub use matching::{ContainsEntryMatching, ContainsValueMatching};
+pub use projection::{MapKeys, MapProjectionAssertions, MapValues};
 
 use crate::{assertions::HasLength, renderer::RenderingOrder};
 
-/// A keyed collection supporting iteration over its entries.
+/// A keyed collection whose entries can be inspected repeatedly by reference, the capability
+/// behind the map assertions that iterate over entries.
 ///
-/// Implementing this trait makes iteration-based [`MapAssertions`] available. Implement
-/// [`MapLookup`] for key queries. The prelude does not re-export this implementor-facing trait.
+/// Implementing `Map` for your own type makes the iteration-based
+/// [`MapAssertions`] available on it: `contains_value`, `does_not_contain_value`, and
+/// `contains_value_matching`. [`MapProjectionAssertions`] projects it onto collection views of its
+/// keys and values. The [`HasLength`] supertrait adds `is_empty` and `has_length`. Implement
+/// [`MapLookup`] as well to enable the assertions that query keys, such as `contains_key`,
+/// `contains_entry`, and `contains_exactly_entries`.
 ///
-/// Assertr renders map syntax. A custom [`ValueRenderer`](crate::renderer::ValueRenderer) needs to
-/// render only [`Key`](Map::Key) and [`Value`](Map::Value).
+/// ```
+/// use assertr::{
+///     assertions::{HasLength, Map},
+///     prelude::*,
+///     renderer::RenderingOrder,
+/// };
+///
+/// /// Settings kept as key/value pairs in insertion order.
+/// #[derive(Debug)]
+/// struct Settings {
+///     pairs: Vec<(&'static str, u32)>,
+/// }
+///
+/// impl HasLength for Settings {
+///     fn length(&self) -> usize {
+///         self.pairs.len()
+///     }
+/// }
+///
+/// impl Map for Settings {
+///     type Key = &'static str;
+///     type Value = u32;
+///     // Insertion order is deterministic, so reports can keep it.
+///     const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
+///
+///     fn entries(&self) -> impl Iterator<Item = (&Self::Key, &Self::Value)> {
+///         self.pairs.iter().map(|(key, value)| (key, value))
+///     }
+/// }
+///
+/// let settings = Settings { pairs: vec![("retries", 3), ("timeout", 30)] };
+/// assert_that!(settings)
+///     .contains_value(30)
+///     .does_not_contain_value(0)
+///     .has_length(2);
+/// ```
+///
+/// `Map` is not part of the prelude, so import it from
+/// [`assertr::assertions`](crate::assertions) to implement it. Shared and mutable references to a
+/// map are maps too.
+///
+/// # Contract
+///
+/// - [`entries`](Self::entries) must yield the same entries on every call, because some assertions
+///   traverse the map several times.
+/// - [`HasLength::length`] must equal the number of entries that `entries` yields.
+/// - Keys must be unique.
+/// - When the map also implements [`MapLookup`], `entries` must yield references to the same stored
+///   keys and values that [`MapLookup::get_key_value`] returns.
+///
+/// Rust cannot check these requirements. Violating them makes outcomes and diagnostics
+/// unreliable.
+///
+/// # Rendering
+///
+/// Assertr renders the map structure itself, so a custom
+/// [`ValueRenderer`](crate::renderer::ValueRenderer) needs to render only [`Key`](Map::Key) and
+/// [`Value`](Map::Value). Length assertions render the whole subject and therefore need a renderer
+/// for the map type itself. With the default renderer, a derived `Debug` covers both.
+/// [`RENDERING_ORDER`](Self::RENDERING_ORDER) chooses whether reports keep iteration order or sort
+/// entries by their rendered text.
 pub trait Map: HasLength {
     /// The map's key type.
     type Key;
@@ -44,50 +111,63 @@ pub trait Map: HasLength {
     /// The map's value type.
     type Value;
 
-    /// Whether diagnostics preserve iteration order or sort entries by rendered text.
+    /// Whether diagnostics preserve iteration order or sort entries by their rendered text.
     ///
-    /// This affects presentation only. It does not change matching or lookup behavior.
+    /// Use [`RenderingOrder::SortByRenderedText`] when iteration order is arbitrary, as in a
+    /// hash-based map, so reports stay stable between runs. This affects presentation only. It
+    /// does not change matching or lookup behavior.
     const RENDERING_ORDER: RenderingOrder;
 
-    /// The entries of this map.
+    /// The entries of this map, as references to the stored keys and values.
     ///
     /// Must be repeatable. Every call must yield the same entries because some assertions make
-    /// multiple passes. References must point at the stored keys and values returned by
-    /// [`MapLookup::get_key_value`].
+    /// multiple passes. References must point at the stored keys and values that
+    /// [`MapLookup::get_key_value`] returns.
     fn entries(&self) -> impl Iterator<Item = (&Self::Key, &Self::Value)>;
 }
 
-/// Native lookup of a [`Map`] by a borrowed key view `Q`, carrying the map's own lookup bounds.
+/// Native lookup of a [`Map`] by a borrowed key view `Q`, the capability behind the map assertions
+/// that query keys.
 ///
-/// Every assertion that queries a key (`contains_key`, `contains_entry`, `contains_keys`, the
-/// `contains_exactly_entries` family, and their negatives) requires the subject to implement
-/// `MapLookup<Q>` for the query type `Q`. `Q` may be an unsized borrowed view of [`Map::Key`], such
-/// as `str` for a `String` key, and is compared according to the contract of [`Borrow`].
-///
-/// The bounds live on the implementation, not on the trait, so each map demands exactly what its
-/// native lookup needs: `Q: Hash + Eq` for a `HashMap`, `Q: Ord` for a `BTreeMap`. A key type only
-/// needs to satisfy its own map's requirements. A custom map can implement this trait once,
-/// generically over `Q`, by delegating to its native lookup:
+/// Implementing `MapLookup<Q>` for your own map, on top of [`Map`], makes the key-querying
+/// [`MapAssertions`] available for queries of type `Q`: `contains_key`, `does_not_contain_key`,
+/// `contains_keys`, `contains_entry` and its variants, and the `contains_exactly_entries` family.
+/// The [`entry`] and [`entries_are`] matchers use it too, and the keys view of
+/// [`MapProjectionAssertions::keys`] becomes a set. `Q` may be an unsized borrowed view of
+/// [`Map::Key`], such as `str` for a `String` key. Implement the trait once, generically over
+/// `Q`, by delegating to your map's native lookup:
 ///
 /// ```
 /// use core::borrow::Borrow;
 /// use std::collections::BTreeMap;
 ///
-/// use assertr::assertions::HasLength;
-/// use assertr::assertions::{Map, MapLookup};
-/// use assertr::renderer::RenderingOrder;
+/// use assertr::{
+///     assertions::{HasLength, Map, MapLookup},
+///     prelude::*,
+///     renderer::RenderingOrder,
+/// };
 ///
+/// /// Configuration values by name.
+/// #[derive(Debug)]
 /// struct Config(BTreeMap<String, i32>);
 ///
-/// # impl HasLength for Config {
-/// #     fn length(&self) -> usize { self.0.len() }
-/// # }
-/// # impl Map for Config {
-/// #     type Key = String;
-/// #     type Value = i32;
-/// #     const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
-/// #     fn entries(&self) -> impl Iterator<Item = (&String, &i32)> { self.0.iter() }
-/// # }
+/// impl HasLength for Config {
+///     fn length(&self) -> usize {
+///         self.0.len()
+///     }
+/// }
+///
+/// impl Map for Config {
+///     type Key = String;
+///     type Value = i32;
+///     const RENDERING_ORDER: RenderingOrder = RenderingOrder::PreserveIteration;
+///
+///     fn entries(&self) -> impl Iterator<Item = (&String, &i32)> {
+///         self.0.iter()
+///     }
+/// }
+///
+/// // The bounds are those of the native lookup, here `BTreeMap::get_key_value`.
 /// impl<Q> MapLookup<Q> for Config
 /// where
 ///     Q: Ord + ?Sized,
@@ -97,13 +177,29 @@ pub trait Map: HasLength {
 ///         self.0.get_key_value(key)
 ///     }
 /// }
+///
+/// let config = Config(BTreeMap::from([(String::from("retries"), 3)]));
+/// assert_that!(config)
+///     .contains_key("retries")
+///     .does_not_contain_key("timeout")
+///     .contains_entry("retries", 3)
+///     .contains_exactly_entries([("retries", 3)]);
 /// ```
 ///
-/// The returned references must point at the entry's *stored* key and value, the same ones
-/// [`Map::entries`] yields. The exact-entry assertions rely on that identity to tell expected
-/// entries from unexpected ones without requiring `Hash` or `Ord` on the key type.
+/// Like [`Map`], `MapLookup` is not part of the prelude.
 ///
-/// Like [`Map`], this trait is not re-exported from the prelude.
+/// # Contract
+///
+/// - The returned references must point at the entry's *stored* key and value, the same ones
+///   [`Map::entries`] yields. The exact-entry assertions rely on that identity to tell expected
+///   entries from unexpected ones without requiring `Hash` or `Ord` on the key type.
+/// - Lookup must agree with key uniqueness: a query finds the entry whose key is equivalent to it
+///   under the equivalence that keeps the keys unique, such as hashing or ordering. `Borrow`
+///   implementations must preserve that equivalence, as the [`Borrow`] contract requires.
+///
+/// The bounds live on the implementation, not on the trait, so each map demands exactly what its
+/// native lookup needs: `Q: Hash + Eq` for a `HashMap`, `Q: Ord` for a `BTreeMap`. A key type only
+/// needs to satisfy its own map's requirements. There is no fallback to an equality scan.
 pub trait MapLookup<Q: ?Sized>: Map {
     /// The stored key and value under `key`, if any.
     fn get_key_value(&self, key: &Q) -> Option<(&Self::Key, &Self::Value)>;

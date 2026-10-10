@@ -11,6 +11,7 @@ sources:
   - assertr/src/assertions/map/imp.rs
   - assertr/src/assertions/map/entry.rs
   - assertr/src/assertions/map/entries_are.rs
+  - assertr/src/assertions/map/projection.rs
 ---
 
 # Collection, set, and map semantics
@@ -75,6 +76,15 @@ Exact keyed map checks use native lookup, length, and stored-key identity:
 - Repeated queries cannot cover a missing distinct entry.
 - A present key counts as visited even if its value fails the check. It is not also reported as unexpected.
 - Duplicate queries that match every entry while lengths differ report a length failure.
+
+### Key and value views
+
+`MapProjectionAssertions::keys` and `values` derive a child chain over a borrowed view of the map. Both views implement
+`HasLength` and `Collection` only, so order-free collection checks and matchers such as `each` apply. Neither view is
+`StableOrder`, even for a `BTreeMap`, because map iteration order does not give keys or values positions. The keys
+view is also `SetLookup` when the map implements `MapLookup<Key>`, so set relations use the map's native lookup. The
+values view preserves duplicates. Diagnostics present keys as a set and values as a list, both in the map's
+`RENDERING_ORDER`.
 
 ### Query selection
 

@@ -92,6 +92,7 @@ for detailed requirements and exceptions.
 | [SetLookup](collection-semantics.md#capability-model) | Native membership for unique elements, using the same equivalence as the set. |
 | [Map](collection-semantics.md#capability-model) | Allows repeated traversal of the same stored keys and values. |
 | [MapLookup](collection-semantics.md#keyed-maps) | Native borrowed-key lookup capability. |
+| [Map views](collection-semantics.md#key-and-value-views) | `MapKeys` and `MapValues`: order-free collection views of a map's keys or values, created by projection. |
 | [Reference identity](reference-identity.md#which-address-is-compared) | Pointer equality of the subject or selected `Borrow` target, including pointer metadata. |
 
 ## Diagnostic values
