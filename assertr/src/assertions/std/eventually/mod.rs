@@ -572,8 +572,11 @@ struct FailedObservation {
 enum Step<T> {
     /// The expectation holds for this value.
     Met(T),
-    /// The expectation does not hold, explained when the assertion fails with this observation.
-    NotMet(Option<Box<FailureBuilder>>),
+    /// The expectation does not hold, and the assertion fails with this explanation.
+    Failed(Box<FailureBuilder>),
+    /// The expectation does not hold yet. The observation is kept unexplained, to explain it
+    /// should no later observation complete before the timeout.
+    Unmet(Observed<T>),
 }
 
 /// Shared execution result. Public boundaries choose propagation or panic presentation.
@@ -631,8 +634,9 @@ where
         }
     }
 
-    /// Observes until `expected` holds or the timeout passes, then fails with the last
-    /// observation. An observation still pending at the timeout fails the assertion.
+    /// Observes until `expected` holds or the timeout passes, then fails with the last completed
+    /// observation. An observation still pending at the timeout is abandoned. The assertion then
+    /// fails with the observation before it, or as unobserved when none completed.
     async fn until<T: 't, D>(
         self,
         expected: D,
@@ -644,11 +648,23 @@ where
     {
         let mut history = History::start();
         let deadline = history.started.checked_add(self.patience.timeout());
+        let mut unmet = None;
         loop {
             let Some(output) = sleep::before((self.actual.borrowed())(), deadline).await else {
-                let failure = not_observed::<T>().fact(Fact::note(
-                    "The observation did not complete before the timeout.",
-                ));
+                let last =
+                    unmet.map(|observed| judge(&self.detached_chain, observed, &expected, true));
+                let failure = match last {
+                    Some(Step::Met(value)) => return self.finish(Ok(value), &history),
+                    Some(Step::Failed(failure)) => failure.fact(Fact::note(
+                        "A later observation did not complete before the timeout.",
+                    )),
+                    Some(Step::Unmet(_)) => {
+                        unreachable!("an explained rejection ends the assertion")
+                    }
+                    None => not_observed::<T>().fact(Fact::note(
+                        "The observation did not complete before the timeout.",
+                    )),
+                };
                 return self.finish(Err(failure.fact(history.waited())), &history);
             };
             let last_attempt = deadline.is_some_and(|deadline| Instant::now() >= deadline);
@@ -661,10 +677,13 @@ where
                 last_attempt,
             ) {
                 Step::Met(value) => return self.finish(Ok(value), &history),
-                Step::NotMet(Some(failure)) => {
+                Step::Failed(failure) => {
                     return self.finish(Err(failure.fact(history.waited())), &history);
                 }
-                Step::NotMet(None) => self.pause(deadline).await,
+                Step::Unmet(observed) => {
+                    unmet = Some(observed);
+                    self.pause(deadline).await;
+                }
             }
         }
     }
@@ -710,13 +729,12 @@ where
                     return self.finish(Ok(value), &history);
                 }
                 Step::Met(_) => self.pause(deadline).await,
-                Step::NotMet(failure) => {
-                    let failure =
-                        failure.expect("every rejection of the last attempt is explained");
+                Step::Failed(failure) => {
                     // The last observation is the one that did not hold.
                     let held = history.held(history.observations - 1);
                     return self.finish(Err(failure.fact(held)), &history);
                 }
+                Step::Unmet(_) => unreachable!("an explained rejection ends the assertion"),
             }
         }
     }
@@ -758,28 +776,50 @@ where
     D: Expectation<T, R>,
     R: ValueRenderer<T>,
 {
+    history.record(match &observed {
+        Ok(value) => chain.render().value(value),
+        Err(failed) => failed.error.clone(),
+    });
+    judge(chain, observed, expected, explain)
+}
+
+/// Evaluates `expected` on an observation without recording it. A rejection is explained when
+/// `explain` is set or a failed observation gives up, and kept as unmet otherwise.
+fn judge<T, R, D>(
+    chain: &DetachedChain<R>,
+    observed: Observed<T>,
+    expected: &D,
+    explain: bool,
+) -> Step<T>
+where
+    D: Expectation<T, R>,
+    R: ValueRenderer<T>,
+{
     let value = match observed {
         Ok(value) => value,
-        Err(FailedObservation { error, gives_up }) => {
-            history.record(error.clone());
-            return Step::NotMet(
-                (explain || gives_up)
-                    .then(|| Box::new(not_observed::<T>().fact(Fact::labelled("Error", error)))),
-            );
+        Err(failed) if explain || failed.gives_up => {
+            let failure = not_observed::<T>().fact(Fact::labelled("Error", failed.error));
+            return Step::Failed(Box::new(failure));
         }
+        Err(failed) => return Step::Unmet(Err(failed)),
     };
-    history.record(chain.render().value(&value));
     let context = chain.assertion_context();
-    if let Err(rejection) = expected.evaluate(&value, &context) {
-        return Step::NotMet(explain.then(|| {
-            Box::new(expected.explain(
+    let rejected = match expected.evaluate(&value, &context) {
+        Ok(_) => false,
+        Err(rejection) if explain => {
+            return Step::Failed(Box::new(expected.explain(
                 Some((&value, rejection)),
                 FailureBuilder::new::<T>(D::KIND),
                 &context,
-            ))
-        }));
+            )));
+        }
+        Err(_) => true,
+    };
+    if rejected {
+        Step::Unmet(Ok(value))
+    } else {
+        Step::Met(value)
     }
-    Step::Met(value)
 }
 
 /// How many distinct values the history keeps.
@@ -1690,6 +1730,12 @@ mod tests {
         use super::*;
         use crate::matchers::eq;
 
+        /// One observation, then a pause that the timeout cuts short, so the second observation
+        /// starts at the timeout and is abandoned as soon as it is pending.
+        const SECOND_ATTEMPT_AT_THE_TIMEOUT: Patience = QUICK
+            .with_timeout(Duration::from_millis(50))
+            .with_interval(Duration::from_secs(10));
+
         #[tokio::test]
         async fn fail_eventually_at_the_timeout() {
             let started = Instant::now();
@@ -1712,6 +1758,68 @@ mod tests {
             assert_that!(fact(&failure, "Waited"))
                 .some()
                 .ends_with("(0 observations)");
+        }
+
+        #[tokio::test]
+        async fn explain_eventually_the_last_completed_observation() {
+            let calls = Cell::new(0);
+            let failure = raised(|presentation| {
+                let observe = || {
+                    calls.set(calls.get() + 1);
+                    let call = calls.get();
+                    async move {
+                        tokio::task::yield_now().await;
+                        call
+                    }
+                };
+                async move {
+                    assert_that!(observe)
+                        .with_panic_presentation(presentation)
+                        .eventually()
+                        .with_patience(SECOND_ATTEMPT_AT_THE_TIMEOUT)
+                        .matches(eq(0))
+                        .await;
+                }
+            })
+            .await;
+
+            assert_that!(failure.kind).is_equal_to(FailureKind::Equality);
+            assert_that!(failure.expected.as_ref().map(ToString::to_string))
+                .is_equal_to(Some("0".to_owned()));
+            assert_that!(calls.get()).is_equal_to(2);
+            assert_that!(failure.actual.as_ref().map(ToString::to_string))
+                .is_equal_to(Some("1".to_owned()));
+            assert_that!(fact(&failure, "Waited"))
+                .some()
+                .ends_with("(1 observation)");
+            assert_that!(note(&failure)).is_equal_to(Some(
+                "A later observation did not complete before the timeout.".to_owned(),
+            ));
+        }
+
+        #[tokio::test]
+        async fn explain_eventually_ok_the_last_completed_error() {
+            let failure = raised(|presentation| {
+                let observe = || async {
+                    tokio::task::yield_now().await;
+                    Err::<u32, _>("unavailable")
+                };
+                async move {
+                    assert_that!(observe)
+                        .with_panic_presentation(presentation)
+                        .eventually_ok()
+                        .with_patience(SECOND_ATTEMPT_AT_THE_TIMEOUT)
+                        .matches(eq(1))
+                        .await;
+                }
+            })
+            .await;
+
+            assert_that!(failure.relation.as_deref()).is_equal_to(Some("could not be observed"));
+            assert_that!(fact(&failure, "Error")).is_equal_to(Some("\"unavailable\"".to_owned()));
+            assert_that!(note(&failure)).is_equal_to(Some(
+                "A later observation did not complete before the timeout.".to_owned(),
+            ));
         }
 
         #[tokio::test]

@@ -75,8 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Result`. They end with any matcher (`matches`) or assertion callback (`satisfies`) and continue on the observed
   value. `try_matches` instead returns the observed value or a boxed `AssertionFailure`, with the same retry policy,
   deadlines, caller metadata, and observation history as `matches`. Failures add how long and how often the value was
-  observed, and the values seen. An observation still pending at its deadline fails the assertion instead of hanging
-  it. `eventually_ok().giving_up_on(|error| ..)` ends the assertion at the first error no retry can fix instead of
+  observed, and the values seen. An observation still pending at its deadline is abandoned instead of hanging the
+  assertion, and `eventually` then explains the last observation that completed.
+  `eventually_ok().giving_up_on(|error| ..)` ends the assertion at the first error no retry can fix instead of
   retrying it until the timeout, and `giving_up_on_any_error()` ends it at any error. The `GiveUp` policy trait is
   sealed. Eventual assertions run in any async runtime, and their futures are `Send` whenever the observation,
   expectation, and renderer are. `EventualAssertions` and `Patience` are exported from `assertions` and the prelude,

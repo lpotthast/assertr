@@ -226,8 +226,9 @@ defaults are fast (1 s, 10 ms, 100 ms, 1 s). Set your own for a whole test suite
 `Patience::set_global`. Override them for one assertion with `within`, `polling_every`,
 `for_at_least`, `each_observation_within`, or `with_patience`, in any order. Use `eventually_ok` and
 `consistently_ok` for observations returning a `Result`. An observation still pending at its
-deadline fails the assertion instead of hanging it. `try_matches` returns the failure instead of
-panicking, for shared helpers that propagate it with `?`. Eventual assertions need no particular
+deadline is abandoned instead of hanging the assertion, and `eventually` then explains the last
+observation that completed. `try_matches` returns the failure instead of panicking, for shared
+helpers that propagate it with `?`. Eventual assertions need no particular
 runtime, and their futures are `Send` when the observation, the expectation, and the renderer are.
 
 ### Browser elements (`thirtyfour`)

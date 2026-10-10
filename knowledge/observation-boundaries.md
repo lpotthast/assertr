@@ -82,7 +82,7 @@ repeatedly in panic mode. Their builders configure the [patience](glossary.md#ex
 
 | Assertion | Passes | Fails |
 |---|---|---|
-| `eventually` | At the first observation meeting the expectation. Continues with that value. | When the last observation at or after the timeout does not. |
+| `eventually` | At the first observation meeting the expectation. Continues with that value. | At the timeout, explaining the last completed observation. |
 | `consistently` | When every observation until the consistency duration ends meets it. Continues with the last value. | At the first observation that does not. |
 | `_ok` variants | Same, for an observation returning `Result`: `eventually_ok` retries an `Err` unless `giving_up_on` accepts it or `giving_up_on_any_error` is set, `consistently_ok` fails on it. | An `Err` fails with relation "could not be observed" and an `Error` fact: at the timeout, or at once when given up on. |
 
@@ -110,8 +110,10 @@ observations) and, when the value changed, `Observed values`: up to eight distin
 counts only the observations before the failing one, and reads `never` when there were none.
 
 Every observation runs against a deadline: the timeout for `eventually`, and the observation timeout from the
-observation's start for `consistently`. An observation still pending at its deadline is dropped, and the assertion fails with relation
-"could not be observed" and a note. An observation ready at the deadline still counts. Only a future returning
+observation's start for `consistently`. An observation still pending at its deadline is dropped. `eventually` then
+explains the last completed observation with a note that a later one did not complete, and `consistently` fails with
+relation "could not be observed" and a note. `eventually` uses that relation too when no observation completed. The
+last completed observation is evaluated again for its explanation. An observation ready at the deadline still counts. Only a future returning
 `Pending` can be abandoned. An observation that blocks its thread synchronously cannot be interrupted. Pauses last one
 interval but end at the timeout or the end of the consistency duration, so a long interval never extends the
 assertion. A duration too large for an `Instant` means no deadline instead of an overflow.
