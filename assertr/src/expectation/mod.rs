@@ -147,7 +147,10 @@ pub trait Expectation<T: ?Sized, R = DebugRenderer> {
     /// Set it for pure grouping expectations, like [`all_of`](crate::matchers::all_of), whose
     /// children already explain everything. Inside another expectation, only the children and
     /// their omission count are reported, not this expectation's relation, values, or facts. Run
-    /// directly on a chain, the expectation still reports its own failure.
+    /// directly on a chain, the expectation still reports its own failure. A rejection explained
+    /// without children or omissions has nothing to flatten and is reported whole, so it is never
+    /// lost. Attach the evidence of the children with
+    /// [`FailureBuilder::evidence`](crate::failure::FailureBuilder::evidence).
     const FLATTEN: bool = false;
 
     /// Checks `actual` and returns what was observed.

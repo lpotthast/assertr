@@ -269,12 +269,13 @@ impl<'r, R> AssertionContext<'r, R> {
             let failure = definition
                 .explain(Some((actual, rejection)), failure, self)
                 .build();
-            if D::FLATTEN {
+            if D::FLATTEN && (!failure.children.is_empty() || failure.omitted_children > 0) {
                 self.append(Evidence {
                     children: failure.children,
                     omitted: failure.omitted_children,
                 });
             } else {
+                // A flattening rejection without evidence would vanish, so it stays whole.
                 self.retain(failure);
             }
         } else {
@@ -870,8 +871,64 @@ mod tests {
 
             let mut context = AssertionContext::default();
             assert_that!(context.evaluate(&1, &all_of(matchers![Flat(&explanations)]))).is_false();
-            // The rejection, then the conjunction's fallback description of its empty evidence.
-            assert_that!(explanations.get()).is_equal_to(2);
+            // The rejection has no evidence to flatten, so it is retained whole.
+            assert_that!(explanations.get()).is_equal_to(1);
+        }
+
+        /// A downstream grouping expectation that rejects with a relation but no child evidence.
+        struct Odd;
+
+        impl Expectation<i32> for Odd {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                i32: 'a;
+            type Rejection<'a>
+                = Evidence
+            where
+                Self: 'a,
+                i32: 'a;
+
+            fn evaluate(
+                &self,
+                actual: &i32,
+                context: &AssertionContext<'_>,
+            ) -> Result<(), Evidence> {
+                if actual % 2 == 1 {
+                    Ok(())
+                } else {
+                    Err(context.isolated().into_evidence())
+                }
+            }
+
+            const KIND: FailureKind = FailureKind::Matching;
+            const FLATTEN: bool = true;
+
+            fn explain<'a>(
+                &'a self,
+                _: Option<(&'a i32, Evidence)>,
+                failure: FailureBuilder,
+                _: &AssertionContext<'_>,
+            ) -> FailureBuilder {
+                failure.relation("is not odd")
+            }
+        }
+
+        #[test]
+        fn keeps_a_flattened_rejection_without_evidence_whole() {
+            use crate::matchers::{each, eq};
+
+            let conjunction = assert_that!(2)
+                .with_location(false)
+                .capture(|it| it.matches(all_of(matchers![Odd, eq(2)])));
+            let elements = assert_that!([1, 2])
+                .with_location(false)
+                .capture(|it| it.matches(each(Odd)));
+            for failures in [conjunction, elements] {
+                assert_that!(failures).has_length(1);
+                assert_that!(failures[0].to_string()).contains("is not odd");
+            }
         }
 
         #[test]

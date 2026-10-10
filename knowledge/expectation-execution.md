@@ -29,7 +29,7 @@ Neither `evaluate` nor `explain` tracks assertions or raises failures. Implement
 | `Rejection<'a>` | Retain the failed observation needed for explanation. May borrow the subject or definition. |
 | `Expectation<T, R>::explain` | Populate and return the supplied `FailureBuilder`. |
 | `KIND` | Use the same `FailureKind` for rejection and missing-subject diagnostics. Defaults to `Predicate`. Built-in expectations state it explicitly. |
-| `FLATTEN` | Permit composition to merge children into its receiving context. Composition then shows only the children and their omission count, not the definition's own relation, operands, or facts. Probes never explain. Ordinary execution still retains the enclosing failure. |
+| `FLATTEN` | Permit composition to merge children into its receiving context. Composition then shows only the children and their omission count, not the definition's own relation, operands, or facts. A rejection without children or omissions is retained whole instead, so it is never lost. Probes never explain. Ordinary execution still retains the enclosing failure. |
 
 Retain converted views, errors, counts, or guards whenever obtaining them again would repeat an observation. Explanation
 must not repeat comparisons, searches, lookups, callbacks, consumption, or other observations. It may
