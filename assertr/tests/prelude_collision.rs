@@ -1,5 +1,6 @@
-//! Coverage for collision-prone extension-point names. Collection capability traits remain in
-//! their own modules, so their bare names stay usable next to other glob-imported preludes.
+//! Coverage for collision-prone extension-point names. Capability traits, including `HasLength`,
+//! remain in their own modules, so their bare names stay usable next to other glob-imported
+//! preludes.
 
 use assertr::prelude::*;
 
@@ -8,7 +9,7 @@ fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
     use core::borrow::Borrow;
 
     use assertr::{
-        assertions::{Collection as AssertrCollection, StableOrder},
+        assertions::{Collection as AssertrCollection, HasLength, StableOrder},
         renderer::CollectionPresentation,
     };
 
@@ -195,7 +196,7 @@ fn a_custom_bag_gets_only_order_free_collection_assertions() {
     impl AssertrCollection for Multiset {
         type Item = i32;
         const PRESENTATION: CollectionPresentation = CollectionPresentation::list()
-            .show_type_hint(true)
+            .with_type_hint(true)
             .with_order(RenderingOrder::SortByRenderedText);
 
         fn elements(&self) -> impl Iterator<Item = &i32> {
@@ -256,7 +257,7 @@ fn a_custom_set_gets_every_set_and_collection_assertion() {
     impl AssertrCollection for CustomSet {
         type Item = i32;
         const PRESENTATION: CollectionPresentation =
-            CollectionPresentation::set().show_type_hint(true);
+            CollectionPresentation::set().with_type_hint(true);
 
         fn elements(&self) -> impl Iterator<Item = &i32> {
             self.0.iter()
@@ -374,11 +375,9 @@ fn a_custom_map_gets_every_map_assertion() {
         .contains_entry_satisfying("retries", satisfies_three)
         .contains_keys(["retries"])
         .contains_exactly_entries([("retries", 3)])
-        .contains_exactly_entries_matching(matchers::entry_matchers(
-            ([("retries", is_three)])
-                .into_iter()
-                .map(|(key, p)| (key, matchers::predicate(p))),
-        ))
+        .contains_exactly_entries_matching(
+            [("retries", is_three)].map(|(key, p)| matchers::entry(key, matchers::predicate(p))),
+        )
         .contains_exactly_entries_satisfying([("retries", satisfies_three)])
         .has_length(1);
 

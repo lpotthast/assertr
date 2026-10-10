@@ -1,6 +1,6 @@
 use crate::{
     AssertThat, Mode,
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, passed},
     failure::{FailureBuilder, FailureKind},
     renderer::{DebugRenderer, ValueRenderer},
 };
@@ -21,11 +21,7 @@ impl<R: ValueRenderer<char>> Expectation<char, R> for EqualToIgnoringAsciiCase {
     type Success<'a> = ();
     type Rejection<'a> = ();
     fn evaluate<'a>(&'a self, actual: &'a char, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if actual.eq_ignore_ascii_case(&self.0) {
-            Ok(())
-        } else {
-            Err(())
-        }
+        passed(actual.eq_ignore_ascii_case(&self.0))
     }
 
     const KIND: FailureKind = FailureKind::Equality;

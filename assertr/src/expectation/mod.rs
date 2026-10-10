@@ -24,6 +24,23 @@
 //! ```
 //!
 //! The [custom assertions guide](crate#custom-assertions) walks through a complete implementation.
+//!
+//! An expectation that runs a list of child expectations, like
+//! [`all_of`](crate::matchers::all_of), accepts any [`MatcherList`]: a
+//! [`matchers!`](crate::matchers!) list of mixed matcher types, or an array, slice, or vector of
+//! one matcher type. [`EntryMatcherList`] is the keyed form behind
+//! [`entries_are!`](crate::entries_are). Both traits are sealed. Name them in bounds or as
+//! `impl MatcherList<T>` return types:
+//!
+//! ```
+//! use assertr::{expectation::MatcherList, matchers::{all_of, eq, gt}, prelude::*};
+//!
+//! fn small_positive() -> impl MatcherList<i32> {
+//!     matchers![gt(0), eq(2)]
+//! }
+//!
+//! assert_that!(2).matches(all_of(small_positive()));
+//! ```
 
 use alloc::vec::Vec;
 
@@ -32,9 +49,9 @@ use crate::{
     renderer::DebugRenderer,
 };
 
-/// Declares the associated items of a transparent composition: no success observation, owned
-/// child [`Evidence`] as the rejection, and flattening into the receiving context.
-macro_rules! composite_items {
+/// Declares the associated items of a composition that keeps no success observation and rejects
+/// with owned child [`Evidence`].
+macro_rules! evidence_items {
     ($subject:ty) => {
         type Success<'a>
             = ()
@@ -46,10 +63,24 @@ macro_rules! composite_items {
         where
             Self: 'a,
             $subject: 'a;
+    };
+}
+pub(crate) use evidence_items;
+
+/// Declares the associated items of a transparent composition: the [`evidence_items!`] plus
+/// flattening into the receiving context.
+macro_rules! composite_items {
+    ($subject:ty) => {
+        $crate::expectation::evidence_items!($subject);
         const FLATTEN: bool = true;
     };
 }
 pub(crate) use composite_items;
+
+/// Converts the outcome of a check that retains no observation into an evaluation result.
+pub(crate) const fn passed(condition: bool) -> Result<(), ()> {
+    if condition { Ok(()) } else { Err(()) }
+}
 
 pub(crate) mod all_of;
 pub(crate) mod any_of;
@@ -59,31 +90,23 @@ pub(crate) mod field;
 pub(crate) mod lists;
 pub(crate) mod predicate;
 pub(crate) mod satisfying;
-#[cfg(test)]
-pub(crate) mod test_support;
 
 pub(crate) mod context;
 pub use context::AssertionContext;
+pub use lists::MatcherList;
+
+pub use crate::assertions::map::EntryMatcherList;
 
 /// Failures collected while running child expectations, plus a count of those the rendering
 /// budget left out.
 ///
 /// Get it from [`AssertionContext::into_evidence`] and attach it to a failure with
-/// [`explain`](Self::explain). It owns its failures and borrows nothing, so it works as the
+/// [`FailureBuilder::evidence`]. It owns its failures and borrows nothing, so it works as the
 /// [`Rejection`](Expectation::Rejection) of a combining expectation.
 #[derive(Debug)]
 pub struct Evidence {
     pub(crate) children: Vec<AssertionFailure>,
     pub(crate) omitted: usize,
-}
-
-impl Evidence {
-    /// Adds the collected failures and their omission count to `failure` as nested failures.
-    pub fn explain(self, failure: FailureBuilder) -> FailureBuilder {
-        failure
-            .children(self.children)
-            .omitted_children(self.omitted)
-    }
 }
 
 /// A reusable check with its own failure report.

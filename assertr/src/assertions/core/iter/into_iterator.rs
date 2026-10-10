@@ -1,18 +1,32 @@
 use crate::{
     AssertThat, Mode,
     assertions::iterator::{
-        Contains, ContainsAll, ContainsExactlyInAnyOrder, ContainsMatching, DoesNotContain,
-        DoesNotContainMatching, ElementsAreInAnyOrder, IsEmpty, IsNotEmpty, LengthScan,
-        PositionReporting::Unavailable, run,
+        ContainsAllScan, ContainsMatchingScan, ContainsScan, DoesNotContainMatchingScan,
+        DoesNotContainScan, IsEmptyScan, IsNotEmptyScan, LengthScan,
+        PositionReporting::Unavailable, Scan, UnorderedEqualScan, UnorderedMatchScan, run,
     },
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{Expectation, lists::SatisfyingList},
-    matchers::{MatcherList, satisfying},
+    expectation::{Expectation, MatcherList, lists::SatisfyingList},
+    matchers::satisfying,
     mode::Capture,
     renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Chainable assertions over a fresh borrowed iteration of a collection-like value.
+///
+/// Available for every subject whose shared reference iterates `&T`, that is
+/// `for<'a> &'a Subject: IntoIterator<Item = &'a T>`, such as slices, arrays, vectors, sets, and
+/// custom containers. Maps do not qualify because their borrowed items are `(&K, &V)` pairs. Use
+/// [`MapAssertions`](crate::assertions::MapAssertions) for them.
+///
+/// ```
+/// use assertr::prelude::*;
+///
+/// assert_that!(vec![1, 2, 3])
+///     .into_iter_contains(2)
+///     .into_iter_contains_all([3, 1])
+///     .into_iter_has_length(3);
+/// ```
 ///
 /// Each method calls `IntoIterator::into_iter(&subject)` exactly once and returns the original
 /// assertion. Chaining therefore performs one fresh borrowed traversal per assertion. Streaming,
@@ -63,8 +77,9 @@ pub trait IntoIteratorAssertions<T, R = DebugRenderer> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
-    /// Asserts that no element in a borrowed traversal matches `expected`.
-    fn into_iter_does_not_contain_matching<P>(self, expected: P) -> Self
+    /// Asserts that no element in a borrowed traversal matches the unwanted constraint
+    /// `not_expected`.
+    fn into_iter_does_not_contain_matching<P>(self, not_expected: P) -> Self
     where
         P: Expectation<T, R>,
         R: ValueRenderer<usize> + ValueRenderer<T>;
@@ -122,12 +137,11 @@ where
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
-        run(&self, || {
-            let expected = borrow_for::<T, _>(&expected);
-            (self.actual().into_iter(), Contains::<T, _>::new(expected))
-        });
-        self
+        traverse(self, || {
+            ContainsScan::<T, _>::new(borrow_for::<T, _>(&expected))
+        })
     }
+
     #[track_caller]
     fn into_iter_contains_all<E>(self, expected: impl AsRef<[E]>) -> Self
     where
@@ -135,24 +149,20 @@ where
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
-        run(&self, || {
-            let scan = ContainsAll::<T, _>::new(expected.as_ref());
-            (self.actual().into_iter(), scan)
-        });
-        self
+        traverse(self, || ContainsAllScan::<T, _>::new(expected.as_ref()))
     }
+
     #[track_caller]
     fn into_iter_contains_matching<P>(self, expected: P) -> Self
     where
         P: Expectation<T, R>,
         R: ValueRenderer<usize>,
     {
-        run(&self, || {
-            let scan = ContainsMatching::<T, _>::new(expected, Unavailable);
-            (self.actual().into_iter(), scan)
-        });
-        self
+        traverse(self, || {
+            ContainsMatchingScan::<T, _>::new(expected, Unavailable)
+        })
     }
+
     #[track_caller]
     fn into_iter_contains_satisfying<A>(self, assertions: A) -> Self
     where
@@ -161,6 +171,7 @@ where
     {
         self.into_iter_contains_matching(satisfying(assertions))
     }
+
     #[track_caller]
     fn into_iter_does_not_contain<E>(self, not_expected: E) -> Self
     where
@@ -168,25 +179,22 @@ where
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
-        run(&self, || {
-            let unexpected = borrow_for::<T, _>(&not_expected);
-            let scan = DoesNotContain::<T, _>::new(unexpected, Unavailable);
-            (self.actual().into_iter(), scan)
-        });
-        self
+        traverse(self, || {
+            DoesNotContainScan::<T, _>::new(borrow_for::<T, _>(&not_expected), Unavailable)
+        })
     }
+
     #[track_caller]
-    fn into_iter_does_not_contain_matching<P>(self, expected: P) -> Self
+    fn into_iter_does_not_contain_matching<P>(self, not_expected: P) -> Self
     where
         P: Expectation<T, R>,
         R: ValueRenderer<usize> + ValueRenderer<T>,
     {
-        run(&self, || {
-            let scan = DoesNotContainMatching::<T, _>::new(expected, Unavailable);
-            (self.actual().into_iter(), scan)
-        });
-        self
+        traverse(self, || {
+            DoesNotContainMatchingScan::<T, _>::new(not_expected, Unavailable)
+        })
     }
+
     #[track_caller]
     fn into_iter_does_not_contain_satisfying<A>(self, assertions: A) -> Self
     where
@@ -195,6 +203,7 @@ where
     {
         self.into_iter_does_not_contain_matching(satisfying(assertions))
     }
+
     #[track_caller]
     fn into_iter_contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
@@ -202,24 +211,18 @@ where
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
-        run(&self, || {
-            let scan = ContainsExactlyInAnyOrder::<T, _>::new(expected.as_ref());
-            (self.actual().into_iter(), scan)
-        });
-        self
+        traverse(self, || UnorderedEqualScan::<T, _>::new(expected.as_ref()))
     }
+
     #[track_caller]
     fn into_iter_contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
         P: MatcherList<T, R>,
         R: ValueRenderer<usize>,
     {
-        run(&self, || {
-            let scan = ElementsAreInAnyOrder::<T, _>::new(expected);
-            (self.actual().into_iter(), scan)
-        });
-        self
+        traverse(self, || UnorderedMatchScan::<T, _>::new(expected))
     }
+
     #[track_caller]
     fn into_iter_contains_exactly_in_any_order_satisfying<A>(
         self,
@@ -229,41 +232,51 @@ where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
     {
-        run(&self, || {
-            let expected = SatisfyingList::new(assertions.as_ref());
-            let scan = ElementsAreInAnyOrder::<T, _>::new(expected);
-            (self.actual().into_iter(), scan)
-        });
-        self
+        traverse(self, || {
+            UnorderedMatchScan::<T, _>::new(SatisfyingList::new(assertions.as_ref()))
+        })
     }
+
     #[track_caller]
     fn into_iter_is_empty(self) -> Self
     where
         R: ValueRenderer<T> + ValueRenderer<usize>,
     {
-        run(&self, || (self.actual().into_iter(), IsEmpty::<T>::new()));
-        self
+        traverse(self, IsEmptyScan::<T>::new)
     }
+
     #[track_caller]
     fn into_iter_is_not_empty(self) -> Self
     where
         R: ValueRenderer<T>,
     {
-        run(&self, || {
-            (self.actual().into_iter(), IsNotEmpty::<T>::new())
-        });
-        self
+        traverse(self, IsNotEmptyScan::<T>::new)
     }
+
     #[track_caller]
     fn into_iter_has_length(self, expected: usize) -> Self
     where
         R: ValueRenderer<T> + ValueRenderer<usize>,
     {
-        run(&self, || {
-            (self.actual().into_iter(), LengthScan::<T>::new(expected))
-        });
-        self
+        traverse(self, || LengthScan::<T>::new(expected))
     }
+}
+
+/// Tracks the assertion, then lets `scan` create the scan and runs it over one fresh borrowed
+/// traversal of the subject, returning the original chain.
+///
+/// `scan` runs after tracking, so expected operands and lists are accessed only then.
+#[track_caller]
+fn traverse<T, I, D, M: Mode, R>(
+    this: AssertThat<'_, I, M, R>,
+    scan: impl FnOnce() -> D,
+) -> AssertThat<'_, I, M, R>
+where
+    for<'a> &'a I: IntoIterator<Item = &'a T>,
+    D: for<'a> Scan<<&'a I as IntoIterator>::IntoIter, R>,
+{
+    run(&this, || (this.actual().into_iter(), scan()));
+    this
 }
 
 #[cfg(test)]
@@ -659,9 +672,9 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(vec![1, 2, 3]),
-                into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
-                    is_one, is_two, is_nine,
-                ]))
+                into_iter_contains_exactly_in_any_order_matching(
+                    [is_one, is_two, is_nine,].map(matchers::predicate)
+                )
             );
         }
 
@@ -672,10 +685,9 @@ mod tests {
             struct Opaque(u8);
 
             assert_that!(vec![Opaque(1), Opaque(2)])
-                .into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
-                    |it: &Opaque| it.0 == 2,
-                    |it: &Opaque| it.0 == 1,
-                ]));
+                .into_iter_contains_exactly_in_any_order_matching(
+                    [|it: &Opaque| it.0 == 2, |it: &Opaque| it.0 == 1].map(matchers::predicate),
+                );
         }
 
         fn is_one(value: &i32) -> bool {
@@ -695,9 +707,9 @@ mod tests {
             assert_that!(|| {
                 assert_that!(vec![1, 2, 3])
                     .with_location(false)
-                    .into_iter_contains_exactly_in_any_order_matching(matchers::predicate_list([
-                        is_one, is_two, is_nine,
-                    ]));
+                    .into_iter_contains_exactly_in_any_order_matching(
+                        [is_one, is_two, is_nine].map(matchers::predicate),
+                    );
             })
             .panics()
             .has_type::<String>()

@@ -1,6 +1,6 @@
 use crate::{
     AssertThat, Mode,
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, passed},
     failure::{FailureBuilder, FailureKind},
     renderer::{DebugRenderer, ValueRenderer},
 };
@@ -78,11 +78,7 @@ where
         Self: 'a,
         A: 'a;
     fn evaluate(&self, actual: &A, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if (self.predicate)(actual) {
-            Ok(())
-        } else {
-            Err(())
-        }
+        passed((self.predicate)(actual))
     }
 
     const KIND: FailureKind = FailureKind::Predicate;
@@ -146,11 +142,7 @@ impl<T: ?Sized, R: ValueRenderer<T>, P: Fn(&T) -> bool> Expectation<T, R>
         Self: 'a,
         T: 'a;
     fn evaluate(&self, actual: &T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if (self.0.predicate)(actual) {
-            Err(())
-        } else {
-            Ok(())
-        }
+        passed(!(self.0.predicate)(actual))
     }
 
     const KIND: FailureKind = FailureKind::Predicate;

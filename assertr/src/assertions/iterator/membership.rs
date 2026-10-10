@@ -35,12 +35,12 @@ impl<E> Collection for Missing<'_, E> {
 }
 
 /// Requires an element equal to a borrowed view, stopping at the first match.
-pub(crate) struct Contains<'e, T, E: ?Sized> {
+pub(crate) struct ContainsScan<'e, T, E: ?Sized> {
     expected: &'e E,
     item: PhantomData<fn() -> T>,
 }
 
-impl<'e, T, E: ?Sized> Contains<'e, T, E> {
+impl<'e, T, E: ?Sized> ContainsScan<'e, T, E> {
     pub(crate) const fn new(expected: &'e E) -> Self {
         Self {
             expected,
@@ -49,7 +49,7 @@ impl<'e, T, E: ?Sized> Contains<'e, T, E> {
     }
 }
 
-impl<T, E: ?Sized, I, R> Scan<I, R> for Contains<'_, T, E>
+impl<T, E: ?Sized, I, R> Scan<I, R> for ContainsScan<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -94,12 +94,12 @@ where
 }
 
 /// Requires every expected value to occur, stopping once all have been found.
-pub(crate) struct ContainsAll<'e, T, E> {
+pub(crate) struct ContainsAllScan<'e, T, E> {
     expected: &'e [E],
     item: PhantomData<fn() -> T>,
 }
 
-impl<'e, T, E> ContainsAll<'e, T, E> {
+impl<'e, T, E> ContainsAllScan<'e, T, E> {
     pub(crate) const fn new(expected: &'e [E]) -> Self {
         Self {
             expected,
@@ -108,7 +108,7 @@ impl<'e, T, E> ContainsAll<'e, T, E> {
     }
 }
 
-impl<T, E, I, R> Scan<I, R> for ContainsAll<'_, T, E>
+impl<T, E, I, R> Scan<I, R> for ContainsAllScan<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -178,13 +178,13 @@ where
 }
 
 /// Requires no element equal to a borrowed view, stopping at the first match.
-pub(crate) struct DoesNotContain<'e, T, E: ?Sized> {
+pub(crate) struct DoesNotContainScan<'e, T, E: ?Sized> {
     expected: &'e E,
     positions: PositionReporting,
     item: PhantomData<fn() -> T>,
 }
 
-impl<'e, T, E: ?Sized> DoesNotContain<'e, T, E> {
+impl<'e, T, E: ?Sized> DoesNotContainScan<'e, T, E> {
     pub(crate) const fn new(expected: &'e E, positions: PositionReporting) -> Self {
         Self {
             expected,
@@ -194,7 +194,7 @@ impl<'e, T, E: ?Sized> DoesNotContain<'e, T, E> {
     }
 }
 
-impl<T, E: ?Sized, I, R> Scan<I, R> for DoesNotContain<'_, T, E>
+impl<T, E: ?Sized, I, R> Scan<I, R> for DoesNotContainScan<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -239,13 +239,13 @@ where
 }
 
 /// Requires an element matching an expectation, stopping at the first match.
-pub(crate) struct ContainsMatching<T, P> {
+pub(crate) struct ContainsMatchingScan<T, P> {
     expected: P,
     positions: PositionReporting,
     item: PhantomData<fn() -> T>,
 }
 
-impl<T, P> ContainsMatching<T, P> {
+impl<T, P> ContainsMatchingScan<T, P> {
     pub(crate) const fn new(expected: P, positions: PositionReporting) -> Self {
         Self {
             expected,
@@ -255,7 +255,7 @@ impl<T, P> ContainsMatching<T, P> {
     }
 }
 
-impl<T, P, I, R> Scan<I, R> for ContainsMatching<T, P>
+impl<T, P, I, R> Scan<I, R> for ContainsMatchingScan<T, P>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -301,18 +301,18 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
         let failure = failure.relation("does not contain a matching element");
-        evidence.explain(consumed_fact(failure, context, consumed))
+        consumed_fact(failure, context.render(), consumed).evidence(evidence)
     }
 }
 
 /// Requires no element matching an expectation, stopping at the first match.
-pub(crate) struct DoesNotContainMatching<T, P> {
+pub(crate) struct DoesNotContainMatchingScan<T, P> {
     expected: P,
     positions: PositionReporting,
     item: PhantomData<fn() -> T>,
 }
 
-impl<T, P> DoesNotContainMatching<T, P> {
+impl<T, P> DoesNotContainMatchingScan<T, P> {
     pub(crate) const fn new(expected: P, positions: PositionReporting) -> Self {
         Self {
             expected,
@@ -322,7 +322,7 @@ impl<T, P> DoesNotContainMatching<T, P> {
     }
 }
 
-impl<T, P, I, R> Scan<I, R> for DoesNotContainMatching<T, P>
+impl<T, P, I, R> Scan<I, R> for DoesNotContainMatchingScan<T, P>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -364,7 +364,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
         let failure = failure.relation("contains an unexpected matching element");
-        evidence.explain(consumed_fact(failure, context, consumed))
+        consumed_fact(failure, context.render(), consumed).evidence(evidence)
     }
 }
 
@@ -404,7 +404,7 @@ mod tests {
             let missing = failures[0]
                 .facts
                 .iter()
-                .find(|fact| fact.label == "Elements not found")
+                .find(|fact| fact.label.as_deref() == Some("Elements not found"))
                 .unwrap();
             let RenderedBody::Group { items, omitted, .. } = &missing.value.body else {
                 panic!("missing values are a group")

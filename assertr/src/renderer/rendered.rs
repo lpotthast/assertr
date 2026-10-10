@@ -15,9 +15,10 @@ use super::{GroupStyle, omission};
 /// metadata stored in the tree. Leaves are never rendered again. [`Debug`] shows the tree's
 /// structure instead.
 ///
-/// Verbatim conversions from strings, formatting arguments, and primitive values bypass the
-/// renderer and budget. Use them only for structural text or caller-authored prose. Render
-/// assertion evidence through a [`RenderingContext`](super::RenderingContext) instead.
+/// Converting a string or [`format_args!`] output produces verbatim text that bypasses the
+/// renderer and budget. Use these conversions only for structural text or caller-authored prose.
+/// Numbers and other values have no conversion, so render assertion evidence through a
+/// [`RenderingContext`](super::RenderingContext) instead.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Rendered {
@@ -63,7 +64,7 @@ impl Rendered {
     ///
     /// The complete Rust type name remains attached when `show` is `false`.
     #[must_use]
-    pub fn show_type_hint(mut self, show: bool) -> Self {
+    pub fn with_type_hint(mut self, show: bool) -> Self {
         self.shows_type_hint = show;
         self
     }
@@ -158,20 +159,6 @@ impl From<Cow<'_, str>> for Rendered {
         Self::verbatim(text.into_owned())
     }
 }
-
-macro_rules! impl_verbatim_primitives {
-    ($($type:ty),+ $(,)?) => {$ (
-        impl From<$type> for Rendered {
-            fn from(value: $type) -> Self {
-                Self::verbatim(format!("{value}"))
-            }
-        }
-    )+ };
-}
-
-impl_verbatim_primitives!(
-    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64, bool, char,
-);
 
 /// A rendered tuple of two diagnostic values, such as the entry shown by `does_not_contain_entry`.
 impl<A: Into<Rendered>, B: Into<Rendered>> From<(A, B)> for Rendered {
@@ -336,14 +323,14 @@ mod tests {
         fn is_shown_in_short_form_for_typed_values() {
             let rendered =
                 Rendered::typed::<BTreeMap<String, i32>>(RenderedBody::Placeholder("<locked>"))
-                    .show_type_hint(true);
+                    .with_type_hint(true);
 
             assert_that!(rendered.to_string()).is_equal_to("BTreeMap <locked>");
         }
 
         #[test]
         fn is_skipped_without_a_type_name() {
-            let rendered = leaf("text").show_type_hint(true);
+            let rendered = leaf("text").with_type_hint(true);
 
             assert_that!(rendered.to_string()).is_equal_to("text");
             assert_that!(format!("{rendered:#}")).is_equal_to("text");

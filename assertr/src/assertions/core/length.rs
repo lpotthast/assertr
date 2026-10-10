@@ -11,7 +11,7 @@ fn with_type_hint<T: ?Sized, R: ValueRenderer<T>>(
     render: RenderingContext<'_, R>,
     value: &T,
 ) -> Rendered {
-    render.value(value).show_type_hint(true)
+    render.value(value).with_type_hint(true)
 }
 
 property_expectation! {
@@ -189,18 +189,12 @@ mod tests {
 
         #[test]
         fn passing_checks_render_nothing() {
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("success rendered")
-                }
-            }
             assert_that!([] as [i32; 0])
-                .with_renderer(NeverRender)
+                .with_renderer(crate::test_support::PanickingRenderer("success rendered"))
                 .is_empty()
                 .has_length(0);
             assert_that!([1, 2])
-                .with_renderer(NeverRender)
+                .with_renderer(crate::test_support::PanickingRenderer("success rendered"))
                 .is_not_empty()
                 .has_length(2);
         }
@@ -220,6 +214,17 @@ mod tests {
         fn succeeds_when_empty() {
             let arr: [i32; 0] = [];
             assert_that!(arr).is_empty();
+        }
+
+        #[test]
+        fn matchers_accept_unsized_subjects() {
+            use crate::matchers::{IsEmpty, IsNotEmpty, dereferenced};
+
+            assert_that!(String::new()).matches(dereferenced(IsEmpty));
+            assert_that!(vec![1]).matches(dereferenced(IsNotEmpty));
+            let failures =
+                assert_that!(String::from("text")).capture(|it| it.matches(dereferenced(IsEmpty)));
+            assert_that!(failures).has_length(1);
         }
 
         #[test]

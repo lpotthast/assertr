@@ -1,52 +1,97 @@
 use alloc::vec::Vec;
 
 use crate::{
-    assertions::collection::{Placement, StableOrder},
-    expectation::{AssertionContext, Evidence, Expectation, composite_items, context::unsatisfied},
+    assertions::{
+        collection::{Placement, StableOrder},
+        support::length_facts,
+    },
+    expectation::{
+        AssertionContext, Evidence, Expectation, MatcherList, composite_items, context::unsatisfied,
+    },
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
-    matchers::MatcherList,
 };
 
-/// A sequence constraint requiring stable element order.
+/// Matches a stable-order collection against a list of matchers, one matcher per position.
+///
+/// The constructor selects where the matchers must apply:
+///
+/// | Constructor | Passes when |
+/// |---|---|
+/// | [`elements_are`] or [`elements_are!`](crate::elements_are) | Every element matches the matcher at its position, and the lengths are equal. |
+/// | [`starts_with_elements`] | The leading elements match. |
+/// | [`ends_with_elements`] | The trailing elements match. |
+/// | [`contains_contiguous_elements`] | Some contiguous window of elements matches. |
+///
+/// The list is a [`MatcherList`]: an array, slice, or vector of one matcher type, or
+/// `matchers![..]` for matchers of different types. Rejections report each failing element at its
+/// index. The subject must implement [`StableOrder`]. Use
+/// [`elements_are_in_any_order`](crate::matchers::elements_are_in_any_order) when order does not
+/// matter.
+///
+/// ```
+/// use assertr::{
+///     matchers::{contains_contiguous_elements, ends_with_elements, eq, ge, starts_with_elements},
+///     prelude::*,
+/// };
+///
+/// let scores = [3, 18, 30, 7];
+/// assert_that!(scores)
+///     .matches(elements_are![eq(3), ge(10), ge(10), eq(7)])
+///     .matches(starts_with_elements([eq(3)]))
+///     .matches(ends_with_elements(matchers![ge(20), eq(7)]))
+///     .matches(contains_contiguous_elements([ge(10), ge(10)]));
+/// ```
 #[derive(Debug, Clone)]
 pub struct ElementsAre<L> {
     list: L,
-    position: Placement,
+    placement: Placement,
 }
 
-/// Matches exactly the listed constraints in positional order.
-pub fn elements_are<L>(list: L) -> ElementsAre<L> {
+/// Matches when every element matches the matcher at its position and the lengths are equal.
+///
+/// [`elements_are!`](crate::elements_are) builds the list for you. See [`ElementsAre`] for the
+/// other placements.
+#[must_use]
+pub const fn elements_are<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
-        position: Placement::Exact,
+        placement: Placement::Exact,
     }
 }
 
-/// Matches the initial positions.
-pub fn starts_with_elements<L>(list: L) -> ElementsAre<L> {
+/// Matches when the leading elements match the listed matchers, in order.
+///
+/// Extra trailing elements are allowed. A shorter subject reports its length and the matchers
+/// without an element.
+#[must_use]
+pub const fn starts_with_elements<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
-        position: Placement::Prefix,
+        placement: Placement::Prefix,
     }
 }
 
-/// Matches the final positions. Constraints align with the subject's end, so a shorter subject
-/// reports the leading constraints as missing.
-pub fn ends_with_elements<L>(list: L) -> ElementsAre<L> {
+/// Matches when the trailing elements match the listed matchers, in order.
+///
+/// Matchers align with the subject's end, so a shorter subject reports the leading matchers as
+/// missing.
+#[must_use]
+pub const fn ends_with_elements<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
-        position: Placement::Suffix,
+        placement: Placement::Suffix,
     }
 }
 
-/// Matches a contiguous window.
+/// Matches when some contiguous window of elements matches the listed matchers, in order.
 ///
 /// A rejection retains one group per rejected candidate window. Each group carries a `Window start`
 /// fact with the window's zero-based starting index.
-pub fn contains_contiguous_elements<L>(list: L) -> ElementsAre<L> {
+#[must_use]
+pub const fn contains_contiguous_elements<L>(list: L) -> ElementsAre<L> {
     ElementsAre {
         list,
-        position: Placement::Contiguous,
+        placement: Placement::Contiguous,
     }
 }
 
@@ -61,26 +106,24 @@ where
         let expected_length = self.list.len();
         let mut elements = actual.elements();
         // Only contiguous searches revisit elements across multiple candidate windows.
-        let buffered = if matches!(self.position, Placement::Contiguous) {
+        let buffered = if self.placement == Placement::Contiguous {
             elements.by_ref().collect::<Vec<_>>()
         } else {
             Vec::new()
         };
         // A suffix aligns from the right. Leading slots of a longer suffix precede the subject.
-        let unaligned = if matches!(self.position, Placement::Suffix) {
+        let unaligned = if self.placement == Placement::Suffix {
             expected_length.saturating_sub(actual_length)
         } else {
             0
         };
-        let starts = match self.position {
-            Placement::Exact | Placement::Prefix => 0..1,
-            Placement::Suffix => {
-                actual_length.saturating_sub(expected_length)
-                    ..actual_length.saturating_sub(expected_length) + 1
-            }
-            Placement::Contiguous => 0..actual_length.saturating_sub(expected_length) + 1,
+        let last_start = actual_length.saturating_sub(expected_length);
+        let starts = match self.placement {
+            Placement::Exact | Placement::Prefix => 0..=0,
+            Placement::Suffix => last_start..=last_start,
+            Placement::Contiguous => 0..=last_start,
         };
-        let length_matches = if matches!(self.position, Placement::Exact) {
+        let length_matches = if self.placement == Placement::Exact {
             actual_length == expected_length
         } else {
             actual_length >= expected_length
@@ -96,7 +139,7 @@ where
                     continue;
                 }
                 let position = start + index - unaligned;
-                let item = if matches!(self.position, Placement::Contiguous) {
+                let item = if self.placement == Placement::Contiguous {
                     buffered.get(position).copied()
                 } else {
                     window_elements.next()
@@ -114,13 +157,10 @@ where
                 window.record(|window| {
                     FailureBuilder::new::<C>(FailureKind::Matching)
                         .relation("does not have the required sequence")
-                        .fact(Fact::labelled(
-                            "Actual length",
-                            window.render().value(&actual_length),
-                        ))
-                        .fact(Fact::labelled(
-                            "Expected length",
-                            window.render().value(&expected_length),
+                        .facts(length_facts(
+                            window.render(),
+                            actual_length,
+                            expected_length,
                         ))
                         .build()
                 });
@@ -129,19 +169,17 @@ where
                 return Ok(());
             }
             let evidence = window.into_evidence();
-            if matches!(self.position, Placement::Contiguous) {
+            if self.placement == Placement::Contiguous {
                 // Each rejected window stays one group, so its evidence does not interleave with
                 // the evidence of overlapping windows.
                 alternatives.record(|alternatives| {
-                    evidence
-                        .explain(
-                            FailureBuilder::new::<C>(FailureKind::Matching)
-                                .relation("does not match in this window")
-                                .fact(Fact::labelled(
-                                    "Window start",
-                                    alternatives.render().value(&start),
-                                )),
-                        )
+                    FailureBuilder::new::<C>(FailureKind::Matching)
+                        .relation("does not match in this window")
+                        .fact(Fact::labelled(
+                            "Window start",
+                            alternatives.render().value(&start),
+                        ))
+                        .evidence(evidence)
                         .build()
                 });
             } else {
@@ -161,24 +199,33 @@ where
         match rejected {
             None => context.describe_list::<C::Item, _>(
                 &self.list,
-                failure.relation(match self.position {
+                failure.relation(match self.placement {
                     Placement::Exact => "has exactly these elements in order",
                     Placement::Prefix => "starts with these elements",
                     Placement::Suffix => "ends with these elements",
                     Placement::Contiguous => "contains these elements contiguously",
                 }),
             ),
-            Some((_, evidence)) => evidence.explain(failure.relation(match self.position {
-                Placement::Contiguous => "does not contain these elements contiguously",
-                Placement::Exact | Placement::Prefix | Placement::Suffix => "does not match",
-            })),
+            Some((_, evidence)) => failure
+                .relation(match self.placement {
+                    Placement::Contiguous => "does not contain these elements contiguously",
+                    Placement::Exact | Placement::Prefix | Placement::Suffix => "does not match",
+                })
+                .evidence(evidence),
         }
     }
 }
 
-/// Exact positional matcher list with explicit expectations.
+/// Builds an exact positional [`ElementsAre`] matcher from matchers of any types.
 ///
-/// Use [`eq`](crate::matchers::eq) or [`eq`](crate::matchers::eq) for equality.
+/// `elements_are![a, b]` is short for `elements_are(matchers![a, b])`. Each argument is a matcher.
+/// Use [`eq`](crate::matchers::eq) for equality.
+///
+/// ```
+/// use assertr::{matchers::{eq, ge}, prelude::*};
+///
+/// assert_that!([18, 30]).matches(elements_are![eq(18), ge(20)]);
+/// ```
 #[macro_export]
 macro_rules! elements_are {
     ($($value:expr),* $(,)?) => {
@@ -238,7 +285,7 @@ mod tests {
             {
                 let matcher = ElementsAre {
                     list: expected.iter().copied().map(eq).collect::<Vec<_>>(),
-                    position: placement,
+                    placement,
                 };
                 let failures = assert_that!(actual).capture(|it| it.matches(matcher));
                 assert_that!(failures.is_empty()).is_equal_to(accepted);
@@ -253,27 +300,10 @@ mod tests {
             .with_location(false)
             .capture(|it| it.matches(ends_with_elements([eq(1), eq(2), eq(3)])));
         assert_that!(failures).has_length(1);
-        assert_that!(failures[0]).has_text_report(indoc::indoc! {r"
-            -------- assertr --------
-            Expression: `[2, 3]`
-
-            does not match
-
-            Nested failures:
-              - does not satisfy the constraint
-
-                Constraint:
-                    is equal to
-
-                    Expected: 1
-
-              - does not have the required sequence
-
-                Details:
-                  - Actual length: 2
-                  - Expected length: 3
-            -------- assertr --------
-        "});
+        // The aligned elements match, so only the unaligned leading matcher and the length are
+        // reported. The next test pins the full report of this shape.
+        assert_that!(failures[0].children).has_length(2);
+        assert_that!(failures[0].children[0].path).is_empty();
     }
 
     #[test]
@@ -399,7 +429,7 @@ mod tests {
                 assert_that!(comparisons.get()).is_equal_to(20);
                 // Only the first window is retained. It renders its start, actual, and expected.
                 assert_that!(renders.get()).is_equal_to(3);
-                assert_that!(failures.len()).is_equal_to(usize::from(!later_success));
+                assert_that!(&failures).has_length(usize::from(!later_success));
                 if !later_success {
                     assert_that!(failures[0].children).has_length(1);
                     let window = &failures[0].children[0];
@@ -484,7 +514,7 @@ mod tests {
                 .capture(|it| it.matches(all_of(matchers![elements_are![eq(1)]])));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
+                    element.has_text_report(formatdoc! {r"
             -------- assertr --------
             Expression: `[1, 2]`
 
@@ -520,20 +550,19 @@ mod tests {
         #[test]
         fn a_zero_item_budget_preserves_length_failure_without_rendering_evidence() {
             use indoc::formatdoc;
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    panic!("rendered omitted evidence")
-                }
-            }
             let failures = assert_that!([1, 2])
-                .with_renderer(NeverRender)
+                .with_renderer(crate::test_support::PanickingRenderer(
+                    "rendered omitted evidence",
+                ))
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(0))
                 .capture(|it| it.matches(elements_are![]));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
+                    element
+                        .derive(|value| &value.omitted_children)
+                        .is_equal_to(1);
+                    element.has_text_report(formatdoc! {r"
         -------- assertr --------
         Expression: `[1, 2]`
 
@@ -543,9 +572,6 @@ mod tests {
           - ... 1 more nested failure ...
         -------- assertr --------
     "});
-                    element
-                        .derive(|value| &value.omitted_children)
-                        .is_equal_to(1);
                 },
             ]);
         }
@@ -556,13 +582,10 @@ mod tests {
         use crate::expectation::AssertionContext;
         #[test]
         fn length_mismatches_do_not_render_numeric_evidence() {
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    panic!("probe rendered evidence")
-                }
-            }
-            let context = AssertionContext::new(&NeverRender, RenderingBudget::default());
+            let context = AssertionContext::new(
+                &crate::test_support::PanickingRenderer("probe rendered evidence"),
+                RenderingBudget::default(),
+            );
             assert_that!(context.probe(&[1, 2], &elements_are![])).is_false();
             assert_that!(context.into_evidence().children).is_empty();
         }

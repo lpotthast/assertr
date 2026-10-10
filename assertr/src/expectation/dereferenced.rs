@@ -11,7 +11,8 @@ pub struct Dereferenced<M>(M);
 
 /// Adapts a matcher for subjects implementing [`Deref`], such as references, boxes, reference
 /// counted pointers, or `String`, including reference-valued fields and iterator items.
-pub fn dereferenced<M>(matcher: M) -> Dereferenced<M> {
+#[must_use]
+pub const fn dereferenced<M>(matcher: M) -> Dereferenced<M> {
     Dereferenced(matcher)
 }
 

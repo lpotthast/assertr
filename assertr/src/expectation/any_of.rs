@@ -13,7 +13,8 @@ use crate::{
 pub struct AnyOf<L>(L);
 
 /// Stops at the first matching branch. An empty disjunction fails.
-pub fn any_of<L>(matchers: L) -> AnyOf<L> {
+#[must_use]
+pub const fn any_of<L>(matchers: L) -> AnyOf<L> {
     AnyOf(matchers)
 }
 
@@ -22,24 +23,15 @@ where
     L: MatcherList<A, R>,
     R: crate::renderer::ValueRenderer<usize>,
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        A: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        A: 'a;
+    evidence_items!(A);
     fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+        let render = settings.render();
         let mut context = settings.isolated();
         for index in 0..self.0.len() {
             let mut branch = context.isolated();
             if self.0.evaluate_at(index, actual, &mut branch) {
                 return Ok(());
             }
-            let render = branch.render();
             let mut evidence = branch.into_evidence();
             for failure in &mut evidence.children {
                 failure
@@ -62,9 +54,9 @@ where
             None => {
                 context.describe_list::<A, _>(&self.0, failure.relation("satisfies any constraint"))
             }
-            Some((_, evidence)) => {
-                evidence.explain(failure.relation("does not match any alternative"))
-            }
+            Some((_, evidence)) => failure
+                .relation("does not match any alternative")
+                .evidence(evidence),
         }
     }
 }

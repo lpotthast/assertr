@@ -2,7 +2,7 @@ use alloc::borrow::Cow;
 use core::fmt;
 
 use crate::{
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, passed},
     failure::{FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };
@@ -47,7 +47,8 @@ impl<F> fmt::Debug for Predicate<F> {
 /// let failures = assert_that!(3).with_location(false).capture(|it| it.matches(is_even()));
 /// assert_that!(failures[0].to_string()).contains("Actual: 3\n\nis odd");
 /// ```
-pub fn predicate<A: ?Sized, F>(callback: F) -> Predicate<F>
+#[must_use]
+pub const fn predicate<A: ?Sized, F>(callback: F) -> Predicate<F>
 where
     F: Fn(&A) -> bool,
 {
@@ -93,11 +94,7 @@ where
         Self: 'a,
         A: 'a;
     fn evaluate(&self, actual: &A, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if (self.callback)(actual) {
-            Ok(())
-        } else {
-            Err(())
-        }
+        passed((self.callback)(actual))
     }
 
     const KIND: FailureKind = FailureKind::Matching;
@@ -107,15 +104,15 @@ where
         failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
-        match (rejected, &self.rejection) {
-            (None, _) => failure.relation(self.description.clone()),
-            (Some((actual, ())), Some(rejection)) => failure
-                .actual(context.render().value(actual))
-                .relation(rejection.clone()),
-            (Some((actual, ())), None) => failure
-                .actual(context.render().value(actual))
+        let Some((actual, ())) = rejected else {
+            return failure.relation(self.description.clone());
+        };
+        let failure = failure.actual(context.render().value(actual));
+        match &self.rejection {
+            Some(rejection) => failure.relation(rejection.clone()),
+            None => failure
                 .relation("does not satisfy the constraint")
-                .constraint(context.describe(&self)),
+                .constraint(context.describe::<A, _>(self)),
         }
     }
 }

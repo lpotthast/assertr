@@ -13,21 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Reusable expectations. An `Expectation` evaluates a subject once and explains a rejection or describes an unmet
   expectation through the structured failure builder. Apply one to a chain with `matches` (fluent alias
-  `match_expectation`), or with `test_assertion`, which also returns the successful observation. Every
+  `match_expectation`), with `test_assertion`, which also returns the successful observation, or in panic mode with
+  `require`, which returns the successful observation without an `Option`. Every
   built-in assertion family is backed by public expectations that compose the same way as custom definitions.
 - The `matchers` catalog re-exports every public expectation, with common checks at its root and subject namespaces for
-  family-specific names. Combine them with `all_of`, `any_of`, `anything`, `predicate`, `predicate_list`, `satisfying`
+  family-specific names. Combine them with `all_of`, `any_of`, `anything`, `predicate`, `satisfying`
   (assertion callbacks), `dereferenced` (any `Deref` subject), `each`, `elements_are!`, `elements_are_in_any_order!`,
   `entries_are!`, `matchers!` (heterogeneous matcher lists), and `pattern!`. Use `eq`, `lt`,
-  `gt`, `le`, and `ge` for comparisons. Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a
+  `gt`, `le`, and `ge` for comparisons, and `close_to` for tolerances. Ordering matchers reject incomparable values. `DoesNotMatchPattern` matches a
   pattern negatively. Matcher lists and keyed value expectations require explicit matchers. `matchers![..]` builds
   heterogeneous lists, including keyed `matchers![entry(..), ..]` lists. Arrays, slices, and vectors hold one matcher
-  type. Passing a plain value where a matcher is expected produces a compile error that suggests `eq(value)`. All of
-  this works without optional features or `std`.
+  type, such as `[is_one, is_two].map(predicate)`. The sealed list traits `MatcherList` and `EntryMatcherList` live in
+  `assertr::expectation`. Passing a plain value where a matcher is expected produces a compile error that suggests `eq(value)`.
+  Collection matcher constructors such as `each`, `elements_are`, and `contains_matching` are `const` and warn when
+  their result is unused. All of this works without optional features or `std`.
 - Domain checks need no trait implementation: `predicate(..).described_as(..).rejected_as(..)` names a boolean check
   and its rejection, and `matchers::field` applies a matcher to one field and reports evidence at that field. Return
   them from a function as `impl Expectation`. Full implementations can keep the default `Expectation::KIND`
-  (`FailureKind::Predicate`) and explain the common case with `FailureBuilder::relations`.
+  (`FailureKind::Predicate`) and explain the common case with `FailureBuilder::relations`. Combining expectations run
+  children through `AssertionContext`, attach the collected `Evidence` with `FailureBuilder::evidence`, and describe a
+  child that has no subject with `AssertionContext::describe`.
 - `partial!` matches selected struct or enum fields without derives or attributes on domain types and renders only the
   selected leaves. Each selected field requires an explicit matcher, such as `eq(value)` or a nested `partial!`.
   Qualified constructor paths work with the optional `variant` prefix. It also works through facade crates that
@@ -42,8 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Box<dyn Any + Send>` and `Box<dyn Any + Send + Sync>` support `is_of_type`, `has_type`, and `has_type_ref`, for
   example on payloads from `catch_unwind` or `JoinHandle::join`. Box and panic-payload `is_of_type` checks preserve
   the subject and work in panic and capture mode.
+- `has_message` continues with the message of a panic payload, whether `panic!` raised a `&str` or a `String`, so a
+  message check no longer depends on how the panic was formatted: `assert_that!(|| ..).panics().has_message()`. It
+  works on `PanicValue` and boxed `dyn Any` payloads, and `matchers::HasPanicMessage` performs the same check in any
+  mode.
+- `RefCellAssertions::is_not_borrowed` and `matchers::cell::IsNotBorrowed` check that a cell has no active borrow.
 - `is_close_to` supports `core::num::Wrapping`. The `NumericDistance` documentation explains how to check foreign
   numeric types.
+- `HasLength` supports `u128`, `i128`, and `isize` ranges.
 - `RenderingBudget` limits diagnostics to 256 items per group and 4,096 characters per rendered leaf by default.
   Configure it with `with_max_items` and `with_max_leaf_characters`, apply it with `with_rendering_budget`, or disable
   both limits with `RenderingBudget::unlimited()`. Reports state how many items or nested failures were omitted.
@@ -73,17 +84,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `is_one_of(candidates)` and the `matchers::one_of` matcher (`IsOneOf`) check that the subject equals one of a
   runtime list of values, borrowed like `is_equal_to`'s operand.
 - `AssertionFailure` and `AssertionFailures` implement `core::error::Error` with readable `Display` and `Debug` reports.
-  `Fact` and `renderer::Rendered` expose their diagnostic data as public fields.
+  `Fact` and `renderer::Rendered` expose their diagnostic data as public fields. A fact's `label` is `None` for a note
+  created with `Fact::note`.
 - `RenderingContext` renders values, collections, maps, synthetic value and key/value lists, and one-field variants and
   structs, including inaccessible fields, into owned `Rendered` trees through the active leaf renderer and budget.
   Rendered values retain Rust type metadata. `compact()` renders leaves for inline use, and synthetic evidence selects
-  its ordering through `RenderingOrder`.
+  its ordering through `RenderingOrder`. Only strings and `format_args!` convert into `Rendered` directly, as verbatim
+  text for labels and prose, so numbers and other values always pass through the active renderer and budget.
 - docs.rs shows the features required by feature-gated items.
 - Public expectation types implement `Debug` and `Clone`, bounded on their operands and nested matchers, and `Copy`
   when they hold no data, only concrete copyable data, or only borrowed targets. Callback definitions such as
   `Predicate`, `Satisfying`, and `Pattern` are `Clone` when their callback is and omit it from `Debug`. Identity
   definitions show addresses. Rejection types such as `MissingElementsRejection` and `EntryRejection` implement
-  `Debug`.
+  `Debug`, as do `AssertionContext`, `RenderingContext`, and `CustomRenderer`. Generic property expectations such as
+  `IsEmpty`, `IsNotEmpty`, and `IsZero` accept unsized subjects where their bound allows, for example
+  `dereferenced(IsEmpty)` on a `String`.
 - `#[fluent_expressions(crate = <path>)]` names a re-exported runtime, so expression capture works in crates that
   reach `assertr` only through a facade crate:
   `#[my_facade::assertr::fluent_expressions(crate = ::my_facade::assertr)]`. Without the argument, the attribute still
@@ -93,6 +108,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `assert_that!` owns closure literals and `async` blocks, so `assert_that!(|| ..).panics()` and
   `assert_that!(async || ..).panics_async()` work without `assert_that_owned!`. Other expressions are still borrowed.
+- **Breaking:** Renamed the fluent entry traits `IntoAssertContext` and `IntoOwnedAssertContext` to `FluentEntry` and
+  `OwnedFluentEntry`. Code using the prelude and method syntax is unaffected.
+- **Breaking:** Renamed `Type::get_type_name` to `Type::type_name`.
+- **Breaking:** Renamed `is_blank_ascii` and its fluent alias `be_blank_ascii` to `is_ascii_blank` and `be_ascii_blank`,
+  matching the `is_ascii_*` character assertions.
 - **Breaking:** Removed `AssertrCondition`, `ConditionAssertions`, `IterableConditionAssertions`, and their `is`,
   `has`, `are`, `have`, and fluent `be` methods. Use `matches` with a matcher or `predicate`.
 - **Breaking:** Equality, ordering, and collection, iterator, and map value comparisons use standard `PartialEq` and
@@ -130,7 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   reports compile errors for names that are not string literals or identifiers, keyword names become raw identifiers,
   and generated aliases link to their original method instead of repeating its documentation.
 - **Breaking:** Collection, iterator, and map `*_matching` methods and fluent aliases accept matchers instead of bare
-  predicates. Wrap closures with `matchers::predicate`, predicate arrays with `matchers::predicate_list`, and keyed
+  predicates. Wrap closures with `matchers::predicate`, predicate arrays with `[..].map(matchers::predicate)`, and keyed
   matcher lists with `[entry(..)]`, `matchers![entry(..), ..]`, or `matchers::entry_matchers`. Predicate rejections
   render the rejected subject, so their diagnostics require a renderer for it.
 - **Breaking:** `StableOrder` and `StableOrderAssertions` replace `Sequence` and `SequenceAssertions` and own positional
@@ -149,9 +169,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** `HasLength` covers `str` and `[T]` directly and forwards through blanket `&T` and `&mut T`
   implementations. Downstream types implementing it for both a value and its references must remove their reference
   implementations. Length and element assertions on `HashSet` and `HashMap` no longer require `S: BuildHasher`.
+- **Breaking:** `HasLength` is no longer part of the prelude, like the other capability traits, so its `length()` no
+  longer appears on standard types in test code. Import `assertr::assertions::HasLength` to implement it. Its
+  redundant `is_not_empty` method is removed. Use `!value.is_empty()`, or the `is_not_empty` assertion.
 - **Breaking:** Assertion traits share one generic shape: subject parameters, then the mode where a signature needs it,
-  then a renderer `R` defaulting to `DebugRenderer`. Unused lifetimes are gone. This changes `OptionAssertions<T, M,
-  R>`, `ResultAssertions<T, E, M, R>`, `PollAssertions<T, M, R>`, `BoxAssertions<R>`, `HttpHeaderValueAssertions<M, R>`,
+  then a renderer `R` defaulting to `DebugRenderer`. Unused lifetimes and parameters are gone. This changes
+  `OptionAssertions<T, M, R>`, `ResultAssertions<T, E, M, R>`, `PollAssertions<T, M, R>`, `BoxAssertions` (no
+  parameters), `RangeBoundAssertions<B, R>` (no `Range` parameter), `HttpHeaderValueAssertions<M, R>`,
   `RootcauseDynamicReportAssertions<M, R>`, and `ProgramAssertions<'a, R>`. `NumAssertions<T, R>`, `StrAssertions<R>`,
   `LengthAssertions<T, R>`, and `PathAssertions<P, R>` replace their associated `Subject` and `Renderer` types with
   parameters. Generic bounds naming these traits must be updated, for example to `NumAssertions<T, MyRenderer>`. String
@@ -269,6 +293,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `into_iter_is_empty` respectively.
 - **Breaking:** Removed `Actual::map`. Match on the `Actual` variants instead.
 - **Breaking:** Removed `AssertThat::and()`, which returned the chain unchanged. Chain the next assertion directly.
+- **Breaking:** Removed `is_additive_identity` and `is_multiplicative_identity` and their fluent aliases. Use
+  `is_zero` and `is_one`.
+- **Breaking:** Removed the public `Mode::CAPTURES` constant. `Mode` remains a sealed marker trait for `Panic` and
+  `Capture`.
 - **Breaking:** Every public item has one path. Assertion and capability traits live directly in `assertr::assertions`,
   for example `assertr::assertions::PartialEqAssertions` and `assertr::assertions::Collection`. The family modules
   such as `assertions::core` and `assertions::std`, and their `prelude` modules, are private. Expectation types and

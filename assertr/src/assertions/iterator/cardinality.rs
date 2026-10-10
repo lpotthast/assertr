@@ -1,19 +1,19 @@
 use super::{
     AssertionContext, Borrow, FailureBuilder, FailureKind, KnownLength, LengthBound,
-    PREVIEW_CAPACITY, PhantomData, RenderingOrder, Scan, Tail, ValueRenderer,
+    PREVIEW_CAPACITY, PhantomData, RenderingOrder, Scan, Tail, ValueRenderer, consumed_fact,
 };
 use crate::failure::Fact;
 
 /// Requires an iterator to yield no element, consuming at most one.
-pub(crate) struct IsEmpty<T>(PhantomData<fn() -> T>);
+pub(crate) struct IsEmptyScan<T>(PhantomData<fn() -> T>);
 
-impl<T> IsEmpty<T> {
+impl<T> IsEmptyScan<T> {
     pub(crate) const fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<T, I, R> Scan<I, R> for IsEmpty<T>
+impl<T, I, R> Scan<I, R> for IsEmptyScan<T>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -40,26 +40,26 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
         let render = context.render();
-        failure
+        let failure = failure
             .actual(render.borrowed_values::<T, _>(
                 core::slice::from_ref(&item),
                 RenderingOrder::PreserveIteration,
             ))
-            .relation("is not empty")
-            .fact(Fact::labelled("Consumed elements", render.value(&1_usize)))
+            .relation("is not empty");
+        consumed_fact(failure, render, 1)
     }
 }
 
 /// Requires an iterator to yield at least one element, consuming at most one.
-pub(crate) struct IsNotEmpty<T>(PhantomData<fn() -> T>);
+pub(crate) struct IsNotEmptyScan<T>(PhantomData<fn() -> T>);
 
-impl<T> IsNotEmpty<T> {
+impl<T> IsNotEmptyScan<T> {
     pub(crate) const fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<T, I, R> Scan<I, R> for IsNotEmpty<T>
+impl<T, I, R> Scan<I, R> for IsNotEmptyScan<T>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -271,7 +271,7 @@ mod tests {
             let failures = length([1, 2].into_iter(), 3, RenderingBudget::default());
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
+                    let element = element.has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `()`
 
@@ -299,7 +299,7 @@ mod tests {
             );
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
+                    let element = element.has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `()`
 
@@ -323,8 +323,6 @@ mod tests {
         }
         #[test]
         fn limits_evidence_without_changing_consumption() {
-            use indoc::formatdoc;
-
             let mut iterator = [1, 2, 3].into_iter().filter(|_| true);
             let failures = length(
                 &mut iterator,
@@ -333,7 +331,7 @@ mod tests {
             );
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
+                    element.has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `()`
 
@@ -357,7 +355,7 @@ mod tests {
             let fact = failures[0]
                 .facts
                 .iter()
-                .find(|fact| fact.label == "Minimum actual length")
+                .find(|fact| fact.label.as_deref() == Some("Minimum actual length"))
                 .unwrap();
             assert_that!(fact.value.type_name).is_equal_to(Some("usize"));
             assert_that!(fact.value.body).is_equal_to(RenderedBody::Text {
@@ -415,7 +413,7 @@ mod tests {
             );
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
+                    element.has_text_report(formatdoc! {r"
                 -------- assertr --------
                 Expression: `()`
 

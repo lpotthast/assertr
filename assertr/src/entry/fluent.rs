@@ -5,7 +5,7 @@ use crate::{
     mode::{Capture, Panic},
 };
 
-/// Fluent entry points into an assertion context, available on every value with the `fluent`
+/// Fluent entry points into an assertion chain, available on every value with the `fluent`
 /// feature.
 ///
 /// `must()` and `verify()` borrow the value, `must_owned()` and `verify_owned()` take ownership.
@@ -13,7 +13,7 @@ use crate::{
 /// one unambiguous meaning. The shorter names borrow and keep the value usable. Ownership is
 /// required only by consuming assertions such as `panics()`.
 ///
-/// `IntoAssertContext` is implemented for `&T` and `&mut T`. Method-call autoref makes it available
+/// `FluentEntry` is implemented for `&T` and `&mut T`. Method-call autoref makes it available
 /// as `value.must()` for an owned binding, while a receiver that is already a shared or mutable
 /// reference borrows its pointee directly. All three forms therefore produce `AssertThat<T>` for a
 /// sized `T`. In particular, `reference.must()` works for `reference: &mut T` without writing
@@ -25,7 +25,7 @@ use crate::{
 /// produces `AssertThat<&str>`. Their slice, collection, string, and length assertions remain
 /// available.
 ///
-/// Ownership-taking calls use the separate [`IntoOwnedAssertContext`] trait and preserve the exact
+/// Ownership-taking calls use the separate [`OwnedFluentEntry`] trait and preserve the exact
 /// receiver expression. `(&value).must_owned()` owns the `&T` and produces `AssertThat<&T>`. It
 /// cannot take ownership of `value`.
 ///
@@ -76,8 +76,7 @@ use crate::{
 ///
 /// This trait is re-exported by [`crate::prelude`]. Import the prelude and use method syntax rather
 /// than implementing this trait downstream.
-#[cfg(feature = "fluent")]
-pub trait IntoAssertContext<'t> {
+pub trait FluentEntry<'t> {
     /// The subject type assertion methods are resolved against.
     type Subject: 't;
 
@@ -96,11 +95,10 @@ pub trait IntoAssertContext<'t> {
         F: FnOnce(AssertThat<'t, Self::Subject, Capture>) -> AssertThat<'t, U, Capture, R2>;
 }
 
-/// Implements [`IntoAssertContext`] for one receiver shape, given its conversion into the subject.
-#[cfg(feature = "fluent")]
-macro_rules! into_assert_context {
+/// Implements [`FluentEntry`] for one receiver shape, given its conversion into the subject.
+macro_rules! fluent_entry {
     ([$($generics:tt)*] $receiver:ty => $subject:ty, |$this:ident| $actual:expr) => {
-        impl<$($generics)*> IntoAssertContext<'t> for $receiver {
+        impl<$($generics)*> FluentEntry<'t> for $receiver {
             type Subject = $subject;
 
             fn must(self) -> AssertThat<'t, $subject, Panic> {
@@ -122,34 +120,30 @@ macro_rules! into_assert_context {
     };
 }
 
-#[cfg(feature = "fluent")]
-into_assert_context!(['t, T: 't] &'t T => T, |this| Actual::Borrowed(this));
-#[cfg(feature = "fluent")]
-into_assert_context!(['t, T: 't] &'t mut T => T, |this| Actual::Borrowed(this));
-#[cfg(feature = "fluent")]
-into_assert_context!(['t, T: 't] &'t mut [T] => &'t [T], |this| Actual::Owned(this));
-#[cfg(feature = "fluent")]
-into_assert_context!(['t] &'t mut str => &'t str, |this| Actual::Owned(this));
+fluent_entry!(['t, T: 't] &'t T => T, |this| Actual::Borrowed(this));
+fluent_entry!(['t, T: 't] &'t mut T => T, |this| Actual::Borrowed(this));
+fluent_entry!(['t, T: 't] &'t mut [T] => &'t [T], |this| Actual::Owned(this));
+fluent_entry!(['t] &'t mut str => &'t str, |this| Actual::Owned(this));
 
 /// Fluent entry points that preserve ownership of their receiver.
 ///
-/// This trait is re-exported by [`crate::prelude`]. It is separate from [`IntoAssertContext`] so
+/// This trait is re-exported by [`crate::prelude`]. It is separate from [`FluentEntry`] so
 /// `must()` and `verify()` can consistently borrow reference pointees, while `must_owned()` and
 /// `verify_owned()` keep the exact type passed by the caller. Import the prelude and use method
 /// syntax rather than implementing this trait downstream.
-#[cfg(feature = "fluent")]
-pub trait IntoOwnedAssertContext<'t>: Sized {
+pub trait OwnedFluentEntry<'t>: Sized {
     /// Takes ownership of the value and starts a panic-mode assertion.
     ///
-    /// Use this when an assertion consumes its subject. Prefer [`IntoAssertContext::must`] when
+    /// Use this when an assertion consumes its subject. Prefer [`FluentEntry::must`] when
     /// ownership is not required.
     #[must_use]
     fn must_owned(self) -> AssertThat<'t, Self, Panic>;
 
     /// Takes ownership of the value and runs the given assertions in capture mode.
     ///
-    /// Use this when an assertion consumes its subject. Prefer [`IntoAssertContext::verify`] when
+    /// Use this when an assertion consumes its subject. Prefer [`FluentEntry::verify`] when
     /// ownership is not required.
+    #[track_caller]
     #[must_use = "The captured failures must be inspected. Use `must_owned()` to panic on failure instead."]
     fn verify_owned<F, U: 't, R2>(self, assertions: F) -> AssertionFailures
     where
@@ -157,8 +151,7 @@ pub trait IntoOwnedAssertContext<'t>: Sized {
         F: FnOnce(AssertThat<'t, Self, Capture>) -> AssertThat<'t, U, Capture, R2>;
 }
 
-#[cfg(feature = "fluent")]
-impl<'t, T: 't> IntoOwnedAssertContext<'t> for T {
+impl<'t, T: 't> OwnedFluentEntry<'t> for T {
     fn must_owned(self) -> AssertThat<'t, T, Panic> {
         AssertThat::new(Actual::Owned(self))
     }
@@ -176,7 +169,6 @@ impl<'t, T: 't> IntoOwnedAssertContext<'t> for T {
 mod tests {
     use crate::prelude::*;
 
-    #[cfg(feature = "fluent")]
     mod fluent_entry_points {
         use super::*;
 

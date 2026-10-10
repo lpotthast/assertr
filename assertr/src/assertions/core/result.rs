@@ -28,10 +28,7 @@ impl<T, E, R: ValueRenderer<E>> Expectation<Result<T, E>, R> for IsOk {
         actual: &'a Result<T, E>,
         _: &AssertionContext<'_, R>,
     ) -> Result<&'a T, &'a E> {
-        match actual {
-            Ok(value) => Ok(value),
-            Err(value) => Err(value),
-        }
+        actual.as_ref()
     }
 
     const KIND: FailureKind = FailureKind::Variant;
@@ -215,7 +212,7 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
 
 #[cfg(test)]
 mod tests {
-    use crate::{failure::FailureKind, prelude::*};
+    use crate::{failure::FailureKind, prelude::*, test_support::rejected_kind};
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
@@ -367,13 +364,6 @@ mod tests {
         }
     }
 
-    fn rejected_kind(extract: impl FnOnce()) {
-        assert_that_owned!(extract)
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(format!("{:?}", FailureKind::Variant));
-    }
-
     mod get_ok {
         use super::*;
 
@@ -394,7 +384,7 @@ mod tests {
 
         #[test]
         fn rejects_errors_like_is_ok() {
-            rejected_kind(|| {
+            rejected_kind(FailureKind::Variant, || {
                 let _ = assert_that!(Result::<i32, i32>::Err(1))
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_ok();
@@ -421,7 +411,7 @@ mod tests {
 
         #[test]
         fn rejects_values_like_is_err() {
-            rejected_kind(|| {
+            rejected_kind(FailureKind::Variant, || {
                 let _ = assert_that!(Result::<i32, i32>::Ok(1))
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_err();

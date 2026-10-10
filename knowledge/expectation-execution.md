@@ -57,6 +57,7 @@ The executor constructs `AssertionContext` from the chain's renderer, budget, an
 |---|---|
 | `matches` | Track and evaluate once. On failure, explain and raise the rejection. On success, drop the success value. Return the original chain. `matches` delegates without another count or failure wrapper. |
 | `test_assertion` | Run the same steps, but return `Some(success)` on success. Raise a rejection and return `None` in capture mode. The caller decides how long to retain the success value. |
+| `require` | Panic mode only. Run the same steps and return the success value directly, because a rejection panics. |
 | Private methods used after tracking | Accept an adapter's observation and caller location, or `FnOnce` hooks for observation and explanation. Handle the failure without tracking again. |
 
 Chain methods preserve `#[track_caller]`. A method that only delegates to a tracked assertion must not track again.
@@ -93,12 +94,14 @@ It borrows rendering settings and stores child failures, with paths relative to 
 | `evaluate` | Evaluate the check and immediately explain a rejection if diagnostics are enabled and the budget permits it. Drop the observed success or rejection before returning the boolean result. |
 | `scoped` | Add one relative path segment for the operation, then append that scope's evidence once. |
 | `probe` | Evaluate without recording or rendering evidence. |
-| `into_evidence` | Return owned failures and omission counts without borrowing subjects, definitions, or guards. |
+| `into_evidence` | Return owned failures and omission counts without borrowing subjects, definitions, or guards. `FailureBuilder::evidence` attaches them in `explain`. |
+| `describe` | Explain a child expectation without a subject, never evaluating it. |
 
 These operations, `render`, and `is_diagnostic` are the public surface. `evaluate` and `probe` are `#[must_use]`
 because a composite that ignores a failing child would wrongly pass. `Evidence` has no public constructor, so downstream
 code can only return evidence that a collector gathered. Built-in matchers also use the private `record`, which takes a
-closure so that a failure is only built when the collector keeps it. `unsatisfied` wraps the description of a constraint
+closure so that a failure is only built when the collector keeps it, and the private `probing`, a collector that
+evaluates several children like `probe`. `unsatisfied` wraps the description of a constraint
 that has no subject to show as a "does not satisfy the constraint" failure.
 
 Built-in completion discards evidence on success. On rejection, it adds a lazy fallback only if neither retained nor
@@ -107,7 +110,7 @@ does not imply success. Private recording and completion helpers implement these
 in [context.rs](../assertr/src/expectation/context.rs).
 
 Evidence paths stay relative to the scope that retains them. `scoped` prepends its segment once when it appends the
-child scope's evidence, so `Evidence::explain` attaches children unchanged. Flattening appends the explained children to
+child scope's evidence, so `FailureBuilder::evidence` attaches children unchanged. Flattening appends the explained children to
 the receiving scope, preserving repeated field names when they refer to distinct nested fields.
 [Paths](failure-processing.md#paths) participate in evidence ordering before truncation. A sorted scope below a path
 segment ranks each report as if rendered beneath that shared prefix, so retention agrees with every enclosing scope.

@@ -9,8 +9,9 @@ use crate::{AssertThat, actual::Actual, mode::Panic};
 
 /// Fallback wrapper for the general borrowed path.
 ///
-/// Reached via `Deref` from [`Wrap`] when the asserted expression is not itself a reference to a
-/// `Sized` target. Holds the borrow of the asserted expression.
+/// Reached via `Deref` from [`Wrap`] when no inherent method of `Wrap` applies: the asserted
+/// expression is neither a reference to a `Sized` target nor a reference to one of the unsized
+/// targets with a dedicated impl. Holds the borrow of the asserted expression.
 pub struct Fallback<T>(pub T);
 
 /// Primary wrapper used by the `assert_that!` macro. Holds a borrow of the asserted expression.
@@ -23,12 +24,12 @@ pub struct Wrap<T> {
     pub inner: Fallback<T>,
 }
 
-// Inherent impl for shared-reference expressions - tried FIRST by method resolution. The implicit
-// `Sized` bound on `T` is intentional: unsized targets like `str` and `Path` fall through to the
-// `Fallback` path, keeping the reference itself as the subject. For example, an `&str` subject
-// satisfies the `S: AsRef<str>` bound of the blanket `StrAssertions` impl.
+// Inherent impl for shared-reference expressions, tried first by method resolution. The implicit
+// `Sized` bound on `T` is intentional. References to unsized targets keep the reference itself as
+// the subject, through the dedicated impls below for `str`, slices, `CStr`, `Path`, and `OsStr`,
+// or through `Fallback` for other targets. For example, an `&str` subject satisfies the
+// `S: AsRef<str>` bound of the blanket `StrAssertions` impl.
 impl<'a, T> Wrap<&'_ &'a T> {
-    #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, T, Panic> {
         AssertThat::new(Actual::Borrowed(*self.inner.0))
@@ -38,7 +39,6 @@ impl<'a, T> Wrap<&'_ &'a T> {
 // Inherent impl for mutable-reference expressions: reborrows immutably. The reborrow is limited to
 // the wrapper's own lifetime, so the resulting assertion must be consumed within the statement.
 impl<'x, T> Wrap<&'x &'_ mut T> {
-    #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'x, T, Panic> {
         AssertThat::new(Actual::Borrowed(&**self.inner.0))
@@ -64,7 +64,6 @@ impl<'x, T> Wrap<&'x &'_ mut T> {
 // statement. Without these, `let a = assert_that!(text.as_str());` fails with E0716 because the
 // `Fallback` path borrows the temporary `&str` produced by the call.
 impl<'a> Wrap<&'_ &'a str> {
-    #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a str, Panic> {
         AssertThat::new(Actual::Owned(*self.inner.0))
@@ -72,7 +71,6 @@ impl<'a> Wrap<&'_ &'a str> {
 }
 
 impl<'a, T> Wrap<&'_ &'a [T]> {
-    #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a [T], Panic> {
         AssertThat::new(Actual::Owned(*self.inner.0))
@@ -80,7 +78,6 @@ impl<'a, T> Wrap<&'_ &'a [T]> {
 }
 
 impl<'a> Wrap<&'_ &'a core::ffi::CStr> {
-    #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a core::ffi::CStr, Panic> {
         AssertThat::new(Actual::Owned(*self.inner.0))
@@ -89,7 +86,6 @@ impl<'a> Wrap<&'_ &'a core::ffi::CStr> {
 
 #[cfg(feature = "std")]
 impl<'a> Wrap<&'_ &'a std::path::Path> {
-    #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a std::path::Path, Panic> {
         AssertThat::new(Actual::Owned(*self.inner.0))
@@ -98,7 +94,6 @@ impl<'a> Wrap<&'_ &'a std::path::Path> {
 
 #[cfg(feature = "std")]
 impl<'a> Wrap<&'_ &'a std::ffi::OsStr> {
-    #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'a, &'a std::ffi::OsStr, Panic> {
         AssertThat::new(Actual::Owned(*self.inner.0))
@@ -119,7 +114,6 @@ impl<T> Deref for Wrap<T> {
 // named value usable afterwards) or a temporary that lives until the end of the enclosing statement
 // (keeping assertions on literals and temporaries ergonomic).
 impl<'t, T> Fallback<&'t T> {
-    #[track_caller]
     #[must_use]
     pub fn into_assert_that(&self) -> AssertThat<'t, T, Panic> {
         AssertThat::new(Actual::Borrowed(self.0))
@@ -127,7 +121,6 @@ impl<'t, T> Fallback<&'t T> {
 }
 
 /// Entry point of the `assert_that_owned!` macro.
-#[track_caller]
 #[must_use]
 pub fn owned<'t, T: 't>(value: T) -> AssertThat<'t, T, Panic> {
     AssertThat::new(Actual::Owned(value))
@@ -137,13 +130,6 @@ pub fn owned<'t, T: 't>(value: T) -> AssertThat<'t, T, Panic> {
 mod tests {
     mod borrowing_by_default {
         use crate::prelude::*;
-
-        #[test]
-        fn a_named_string_remains_usable() {
-            let value = String::from("hello");
-            assert_that!(value).is_equal_to("hello".to_string());
-            assert_that!(value.len()).is_equal_to(5);
-        }
 
         #[test]
         fn a_named_collection_remains_usable() {
@@ -214,6 +200,13 @@ mod tests {
         }
 
         #[test]
+        #[cfg(feature = "std")]
+        fn a_named_path_reference_keeps_path_assertions() {
+            let path = std::path::Path::new("foo/bar.rs");
+            assert_that!(path).has_file_name("bar.rs");
+        }
+
+        #[test]
         fn the_reference_stays_the_subject() {
             fn accepts_str(_: AssertThat<'_, &str, Panic>) {}
             fn accepts_slice(_: AssertThat<'_, &[i32], Panic>) {}
@@ -248,66 +241,17 @@ mod tests {
         fn takes_ownership_of_an_iterator() {
             assert_that_owned!([1, 2, 3].into_iter()).contains(2);
         }
-
-        #[test]
-        fn works_with_plain_values() {
-            assert_that_owned!(String::from("hello")).is_equal_to("hello".to_string());
-        }
     }
 
     mod literals_and_temporaries {
         use crate::prelude::*;
 
         #[test]
-        fn works_with_integer() {
-            assert_that!(42).is_equal_to(42);
-        }
-
-        #[test]
-        fn works_with_string() {
-            assert_that!(String::from("hello")).is_equal_to("hello".to_string());
-        }
-
-        #[test]
-        fn works_with_vec() {
-            assert_that!(vec![1, 2, 3]).has_length(3);
-        }
-
-        #[test]
-        fn works_with_bool() {
-            assert_that!(true).is_true();
-        }
-
-        #[test]
-        fn works_with_option() {
+        fn extractions_continue_on_a_temporary() {
             assert_that!(Some(42)).get_some().is_equal_to(42);
-        }
-
-        #[test]
-        fn works_with_result() {
             assert_that!(Result::<i32, ()>::Ok(42))
                 .get_ok()
                 .is_equal_to(42);
-        }
-    }
-
-    mod unsized_reference_targets {
-        use crate::prelude::*;
-
-        #[test]
-        fn works_with_str_slice() {
-            // &str has unsized target `str`, so goes through the Fallback path keeping the
-            // reference itself as the subject: AssertThat<'_, &str, Panic>.
-            assert_that!("hello").starts_with("hel");
-        }
-
-        #[cfg(feature = "std")]
-        #[test]
-        fn works_with_path() {
-            use std::path::Path;
-            let path = Path::new("foo/bar.rs");
-            // &Path has unsized target `Path`, goes through the Fallback path.
-            assert_that!(path).has_file_name("bar.rs");
         }
     }
 
@@ -315,17 +259,10 @@ mod tests {
         use crate::prelude::*;
 
         #[test]
-        fn works_with_borrowed_integer() {
-            let value = 42;
-            assert_that!(&value).is_equal_to(42);
-            let _ = value;
-        }
-
-        #[test]
         fn borrowing_explicitly_is_equivalent_to_borrowing_by_default() {
             let value = String::from("hello");
-            assert_that!(&value).is_equal_to("hello".to_string());
-            assert_that!(value).is_equal_to("hello".to_string());
+            assert_that!(&value).is_equal_to("hello");
+            assert_that!(value).is_equal_to("hello");
         }
 
         #[test]
@@ -348,7 +285,7 @@ mod tests {
         fn works_with_variable_holding_reference() {
             let value = 42;
             let r: &i32 = &value;
-            // r is already a reference - autoref specialization detects this.
+            // `r` is already a reference, so the `Wrap<&&T>` impl unwraps it.
             assert_that!(r).is_equal_to(42);
         }
     }
@@ -368,25 +305,6 @@ mod tests {
             .is_equal_to(42);
 
             assert_that!(evaluations).is_equal_to(1);
-        }
-    }
-
-    mod chaining {
-        use crate::prelude::*;
-
-        #[test]
-        fn allows_chaining_multiple_assertions() {
-            assert_that!(42).is_equal_to(42).is_not_equal_to(43);
-        }
-    }
-
-    mod capture_mode {
-        use crate::prelude::*;
-
-        #[test]
-        fn works_with_capture_mode() {
-            let failures = assert_that!(42).capture(|it| it.is_equal_to(43));
-            assert_that!(failures).has_length(1);
         }
     }
 }

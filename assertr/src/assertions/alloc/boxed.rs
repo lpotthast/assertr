@@ -3,7 +3,9 @@ use core::any::{Any, type_name, type_name_of_val};
 
 use crate::{
     AssertThat, PanicValue,
+    actual::Actual,
     assertions::support::project_checked,
+    entry::panic_message,
     expectation::{AssertionContext, Expectation},
     failure::{Fact, FailureBuilder, FailureKind},
     mode::{Mode, Panic},
@@ -134,6 +136,72 @@ impl<E: 'static, P: Payload, R> Expectation<P, R> for IsOfType<E> {
     }
 }
 
+/// Checks that a boxed `Any` value or captured panic payload is a `&str` or `String` message,
+/// returning the borrowed message on success.
+///
+/// `panic!("literal")` raises a `&str` payload, while `panic!("{value}")` raises a `String`.
+/// This definition accepts both, so a message check does not depend on how the panic was
+/// formatted. [`BoxExtractAssertions::has_message`] executes this same definition and continues
+/// with the message. Supported subjects are the same as for [`IsOfType`].
+///
+/// ```
+/// use assertr::{matchers::HasPanicMessage, prelude::*};
+///
+/// let id = 7;
+/// let payload = std::panic::catch_unwind(|| panic!("no user {id}")).unwrap_err();
+/// assert_that!(payload).matches(HasPanicMessage);
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct HasPanicMessage;
+
+impl<P: Payload, R> Expectation<P, R> for HasPanicMessage {
+    type Success<'a>
+        = &'a str
+    where
+        Self: 'a,
+        P: 'a;
+    type Rejection<'a>
+        = &'a dyn Any
+    where
+        Self: 'a,
+        P: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a P,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<&'a str, &'a dyn Any> {
+        let payload = actual.payload();
+        panic_message(payload).ok_or(payload)
+    }
+
+    const KIND: FailureKind = FailureKind::Variant;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a P, &'a dyn Any)>,
+        failure: FailureBuilder,
+        _: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let failure = failure.expected("&str or String");
+        let Some((_, payload)) = rejected else {
+            return failure.relation("is a string message");
+        };
+        failure
+            .actual(type_name_of_val(payload))
+            .relation("is not a string message")
+            .fact(Fact::note(P::ERASED_TYPE_NOTE))
+    }
+}
+
+/// Takes the message out of a payload that [`HasPanicMessage`] accepted.
+fn into_message(payload: Box<dyn Any>) -> Option<String> {
+    match payload.downcast::<String>() {
+        Ok(message) => Some(*message),
+        Err(payload) => panic_message(&*payload).map(String::from),
+    }
+}
+
 /// Type checks for boxed `Any` values and captured panic payloads in panic and capture mode.
 ///
 /// Implemented for `Box<dyn Any>`, `Box<dyn Any + Send>`, and `Box<dyn Any + Send + Sync>`
@@ -142,7 +210,7 @@ impl<E: 'static, P: Payload, R> Expectation<P, R> for IsOfType<E> {
 /// Use [`BoxExtractAssertions::has_type`] to continue with the downcast value.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
-pub trait BoxAssertions<R = DebugRenderer> {
+pub trait BoxAssertions {
     /// Asserts that the payload has type `E`, preserving the original subject.
     fn is_of_type<E: 'static>(self) -> Self;
 }
@@ -163,9 +231,29 @@ pub trait BoxExtractAssertions<'t, R = DebugRenderer> {
     fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
     where
         R: Clone;
+
+    /// Asserts that the payload is a `&str` or `String` message and returns an assertion over
+    /// that message.
+    ///
+    /// `panic!("literal")` raises a `&str` payload, while `panic!("{value}")` raises a `String`.
+    /// This method accepts both, so prefer it over [`has_type`](Self::has_type) when only the
+    /// message matters. The message is copied into a `String` unless an owned subject already
+    /// holds one.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// let id = 7;
+    /// # #[cfg(feature = "std")]
+    /// assert_that!(move || panic!("no user {id}"))
+    ///     .panics()
+    ///     .has_message()
+    ///     .is_equal_to("no user 7");
+    /// ```
+    fn has_message(self) -> AssertThat<'t, String, Panic, R>;
 }
 
-impl<P: Payload, M: Mode, R> BoxAssertions<R> for AssertThat<'_, P, M, R> {
+impl<P: Payload, M: Mode, R> BoxAssertions for AssertThat<'_, P, M, R> {
     #[track_caller]
     fn is_of_type<E: 'static>(self) -> Self {
         self.matches(IsOfType::<E>::new())
@@ -192,6 +280,20 @@ impl<'t, P: Payload, R> BoxExtractAssertions<'t, R> for AssertThat<'t, P, Panic,
         let value = self.require(&const { IsOfType::<E>::new() });
         self.derive_owned(|_| value)
     }
+
+    #[track_caller]
+    fn has_message(self) -> AssertThat<'t, String, Panic, R> {
+        self.matches(HasPanicMessage).map(|actual| {
+            let message = match actual {
+                Actual::Owned(payload) => into_message(payload.into_any()),
+                Actual::Borrowed(payload) => panic_message(payload.payload()).map(String::from),
+            };
+            Actual::Owned(
+                message
+                    .unwrap_or_else(|| unreachable!("the expectation already checked the subject")),
+            )
+        })
+    }
 }
 
 #[cfg(test)]
@@ -212,6 +314,7 @@ mod tests {
             value.must().be_of_type::<&str>();
             value.must().have_type::<&str>();
             value.must().have_type_ref::<&str>();
+            value.must().have_message();
         }
     }
 
@@ -409,6 +512,71 @@ mod tests {
         }
     }
 
+    mod has_message {
+        use super::*;
+        use crate::matchers::HasPanicMessage;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let value: Box<dyn Any> = Box::new(1_i32);
+            assert_caller_location!(assert_that!(value), has_message());
+        }
+
+        #[test]
+        fn extracts_literal_and_formatted_messages_from_owned_and_borrowed_payloads() {
+            let id = 7;
+            assert_that!(|| panic!("literal"))
+                .panics()
+                .has_message()
+                .is_equal_to("literal");
+            assert_that!(move || panic!("formatted {id}"))
+                .panics()
+                .has_message()
+                .is_equal_to("formatted 7");
+            let literal: Box<dyn Any + Send> = Box::new("literal");
+            assert_that!(literal).has_message().is_equal_to("literal");
+            assert_that_owned!(literal)
+                .has_message()
+                .is_equal_to("literal");
+            let owned = PanicValue(Box::new(String::from("owned")));
+            assert_that!(owned).has_message().is_equal_to("owned");
+            assert_that_owned!(owned).has_message().is_equal_to("owned");
+        }
+
+        #[test]
+        fn matcher_checks_messages_in_capture_mode() {
+            let failures = assert_that!(PanicValue(Box::new(3_u8)))
+                .capture(|it| it.matches(HasPanicMessage).matches(HasPanicMessage));
+            assert_that!(failures).has_length(2);
+            assert_that!(PanicValue(Box::new("message"))).matches(HasPanicMessage);
+        }
+
+        #[test]
+        fn explains_payloads_without_a_message() {
+            let actual = PanicValue(Box::new(3_u8));
+
+            assert_that!(|| {
+                let _ = assert_that!(actual).with_location(false).has_message();
+            })
+            .panics()
+            .has_message()
+            .is_equal_to(formatdoc! {r"
+                -------- assertr --------
+                Expression: `actual`
+
+                Actual: dyn core::any::Any
+
+                is not a string message
+
+                Expected: &str or String
+
+                Details:
+                  - The panic value can only be captured as Box<dyn Any + Send>, meaning that the concrete type was erased. We already checked for both `&str` and `String`. Try other common types used for panic values or analyze your panicking code.
+                -------- assertr --------
+            "});
+        }
+    }
+
     mod thread_safe_payloads {
         use super::*;
 
@@ -435,9 +603,9 @@ mod tests {
 
         #[test]
         fn traits_are_implemented_without_renderer_support() {
-            assert_trait_impl!(AssertThat<'static, Box<dyn Any>, Capture, NoRenderer> => BoxAssertions<NoRenderer>);
-            assert_trait_impl!(AssertThat<'static, Box<dyn Any + Send>, Capture, NoRenderer> => BoxAssertions<NoRenderer>);
-            assert_trait_impl!(AssertThat<'static, PanicValue, Capture, NoRenderer> => BoxAssertions<NoRenderer>);
+            assert_trait_impl!(AssertThat<'static, Box<dyn Any>, Capture, NoRenderer> => BoxAssertions);
+            assert_trait_impl!(AssertThat<'static, Box<dyn Any + Send>, Capture, NoRenderer> => BoxAssertions);
+            assert_trait_impl!(AssertThat<'static, PanicValue, Capture, NoRenderer> => BoxAssertions);
             assert_trait_impl!(
                 AssertThat<'static, Box<dyn Any>, Panic, NoRenderer>
                     => BoxExtractAssertions<'static, NoRenderer>

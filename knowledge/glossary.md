@@ -36,6 +36,7 @@ for detailed requirements and exceptions.
 | [Panic](assertion-lifecycle.md#entry-subject-ownership-and-mode) | Mode presenting an assertion failure as a panic. |
 | [Capture](assertion-lifecycle.md#entry-subject-ownership-and-mode) | Mode that collects failures so checks can continue. |
 | [ChainState](assertion-lifecycle.md#chain-representation) | Private state that can move to a chain with a different subject type. |
+| [DiagnosticSettings](assertion-lifecycle.md#chain-representation) | Private subject name, expression, location policy, rendering budget, and panic presentation of a chain. |
 | [ChainRecords](assertion-lifecycle.md#chain-representation) | Private storage for messages, assertion counts, failures, and an optional link to parent records. |
 | [Root chain](assertion-lifecycle.md#chain-representation) | Chain with no parent-record link. |
 | [Child chain](assertion-lifecycle.md#chain-representation) | Derived chain linked to ancestor records. |
@@ -114,8 +115,8 @@ for detailed requirements and exceptions.
 | [FailureKind](failure-processing.md#structured-construction-and-ownership) | Non-exhaustive failure family, not a specific assertion. |
 | [FailureBuilder](failure-processing.md#builder-completion) | Builds a structured failure. The executor or `AssertThat::raise` adds chain metadata and handles it according to the mode. |
 | [Relation](failure-processing.md#structured-construction-and-ownership) | Lowercase diagnostic sentence without values or trailing period. |
-| [Fact](failure-processing.md#structured-construction-and-ownership) | Label plus `Rendered` evidence. |
-| [Note](failure-processing.md#structured-construction-and-ownership) | `Fact` with empty label, shown as unlabelled detail. |
+| [Fact](failure-processing.md#structured-construction-and-ownership) | Optional label plus `Rendered` evidence. |
+| [Note](failure-processing.md#structured-construction-and-ownership) | `Fact` without a label, shown as unlabelled detail. |
 | [Path](failure-processing.md#paths) | A sequence of `PathSegment` values locating nested evidence relative to its parent subject. |
 
 ## Execution and presentation

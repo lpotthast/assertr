@@ -19,12 +19,13 @@ mod tests;
 use alloc::{collections::VecDeque, vec::Vec};
 use core::{borrow::Borrow, marker::PhantomData, panic::Location};
 
-pub(crate) use cardinality::{IsEmpty, IsNotEmpty, LengthScan};
+pub(crate) use cardinality::{IsEmptyScan, IsNotEmptyScan, LengthScan};
 pub(crate) use membership::{
-    Contains, ContainsAll, ContainsMatching, DoesNotContain, DoesNotContainMatching,
+    ContainsAllScan, ContainsMatchingScan, ContainsScan, DoesNotContainMatchingScan,
+    DoesNotContainScan,
 };
-pub(crate) use positional::{ElementsEqual, ElementsMatch};
-pub(crate) use unordered::{ContainsExactlyInAnyOrder, ElementsAreInAnyOrder};
+pub(crate) use positional::{ElementsEqualScan, ElementsMatchScan};
+pub(crate) use unordered::{UnorderedEqualScan, UnorderedMatchScan};
 
 use crate::{
     AssertThat, Mode,
@@ -144,11 +145,7 @@ impl<Item> Tail<Item> {
         rendering: RenderingContext<'_, R>,
         decisive_index: Option<usize>,
     ) -> FailureBuilder {
-        let failure = failure.fact(Fact::labelled(
-            "Consumed elements",
-            rendering.value(&self.consumed),
-        ));
-        let failure = self.omission(failure);
+        let failure = self.omission(consumed_fact(failure, rendering, self.consumed));
         match decisive_index {
             Some(index) => failure.fact(Fact::labelled("Decisive index", rendering.value(&index))),
             None => failure,
@@ -295,14 +292,14 @@ impl<T, Item: Borrow<T>> Collection for Items<'_, T, Item> {
     }
 }
 
-/// Attaches the number of consumed elements for matcher scans, which retain no preview.
+/// Attaches the number of consumed elements.
 fn consumed_fact<R: ValueRenderer<usize>>(
     failure: FailureBuilder,
-    context: &AssertionContext<'_, R>,
+    rendering: RenderingContext<'_, R>,
     consumed: usize,
 ) -> FailureBuilder {
     failure.fact(Fact::labelled(
         "Consumed elements",
-        context.render().value(&consumed),
+        rendering.value(&consumed),
     ))
 }

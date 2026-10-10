@@ -5,11 +5,11 @@ use super::entry::{explain_entry, record_entry};
 use crate::{
     __private::{Cons, Nil},
     AssertThat,
-    assertions::map::{Entry, Map, MapLookup, entry},
+    assertions::map::{Entry, Map, MapLookup},
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation, lists::sealed as list_sealed},
+    expectation::{AssertionContext, Expectation, MatcherList, lists::sealed as list_sealed},
     failure::{AssertionFailure, FailureBuilder, FailureKind},
-    matchers::{MatcherList, satisfying},
+    matchers::satisfying,
     mode::Capture,
     renderer::{DebugRenderer, ValueRenderer},
 };
@@ -108,14 +108,6 @@ impl<MapType: Map + ?Sized, R, L: EntryMatcherList<MapType, R> + ?Sized>
     ) -> (bool, Option<&'a MapType::Key>) {
         (**self).evaluate_entry_at(index, actual, context)
     }
-}
-
-/// Builds a homogeneous keyed list from key/matcher pairs.
-pub fn entry_matchers<K, M>(entries: impl IntoIterator<Item = (K, M)>) -> Vec<Entry<K, M>> {
-    entries
-        .into_iter()
-        .map(|(key, matcher)| entry(key, matcher))
-        .collect()
 }
 
 /// A borrowed list of key/callback pairs that adapts only the entry being evaluated or described.

@@ -106,7 +106,7 @@
 //! # #[cfg(feature = "std")]
 //! assert_that!(|| panic!("boom"))
 //!     .panics()
-//!     .has_type::<&str>()
+//!     .has_message()
 //!     .is_equal_to("boom");
 //! ```
 //!
@@ -238,7 +238,7 @@
 //! ```
 //!
 //! Both borrow the value. `must_owned()` and `verify_owned()` take ownership. See
-//! [`IntoAssertContext`](https://docs.rs/assertr/latest/assertr/trait.IntoAssertContext.html) for
+//! [`FluentEntry`](https://docs.rs/assertr/latest/assertr/trait.FluentEntry.html) for
 //! all naming rules and for recording the source expression in reports.
 //!
 //! ## Finding assertions
@@ -308,7 +308,6 @@
 #![doc = include_str!("crate_docs.md")]
 
 extern crate alloc;
-extern crate core;
 extern crate self as assertr;
 #[cfg(all(test, not(feature = "std")))]
 extern crate std;
@@ -318,6 +317,7 @@ pub mod __private;
 pub mod actual;
 mod assert_that;
 pub mod assertions;
+#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 mod conversion;
 mod details;
 mod entry;
@@ -350,7 +350,7 @@ use actual::Actual;
 #[cfg(feature = "fluent")]
 pub use assertr_macros::fluent_expressions;
 #[cfg(feature = "fluent")]
-pub use entry::{IntoAssertContext, IntoOwnedAssertContext};
+pub use entry::{FluentEntry, OwnedFluentEntry};
 pub use entry::{PanicValue, Type, assert_that_type};
 use failure::AssertionFailures;
 use mode::Mode;
@@ -416,21 +416,22 @@ macro_rules! partial {
 /// the active renderer. Renderer capabilities are required by individual methods rather than by the
 /// chain, so projections can preserve `R` even when it cannot render every intermediate subject.
 ///
-/// Derived assertions share their root's mode, failure storage, detail messages, and assertion
-/// count. A failure on a child therefore behaves as a failure on the root.
+/// Derived chains keep their parent's mode and inherit its detail messages. Their failures and
+/// assertion counts propagate to every ancestor, and failures are stored at the root. A failure on
+/// a child therefore behaves as a failure on the root.
 ///
 /// ## Unwind safety
 ///
-/// An assertion context preserves the unwind-safety requirements of its subject and renderer:
+/// An assertion chain preserves the unwind-safety requirements of its subject and renderer:
 ///
-/// | Context trait | Subject bound | Renderer bound |
+/// | Chain trait | Subject bound | Renderer bound |
 /// |---|---|---|
 /// | [`UnwindSafe`](core::panic::UnwindSafe) | `T: UnwindSafe + RefUnwindSafe` | `R: UnwindSafe` |
 /// | [`RefUnwindSafe`](core::panic::RefUnwindSafe) | `T: RefUnwindSafe` | `R: RefUnwindSafe` |
 ///
 /// Both modes have these guarantees. The subject needs both bounds for `UnwindSafe` because
 /// [`Actual<T>`](crate::actual::Actual) can hold either `T` or `&T`, even when this particular
-/// context was created with `assert_that_owned!`. Internal counters, messages, and captured
+/// chain was created with `assert_that_owned!`. Internal counters, messages, and captured
 /// failures do not impose additional unwind bounds. A child's ancestor links reference only
 /// assertion records. Its unwind safety depends on its own subject and renderer, even if an
 /// ancestor's values do not implement the corresponding traits.
@@ -438,55 +439,55 @@ macro_rules! partial {
 /// Ordinary construction, projections, renderers, and assertion callbacks do not require these
 /// traits. Panic assertions such as `panics()` still accept closures capturing mutable state. They
 /// catch the closure's panic explicitly and do not restore captured state. The bounds above matter
-/// when passing an existing context to an API such as `std::panic::catch_unwind`.
+/// when passing an existing chain to an API such as `std::panic::catch_unwind`.
 ///
-/// For example, sharing a context containing a `Cell` across a catch boundary is rejected:
+/// For example, sharing a chain containing a `Cell` across a catch boundary is rejected:
 ///
 /// ```compile_fail,E0277
 /// use std::{cell::Cell, panic::catch_unwind};
 /// use assertr::assert_that;
 ///
 /// let value = Cell::new((0, 0));
-/// let context = assert_that!(value);
+/// let chain = assert_that!(value);
 /// let _ = catch_unwind(|| {
-///     context.actual().set((1, 0));
+///     chain.actual().set((1, 0));
 ///     panic!("interrupted update");
 /// });
 /// ```
 ///
-/// The same applies to an owned `RefCell` accessed through a shared context:
+/// The same applies to an owned `RefCell` accessed through a shared chain:
 ///
 /// ```compile_fail,E0277
 /// use std::{cell::RefCell, panic::catch_unwind};
 /// use assertr::assert_that_owned;
 ///
-/// let context = assert_that_owned!(RefCell::new((0, 0)));
+/// let chain = assert_that_owned!(RefCell::new((0, 0)));
 /// let _ = catch_unwind(|| {
-///     context.actual().borrow_mut().0 = 1;
+///     chain.actual().borrow_mut().0 = 1;
 ///     panic!("interrupted update");
 /// });
 /// ```
 ///
-/// Moving an owned `Cell` context also requires `RefUnwindSafe`, due to the shared subject
+/// Moving an owned `Cell` chain also requires `RefUnwindSafe`, due to the shared subject
 /// representation:
 ///
 /// ```compile_fail,E0277
 /// use std::{cell::Cell, panic::catch_unwind};
 /// use assertr::assert_that_owned;
 ///
-/// let context = assert_that_owned!(Cell::new(0));
-/// let _ = catch_unwind(move || drop(context));
+/// let chain = assert_that_owned!(Cell::new(0));
+/// let _ = catch_unwind(move || drop(chain));
 /// ```
 ///
-/// Mutable-reference subjects additionally prevent moving a context across the boundary:
+/// Mutable-reference subjects additionally prevent moving a chain across the boundary:
 ///
 /// ```compile_fail,E0277
 /// use std::panic::catch_unwind;
 /// use assertr::assert_that_owned;
 ///
 /// let mut value = 0;
-/// let context = assert_that_owned!(&mut value);
-/// let _ = catch_unwind(move || drop(context));
+/// let chain = assert_that_owned!(&mut value);
+/// let _ = catch_unwind(move || drop(chain));
 /// ```
 ///
 /// Renderer state participates even when the operation does not render a value:
@@ -496,15 +497,15 @@ macro_rules! partial {
 /// use assertr::assert_that;
 ///
 /// let calls = Cell::new(0);
-/// let context = assert_that!(1).with_debug_format(move |value, f| {
+/// let chain = assert_that!(1).with_debug_format(move |value, f| {
 ///     calls.set(calls.get() + 1);
 ///     write!(f, "{value}")
 /// });
-/// let _ = catch_unwind(|| context.actual());
+/// let _ = catch_unwind(|| chain.actual());
 /// ```
 ///
 /// An owned renderer can implement `RefUnwindSafe` without implementing `UnwindSafe`. For example,
-/// installing a mutable reference is permitted, but moving that context into `catch_unwind` is
+/// installing a mutable reference is permitted, but moving that chain into `catch_unwind` is
 /// rejected:
 ///
 /// ```compile_fail,E0277
@@ -512,8 +513,8 @@ macro_rules! partial {
 /// use assertr::{assert_that, renderer::DebugRenderer};
 ///
 /// let mut renderer = DebugRenderer;
-/// let context = assert_that!(1).with_renderer(&mut renderer);
-/// let _ = catch_unwind(move || drop(context));
+/// let chain = assert_that!(1).with_renderer(&mut renderer);
+/// let _ = catch_unwind(move || drop(chain));
 /// ```
 ///
 /// After reviewing the captured state, callers can explicitly assume responsibility with
@@ -524,9 +525,9 @@ macro_rules! partial {
 /// use assertr::prelude::*;
 ///
 /// let value = Cell::new(0);
-/// let context = assert_that!(value);
+/// let chain = assert_that!(value);
 /// let result = catch_unwind(AssertUnwindSafe(|| {
-///     context.actual().set(1);
+///     chain.actual().set(1);
 ///     panic!("after the update");
 /// }));
 /// assert_that!(result).is_err();
@@ -548,7 +549,8 @@ enum Expression {
 }
 
 impl Expression {
-    fn get(self) -> Option<&'static str> {
+    /// The expression recorded by an entry macro, fluent rewriting, or an explicit override.
+    fn explicit(self) -> Option<&'static str> {
         if let Self::Explicit(expression) = self {
             Some(expression)
         } else {
@@ -574,31 +576,13 @@ impl Expression {
 /// `T` preserves the records, diagnostic settings, mode, and renderer automatically.
 ///
 /// User-provided rendering and presentation state stays here, outside the unwind exemptions on
-/// `ChainRecords`. Auto traits therefore continue to check it as part of the assertion context.
+/// `ChainRecords`. Auto traits therefore continue to check it as part of the assertion chain.
 struct ChainState<'t, M: Mode, R> {
     /// This node's records and its link to ancestor records.
     records: ChainRecords<'t>,
 
-    /// Optional user-provided subject name shown in failure diagnostics. Derived chains start
-    /// without a name because they describe a new subject.
-    subject_name: Option<String>,
-
-    /// Source expression shown in failure diagnostics, usually recorded by an entry macro or
-    /// fluent-expression rewriting. Derived chains start without an expression.
-    expression: Expression,
-
-    /// Whether failures record the assertion caller's file, line, and column. Derived chains
-    /// inherit this setting. Tests can disable it when comparing exact failure reports.
-    include_location: bool,
-
-    /// Limits items per repeated diagnostic group and characters per rendered leaf. Derived chains
-    /// inherit these limits, which the rendering context applies in both panic and capture mode.
-    rendering_budget: RenderingBudget,
-
-    /// An inherited context override for panic text. `None` uses the failure's `Display` report.
-    /// Capture mode never invokes presentation. `Arc` shares the closure with derived contexts
-    /// without requiring it to be `Clone`, and keeps it `Send` for assertions that await.
-    panic_presentation: Option<alloc::sync::Arc<failure::panic_presentation::PanicPresentation>>,
+    /// How failures raised on this chain are described and presented.
+    settings: DiagnosticSettings,
 
     /// Compile-time marker selecting immediate panics or failure collection. Derived chains retain
     /// the same mode.
@@ -617,6 +601,33 @@ struct ChainState<'t, M: Mode, R> {
     renderer: R,
 }
 
+/// The diagnostic settings of a chain, independent of its subject, records, and renderer.
+///
+/// A chain detached across an await keeps these settings without its records, so this type holds
+/// no cells and no borrows. It is `Send` and `Sync`.
+struct DiagnosticSettings {
+    /// Optional user-provided subject name shown in failure diagnostics. Derived chains start
+    /// without a name because they describe a new subject.
+    subject_name: Option<String>,
+
+    /// Source expression shown in failure diagnostics, usually recorded by an entry macro or
+    /// fluent-expression rewriting. Derived chains start without an expression.
+    expression: Expression,
+
+    /// Whether failures record the assertion caller's file, line, and column. Derived chains
+    /// inherit this setting. Tests can disable it when comparing exact failure reports.
+    include_location: bool,
+
+    /// Limits items per repeated diagnostic group and characters per rendered leaf. Derived chains
+    /// inherit these limits, which the rendering context applies in both panic and capture mode.
+    rendering_budget: RenderingBudget,
+
+    /// An inherited override for panic text. `None` uses the failure's `Display` report. Capture
+    /// mode never invokes presentation. `Arc` shares the closure with derived chains without
+    /// requiring it to be `Clone`, and keeps it `Send` for assertions that await.
+    panic_presentation: Option<alloc::sync::Arc<failure::panic_presentation::PanicPresentation>>,
+}
+
 /// Messages, assertion counts, and captured failures for one node in an assertion chain.
 ///
 /// Each child starts with its own records. Assertion counts propagate through every ancestor,
@@ -629,7 +640,7 @@ struct ChainState<'t, M: Mode, R> {
 /// to be unwind safe. The child's own subject and renderer still determine its auto traits.
 struct ChainRecords<'t> {
     /// The ancestor records used for propagation. `None` marks a root, including one created by
-    /// `capture`. This deliberately does not point to an entire assertion context or `ChainState`.
+    /// `capture`. This deliberately does not point to an entire assertion chain or `ChainState`.
     parent: Option<&'t ChainRecords<'t>>,
 
     // These exemptions cover only library-owned data. User conversions and rendering finish
@@ -642,8 +653,8 @@ struct ChainRecords<'t> {
     /// Includes assertions attempted on derived chains, even when an assertion panics.
     ///
     /// [`AssertThat::capture`] uses the count to reject capture closures that perform no
-    /// assertions. In panic mode, unused assertion contexts are caught at compile time instead, by
-    /// the `#[must_use]` annotations on the entry points.
+    /// assertions. In panic mode, unused assertion chains are flagged instead, by
+    /// `unused_must_use` warnings from the `#[must_use]` annotations on the entry points.
     number_of_assertions: AssertUnwindSafe<Cell<usize>>,
     /// Captured failures owned by this chain. Children forward failures through `parent`.
     failures: AssertUnwindSafe<RefCell<AssertionFailures>>,

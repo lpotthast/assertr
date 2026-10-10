@@ -160,7 +160,7 @@ impl<T, M: Mode, R> OptionAssertions<T, M, R> for AssertThat<'_, Option<T>, M, R
 
 #[cfg(test)]
 mod tests {
-    use crate::{failure::FailureKind, prelude::*};
+    use crate::{failure::FailureKind, prelude::*, test_support::rejected_kind};
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
@@ -292,14 +292,11 @@ mod tests {
 
         #[test]
         fn rejects_none_like_is_some() {
-            assert_that!(|| {
+            rejected_kind(FailureKind::Variant, || {
                 let _ = assert_that!(Option::<i32>::None)
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_some();
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(format!("{:?}", FailureKind::Variant));
+            });
         }
     }
 

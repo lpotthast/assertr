@@ -1,6 +1,6 @@
 use crate::{
     AssertThat, Mode, Type,
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, passed},
     failure::{Fact, FailureBuilder, FailureKind},
 };
 
@@ -20,7 +20,7 @@ impl<T, R> Expectation<Type<T>, R> for NeedsDrop {
         Self: 'a,
         Type<T>: 'a;
     fn evaluate<'a>(&'a self, actual: &'a Type<T>, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if actual.needs_drop() { Ok(()) } else { Err(()) }
+        passed(actual.needs_drop())
     }
 
     const KIND: FailureKind = FailureKind::Predicate;
@@ -33,7 +33,7 @@ impl<T, R> Expectation<Type<T>, R> for NeedsDrop {
         match rejected {
             None => failure.relation("needs drop"),
             Some((actual, ())) => failure
-                .actual(actual.get_type_name())
+                .actual(actual.type_name())
                 .relation("does not need drop")
                 .fact(Fact::note(
                     "Dropping a value of this type is guaranteed to have no side effect.",
@@ -139,19 +139,19 @@ mod tests {
 
         #[test]
         fn panics_when_type_does_not_need_drop() {
-            struct DoeNotNeedDrop;
+            struct DoesNotNeedDrop;
 
             assert_that!(|| {
-                assert_that_type::<DoeNotNeedDrop>()
+                assert_that_type::<DoesNotNeedDrop>()
                     .with_location(false)
                     .needs_drop();
             }).panics()
             .has_type::<String>()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
-                    Expression: `assertr::assertions::core::mem::tests::needs_drop::panics_when_type_does_not_need_drop::DoeNotNee...`
+                    Expression: `assertr::assertions::core::mem::tests::needs_drop::panics_when_type_does_not_need_drop::DoesNotNe...`
 
-                    Actual: assertr::assertions::core::mem::tests::needs_drop::panics_when_type_does_not_need_drop::DoeNotNeedDrop
+                    Actual: assertr::assertions::core::mem::tests::needs_drop::panics_when_type_does_not_need_drop::DoesNotNeedDrop
 
                     does not need drop
 

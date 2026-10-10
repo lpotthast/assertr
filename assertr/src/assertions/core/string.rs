@@ -148,7 +148,7 @@ str_expectation! {
 
 str_expectation! {
     /// Checks that a string is empty or contains only ASCII whitespace.
-    pub struct IsBlankAscii;
+    pub struct IsAsciiBlank;
     kind Predicate;
     check |actual| actual.split_ascii_whitespace().next().is_none();
     relations "is ASCII blank", "is not ASCII blank";
@@ -249,7 +249,7 @@ pub trait StrAssertions<R = DebugRenderer> {
         R: ValueRenderer<str>;
 
     /// Asserts that the subject is empty or contains only ASCII whitespace.
-    fn is_blank_ascii(self) -> Self
+    fn is_ascii_blank(self) -> Self
     where
         R: ValueRenderer<str>;
 
@@ -307,11 +307,11 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     }
 
     #[track_caller]
-    fn is_blank_ascii(self) -> Self
+    fn is_ascii_blank(self) -> Self
     where
         R: ValueRenderer<str>,
     {
-        self.matches(IsBlankAscii)
+        self.matches(IsAsciiBlank)
     }
 
     #[track_caller]
@@ -380,7 +380,7 @@ mod tests {
         #[test]
         fn are_as_expected() {
             "".must().be_blank();
-            "".must().be_blank_ascii();
+            "".must().be_ascii_blank();
             "a".must().not_be_blank();
             "FoObAr".must().be_equal_to_ignoring_ascii_case("fOoBaR");
             "foobar".must().contain("foo");
@@ -424,7 +424,7 @@ mod tests {
                 let failures = assert_that!(actual)
                     .with_renderer(SentinelRenderer)
                     .capture(|it| {
-                        let it = it.is_blank().is_not_blank().is_blank_ascii();
+                        let it = it.is_blank().is_not_blank().is_ascii_blank();
                         assert_that!(actual_calls.get()).is_equal_to(3);
                         let it = it.is_equal_to_ignoring_ascii_case(operand());
                         assert_that!((actual_calls.get(), expected_calls.get()))
@@ -586,25 +586,25 @@ mod tests {
         }
     }
 
-    mod is_blank_ascii {
+    mod is_ascii_blank {
         use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!("a"), is_blank_ascii());
+            assert_caller_location!(assert_that!("a"), is_ascii_blank());
         }
 
         #[test]
         fn succeeds_when_blank() {
-            assert_that!("").is_blank_ascii();
-            assert_that!(" ").is_blank_ascii();
-            assert_that!("\t \n").is_blank_ascii();
-            assert_that!(String::from("\t \n")).is_blank_ascii();
+            assert_that!("").is_ascii_blank();
+            assert_that!(" ").is_ascii_blank();
+            assert_that!("\t \n").is_ascii_blank();
+            assert_that!(String::from("\t \n")).is_ascii_blank();
         }
 
         #[test]
         fn identifies_unicode_whitespace_as_non_ascii_whitespace() {
-            let failures = assert_that!("\u{a0}").capture(StrAssertions::is_blank_ascii);
+            let failures = assert_that!("\u{a0}").capture(StrAssertions::is_ascii_blank);
             assert_that!(failures[0].relation.as_deref()).is_equal_to(Some("is not ASCII blank"));
         }
     }
@@ -851,7 +851,7 @@ mod tests {
                     .with_location(false)
                     .capture(|it| it.contains("baz"))
             ))
-            .is_equal_to(reference.clone());
+            .is_equal_to(&reference);
 
             let boxed = String::from("foobar").into_boxed_str();
             assert_that!(rendered(
@@ -859,7 +859,7 @@ mod tests {
                     .with_location(false)
                     .capture(|it| it.contains("baz"))
             ))
-            .is_equal_to(reference.clone());
+            .is_equal_to(&reference);
 
             let cow = Cow::Borrowed("foobar");
             assert_that!(rendered(

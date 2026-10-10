@@ -8,7 +8,7 @@
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 
 use super::{AssertionFailure, Fact, FailureKind, PathSegment};
-use crate::renderer::Rendered;
+use crate::{expectation::Evidence, renderer::Rendered};
 
 /// Builds one [`AssertionFailure`].
 ///
@@ -169,7 +169,7 @@ impl FailureBuilder {
 
     /// Appends facts in iteration order, after any facts already attached.
     ///
-    /// Labeled facts and notes may be mixed. Their rendered evidence is preserved unchanged.
+    /// Labelled facts and notes may be mixed. Their rendered evidence is preserved unchanged.
     pub fn facts(mut self, facts: impl IntoIterator<Item = Fact>) -> Self {
         self.failure.facts.extend(facts);
         self
@@ -186,19 +186,33 @@ impl FailureBuilder {
         self.failure.children.extend(children);
         self
     }
+
+    /// Attaches the failures collected by child expectations, together with the number the
+    /// rendering budget left out.
+    ///
+    /// Collect the evidence with [`AssertionContext`](crate::expectation::AssertionContext) during
+    /// [`Expectation::evaluate`](crate::expectation::Expectation::evaluate), return it as the
+    /// rejection, and attach it here in
+    /// [`Expectation::explain`](crate::expectation::Expectation::explain).
+    /// Like [`children`](Self::children) and [`omitted_children`](Self::omitted_children), this
+    /// accumulates.
+    pub fn evidence(self, evidence: Evidence) -> Self {
+        self.children(evidence.children)
+            .omitted_children(evidence.omitted)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use core::{cell::Cell, fmt};
 
-    use indoc::formatdoc;
+    use indoc::indoc;
 
     use super::FailureBuilder;
     use crate::{
         failure::{Fact, FailureKind},
         prelude::*,
-        renderer::{RenderedBody, RenderingContext},
+        renderer::{Rendered, RenderedBody, RenderingContext},
     };
 
     struct Evidence;
@@ -215,15 +229,16 @@ mod tests {
     mod fact {
         use super::*;
 
-        #[test]
-        fn preserves_labelled_evidence_without_rendering_again() {
+        /// Attaches one fact rendered from `Evidence` and checks that it keeps its evidence without
+        /// rendering it again.
+        fn assert_preserved(fact: impl FnOnce(Rendered) -> Fact, detail: &str) -> AssertionFailure {
             let renders = Cell::new(0);
             let renderer = EvidenceRenderer(&renders);
             let rendering = RenderingContext::new(
                 &renderer,
                 RenderingBudget::default().with_max_leaf_characters(3),
             );
-            let fact = Fact::labelled("Reason", rendering.value(&Evidence));
+            let fact = fact(rendering.value(&Evidence));
             assert_that!(renders.get()).is_equal_to(1);
 
             let failure = FailureBuilder::new::<()>(FailureKind::Other)
@@ -231,14 +246,9 @@ mod tests {
                 .fact(fact)
                 .build();
 
-            assert_that!(failure).has_text_report(formatdoc! {"
-                -------- assertr --------
-                does not hold
-
-                Details:
-                  - Reason: evi... 5 more characters ...
-                -------- assertr --------
-            "});
+            assert_that!(&failure).has_text_report(format!(
+                "-------- assertr --------\ndoes not hold\n\nDetails:\n  - {detail}\n-------- assertr --------\n"
+            ));
             assert_that!(failure.facts[0].value.type_name)
                 .is_equal_to(Some(core::any::type_name::<Evidence>()));
             assert_that!(failure.facts[0].value.body).is_equal_to(RenderedBody::Text {
@@ -246,40 +256,22 @@ mod tests {
                 omitted_characters: 5,
             });
             assert_that!(renders.get()).is_equal_to(1);
+            failure
+        }
+
+        #[test]
+        fn preserves_labelled_evidence_without_rendering_again() {
+            let failure = assert_preserved(
+                |value| Fact::labelled("Reason", value),
+                "Reason: evi... 5 more characters ...",
+            );
+            assert_that!(failure.facts[0].label.as_deref()).is_equal_to(Some("Reason"));
         }
 
         #[test]
         fn preserves_note_evidence_without_rendering_again() {
-            let renders = Cell::new(0);
-            let renderer = EvidenceRenderer(&renders);
-            let rendering = RenderingContext::new(
-                &renderer,
-                RenderingBudget::default().with_max_leaf_characters(3),
-            );
-            let fact = Fact::note(rendering.value(&Evidence));
-            assert_that!(renders.get()).is_equal_to(1);
-
-            let failure = FailureBuilder::new::<()>(FailureKind::Other)
-                .relation("does not hold")
-                .fact(fact)
-                .build();
-
-            assert_that!(failure).has_text_report(formatdoc! {"
-                -------- assertr --------
-                does not hold
-
-                Details:
-                  - evi... 5 more characters ...
-                -------- assertr --------
-            "});
-            assert_that!(failure.facts[0].label.as_ref()).is_empty();
-            assert_that!(failure.facts[0].value.type_name)
-                .is_equal_to(Some(core::any::type_name::<Evidence>()));
-            assert_that!(failure.facts[0].value.body).is_equal_to(RenderedBody::Text {
-                text: "evi".into(),
-                omitted_characters: 5,
-            });
-            assert_that!(renders.get()).is_equal_to(1);
+            let failure = assert_preserved(Fact::note, "evi... 5 more characters ...");
+            assert_that!(failure.facts[0].label).is_none();
         }
     }
 
@@ -337,7 +329,7 @@ mod tests {
                 .facts(["Next.", "Last."].into_iter().map(Fact::note))
                 .build();
 
-            assert_that!(failure).has_text_report(formatdoc! {"
+            assert_that!(failure).has_text_report(indoc! {"
                 -------- assertr --------
                 does not hold
 
@@ -365,7 +357,7 @@ mod tests {
                 .fact(Fact::labelled("Last", "unchanged"))
                 .build();
 
-            assert_that!(failure).has_text_report(formatdoc! {"
+            assert_that!(failure).has_text_report(indoc! {"
                 -------- assertr --------
                 does not hold
 

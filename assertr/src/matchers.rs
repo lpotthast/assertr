@@ -31,7 +31,7 @@
 //! [`all_of`] requires every matcher to pass and reports each one that fails. [`any_of`] passes as
 //! soon as one matcher passes. If none does, it reports all of them, numbered by a zero-based
 //! `Branch` fact. Use [`matchers!`](crate::matchers!) to list matchers of different types, or an
-//! array for matchers of one type (see [`MatcherList`]).
+//! array for matchers of one type (see [`MatcherList`](crate::expectation::MatcherList)).
 //!
 //! There is no generic `not`. Negated checks such as [`NotEqualTo`], [`IsNone`], and
 //! [`DoesNotMatchPattern`] are separate matchers with their own failure reports.
@@ -53,11 +53,13 @@
 //!
 //! | Subject or check | Matchers |
 //! |---|---|
-//! | Equality and ordering | [`eq`], [`EqualTo`], [`NotEqualTo`], [`lt`], [`le`], [`gt`], [`ge`], and their types |
-//! | Booleans, variants, and types | [`IsTrue`], [`IsFalse`], [`IsSome`], [`IsNone`], [`IsOk`], [`IsErr`], [`IsReady`], [`IsPending`], [`IsOfType`] |
+//! | Equality and ordering | [`eq`], [`EqualTo`], [`NotEqualTo`], [`one_of`], [`lt`], [`le`], [`gt`], [`ge`], and their types |
+//! | Tolerance | [`close_to`], [`IsCloseTo`] for numbers and durations implementing [`NumericDistance`](crate::assertions::NumericDistance) |
+//! | Booleans, variants, and types | [`IsTrue`], [`IsFalse`], [`IsSome`], [`IsNone`], [`IsOk`], [`IsErr`], [`IsReady`], [`IsPending`], [`IsOfType`], [`HasPanicMessage`] |
 //! | Length, formatting, and identity | [`HasLengthOf`], [`IsEmpty`], [`IsNotEmpty`], [`HasDebugString`], [`HasDebugValue`], [`HasDisplayValue`], [`IsSameInstanceAs`], [`IsNotSameInstanceAs`] |
 //! | Characters and strings | [`character`], [`string`] |
-//! | Elements, maps, and sets | [`collection`], [`map`], [`set`] |
+//! | Element search | [`contains_matching`], [`does_not_contain_matching`], [`starts_with_elements`], [`ends_with_elements`], [`contains_contiguous_elements`] |
+//! | Elements, maps, and sets | [`collection`], [`map`], [`set`], [`entry`] |
 //! | Ranges, `RefCell` borrows, and iterators | [`range`], [`cell`], [`iterator`] |
 //! | Drop behavior | [`memory`] |
 //! | Numbers (`num`) | `numeric`. Floating-point checks also need `std` or `libm`. |
@@ -68,9 +70,9 @@
 //! | Tokio (`tokio`) | `tokio_mutex`, `tokio_rw_lock`, `watch` |
 //! | Combining checks | [`all_of`], [`any_of`], [`each`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`anything`] |
 //!
-//! Each matcher's page lists the subjects it supports and what it needs to render a failure. The
-//! matchers are re-exports, so their original paths under [`assertions`](crate::assertions) work
-//! too. Import `matchers::*` next to `prelude::*` if you want to browse them with autocomplete.
+//! Each matcher's page lists the subjects it supports and what it needs to render a failure. This
+//! module is the public home of these types. Import `matchers::*` next to `prelude::*` if you want
+//! to browse them with autocomplete.
 //!
 //! ## Structural syntax
 //!
@@ -229,10 +231,10 @@
 //! [`capture`](crate::AssertThat::capture) to inspect them, and see the [rendering
 //! guide](crate::renderer) to change how values are shown.
 
-/// Primitive, variant, length, formatting, and identity expectations are available directly.
+// Primitive, variant, length, formatting, and identity expectations are available directly.
 #[doc(inline)]
 pub use crate::assertions::{
-    alloc::boxed::IsOfType,
+    alloc::boxed::{HasPanicMessage, IsOfType},
     core::{
         bool::{IsFalse, IsTrue},
         debug::{HasDebugString, HasDebugValue},
@@ -256,8 +258,8 @@ pub use crate::{
             partial_eq::{EqualTo, IsOneOf, NotEqualTo, eq, one_of},
             partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
         },
-        distance::IsCloseTo,
-        map::{EntriesAre, Entry, EntryMatcherList, entries_are, entry, entry_matchers},
+        distance::{IsCloseTo, close_to},
+        map::{EntriesAre, Entry, entries_are, entry},
     },
     expectation::{
         all_of::{AllOf, all_of},
@@ -265,7 +267,6 @@ pub use crate::{
         anything::{Anything, anything},
         dereferenced::{Dereferenced, dereferenced},
         field::{Field, field},
-        lists::{MatcherList, predicate_list},
         predicate::{Predicate, predicate},
         satisfying::{Satisfying, satisfying},
     },
@@ -284,7 +285,7 @@ pub mod string {
     #[doc(inline)]
     pub use crate::assertions::core::string::{
         Contains, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
-        EqualToIgnoringAsciiCase, IsBlank, IsBlankAscii, IsNotBlank, StartsWith,
+        EqualToIgnoringAsciiCase, IsAsciiBlank, IsBlank, IsNotBlank, StartsWith,
     };
 }
 
@@ -327,7 +328,7 @@ pub mod range {
 pub mod cell {
     #[doc(inline)]
     pub use crate::assertions::core::ref_cell::{
-        IsBorrowed, IsMutablyBorrowed, IsNotMutablyBorrowed,
+        IsBorrowed, IsMutablyBorrowed, IsNotBorrowed, IsNotMutablyBorrowed,
     };
 }
 
@@ -513,7 +514,7 @@ mod tests {
             assert_that!(debug_and_clone(&dereferenced(eq(1))))
                 .is_equal_to("Dereferenced(EqualTo(1))");
             assert_that!(debug_and_clone(&elements_are([eq(1)])))
-                .is_equal_to("ElementsAre { list: [EqualTo(1)], position: Exact }");
+                .is_equal_to("ElementsAre { list: [EqualTo(1)], placement: Exact }");
             assert_that!(debug_and_clone(&entries_are([entry("a", eq(1))])))
                 .is_equal_to(r#"EntriesAre([Entry { key: "a", matcher: EqualTo(1) }])"#);
             assert_that!(debug_and_clone(&field(

@@ -1,10 +1,9 @@
-#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
+//! Conversions of the subject into its serialized form.
+
 use alloc::string::String;
 
-#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 use crate::{AssertThat, actual::Actual, mode::Mode};
 
-#[cfg(any(feature = "serde-json", feature = "serde-toml"))]
 impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
     /// Serializes the borrowed view of the subject once, returning a JSON `Result` subject.
     ///
@@ -57,7 +56,7 @@ impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
     }
 }
 
-#[cfg(all(test, any(feature = "serde-json", feature = "serde-toml")))]
+#[cfg(test)]
 mod tests {
     use core::cell::Cell;
 
@@ -133,7 +132,7 @@ mod tests {
                 }
                 #[test]
                 fn result_assertions_keep_renderer_budget_and_chain_state() {
-                    use indoc::formatdoc;
+                    use indoc::indoc;
 
                     let calls = Cell::new(0);
                     let subject = Serialized {
@@ -151,7 +150,7 @@ mod tests {
                     let failures = converted.capture(|it| it.is_equal_to("wrong"));
                     assert_that!(failures).contains_exactly_satisfying([
                         |element: AssertThat<AssertionFailure, Capture>| {
-                            element.derive(|value| value).has_text_report(formatdoc! {r"
+                            element.derive(|value| value).has_text_report(indoc! {r"
                         -------- assertr --------
                         Subject: serialized subject
                         Expression: `subject`
@@ -186,7 +185,7 @@ mod tests {
                         .capture(|it| it.$method().is_ok_satisfying(|_| {}));
                     assert_that!(failures).contains_exactly_satisfying([
                         |element: AssertThat<AssertionFailure, Capture>| {
-                            element.derive(|value| value).has_text_report(formatdoc! {r"
+                            element.derive(|value| value).has_text_report(indoc! {r"
                         -------- assertr --------
                         Expression: `subject`
 

@@ -21,8 +21,8 @@ impl<F> core::fmt::Debug for Satisfying<F> {
 ///
 /// The built-in matchers cover a selective set of constraints. Use this adapter when a field
 /// needs a check from an [assertion family](crate::assertions) or a custom assertion trait.
-/// The closure receives an assertion context for the field. All its assertions must pass for
-/// the matcher to match, and their structured failures retain the enclosing field's path.
+/// The closure receives a capture-mode assertion chain for the value. All its assertions must pass
+/// for the matcher to match, and their structured failures retain the enclosing field's path.
 ///
 /// ```rust
 /// # #[cfg(feature = "partial")]
@@ -74,7 +74,8 @@ impl<F> core::fmt::Debug for Satisfying<F> {
 /// # Panics
 ///
 /// Panics during evaluation if the closure performs no assertions. User panics propagate.
-pub fn satisfying<A, R, F>(callback: F) -> Satisfying<F>
+#[must_use]
+pub const fn satisfying<A, R, F>(callback: F) -> Satisfying<F>
 where
     F: for<'a> Fn(AssertThat<'a, A, Capture, R>),
 {
@@ -102,7 +103,7 @@ where
     ) -> FailureBuilder {
         match rejected {
             None => failure.relation("satisfies the assertions"),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+            Some((_, evidence)) => failure.relation("does not match").evidence(evidence),
         }
     }
 }

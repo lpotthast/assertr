@@ -52,6 +52,10 @@ methods immediately build owned `Rendered` trees containing leaf text, children,
 Failure consumers inspect these trees without rerendering original values. See
 [structural evidence examples](../assertr/src/crate_docs.md#structural-evidence).
 
+Only strings and `format_args!` output convert into `Rendered` directly. They become verbatim text that bypasses the
+renderer and budget, meant for structural labels and author prose. Numbers, `bool`, and `char` deliberately have no
+conversion, so counts and other values cannot skip the active renderer by accident.
+
 ### Structural rendering
 
 | Method | Structure and ordering |
@@ -65,9 +69,9 @@ Failure consumers inspect these trees without rerendering original values. See
 | `variant`, `struct_field`, `unavailable_struct_field` | One-field wrappers preserving the owner's canonical type separately from field type. Unavailable fields have structural placeholders and no inferred type. |
 
 `compact()` returns a context that formats leaves without the alternate flag, for evidence embedded in surrounding text
-such as map keys in paths. `Rendered::show_type_hint` controls whether text output shows a leaf's short type name.
+such as map keys in paths. `Rendered::with_type_hint` controls whether text output shows a leaf's short type name.
 
-`CollectionPresentation` selects syntax, type-hint visibility through `show_type_hint(bool)`, and `RenderingOrder`. It
+`CollectionPresentation` selects syntax, type-hint visibility through `with_type_hint(bool)`, and `RenderingOrder`. It
 does not enable assertion methods. `PreserveIteration` follows traversal. `SortByRenderedText` sorts formatted evidence
 and marks it "(sorted for rendering)" when at least two items, counting omitted ones, were considered. Built-in
 sequences and tree collections preserve iteration. Hash collections and heaps sort.

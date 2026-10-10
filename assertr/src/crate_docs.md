@@ -158,7 +158,7 @@ assert_that!(async || 7_u32)
     .is_equal_to(7);
 assert_that!(async || panic!("boom"))
     .panics_async().await
-    .has_type::<&str>()
+    .has_message()
     .is_equal_to("boom");
 # });
 # }
@@ -476,16 +476,17 @@ where
 }
 
 let address = String::from("8080");
-let port = assert_that!(address).test_assertion(&IsPort);
-assert_that!(port).is_equal_to(Some(8080));
+let port = assert_that!(address).require(&IsPort);
+assert_that!(port).is_equal_to(8080);
 
 let failures = assert_that!(String::from("http"))
     .capture(|it| it.matches(IsPort));
 assert_that!(failures[0].to_string()).contains("is not a port");
 ```
 
-[`AssertThat::test_assertion`] returns the observed value instead of continuing the chain. In
-capture mode, it returns `None` after recording a failure.
+[`AssertThat::require`] returns the observed value instead of continuing the chain. It exists only
+in panic mode, where a rejection panics. [`AssertThat::test_assertion`] works in both modes and
+returns `None` after recording a failure in capture mode.
 
 When filling the builder:
 

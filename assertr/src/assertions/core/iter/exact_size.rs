@@ -112,44 +112,13 @@ where
     }
 }
 
-/// Requires [`ExactSizeIterator::len`] to be nonzero, without advancing the iterator.
-#[derive(Debug, Clone, Copy)]
-pub struct HasRemainingElements;
-
-impl<I: ExactSizeIterator, R> Expectation<I, R> for HasRemainingElements {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        I: 'a;
-    type Rejection<'a>
-        = ()
-    where
-        Self: 'a,
-        I: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a I,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let length = actual.len();
-        if length != 0 { Ok(()) } else { Err(()) }
-    }
-
-    const KIND: FailureKind = FailureKind::Length;
-
-    fn explain<'a>(
-        &'a self,
-        rejected: Option<(&'a I, Self::Rejection<'a>)>,
-        failure: FailureBuilder,
-        _context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder {
-        match rejected {
-            None => failure.relation("has remaining elements"),
-            Some((_, ())) => failure.relation("has no remaining elements"),
-        }
-    }
+property_expectation! {
+    /// Requires [`ExactSizeIterator::len`] to be nonzero, without advancing the iterator.
+    pub struct HasRemainingElements for<I: ExactSizeIterator> I;
+    kind Length;
+    check |actual| actual.len() != 0;
+    relations "has remaining elements", "has no remaining elements";
+    hidden;
 }
 
 /// Non-consuming assertions for the exact number of elements remaining in an iterator.

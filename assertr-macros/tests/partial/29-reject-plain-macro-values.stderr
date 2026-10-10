@@ -81,8 +81,8 @@ note: required by a bound in `assertr::assertions::StableOrderAssertions::contai
   |     fn contains_exactly_matching<P>(self, expected: P) -> Self
   |        ------------------------- required by a bound in this associated function
   |     where
-  |         P: crate::matchers::MatcherList<T, R>,
-  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `StableOrderAssertions::contains_exactly_matching`
+  |         P: crate::expectation::MatcherList<T, R>,
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `StableOrderAssertions::contains_exactly_matching`
 
 error[E0277]: `{integer}` is not an expectation for `{integer}`
  --> tests/partial/29-reject-plain-macro-values.rs:9:58

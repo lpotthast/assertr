@@ -87,54 +87,88 @@ impl<T: Debug + ?Sized, E: AsRef<str>, R: ValueRenderer<str>> Expectation<T, R>
     }
 }
 
-/// Compares the complete `Debug` representation with the expected value's representation.
+/// Defines an expectation comparing the complete representation of the subject under one
+/// formatting trait with the expected value's representation under the same trait.
+///
 /// Formatting determines truth even when diagnostic rendering is disabled or budgeted.
-/// Rejections retain the formatted operands so explanation never formats them again.
-#[derive(Debug, Clone)]
-pub struct HasDebugValue<E>(E);
+/// Evaluation formats each operand once, and rejections retain both texts, so explanation never
+/// formats them again. Only a missing subject formats the expected operand for its description.
+macro_rules! formatted_value_expectation {
+    (
+        $(#[$attr:meta])*
+        pub struct $name:ident;
+        format $format:path, $spec:literal;
+        relation $relation:literal;
+    ) => {
+        $(#[$attr])*
+        #[derive(Debug, Clone)]
+        pub struct $name<E>(E);
 
-impl<E> HasDebugValue<E> {
-    /// Owns the expected operand, which may itself be borrowed.
-    #[must_use]
-    pub const fn new(expected: E) -> Self {
-        Self(expected)
-    }
+        impl<E> $name<E> {
+            /// Owns the expected operand, which may itself be borrowed.
+            #[must_use]
+            pub const fn new(expected: E) -> Self {
+                Self(expected)
+            }
+        }
+
+        impl<T, E, R> $crate::expectation::Expectation<T, R> for $name<E>
+        where
+            T: $format + ?Sized,
+            E: $format,
+            R: $crate::renderer::ValueRenderer<str>,
+        {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                T: 'a;
+            type Rejection<'a>
+                = (::alloc::string::String, ::alloc::string::String)
+            where
+                Self: 'a,
+                T: 'a;
+
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a T,
+                _: &$crate::expectation::AssertionContext<'_, R>,
+            ) -> Result<(), Self::Rejection<'a>> {
+                $crate::assertions::core::debug::compare_text(
+                    ::alloc::format!($spec, actual),
+                    ::alloc::format!($spec, self.0),
+                )
+            }
+
+            const KIND: $crate::failure::FailureKind = $crate::failure::FailureKind::Equality;
+
+            fn explain<'a>(
+                &'a self,
+                rejected: Option<(&'a T, Self::Rejection<'a>)>,
+                failure: $crate::failure::FailureBuilder,
+                context: &$crate::expectation::AssertionContext<'_, R>,
+            ) -> $crate::failure::FailureBuilder {
+                $crate::assertions::core::debug::explain_text(
+                    rejected.map(|(_, texts)| texts),
+                    || ::alloc::format!($spec, self.0),
+                    $relation,
+                    failure,
+                    context,
+                )
+            }
+        }
+    };
 }
 
-impl<T: Debug + ?Sized, E: Debug, R: ValueRenderer<str>> Expectation<T, R> for HasDebugValue<E> {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        T: 'a;
-    type Rejection<'a>
-        = (String, String)
-    where
-        Self: 'a,
-        T: 'a;
-    fn evaluate<'a>(
-        &'a self,
-        actual: &'a T,
-        _: &AssertionContext<'_, R>,
-    ) -> Result<(), Self::Rejection<'a>> {
-        compare_text(format!("{actual:?}"), format!("{:?}", self.0))
-    }
+pub(super) use formatted_value_expectation;
 
-    const KIND: FailureKind = FailureKind::Equality;
-    fn explain<'a>(
-        &'a self,
-        rejected: Option<(&'a T, Self::Rejection<'a>)>,
-        failure: FailureBuilder,
-        context: &AssertionContext<'_, R>,
-    ) -> FailureBuilder {
-        explain_text(
-            rejected.map(|(_, texts)| texts),
-            || format!("{:?}", self.0),
-            "has the expected Debug representation",
-            failure,
-            context,
-        )
-    }
+formatted_value_expectation! {
+    /// Compares the complete `Debug` representation with the expected value's representation.
+    ///
+    /// Use [`HasDebugString`] to compare with preformatted text instead.
+    pub struct HasDebugValue;
+    format Debug, "{:?}";
+    relation "has the expected Debug representation";
 }
 
 /// Assertions for values implementing [`Debug`].
@@ -224,7 +258,6 @@ mod tests {
             for value in ["", "\"", "\\", "\n", "\r\n", "\t", "é🦀"] {
                 let expected = format!("{value:?}");
                 assert_that!(value).has_debug_string(&expected);
-                assert_that!(value).has_debug_value(value);
                 let without_quotes = &expected[1..expected.len() - 1];
                 assert_that!(assert_that!(value).capture(|it| it.has_debug_string(without_quotes)))
                     .has_length(1);
@@ -274,16 +307,27 @@ mod tests {
         }
 
         #[test]
-        fn succeeds_when_equal_on_static_string_containing_escaped_characters() {
-            assert_that!("\n").has_debug_string(r#""\n""#);
-        }
-
-        #[test]
         fn succeeds_when_equal_on_struct_debug_string_containing_escaped_characters() {
             #[derive(Debug)]
             struct Data(#[expect(unused)] &'static str);
 
             assert_that!(Data("\n")).has_debug_string(r#"Data("\n")"#);
+        }
+
+        #[test]
+        fn succeeds_when_equal_using_a_struct_representation() {
+            #[derive(Debug)]
+            #[expect(dead_code)] // Expect fields to never be read.
+            struct Person {
+                age: u32,
+                alive: bool,
+            }
+
+            assert_that!(Person {
+                age: 42,
+                alive: true,
+            })
+            .has_debug_string("Person { age: 42, alive: true }");
         }
 
         #[test]
@@ -354,12 +398,18 @@ mod tests {
             }
         }
 
+        #[test]
+        fn formats_string_subjects_and_operands_alike() {
+            for value in ["", "\"", "\\", "\n", "\r\n", "\t", "é🦀"] {
+                assert_that!(value).has_debug_value(value);
+            }
+        }
+
         mod with_number {
             use crate::prelude::*;
 
             #[test]
             fn succeeds_when_equal_using_same_value() {
-                assert_that!(42).has_debug_value(42);
                 assert_that!(42).has_debug_value(42);
             }
 
@@ -376,7 +426,7 @@ mod tests {
 
             use crate::prelude::*;
 
-            // That's why we also have `has_debug_string`.
+            // A string's Debug form is escaped. Compare preformatted text with `has_debug_string`.
             #[test]
             fn distinguishes_a_newline_from_a_literal_escape_sequence() {
                 assert_that!(|| {
@@ -430,15 +480,6 @@ mod tests {
                     age: 42,
                     alive: true,
                 });
-            }
-
-            #[test]
-            fn succeeds_when_equal_using_string_representation() {
-                assert_that!(Person {
-                    age: 42,
-                    alive: true,
-                })
-                .has_debug_string("Person { age: 42, alive: true }");
             }
         }
     }

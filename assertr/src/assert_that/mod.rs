@@ -12,18 +12,19 @@ use alloc::vec::Vec;
 use core::{
     cell::{Cell, RefCell},
     marker::PhantomData,
-    panic::AssertUnwindSafe,
+    panic::{AssertUnwindSafe, Location},
 };
 
 #[cfg(feature = "std")]
 pub(crate) use detached::DetachedChain;
 
 use crate::{
-    AssertThat, ChainRecords, ChainState, Expression,
+    AssertThat, ChainRecords, ChainState, DiagnosticSettings, Expression,
     actual::Actual,
-    failure::AssertionFailures,
+    expectation::AssertionContext,
+    failure::{AssertionFailure, AssertionFailures, FailureBuilder},
     mode::{Mode, Panic},
-    renderer::{DebugRenderer, RenderingBudget},
+    renderer::{DebugRenderer, RenderingBudget, RenderingContext},
 };
 
 impl<'t> ChainRecords<'t> {
@@ -38,15 +39,59 @@ impl<'t> ChainRecords<'t> {
     }
 }
 
-impl<'t, M: Mode, R> ChainState<'t, M, R> {
-    const fn root(renderer: R) -> Self {
+impl DiagnosticSettings {
+    /// The settings of a new root chain.
+    const fn new() -> Self {
         Self {
-            records: ChainRecords::new(None),
             subject_name: None,
             expression: Expression::Unset,
             include_location: true,
             rendering_budget: RenderingBudget::DEFAULT,
             panic_presentation: None,
+        }
+    }
+
+    /// Inherits everything except the subject name and expression, which describe the parent's
+    /// subject.
+    fn for_child(&self) -> Self {
+        Self {
+            subject_name: None,
+            expression: Expression::Unset,
+            include_location: self.include_location,
+            rendering_budget: self.rendering_budget,
+            panic_presentation: self.panic_presentation.clone(),
+        }
+    }
+
+    /// Renders values with `renderer` within this chain's budget.
+    const fn render<'r, R>(&self, renderer: &'r R) -> RenderingContext<'r, R> {
+        RenderingContext::new(renderer, self.rendering_budget)
+    }
+
+    /// Supplies the rendering settings and location policy for expectation evaluation.
+    fn assertion_context<'r, R>(&self, renderer: &'r R) -> AssertionContext<'r, R> {
+        AssertionContext::from_rendering(self.render(renderer), self.include_location)
+    }
+
+    /// Completes the failure's caller, subject name, and expression. The caller adds messages.
+    pub(crate) fn complete(
+        &self,
+        failure: FailureBuilder,
+        location: &'static Location<'static>,
+    ) -> AssertionFailure {
+        let mut failure = failure.build();
+        failure.location = self.include_location.then_some(location);
+        failure.subject_name.clone_from(&self.subject_name);
+        failure.expression = self.expression.explicit();
+        failure
+    }
+}
+
+impl<'t, M: Mode, R> ChainState<'t, M, R> {
+    const fn root(renderer: R) -> Self {
+        Self {
+            records: ChainRecords::new(None),
+            settings: DiagnosticSettings::new(),
             mode: PhantomData,
             renderer,
         }
@@ -60,11 +105,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
     {
         ChainState {
             records: ChainRecords::new(Some(&self.records)),
-            subject_name: None,
-            expression: Expression::Unset,
-            include_location: self.include_location,
-            rendering_budget: self.rendering_budget,
-            panic_presentation: self.panic_presentation.clone(),
+            settings: self.settings.for_child(),
             mode: PhantomData,
             renderer: self.renderer.clone(),
         }
@@ -73,11 +114,7 @@ impl<'t, M: Mode, R> ChainState<'t, M, R> {
     fn with_renderer<R2>(self, renderer: R2) -> ChainState<'t, M, R2> {
         ChainState {
             records: self.records,
-            subject_name: self.subject_name,
-            expression: self.expression,
-            include_location: self.include_location,
-            rendering_budget: self.rendering_budget,
-            panic_presentation: self.panic_presentation,
+            settings: self.settings,
             mode: self.mode,
             renderer,
         }
@@ -100,7 +137,7 @@ impl<'t, T> AssertThat<'t, T, crate::mode::Capture> {
     #[track_caller]
     pub(crate) fn new_fluent_capturing(actual: Actual<'t, T>) -> Self {
         let mut assertion = Self::new(actual);
-        assertion.state.expression = Expression::PendingFluent(core::panic::Location::caller());
+        assertion.state.settings.expression = Expression::PendingFluent(Location::caller());
         assertion
     }
 }
@@ -194,25 +231,19 @@ mod tests {
         fn explicitly_overridden_subject_state_remains_accessible_after_a_panic() {
             let value = Cell::new((0, 0));
             let context = assert_that!(value);
-            assert_that!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    context.actual().set((1, 0));
-                    panic!("interrupted update");
-                }))
-                .is_err()
-            )
-            .is_true();
+            assert_that!(catch_unwind(AssertUnwindSafe(|| {
+                context.actual().set((1, 0));
+                panic!("interrupted update");
+            })))
+            .is_err();
             assert_that!(context.actual().get()).is_equal_to((1, 0));
 
             let context = assert_that_owned!(RefCell::new((0, 0)));
-            assert_that!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    context.actual().borrow_mut().0 = 1;
-                    panic!("interrupted update");
-                }))
-                .is_err()
-            )
-            .is_true();
+            assert_that!(catch_unwind(AssertUnwindSafe(|| {
+                context.actual().borrow_mut().0 = 1;
+                panic!("interrupted update");
+            })))
+            .is_err();
             assert_that!(*context.actual().borrow()).is_equal_to((1, 0));
         }
 
@@ -236,13 +267,10 @@ mod tests {
                 calls.set(calls.get() + 1);
                 panic!("renderer panic");
             });
-            assert_that!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    context.derive_owned(|value| *value).is_equal_to(2);
-                }))
-                .is_err()
-            )
-            .is_true();
+            assert_that!(catch_unwind(AssertUnwindSafe(|| {
+                context.derive_owned(|value| *value).is_equal_to(2);
+            })))
+            .is_err();
             assert_that!(calls.get()).is_equal_to(3);
         }
 
@@ -275,14 +303,11 @@ mod tests {
         fn capture_bookkeeping_remains_usable_after_a_caught_panic() {
             let failures = assert_that!(1).with_detail_message("root").capture(|root| {
                 let child = root.derive(|value| value).with_detail_message("child");
-                assert_that!(
-                    catch_unwind(|| {
-                        child.derive(|value| value).is_equal_to(2);
-                        panic!("after recording a failure");
-                    })
-                    .is_err()
-                )
-                .is_true();
+                assert_that!(catch_unwind(|| {
+                    child.derive(|value| value).is_equal_to(2);
+                    panic!("after recording a failure");
+                }))
+                .is_err();
                 child.is_equal_to(3);
                 assert_that!(root.state.records.assertion_count()).is_equal_to(2);
                 root.is_equal_to(4)
@@ -304,13 +329,10 @@ mod tests {
             }
 
             let failures = assert_that!(1).capture(|root| {
-                assert_that!(
-                    catch_unwind(|| {
-                        root.add_detail_message(Message(&|| root.add_detail_message("nested")));
-                    })
-                    .is_err()
-                )
-                .is_true();
+                assert_that!(catch_unwind(|| {
+                    root.add_detail_message(Message(&|| root.add_detail_message("nested")));
+                }))
+                .is_err();
                 root.add_detail_message("after panic");
                 root.is_equal_to(2)
             });
@@ -354,8 +376,6 @@ mod tests {
     }
 
     mod unwrap_inner {
-        use indoc::formatdoc;
-
         use crate::prelude::*;
 
         #[test]
@@ -365,7 +385,7 @@ mod tests {
 
             assert_that!(move || assert.unwrap_inner()).panics()
                 .has_type::<&str>()
-                .is_equal_to(formatdoc! {r"Cannot unwrap a borrowed value. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead."});
+                .is_equal_to("Cannot unwrap a borrowed value. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.");
         }
 
         #[test]

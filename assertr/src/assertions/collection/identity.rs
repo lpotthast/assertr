@@ -5,6 +5,7 @@ use core::{borrow::Borrow, marker::PhantomData, ptr};
 
 use super::{Collection, StableOrder};
 use crate::{
+    assertions::support::length_facts,
     expectation::{AssertionContext, Expectation},
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::{Rendered, RenderingOrder},
@@ -109,34 +110,79 @@ impl<U: ?Sized> core::fmt::Debug for Addresses<'_, U> {
     }
 }
 
+/// Implements `Clone`, `Copy`, `Debug`, and `new` for an expectation borrowing one target. A
+/// derive would wrongly require `U: Clone`, and `Debug` shows only the target's address because
+/// identity never inspects its contents.
+macro_rules! single_target_traits {
+    ($name:ident) => {
+        impl<U: ?Sized> Clone for $name<'_, U> {
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+
+        impl<U: ?Sized> Copy for $name<'_, U> {}
+
+        impl<U: ?Sized> core::fmt::Debug for $name<'_, U> {
+            fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                formatter
+                    .debug_tuple(stringify!($name))
+                    .field(&ptr::from_ref(self.0))
+                    .finish()
+            }
+        }
+
+        impl<'e, U: ?Sized> $name<'e, U> {
+            /// Borrows the expected target, including pointer metadata for unsized targets.
+            #[must_use]
+            pub const fn new(expected: &'e U) -> Self {
+                Self(expected)
+            }
+        }
+    };
+}
+
+/// Implements `Clone`, `Debug`, and `new` for an expectation storing expected target references
+/// as `expected: B`. Only `B` needs `Clone`, and `Debug` shows the targets' addresses because
+/// identity never inspects their contents.
+macro_rules! target_list_traits {
+    ($name:ident) => {
+        impl<'e, U: ?Sized + 'e, B: Clone> Clone for $name<'e, U, B> {
+            fn clone(&self) -> Self {
+                Self {
+                    expected: self.expected.clone(),
+                    target: PhantomData,
+                }
+            }
+        }
+
+        impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> core::fmt::Debug for $name<'e, U, B> {
+            fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                formatter
+                    .debug_struct(stringify!($name))
+                    .field("expected", &Addresses(self.expected.as_ref()))
+                    .finish()
+            }
+        }
+
+        impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> $name<'e, U, B> {
+            /// Stores expected target references without converting their storage yet.
+            #[must_use]
+            pub const fn new(expected: B) -> Self {
+                Self {
+                    expected,
+                    target: PhantomData,
+                }
+            }
+        }
+    };
+}
+
 /// Checks that some collection element borrows the same instance as the expected target, without
 /// equality or target rendering capabilities.
 pub struct ContainsSameInstanceAs<'e, U: ?Sized>(&'e U);
 
-impl<U: ?Sized> Clone for ContainsSameInstanceAs<'_, U> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<U: ?Sized> Copy for ContainsSameInstanceAs<'_, U> {}
-
-/// Shows the expected target's address, because identity never inspects its contents.
-impl<U: ?Sized> core::fmt::Debug for ContainsSameInstanceAs<'_, U> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("ContainsSameInstanceAs")
-            .field(&ptr::from_ref(self.0))
-            .finish()
-    }
-}
-impl<'e, U: ?Sized> ContainsSameInstanceAs<'e, U> {
-    /// Borrows the expected target, including pointer metadata for unsized targets.
-    #[must_use]
-    pub const fn new(expected: &'e U) -> Self {
-        Self(expected)
-    }
-}
+single_target_traits!(ContainsSameInstanceAs);
 
 impl<C: Collection + ?Sized, U: ?Sized, R> Expectation<C, R> for ContainsSameInstanceAs<'_, U>
 where
@@ -208,30 +254,7 @@ where
 /// equality or target rendering capabilities.
 pub struct DoesNotContainSameInstanceAs<'e, U: ?Sized>(&'e U);
 
-impl<U: ?Sized> Clone for DoesNotContainSameInstanceAs<'_, U> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<U: ?Sized> Copy for DoesNotContainSameInstanceAs<'_, U> {}
-
-/// Shows the expected target's address, because identity never inspects its contents.
-impl<U: ?Sized> core::fmt::Debug for DoesNotContainSameInstanceAs<'_, U> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("DoesNotContainSameInstanceAs")
-            .field(&ptr::from_ref(self.0))
-            .finish()
-    }
-}
-impl<'e, U: ?Sized> DoesNotContainSameInstanceAs<'e, U> {
-    /// Borrows the expected target, including pointer metadata for unsized targets.
-    #[must_use]
-    pub const fn new(expected: &'e U) -> Self {
-        Self(expected)
-    }
-}
+single_target_traits!(DoesNotContainSameInstanceAs);
 
 impl<C: Collection + ?Sized, U: ?Sized, R> Expectation<C, R> for DoesNotContainSameInstanceAs<'_, U>
 where
@@ -292,36 +315,7 @@ pub struct ContainsExactlySameInstances<'e, U: ?Sized + 'e, B = Vec<&'e U>> {
     target: PhantomData<&'e U>,
 }
 
-impl<'e, U: ?Sized + 'e, B: Clone> Clone for ContainsExactlySameInstances<'e, U, B> {
-    fn clone(&self) -> Self {
-        Self {
-            expected: self.expected.clone(),
-            target: PhantomData,
-        }
-    }
-}
-
-/// Shows the expected targets' addresses, because identity never inspects their contents.
-impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> core::fmt::Debug
-    for ContainsExactlySameInstances<'e, U, B>
-{
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("ContainsExactlySameInstances")
-            .field("expected", &Addresses(self.expected.as_ref()))
-            .finish()
-    }
-}
-impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> ContainsExactlySameInstances<'e, U, B> {
-    /// Stores expected target references without converting their storage yet.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            target: PhantomData,
-        }
-    }
-}
+target_list_traits!(ContainsExactlySameInstances);
 
 impl<'e, C: StableOrder + ?Sized, U: ?Sized + 'e, B, R> Expectation<C, R>
     for ContainsExactlySameInstances<'e, U, B>
@@ -391,7 +385,7 @@ where
             None => failure.relation("contains exactly the same instances in order"),
             Some((actual, rejection)) => {
                 let ExactIdentityRejection {
-                    expected,
+                    expected: _,
                     length,
                     mismatch,
                     observed,
@@ -400,12 +394,7 @@ where
                     .actual(observed.render(actual, RenderingOrder::PreserveIteration, context))
                     .relation("does not contain exactly the same instances in order");
                 if length != expected.len() {
-                    failure = failure
-                        .fact(Fact::labelled("Actual length", render.value(&length)))
-                        .fact(Fact::labelled(
-                            "Expected length",
-                            render.value(&expected.len()),
-                        ));
+                    failure = failure.facts(length_facts(render, length, expected.len()));
                 }
                 if let Some(IdentityMismatch {
                     index,
@@ -427,7 +416,7 @@ where
                             .path([PathSegment::Index(index)])
                             .build()
                     });
-                    failure = child.into_evidence().explain(failure);
+                    failure = failure.evidence(child.into_evidence());
                 }
                 failure
             }
@@ -444,36 +433,7 @@ pub struct ContainsExactlySameInstancesInAnyOrder<'e, U: ?Sized + 'e, B = Vec<&'
     target: PhantomData<&'e U>,
 }
 
-impl<'e, U: ?Sized + 'e, B: Clone> Clone for ContainsExactlySameInstancesInAnyOrder<'e, U, B> {
-    fn clone(&self) -> Self {
-        Self {
-            expected: self.expected.clone(),
-            target: PhantomData,
-        }
-    }
-}
-
-/// Shows the expected targets' addresses, because identity never inspects their contents.
-impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> core::fmt::Debug
-    for ContainsExactlySameInstancesInAnyOrder<'e, U, B>
-{
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("ContainsExactlySameInstancesInAnyOrder")
-            .field("expected", &Addresses(self.expected.as_ref()))
-            .finish()
-    }
-}
-impl<'e, U: ?Sized + 'e, B: AsRef<[&'e U]>> ContainsExactlySameInstancesInAnyOrder<'e, U, B> {
-    /// Stores expected target references without converting their storage yet.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            target: PhantomData,
-        }
-    }
-}
+target_list_traits!(ContainsExactlySameInstancesInAnyOrder);
 
 impl<'e, C: Collection + ?Sized, U: ?Sized + 'e, B, R> Expectation<C, R>
     for ContainsExactlySameInstancesInAnyOrder<'e, U, B>
@@ -670,7 +630,7 @@ mod tests {
                     element
                         .derive(|value| &value.kind)
                         .is_equal_to(FailureKind::Membership);
-                    element.derive(|value| value).has_text_report(formatdoc! {"
+                    element.has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`
 
@@ -765,16 +725,10 @@ mod tests {
                 .capture(|it| it.does_not_contain_same_instance_as(&keys[0]));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element
-                        .derive_owned(|value| value.expected.is_none())
-                        .is_true();
-                    element
-                        .derive_owned(|value| value.facts.is_empty())
-                        .is_true();
-                    element
-                        .derive_owned(|value| value.children.is_empty())
-                        .is_true();
-                    element.derive(|value| value).has_text_report(formatdoc! {"
+                    element.derive(|value| &value.expected).is_none();
+                    element.derive(|value| &value.facts).is_empty();
+                    element.derive(|value| &value.children).is_empty();
+                    element.has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`
 
@@ -846,7 +800,7 @@ mod tests {
                                 element.derive(|value| &value.facts).is_empty();
                             },
                         ]);
-                    item.derive(|subject| subject).has_text_report(formatdoc! {"
+                    item.has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`
 
@@ -1002,10 +956,8 @@ mod tests {
                 });
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element
-                        .derive_owned(|value| value.children.is_empty())
-                        .is_true();
-                    element.derive(|value| value).has_text_report(formatdoc! {"
+                    element.derive(|value| &value.children).is_empty();
+                    element.has_text_report(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`
 
@@ -1063,8 +1015,8 @@ mod tests {
                         item.derive(|subject| &subject.facts)
                             .contains_exactly_satisfying([|element: AssertThat<Fact, Capture>| {
                                 element
-                                    .derive(|value| &value.label)
-                                    .is_equal_to(alloc::borrow::Cow::Borrowed(label));
+                                    .derive_owned(|value| value.label.as_deref())
+                                    .is_equal_to(Some(label));
                             }]);
                     },
                 ]);
@@ -1223,6 +1175,8 @@ mod tests {
 
         #[test]
         fn positional_evidence_ignores_presentation_sorting() {
+            use crate::assertions::HasLength;
+
             struct SortedPresentation<'a>([&'a Opaque; 2]);
             impl HasLength for SortedPresentation<'_> {
                 fn length(&self) -> usize {

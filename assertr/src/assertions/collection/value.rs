@@ -5,17 +5,18 @@ use core::marker::PhantomData;
 
 use super::{Collection, Placement, StableOrder};
 use crate::{
+    assertions::support::indexed_equality_mismatch,
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation},
-    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
+    expectation::{AssertionContext, Expectation, passed},
+    failure::{Fact, FailureBuilder, FailureKind},
     renderer::{RenderingContext, RenderingOrder, ValueRenderer},
     util::matching::{assign_exactly, match_bipartite},
 };
 
-/// Retained missing values from a membership rejection.
+/// Retained missing expected operands, such as elements or map keys, from a membership rejection.
 #[derive(Debug)]
 pub struct MissingElementsRejection<'a, E: ?Sized> {
-    missing: Vec<&'a E>,
+    pub(crate) missing: Vec<&'a E>,
 }
 
 /// Retained length and first mismatch from a prefix or suffix rejection.
@@ -74,8 +75,17 @@ pub struct ExactElementsRejection<'a, A: ?Sized, E: ?Sized> {
     only_order_differs: bool,
 }
 
-/// Checks collection membership with the actual element’s `PartialEq` implementation and a borrowed
+/// Checks collection membership with the actual element's `PartialEq` implementation and a borrowed
 /// item operand.
+///
+/// [`CollectionAssertions::contains`](crate::assertions::CollectionAssertions::contains)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::Contains, prelude::*};
+///
+/// assert_that!(["a", "b"]).matches(Contains::new("b"));
+/// ```
 #[derive(Debug, Clone)]
 pub struct Contains<E>(E);
 
@@ -142,8 +152,17 @@ where
     }
 }
 
-/// Checks that no collection element equals a borrowed item operand, using the actual element’s
+/// Checks that no collection element equals a borrowed item operand, using the actual element's
 /// `PartialEq` implementation.
+///
+/// [`CollectionAssertions::does_not_contain`](crate::assertions::CollectionAssertions::does_not_contain)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::DoesNotContain, prelude::*};
+///
+/// assert_that!(["a", "b"]).matches(DoesNotContain::new("c"));
+/// ```
 #[derive(Debug, Clone)]
 pub struct DoesNotContain<E>(E);
 
@@ -211,22 +230,20 @@ where
 }
 
 /// Requires a match for each expected value. Duplicate expectations may share a matching element.
+///
+/// [`CollectionAssertions::contains_all`](crate::assertions::CollectionAssertions::contains_all)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::ContainsAll, prelude::*};
+///
+/// assert_that!([1, 2, 3]).matches(ContainsAll::new([3, 1, 1]));
+/// ```
 pub struct ContainsAll<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
-expected_operands_traits!(ContainsAll<E, B>, operand);
-impl<E, B: AsRef<[E]>> ContainsAll<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
-    /// without accessing its views.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-}
+expected_operands_traits!(ContainsAll<E, B>, operand, new);
 
 impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for ContainsAll<E, B>
 where
@@ -277,7 +294,7 @@ where
         let failure = match rejected {
             None => failure.relation("contains all of"),
             Some((actual, rejection)) => {
-                let MissingElementsRejection { missing, .. } = rejection;
+                let MissingElementsRejection { missing } = rejection;
                 failure
                     .actual(render.collection(actual))
                     .relation("does not contain all of")
@@ -377,15 +394,9 @@ where
             }) = mismatch
             {
                 let mut child = context.isolated();
-                child.record(|context| {
-                    let render = context.render();
-                    FailureBuilder::new::<C::Item>(FailureKind::Equality)
-                        .actual(render.value(element))
-                        .expected(render.value(expected))
-                        .path([PathSegment::Index(index)])
-                        .build()
-                });
-                failure = child.into_evidence().explain(failure);
+                child
+                    .record(|context| indexed_equality_mismatch(context, index, element, expected));
+                failure = failure.evidence(child.into_evidence());
             }
             failure
         }
@@ -395,22 +406,20 @@ where
 }
 
 /// Requires an equal collection prefix, retaining the first mismatch and observed length.
+///
+/// [`StableOrderAssertions::starts_with`](crate::assertions::StableOrderAssertions::starts_with)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::StartsWith, prelude::*};
+///
+/// assert_that!([1, 2, 3]).matches(StartsWith::new([1, 2]));
+/// ```
 pub struct StartsWith<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
-expected_operands_traits!(StartsWith<E, B>, operand);
-impl<E, B: AsRef<[E]>> StartsWith<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
-    /// without accessing its views.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-}
+expected_operands_traits!(StartsWith<E, B>, operand, new);
 
 impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for StartsWith<E, B>
 where
@@ -460,22 +469,20 @@ where
 ///
 /// Both lists are aligned at their ends. A subject shorter than the suffix is compared with the
 /// suffix's final elements, so its rejection reports the length and only genuine mismatches.
+///
+/// [`StableOrderAssertions::ends_with`](crate::assertions::StableOrderAssertions::ends_with)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::EndsWith, prelude::*};
+///
+/// assert_that!([1, 2, 3]).matches(EndsWith::new([2, 3]));
+/// ```
 pub struct EndsWith<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
-expected_operands_traits!(EndsWith<E, B>, operand);
-impl<E, B: AsRef<[E]>> EndsWith<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
-    /// without accessing its views.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-}
+expected_operands_traits!(EndsWith<E, B>, operand, new);
 
 impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for EndsWith<E, B>
 where
@@ -522,22 +529,20 @@ where
 }
 
 /// Requires an equal contiguous subsequence in a collection with stable order.
+///
+/// [`StableOrderAssertions::contains_contiguous`](crate::assertions::StableOrderAssertions::contains_contiguous)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::ContainsContiguous, prelude::*};
+///
+/// assert_that!([1, 2, 3, 4]).matches(ContainsContiguous::new([2, 3]));
+/// ```
 pub struct ContainsContiguous<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
-expected_operands_traits!(ContainsContiguous<E, B>, operand);
-impl<E, B: AsRef<[E]>> ContainsContiguous<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
-    /// without accessing its views.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-}
+expected_operands_traits!(ContainsContiguous<E, B>, operand, new);
 
 impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for ContainsContiguous<E, B>
 where
@@ -576,7 +581,7 @@ where
                 .zip(expected.iter().map(borrow_for::<C::Item, _>))
                 .all(|(actual, expected)| (*actual).eq(expected))
         });
-        if found { Ok(()) } else { Err(()) }
+        passed(found)
     }
 
     const KIND: FailureKind = FailureKind::Membership;
@@ -602,22 +607,20 @@ where
 }
 
 /// Requires exact positional equality, retaining unmatched occurrences from maximum assignment.
+///
+/// [`StableOrderAssertions::contains_exactly`](crate::assertions::StableOrderAssertions::contains_exactly)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::ContainsExactly, prelude::*};
+///
+/// assert_that!(vec![1, 2]).matches(ContainsExactly::new([1, 2]));
+/// ```
 pub struct ContainsExactly<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
-expected_operands_traits!(ContainsExactly<E, B>, operand);
-impl<E, B: AsRef<[E]>> ContainsExactly<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
-    /// without accessing its views.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-}
+expected_operands_traits!(ContainsExactly<E, B>, operand, new);
 
 impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for ContainsExactly<E, B>
 where
@@ -693,7 +696,6 @@ where
                     unexpected,
                     missing,
                     only_order_differs,
-                    ..
                 } = rejection;
                 let mut failure = unmatched_facts(
                     failure
@@ -718,22 +720,20 @@ where
 }
 
 /// Requires exact unordered multiplicity, retaining unmatched occurrences from maximum assignment.
+///
+/// [`CollectionAssertions::contains_exactly_in_any_order`](crate::assertions::CollectionAssertions::contains_exactly_in_any_order)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::ContainsExactlyInAnyOrder, prelude::*};
+///
+/// assert_that!([1, 2, 2]).matches(ContainsExactlyInAnyOrder::new([2, 1, 2]));
+/// ```
 pub struct ContainsExactlyInAnyOrder<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
-expected_operands_traits!(ContainsExactlyInAnyOrder<E, B>, operand);
-impl<E, B: AsRef<[E]>> ContainsExactlyInAnyOrder<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
-    /// without accessing its views.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-}
+expected_operands_traits!(ContainsExactlyInAnyOrder<E, B>, operand, new);
 
 impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for ContainsExactlyInAnyOrder<E, B>
 where
@@ -1392,7 +1392,7 @@ mod tests {
                 )
                 .build();
             assert_that!(comparisons.get()).is_equal_to(observed);
-            context.describe::<[Actual; 2], _>(definition);
+            let _ = context.describe::<[Actual; 2], _>(definition);
             assert_that!(comparisons.get()).is_equal_to(observed);
         }
 
@@ -1443,12 +1443,12 @@ mod tests {
             assert_that!((views.get(), first.get(), omitted.get())).is_equal_to((0, 0, 0));
             let context =
                 AssertionContext::new(&DebugRenderer, RenderingBudget::default().with_max_items(1));
-            context.describe::<[Actual; 2], _>(&prefix);
-            context.describe::<[Actual; 2], _>(&suffix);
-            context.describe::<[Actual; 2], _>(&exact);
-            context.describe::<[Actual; 2], _>(&membership);
-            context.describe::<[Actual; 2], _>(&contiguous);
-            context.describe::<[Actual; 2], _>(&unordered);
+            let _ = context.describe::<[Actual; 2], _>(&prefix);
+            let _ = context.describe::<[Actual; 2], _>(&suffix);
+            let _ = context.describe::<[Actual; 2], _>(&exact);
+            let _ = context.describe::<[Actual; 2], _>(&membership);
+            let _ = context.describe::<[Actual; 2], _>(&contiguous);
+            let _ = context.describe::<[Actual; 2], _>(&unordered);
             assert_that!(views.get()).is_greater_than(0);
             assert_that!(first.get()).is_greater_than(0);
             assert_that!(omitted.get()).is_equal_to(0);

@@ -3,12 +3,20 @@
 //! This module is declared first with `#[macro_use]`, so its macros are in scope for every
 //! assertion family module declared after it.
 
-use crate::{AssertThat, Mode, actual::Actual, failure::FailureBuilder, renderer::Rendered};
+use crate::{
+    AssertThat, Mode,
+    actual::Actual,
+    expectation::AssertionContext,
+    failure::{AssertionFailure, Fact, FailureBuilder, FailureKind, PathSegment},
+    renderer::{Rendered, RenderingContext, ValueRenderer},
+};
 
 /// Defines a unit expectation for a property of the subject that retains no observation.
 ///
 /// The subject is either a concrete type (`for bool`) or a generic subject (`for<T: Signed> T`,
-/// `for<T> Mutex<T>`). `check` receives the borrowed subject. Diagnostics either describe the
+/// `for<T> Mutex<T>`). Generic parameters are `?Sized`, so a property of `T` also applies to
+/// unsized subjects such as `str` and `[T]` when the bound allows them. `check` receives the
+/// borrowed subject. Diagnostics either describe the
 /// property with a positive and a negated relation (`relations`), or compare with a computed value
 /// as a direct equality (`expected`). Both render the subject through the active renderer. The
 /// optional `present` function replaces that rendering: it receives the rendering context and the
@@ -68,7 +76,7 @@ macro_rules! property_expectation {
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
 
-        impl<$($param,)* R> $crate::expectation::Expectation<$subject, R> for $name
+        impl<$($param: ?Sized,)* R> $crate::expectation::Expectation<$subject, R> for $name
         where
             $($bounds)*
         {
@@ -88,7 +96,7 @@ macro_rules! property_expectation {
                 $actual: &'a $subject,
                 _: &$crate::expectation::AssertionContext<'_, R>,
             ) -> Result<(), ()> {
-                if $check { Ok(()) } else { Err(()) }
+                $crate::expectation::passed($check)
             }
 
             const KIND: $crate::failure::FailureKind = $crate::failure::FailureKind::$kind;
@@ -162,7 +170,25 @@ macro_rules! type_selection_traits {
 
 /// Implements `Clone` and `Debug` for an expectation storing its operands as `expected: B` beside
 /// a phantom operand marker. Only the stored operands `B` need these traits.
+///
+/// The `new` form also implements the constructor of an `<E, B>` expectation storing a list of
+/// [repeatable expected data](crate#expected-lists) beside `operand: PhantomData<fn() -> E>`.
 macro_rules! expected_operands_traits {
+    ($name:ident<E, B>, operand, new) => {
+        expected_operands_traits!($name<E, B>, operand);
+
+        impl<E, B: AsRef<[E]>> $name<E, B> {
+            /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
+            /// without accessing its views.
+            #[must_use]
+            pub const fn new(expected: B) -> Self {
+                Self {
+                    expected,
+                    operand: ::core::marker::PhantomData,
+                }
+            }
+        }
+    };
     ($name:ident<$($param:ident),+>, $marker:ident) => {
         impl<$($param),+> ::core::clone::Clone for $name<$($param),+>
         where
@@ -232,4 +258,34 @@ impl<T, M: Mode, R: Clone> AssertThat<'_, T, M, R> {
             assertions(self.derive(|_| value));
         }
     }
+}
+
+/// Builds the equality failure of the element at `index`, located relative to its collection.
+pub(crate) fn indexed_equality_mismatch<A: ?Sized, E: ?Sized, R>(
+    context: &AssertionContext<'_, R>,
+    index: usize,
+    actual: &A,
+    expected: &E,
+) -> AssertionFailure
+where
+    R: ValueRenderer<A> + ValueRenderer<E>,
+{
+    let render = context.render();
+    FailureBuilder::new::<A>(FailureKind::Equality)
+        .actual(render.value(actual))
+        .expected(render.value(expected))
+        .path([PathSegment::Index(index)])
+        .build()
+}
+
+/// The `Actual length` and `Expected length` facts of a length mismatch, in that order.
+pub(crate) fn length_facts<R: ValueRenderer<usize>>(
+    render: RenderingContext<'_, R>,
+    actual: usize,
+    expected: usize,
+) -> [Fact; 2] {
+    [
+        Fact::labelled("Actual length", render.value(&actual)),
+        Fact::labelled("Expected length", render.value(&expected)),
+    ]
 }

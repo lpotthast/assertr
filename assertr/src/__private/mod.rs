@@ -81,6 +81,5 @@ where
 {
     crate::expectation::field::projected(projection, matcher, path)
 }
-#[doc(hidden)]
 pub use partial_match::PartialMatch;
 pub use partial_match::partial_match;

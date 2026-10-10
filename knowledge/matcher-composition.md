@@ -62,9 +62,12 @@ Iterator contiguous searches report the same per-window groups.
 
 ## Matcher lists
 
+Both list traits are authoring machinery and live in `assertr::expectation`, next to `Expectation` and
+`AssertionContext`. The `matchers` catalog holds the constructors.
+
 | Trait | Supported lists |
 |---|---|
-| `MatcherList<A, R>` | Sealed. `matchers!` nodes can mix matcher types. Arrays, slices, and vectors hold one matcher type. References reuse existing lists. |
+| `MatcherList<A, R>` | Sealed. `matchers!` nodes can mix matcher types. Arrays, slices, and vectors hold one matcher type, such as `[is_one, is_two].map(predicate)` for non-capturing closures. References reuse existing lists. |
 | `EntryMatcherList<MapType, R>` | Sealed. `matchers![entry(..), ..]` can mix keyed matcher types. Arrays, slices, and vectors hold one `Entry` type. |
 
 Lists store definitions without boxing them or adding a renderer type parameter to the storage. Each slot can be

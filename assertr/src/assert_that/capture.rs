@@ -24,11 +24,7 @@ impl<'t, R> ChainState<'t, Panic, R> {
                 failures: self.records.failures,
                 inherited_messages,
             },
-            subject_name: self.subject_name,
-            expression: self.expression,
-            include_location: self.include_location,
-            rendering_budget: self.rendering_budget,
-            panic_presentation: self.panic_presentation,
+            settings: self.settings,
             mode: PhantomData,
             renderer: self.renderer,
         }
@@ -121,7 +117,7 @@ impl<'t, T, R> AssertThat<'t, T, Capture, R> {
 
 #[cfg(test)]
 mod tests {
-    use indoc::formatdoc;
+    use indoc::indoc;
 
     use crate::prelude::*;
 
@@ -192,7 +188,7 @@ mod tests {
 
         assert_that!(&failures[..]).contains_exactly_satisfying([
             |it: AssertThat<AssertionFailure, Capture>| {
-                it.has_text_report(formatdoc! {"
+                it.has_text_report(indoc! {"
                     -------- assertr --------
                     Expression: `42`
 
@@ -205,7 +201,7 @@ mod tests {
                 "});
             },
             |it: AssertThat<AssertionFailure, Capture>| {
-                it.has_text_report(formatdoc! {"
+                it.has_text_report(indoc! {"
                     -------- assertr --------
                     Expression: `42`
 

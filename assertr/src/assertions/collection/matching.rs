@@ -2,7 +2,7 @@
 
 use super::Collection;
 use crate::{
-    expectation::{AssertionContext, Evidence, Expectation, composite_items},
+    expectation::{AssertionContext, Evidence, Expectation, composite_items, evidence_items},
     failure::{FailureBuilder, FailureKind},
     renderer::{RenderingOrder, ValueRenderer},
 };
@@ -66,7 +66,7 @@ impl MatchingItem {
     {
         match rejection {
             None => self.describe::<T, _, _>(matcher, failure, context),
-            Some(evidence) => evidence.explain(failure.relation(self.does_not_contain)),
+            Some(evidence) => failure.relation(self.does_not_contain).evidence(evidence),
         }
     }
 
@@ -109,7 +109,8 @@ pub struct ContainsMatching<M>(M);
 /// Matches collections containing at least one matching element.
 ///
 /// This is a convenience constructor for [`ContainsMatching::new`].
-pub fn contains_matching<M>(matcher: M) -> ContainsMatching<M> {
+#[must_use]
+pub const fn contains_matching<M>(matcher: M) -> ContainsMatching<M> {
     ContainsMatching::new(matcher)
 }
 
@@ -125,16 +126,7 @@ impl<C: Collection + ?Sized, R, M> Expectation<C, R> for ContainsMatching<M>
 where
     M: Expectation<C::Item, R>,
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        C: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        C: 'a;
+    evidence_items!(C);
 
     fn evaluate(&self, actual: &C, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
         MATCHING_ELEMENT.find(
@@ -183,7 +175,8 @@ pub struct DoesNotContainMatching<M>(M);
 /// Matches collections in which no element matches.
 ///
 /// This is a convenience constructor for [`DoesNotContainMatching::new`].
-pub fn does_not_contain_matching<M>(matcher: M) -> DoesNotContainMatching<M> {
+#[must_use]
+pub const fn does_not_contain_matching<M>(matcher: M) -> DoesNotContainMatching<M> {
     DoesNotContainMatching::new(matcher)
 }
 
@@ -234,7 +227,9 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: Expectation<C::Item, 
             None => failure
                 .relation("contains no matching elements")
                 .children([context.describe(&self.0)]),
-            Some((_, evidence)) => evidence.explain(failure.relation("contains matching elements")),
+            Some((_, evidence)) => failure
+                .relation("contains matching elements")
+                .evidence(evidence),
         }
     }
 }
@@ -246,10 +241,9 @@ mod tests {
 
         use crate::{
             assertions::{collection::contains_matching, core::partial_eq::eq},
-            expectation::test_support::{assert_bounded_order, bounded_failures},
             matchers::all_of,
             prelude::*,
-            test_support::UnorderedSet,
+            test_support::{NoRenderer, UnorderedSet, assert_bounded_order, bounded_failures},
         };
 
         struct ReverseRenderer<'a>(&'a Cell<usize>);
@@ -262,7 +256,11 @@ mod tests {
         }
 
         #[test]
-        fn is_implemented_without_renderer_support() {}
+        fn is_implemented_without_renderer_support() {
+            assert_that!([1, 2])
+                .with_renderer(NoRenderer)
+                .matches(contains_matching(matchers::anything()));
+        }
 
         #[test]
         fn bounded_evidence_is_independent_of_iteration_order() {
@@ -326,9 +324,9 @@ mod tests {
             let matcher = contains_matching(all_of(matchers![eq(9), eq(0)]));
             let failures = bounded_failures(&[3, 2, 1], &matcher, 1);
 
+            assert_that!(failures[0].omitted_children).is_equal_to(5);
             assert_that!(failures[0].children).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    assert_that!(failures[0].omitted_children).is_equal_to(5);
                     element
                         .derive_owned(|item| item.expected.as_ref())
                         .is_equal_to(Some(&AssertionContext::default().render().value(&0)));

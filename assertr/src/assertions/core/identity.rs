@@ -1,6 +1,6 @@
 use crate::{
     AssertThat, Mode,
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, passed},
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -53,11 +53,7 @@ macro_rules! identity_expectation {
                 T: 'a;
 
             fn evaluate(&self, actual: &T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-                if core::ptr::eq(actual, self.0) == $same {
-                    Ok(())
-                } else {
-                    Err(())
-                }
+                passed(core::ptr::eq(actual, self.0) == $same)
             }
 
             const KIND: FailureKind = FailureKind::Equality;

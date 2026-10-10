@@ -10,9 +10,8 @@ use alloc::{collections::BTreeMap, vec::Vec};
 
 use crate::{
     assertions::collection::Collection,
-    expectation::{AssertionContext, Evidence, Expectation, composite_items},
+    expectation::{AssertionContext, Evidence, Expectation, MatcherList, composite_items},
     failure::{AssertionFailure, Fact, FailureBuilder, FailureKind},
-    matchers::MatcherList,
     renderer::{RenderingOrder, ValueRenderer},
     util::matching::{BipartiteMatchResult, assign_exactly},
 };
@@ -36,7 +35,8 @@ pub struct ElementsAreInAnyOrder<L>(L);
 ///
 /// The `at slot` fact identifies a zero-based expectation position, never an actual collection
 /// index.
-pub fn elements_are_in_any_order<L>(list: L) -> ElementsAreInAnyOrder<L> {
+#[must_use]
+pub const fn elements_are_in_any_order<L>(list: L) -> ElementsAreInAnyOrder<L> {
     ElementsAreInAnyOrder(list)
 }
 
@@ -85,7 +85,7 @@ where
                 &self.0,
                 failure.relation("has exactly these elements in any order"),
             ),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+            Some((_, evidence)) => failure.relation("does not match").evidence(evidence),
         }
     }
 }
@@ -108,7 +108,7 @@ where
     fn matches(&mut self, index: usize, slot: usize) -> bool {
         let (list, actual, settings) = (self.list, self.actual, self.settings);
         *self.cache.entry((index, slot)).or_insert_with(|| {
-            let mut probe = settings.isolated().with_diagnostics(false);
+            let mut probe = settings.probing();
             list.evaluate_at(slot, actual[index], &mut probe)
         })
     }
@@ -136,7 +136,7 @@ where
             .fact(Fact::labelled("At slot", context.render().value(&slot)))
             .relation("is missing an element matching this expectation")
             .constraint(self.list.describe_at(slot, context));
-        candidates.into_evidence().explain(failure).build()
+        failure.evidence(candidates.into_evidence()).build()
     }
 
     /// Describes every unexpected element. A surplus element satisfying an occupied slot is
@@ -162,16 +162,13 @@ where
                 unexpected.record(|context| self.surplus(&satisfied, context));
             }
         }
-        unexpected
-            .into_evidence()
-            .explain(
-                FailureBuilder::new::<C>(FailureKind::Matching)
-                    .relation("has unexpected elements")
-                    .fact(Fact::labelled(
-                        "Unexpected count",
-                        context.render().value(&result.unmatched_actual.len()),
-                    )),
-            )
+        FailureBuilder::new::<C>(FailureKind::Matching)
+            .relation("has unexpected elements")
+            .fact(Fact::labelled(
+                "Unexpected count",
+                context.render().value(&result.unmatched_actual.len()),
+            ))
+            .evidence(unexpected.into_evidence())
             .build()
     }
 
@@ -193,19 +190,24 @@ where
                     .build()
             });
         }
-        constraints
-            .into_evidence()
-            .explain(
-                FailureBuilder::new::<A>(FailureKind::Matching)
-                    .relation("has an extra occurrence matching already satisfied expectations"),
-            )
+        FailureBuilder::new::<A>(FailureKind::Matching)
+            .relation("has an extra occurrence matching already satisfied expectations")
+            .evidence(constraints.into_evidence())
             .build()
     }
 }
 
-/// Exact unordered matcher list with explicit expectations and duplicate preservation.
+/// Builds an exact order-free [`ElementsAreInAnyOrder`] matcher from matchers of any types.
 ///
-/// Use [`eq`](crate::matchers::eq) or [`eq`](crate::matchers::eq) for equality.
+/// `elements_are_in_any_order![a, b]` is short for `elements_are_in_any_order(matchers![a, b])`.
+/// Each element must match a distinct matcher, so duplicates count. Each argument is a matcher.
+/// Use [`eq`](crate::matchers::eq) for equality.
+///
+/// ```
+/// use assertr::{matchers::{eq, ge}, prelude::*};
+///
+/// assert_that!([30, 18]).matches(elements_are_in_any_order![eq(18), ge(20)]);
+/// ```
 #[macro_export]
 macro_rules! elements_are_in_any_order {
     ($($value:expr),* $(,)?) => {
@@ -217,9 +219,9 @@ macro_rules! elements_are_in_any_order {
 mod tests {
     use crate::{
         assertions::core::partial_ord::ge,
-        expectation::test_support::{assert_bounded_order, bounded_failures},
         matchers::eq,
         prelude::*,
+        test_support::{assert_bounded_order, bounded_failures},
     };
 
     #[test]
@@ -426,7 +428,7 @@ mod tests {
                     Self: 'a,
                     i32: 'a;
                 fn evaluate(&self, actual: &i32, _: &AssertionContext<'_>) -> Result<(), ()> {
-                    if *actual == 99 { Ok(()) } else { Err(()) }
+                    crate::expectation::passed(*actual == 99)
                 }
 
                 const KIND: FailureKind = FailureKind::Equality;
@@ -462,8 +464,8 @@ mod tests {
                 let description = missing.constraint.as_ref().unwrap();
                 assert_that!(description.relation.as_deref()).is_equal_to(Some("is equal to"));
                 assert_that!(description.facts).has_length(1);
-                assert_that!(description.facts[0].label)
-                    .is_equal_to(alloc::borrow::Cow::Borrowed("requirement"));
+                assert_that!(description.facts[0].label.as_deref())
+                    .is_equal_to(Some("requirement"));
                 assert_that!(format!("{:#}", description.facts[0].value))
                     .is_equal_to("\"retained\"");
                 assert_that!(missing.children).has_length(1);
@@ -647,7 +649,7 @@ mod tests {
             for surplus in &unexpected.children {
                 assert_that!(surplus.children).is_empty();
                 assert_that!(format!("{:#}", surplus.facts[0].value)).is_equal_to("count(0)");
-                assert_that!(surplus.facts[0].label.as_ref()).is_equal_to("At slot");
+                assert_that!(surplus.facts[0].label.as_deref()).is_equal_to(Some("At slot"));
                 assert_that!(
                     surplus
                         .constraint
@@ -750,14 +752,10 @@ mod tests {
 
         #[test]
         fn a_zero_item_budget_does_not_render_completed_or_surplus_evidence() {
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("rendered omitted evidence")
-                }
-            }
-            let mut context =
-                AssertionContext::new(&NeverRender, RenderingBudget::default().with_max_items(0));
+            let mut context = AssertionContext::new(
+                &crate::test_support::PanickingRenderer("rendered omitted evidence"),
+                RenderingBudget::default().with_max_items(0),
+            );
             assert_that!(context.evaluate(&[1, 1, 99], &elements_are_in_any_order![eq(1)]))
                 .is_false();
             let evidence = context.into_evidence();
@@ -768,20 +766,19 @@ mod tests {
         #[test]
         fn a_zero_item_budget_preserves_length_failure_without_rendering_evidence() {
             use indoc::formatdoc;
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("rendered omitted evidence")
-                }
-            }
             let failures = assert_that!([1, 2])
-                .with_renderer(NeverRender)
+                .with_renderer(crate::test_support::PanickingRenderer(
+                    "rendered omitted evidence",
+                ))
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::default().with_max_items(0))
                 .capture(|it| it.matches(elements_are_in_any_order![]));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
+                    element
+                        .derive(|value| &value.omitted_children)
+                        .is_equal_to(1);
+                    element.has_text_report(formatdoc! {r"
         -------- assertr --------
         Expression: `[1, 2]`
 
@@ -791,9 +788,6 @@ mod tests {
           - ... 1 more nested failure ...
         -------- assertr --------
     "});
-                    element
-                        .derive(|value| &value.omitted_children)
-                        .is_equal_to(1);
                 },
             ]);
         }
@@ -801,7 +795,7 @@ mod tests {
         fn matrix_matchers<'a, const M: usize>(
             matrix: &'a [[bool; M]],
             calls: &'a RefCell<Vec<(usize, usize)>>,
-        ) -> impl matchers::MatcherList<usize, DebugRenderer> + 'a {
+        ) -> impl crate::expectation::MatcherList<usize, DebugRenderer> + 'a {
             use crate::matchers::{all_of, predicate};
             (0..M)
                 .map(|slot| {
@@ -867,18 +861,15 @@ mod tests {
             use core::cell::RefCell;
 
             use crate::{assertions::core::partial_eq::eq, matchers::predicate};
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("probe rendered evidence")
-                }
-            }
             let calls = RefCell::new([0; 3]);
             let matcher = elements_are_in_any_order![predicate(|index: &usize| {
                 calls.borrow_mut()[*index] += 1;
                 *index < 2
             })];
-            let context = AssertionContext::new(&NeverRender, RenderingBudget::default());
+            let context = AssertionContext::new(
+                &crate::test_support::PanickingRenderer("probe rendered evidence"),
+                RenderingBudget::default(),
+            );
             assert_that!(context.probe(&[0, 1, 2], &matcher)).is_false();
             // Unequal lengths decide a probe before any comparison.
             assert_that!(*calls.borrow()).is_equal_to([0, 0, 0]);
@@ -892,7 +883,6 @@ mod tests {
         fn stops_at_the_first_unassignable_occurrence() {
             use core::cell::Cell;
 
-            use crate::matchers::predicate_list;
             let calls = Cell::new(0);
             let counted = |expected: usize| {
                 let calls = &calls;
@@ -901,8 +891,9 @@ mod tests {
                     *actual == expected
                 }
             };
-            let matcher =
-                super::super::elements_are_in_any_order(predicate_list([counted(1), counted(2)]));
+            let matcher = super::super::elements_are_in_any_order(
+                [counted(1), counted(2)].map(matchers::predicate),
+            );
             let context = AssertionContext::default();
 
             assert_that!(context.probe(&[0, 1], &matcher)).is_false();
@@ -915,13 +906,10 @@ mod tests {
 
         #[test]
         fn length_mismatches_do_not_render_numeric_evidence() {
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("probe rendered evidence")
-                }
-            }
-            let context = AssertionContext::new(&NeverRender, RenderingBudget::default());
+            let context = AssertionContext::new(
+                &crate::test_support::PanickingRenderer("probe rendered evidence"),
+                RenderingBudget::default(),
+            );
             assert_that!(context.probe(&[1, 2], &elements_are_in_any_order![])).is_false();
             assert_that!(context.into_evidence().children).is_empty();
         }

@@ -9,7 +9,8 @@ use crate::{
 pub struct AllOf<L>(L);
 
 /// Evaluates all constraints. An empty conjunction succeeds.
-pub fn all_of<L>(matchers: L) -> AllOf<L> {
+#[must_use]
+pub const fn all_of<L>(matchers: L) -> AllOf<L> {
     AllOf(matchers)
 }
 
@@ -37,7 +38,7 @@ where
         match rejected {
             None => context
                 .describe_list::<A, _>(&self.0, failure.relation("satisfies every constraint")),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+            Some((_, evidence)) => failure.relation("does not match").evidence(evidence),
         }
     }
 }

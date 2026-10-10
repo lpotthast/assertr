@@ -21,7 +21,7 @@ impl<T> Actual<'_, T> {
     #[track_caller]
     pub fn unwrap_owned(self) -> T {
         match self {
-            Actual::Borrowed(_t) => panic!(
+            Actual::Borrowed(_) => panic!(
                 "Cannot unwrap a borrowed value. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead."
             ),
             Actual::Owned(t) => t,

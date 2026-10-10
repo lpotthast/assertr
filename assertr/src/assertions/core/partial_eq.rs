@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use crate::{
     AssertThat, Mode,
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, passed},
     failure::{FailureBuilder, FailureKind},
     renderer::{DebugRenderer, RenderingOrder, ValueRenderer},
 };
@@ -197,11 +197,7 @@ where
 
     fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
         let mut candidates = self.expected.as_ref().iter().map(borrow_for::<T, _>);
-        if candidates.any(|candidate| actual.eq(candidate)) {
-            Ok(())
-        } else {
-            Err(())
-        }
+        passed(candidates.any(|candidate| actual.eq(candidate)))
     }
 
     fn explain<'a>(
@@ -219,13 +215,13 @@ where
         let candidates = context
             .render()
             .borrowed_values::<E::View, _>(&candidates, RenderingOrder::PreserveIteration);
-        match rejected {
-            None => failure.relation("is one of").expected(candidates),
-            Some((actual, ())) => failure
-                .actual(context.render().value(actual))
-                .relation("is not one of")
-                .expected(candidates),
-        }
+        failure
+            .relations(
+                rejected.map(|(actual, ())| context.render().value(actual)),
+                "is one of",
+                "is not one of",
+            )
+            .expected(candidates)
     }
 }
 

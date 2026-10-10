@@ -143,11 +143,10 @@ fn explain_value<T, R: ValueRenderer<T>>(
         Some((actual, ValueRejection::Locked)) => {
             explain_held_lock(actual, "Mutex", failure, context)
         }
-        Some((actual, ValueRejection::Rejected(guard, evidence))) => evidence.explain(
-            failure
-                .actual(render.struct_field(actual, "Mutex", "data", &*guard))
-                .relation("contains a value that does not satisfy the assertions"),
-        ),
+        Some((actual, ValueRejection::Rejected(guard, evidence))) => failure
+            .actual(render.struct_field(actual, "Mutex", "data", &*guard))
+            .relation("contains a value that does not satisfy the assertions")
+            .evidence(evidence),
     }
 }
 

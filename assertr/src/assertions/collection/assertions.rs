@@ -87,8 +87,8 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
-    /// Asserts that at least one element matches `expected`.
-    fn contains_matching<P>(self, expected: P) -> Self
+    /// Asserts that at least one element matches `matcher`.
+    fn contains_matching<P>(self, matcher: P) -> Self
     where
         P: Expectation<T, R>;
 
@@ -124,8 +124,8 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
-    /// Asserts that no element matches `expected`.
-    fn does_not_contain_matching<P>(self, expected: P) -> Self
+    /// Asserts that no element matches `unwanted`.
+    fn does_not_contain_matching<P>(self, unwanted: P) -> Self
     where
         P: Expectation<T, R>,
         R: ValueRenderer<T>;
@@ -154,11 +154,31 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     /// A maximum matching makes overlapping matchers order-independent.
     fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<T, R>,
+        P: crate::expectation::MatcherList<T, R>,
         R: ValueRenderer<usize>;
 
     /// Asserts one-to-one matching between subject elements and assertion closures, independent of
     /// order. A maximum matching makes overlapping assertions order-independent.
+    ///
+    /// All callbacks share one type `A`. Functions and non-capturing closures coerce to a common
+    /// function-pointer type, and calls of one helper function returning `impl Fn` share its return
+    /// type. Distinct capturing closures have distinct types, so use
+    /// [`contains_exactly_in_any_order_matching`](Self::contains_exactly_in_any_order_matching)
+    /// with [`satisfying`](crate::matchers::satisfying) for them instead:
+    ///
+    /// ```
+    /// use assertr::{matchers::satisfying, prelude::*};
+    ///
+    /// let largest = 3;
+    /// assert_that!([3, 1]).contains_exactly_in_any_order_matching(matchers![
+    ///     satisfying(|it: AssertThat<i32, Capture>| {
+    ///         it.is_less_than(largest);
+    ///     }),
+    ///     satisfying(move |it: AssertThat<i32, Capture>| {
+    ///         it.is_equal_to(largest);
+    ///     }),
+    /// ]);
+    /// ```
     fn contains_exactly_in_any_order_satisfying<A>(self, assertions: impl AsRef<[A]>) -> Self
     where
         R: Clone + ValueRenderer<usize>,
@@ -210,11 +230,11 @@ where
     }
 
     #[track_caller]
-    fn contains_matching<P>(self, expected: P) -> Self
+    fn contains_matching<P>(self, matcher: P) -> Self
     where
         P: Expectation<C::Item, R>,
     {
-        self.matches(ContainsMatching::new(expected))
+        self.matches(ContainsMatching::new(matcher))
     }
 
     #[track_caller]
@@ -247,12 +267,12 @@ where
     }
 
     #[track_caller]
-    fn does_not_contain_matching<P>(self, expected: P) -> Self
+    fn does_not_contain_matching<P>(self, unwanted: P) -> Self
     where
         P: Expectation<C::Item, R>,
         R: ValueRenderer<C::Item>,
     {
-        self.matches(DoesNotContainMatching::new(expected))
+        self.matches(DoesNotContainMatching::new(unwanted))
     }
 
     #[track_caller]
@@ -277,7 +297,7 @@ where
     #[track_caller]
     fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> Self
     where
-        P: crate::matchers::MatcherList<C::Item, R>,
+        P: crate::expectation::MatcherList<C::Item, R>,
         R: ValueRenderer<usize>,
     {
         self.matches(elements_are_in_any_order(expected))
@@ -715,55 +735,6 @@ mod tests {
 
         use crate::prelude::*;
 
-        #[derive(Debug)]
-        struct Actual(u8);
-
-        #[derive(Debug)]
-        struct Expected(u8);
-
-        #[derive(Debug)]
-        enum WildcardExpected {
-            Any,
-            Value(u8),
-        }
-
-        #[cfg(feature = "partial")]
-        #[derive(Debug)]
-        struct DerivedActual {
-            pub value: u8,
-        }
-
-        impl PartialEq<Expected> for Actual {
-            fn eq(&self, other: &Expected) -> bool {
-                self.0 == other.0
-            }
-        }
-
-        impl<R> Expectation<Actual, R> for WildcardExpected {
-            type Success<'a> = ();
-            type Rejection<'a> = ();
-            fn evaluate(&self, actual: &Actual, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-                match self {
-                    Self::Any => Ok(()),
-                    Self::Value(value) if actual.0 == *value => Ok(()),
-                    Self::Value(_) => Err(()),
-                }
-            }
-
-            const KIND: crate::failure::FailureKind = crate::failure::FailureKind::Matching;
-            fn explain(
-                &self,
-                rejected: Option<(&Actual, ())>,
-                failure: crate::failure::FailureBuilder,
-                context: &AssertionContext<'_, R>,
-            ) -> crate::failure::FailureBuilder {
-                match rejected {
-                    None => failure.relation("matches the wildcard constraint"),
-                    Some((_, ())) => failure.constraint(context.describe(&self)),
-                }
-            }
-        }
-
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
@@ -775,37 +746,6 @@ mod tests {
         #[test]
         fn succeeds_when_slices_match() {
             assert_that!([1, 2, 3].as_slice()).contains_exactly_in_any_order([2, 3, 1]);
-        }
-
-        #[test]
-        fn custom_heterogeneous_comparisons_use_predicates() {
-            assert_that!([Actual(1), Actual(2)].as_slice()).contains_exactly_in_any_order_matching(
-                matchers::predicate_list([
-                    |it: &Actual| it.eq(&Expected(2)),
-                    |it: &Actual| it.eq(&Expected(1)),
-                ]),
-            );
-        }
-
-        #[test]
-        fn supports_non_equivalence_matchers() {
-            assert_that!([Actual(2), Actual(1)].as_slice()).contains_exactly_in_any_order_matching(
-                [WildcardExpected::Any, WildcardExpected::Value(2)],
-            );
-        }
-
-        #[test]
-        #[cfg(feature = "partial")]
-        fn supports_structural_wildcards() {
-            let actual = [DerivedActual { value: 2 }, DerivedActual { value: 1 }];
-            assert_that!(actual.as_slice()).contains_exactly_in_any_order_matching(matchers![
-                partial!(DerivedActual {
-                    value: matchers::anything()
-                }),
-                partial!(DerivedActual {
-                    value: matchers::eq(2)
-                }),
-            ]);
         }
 
         #[test]
@@ -864,6 +804,55 @@ mod tests {
 
         use crate::prelude::*;
 
+        #[derive(Debug)]
+        struct Actual(u8);
+
+        #[derive(Debug)]
+        struct Expected(u8);
+
+        #[derive(Debug)]
+        enum WildcardExpected {
+            Any,
+            Value(u8),
+        }
+
+        #[cfg(feature = "partial")]
+        #[derive(Debug)]
+        struct DerivedActual {
+            pub value: u8,
+        }
+
+        impl PartialEq<Expected> for Actual {
+            fn eq(&self, other: &Expected) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        impl<R> Expectation<Actual, R> for WildcardExpected {
+            type Success<'a> = ();
+            type Rejection<'a> = ();
+            fn evaluate(&self, actual: &Actual, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+                match self {
+                    Self::Any => Ok(()),
+                    Self::Value(value) if actual.0 == *value => Ok(()),
+                    Self::Value(_) => Err(()),
+                }
+            }
+
+            const KIND: crate::failure::FailureKind = crate::failure::FailureKind::Matching;
+            fn explain(
+                &self,
+                rejected: Option<(&Actual, ())>,
+                failure: crate::failure::FailureBuilder,
+                context: &AssertionContext<'_, R>,
+            ) -> crate::failure::FailureBuilder {
+                match rejected {
+                    None => failure.relation("matches the wildcard constraint"),
+                    Some((_, ())) => failure.constraint(context.describe(&self)),
+                }
+            }
+        }
+
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
@@ -875,30 +864,60 @@ mod tests {
         }
 
         #[test]
+        fn custom_heterogeneous_comparisons_use_predicates() {
+            assert_that!([Actual(1), Actual(2)].as_slice()).contains_exactly_in_any_order_matching(
+                [
+                    |it: &Actual| it.eq(&Expected(2)),
+                    |it: &Actual| it.eq(&Expected(1)),
+                ]
+                .map(matchers::predicate),
+            );
+        }
+
+        #[test]
+        fn supports_non_equivalence_matchers() {
+            assert_that!([Actual(2), Actual(1)].as_slice()).contains_exactly_in_any_order_matching(
+                [WildcardExpected::Any, WildcardExpected::Value(2)],
+            );
+        }
+
+        #[test]
+        #[cfg(feature = "partial")]
+        fn supports_structural_wildcards() {
+            let actual = [DerivedActual { value: 2 }, DerivedActual { value: 1 }];
+            assert_that!(actual.as_slice()).contains_exactly_in_any_order_matching(matchers![
+                partial!(DerivedActual {
+                    value: matchers::anything()
+                }),
+                partial!(DerivedActual {
+                    value: matchers::eq(2)
+                }),
+            ]);
+        }
+
+        #[test]
         fn succeeds_when_slices_match() {
             assert_that!([1, 2, 3].as_slice()).contains_exactly_in_any_order_matching(
-                matchers::predicate_list(
-                    [
-                        move |it: &i32| *it == 1,
-                        move |it: &i32| *it == 2,
-                        move |it: &i32| *it == 3,
-                    ]
-                    .as_slice(),
-                ),
+                [
+                    move |it: &i32| *it == 1,
+                    move |it: &i32| *it == 2,
+                    move |it: &i32| *it == 3,
+                ]
+                .map(matchers::predicate)
+                .as_slice(),
             );
         }
 
         #[test]
         fn succeeds_when_slices_match_in_different_order() {
             assert_that!([1, 2, 3].as_slice()).contains_exactly_in_any_order_matching(
-                matchers::predicate_list(
-                    [
-                        move |it: &i32| *it == 3,
-                        move |it: &i32| *it == 1,
-                        move |it: &i32| *it == 2,
-                    ]
-                    .as_slice(),
-                ),
+                [
+                    move |it: &i32| *it == 3,
+                    move |it: &i32| *it == 1,
+                    move |it: &i32| *it == 2,
+                ]
+                .map(matchers::predicate)
+                .as_slice(),
             );
         }
 
@@ -907,7 +926,7 @@ mod tests {
             let predicates: [fn(&i32) -> bool; 2] = [|it| *it <= 2, |it| *it == 1];
 
             assert_that!([1, 2].as_slice())
-                .contains_exactly_in_any_order_matching(matchers::predicate_list(predicates));
+                .contains_exactly_in_any_order_matching(predicates.map(matchers::predicate));
         }
 
         #[test]
@@ -916,7 +935,7 @@ mod tests {
             assert_that!(|| {
                 assert_that!([1].as_slice())
                     .with_location(false)
-                    .contains_exactly_in_any_order_matching(matchers::predicate_list(predicates));
+                    .contains_exactly_in_any_order_matching(predicates.map(matchers::predicate));
             })
             .panics()
             .has_type::<String>()
@@ -950,14 +969,15 @@ mod tests {
             assert_that!(|| {
                 assert_that!([1, 2, 3].as_slice())
                     .with_location(false)
-                    .contains_exactly_in_any_order_matching(matchers::predicate_list(
+                    .contains_exactly_in_any_order_matching(
                         [
                             move |it: &i32| *it == 2,
                             move |it: &i32| *it == 3,
                             move |it: &i32| *it == 4,
                         ]
+                        .map(matchers::predicate)
                         .as_slice(),
-                    ));
+                    );
             })
             .panics()
             .has_type::<String>()

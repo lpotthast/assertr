@@ -3,7 +3,7 @@
 use super::{EntryRejection, Map, MapLookup};
 use crate::{
     assertions::collection::matching::MatchingItem,
-    expectation::{AssertionContext, Evidence, Expectation},
+    expectation::{AssertionContext, Expectation, evidence_items},
     failure::{FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };
@@ -100,16 +100,7 @@ impl<Mp: Map + ?Sized, E, R> Expectation<Mp, R> for ContainsValueMatching<E>
 where
     E: Expectation<Mp::Value, R>,
 {
-    type Success<'a>
-        = ()
-    where
-        Self: 'a,
-        Mp: 'a;
-    type Rejection<'a>
-        = Evidence
-    where
-        Self: 'a,
-        Mp: 'a;
+    evidence_items!(Mp);
 
     fn evaluate<'a>(
         &'a self,

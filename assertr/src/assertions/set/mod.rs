@@ -1,12 +1,6 @@
-//! Set assertions for `BTreeSet`, `HashSet`, and custom set types.
+//! Set capability, relation assertions, and reusable relation expectations.
 //!
-//! A set implements [`Collection`] for order-free element assertions and [`SetLookup`] for subset,
-//! superset, and disjointness relations. It does not implement
-//! [`StableOrder`](crate::assertions::StableOrder), even when its iteration happens to
-//! be deterministic.
-//!
-//! Implement [`Collection`] and [`SetLookup`] for a custom set to make every set assertion
-//! available.
+//! The user-facing contract lives on [`SetLookup`], because this module itself is not public.
 
 mod assertions;
 mod imp;
@@ -20,12 +14,74 @@ pub use imp::{IsDisjointFrom, IsSubsetOf, IsSupersetOf};
 use crate::renderer::RenderingOrder;
 use crate::{assertions::collection::Collection, renderer::CollectionPresentation};
 
-/// Native membership lookup capability for a set collection.
+/// Native membership lookup for a collection of unique elements, the capability behind the set
+/// relations.
 ///
-/// Implementing this trait declares that the collection has unique elements and can query
-/// membership according to the same equivalence relation that enforces that uniqueness.
-/// [`SetAssertions`] require this capability. This implementor-facing trait is not re-exported from
-/// the prelude.
+/// Implementing `SetLookup` for your own set type, on top of [`Collection`], makes
+/// [`SetAssertions`] available: `is_subset_of`, `is_superset_of`, and `is_disjoint_from`, plus the
+/// [`IsSubsetOf`], [`IsSupersetOf`], and [`IsDisjointFrom`] matchers. The relations accept any
+/// other `SetLookup` type with the same element type, so your set can be compared with a
+/// `BTreeSet` or a `HashSet`.
+///
+/// ```
+/// use std::collections::BTreeSet;
+///
+/// use assertr::{
+///     assertions::{Collection, HasLength, SetLookup},
+///     prelude::*,
+///     renderer::CollectionPresentation,
+/// };
+///
+/// #[derive(Debug)]
+/// struct Tags(BTreeSet<&'static str>);
+///
+/// impl HasLength for Tags {
+///     fn length(&self) -> usize {
+///         self.0.len()
+///     }
+/// }
+///
+/// impl Collection for Tags {
+///     type Item = &'static str;
+///     const PRESENTATION: CollectionPresentation = CollectionPresentation::set();
+///
+///     fn elements(&self) -> impl Iterator<Item = &Self::Item> {
+///         self.0.iter()
+///     }
+/// }
+///
+/// impl SetLookup for Tags {
+///     fn contains_element(&self, element: &&'static str) -> bool {
+///         self.0.contains(element)
+///     }
+/// }
+///
+/// let tags = Tags(BTreeSet::from(["rust", "testing"]));
+/// assert_that!(tags)
+///     .contains("rust")
+///     .is_subset_of(BTreeSet::from(["rust", "testing", "docs"]))
+///     .is_disjoint_from(BTreeSet::from(["python"]));
+/// ```
+///
+/// `SetLookup` is not part of the prelude, so import it from
+/// [`assertr::assertions`](crate::assertions). Shared and mutable references to a set are sets
+/// too.
+///
+/// # Contract
+///
+/// Implementing this trait declares that the collection holds unique elements and that
+/// [`contains_element`](Self::contains_element) queries membership with the same equivalence that
+/// makes them unique, such as hashing or ordering. Rust cannot check this.
+///
+/// Set relations use this native lookup. Element assertions such as `contains` and
+/// `contains_exactly_in_any_order` come from [`Collection`] and compare elements with
+/// `PartialEq`, even on sets.
+///
+/// A set never implements [`StableOrder`](crate::assertions::StableOrder), even when its
+/// iteration happens to be deterministic, so order-sensitive assertions such as
+/// `contains_exactly` do not compile for it. Choose
+/// [`CollectionPresentation::set`] for set brackets in diagnostics, and add
+/// `with_order(RenderingOrder::SortByRenderedText)` when iteration order is arbitrary.
 #[diagnostic::on_unimplemented(
     message = "the collection has no native set membership lookup",
     label = "no set-lookup capability",
@@ -39,7 +95,7 @@ pub trait SetLookup: Collection {
 
 impl<T> Collection for BTreeSet<T> {
     type Item = T;
-    const PRESENTATION: CollectionPresentation = CollectionPresentation::set().show_type_hint(true);
+    const PRESENTATION: CollectionPresentation = CollectionPresentation::set().with_type_hint(true);
 
     fn elements(&self) -> impl Iterator<Item = &T> {
         self.iter()
@@ -56,7 +112,7 @@ impl<T: Ord> SetLookup for BTreeSet<T> {
 impl<T, S> Collection for std::collections::HashSet<T, S> {
     type Item = T;
     const PRESENTATION: CollectionPresentation = CollectionPresentation::set()
-        .show_type_hint(true)
+        .with_type_hint(true)
         .with_order(RenderingOrder::SortByRenderedText);
 
     fn elements(&self) -> impl Iterator<Item = &T> {
@@ -97,8 +153,6 @@ where
 }
 
 #[cfg(test)]
-// Collection predicates receive elements by reference, including for small `Copy` element types.
-#[allow(clippy::trivially_copy_pass_by_ref)]
 mod tests {
     use alloc::{collections::BTreeSet, vec::Vec};
 
@@ -111,9 +165,8 @@ mod tests {
     {
         assert_that!(actual.length()).is_equal_to(expected.len());
 
-        let mut elements = actual.elements().copied().collect::<Vec<_>>();
-        elements.sort_unstable();
-        assert_that!(elements).contains_exactly(expected);
+        assert_that!(actual.elements().copied().collect::<Vec<_>>())
+            .contains_exactly_in_any_order(expected);
 
         for expected in expected {
             assert_that!(actual.contains_element(expected)).is_true();
@@ -121,28 +174,14 @@ mod tests {
         assert_that!(actual.contains_element(&42)).is_false();
     }
 
-    fn is_one(value: &i32) -> bool {
-        *value == 1
+    fn eq_to(expected: i32) -> impl Fn(&i32) -> bool {
+        move |value| *value == expected
     }
 
-    fn is_two(value: &i32) -> bool {
-        *value == 2
-    }
-
-    fn is_three(value: &i32) -> bool {
-        *value == 3
-    }
-
-    fn satisfies_one(it: AssertThat<i32, Capture>) {
-        it.is_equal_to(1);
-    }
-
-    fn satisfies_two(it: AssertThat<i32, Capture>) {
-        it.is_equal_to(2);
-    }
-
-    fn satisfies_three(it: AssertThat<i32, Capture>) {
-        it.is_equal_to(3);
+    fn is(expected: i32) -> impl Fn(AssertThat<'_, i32, Capture>) {
+        move |it| {
+            it.is_equal_to(expected);
+        }
     }
 
     #[test]
@@ -156,14 +195,10 @@ mod tests {
 
     #[test]
     fn a_set_gets_every_order_free_collection_assertion_and_set_relation() {
-        let predicates: [fn(&i32) -> bool; 3] = [is_three, is_one, is_two];
-        let assertions: [fn(AssertThat<i32, Capture>); 3] =
-            [satisfies_three, satisfies_one, satisfies_two];
-
         assert_that!(BTreeSet::from([1, 2, 3]))
             .contains(2)
-            .contains_matching(matchers::predicate(is_two))
-            .contains_satisfying(satisfies_two)
+            .contains_matching(matchers::predicate(eq_to(2)))
+            .contains_satisfying(is(2))
             .contains_all([1, 3])
             .does_not_contain(4)
             .does_not_contain_matching(matchers::predicate(|it: &i32| *it > 7))
@@ -171,8 +206,8 @@ mod tests {
                 it.is_equal_to(7);
             })
             .contains_exactly_in_any_order([3, 1, 2])
-            .contains_exactly_in_any_order_matching(matchers::predicate_list(predicates))
-            .contains_exactly_in_any_order_satisfying(assertions)
+            .contains_exactly_in_any_order_matching([3, 1, 2].map(eq_to).map(matchers::predicate))
+            .contains_exactly_in_any_order_satisfying([3, 1, 2].map(is))
             .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
             .is_superset_of(BTreeSet::from([1]))
             .is_disjoint_from(BTreeSet::from([9]));

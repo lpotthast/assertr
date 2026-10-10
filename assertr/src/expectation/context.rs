@@ -1,4 +1,5 @@
 use alloc::string::String;
+use core::fmt;
 
 #[cfg(test)]
 use crate::renderer::RenderingBudget;
@@ -37,7 +38,7 @@ use crate::{
 ///    records the child's failure if not. Wrap it in [`scoped`](Self::scoped) to report the failure
 ///    at a field, index, or key.
 /// 3. On rejection, return the collected failures from [`into_evidence`](Self::into_evidence) and
-///    attach them in `explain` with [`Evidence::explain`].
+///    attach them in `explain` with [`FailureBuilder::evidence`].
 ///
 /// To only find out whether a child passes, for example while searching for a matching element,
 /// use [`probe`](Self::probe). It records nothing and renders nothing.
@@ -83,7 +84,7 @@ use crate::{
 ///         _: &AssertionContext<'_, R>,
 ///     ) -> FailureBuilder {
 ///         match rejected {
-///             Some((_, evidence)) => evidence.explain(failure.relation("has a failing bound")),
+///             Some((_, evidence)) => failure.relation("has a failing bound").evidence(evidence),
 ///             None => failure.relation("has matching bounds"),
 ///         }
 ///     }
@@ -113,6 +114,19 @@ pub struct AssertionContext<'r, R = DebugRenderer> {
     // Paths are relative to this scope. `scoped` prepends its segment when committing evidence.
     children: Smallest<Keyed<(Option<String>, usize), AssertionFailure>>,
     omitted: usize,
+}
+
+impl<R> fmt::Debug for AssertionContext<'_, R> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AssertionContext")
+            .field("budget", &self.rendering.budget())
+            .field("include_location", &self.include_location)
+            .field("diagnostic", &self.diagnostic)
+            .field("retained", &self.children.len())
+            .field("omitted", &self.omitted)
+            .finish_non_exhaustive()
+    }
 }
 
 /// How a scope ranks the evidence it retains.
@@ -194,7 +208,7 @@ impl<'r, R> AssertionContext<'r, R> {
     }
 
     /// Returns the failures this collector recorded, to be attached in
-    /// [`Expectation::explain`] with [`Evidence::explain`].
+    /// [`Expectation::explain`] with [`FailureBuilder::evidence`].
     ///
     /// Paths are relative to this collector. A [`scoped`](Self::scoped) segment added by an
     /// enclosing collector is applied when it takes over the evidence.
@@ -245,34 +259,79 @@ impl<'r, R> AssertionContext<'r, R> {
         actual: &A,
         definition: &D,
     ) -> bool {
-        let result = definition.evaluate(actual, self);
-        let matched = result.is_ok();
-        if let Err(rejection) = result {
-            // Transparent groups have already applied their budgets and rendered their children.
-            // Even a zero-capacity group must transfer its omitted count. Probes never explain.
-            if self.diagnostic && (D::FLATTEN || self.is_diagnostic()) {
-                let failure = FailureBuilder::new::<A>(D::KIND);
-                let failure = definition
-                    .explain(Some((actual, rejection)), failure, self)
-                    .build();
-                if D::FLATTEN {
-                    self.append(Evidence {
-                        children: failure.children,
-                        omitted: failure.omitted_children,
-                    });
-                } else {
-                    self.retain(failure);
-                }
+        let Err(rejection) = definition.evaluate(actual, self) else {
+            return true;
+        };
+        // Transparent groups have already applied their budgets and rendered their children.
+        // Even a zero-capacity group must transfer its omitted count. Probes never explain.
+        if self.diagnostic && (D::FLATTEN || self.is_diagnostic()) {
+            let failure = FailureBuilder::new::<A>(D::KIND);
+            let failure = definition
+                .explain(Some((actual, rejection)), failure, self)
+                .build();
+            if D::FLATTEN {
+                self.append(Evidence {
+                    children: failure.children,
+                    omitted: failure.omitted_children,
+                });
             } else {
-                drop(rejection);
-                self.omitted += usize::from(self.diagnostic);
+                self.retain(failure);
             }
+        } else {
+            drop(rejection);
+            self.omitted += usize::from(self.diagnostic);
         }
-        matched
+        false
     }
 
-    /// Describes an unmet expectation for which there is no subject to evaluate.
-    pub(crate) fn describe<A: ?Sized, D: Expectation<A, R> + ?Sized>(
+    /// Describes `definition` for a subject that does not exist, such as an expected element that
+    /// a collection lacks.
+    ///
+    /// The description is built by [`Expectation::explain`] without a rejection and never
+    /// evaluates `definition`, so predicates and callbacks do not run. Use it when a combining
+    /// expectation reports a child that had nothing to check, for example by attaching the result
+    /// with [`FailureBuilder::constraint`] or [`FailureBuilder::child`].
+    ///
+    /// ```
+    /// use assertr::{
+    ///     expectation::{AssertionContext, Expectation},
+    ///     failure::{FailureBuilder, FailureKind},
+    ///     matchers::eq,
+    ///     prelude::*,
+    /// };
+    ///
+    /// /// Expects `Some` value matching `M`.
+    /// struct HoldsMatching<M>(M);
+    ///
+    /// impl<M: Expectation<i32, R>, R> Expectation<Option<i32>, R> for HoldsMatching<M> {
+    ///     type Success<'a> = () where Self: 'a;
+    ///     type Rejection<'a> = () where Self: 'a;
+    ///
+    ///     fn evaluate(&self, actual: &Option<i32>, context: &AssertionContext<'_, R>) -> Result<(), ()> {
+    ///         match actual {
+    ///             Some(value) if context.probe(value, &self.0) => Ok(()),
+    ///             _ => Err(()),
+    ///         }
+    ///     }
+    ///
+    ///     fn explain(
+    ///         &self,
+    ///         _: Option<(&Option<i32>, ())>,
+    ///         failure: FailureBuilder,
+    ///         context: &AssertionContext<'_, R>,
+    ///     ) -> FailureBuilder {
+    ///         failure
+    ///             .relation("does not hold a matching value")
+    ///             .constraint(context.describe::<i32, _>(&self.0))
+    ///     }
+    /// }
+    ///
+    /// let failures = assert_that!(None::<i32>).capture(|it| it.matches(HoldsMatching(eq(2))));
+    /// let constraint = failures[0].constraint.as_ref().unwrap();
+    /// assert_that!(constraint.expected.as_ref().map(ToString::to_string)).is_equal_to(Some("2".to_owned()));
+    /// ```
+    #[must_use]
+    pub fn describe<A: ?Sized, D: Expectation<A, R> + ?Sized>(
         &self,
         definition: &D,
     ) -> AssertionFailure {
@@ -287,7 +346,7 @@ impl<'r, R> AssertionContext<'r, R> {
         failure: FailureBuilder,
     ) -> FailureBuilder
     where
-        L: crate::matchers::MatcherList<A, R>,
+        L: crate::expectation::MatcherList<A, R>,
     {
         let retained = list.len().min(self.rendering.max_items());
         failure
@@ -335,9 +394,15 @@ impl<'r, R> AssertionContext<'r, R> {
     where
         M: Expectation<A, R>,
     {
-        let context =
-            Self::from_rendering(self.rendering, self.include_location).with_diagnostics(false);
-        matcher.evaluate(actual, &context).is_ok()
+        matcher.evaluate(actual, &self.probing()).is_ok()
+    }
+
+    /// Starts a collector that evaluates children without recording or rendering evidence.
+    ///
+    /// Evaluating through it is equivalent to [`probe`](Self::probe), but it can run several
+    /// children or a [`MatcherList`](crate::expectation::MatcherList) slot.
+    pub(crate) fn probing(&self) -> Self {
+        self.isolated().with_diagnostics(false)
     }
 
     /// Runs `f` with a collector whose failures are reported at `path`, such as a field, index,
@@ -575,9 +640,9 @@ mod tests {
                 _: &AssertionContext<'_>,
             ) -> crate::failure::FailureBuilder {
                 match rejected {
-                    Some((_, evidence)) => {
-                        evidence.explain(failure.relation("does not satisfy the group"))
-                    }
+                    Some((_, evidence)) => failure
+                        .relation("does not satisfy the group")
+                        .evidence(evidence),
                     None => failure.relation("satisfies the group"),
                 }
             }

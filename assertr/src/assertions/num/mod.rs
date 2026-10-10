@@ -98,18 +98,8 @@ pub trait NumAssertions<T: Num, R = DebugRenderer> {
     where
         R: ValueRenderer<T>;
 
-    /// Alias of [`NumAssertions::is_zero`].
-    fn is_additive_identity(self) -> Self
-    where
-        R: ValueRenderer<T>;
-
     /// Asserts that the subject equals the multiplicative identity, one.
     fn is_one(self) -> Self
-    where
-        R: ValueRenderer<T>;
-
-    /// Alias of [`NumAssertions::is_one`].
-    fn is_multiplicative_identity(self) -> Self
     where
         R: ValueRenderer<T>;
 
@@ -202,27 +192,11 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
     }
 
     #[track_caller]
-    fn is_additive_identity(self) -> Self
-    where
-        R: ValueRenderer<T>,
-    {
-        self.is_zero()
-    }
-
-    #[track_caller]
     fn is_one(self) -> Self
     where
         R: ValueRenderer<T>,
     {
         self.matches(IsOne)
-    }
-
-    #[track_caller]
-    fn is_multiplicative_identity(self) -> Self
-    where
-        R: ValueRenderer<T>,
-    {
-        self.is_one()
     }
 
     #[track_caller]
@@ -315,20 +289,18 @@ mod tests {
 
         #[test]
         fn are_as_expected() {
-            0_i32.must().be_zero().be_additive_identity();
-            1_i32.must().be_one().be_multiplicative_identity();
+            0_i32.must().be_zero();
+            1_i32.must().be_one();
             (-0.01_f64).must().be_negative();
             0.01_f64.must().be_positive();
             0.333_f64.must().be_close_to(0.333, 0.001);
-        }
-
-        #[test]
-        #[cfg(any(feature = "std", feature = "libm"))]
-        fn float_classifications_are_as_expected() {
-            f32::NAN.must().be_nan();
-            0.3_f32.must().be_finite().be_normal();
-            f32::INFINITY.must().be_infinite();
-            f32::from_bits(1).must().be_subnormal();
+            #[cfg(any(feature = "std", feature = "libm"))]
+            {
+                f32::NAN.must().be_nan();
+                0.3_f32.must().be_finite().be_normal();
+                f32::INFINITY.must().be_infinite();
+                f32::from_bits(1).must().be_subnormal();
+            }
         }
     }
 
@@ -452,17 +424,6 @@ mod tests {
         }
     }
 
-    /// Synonym of `is_zero`. The caller location is pinned here. The behavior is covered by that
-    /// module.
-    mod is_additive_identity {
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(3), is_additive_identity());
-        }
-    }
-
     mod is_one {
         use crate::prelude::*;
 
@@ -476,17 +437,6 @@ mod tests {
             assert_that!(1).is_one();
             let failures = assert_that!(3).capture(NumAssertions::is_one);
             assert_that!(failures).has_length(1);
-        }
-    }
-
-    /// Synonym of `is_one`. The caller location is pinned here. The behavior is covered by that
-    /// module.
-    mod is_multiplicative_identity {
-        use crate::prelude::*;
-
-        #[test]
-        fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(3), is_multiplicative_identity());
         }
     }
 

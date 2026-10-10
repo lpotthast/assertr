@@ -6,14 +6,14 @@
 
 use super::{
     AssertionContext, Borrow, FailureBuilder, FailureKind, KnownLength, LengthBound,
-    PREVIEW_CAPACITY, PhantomData, RenderingOrder, Scan, Tail, ValueRenderer, consumed_fact,
+    PREVIEW_CAPACITY, PhantomData, RenderingContext, RenderingOrder, Scan, Tail, ValueRenderer,
+    consumed_fact,
 };
 use crate::{
-    assertions::collection::Placement,
+    assertions::{collection::Placement, support::indexed_equality_mismatch},
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{Evidence, context::unsatisfied},
+    expectation::{Evidence, MatcherList, context::unsatisfied},
     failure::{Fact, PathSegment},
-    matchers::MatcherList,
 };
 
 /// Checks one expected slot against the element at a yield position, recording any rejection
@@ -41,11 +41,27 @@ pub(crate) enum End {
 pub(crate) enum Rejection<Item> {
     /// An exact size hint ruled out the expected length before consuming anything.
     Reported(KnownLength),
-    Scanned {
-        tail: Tail<Item>,
-        end: End,
-        evidence: Evidence,
-    },
+    /// Consumed input decided the rejection.
+    Scanned(Scanned<Item>),
+}
+
+/// What a rejected positional scan retained from the consumed input.
+pub(crate) struct Scanned<Item> {
+    tail: Tail<Item>,
+    end: End,
+    evidence: Evidence,
+}
+
+/// Attaches the index of the element found after an exact sequence of `len` elements.
+fn extra_element_fact<R: ValueRenderer<usize>>(
+    failure: FailureBuilder,
+    rendering: RenderingContext<'_, R>,
+    len: usize,
+) -> FailureBuilder {
+    failure.fact(Fact::labelled(
+        "Extra element at index",
+        rendering.value(&len),
+    ))
 }
 
 /// Scans for `len` expected slots at `placement`, retaining at least `retain` of the latest
@@ -134,11 +150,11 @@ where
             (tail, end)
         }
     };
-    Err(Rejection::Scanned {
+    Err(Rejection::Scanned(Scanned {
         tail: tail.finish(),
         end,
         evidence: scope.into_evidence(),
-    })
+    }))
 }
 
 /// Evaluates every position of one complete window starting at yield index `start`.
@@ -172,15 +188,13 @@ where
             windows.append(evidence);
         } else {
             windows.record(|windows| {
-                evidence
-                    .explain(
-                        FailureBuilder::new::<I>(FailureKind::Matching)
-                            .relation("does not match in this window")
-                            .fact(Fact::labelled(
-                                "Window start",
-                                windows.render().value(&start),
-                            )),
-                    )
+                FailureBuilder::new::<I>(FailureKind::Matching)
+                    .relation("does not match in this window")
+                    .fact(Fact::labelled(
+                        "Window start",
+                        windows.render().value(&start),
+                    ))
+                    .evidence(evidence)
                     .build()
             });
         }
@@ -189,13 +203,13 @@ where
 }
 
 /// Compares the input with expected values at a placement, retaining an equality preview.
-pub(crate) struct ElementsEqual<'e, T, E> {
+pub(crate) struct ElementsEqualScan<'e, T, E> {
     expected: &'e [E],
     placement: Placement,
     item: PhantomData<fn() -> T>,
 }
 
-impl<'e, T, E> ElementsEqual<'e, T, E> {
+impl<'e, T, E> ElementsEqualScan<'e, T, E> {
     pub(crate) const fn new(expected: &'e [E], placement: Placement) -> Self {
         Self {
             expected,
@@ -205,7 +219,7 @@ impl<'e, T, E> ElementsEqual<'e, T, E> {
     }
 }
 
-impl<T, E, I, R> Scan<I, R> for ElementsEqual<'_, T, E>
+impl<T, E, I, R> Scan<I, R> for ElementsEqualScan<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -231,7 +245,7 @@ where
         let probe;
         let context = if self.placement == Placement::Contiguous {
             // The report shows no window evidence, so windows are only probed.
-            probe = context.isolated().with_diagnostics(false);
+            probe = context.probing();
             &probe
         } else {
             context
@@ -242,12 +256,7 @@ where
             if !matched {
                 // Construct indexed evidence only for retained rejections.
                 context.record(|context| {
-                    let render = context.render();
-                    FailureBuilder::new::<T>(FailureKind::Equality)
-                        .actual(render.value(actual))
-                        .expected(render.value(expected))
-                        .path([PathSegment::Index(position)])
-                        .build()
+                    indexed_equality_mismatch(context, position, actual, expected)
                 });
             }
             matched
@@ -283,13 +292,13 @@ where
                     self.expected,
                     RenderingOrder::PreserveIteration,
                 ));
-        let (tail, end, evidence) = match rejection {
+        let Scanned {
+            tail,
+            end,
+            evidence,
+        } = match rejection {
             Rejection::Reported(known) => return known.facts(failure, render),
-            Rejection::Scanned {
-                tail,
-                end,
-                evidence,
-            } => (tail, end, evidence),
+            Rejection::Scanned(scanned) => scanned,
         };
         let decisive = match end {
             End::Mismatch(index) => Some(index),
@@ -304,22 +313,20 @@ where
             End::Short if self.placement == Placement::Suffix => {
                 failure.fact(Fact::labelled("Suffix length", render.value(&len)))
             }
-            End::Extra => {
-                failure.fact(Fact::labelled("Extra element at index", render.value(&len)))
-            }
-            _ => evidence.explain(failure),
+            End::Extra => extra_element_fact(failure, render, len),
+            _ => failure.evidence(evidence),
         }
     }
 }
 
 /// Matches the input against a matcher list at a placement, without retaining a preview.
-pub(crate) struct ElementsMatch<T, L> {
+pub(crate) struct ElementsMatchScan<T, L> {
     expected: L,
     placement: Placement,
     item: PhantomData<fn() -> T>,
 }
 
-impl<T, L> ElementsMatch<T, L> {
+impl<T, L> ElementsMatchScan<T, L> {
     pub(crate) const fn new(expected: L, placement: Placement) -> Self {
         Self {
             expected,
@@ -329,7 +336,7 @@ impl<T, L> ElementsMatch<T, L> {
     }
 }
 
-impl<T, L, I, R> Scan<I, R> for ElementsMatch<T, L>
+impl<T, L, I, R> Scan<I, R> for ElementsMatchScan<T, L>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -364,16 +371,16 @@ where
     ) -> FailureBuilder {
         let render = context.render();
         let len = self.expected.len();
-        let (tail, end, evidence) = match rejection {
+        let Scanned {
+            tail,
+            end,
+            evidence,
+        } = match rejection {
             Rejection::Reported(known) => {
                 let failure = failure.relation("does not have the required sequence length");
                 return known.facts(failure, render);
             }
-            Rejection::Scanned {
-                tail,
-                end,
-                evidence,
-            } => (tail, end, evidence),
+            Rejection::Scanned(scanned) => scanned,
         };
         let consumed = tail.consumed;
         let sequence = matches!(self.placement, Placement::Exact | Placement::Prefix);
@@ -394,15 +401,13 @@ where
             }
             End::Short | End::Windows => ("does not contain these elements contiguously", evidence),
         };
-        let failure =
-            evidence.explain(consumed_fact(failure.relation(relation), context, consumed));
+        let failure = consumed_fact(failure.relation(relation), context.render(), consumed)
+            .evidence(evidence);
         match end {
             End::Short if sequence => {
                 failure.fact(Fact::labelled("Expected length", render.value(&len)))
             }
-            End::Extra => {
-                failure.fact(Fact::labelled("Extra element at index", render.value(&len)))
-            }
+            End::Extra => extra_element_fact(failure, render, len),
             // Describe incomplete windows without evaluating their matchers or inventing positions.
             End::Short => failure
                 .fact(Fact::labelled("Expected length", render.value(&len)))
@@ -537,8 +542,8 @@ mod tests {
         fn deque_wraparound_preserves_overlaps_and_first_success() {
             for length in [1, 3, 16, 17, 40] {
                 let pattern = (0..length).collect::<Vec<_>>();
-                let mut iterator = core::iter::repeat_n(99, 77).chain(0..).inspect(|_| {});
-                let scan = ElementsEqual::<usize, _>::new(&pattern, Placement::Contiguous);
+                let mut iterator = core::iter::repeat_n(99, 77).chain(0..);
+                let scan = ElementsEqualScan::<usize, _>::new(&pattern, Placement::Contiguous);
                 assert_that!(
                     scan.observe(&mut iterator, &AssertionContext::default())
                         .is_ok()
@@ -566,17 +571,17 @@ mod tests {
                     let context = AssertionContext::default();
                     let rejection = if matcher {
                         let expected = [crate::matchers::eq(1), crate::matchers::eq(2)];
-                        ElementsMatch::<i32, _>::new(expected, placement)
+                        ElementsMatchScan::<i32, _>::new(expected, placement)
                             .observe(&mut iterator, &context)
                     } else {
-                        ElementsEqual::<i32, _>::new(&[1, 2], placement)
+                        ElementsEqualScan::<i32, _>::new(&[1, 2], placement)
                             .observe(&mut iterator, &context)
                     };
-                    let Err(Rejection::Scanned {
+                    let Err(Rejection::Scanned(Scanned {
                         tail,
                         end: End::Short,
                         ..
-                    }) = rejection
+                    })) = rejection
                     else {
                         panic!("a short input is rejected after scanning")
                     };
@@ -591,7 +596,7 @@ mod tests {
             let mut iterator = 0..;
             let context = AssertionContext::default();
             for placement in [Placement::Suffix, Placement::Contiguous] {
-                let scan = ElementsEqual::<i32, i32>::new(&[], placement);
+                let scan = ElementsEqualScan::<i32, i32>::new(&[], placement);
                 assert_that!(scan.observe(&mut iterator, &context).is_ok()).is_true();
             }
             assert_that!(iterator.next()).is_equal_to(Some(0));
@@ -681,14 +686,14 @@ mod tests {
                 comparisons: &comparisons,
             };
             let expected: Vec<_> = (0..19).chain([99]).map(item).collect();
-            let scan = ElementsEqual::<Compared<'_>, _>::new(&expected, placement);
+            let scan = ElementsEqualScan::<Compared<'_>, _>::new(&expected, placement);
             let context = AssertionContext::new(&DebugRenderer, RenderingBudget::default());
             let mut iterator = (0..).map(item);
-            let Err(Rejection::Scanned {
+            let Err(Rejection::Scanned(Scanned {
                 tail,
                 end: End::Mismatch(index),
                 ..
-            }) = scan.observe(&mut iterator, &context)
+            })) = scan.observe(&mut iterator, &context)
             else {
                 panic!("an unknown length cannot reject before scanning")
             };
@@ -829,7 +834,7 @@ mod tests {
                 let fact = failure
                     .facts
                     .iter()
-                    .find(|fact| fact.label == label)
+                    .find(|fact| fact.label.as_deref() == Some(label))
                     .unwrap();
                 assert_truncated_value(&fact.value, "usize", 6);
             }

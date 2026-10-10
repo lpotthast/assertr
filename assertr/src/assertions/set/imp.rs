@@ -11,7 +11,7 @@ use crate::{
 
 /// One set relation: which elements to inspect, which membership rejects them, and how to
 /// describe the relation and its offending elements.
-struct Relation {
+struct SetRelation {
     /// Inspect the expected set's elements instead of the subject's.
     expected_elements: bool,
     /// Reject an inspected element when the other set contains it, instead of when it does not.
@@ -21,7 +21,7 @@ struct Relation {
     offending: &'static str,
 }
 
-const SUBSET: Relation = Relation {
+const SUBSET: SetRelation = SetRelation {
     expected_elements: false,
     reject_members: false,
     holds: "is a subset of",
@@ -29,7 +29,7 @@ const SUBSET: Relation = Relation {
     offending: "Elements not in expected",
 };
 
-const SUPERSET: Relation = Relation {
+const SUPERSET: SetRelation = SetRelation {
     expected_elements: true,
     reject_members: false,
     holds: "is a superset of",
@@ -37,7 +37,7 @@ const SUPERSET: Relation = Relation {
     offending: "Elements not in actual",
 };
 
-const DISJOINT: Relation = Relation {
+const DISJOINT: SetRelation = SetRelation {
     expected_elements: false,
     reject_members: true,
     holds: "is disjoint from",
@@ -45,7 +45,7 @@ const DISJOINT: Relation = Relation {
     offending: "Overlapping elements",
 };
 
-impl Relation {
+impl SetRelation {
     /// Collects the inspected elements that violate the relation.
     fn evaluate<'a, S, O>(&self, actual: &'a S, expected: &'a O) -> Result<(), Vec<&'a S::Item>>
     where
@@ -105,9 +105,9 @@ impl Relation {
     }
 }
 
-/// Implements a public set relation expectation by delegating to its [`Relation`].
+/// Implements a public set relation expectation by delegating to its [`SetRelation`].
 macro_rules! set_relation {
-    ($(#[$attr:meta])* $name:ident, $relation:ident) => {
+    ($(#[$attr:meta])* $name:ident, $set_relation:ident) => {
         $(#[$attr])*
         #[derive(Debug, Clone)]
         pub struct $name<O>(O);
@@ -141,7 +141,7 @@ macro_rules! set_relation {
                 actual: &'a S,
                 _: &AssertionContext<'_, R>,
             ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-                $relation.evaluate(actual, &self.0)
+                $set_relation.evaluate(actual, &self.0)
             }
 
             const KIND: FailureKind = FailureKind::Membership;
@@ -152,7 +152,7 @@ macro_rules! set_relation {
                 failure: FailureBuilder,
                 context: &AssertionContext<'_, R>,
             ) -> FailureBuilder {
-                $relation.explain(&self.0, rejected, failure, context)
+                $set_relation.explain(&self.0, rejected, failure, context)
             }
         }
     };
@@ -160,16 +160,55 @@ macro_rules! set_relation {
 
 set_relation!(
     /// Checks that a set is a subset of another set using native lookup.
+    ///
+    /// The expected superset can be any [`SetLookup`] type with the same element type. A
+    /// rejection lists the subject elements missing from it.
+    /// [`SetAssertions::is_subset_of`](crate::assertions::SetAssertions::is_subset_of) executes
+    /// this same definition.
+    ///
+    /// ```
+    /// use std::collections::BTreeSet;
+    ///
+    /// use assertr::{matchers::set::IsSubsetOf, prelude::*};
+    ///
+    /// assert_that!(BTreeSet::from([1, 2])).matches(IsSubsetOf::new(BTreeSet::from([1, 2, 3])));
+    /// ```
     IsSubsetOf,
     SUBSET
 );
 set_relation!(
     /// Checks that a set is a superset of another set using native lookup.
+    ///
+    /// The expected subset can be any [`SetLookup`] type with the same element type. A rejection
+    /// lists its elements missing from the subject.
+    /// [`SetAssertions::is_superset_of`](crate::assertions::SetAssertions::is_superset_of)
+    /// executes this same definition.
+    ///
+    /// ```
+    /// use std::collections::BTreeSet;
+    ///
+    /// use assertr::{matchers::set::IsSupersetOf, prelude::*};
+    ///
+    /// assert_that!(BTreeSet::from([1, 2, 3])).matches(IsSupersetOf::new(BTreeSet::from([3])));
+    /// ```
     IsSupersetOf,
     SUPERSET
 );
 set_relation!(
     /// Checks that a set is disjoint from another set using native lookup.
+    ///
+    /// The other set can be any [`SetLookup`] type with the same element type. A rejection lists
+    /// the overlapping elements.
+    /// [`SetAssertions::is_disjoint_from`](crate::assertions::SetAssertions::is_disjoint_from)
+    /// executes this same definition.
+    ///
+    /// ```
+    /// use std::collections::BTreeSet;
+    ///
+    /// use assertr::{matchers::set::IsDisjointFrom, prelude::*};
+    ///
+    /// assert_that!(BTreeSet::from([1, 2])).matches(IsDisjointFrom::new(BTreeSet::from([3])));
+    /// ```
     IsDisjointFrom,
     DISJOINT
 );

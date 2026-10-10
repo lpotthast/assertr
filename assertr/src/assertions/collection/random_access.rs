@@ -66,8 +66,8 @@ where
 /// Panic-mode indexed extraction from collections with [`RandomAccess`].
 ///
 /// The method borrows the assertion chain and returns an assertion borrowing the selected element.
-/// It is statically unavailable for stable-order collections such as linked lists and for unordered
-/// collections such as sets.
+/// It is statically unavailable for collections without constant-time indexing, such as linked
+/// lists, and for unordered collections such as sets.
 ///
 /// ```compile_fail,E0599
 /// use assertr::prelude::*;
@@ -186,8 +186,6 @@ mod tests {
 
         #[test]
         fn extraction_preserves_the_renderer_and_budget() {
-            use indoc::formatdoc;
-
             use crate::{renderer::RenderedBody, test_support::CustomValueRenderer};
             let subject = [7];
             let chain = assert_that!(subject)
@@ -197,20 +195,19 @@ mod tests {
             let failures = chain.get_at(0).capture(|it| it.is_equal_to(8));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
-                    element.derive(|value| value).has_text_report(formatdoc! {r"
-                -------- assertr --------
-                Expected: cus... 6 more characters ...
-
-                  Actual: cus... 6 more characters ...
-                -------- assertr --------
-            "});
-
                     element
                         .derive(|value| &value.actual.as_ref().unwrap().body)
                         .is_equal_to(RenderedBody::Text {
                             text: "cus".into(),
                             omitted_characters: 6,
                         });
+                    element.has_text_report(formatdoc! {r"
+                        -------- assertr --------
+                        Expected: cus... 6 more characters ...
+
+                          Actual: cus... 6 more characters ...
+                        -------- assertr --------
+                    "});
                 },
             ]);
         }

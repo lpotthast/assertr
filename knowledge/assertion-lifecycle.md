@@ -30,7 +30,8 @@ that reports to its parent.
 | `Actual<'t, T>`                   | `Borrowed(&T)` or `Owned(T)`. `actual()` returns `&T`.                                               |
 | `M: Mode`                         | Compile-time failure handling, sealed to `Panic` and `Capture`.                                      |
 | `R`                               | Active renderer. Methods require only the rendering capabilities they use.                           |
-| `ChainState` (private)            | Mode, renderer, diagnostic settings, subject name, expression, records. Independent of subject type. |
+| `ChainState` (private)            | Mode, renderer, records, and `DiagnosticSettings`. Independent of subject type.                      |
+| `DiagnosticSettings` (private)    | Subject name, expression, location policy, rendering budget, panic presentation. Kept when detached. |
 | `ChainRecords` (private)          | Local messages, assertion count, captured failures, optional parent-record link.                     |
 
 A root has no parent link. A child's link gives it access to ancestor records, but not to ancestor subjects, renderers,
@@ -88,7 +89,8 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 
 For example, program existence retains its subject, while resolved-path extraction promises a `PathBuf`. Type checks and
 extractions on erased boxes, panic payloads, and rootcause contexts use the same distinction. Owned payloads can transfer
-ownership. Borrowed payloads remain borrowed.
+ownership. Borrowed payloads remain borrowed. Message extraction with `has_message` always yields an owned `String`: it
+moves an owned `String` payload and copies a `&str` payload or a borrowed message.
 
 ### Async constraints
 

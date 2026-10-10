@@ -3,6 +3,7 @@
 mod assertions;
 mod caller_location;
 mod collections;
+mod evidence;
 mod rendering;
 
 use alloc::string::String;
@@ -13,11 +14,26 @@ pub(crate) use caller_location::LocationRecorder;
 pub(crate) use caller_location::block_on;
 pub(crate) use caller_location::{assert_caller_location, check_caller_location};
 pub(crate) use collections::{PreservedBag, UnorderedMap, UnorderedSet};
+pub(crate) use evidence::{assert_bounded_order, bounded_failures};
 pub(crate) use rendering::{
-    ComparisonRenderer, CustomValueRenderer, NoRenderer, NumericRenderer, RedactingRenderer,
-    RendererActual, RendererExpected, SENTINEL, SentinelRenderer, assert_custom_fact,
-    assert_custom_value, assert_redacted,
+    ComparisonRenderer, CustomValueRenderer, NoRenderer, NumericRenderer, PanickingRenderer,
+    RedactingRenderer, RendererActual, RendererExpected, SENTINEL, SentinelRenderer,
+    assert_custom_fact, assert_custom_value, assert_redacted,
 };
+
+/// Asserts that `extract` panics with exactly the `Debug` text of `kind`.
+///
+/// The chain under test installs `with_panic_presentation(|failure| format!("{:?}",
+/// failure.kind))`, so its panic carries only the failure kind. This pins that an extracting
+/// assertion rejects like its non-extracting counterpart.
+pub(crate) fn rejected_kind(kind: crate::failure::FailureKind, extract: impl FnOnce()) {
+    use crate::prelude::*;
+
+    assert_that_owned!(extract)
+        .panics()
+        .has_message()
+        .is_equal_to(alloc::format!("{kind:?}"));
+}
 
 /// A boolean matcher whose diagnostics render nothing, for renderer-independence fixtures.
 ///
@@ -44,7 +60,7 @@ impl<A: ?Sized, R, F: Fn(&A) -> bool> crate::expectation::Expectation<A, R> for 
         actual: &A,
         _: &crate::expectation::AssertionContext<'_, R>,
     ) -> Result<(), ()> {
-        if (self.0)(actual) { Ok(()) } else { Err(()) }
+        crate::expectation::passed((self.0)(actual))
     }
 
     const KIND: crate::failure::FailureKind = crate::failure::FailureKind::Matching;

@@ -3,14 +3,14 @@ use crate::{
     assertions::{
         collection::Placement,
         iterator::{
-            Contains, ContainsExactlyInAnyOrder, ContainsMatching, DoesNotContain,
-            DoesNotContainMatching, ElementsAreInAnyOrder, ElementsEqual, ElementsMatch,
-            PositionReporting::YieldOrder, run,
+            ContainsAllScan, ContainsMatchingScan, ContainsScan, DoesNotContainMatchingScan,
+            DoesNotContainScan, ElementsEqualScan, ElementsMatchScan,
+            PositionReporting::YieldOrder, Scan, UnorderedEqualScan, UnorderedMatchScan, run,
         },
     },
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{Expectation, lists::SatisfyingList},
-    matchers::{MatcherList, satisfying},
+    expectation::{Expectation, MatcherList, lists::SatisfyingList},
+    matchers::satisfying,
     mode::Capture,
     renderer::{DebugRenderer, ValueRenderer},
 };
@@ -61,181 +61,177 @@ use crate::{
 /// each candidate element.
 ///
 /// Bulk value lists use [repeatable expected data](crate#expected-lists).
-#[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// Asserts that the iterator contains an element equal to `expected`.
-    fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
+    fn contains<E>(self, expected: E) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
-        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u;
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
+
+    /// Asserts that the iterator contains an element equal to each expected value.
+    ///
+    /// Extra elements are allowed and duplicate expectations may share one element, like
+    /// [`CollectionAssertions::contains_all`](crate::assertions::CollectionAssertions::contains_all).
+    /// The scan stops as soon as every expected value has been seen, so it can succeed on an
+    /// infinite iterator. An empty expected list succeeds without advancing the iterator.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that_owned!((0..).map(|n| n * n)).contains_all([49, 4, 4]);
+    /// ```
+    fn contains_all<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
+    where
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the iterator contains an element matching `expected`.
-    fn contains_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn contains_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: Expectation<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>;
 
     /// Asserts that the iterator contains an element satisfying `assertions`.
-    fn contains_satisfying<'u, A>(self, assertions: A) -> AssertThat<'u, (), M, R>
+    fn contains_satisfying<A>(self, assertions: A) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: Clone + ValueRenderer<usize>,
-        't: 'u;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that the iterator starts with elements equal to `expected`, in order.
-    fn starts_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
+    fn starts_with<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
-        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u;
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the iterator's prefix matches the expected matcher list in order.
-    fn starts_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn starts_with_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>;
 
     /// Asserts that the iterator's prefix satisfies `assertions` in order.
-    fn starts_with_satisfying<'u, A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'u, (), M, R>
+    fn starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: Clone + ValueRenderer<usize>,
-        't: 'u;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that the iterator ends with elements equal to `expected`, in order.
-    fn ends_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
+    fn ends_with<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
-        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u;
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the iterator's suffix matches the expected matcher list in order.
-    fn ends_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn ends_with_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>;
 
     /// Asserts that the iterator's suffix satisfies `assertions` in order.
-    fn ends_with_satisfying<'u, A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'u, (), M, R>
+    fn ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: Clone + ValueRenderer<usize>,
-        't: 'u;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that the iterator contains `expected` as a contiguous subsequence.
-    fn contains_contiguous<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
+    fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
-        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u;
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
     ///
     /// A rejection retains one group per rejected window within the rendering budget. Each group
     /// carries a `Window start` fact with the window's zero-based starting index.
-    fn contains_contiguous_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn contains_contiguous_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>;
 
     /// Asserts that a contiguous subsequence satisfies `assertions` in order.
     ///
     /// Rejections are grouped per window like
     /// [`contains_contiguous_matching`](Self::contains_contiguous_matching).
-    fn contains_contiguous_satisfying<'u, A>(
+    fn contains_contiguous_satisfying<A>(
         self,
         assertions: impl AsRef<[A]>,
-    ) -> AssertThat<'u, (), M, R>
+    ) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: Clone + ValueRenderer<usize>,
-        't: 'u;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts that no iterator element equals `not_expected`.
-    fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M, R>
+    fn does_not_contain<E>(self, not_expected: E) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
-        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u;
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
-    /// Asserts that no iterator element matches `expected`.
-    fn does_not_contain_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    /// Asserts that no iterator element matches the unwanted constraint `not_expected`.
+    fn does_not_contain_matching<P>(self, not_expected: P) -> AssertThat<'t, (), M, R>
     where
         P: Expectation<T, R>,
-        't: 'u,
         R: ValueRenderer<usize> + ValueRenderer<T>;
 
     /// Asserts that no iterator element satisfies `assertions`.
-    fn does_not_contain_satisfying<'u, A>(self, assertions: A) -> AssertThat<'u, (), M, R>
+    fn does_not_contain_satisfying<A>(self, assertions: A) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
-        't: 'u;
+        R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
 
     /// Asserts positional equality with `expected`, including length.
-    fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
+    fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
-        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u;
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that each element matches the constraint at the same position, including length.
-    fn contains_exactly_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn contains_exactly_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>;
 
     /// Asserts that each element satisfies the assertions at the same position, including length.
-    fn contains_exactly_satisfying<'u, A>(
+    fn contains_exactly_satisfying<A>(
         self,
         assertions: impl AsRef<[A]>,
-    ) -> AssertThat<'u, (), M, R>
+    ) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: Clone + ValueRenderer<usize>,
-        't: 'u;
+        R: Clone + ValueRenderer<usize>;
 
     /// Asserts multiset equality with `expected`, ignoring order but preserving duplicate counts.
-    fn contains_exactly_in_any_order<'u, E>(
+    fn contains_exactly_in_any_order<E>(
         self,
         expected: impl AsRef<[E]>,
-    ) -> AssertThat<'u, (), M, R>
+    ) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
-        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u;
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts one-to-one matching between elements and the expected matcher list, independent of
     /// order.
-    fn contains_exactly_in_any_order_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>;
 
     /// Asserts one-to-one matching between elements and `assertions`, independent of order.
-    fn contains_exactly_in_any_order_satisfying<'u, A>(
+    fn contains_exactly_in_any_order_satisfying<A>(
         self,
         assertions: impl AsRef<[A]>,
-    ) -> AssertThat<'u, (), M, R>
+    ) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
-        R: Clone + ValueRenderer<usize>,
-        't: 'u;
+        R: Clone + ValueRenderer<usize>;
 }
 
 impl<'t, T, I, M: Mode, R> IteratorAssertions<'t, T, M, R> for AssertThat<'t, I, M, R>
@@ -243,339 +239,281 @@ where
     I: Iterator<Item = T>,
 {
     #[track_caller]
-    fn contains<'u, E>(self, expected: E) -> AssertThat<'u, (), M, R>
+    fn contains<E>(self, expected: E) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u,
     {
-        let (actual, this) = take_iterator(self);
-        run(&this, || {
-            (actual, Contains::<T, _>::new(borrow_for::<T, _>(&expected)))
-        });
-        this
+        consume(self, || {
+            ContainsScan::<T, _>::new(borrow_for::<T, _>(&expected))
+        })
     }
 
     #[track_caller]
-    fn contains_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn contains_all<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
+    where
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
+    {
+        consume(self, || ContainsAllScan::<T, _>::new(expected.as_ref()))
+    }
+
+    #[track_caller]
+    fn contains_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: Expectation<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>,
     {
-        let (actual, this) = take_iterator(self);
-        run(&this, || {
-            (actual, ContainsMatching::<T, _>::new(expected, YieldOrder))
-        });
-        this
+        consume(self, || {
+            ContainsMatchingScan::<T, _>::new(expected, YieldOrder)
+        })
     }
 
     #[track_caller]
-    fn contains_satisfying<'u, A>(self, assertions: A) -> AssertThat<'u, (), M, R>
+    fn contains_satisfying<A>(self, assertions: A) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
-        't: 'u,
     {
         self.contains_matching(satisfying(assertions))
     }
 
     #[track_caller]
-    fn starts_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
+    fn starts_with<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u,
     {
-        equal(self, &expected, Placement::Prefix)
+        consume(self, || {
+            ElementsEqualScan::<T, _>::new(expected.as_ref(), Placement::Prefix)
+        })
     }
 
     #[track_caller]
-    fn starts_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn starts_with_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>,
     {
-        matching(self, || expected, Placement::Prefix)
+        consume(self, || {
+            ElementsMatchScan::<T, _>::new(expected, Placement::Prefix)
+        })
     }
 
     #[track_caller]
-    fn starts_with_satisfying<'u, A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'u, (), M, R>
+    fn starts_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
-        't: 'u,
     {
-        matching(
-            self,
-            || SatisfyingList::new(assertions.as_ref()),
-            Placement::Prefix,
-        )
+        consume(self, || {
+            ElementsMatchScan::<T, _>::new(
+                SatisfyingList::new(assertions.as_ref()),
+                Placement::Prefix,
+            )
+        })
     }
 
     #[track_caller]
-    fn ends_with<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
+    fn ends_with<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u,
     {
-        equal(self, &expected, Placement::Suffix)
+        consume(self, || {
+            ElementsEqualScan::<T, _>::new(expected.as_ref(), Placement::Suffix)
+        })
     }
 
     #[track_caller]
-    fn ends_with_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn ends_with_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>,
     {
-        matching(self, || expected, Placement::Suffix)
+        consume(self, || {
+            ElementsMatchScan::<T, _>::new(expected, Placement::Suffix)
+        })
     }
 
     #[track_caller]
-    fn ends_with_satisfying<'u, A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'u, (), M, R>
+    fn ends_with_satisfying<A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
-        't: 'u,
     {
-        matching(
-            self,
-            || SatisfyingList::new(assertions.as_ref()),
-            Placement::Suffix,
-        )
+        consume(self, || {
+            ElementsMatchScan::<T, _>::new(
+                SatisfyingList::new(assertions.as_ref()),
+                Placement::Suffix,
+            )
+        })
     }
 
     #[track_caller]
-    fn contains_contiguous<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
+    fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u,
     {
-        equal(self, &expected, Placement::Contiguous)
+        consume(self, || {
+            ElementsEqualScan::<T, _>::new(expected.as_ref(), Placement::Contiguous)
+        })
     }
 
     #[track_caller]
-    fn contains_contiguous_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn contains_contiguous_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>,
     {
-        matching(self, || expected, Placement::Contiguous)
+        consume(self, || {
+            ElementsMatchScan::<T, _>::new(expected, Placement::Contiguous)
+        })
     }
 
     #[track_caller]
-    fn contains_contiguous_satisfying<'u, A>(
+    fn contains_contiguous_satisfying<A>(
         self,
         assertions: impl AsRef<[A]>,
-    ) -> AssertThat<'u, (), M, R>
+    ) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
-        't: 'u,
     {
-        matching(
-            self,
-            || SatisfyingList::new(assertions.as_ref()),
-            Placement::Contiguous,
-        )
+        consume(self, || {
+            ElementsMatchScan::<T, _>::new(
+                SatisfyingList::new(assertions.as_ref()),
+                Placement::Contiguous,
+            )
+        })
     }
 
     #[track_caller]
-    fn does_not_contain<'u, E>(self, not_expected: E) -> AssertThat<'u, (), M, R>
+    fn does_not_contain<E>(self, not_expected: E) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u,
     {
-        let (actual, this) = take_iterator(self);
-        run(&this, || {
-            let unexpected = borrow_for::<T, _>(&not_expected);
-            (actual, DoesNotContain::<T, _>::new(unexpected, YieldOrder))
-        });
-        this
+        consume(self, || {
+            DoesNotContainScan::<T, _>::new(borrow_for::<T, _>(&not_expected), YieldOrder)
+        })
     }
 
     #[track_caller]
-    fn does_not_contain_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn does_not_contain_matching<P>(self, not_expected: P) -> AssertThat<'t, (), M, R>
     where
         P: Expectation<T, R>,
-        't: 'u,
         R: ValueRenderer<usize> + ValueRenderer<T>,
     {
-        let (actual, this) = take_iterator(self);
-        run(&this, || {
-            (
-                actual,
-                DoesNotContainMatching::<T, _>::new(expected, YieldOrder),
-            )
-        });
-        this
+        consume(self, || {
+            DoesNotContainMatchingScan::<T, _>::new(not_expected, YieldOrder)
+        })
     }
 
     #[track_caller]
-    fn does_not_contain_satisfying<'u, A>(self, assertions: A) -> AssertThat<'u, (), M, R>
+    fn does_not_contain_satisfying<A>(self, assertions: A) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: ValueRenderer<T> + Clone + ValueRenderer<usize>,
-        't: 'u,
     {
         self.does_not_contain_matching(satisfying(assertions))
     }
 
     #[track_caller]
-    fn contains_exactly<'u, E>(self, expected: impl AsRef<[E]>) -> AssertThat<'u, (), M, R>
+    fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u,
     {
-        equal(self, &expected, Placement::Exact)
+        consume(self, || {
+            ElementsEqualScan::<T, _>::new(expected.as_ref(), Placement::Exact)
+        })
     }
 
     #[track_caller]
-    fn contains_exactly_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn contains_exactly_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>,
     {
-        matching(self, || expected, Placement::Exact)
+        consume(self, || {
+            ElementsMatchScan::<T, _>::new(expected, Placement::Exact)
+        })
     }
 
     #[track_caller]
-    fn contains_exactly_satisfying<'u, A>(
-        self,
-        assertions: impl AsRef<[A]>,
-    ) -> AssertThat<'u, (), M, R>
+    fn contains_exactly_satisfying<A>(self, assertions: impl AsRef<[A]>) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
-        't: 'u,
     {
-        matching(
-            self,
-            || SatisfyingList::new(assertions.as_ref()),
-            Placement::Exact,
-        )
+        consume(self, || {
+            ElementsMatchScan::<T, _>::new(
+                SatisfyingList::new(assertions.as_ref()),
+                Placement::Exact,
+            )
+        })
     }
 
     #[track_caller]
-    fn contains_exactly_in_any_order<'u, E>(
-        self,
-        expected: impl AsRef<[E]>,
-    ) -> AssertThat<'u, (), M, R>
+    fn contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-        't: 'u,
     {
-        let (actual, this) = take_iterator(self);
-        run(&this, || {
-            let scan = ContainsExactlyInAnyOrder::<T, _>::new(expected.as_ref());
-            (actual, scan)
-        });
-        this
+        consume(self, || UnorderedEqualScan::<T, _>::new(expected.as_ref()))
     }
 
     #[track_caller]
-    fn contains_exactly_in_any_order_matching<'u, P>(self, expected: P) -> AssertThat<'u, (), M, R>
+    fn contains_exactly_in_any_order_matching<P>(self, expected: P) -> AssertThat<'t, (), M, R>
     where
         P: MatcherList<T, R>,
-        't: 'u,
         R: ValueRenderer<usize>,
     {
-        let (actual, this) = take_iterator(self);
-        run(&this, || {
-            (actual, ElementsAreInAnyOrder::<T, _>::new(expected))
-        });
-        this
+        consume(self, || UnorderedMatchScan::<T, _>::new(expected))
     }
 
     #[track_caller]
-    fn contains_exactly_in_any_order_satisfying<'u, A>(
+    fn contains_exactly_in_any_order_satisfying<A>(
         self,
         assertions: impl AsRef<[A]>,
-    ) -> AssertThat<'u, (), M, R>
+    ) -> AssertThat<'t, (), M, R>
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>,
-        't: 'u,
     {
-        let (actual, this) = take_iterator(self);
-        run(&this, || {
-            let expected = SatisfyingList::new(assertions.as_ref());
-            (actual, ElementsAreInAnyOrder::<T, _>::new(expected))
-        });
-        this
+        consume(self, || {
+            UnorderedMatchScan::<T, _>::new(SatisfyingList::new(assertions.as_ref()))
+        })
     }
 }
 
-/// Takes the iterator out of `this`, returning it together with the terminal `()` assertion.
+/// Takes the iterator out of `this`, then tracks the assertion and lets `scan` create the scan.
+///
+/// `scan` runs after tracking, so expected operands and lists are accessed only then. The
+/// iterator is released before failure handling, and the terminal `()` assertion is returned.
 #[track_caller]
-fn take_iterator<'t, 'u, I, M: Mode, R>(
+fn consume<'t, I, D, M: Mode, R>(
     this: AssertThat<'t, I, M, R>,
-) -> (I, AssertThat<'u, (), M, R>)
+    scan: impl FnOnce() -> D,
+) -> AssertThat<'t, (), M, R>
 where
-    't: 'u,
+    I: Iterator,
+    D: Scan<I, R>,
 {
-    this.take_owned(
+    let (actual, this) = this.take_owned(
         "Iterator assertions consume the iterator and therefore need to own it. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
-    )
-}
-
-/// Runs a positional equality scan, accessing the expected list only after tracking.
-#[track_caller]
-fn equal<'t, 'u, T, I, E, M: Mode, R>(
-    this: AssertThat<'t, I, M, R>,
-    expected: &impl AsRef<[E]>,
-    placement: Placement,
-) -> AssertThat<'u, (), M, R>
-where
-    I: Iterator<Item = T>,
-    T: PartialEq<E::View>,
-    E: BorrowFor<T>,
-    R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
-    't: 'u,
-{
-    let (actual, this) = take_iterator(this);
-    run(&this, || {
-        (
-            actual,
-            ElementsEqual::<T, _>::new(expected.as_ref(), placement),
-        )
-    });
-    this
-}
-
-/// Runs a positional matcher scan, creating the list only after tracking.
-#[track_caller]
-fn matching<'t, 'u, T, I, L, M: Mode, R>(
-    this: AssertThat<'t, I, M, R>,
-    expected: impl FnOnce() -> L,
-    placement: Placement,
-) -> AssertThat<'u, (), M, R>
-where
-    I: Iterator<Item = T>,
-    L: MatcherList<T, R>,
-    R: ValueRenderer<usize>,
-    't: 'u,
-{
-    let (actual, this) = take_iterator(this);
-    run(&this, || {
-        (actual, ElementsMatch::<T, _>::new(expected(), placement))
-    });
+    );
+    run(&this, || (actual, scan()));
     this
 }
 
@@ -596,6 +534,7 @@ mod tests {
         fn are_as_expected() {
             let values = || [1, 2, 3].into_iter().must_owned();
             values().contain(2);
+            values().contain_all([3, 1]);
             values().contain_matching(eq(2));
             values().contain_satisfying(is(2));
             values().not_contain(4);
@@ -741,6 +680,33 @@ mod tests {
                       - Consumed elements: 3
                     -------- assertr --------
                 "});
+        }
+    }
+
+    /// The borrowed `into_iter_contains_all` pins the report of the shared scan.
+    mod contains_all {
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                contains_all([2, 4])
+            );
+        }
+
+        #[test]
+        fn succeeds_when_every_expected_value_occurs() {
+            assert_that_owned!([1, 2, 3].into_iter()).contains_all([3, 1, 1]);
+            assert_that_owned!(vec!["a".to_owned(), "b".to_owned()].into_iter())
+                .contains_all(["b", "a"]);
+        }
+
+        #[test]
+        fn stops_on_an_infinite_iterator_once_every_value_occurred() {
+            let mut iterator = 0..;
+            assert_that_owned!(&mut iterator).contains_all([3, 1]);
+            assert_that!(iterator.next()).is_equal_to(Some(4));
         }
     }
 
@@ -975,7 +941,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                starts_with_matching(matchers::predicate_list([is_one, is_nine]))
+                starts_with_matching([is_one, is_nine].map(matchers::predicate))
             );
         }
 
@@ -992,7 +958,7 @@ mod tests {
             assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .starts_with_matching(matchers::predicate_list([is_one, is_nine]));
+                    .starts_with_matching([is_one, is_nine].map(matchers::predicate));
             })
             .panics()
             .has_type::<String>()
@@ -1099,7 +1065,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                ends_with_matching(matchers::predicate_list([is_two, is_nine]))
+                ends_with_matching([is_two, is_nine].map(matchers::predicate))
             );
         }
 
@@ -1116,7 +1082,7 @@ mod tests {
             assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .ends_with_matching(matchers::predicate_list([is_two, is_nine]));
+                    .ends_with_matching([is_two, is_nine].map(matchers::predicate));
             })
             .panics()
             .has_type::<String>()
@@ -1222,7 +1188,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                contains_contiguous_matching(matchers::predicate_list([is_two, is_nine,]))
+                contains_contiguous_matching([is_two, is_nine,].map(matchers::predicate))
             );
         }
 
@@ -1239,7 +1205,7 @@ mod tests {
             assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .contains_contiguous_matching(matchers::predicate_list([is_two, is_nine]));
+                    .contains_contiguous_matching([is_two, is_nine].map(matchers::predicate));
             })
             .panics()
             .has_type::<String>()
@@ -1377,7 +1343,7 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                contains_exactly_matching(matchers::predicate_list([is_one, is_nine, is_three,]))
+                contains_exactly_matching([is_one, is_nine, is_three,].map(matchers::predicate))
             );
         }
 
@@ -1398,9 +1364,9 @@ mod tests {
             assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .contains_exactly_matching(matchers::predicate_list([
-                        is_one, is_nine, is_three,
-                    ]));
+                    .contains_exactly_matching(
+                        [is_one, is_nine, is_three].map(matchers::predicate),
+                    );
             })
             .panics()
             .has_type::<String>()
@@ -1429,10 +1395,9 @@ mod tests {
             assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter().filter(|_| true))
                     .with_location(false)
-                    .contains_exactly_matching(matchers::predicate_list([
-                        |it: &i32| *it == 1,
-                        |it: &i32| *it == 2,
-                    ]));
+                    .contains_exactly_matching(
+                        [|it: &i32| *it == 1, |it: &i32| *it == 2].map(matchers::predicate),
+                    );
             })
             .panics()
             .has_type::<String>()
@@ -1575,28 +1540,26 @@ mod tests {
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that_owned!([1, 2, 3].into_iter()),
-                contains_exactly_in_any_order_matching(matchers::predicate_list([
-                    is_one, is_two, is_nine,
-                ]))
+                contains_exactly_in_any_order_matching(
+                    [is_one, is_two, is_nine,].map(matchers::predicate)
+                )
             );
         }
 
         #[test]
         fn matches_items_without_equality_through_predicates() {
             assert_that_owned!([Opaque(1), Opaque(2)].into_iter())
-                .contains_exactly_in_any_order_matching(matchers::predicate_list([
-                    |it: &Opaque| it.0 == 2,
-                    |it: &Opaque| it.0 == 1,
-                ]));
+                .contains_exactly_in_any_order_matching(
+                    [|it: &Opaque| it.0 == 2, |it: &Opaque| it.0 == 1].map(matchers::predicate),
+                );
         }
 
         #[test]
         fn assigns_overlapping_predicates_one_to_one() {
             assert_that_owned!([Opaque(2), Opaque(1)].into_iter())
-                .contains_exactly_in_any_order_matching(matchers::predicate_list([
-                    |_: &Opaque| true,
-                    |it: &Opaque| it.0 == 2,
-                ]));
+                .contains_exactly_in_any_order_matching(
+                    [|_: &Opaque| true, |it: &Opaque| it.0 == 2].map(matchers::predicate),
+                );
         }
 
         fn is_one(value: &i32) -> bool {
@@ -1616,9 +1579,9 @@ mod tests {
             assert_that!(|| {
                 assert_that_owned!([1, 2, 3].into_iter())
                     .with_location(false)
-                    .contains_exactly_in_any_order_matching(matchers::predicate_list([
-                        is_one, is_two, is_nine,
-                    ]));
+                    .contains_exactly_in_any_order_matching(
+                        [is_one, is_two, is_nine].map(matchers::predicate),
+                    );
             })
             .panics()
             .has_type::<String>()

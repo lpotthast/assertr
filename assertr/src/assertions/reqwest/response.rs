@@ -934,17 +934,11 @@ mod tests {
 
         #[test]
         fn successful_header_checks_do_not_render() {
-            struct NeverRender;
-
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("a passing assertion must not render values")
-                }
-            }
-
             let response = header_response(b"secret", true);
             assert_that!(response)
-                .with_renderer(NeverRender)
+                .with_renderer(crate::test_support::PanickingRenderer(
+                    "a passing assertion must not render values",
+                ))
                 .has_header("x-api-key")
                 .has_header_value("x-api-key", "secret")
                 .does_not_have_header("missing")

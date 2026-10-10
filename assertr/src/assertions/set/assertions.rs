@@ -10,7 +10,29 @@ use crate::{
 /// [`CollectionAssertions`](crate::assertions::CollectionAssertions).
 ///
 /// Every relation accepts any other set type, so a `HashSet` can be compared against a `BTreeSet`,
-/// and against a `HashSet` with a different hasher.
+/// and against a `HashSet` with a different hasher. Membership uses each set's native lookup
+/// through [`SetLookup`].
+///
+/// ```
+/// use std::collections::{BTreeSet, HashSet};
+///
+/// use assertr::prelude::*;
+///
+/// # #[cfg(feature = "std")] {
+/// let granted = HashSet::from(["read", "write"]);
+/// assert_that!(&granted)
+///     .is_subset_of(BTreeSet::from(["read", "write", "admin"]))
+///     .is_superset_of(BTreeSet::from(["read"]))
+///     .is_disjoint_from(BTreeSet::from(["delete"]));
+///
+/// let failures = assert_that!(granted)
+///     .with_location(false)
+///     .capture(|it| it.is_disjoint_from(BTreeSet::from(["write"])));
+/// assert_that!(failures[0].to_string())
+///     .contains("is not disjoint from")
+///     .contains("Overlapping elements");
+/// # }
+/// ```
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait SetAssertions<T, R = DebugRenderer> {

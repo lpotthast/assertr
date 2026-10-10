@@ -21,7 +21,7 @@ impl<T> Type<T> {
 
     /// The name of `T`, as reported by [`core::any::type_name`].
     #[must_use]
-    pub fn get_type_name(&self) -> &'static str {
+    pub fn type_name(&self) -> &'static str {
         type_name::<T>()
     }
 
@@ -62,7 +62,7 @@ impl<T> Default for Type<T> {
 ///     size.is_equal_to(4);
 /// });
 ///
-/// assert_that_type::<u32>().satisfies_owned(|it| it.get_type_name(), |name| {
+/// assert_that_type::<u32>().satisfies_owned(|it| it.type_name(), |name| {
 ///     name.is_equal_to("u32");
 /// });
 /// ```

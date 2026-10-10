@@ -67,7 +67,7 @@ mod tests {
         let result = std::panic::catch_unwind(|| {
             let _unused = assert_that!(42).with_location(false);
         });
-        assert_that!(result.is_ok()).is_true();
+        assert_that!(result).is_ok();
     }
 
     #[test]

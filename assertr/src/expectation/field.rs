@@ -64,7 +64,8 @@ impl<A: ?Sized, T: ?Sized, F, M: fmt::Debug> fmt::Debug for Field<A, T, F, M> {
 /// let failures = assert_that!(Person { name: String::new() }).capture(|it| it.matches(has_name()));
 /// assert_that!(failures[0].to_string()).contains("At .name:");
 /// ```
-pub fn field<A: ?Sized, T: ?Sized, F, M>(
+#[must_use]
+pub const fn field<A: ?Sized, T: ?Sized, F, M>(
     name: &'static str,
     projection: F,
     matcher: M,
@@ -147,7 +148,7 @@ where
                     .kind(M::KIND),
                 context,
             ),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+            Some((_, evidence)) => failure.relation("does not match").evidence(evidence),
         }
     }
 }

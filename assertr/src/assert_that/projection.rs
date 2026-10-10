@@ -195,12 +195,9 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         }
     }
 
-    // It would be nice to optimize this, so that:
-    // - we do not need separate satisfies, satisfies_owned and satisfies_ref methods
-    // - we use a `for<'a: 'b, 'b>` (see https://users.rust-lang.org/t/why-cant-i-use-lifetime-bounds-in-hrtbs/97277/2)
-    //   bound for F and A, telling the compiler that the returned values live shorter than the
-    //   input.
-    // - we can replace () with some type R (return), letting the user write more succinct closures.
+    // Three `satisfies` variants exist because a higher-ranked mapper bound cannot express that
+    // an owned result may borrow from its input. `satisfies_owned` requires a result independent
+    // of the input lifetime, so `satisfies_ref` covers references to unsized targets.
 
     /// Runs the given assertions against a borrowed projection of the subject.
     ///
@@ -339,6 +336,35 @@ mod tests {
     #[derive(PartialEq)]
     struct Secret(u32);
 
+    #[cfg(feature = "fluent")]
+    mod fluent_aliases {
+        use crate::prelude::*;
+
+        #[test]
+        fn are_as_expected() {
+            (1, "one")
+                .must()
+                .satisfy(
+                    |pair| &pair.0,
+                    |number| {
+                        number.be_equal_to(1);
+                    },
+                )
+                .satisfy_owned(
+                    |pair| pair.0 + 1,
+                    |number| {
+                        number.be_equal_to(2);
+                    },
+                )
+                .satisfy_ref(
+                    |pair| pair.1,
+                    |text| {
+                        text.be_equal_to("one");
+                    },
+                );
+        }
+    }
+
     #[test]
     fn custom_renderer_is_preserved_by_satisfies() {
         let failures = assert_that!(Secret(1))
@@ -392,9 +418,10 @@ mod tests {
         });
 
         assert_that!(&failures[..])
-            .contains_exactly_matching(matchers::predicate_list([|it: &AssertionFailure| {
-                it.to_string().contains("Expected: 4")
-            }]))
+            .contains_exactly_matching(
+                [|it: &AssertionFailure| it.to_string().contains("Expected: 4")]
+                    .map(matchers::predicate),
+            )
             .contains_exactly_satisfying([|it: AssertThat<AssertionFailure, Capture>| {
                 it.satisfies_owned(ToString::to_string, |description| {
                     description.contains("Expected: 4");
@@ -432,8 +459,8 @@ mod tests {
                 )
             });
 
-        assert_that!(&failures[..]).contains_exactly_matching(matchers::predicate_list([
-            |it: &AssertionFailure| it.to_string().contains("xyz"),
-        ]));
+        assert_that!(&failures[..]).contains_exactly_matching(
+            [|it: &AssertionFailure| it.to_string().contains("xyz")].map(matchers::predicate),
+        );
     }
 }

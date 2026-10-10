@@ -7,10 +7,10 @@ use core::panic::RefUnwindSafe;
 
 use super::AssertionFailure;
 
-/// The context's panic text closure, used only by panic-mode failure handling.
+/// The chain's panic text closure, used only by panic-mode failure handling.
 ///
 /// The `'static` bound keeps the owned closure's destructor independent of subject borrows,
-/// allowing those borrows to end at the assertion context's last use.
+/// allowing those borrows to end at the assertion chain's last use.
 /// Preserve unwind safety when erasing the closure type, including through the shared `Arc`. It is
 /// `Send` and `Sync`, so that assertions awaiting an observation can move between threads.
 pub(crate) type PanicPresentation =
@@ -29,7 +29,7 @@ pub(crate) fn render(
     {
         match std::panic::catch_unwind(|| presentation(failure)) {
             Ok(text) => text,
-            Err(payload) => fallback(failure, panic_payload(payload.as_ref())),
+            Err(payload) => fallback(failure, payload.as_ref()),
         }
     }
 
@@ -38,24 +38,11 @@ pub(crate) fn render(
 }
 
 #[cfg(feature = "std")]
-fn fallback(failure: &AssertionFailure, detail: &str) -> String {
-    use core::fmt::Write;
-
-    let mut message = failure.to_string();
-    message.push_str("\n-------- assertr presentation diagnostic --------\n");
-    writeln!(message, "The failure presentation panicked: {detail}")
-        .expect("writing a presentation diagnostic to a String cannot fail");
-    message.push_str("------ end assertr presentation diagnostic ------\n");
-    message
-}
-
-#[cfg(feature = "std")]
-fn panic_payload(payload: &(dyn core::any::Any + Send)) -> &str {
-    if let Some(message) = payload.downcast_ref::<&str>() {
-        message
-    } else if let Some(message) = payload.downcast_ref::<String>() {
-        message
-    } else {
-        "non-string panic payload"
-    }
+fn fallback(failure: &AssertionFailure, payload: &(dyn core::any::Any + Send)) -> String {
+    let detail = crate::entry::panic_message(payload).unwrap_or("non-string panic payload");
+    alloc::format!(
+        "{failure}\n-------- assertr presentation diagnostic --------\n\
+         The failure presentation panicked: {detail}\n\
+         ------ end assertr presentation diagnostic ------\n"
+    )
 }

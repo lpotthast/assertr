@@ -177,10 +177,10 @@ mod tests {
 
     use indoc::formatdoc;
 
-    use crate::{failure::FailureKind, prelude::*};
+    use crate::{failure::FailureKind, prelude::*, test_support::rejected_kind};
 
     #[derive(Debug, PartialEq)]
-    pub struct Foo {
+    struct Foo {
         val: u32,
     }
 
@@ -293,14 +293,11 @@ mod tests {
 
         #[test]
         fn rejects_pending_like_is_ready() {
-            assert_that!(|| {
+            rejected_kind(FailureKind::Variant, || {
                 let _ = assert_that!(Poll::<i32>::Pending)
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
                     .get_ready();
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(format!("{:?}", FailureKind::Variant));
+            });
         }
     }
 

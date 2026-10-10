@@ -6,11 +6,12 @@ mod panic;
 mod type_subject;
 
 #[cfg(feature = "fluent")]
-pub use fluent::{IntoAssertContext, IntoOwnedAssertContext};
+pub use fluent::{FluentEntry, OwnedFluentEntry};
 pub use panic::PanicValue;
+pub(crate) use panic::panic_message;
 pub use type_subject::{Type, assert_that_type};
 
-/// The main macro entry point into an assertion context. Borrows its input.
+/// The main macro entry point into an assertion chain. Borrows its input.
 ///
 /// `assert_that!(value)` borrows `value`, so a named value remains usable after the assertion.
 /// Temporaries and literals live until the end of the enclosing statement. For a sized pointee,
@@ -60,7 +61,7 @@ macro_rules! assert_that {
     };
 }
 
-/// Macro entry point into an assertion context that takes ownership of its input.
+/// Macro entry point into an assertion chain that takes ownership of its input.
 ///
 /// Use this for assertions that consume their subject, such as iterator assertions or running a
 /// named closure. Prefer [`assert_that!`] otherwise, because it keeps the value usable. Closure
@@ -94,7 +95,7 @@ mod tests {
             assert_that!(failures).is_empty();
 
             let subject = assert_that!(|| 1);
-            assert_that!(subject.state.expression.get()).is_equal_to(Some("|| 1"));
+            assert_that!(subject.state.settings.expression.explicit()).is_equal_to(Some("|| 1"));
             assert_that!(subject.unwrap_inner()()).is_equal_to(1);
         }
 

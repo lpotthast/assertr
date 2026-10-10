@@ -1,24 +1,40 @@
 use super::entry::key_segment;
 use crate::{
-    assertions::map::{EntryMatcherList, FoundEntries, Map},
+    assertions::{
+        map::{EntryMatcherList, FoundEntries, Map},
+        support::length_facts,
+    },
     expectation::{AssertionContext, Evidence, Expectation, composite_items},
-    failure::{Fact, FailureBuilder, FailureKind},
+    failure::{FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };
 
-/// Exact keyed matching. Duplicate queries cannot replace a missing distinct entry.
+/// Requires a map to contain exactly the keys of an [`EntryMatcherList`], with each value matching
+/// the matcher paired with its key.
+///
+/// Create it with [`entries_are`] or the [`entries_are!`](crate::entries_are!) macro. Keys are
+/// looked up natively, so a repeated key cannot stand in for a missing distinct entry. A rejection
+/// reports missing keys, unexpected keys, and value mismatches as nested failures located at their
+/// keys. Lengths are reported only when repeated keys cover every entry.
 #[derive(Debug, Clone)]
 pub struct EntriesAre<L>(L);
 
-/// Applies an exact keyed matcher list. Use arrays, slices, or vectors of [`Entry`](super::Entry)
-/// values, or `entries_are!` for heterogeneous entries.
+/// Requires a map to contain exactly the keys of `list`, with each value matching the matcher
+/// paired with its key.
+///
+/// Use an array, slice, or vector of [`entry`](super::entry) values for one matcher type, or the
+/// [`entries_are!`](crate::entries_are!) macro to mix matcher types. Build a homogeneous list from
+/// key/matcher pairs with `.map(..)`:
 ///
 /// ```
 /// use assertr::{matchers::{entries_are, entry, eq}, prelude::*};
 /// use std::collections::BTreeMap;
 ///
-/// let expected = [entry("key", eq(1))];
-/// assert_that!(BTreeMap::from([("key", 1)])).matches(entries_are(&expected[..]));
+/// let map = BTreeMap::from([("a", 1), ("b", 2)]);
+/// assert_that!(map).matches(entries_are([entry("a", eq(1)), entry("b", eq(2))]));
+///
+/// let expected = [("a", 1), ("b", 2)].map(|(key, value)| entry(key, eq(value)));
+/// assert_that!(map).matches(entries_are(&expected[..]));
 /// ```
 pub fn entries_are<L>(list: L) -> EntriesAre<L> {
     EntriesAre(list)
@@ -61,16 +77,12 @@ where
         let (actual_length, expected_length) = (actual.length(), self.0.len());
         if entries_match && actual_length != expected_length {
             context.record(|context| {
-                let render = context.render();
                 FailureBuilder::new::<MapType>(FailureKind::Length)
                     .relation("does not have the required number of entries")
-                    .fact(Fact::labelled(
-                        "Actual length",
-                        render.value(&actual_length),
-                    ))
-                    .fact(Fact::labelled(
-                        "Expected length",
-                        render.value(&expected_length),
+                    .facts(length_facts(
+                        context.render(),
+                        actual_length,
+                        expected_length,
                     ))
                     .build()
             });
@@ -91,15 +103,27 @@ where
                 &self.0,
                 failure.relation("has exactly the matching entries"),
             ),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+            Some((_, evidence)) => failure.relation("does not match").evidence(evidence),
         }
     }
 }
 
-/// Exact keyed matching with explicit value expectations.
+/// Builds an [`EntriesAre`](crate::matchers::EntriesAre) expectation from `(key, matcher)` pairs
+/// whose matchers may have different types.
 ///
-/// Keys are lookup operands. Use [`eq`](crate::matchers::eq) or
-/// [`eq`](crate::matchers::eq) for value equality.
+/// The map must contain exactly these keys, and each value must match the matcher paired with its
+/// key. Keys are lookup operands, not matchers, and may be borrowed forms of the stored key.
+/// Values need explicit matchers. Use [`eq`](crate::matchers::eq) for equality. `entries_are![]`
+/// requires an empty map, and a repeated key cannot stand in for a missing distinct entry.
+///
+/// ```
+/// use assertr::{matchers::*, prelude::*};
+/// use std::collections::BTreeMap;
+///
+/// assert_that!(BTreeMap::from([("Ada", 36), ("Grace", 85)]))
+///     .matches(entries_are![("Ada", ge(18)), ("Grace", eq(85))]);
+/// assert_that!(BTreeMap::<&str, i32>::new()).matches(entries_are![]);
+/// ```
 #[macro_export]
 macro_rules! entries_are {
     (@list) => {

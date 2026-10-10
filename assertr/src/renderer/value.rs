@@ -28,7 +28,7 @@ use core::fmt;
 /// structural methods, such as
 /// [`RenderingContext::borrowed_values`](crate::renderer::RenderingContext::borrowed_values), so
 /// custom renderers and the chain's [`RenderingBudget`](crate::renderer::RenderingBudget) remain
-/// effective. Use [`Rendered::show_type_hint`](crate::renderer::Rendered::show_type_hint) to
+/// effective. Use [`Rendered::with_type_hint`](crate::renderer::Rendered::with_type_hint) to
 /// control whether text output shows a value's short type hint.
 ///
 /// # Render leaf values, not structural wrappers
@@ -125,6 +125,14 @@ impl<T: fmt::Debug + ?Sized> ValueRenderer<T> for DebugRenderer {
 /// type.
 #[derive(Clone, Copy)]
 pub struct CustomRenderer<F>(pub(crate) F);
+
+impl<F> fmt::Debug for CustomRenderer<F> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CustomRenderer")
+            .finish_non_exhaustive()
+    }
+}
 
 impl<T: ?Sized, F> ValueRenderer<T> for CustomRenderer<F>
 where

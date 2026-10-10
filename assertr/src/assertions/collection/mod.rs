@@ -1,17 +1,7 @@
-//! Element-collection assertions for slices, arrays, `Vec`, `VecDeque`, `LinkedList`, `BinaryHeap`,
-//! sets, and custom collections.
+//! Element-collection capabilities, assertion families, and reusable expectations.
 //!
-//! The family distinguishes order-free and order-sensitive operations:
-//!
-//! - [`CollectionAssertions`] applies to every [`Collection`], including sets.
-//! - [`StableOrderAssertions`] requires [`StableOrder`], so order-sensitive calls on sets do not
-//!   compile.
-//! - [`StableOrderExtractAssertions`] borrows elements selected from a stable order.
-//! - [`RandomAccessExtractAssertions`] requires [`RandomAccess`] for indexed extraction.
-//!
-//! Implement [`HasLength`] and [`Collection`] to make collection assertions available on a custom
-//! type. Implement [`StableOrder`] only when iteration defines meaningful positions, and
-//! [`RandomAccess`] only when arbitrary positions can be accessed in constant time.
+//! The user-facing contracts live on the capability traits [`Collection`], [`StableOrder`], and
+//! [`RandomAccess`], because this module itself is not public.
 
 mod assertions;
 mod each;
@@ -46,6 +36,7 @@ pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
 pub use stable_order::{
     HasFirst, HasLast, HasSingle, StableOrderAssertions, StableOrderExtractAssertions,
 };
+pub(crate) use value::MissingElementsRejection;
 pub use value::{
     Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
     DoesNotContain, EndsWith, StartsWith,
@@ -69,15 +60,74 @@ pub(crate) enum Placement {
     Contiguous,
 }
 
-/// A collection whose elements can be inspected repeatedly by reference.
+/// A collection whose elements can be inspected repeatedly by reference, the capability behind
+/// the order-free element assertions.
 ///
-/// Implementing this trait makes [`CollectionAssertions`] available. Its [`HasLength`] supertrait
-/// also provides `is_empty`, `is_not_empty`, and `has_length`. This implementor-facing trait is not
-/// re-exported from the prelude.
+/// Implementing `Collection` for your own type makes
+/// [`CollectionAssertions`](crate::assertions::CollectionAssertions) available on it: `contains`,
+/// `does_not_contain`, `contains_all`, `contains_exactly_in_any_order`, their `_matching` and
+/// `_satisfying` variants, and the identity checks such as `contains_same_instance_as`. Element
+/// matchers such as [`each`](crate::matchers::each) and
+/// [`contains_matching`](crate::matchers::contains_matching) work on it too. The [`HasLength`]
+/// supertrait adds `is_empty`, `is_not_empty`, and `has_length`.
 ///
-/// Indexed assertions and indexed diagnostics require [`StableOrder`]. Bags and sets have no
-/// indexes in assertr's model. Their iteration offsets are never exposed as element positions. A
-/// set therefore cannot call an order-sensitive assertion:
+/// ```
+/// use assertr::{
+///     assertions::{Collection, HasLength},
+///     prelude::*,
+///     renderer::CollectionPresentation,
+/// };
+///
+/// #[derive(Debug)]
+/// struct Inventory {
+///     items: Vec<&'static str>,
+/// }
+///
+/// impl HasLength for Inventory {
+///     fn length(&self) -> usize {
+///         self.items.len()
+///     }
+/// }
+///
+/// impl Collection for Inventory {
+///     type Item = &'static str;
+///     // An inventory is a bag: its order carries no meaning.
+///     const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+///
+///     fn elements(&self) -> impl Iterator<Item = &Self::Item> {
+///         self.items.iter()
+///     }
+/// }
+///
+/// let inventory = Inventory { items: vec!["rope", "lamp", "rope"] };
+/// assert_that!(inventory)
+///     .contains("lamp")
+///     .does_not_contain("map")
+///     .contains_exactly_in_any_order(["rope", "rope", "lamp"])
+///     .has_length(3);
+/// ```
+///
+/// `Collection` is not part of the prelude, so import it from
+/// [`assertr::assertions`](crate::assertions) to implement it. Shared and mutable references to a
+/// collection are collections too, so `assert_that!(&inventory)` works as well.
+///
+/// # Contract
+///
+/// - [`elements`](Self::elements) must yield the same elements in the same order on every call,
+///   because some assertions traverse the collection several times, sometimes in nested passes.
+/// - [`HasLength::length`] must equal the number of elements that `elements` yields.
+///
+/// Rust cannot check either requirement. Violating them makes outcomes and diagnostics
+/// unreliable.
+///
+/// # Order and positions
+///
+/// A plain `Collection` is order-free. Its iteration offsets are never reported as element
+/// positions, and order-sensitive assertions such as `contains_exactly` or `starts_with` do not
+/// compile for it. Implement [`StableOrder`] as well when the order is part of your collection's
+/// meaning, as in a list, and [`RandomAccess`] when you can also access any position in constant
+/// time. Sets implement `Collection` and [`SetLookup`](crate::assertions::SetLookup), but never
+/// `StableOrder`, even when their iteration is deterministic:
 ///
 /// ```compile_fail,E0277
 /// use assertr::prelude::*;
@@ -88,19 +138,28 @@ pub(crate) enum Placement {
 ///
 /// Use an order-free assertion such as `contains_exactly_in_any_order` instead.
 ///
-/// Assertr renders the collection structure, so a custom
+/// # Rendering
+///
+/// Assertr renders the collection structure itself, so a custom
 /// [`ValueRenderer`](crate::renderer::ValueRenderer) needs to render only
-/// [`Item`](Collection::Item) for element assertions. The length assertions provided through
-/// [`HasLength`] render the whole subject and therefore require a renderer for the collection type
-/// itself.
+/// [`Item`](Collection::Item) for the element assertions. The length assertions render the whole
+/// subject and therefore need a renderer for the collection type itself. With the default
+/// renderer, a derived `Debug` covers both. [`PRESENTATION`](Self::PRESENTATION) selects the
+/// brackets, type hint, and ordering that diagnostics use.
 pub trait Collection: HasLength {
     /// The collection's element type.
     type Item;
 
-    /// How this collection is presented in diagnostics.
+    /// How this collection is presented in diagnostics: list or set brackets, whether the type
+    /// name is shown, and whether elements are sorted by their rendered text.
     ///
-    /// This metadata cannot grant positional assertions. Implement [`StableOrder`] or
-    /// [`RandomAccess`] separately when the collection provides those capabilities.
+    /// Use [`CollectionPresentation::list`] or [`CollectionPresentation::set`]. Sort by rendered
+    /// text with [`RenderingOrder::SortByRenderedText`] when iteration order is arbitrary, as in
+    /// a hash-based collection, so reports stay stable between runs.
+    ///
+    /// This metadata only affects diagnostics. It cannot grant positional assertions. Implement
+    /// [`StableOrder`] or [`RandomAccess`] separately when the collection provides those
+    /// capabilities.
     const PRESENTATION: CollectionPresentation;
 
     /// The elements in iteration order.
@@ -110,18 +169,73 @@ pub trait Collection: HasLength {
     fn elements(&self) -> impl Iterator<Item = &Self::Item>;
 }
 
-/// A [`Collection`] whose iteration order defines stable, meaningful element positions.
+/// A [`Collection`] whose iteration order defines stable, meaningful element positions, the
+/// capability behind the order-sensitive assertions.
 ///
-/// This capability unlocks order-sensitive assertions and index-bearing diagnostics. It does not
-/// promise efficient access to an arbitrary position. [`LinkedList`] therefore has stable order
-/// even though it does not implement [`RandomAccess`]. "Stable" means that order is part of the
-/// collection's value semantics. Deterministic iteration alone does not qualify, so a
-/// [`alloc::collections::BTreeSet`] does not implement this trait.
+/// Implementing `StableOrder` for your own collection makes
+/// [`StableOrderAssertions`](crate::assertions::StableOrderAssertions) available: `starts_with`,
+/// `ends_with`, `contains_contiguous`, `contains_exactly`, their `_matching` and `_satisfying`
+/// variants, and `contains_exactly_same_instances`. In panic mode,
+/// [`StableOrderExtractAssertions`](crate::assertions::StableOrderExtractAssertions) adds
+/// `get_first`, `get_last`, and `get_single`. Failures name the index of a mismatching element.
+/// The trait has no methods. It only declares that [`Collection::elements`] yields elements in
+/// their meaningful order.
+///
+/// ```
+/// use assertr::{
+///     assertions::{Collection, HasLength, StableOrder},
+///     prelude::*,
+///     renderer::CollectionPresentation,
+/// };
+///
+/// #[derive(Debug)]
+/// struct Playlist {
+///     tracks: Vec<&'static str>,
+/// }
+///
+/// impl HasLength for Playlist {
+///     fn length(&self) -> usize {
+///         self.tracks.len()
+///     }
+/// }
+///
+/// impl Collection for Playlist {
+///     type Item = &'static str;
+///     const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+///
+///     fn elements(&self) -> impl Iterator<Item = &Self::Item> {
+///         self.tracks.iter()
+///     }
+/// }
+///
+/// // The track order is part of what a playlist is.
+/// impl StableOrder for Playlist {}
+///
+/// let playlist = Playlist { tracks: vec!["Intro", "Theme", "Outro"] };
+/// assert_that!(playlist)
+///     .starts_with(["Intro"])
+///     .contains_exactly(["Intro", "Theme", "Outro"])
+///     .get_last()
+///     .is_equal_to("Outro");
+/// ```
+///
+/// `StableOrder` is not part of the prelude, so import it from
+/// [`assertr::assertions`](crate::assertions).
+///
+/// # When to implement it
+///
+/// "Stable" means that order is part of the collection's value semantics, so two collections
+/// with the same elements in a different order are different values. Deterministic iteration
+/// alone does not qualify. A [`alloc::collections::BTreeSet`] always iterates in sorted order,
+/// but that order does not make its elements positional, so it does not implement this trait.
+///
+/// The capability does not promise efficient access to an arbitrary position. [`LinkedList`]
+/// therefore has stable order even though it does not implement [`RandomAccess`].
 ///
 /// Presentation metadata cannot grant this capability:
 ///
 /// ```compile_fail,E0277
-/// use assertr::assertions::{HasLength, collection::{Collection, StableOrder}};
+/// use assertr::assertions::{Collection, HasLength, StableOrder};
 /// use assertr::renderer::CollectionPresentation;
 ///
 /// struct Deterministic(Vec<i32>);
@@ -147,10 +261,55 @@ pub trait Collection: HasLength {
 )]
 pub trait StableOrder: Collection {}
 
-/// A [`StableOrder`] collection supporting constant-time access to an element by position.
+/// A [`StableOrder`] collection supporting constant-time access to an element by position, the
+/// capability behind indexed extraction.
 ///
-/// APIs that retrieve a position directly require this capability. Traversal-based sequence
-/// assertions need only [`StableOrder`].
+/// Implementing `RandomAccess` for your own collection makes
+/// [`RandomAccessExtractAssertions`](crate::assertions::RandomAccessExtractAssertions) available,
+/// whose `get_at` checks that an index is in bounds and continues with the element there.
+/// Traversal-based sequence assertions need only [`StableOrder`].
+///
+/// ```
+/// use assertr::{
+///     assertions::{Collection, HasLength, RandomAccess, StableOrder},
+///     prelude::*,
+///     renderer::CollectionPresentation,
+/// };
+///
+/// #[derive(Debug)]
+/// struct Grid {
+///     cells: Vec<u8>,
+/// }
+///
+/// impl HasLength for Grid {
+///     fn length(&self) -> usize {
+///         self.cells.len()
+///     }
+/// }
+///
+/// impl Collection for Grid {
+///     type Item = u8;
+///     const PRESENTATION: CollectionPresentation = CollectionPresentation::list();
+///
+///     fn elements(&self) -> impl Iterator<Item = &u8> {
+///         self.cells.iter()
+///     }
+/// }
+///
+/// impl StableOrder for Grid {}
+///
+/// impl RandomAccess for Grid {
+///     fn element_at(&self, index: usize) -> Option<&u8> {
+///         self.cells.get(index)
+///     }
+/// }
+///
+/// assert_that!(Grid { cells: vec![0, 7, 0] }).get_at(1).is_equal_to(7);
+/// ```
+///
+/// `RandomAccess` is not part of the prelude, so import it from
+/// [`assertr::assertions`](crate::assertions). [`element_at`](Self::element_at) must return the
+/// same element that [`Collection::elements`] yields at that position.
 ///
 /// A linked list has stable positions but no random access:
 ///
@@ -167,7 +326,10 @@ pub trait StableOrder: Collection {}
     note = "indexed extraction such as `get_at` requires `RandomAccess`; traversal-based sequence assertions need only `StableOrder`"
 )]
 pub trait RandomAccess: StableOrder {
-    /// Returns the element at `index`, or `None` when `index` is out of bounds.
+    /// Returns the element at the zero-based `index`, or `None` when `index` is out of bounds.
+    ///
+    /// Must run in constant time and agree with the position of that element in
+    /// [`Collection::elements`].
     fn element_at(&self, index: usize) -> Option<&Self::Item>;
 }
 
@@ -255,7 +417,7 @@ impl<T> StableOrder for LinkedList<T> {}
 impl<T> Collection for BinaryHeap<T> {
     type Item = T;
     const PRESENTATION: CollectionPresentation = CollectionPresentation::list()
-        .show_type_hint(true)
+        .with_type_hint(true)
         .with_order(RenderingOrder::SortByRenderedText);
 
     fn elements(&self) -> impl Iterator<Item = &T> {
@@ -352,8 +514,8 @@ mod tests {
         deque.push_front(elements[0]);
 
         let (front, back) = deque.as_slices();
-        assert_that!(front.is_empty()).is_false();
-        assert_that!(back.is_empty()).is_false();
+        assert_that!(front).is_not_empty();
+        assert_that!(back).is_not_empty();
         assert_that!(deque.iter().copied().collect::<Vec<_>>()).contains_exactly(elements);
         deque
     }
@@ -390,7 +552,7 @@ mod tests {
     fn binary_heap_is_an_order_free_bag_with_arbitrary_iteration() {
         let heap = BinaryHeap::from([2, 3, 1]);
 
-        assert_that!(heap.length()).is_equal_to(3);
+        assert_that!(crate::assertions::HasLength::length(&heap)).is_equal_to(3);
         assert_that!(&heap)
             .contains(3)
             .does_not_contain(4)

@@ -9,7 +9,8 @@ use crate::{
 pub struct Each<M>(M);
 
 /// Every element must match. Empty collections succeed. No positional capability is implied.
-pub fn each<M>(matcher: M) -> Each<M> {
+#[must_use]
+pub const fn each<M>(matcher: M) -> Each<M> {
     Each(matcher)
 }
 
@@ -38,7 +39,7 @@ where
             None => failure
                 .relation("has every element matching")
                 .children([context.describe(&self.0)]),
-            Some((_, evidence)) => evidence.explain(failure.relation("does not match")),
+            Some((_, evidence)) => failure.relation("does not match").evidence(evidence),
         }
     }
 }
@@ -46,9 +47,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::each;
-    use crate::{
-        assertions::core::partial_eq::eq, expectation::test_support::assert_bounded_order,
-    };
+    use crate::{assertions::core::partial_eq::eq, test_support::assert_bounded_order};
 
     #[test]
     fn bounded_evidence_is_independent_of_iteration_order() {

@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, string::String};
+use alloc::boxed::Box;
 use core::{
     any::Any,
     panic::{AssertUnwindSafe, Location},
@@ -9,20 +9,12 @@ use crate::{
     AssertThat, PanicValue,
     actual::Actual,
     assertions::support::project_checked,
+    entry::panic_message,
     expectation::{AssertionContext, Expectation},
     failure::{Fact, FailureBuilder, FailureKind},
     mode::Panic,
     renderer::{DebugRenderer, ValueRenderer},
 };
-
-/// The message of a panic payload raised through `panic!` or `panic_any` with a `&str` or a
-/// `String`. A payload of any other type carries no message that could be shown.
-fn panic_message(payload: &(dyn Any + Send)) -> Option<&str> {
-    payload
-        .downcast_ref::<&str>()
-        .copied()
-        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
-}
 
 // Invocation and polling belong to the consuming adapters. These definitions inspect only the
 // resulting observation, so explaining a rejection can never invoke or poll user code again.
@@ -332,7 +324,7 @@ mod tests {
             fn succeeds_when_panic_occurs() {
                 assert_that!(|| unimplemented!())
                     .panics()
-                    .has_type::<&str>()
+                    .has_message()
                     .is_equal_to("not implemented");
             }
 
@@ -348,7 +340,7 @@ mod tests {
 
                 assert_that!(|| PanicsOnDrop)
                     .panics()
-                    .has_type::<&str>()
+                    .has_message()
                     .is_equal_to("output drop");
             }
 
@@ -402,8 +394,6 @@ mod tests {
 
             #[test]
             fn string_payloads_use_the_active_renderer() {
-                use indoc::formatdoc;
-
                 use crate::test_support::{CustomValueRenderer, RedactingRenderer};
                 let message = "private-panic-value";
                 for owned in [false, true] {
@@ -601,7 +591,7 @@ mod tests {
                 assert_that!(async || unimplemented!())
                     .panics_async()
                     .await
-                    .has_type::<&str>()
+                    .has_message()
                     .is_equal_to("not implemented");
             }
 
@@ -613,7 +603,7 @@ mod tests {
                 })
                 .panics_async()
                 .await
-                .has_type::<&str>()
+                .has_message()
                 .is_equal_to("boom");
             }
 
@@ -622,7 +612,7 @@ mod tests {
                 assert_that!(|| -> core::future::Ready<()> { panic!("before future") })
                     .panics_async()
                     .await
-                    .has_type::<&str>()
+                    .has_message()
                     .is_equal_to("before future");
             }
 
@@ -639,7 +629,7 @@ mod tests {
                 assert_that!(async || PanicsOnDrop)
                     .panics_async()
                     .await
-                    .has_type::<&str>()
+                    .has_message()
                     .is_equal_to("output drop");
             }
 

@@ -878,7 +878,15 @@ mod tests {
         failure
             .facts
             .iter()
-            .find(|fact| fact.label == label)
+            .find(|fact| fact.label.as_deref() == Some(label))
+            .map(|fact| fact.value.to_string())
+    }
+
+    fn note(failure: &AssertionFailure) -> Option<String> {
+        failure
+            .facts
+            .iter()
+            .find(|fact| fact.label.is_none())
             .map(|fact| fact.value.to_string())
     }
 
@@ -1665,7 +1673,7 @@ mod tests {
 
             assert_that!(started.elapsed()).is_less_than(Duration::from_secs(1));
             assert_that!(failure.relation.as_deref()).is_equal_to(Some("could not be observed"));
-            assert_that!(fact(&failure, "")).is_equal_to(Some(
+            assert_that!(note(&failure)).is_equal_to(Some(
                 "The observation did not complete before the timeout.".to_owned(),
             ));
             assert_that!(fact(&failure, "Waited"))
@@ -1705,7 +1713,7 @@ mod tests {
 
             assert_that!(started.elapsed()).is_less_than(Duration::from_secs(1));
             assert_that!(failure.relation.as_deref()).is_equal_to(Some("could not be observed"));
-            assert_that!(fact(&failure, "")).is_equal_to(Some(
+            assert_that!(note(&failure)).is_equal_to(Some(
                 "The observation did not complete within 20ms.".to_owned(),
             ));
             assert_that!(fact(&failure, "Held"))

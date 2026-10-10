@@ -20,7 +20,7 @@ use core::borrow::Borrow;
 pub use assertions::MapAssertions;
 pub use entries_are::{EntriesAre, entries_are};
 pub use entry::{Entry, EntryRejection, entry};
-pub use entry_matcher_list::{EntryMatcherList, entry_matchers};
+pub use entry_matcher_list::EntryMatcherList;
 pub(crate) use imp::FoundEntries;
 pub use imp::{
     ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
@@ -419,7 +419,7 @@ mod tests {
     };
     use crate::{
         assertions::HasLength,
-        matchers::{entry, entry_matchers, predicate},
+        matchers::{entry, predicate},
         prelude::*,
     };
 
@@ -438,8 +438,8 @@ mod tests {
         // The lookup hands out the stored entry, not a copy: the exact-entry assertions rely on it.
         let (stored_key, stored_value) = actual.entries().find(|(key, _)| *key == "alpha").unwrap();
         let (found_key, found_value) = actual.get_key_value("alpha").unwrap();
-        assert_that!(core::ptr::eq(stored_key, found_key)).is_true();
-        assert_that!(core::ptr::eq(stored_value, found_value)).is_true();
+        assert_that!(stored_key).is_same_instance_as(found_key);
+        assert_that!(stored_value).is_same_instance_as(found_value);
 
         let mut entries = actual
             .entries()
@@ -600,11 +600,10 @@ mod tests {
             .iter()
             .map(|(key, value)| (key.clone(), *value))
             .collect::<Vec<_>>();
-        let matchers = entry_matchers(
-            keys()
-                .into_iter()
-                .map(|key| (key, predicate(|value: &i32| *value >= 0))),
-        );
+        let matchers = keys()
+            .into_iter()
+            .map(|key| entry(key, predicate(|value: &i32| *value >= 0)))
+            .collect::<Vec<_>>();
         let assertions = keys()
             .into_iter()
             .map(|key| {

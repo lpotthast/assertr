@@ -27,7 +27,7 @@ without parsing reports or retaining original Rust values.
 |---|---|
 | `kind` | Non-exhaustive failure family, not a specific assertion. |
 | `actual`, `relation`, `expected`, `unexpected` | Rendered operands and their relation. Relations are lowercase sentences without embedded values or trailing periods. |
-| `facts` | Labelled evidence via `Fact::labelled`, or an unlabelled note via `Fact::note` (empty label). |
+| `facts` | Labelled evidence via `Fact::labelled`, or an unlabelled note via `Fact::note` (no label). |
 | `children`, `constraint`, omission counts | Nested rejections and missing-subject descriptions. A constraint is another `AssertionFailure`. |
 | `path` | Relative typed location within the parent subject. |
 | Subject/caller metadata | Type, name, expression, caller location, detail messages. |

@@ -10,6 +10,16 @@ use crate::{
 
 pub(crate) struct NoRenderer;
 
+/// Renders nothing and panics with its message instead, proving that a check rendered no leaf.
+#[derive(Clone, Copy)]
+pub(crate) struct PanickingRenderer(pub(crate) &'static str);
+
+impl<T: ?Sized> ValueRenderer<T> for PanickingRenderer {
+    fn fmt(&self, _value: &T, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        panic!("{}", self.0)
+    }
+}
+
 pub(crate) const SENTINEL: &str = "<rendered>";
 
 #[derive(Clone, Copy)]
@@ -130,7 +140,7 @@ pub(crate) fn assert_custom_fact(failure: &AssertionFailure, label: &str, expect
     let fact = failure
         .facts
         .iter()
-        .find(|fact| fact.label == label)
+        .find(|fact| fact.label.as_deref() == Some(label))
         .unwrap();
     assert_custom_value(&fact.value, &expected);
 }

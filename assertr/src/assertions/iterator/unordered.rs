@@ -5,13 +5,10 @@ use super::{
     RenderingOrder, Scan, ValueRenderer, buffer_exactly, consumed_fact,
 };
 use crate::{
-    assertions::collection::{
-        ContainsExactlyInAnyOrder as CollectionContainsExactlyInAnyOrder, elements_are_in_any_order,
-    },
+    assertions::collection::{ContainsExactlyInAnyOrder, elements_are_in_any_order},
     borrow_for::BorrowFor,
-    expectation::{Evidence, Expectation},
+    expectation::{Evidence, Expectation, MatcherList},
     failure::AssertionFailure,
-    matchers::MatcherList,
 };
 
 /// Why unordered equality rejected its input.
@@ -28,12 +25,12 @@ pub(crate) enum UnorderedRejection {
 
 /// Buffers the input, then delegates to the collection expectation, so both report the same
 /// unmatched elements.
-pub(crate) struct ContainsExactlyInAnyOrder<'e, T, E> {
+pub(crate) struct UnorderedEqualScan<'e, T, E> {
     expected: &'e [E],
     item: PhantomData<fn() -> T>,
 }
 
-impl<'e, T, E> ContainsExactlyInAnyOrder<'e, T, E> {
+impl<'e, T, E> UnorderedEqualScan<'e, T, E> {
     pub(crate) const fn new(expected: &'e [E]) -> Self {
         Self {
             expected,
@@ -42,7 +39,7 @@ impl<'e, T, E> ContainsExactlyInAnyOrder<'e, T, E> {
     }
 }
 
-impl<T, E, I, R> Scan<I, R> for ContainsExactlyInAnyOrder<'_, T, E>
+impl<T, E, I, R> Scan<I, R> for UnorderedEqualScan<'_, T, E>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -64,7 +61,7 @@ where
         let items =
             buffer_exactly(iterator, self.expected.len()).map_err(UnorderedRejection::Reported)?;
         let actual = Items::<T, _>::new(&items);
-        let expectation = CollectionContainsExactlyInAnyOrder::<E, _>::new(self.expected);
+        let expectation = ContainsExactlyInAnyOrder::<E, _>::new(self.expected);
         // The rejection borrows the buffered items, so it is explained before they are released.
         let rejection = match expectation.evaluate(&actual, context) {
             Ok(()) => return Ok(()),
@@ -105,7 +102,7 @@ where
             UnorderedRejection::Compared { report, consumed } => {
                 let failure = adopt(failure, *report);
                 match consumed {
-                    Some(consumed) => consumed_fact(failure, context, consumed),
+                    Some(consumed) => consumed_fact(failure, context.render(), consumed),
                     None => failure,
                 }
             }
@@ -114,6 +111,9 @@ where
 }
 
 /// Moves the diagnostic fields of a detached report into the root failure.
+///
+/// The root keeps its own kind, path, location, and chain metadata. The collection report sets
+/// no constraint. Every field is named, so a new diagnostic field cannot be dropped silently.
 fn adopt(failure: FailureBuilder, report: AssertionFailure) -> FailureBuilder {
     let AssertionFailure {
         actual,
@@ -123,7 +123,14 @@ fn adopt(failure: FailureBuilder, report: AssertionFailure) -> FailureBuilder {
         facts,
         children,
         omitted_children,
-        ..
+        constraint: _,
+        path: _,
+        location: _,
+        subject_name: _,
+        expression: _,
+        subject_type_name: _,
+        messages: _,
+        kind: _,
     } = report;
     let mut failure = failure
         .facts(facts)
@@ -155,12 +162,12 @@ pub(crate) enum MatchingRejection {
 }
 
 /// Buffers the input, then evaluates the collection's exact unordered assignment on it.
-pub(crate) struct ElementsAreInAnyOrder<T, L> {
+pub(crate) struct UnorderedMatchScan<T, L> {
     expected: L,
     item: PhantomData<fn() -> T>,
 }
 
-impl<T, L> ElementsAreInAnyOrder<T, L> {
+impl<T, L> UnorderedMatchScan<T, L> {
     pub(crate) const fn new(expected: L) -> Self {
         Self {
             expected,
@@ -169,7 +176,7 @@ impl<T, L> ElementsAreInAnyOrder<T, L> {
     }
 }
 
-impl<T, L, I, R> Scan<I, R> for ElementsAreInAnyOrder<T, L>
+impl<T, L, I, R> Scan<I, R> for UnorderedMatchScan<T, L>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -214,7 +221,7 @@ where
             ),
             MatchingRejection::Mismatch { evidence, consumed } => {
                 let failure = failure.relation("does not match exactly in any order");
-                evidence.explain(consumed_fact(failure, context, consumed))
+                consumed_fact(failure, context.render(), consumed).evidence(evidence)
             }
         }
     }
@@ -234,7 +241,7 @@ mod tests {
             let mut iterator = (0..length)
                 .inspect(|_| consumed.set(consumed.get() + 1))
                 .filter(|_| true);
-            let scan = ContainsExactlyInAnyOrder::<i32, i32>::new(&[1, 2]);
+            let scan = UnorderedEqualScan::<i32, i32>::new(&[1, 2]);
             assert_that!(
                 scan.observe(&mut iterator, &AssertionContext::default())
                     .is_err()

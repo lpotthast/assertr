@@ -1,13 +1,13 @@
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{string::String, vec::Vec};
 use core::{marker::PhantomData, panic::Location};
 
 use crate::{
-    AssertThat, ChainRecords, ChainState, Expression,
+    AssertThat, ChainRecords, ChainState, DiagnosticSettings,
     actual::Actual,
     expectation::AssertionContext,
-    failure::{AssertionFailure, FailureBuilder, panic_presentation::PanicPresentation},
+    failure::{AssertionFailure, FailureBuilder, present_and_panic},
     mode::Panic,
-    renderer::{RenderingBudget, RenderingContext},
+    renderer::RenderingContext,
 };
 
 /// A panic-mode chain without its subject and its link to ancestor records: what an assertion
@@ -19,11 +19,7 @@ use crate::{
 /// ancestors. Panic mode needs neither: it raises every failure immediately.
 pub(crate) struct DetachedChain<R> {
     messages: Vec<String>,
-    subject_name: Option<String>,
-    expression: Expression,
-    include_location: bool,
-    rendering_budget: RenderingBudget,
-    panic_presentation: Option<Arc<PanicPresentation>>,
+    settings: DiagnosticSettings,
     renderer: R,
 }
 
@@ -35,11 +31,7 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
         state.records.collect_messages(&mut messages);
         let detached = DetachedChain {
             messages,
-            subject_name: state.subject_name,
-            expression: state.expression,
-            include_location: state.include_location,
-            rendering_budget: state.rendering_budget,
-            panic_presentation: state.panic_presentation,
+            settings: state.settings,
             renderer: state.renderer,
         };
         (self.actual, detached)
@@ -49,12 +41,12 @@ impl<'t, T, R> AssertThat<'t, T, Panic, R> {
 impl<R> DetachedChain<R> {
     /// Renders values as the chain did.
     pub(crate) const fn render(&self) -> RenderingContext<'_, R> {
-        RenderingContext::new(&self.renderer, self.rendering_budget)
+        self.settings.render(&self.renderer)
     }
 
     /// Evaluates expectations as the chain did.
     pub(crate) fn assertion_context(&self) -> AssertionContext<'_, R> {
-        AssertionContext::from_rendering(self.render(), self.include_location)
+        self.settings.assertion_context(&self.renderer)
     }
 
     /// Raises `failure` as the chain would have.
@@ -64,8 +56,9 @@ impl<R> DetachedChain<R> {
         failure: FailureBuilder,
         location: &'static Location<'static>,
     ) -> ! {
-        self.attach(Actual::Owned(())).raise_at(failure, location);
-        unreachable!("a panic-mode chain panics when it raises a failure")
+        let presentation = self.settings.panic_presentation.clone();
+        let failure = self.complete_at(failure, location);
+        present_and_panic(&failure, presentation.as_deref())
     }
 
     /// Completes a returned failure with exactly the metadata used by panic mode.
@@ -74,8 +67,9 @@ impl<R> DetachedChain<R> {
         failure: FailureBuilder,
         location: &'static Location<'static>,
     ) -> AssertionFailure {
-        self.attach(Actual::Owned(()))
-            .complete_failure(failure, location)
+        let mut failure = self.settings.complete(failure, location);
+        failure.messages.extend(self.messages);
+        failure
     }
 
     /// Continues as a chain on `actual`, keeping the collected messages.
@@ -86,11 +80,7 @@ impl<R> DetachedChain<R> {
             actual,
             state: ChainState {
                 records,
-                subject_name: self.subject_name,
-                expression: self.expression,
-                include_location: self.include_location,
-                rendering_budget: self.rendering_budget,
-                panic_presentation: self.panic_presentation,
+                settings: self.settings,
                 mode: PhantomData,
                 renderer: self.renderer,
             },

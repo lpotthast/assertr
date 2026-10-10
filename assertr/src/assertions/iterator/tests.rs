@@ -66,7 +66,7 @@ impl State {
         assert_that!(self.hints.get()).is_equal_to(hints);
         assert_that!(self.iterations.get()).is_equal_to(1);
         assert_that!(self.drops.get()).is_equal_to(1);
-        assert_that!(self.resource.try_borrow_mut().is_ok()).is_true();
+        assert_that!(self.resource.try_borrow_mut()).is_ok();
     }
 }
 
@@ -93,7 +93,7 @@ impl ResourceRenderer<'_> {
     fn render(&self, value: impl fmt::Display, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // The items are plain numbers. Their interpretation still needs the iterator's resource.
         assert_that!(self.0.drops.get() + 1).is_equal_to(self.0.iterations.get());
-        assert_that!(self.0.resource.try_borrow_mut().is_err()).is_true();
+        assert_that!(self.0.resource.try_borrow_mut()).is_err();
         self.0.renders.set(self.0.renders.get() + 1);
         write!(f, "resource({value})")
     }
@@ -366,7 +366,7 @@ mod borrowed {
         assert_that!(source.state.iterations.get()).is_equal_to(3);
         assert_that!(source.state.drops.get()).is_equal_to(3);
         assert_that!(source.state.next.get()).is_equal_to(8);
-        assert_that!(source.state.resource.try_borrow_mut().is_ok()).is_true();
+        assert_that!(source.state.resource.try_borrow_mut()).is_ok();
         assert_that!(source.state.clones.get()).is_equal_to(2 * source.state.callbacks.get());
         assert_that!(source.values).contains_exactly([1, 2]);
     }
@@ -473,7 +473,7 @@ mod release {
         .unwrap();
         assert_that!(*text).is_equal_to("iterator released before presentation");
         assert_that!(resource.is_poisoned()).is_false();
-        assert_that!(resource.try_lock().is_ok()).is_true();
+        assert_that!(resource.try_lock()).is_ok();
     }
 
     #[test]
@@ -503,7 +503,7 @@ mod release {
                         .capture(|it| it.contains_matching(matcher))
                 };
                 assert_that!(calls.get()).is_equal_to(if expected == 2 { 2 } else { 3 });
-                assert_that!(candidate_guard.try_borrow_mut().is_ok()).is_true();
+                assert_that!(candidate_guard.try_borrow_mut()).is_ok();
                 source.state.verify(if expected == 2 { 2 } else { 4 }, 0);
                 verify_failure(&failures, &source.state, expected == 9);
             }
@@ -828,7 +828,7 @@ mod reporting {
                 element
                     .derive_owned(|value| value.facts.as_slice())
                     .does_not_contain_matching(matchers::predicate(|it: &Fact| {
-                        it.label == "Decisive index"
+                        it.label.as_deref() == Some("Decisive index")
                     }));
             },
             |element: AssertThat<AssertionFailure, Capture>| {
@@ -846,7 +846,7 @@ mod reporting {
                         .value(&3_usize),
                     ))
                     .does_not_contain_matching(matchers::predicate(|it: &Fact| {
-                        it.label == "Decisive index"
+                        it.label.as_deref() == Some("Decisive index")
                     }));
             },
         ]);

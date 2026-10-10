@@ -63,7 +63,7 @@ mod watch_trait_imports {
     #[test]
     #[cfg(feature = "fluent")]
     fn canonical_import_alone_supplies_fluent_aliases() {
-        use assertr::IntoAssertContext;
+        use assertr::FluentEntry;
 
         let (_sender, mut receiver) = tokio::sync::watch::channel(7);
         receiver.must().not_have_changed();
@@ -364,7 +364,7 @@ mod leaf {
         #[allow(clippy::wrong_self_convention)]
         fn is_older_than(self, other: &Person) -> Self
         where
-            R: ValueRenderer<Person>;
+            R: ValueRenderer<Person> + ValueRenderer<u32>;
     }
 
     impl<M: Mode, R> PersonAssertions<R> for AssertThat<'_, Person, M, R> {
@@ -376,11 +376,12 @@ mod leaf {
 
             let age = self.actual().age;
             if age < 18 {
-                // A failure that renders no value needs no renderer capability.
+                // A failure that renders no value needs no renderer capability. Prose notes are
+                // verbatim text, not values.
                 self.raise(
                     self.failure(FailureKind::Ordering)
                         .relation("is not an adult")
-                        .fact(Fact::labelled("Age", age)),
+                        .fact(Fact::note("An adult is at least 18 years old.")),
                 );
             }
             self
@@ -389,7 +390,7 @@ mod leaf {
         #[track_caller]
         fn is_older_than(self, other: &Person) -> Self
         where
-            R: ValueRenderer<Person>,
+            R: ValueRenderer<Person> + ValueRenderer<u32>,
         {
             self.track_assertion();
 
@@ -402,12 +403,23 @@ mod leaf {
                         .actual(self.render().value(actual))
                         .relation("is not older than")
                         .expected(self.render().value(other))
-                        .fact(Fact::labelled("Actual age", actual.age))
-                        .fact(Fact::labelled("Expected age", other.age)),
+                        .fact(Fact::labelled(
+                            "Actual age",
+                            self.render().value(&actual.age),
+                        ))
+                        .fact(Fact::labelled(
+                            "Expected age",
+                            self.render().value(&other.age),
+                        )),
                 );
             }
             self
         }
+    }
+
+    fn age(value: u32) -> assertr::renderer::Rendered {
+        assertr::renderer::RenderingContext::new(&DebugRenderer, RenderingBudget::default())
+            .value(&value)
     }
 
     fn person(age: u32) -> Person {
@@ -425,6 +437,11 @@ mod leaf {
     impl ValueRenderer<Person> for AgeRenderer {
         fn fmt(&self, value: &Person, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "Person(age={})", value.age)
+        }
+    }
+    impl ValueRenderer<u32> for AgeRenderer {
+        fn fmt(&self, value: &u32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{value} years")
         }
     }
 
@@ -458,7 +475,7 @@ mod leaf {
             is not an adult
 
             Details:
-              - Age: 12
+              - An adult is at least 18 years old.
             -------- assertr --------
         "});
     }
@@ -483,7 +500,7 @@ mod leaf {
                     .is_equal_to(Some("is not an adult"));
                 element
                     .derive_owned(|value| value.facts.as_slice())
-                    .contains_exactly([Fact::labelled("Age", "12")]);
+                    .contains_exactly([Fact::note("An adult is at least 18 years old.")]);
                 element
                     .derive_owned(|value| value.to_string())
                     .contains(formatdoc! {"
@@ -494,7 +511,7 @@ mod leaf {
             is not an adult
 
             Details:
-              - Age: 12
+              - An adult is at least 18 years old.
             -------- assertr --------
         "});
             },
@@ -513,14 +530,14 @@ mod leaf {
                 element
                     .derive_owned(|value| value.facts.as_slice())
                     .contains_exactly([
-                        Fact::labelled("Actual age", "12"),
-                        Fact::labelled("Expected age", "40"),
+                        Fact::labelled("Actual age", age(12)),
+                        Fact::labelled("Expected age", age(40)),
                     ]);
             },
             |element: AssertThat<AssertionFailure, Capture>| {
                 element
                     .derive_owned(|value| value.facts.as_slice())
-                    .contains_exactly([Fact::labelled("Age", "12")]);
+                    .contains_exactly([Fact::note("An adult is at least 18 years old.")]);
             },
         ]);
     }
@@ -543,6 +560,7 @@ mod leaf {
 
             Expected: Person(age=40)
         "});
+        assert_that!(failures[0].to_string()).contains("- Actual age: 12 years");
     }
 
     #[test]
@@ -781,8 +799,8 @@ mod generic_num_traits_bounds {
     }
 
     fn assert_identities<T: Num + Debug>(zero: T, one: T) {
-        assert_that!(zero).is_zero().is_additive_identity();
-        assert_that!(one).is_one().is_multiplicative_identity();
+        assert_that!(zero).is_zero();
+        assert_that!(one).is_one();
     }
 
     fn assert_close_to<T: Num + NumericDistance + Debug>(value: T, expected: T, deviation: T) {
@@ -1144,7 +1162,7 @@ mod matcher_authoring {
         ) -> FailureBuilder {
             match rejected {
                 None => self.0.explain(None, failure, context),
-                Some((_, children)) => children.explain(failure),
+                Some((_, children)) => failure.evidence(children),
             }
         }
     }
@@ -1226,7 +1244,7 @@ mod matcher_authoring {
             assert_that!(failure.actual).is_none();
             assert_that!(failure.facts).has_length(1);
             let fact = &failure.facts[0];
-            assert_that!(fact.label.as_ref()).is_empty();
+            assert_that!(fact.label).is_none();
             assert_that!(fact.value.type_name)
                 .is_equal_to(Some(core::any::type_name::<OpaqueError>()));
             let RenderedBody::Text {
@@ -1308,7 +1326,7 @@ mod structural_rendering {
     use core::fmt;
 
     use assertr::{
-        assertions::Collection,
+        assertions::{Collection, HasLength},
         expectation::AssertionContext,
         failure::{FailureBuilder, FailureKind, PathSegment},
         prelude::*,

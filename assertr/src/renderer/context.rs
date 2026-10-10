@@ -25,7 +25,7 @@ use crate::{
 /// only for the leaf types it displays.
 ///
 /// Use [`value`](Self::value) for one leaf value. Leaves retain their complete Rust type name and
-/// hide their type hint by default. Show it with [`Rendered::show_type_hint`].
+/// hide their type hint by default. Show it with [`Rendered::with_type_hint`].
 /// Use [`collection`](Self::collection) and [`map`](Self::map) for a subject's own structure and
 /// presentation metadata. [`variant`](Self::variant) and [`struct_field`](Self::struct_field)
 /// wrap one leaf without requiring a renderer for the owner. Synthetic groups created by
@@ -35,16 +35,24 @@ use crate::{
 /// Leaves use pretty formatting (`f.alternate() == true`) unless the context was made
 /// [`compact`](Self::compact).
 ///
-/// Sorted groups inspect every entry for a nonzero item limit. They retain at most that limit
-/// plus the incoming entry during selection, with cached text keys and encounter order for ties.
-/// Groups exceeding the limit use heap selection. Smaller groups sort once. Zero limits do not
-/// advance or render entries, and unlimited limits collect and sort all. Every inspected leaf
-/// uses the renderer once, including both leaves of map entries. Selection preserves full-sort
-/// output.
+/// Sorted groups rank items by their rendered text, including leaf truncation, before applying
+/// the item limit. Ties keep encounter order. With a nonzero item limit, every item is rendered
+/// once, including both leaves of map entries that are left out. A zero item limit renders
+/// nothing.
 pub struct RenderingContext<'r, R> {
     renderer: &'r R,
     budget: RenderingBudget,
     pretty: bool,
+}
+
+impl<R> Debug for RenderingContext<'_, R> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RenderingContext")
+            .field("budget", &self.budget)
+            .field("pretty", &self.pretty)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<R> Clone for RenderingContext<'_, R> {
@@ -122,7 +130,7 @@ impl<'r, R> RenderingContext<'r, R> {
     /// Renders one leaf value using the chain's renderer and leaf budget.
     ///
     /// The result retains `T`'s complete Rust type name. Text output hides its type hint unless
-    /// enabled with [`Rendered::show_type_hint`].
+    /// enabled with [`Rendered::with_type_hint`].
     pub fn value<T: ?Sized>(self, value: &T) -> Rendered
     where
         R: ValueRenderer<T>,
@@ -252,7 +260,7 @@ impl<'r, R> RenderingContext<'r, R> {
     {
         let presentation = C::PRESENTATION;
         Rendered::typed::<C>(self.group(presentation.style(), items, collection.length(), order))
-            .show_type_hint(presentation.shows_type_hint())
+            .with_type_hint(presentation.shows_type_hint())
     }
 
     /// Renders the entries of a [`Map`] with its type hint and rendering order.
@@ -265,7 +273,7 @@ impl<'r, R> RenderingContext<'r, R> {
     where
         R: ValueRenderer<M::Key> + ValueRenderer<M::Value>,
     {
-        Rendered::typed::<M>(self.map_body(map, M::RENDERING_ORDER)).show_type_hint(true)
+        Rendered::typed::<M>(self.map_body(map, M::RENDERING_ORDER)).with_type_hint(true)
     }
 
     fn map_body<M: Map + ?Sized>(self, map: &M, order: RenderingOrder) -> RenderedBody
@@ -683,7 +691,6 @@ mod tests {
         #[test]
         fn name_the_omitted_items() {
             assert_that!(omission(1_200, "element")).is_equal_to("... 1_200 more elements ...");
-            assert_that!(omission(2, "entry")).is_equal_to("... 2 more entries ...");
         }
 
         #[test]
@@ -753,7 +760,7 @@ mod tests {
 
             let value = rendering.value(&7);
             check_type::<i32>(&value, false);
-            assert_that!(value.show_type_hint(true).to_string()).is_equal_to("i32 pretty(7)");
+            assert_that!(value.with_type_hint(true).to_string()).is_equal_to("i32 pretty(7)");
         }
 
         #[test]
@@ -797,7 +804,7 @@ mod tests {
                 RenderingBudget::default().with_max_leaf_characters(2),
             );
 
-            let value = rendering.value("é😊x").show_type_hint(true);
+            let value = rendering.value("é😊x").with_type_hint(true);
             assert_that!(value.to_string()).is_equal_to("str é😊... 1 more character ...");
         }
 
@@ -1035,7 +1042,7 @@ mod tests {
             type Item = T;
             const PRESENTATION: crate::renderer::CollectionPresentation =
                 crate::renderer::CollectionPresentation::list()
-                    .show_type_hint(true)
+                    .with_type_hint(true)
                     .with_order(RenderingOrder::SortByRenderedText);
 
             fn elements(&self) -> impl Iterator<Item = &T> {

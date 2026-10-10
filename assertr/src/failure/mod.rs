@@ -44,7 +44,7 @@ use alloc::{borrow::Cow, boxed::Box, string::String, vec::Vec};
 
 pub use builder::FailureBuilder;
 
-use crate::{AssertThat, prelude::Mode, renderer::Rendered};
+use crate::{AssertThat, mode::Mode, renderer::Rendered};
 
 /// Delimiter opening and closing every rendered failure message.
 pub(crate) const BANNER: &str = "-------- assertr --------\n";
@@ -95,24 +95,34 @@ pub enum PathSegment {
     Key(Rendered),
 }
 
-/// One labeled piece of evidence attached to an [`AssertionFailure`].
+/// One piece of evidence attached to an [`AssertionFailure`], optionally labelled.
 ///
 /// Facts carry what is neither the expected nor the actual value: lengths, missing keys, unexpected
-/// elements, recorded differences, or a panic payload. A fact with an empty label is a plain note.
+/// elements, recorded differences, or a panic payload. A fact without a label is a plain note.
 /// Labels receive no special treatment in the built-in report. Locations belong in
 /// [`AssertionFailure::path`].
+///
+/// ```
+/// use assertr::{failure::Fact, prelude::*};
+///
+/// let fact = Fact::labelled("Actual length", "3");
+/// assert_that!(fact.label.as_deref()).is_equal_to(Some("Actual length"));
+///
+/// let note = Fact::note("The collection was empty.");
+/// assert_that!(note.label).is_none();
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Fact {
-    /// What the value describes. Empty for a plain note.
-    pub label: Cow<'static, str>,
+    /// What the value describes. `None` for a plain note.
+    pub label: Option<Cow<'static, str>>,
 
     /// The rendered evidence tree.
     pub value: Rendered,
 }
 
 impl Fact {
-    /// Creates a labeled fact from a rendered evidence tree.
+    /// Creates a labelled fact from a rendered evidence tree.
     ///
     /// Render diagnostic values through
     /// [`AssertionContext::render`](crate::expectation::AssertionContext::render) in expectations
@@ -120,18 +130,21 @@ impl Fact {
     /// apply. Structural metadata and caller-authored prose may be passed as verbatim text.
     pub fn labelled(label: impl Into<Cow<'static, str>>, value: impl Into<Rendered>) -> Self {
         Self {
-            label: label.into(),
+            label: Some(label.into()),
             value: value.into(),
         }
     }
 
-    /// Creates an unlabeled note from a rendered evidence tree.
+    /// Creates an unlabelled note from a rendered evidence tree.
     ///
     /// Pass diagnostic values through
     /// [`AssertionContext::render`](crate::expectation::AssertionContext::render)
     /// or [`AssertThat::render`]. Caller-authored prose may be supplied as verbatim text.
     pub fn note(value: impl Into<Rendered>) -> Self {
-        Self::labelled("", value)
+        Self {
+            label: None,
+            value: value.into(),
+        }
     }
 }
 
@@ -150,7 +163,8 @@ impl Fact {
 /// assert_that!(failures[0])
 ///     .derive(|failure| &failure.facts)
 ///     .contains_satisfying(|fact| {
-///         fact.derive(|fact| &fact.label).is_equal_to("Actual length");
+///         fact.derive_owned(|fact| fact.label.as_deref())
+///             .is_equal_to(Some("Actual length"));
 ///         fact.derive(|fact| &fact.value.type_name)
 ///             .is_equal_to(Some("usize"));
 ///     });
@@ -172,7 +186,7 @@ pub struct AssertionFailure {
     /// Number of diagnostic children omitted by the rendering budget.
     pub omitted_children: usize,
     /// Where the failing assertion was invoked. `None` when location printing was disabled via
-    /// `with_location(false)`.
+    /// `with_location(false)`, and for nested failures, which their [`path`](Self::path) locates.
     pub location: Option<&'static core::panic::Location<'static>>,
 
     /// The name given to the assertion's subject via `with_subject_name`, if any.
@@ -291,35 +305,39 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         location: &'static core::panic::Location<'static>,
     ) {
         let state = &self.state;
-        let failure = self.complete_failure(failure, location);
+        let failure = self.complete_at(failure, location);
 
-        if M::CAPTURES {
+        if crate::mode::captures::<M>() {
             state.records.store_failure(
                 failure,
                 #[cfg(feature = "fluent")]
-                state.expression.pending_fluent(),
+                state.settings.expression.pending_fluent(),
             );
         } else {
-            let text = panic_presentation::render(&failure, state.panic_presentation.as_deref());
-            panic!("{text}");
+            present_and_panic(&failure, state.settings.panic_presentation.as_deref());
         }
     }
 
     /// Completes failure metadata without presenting, panicking, or recording it.
-    pub(crate) fn complete_failure(
+    pub(crate) fn complete_at(
         &self,
         failure: FailureBuilder,
         location: &'static core::panic::Location<'static>,
     ) -> AssertionFailure {
-        let state = &self.state;
-        let mut failure = failure.build();
-        failure.location = state.include_location.then_some(location);
-        failure.subject_name.clone_from(&state.subject_name);
-        failure.expression = state.expression.get();
-        state.records.collect_messages(&mut failure.messages);
-
+        let mut failure = self.state.settings.complete(failure, location);
+        self.state.records.collect_messages(&mut failure.messages);
         failure
     }
+}
+
+/// Panics with the text the panic presentation produces for `failure`.
+#[track_caller]
+pub(crate) fn present_and_panic(
+    failure: &AssertionFailure,
+    presentation: Option<&panic_presentation::PanicPresentation>,
+) -> ! {
+    let text = panic_presentation::render(failure, presentation);
+    panic!("{text}");
 }
 
 impl core::fmt::Display for AssertionFailure {

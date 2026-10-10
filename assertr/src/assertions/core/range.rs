@@ -14,7 +14,7 @@ use super::partial_eq::operand_expectation;
 use crate::{
     AssertThat, Mode,
     borrow_for::BorrowFor,
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, passed},
     failure::{FailureBuilder, FailureKind},
     renderer::{DebugRenderer, RenderingContext, ValueRenderer},
 };
@@ -91,8 +91,8 @@ impl<B> DoesNotContainElement<B> {
     /// assert_that!(&1..&3).matches(&unexpected);
     /// ```
     #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self(expected, PhantomData)
+    pub const fn new(unexpected: B) -> Self {
+        Self(unexpected, PhantomData)
     }
 
     /// Owns an operand whose borrowed view is selected for bound type `B`.
@@ -107,8 +107,8 @@ impl<B> DoesNotContainElement<B> {
     /// assert_that!(String::from("a")..String::from("c")).matches(&unexpected);
     /// ```
     #[must_use]
-    pub const fn borrowing<E: BorrowFor<B>>(expected: E) -> DoesNotContainElement<B, E> {
-        DoesNotContainElement(expected, PhantomData)
+    pub const fn borrowing<E: BorrowFor<B>>(unexpected: E) -> DoesNotContainElement<B, E> {
+        DoesNotContainElement(unexpected, PhantomData)
     }
 }
 
@@ -152,7 +152,7 @@ operand_traits!(ContainsElement, DoesNotContainElement);
 pub struct IsInRange<Range>(Range);
 
 impl<Range> IsInRange<Range> {
-    /// Owns the expected operand.
+    /// Owns the range that must contain the subject.
     #[must_use]
     pub const fn new(expected: Range) -> Self {
         Self(expected)
@@ -173,11 +173,7 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R
         Self: 'a,
         B: 'a;
     fn evaluate<'a>(&'a self, actual: &'a B, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if self.0.contains(actual) {
-            Ok(())
-        } else {
-            Err(())
-        }
+        passed(self.0.contains(actual))
     }
 
     const KIND: FailureKind = FailureKind::Ordering;
@@ -204,10 +200,10 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R
 pub struct IsNotInRange<Range>(Range);
 
 impl<Range> IsNotInRange<Range> {
-    /// Owns the expected operand.
+    /// Owns the range that the subject must lie outside of.
     #[must_use]
-    pub const fn new(expected: Range) -> Self {
-        Self(expected)
+    pub const fn new(unexpected: Range) -> Self {
+        Self(unexpected)
     }
 }
 
@@ -225,11 +221,7 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R
         Self: 'a,
         B: 'a;
     fn evaluate<'a>(&'a self, actual: &'a B, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        if self.0.contains(actual) {
-            Err(())
-        } else {
-            Ok(())
-        }
+        passed(!self.0.contains(actual))
     }
 
     const KIND: FailureKind = FailureKind::Ordering;
@@ -272,7 +264,7 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 #[allow(clippy::return_self_not_must_use)]
-pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = DebugRenderer> {
+pub trait RangeBoundAssertions<B, R = DebugRenderer> {
     /// Asserts that the range contains `expected`.
     fn contains_element<E: BorrowFor<B>>(self, expected: E) -> Self
     where
@@ -280,8 +272,8 @@ pub trait RangeBoundAssertions<B, Range: RangeBounds<B>, R = DebugRenderer> {
         E::View: PartialOrd<B>,
         R: ValueRenderer<B> + ValueRenderer<E::View>;
 
-    /// Asserts that the range does not contain `expected`.
-    fn does_not_contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
+    /// Asserts that the range does not contain `unexpected`.
+    fn does_not_contain_element<E: BorrowFor<B>>(self, unexpected: E) -> Self
     where
         B: PartialOrd<E::View>,
         E::View: PartialOrd<B>,
@@ -300,25 +292,25 @@ pub trait RangeAssertions<B, R = DebugRenderer> {
         B: PartialOrd,
         R: ValueRenderer<B>;
 
-    /// Asserts that the subject is outside `expected`.
-    fn is_not_in_range(self, expected: impl RangeBounds<B>) -> Self
+    /// Asserts that the subject is outside `unexpected`.
+    fn is_not_in_range(self, unexpected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd,
         R: ValueRenderer<B>;
 
     /// Alias of [`RangeAssertions::is_not_in_range`].
     #[track_caller]
-    fn is_outside_of_range(self, expected: impl RangeBounds<B>) -> Self
+    fn is_outside_of_range(self, unexpected: impl RangeBounds<B>) -> Self
     where
         Self: Sized,
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
-        self.is_not_in_range(expected)
+        self.is_not_in_range(unexpected)
     }
 }
 
-impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
+impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, R>
     for AssertThat<'_, Range, M, R>
 {
     #[track_caller]
@@ -332,13 +324,13 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, Range, R>
     }
 
     #[track_caller]
-    fn does_not_contain_element<E: BorrowFor<B>>(self, expected: E) -> Self
+    fn does_not_contain_element<E: BorrowFor<B>>(self, unexpected: E) -> Self
     where
         B: PartialOrd<E::View>,
         E::View: PartialOrd<B>,
         R: ValueRenderer<B> + ValueRenderer<E::View>,
     {
-        self.matches(DoesNotContainElement::<B>::borrowing(expected))
+        self.matches(DoesNotContainElement::<B>::borrowing(unexpected))
     }
 }
 
@@ -355,32 +347,32 @@ macro_rules! borrowed_range_assertions {
                 ///
                 /// This is [`RangeBoundAssertions::contains_element`] with the native
                 /// `RangeBounds<B>` view selected explicitly for borrowed bounds.
-                contains_element => RangeBoundAssertions::<B, $range, R>::contains_element;
-                /// Asserts that this range excludes `expected`, using its bounds' pointee type.
+                contains_element(expected) => RangeBoundAssertions::<B, R>::contains_element;
+                /// Asserts that this range excludes `unexpected`, using its bounds' pointee type.
                 ///
                 /// This is [`RangeBoundAssertions::does_not_contain_element`] with the native
                 /// `RangeBounds<B>` view selected explicitly for borrowed bounds.
-                does_not_contain_element =>
-                    RangeBoundAssertions::<B, $range, R>::does_not_contain_element;
+                does_not_contain_element(unexpected) =>
+                    RangeBoundAssertions::<B, R>::does_not_contain_element;
                 /// Fluent alias of [`Self::contains_element`].
                 #[cfg(feature = "fluent")]
-                contain_element => Self::contains_element;
+                contain_element(expected) => Self::contains_element;
                 /// Fluent alias of [`Self::does_not_contain_element`].
                 #[cfg(feature = "fluent")]
-                not_contain_element => Self::does_not_contain_element;
+                not_contain_element(unexpected) => Self::does_not_contain_element;
             }
         }
     )+};
-    (@method $($(#[$attr:meta])* $name:ident => $target:path;)+) => {$(
+    (@method $($(#[$attr:meta])* $name:ident($operand:ident) => $target:path;)+) => {$(
         $(#[$attr])*
         #[track_caller]
-        pub fn $name<E: BorrowFor<B>>(self, expected: E) -> Self
+        pub fn $name<E: BorrowFor<B>>(self, $operand: E) -> Self
         where
             B: PartialOrd<E::View>,
             E::View: PartialOrd<B>,
             R: ValueRenderer<B> + ValueRenderer<E::View>,
         {
-            $target(self, expected)
+            $target(self, $operand)
         }
     )+};
 }
@@ -405,12 +397,12 @@ impl<B, M: Mode, R> RangeAssertions<B, R> for AssertThat<'_, B, M, R> {
     }
 
     #[track_caller]
-    fn is_not_in_range(self, expected: impl RangeBounds<B>) -> Self
+    fn is_not_in_range(self, unexpected: impl RangeBounds<B>) -> Self
     where
         B: PartialOrd,
         R: ValueRenderer<B>,
     {
-        self.matches(IsNotInRange::new(expected))
+        self.matches(IsNotInRange::new(unexpected))
     }
 }
 
@@ -495,7 +487,7 @@ mod tests {
         fn traits_are_implemented_without_renderer_support() {
             assert_trait_impl!(
                 AssertThat<'static, core::ops::Range<i32>, Panic, NoRenderer>
-                    => RangeBoundAssertions<i32, core::ops::Range<i32>, NoRenderer>
+                    => RangeBoundAssertions<i32, NoRenderer>
             );
             assert_trait_impl!(
                 AssertThat<'static, i32, Panic, NoRenderer>
@@ -616,7 +608,6 @@ mod tests {
         use super::*;
 
         #[test]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!("aa".."zz"), contains_element("zz"));
             assert_caller_location!(assert_that!(&1..&4), contains_element(&4));
@@ -679,7 +670,6 @@ mod tests {
         use super::*;
 
         #[test]
-        #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed operands are the regression.
         fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!("aa".."zz"), does_not_contain_element("cc"));
             assert_caller_location!(assert_that!(&1..&4), does_not_contain_element(&2));

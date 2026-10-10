@@ -22,8 +22,8 @@ use crate::{
 /// grants no lookup capability: hash maps require hashing and equality, tree maps require ordering,
 /// and custom maps impose their own bounds. There is no fallback to an equality scan.
 ///
-/// Renderers support the selected query view, plus the stored keys and values used in diagnostics.
-/// Operand wrappers need no renderer or `Clone`. Keyed matchers render the same query for lookup
+/// The renderer must render the selected query view, plus the stored keys and values used in
+/// diagnostics. Operand wrappers need no renderer or `Clone`. Keyed matchers render the same query for lookup
 /// and paths. Exact keyed checks also render stored keys to identify unexpected entries.
 ///
 /// # Bulk query views
@@ -54,8 +54,7 @@ use crate::{
 ///
 /// A custom bulk operand implements `BorrowFor<K>` and [`Borrow<View>`](core::borrow::Borrow), as
 /// described in [borrowed equality](crate#borrowed-expected-values). Custom renderers render
-/// `View`, and the subject needs a `MapLookup` implementation for it. The changelog describes
-/// migrating from the former `MapKeyQuery` trait.
+/// `View`, and the subject needs a `MapLookup` implementation for it.
 ///
 /// Bulk value lists use [repeatable expected data](crate#expected-lists).
 #[allow(clippy::return_self_not_must_use)]
@@ -146,8 +145,20 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
 
     /// Asserts that the map contains exactly the given entries. There are no missing or unexpected
     /// keys, and every value is equal to its expectation.
-    /// Each entry resolves its key and expected value, performs native lookup, and compares
-    /// when present. Diagnostics retain failed observations without repeating lookup or comparison.
+    ///
+    /// Each entry resolves its key and expected value, performs one native lookup, and compares
+    /// the value when the key is present. A rejection reports missing keys, unexpected entries, and
+    /// a nested failure at each key whose value differs, without repeating lookup or comparison.
+    /// Repeated expected keys cannot stand in for missing entries. When they cover every entry
+    /// while the lengths differ, the rejection reports both lengths instead.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use std::collections::BTreeMap;
+    ///
+    /// let map = BTreeMap::from([(String::from("retries"), 3), (String::from("timeout"), 30)]);
+    /// assert_that!(map).contains_exactly_entries([("timeout", 30), ("retries", 3)]);
+    /// ```
     fn contains_exactly_entries<EK, EV>(self, expected: impl AsRef<[(EK, EV)]>) -> Self
     where
         EK: BorrowFor<K>,
@@ -163,9 +174,24 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// Asserts that the map contains exactly the given keys and that each value matches the
     /// matcher paired with its key. Missing and unexpected keys are failures.
     ///
-    /// Accepts arrays, slices, and vectors of [`entry`](super::entry) matchers, for example from
-    /// [`entry_matchers`](super::entry_matchers), or a `matchers!` list of entries with different
-    /// matcher types.
+    /// Accepts arrays, slices, and vectors of [`entry`](super::entry) matchers, or a `matchers!`
+    /// list of entries with different matcher types. This is the method form of
+    /// [`entries_are`](super::entries_are).
+    ///
+    /// ```
+    /// use assertr::{matchers::{entry, eq, gt}, prelude::*};
+    /// use std::collections::BTreeMap;
+    ///
+    /// let map = BTreeMap::from([("retries", 3), ("timeout", 30)]);
+    /// assert_that!(map)
+    ///     .contains_exactly_entries_matching([entry("retries", gt(0)), entry("timeout", gt(10))])
+    ///     .contains_exactly_entries_matching(matchers![
+    ///         entry("retries", eq(3)),
+    ///         entry("timeout", gt(10)),
+    ///     ]);
+    /// let expected = [("retries", 3), ("timeout", 30)].map(|(key, value)| entry(key, eq(value)));
+    /// assert_that!(map).contains_exactly_entries_matching(expected);
+    /// ```
     fn contains_exactly_entries_matching<L>(self, expected: L) -> Self
     where
         L: EntryMatcherList<Self::Map, R>,
@@ -187,6 +213,16 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
         R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone;
 
     /// Asserts that the map has `key` and its value matches `expected`.
+    ///
+    /// The key is looked up natively. A missing key or a rejected value fails with one nested
+    /// failure located at the key. Extra entries are allowed.
+    ///
+    /// ```
+    /// use assertr::{matchers::gt, prelude::*};
+    /// use std::collections::BTreeMap;
+    ///
+    /// assert_that!(BTreeMap::from([("retries", 3)])).contains_entry_matching("retries", gt(0));
+    /// ```
     fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
     where
         Q: ?Sized,
@@ -439,7 +475,7 @@ mod tests {
                 .contains("Expected: [")
                 .contains("] (... 2 more elements ...)");
             assert_that!(failures[0].facts.iter().any(|fact| {
-                fact.label == "Unexpected entries"
+                fact.label.as_deref() == Some("Unexpected entries")
                     && format!("{:#}", fact.value).starts_with('[')
                     && format!("{:#}", fact.value).contains("] (... 2 more elements ...)")
             }))
@@ -975,10 +1011,10 @@ mod tests {
                 failures[0]
                     .facts
                     .iter()
-                    .map(|fact| &*fact.label)
+                    .map(|fact| fact.label.as_deref())
                     .collect::<Vec<_>>()
             )
-            .contains_exactly(["Unexpected entries"]);
+            .contains_exactly([Some("Unexpected entries")]);
         }
 
         #[test]
@@ -1055,7 +1091,7 @@ mod tests {
         use indoc::formatdoc;
 
         use super::*;
-        use crate::matchers::{entry, entry_matchers, eq, predicate};
+        use crate::matchers::{entry, eq, predicate};
 
         fn is_one(value: &i32) -> bool {
             *value == 1
@@ -1064,9 +1100,11 @@ mod tests {
         fn report(actual: &[(&'static str, i32)], keys: &[&'static str]) -> String {
             let map = BTreeMap::from_iter(actual.iter().copied());
             assert_that!(map).with_location(false).capture(|it| {
-                it.contains_exactly_entries_matching(entry_matchers(
-                    keys.iter().map(|key| (*key, predicate(is_one))),
-                ))
+                it.contains_exactly_entries_matching(
+                    keys.iter()
+                        .map(|key| entry(*key, predicate(is_one)))
+                        .collect::<Vec<_>>(),
+                )
             })[0]
                 .to_string()
         }
@@ -1175,7 +1213,10 @@ mod tests {
         #[test]
         fn supports_large_homogeneous_keyed_lists() {
             let map: BTreeMap<_, _> = (0..4096).map(|key| (key, key)).collect();
-            let expected = entry_matchers((0..4096).rev().map(|key| (key, eq(key))));
+            let expected = (0..4096)
+                .rev()
+                .map(|key| entry(key, eq(key)))
+                .collect::<Vec<_>>();
 
             assert_that!(map).contains_exactly_entries_matching(expected);
         }
@@ -1256,6 +1297,57 @@ mod tests {
                 assert_that!(BTreeMap::from([("a", 1)])),
                 contains_entry_matching("a", eq(2))
             );
+        }
+
+        #[test]
+        fn panics_when_key_is_absent() {
+            assert_that!(|| {
+                let map = BTreeMap::from([("a", 1)]);
+                assert_that!(map)
+                    .with_location(false)
+                    .contains_entry_matching("b", eq(1));
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(indoc::formatdoc! {r#"
+                -------- assertr --------
+                Expression: `map`
+
+                does not contain a matching entry
+
+                Nested failures:
+                  - At ["b"]:
+                    does not satisfy the constraint
+
+                    Constraint:
+                        contains the required key
+                -------- assertr --------
+            "#});
+        }
+
+        #[test]
+        fn panics_when_value_does_not_match() {
+            assert_that!(|| {
+                let map = BTreeMap::from([("a", 1)]);
+                assert_that!(map)
+                    .with_location(false)
+                    .contains_entry_matching("a", eq(2));
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(indoc::formatdoc! {r#"
+                -------- assertr --------
+                Expression: `map`
+
+                does not contain a matching entry
+
+                Nested failures:
+                  - At ["a"]:
+                    Expected: 2
+
+                      Actual: 1
+                -------- assertr --------
+            "#});
         }
 
         #[test]
@@ -1589,15 +1681,11 @@ mod tests {
 
         #[test]
         fn probes_resolve_queries_anew_and_render_nothing() {
-            struct NeverRender;
-            impl<T: ?Sized> ValueRenderer<T> for NeverRender {
-                fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    panic!("probe rendered a diagnostic leaf")
-                }
-            }
             let events = Events::default();
             let map = ObservedMap::new(&events, &[("a", "value")]);
-            let root = assert_that!(map).with_renderer(NeverRender);
+            let root = assert_that!(map).with_renderer(crate::test_support::PanickingRenderer(
+                "probe rendered a diagnostic leaf",
+            ));
             let context = root.assertion_context();
             let matcher = entry(Query::once("a", &events), anything());
             assert_that!(context.probe(&map, &matcher)).is_true();
@@ -1634,7 +1722,7 @@ mod tests {
             assert_that!(description.relation.as_deref())
                 .is_equal_to(Some("contains a matching entry"));
             assert_that!(events.take()).contains_exactly(["key"]);
-            context.describe::<ObservedMap, _>(&entries_are([matcher]));
+            let _ = context.describe::<ObservedMap, _>(&entries_are([matcher]));
             assert_that!(events.take()).contains_exactly(["key"]);
             assert_that!(callbacks.get()).is_equal_to(0);
 
@@ -1648,8 +1736,9 @@ mod tests {
                 &StringRenderer,
                 RenderingBudget::default().with_max_items(1),
             );
-            context.describe::<BTreeMap<String, String>, _>(&ContainsKeys::new(&keys));
-            context.describe::<BTreeMap<String, String>, _>(&ContainsExactlyEntries::new(&entries));
+            let _ = context.describe::<BTreeMap<String, String>, _>(&ContainsKeys::new(&keys));
+            let _ = context
+                .describe::<BTreeMap<String, String>, _>(&ContainsExactlyEntries::new(&entries));
             assert_that!(&*events.borrow()).contains("key");
             assert_that!(&*omitted.borrow()).is_empty();
         }

@@ -1064,10 +1064,9 @@ mod tests {
                 )
                 .map(|failure| {
                     let fact = &failure.facts[0];
-                    let fact = if fact.label.is_empty() {
-                        format!("{:#}", fact.value)
-                    } else {
-                        fact.label.to_string()
+                    let fact = match &fact.label {
+                        None => format!("{:#}", fact.value),
+                        Some(label) => label.to_string(),
                     };
                     (failure.relation.unwrap().into_owned(), fact)
                 })

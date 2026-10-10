@@ -35,7 +35,7 @@ pub enum RenderingOrder {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CollectionPresentation {
     style: GroupStyle,
-    show_type_hint: bool,
+    shows_type_hint: bool,
     order: RenderingOrder,
 }
 
@@ -45,7 +45,7 @@ impl CollectionPresentation {
     pub const fn list() -> Self {
         Self {
             style: GroupStyle::List,
-            show_type_hint: false,
+            shows_type_hint: false,
             order: RenderingOrder::PreserveIteration,
         }
     }
@@ -55,17 +55,23 @@ impl CollectionPresentation {
     pub const fn set() -> Self {
         Self {
             style: GroupStyle::Set,
-            show_type_hint: false,
-            order: RenderingOrder::PreserveIteration,
+            ..Self::list()
         }
     }
 
-    /// Selects whether the rendered collection shows its short Rust type hint.
+    /// Selects whether the rendered collection shows its short Rust type hint, such as `BTreeSet`.
     ///
     /// Query the setting with [`shows_type_hint`](Self::shows_type_hint).
+    ///
+    /// ```
+    /// use assertr::{prelude::*, renderer::CollectionPresentation};
+    ///
+    /// const PRESENTATION: CollectionPresentation = CollectionPresentation::set().with_type_hint(true);
+    /// assert_that!(PRESENTATION.shows_type_hint()).is_true();
+    /// ```
     #[must_use]
-    pub const fn show_type_hint(mut self, show: bool) -> Self {
-        self.show_type_hint = show;
+    pub const fn with_type_hint(mut self, show: bool) -> Self {
+        self.shows_type_hint = show;
         self
     }
 
@@ -85,7 +91,7 @@ impl CollectionPresentation {
     /// Returns whether diagnostics show the collection's short Rust type hint.
     #[must_use]
     pub const fn shows_type_hint(self) -> bool {
-        self.show_type_hint
+        self.shows_type_hint
     }
 
     /// Returns the order in which diagnostics render the collection's elements.

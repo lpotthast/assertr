@@ -5,9 +5,12 @@ use core::{marker::PhantomData, ptr};
 
 use super::{Map, MapLookup, entry::key_segment};
 use crate::{
-    assertions::core::partial_eq::operand_expectation,
+    assertions::{
+        collection::MissingElementsRejection, core::partial_eq::operand_expectation,
+        support::length_facts,
+    },
     borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, passed},
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::{RenderingOrder, ValueRenderer},
 };
@@ -173,11 +176,7 @@ where
         actual: &'a Mp,
         _: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        if actual.get_key_value(self.0).is_some() {
-            Err(())
-        } else {
-            Ok(())
-        }
+        passed(actual.get_key_value(self.0).is_none())
     }
 
     const KIND: FailureKind = FailureKind::Membership;
@@ -330,9 +329,9 @@ where
                     Some((value, expected)) => {
                         let mut child = context.isolated();
                         record_value_mismatch(&mut child, self.key, value, expected);
-                        child.into_evidence().explain(
-                            failure.relation("does not contain the expected value at a key"),
-                        )
+                        failure
+                            .relation("does not contain the expected value at a key")
+                            .evidence(child.into_evidence())
                     }
                 }
             }
@@ -426,29 +425,12 @@ where
     }
 }
 
-/// Retained missing query references from a membership rejection.
-#[derive(Debug)]
-pub struct MissingKeysRejection<'a, Q: ?Sized> {
-    missing: Vec<&'a Q>,
-}
-
 /// Requires each expected key query to resolve through native map lookup.
 pub struct ContainsKeys<E, B = Vec<E>> {
     expected: B,
     operand: PhantomData<fn() -> E>,
 }
-expected_operands_traits!(ContainsKeys<E, B>, operand);
-impl<E, B: AsRef<[E]>> ContainsKeys<E, B> {
-    /// Stores an array, slice, or vector of [repeatable expected data](crate#expected-lists)
-    /// without accessing its views.
-    #[must_use]
-    pub const fn new(expected: B) -> Self {
-        Self {
-            expected,
-            operand: PhantomData,
-        }
-    }
-}
+expected_operands_traits!(ContainsKeys<E, B>, operand, new);
 
 // Keep the key projected in GAT-bearing impls so `Mp: 'a` carries its lifetime.
 // Fully qualified views avoid a bound cycle without an independently inferred query parameter.
@@ -465,7 +447,7 @@ where
         Self: 'a,
         Mp: 'a;
     type Rejection<'a>
-        = MissingKeysRejection<'a, E::View>
+        = MissingElementsRejection<'a, E::View>
     where
         Self: 'a,
         Mp: 'a;
@@ -475,9 +457,8 @@ where
         actual: &'a Mp,
         _: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let inputs = self.expected.as_ref();
         let mut missing = Vec::new();
-        for key in inputs {
+        for key in self.expected.as_ref() {
             let query = borrow_for::<Mp::Key, _>(key);
             if actual.get_key_value(query).is_none() {
                 missing.push(query);
@@ -486,7 +467,7 @@ where
         if missing.is_empty() {
             Ok(())
         } else {
-            Err(MissingKeysRejection { missing })
+            Err(MissingElementsRejection { missing })
         }
     }
 
@@ -502,7 +483,7 @@ where
         let expected = self.expected.as_ref();
         let failure = match rejected {
             None => failure.relation("contains all of"),
-            Some((actual, MissingKeysRejection { missing, .. })) => failure
+            Some((actual, MissingElementsRejection { missing })) => failure
                 .actual(render.map(actual))
                 .relation("does not contain all of")
                 .fact(Fact::labelled(
@@ -527,6 +508,16 @@ pub struct ExactEntriesRejection<'a, K, V, EK: ?Sized, EV: ?Sized> {
     missing: Vec<&'a EK>,
     unexpected: Vec<(&'a K, &'a V)>,
     mismatches: Vec<(&'a EK, &'a EV, &'a V)>,
+}
+
+impl<K, V, EK: ?Sized, EV: ?Sized> ExactEntriesRejection<'_, K, V, EK, EV> {
+    /// Whether a missing key, an unexpected entry, or an unequal value explains the rejection.
+    ///
+    /// Distinct expected keys turn every length difference into such evidence. Only repeated
+    /// expected keys can cover every entry while the lengths differ.
+    fn has_entry_evidence(&self) -> bool {
+        !self.missing.is_empty() || !self.unexpected.is_empty() || !self.mismatches.is_empty()
+    }
 }
 
 /// Requires exact native key coverage and value equality, retaining every observation for
@@ -595,20 +586,16 @@ where
                 }
             }
         }
-        let unexpected: Vec<_> = found.unexpected_entries(actual).collect();
-        if length == expected.len()
-            && missing.is_empty()
-            && unexpected.is_empty()
-            && mismatches.is_empty()
-        {
+        let rejection = ExactEntriesRejection {
+            length,
+            missing,
+            unexpected: found.unexpected_entries(actual).collect(),
+            mismatches,
+        };
+        if length == expected.len() && !rejection.has_entry_evidence() {
             Ok(())
         } else {
-            Err(ExactEntriesRejection {
-                length,
-                missing,
-                unexpected,
-                mismatches,
-            })
+            Err(rejection)
         }
     }
 
@@ -625,12 +612,13 @@ where
         let failure = match rejected {
             None => failure.relation("contains exactly"),
             Some((actual, rejection)) => {
+                // Like `EntriesAre`, report the lengths only when no entry explains the failure.
+                let only_length = !rejection.has_entry_evidence();
                 let ExactEntriesRejection {
                     length,
                     missing,
                     unexpected,
                     mismatches,
-                    ..
                 } = rejection;
                 let mut children = context.isolated_for_order(Mp::RENDERING_ORDER);
                 for &(key, expected, value) in &mismatches {
@@ -639,20 +627,8 @@ where
                 let mut failure = failure
                     .actual(render.map(actual))
                     .relation("does not contain exactly");
-                // Like `EntriesAre`, report the lengths only when no entry explains the failure.
-                // Distinct expected keys make every length difference a missing or unexpected
-                // key. Only duplicate expected keys can match every entry while the lengths differ.
-                if length != expected.len()
-                    && missing.is_empty()
-                    && unexpected.is_empty()
-                    && mismatches.is_empty()
-                {
-                    failure = failure
-                        .fact(Fact::labelled("Actual length", render.value(&length)))
-                        .fact(Fact::labelled(
-                            "Expected length",
-                            render.value(&expected.len()),
-                        ));
+                if only_length {
+                    failure = failure.facts(length_facts(render, length, expected.len()));
                 }
                 if !missing.is_empty() {
                     failure = failure.fact(Fact::labelled(
@@ -672,7 +648,7 @@ where
                         ),
                     ));
                 }
-                children.into_evidence().explain(failure)
+                failure.evidence(children.into_evidence())
             }
         };
         failure.expected(

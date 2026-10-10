@@ -20,7 +20,7 @@ impl HasLength for UnorderedSet {
 impl Collection for UnorderedSet {
     type Item = i32;
     const PRESENTATION: CollectionPresentation = CollectionPresentation::set()
-        .show_type_hint(true)
+        .with_type_hint(true)
         .with_order(RenderingOrder::SortByRenderedText);
 
     fn elements(&self) -> impl Iterator<Item = &i32> {
@@ -46,7 +46,7 @@ impl HasLength for PreservedBag {
 impl Collection for PreservedBag {
     type Item = i32;
     const PRESENTATION: CollectionPresentation =
-        CollectionPresentation::list().show_type_hint(true);
+        CollectionPresentation::list().with_type_hint(true);
 
     fn elements(&self) -> impl Iterator<Item = &i32> {
         self.0.iter()

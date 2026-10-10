@@ -1,24 +1,31 @@
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
-use super::{
-    Expectation,
-    predicate::{Predicate, predicate},
-};
+use super::{Expectation, satisfying::satisfying};
 use crate::{
     __private::{Cons, Nil},
     expectation::AssertionContext,
+    failure::AssertionFailure,
 };
 
 pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
-/// A supported heterogeneous or homogeneous list of matchers.
+/// A list of matchers that a composite expectation evaluates or describes one slot at a time.
 ///
 /// Implementations are sealed. Use [`matchers!`](crate::matchers!) to mix matcher types, or arrays,
-/// slices, and vectors of one matcher type. Lists store expectations without boxes or renderer type
-/// parameters.
+/// slices, and vectors of one matcher type. References reuse an existing list. Lists store
+/// expectations without boxes or renderer type parameters.
+///
+/// ```
+/// use assertr::{expectation::MatcherList, matchers::{eq, predicate}, prelude::*};
+///
+/// let mixed = matchers![eq(2), predicate(|value: &i32| value % 2 == 0)];
+/// let uniform = [eq(1), eq(2)];
+/// assert_that!(MatcherList::<i32>::len(&mixed)).is_equal_to(2);
+/// assert_that!(2).matches(matchers::all_of(&mixed)).matches(matchers::any_of(uniform));
+/// ```
 pub trait MatcherList<A: ?Sized, R = crate::renderer::DebugRenderer>: sealed::Sealed {
     /// Number of constraints.
     fn len(&self) -> usize;
@@ -28,14 +35,20 @@ pub trait MatcherList<A: ?Sized, R = crate::renderer::DebugRenderer>: sealed::Se
         self.len() == 0
     }
 
-    /// Describes one expectation slot. The slot must be less than `len()`.
-    fn describe_at(
-        &self,
-        index: usize,
-        context: &AssertionContext<'_, R>,
-    ) -> crate::failure::AssertionFailure;
+    /// Describes the expectation in slot `index` without a subject, for example because the
+    /// element it should match is missing.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= self.len()`.
+    fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> AssertionFailure;
 
-    /// Evaluates one expectation slot. The slot must be less than `len()`.
+    /// Evaluates the expectation in slot `index` against `actual` and returns whether it passed.
+    /// A rejection is recorded in `context` like [`AssertionContext::evaluate`] records it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= self.len()`.
     fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool;
 }
 
@@ -59,19 +72,12 @@ where
         self.0.as_ref().len()
     }
 
-    fn describe_at(
-        &self,
-        index: usize,
-        context: &AssertionContext<'_, R>,
-    ) -> crate::failure::AssertionFailure {
-        context.describe(&super::satisfying::satisfying(&self.0.as_ref()[index]))
+    fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> AssertionFailure {
+        context.describe(&satisfying(&self.0.as_ref()[index]))
     }
 
     fn evaluate_at(&self, index: usize, actual: &A, context: &mut AssertionContext<'_, R>) -> bool {
-        context.evaluate(
-            actual,
-            &super::satisfying::satisfying(&self.0.as_ref()[index]),
-        )
+        context.evaluate(actual, &satisfying(&self.0.as_ref()[index]))
     }
 }
 
@@ -84,11 +90,7 @@ impl<A: ?Sized, R> MatcherList<A, R> for Nil {
         0
     }
 
-    fn describe_at(
-        &self,
-        _: usize,
-        _: &AssertionContext<'_, R>,
-    ) -> crate::failure::AssertionFailure {
+    fn describe_at(&self, _: usize, _: &AssertionContext<'_, R>) -> AssertionFailure {
         panic!("empty matcher list")
     }
 
@@ -106,11 +108,7 @@ where
         1 + self.1.len()
     }
 
-    fn describe_at(
-        &self,
-        index: usize,
-        context: &AssertionContext<'_, R>,
-    ) -> crate::failure::AssertionFailure {
+    fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> AssertionFailure {
         if index == 0 {
             context.describe(&self.0)
         } else {
@@ -139,7 +137,7 @@ macro_rules! homogeneous {
                 <[M]>::len(self)
             }
 
-            fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> crate::failure::AssertionFailure {
+            fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> AssertionFailure {
                 context.describe(&self[index])
             }
 
@@ -169,11 +167,7 @@ where
         (**self).len()
     }
 
-    fn describe_at(
-        &self,
-        index: usize,
-        context: &AssertionContext<'_, R>,
-    ) -> crate::failure::AssertionFailure {
+    fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> AssertionFailure {
         (**self).describe_at(index, context)
     }
 
@@ -182,21 +176,12 @@ where
     }
 }
 
-/// Converts a homogeneous iterable of boolean predicates to a reusable matcher list. For
-/// heterogeneous closures, use `matchers![predicate(...), predicate(...)]`.
-pub fn predicate_list<A, F, I>(predicates: I) -> Vec<Predicate<F>>
-where
-    F: Fn(&A) -> bool,
-    I: IntoIterator<Item = F>,
-{
-    predicates.into_iter().map(predicate).collect()
-}
-
 /// Constructs a reusable heterogeneous matcher list from explicit expectations.
 ///
-/// Use [`eq`](crate::matchers::eq) for equality. The
-/// list's type is an unsupported implementation detail. Let inference pick it, or name the
-/// enclosing check as `impl Expectation<T>` or the list as `impl MatcherList<T>`:
+/// Use [`eq`](crate::matchers::eq) for equality. The list's type is an unsupported implementation
+/// detail. Let inference pick it, or name the enclosing check as `impl Expectation<T>` or the list
+/// as [`impl MatcherList<T>`](crate::expectation::MatcherList). For one matcher type, an array
+/// also works, such as `[is_one, is_two].map(predicate)` for non-capturing closures:
 ///
 /// ```
 /// use assertr::matchers::{all_of, eq, gt};
@@ -207,6 +192,10 @@ where
 /// }
 ///
 /// assert_that!(2).matches(positive_two());
+///
+/// let is_one = |value: &i32| *value == 1;
+/// let is_two = |value: &i32| *value == 2;
+/// assert_that!([1, 2]).matches(matchers::elements_are([is_one, is_two].map(matchers::predicate)));
 /// ```
 #[macro_export]
 macro_rules! matchers {

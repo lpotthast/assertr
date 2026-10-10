@@ -14,7 +14,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// formatting diagnostic values directly. This honors both the active
     /// [`ValueRenderer`](crate::renderer::ValueRenderer) and [`RenderingBudget`]. Rendered leaves
     /// retain type metadata. Control the visibility of its type hint through
-    /// [`Rendered::show_type_hint`](crate::renderer::Rendered::show_type_hint).
+    /// [`Rendered::with_type_hint`](crate::renderer::Rendered::with_type_hint).
     ///
     /// Reusable leaf checks implement [`Expectation`](crate::expectation::Expectation)
     /// and obtain the same context through
@@ -61,7 +61,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// ```
     #[must_use]
     pub const fn render(&self) -> RenderingContext<'_, R> {
-        RenderingContext::new(&self.state.renderer, self.state.rendering_budget)
+        self.state.settings.render(&self.state.renderer)
     }
 
     /// Sets the limits applied when this chain renders diagnostic values and collections.
@@ -86,7 +86,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// ```
     #[must_use]
     pub fn with_rendering_budget(mut self, budget: RenderingBudget) -> Self {
-        self.state.rendering_budget = budget;
+        self.state.settings.rendering_budget = budget;
         self
     }
 

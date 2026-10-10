@@ -37,11 +37,15 @@ A linked list has stable positions without random access. A sorted set always tr
 not make its elements positional. Heaps support checks that do not depend on order. Strings use `StrAssertions`.
 Shared and mutable reference subjects forward every collection, set, and map capability of their target.
 Iteration-only implementations (`HasLength`, `Collection`, `Map`) carry no lookup bounds such as `BuildHasher`, `Hash`,
-or `Ord`. Those belong on `SetLookup` and `MapLookup`.
+or `Ord`. Those belong on `SetLookup` and `MapLookup`. Capability traits are public under `assertr::assertions` and are
+never part of the prelude, so implementors import them explicitly and their methods do not appear on standard types in
+code that only uses assertions.
 See [platform compatibility](platform-compatibility.md#feature-support) for collection feature requirements.
 
-The [collection](../assertr/src/assertions/collection/mod.rs), [set](../assertr/src/assertions/set/mod.rs), and
-[map](../assertr/src/assertions/map/mod.rs) rustdoc gives the full trait requirements.
+The rustdoc of each capability trait in the [collection](../assertr/src/assertions/collection/mod.rs),
+[set](../assertr/src/assertions/set/mod.rs), and [map](../assertr/src/assertions/map/mod.rs) modules gives its full
+contract and a worked example of implementing it for a custom type. Those modules are private, so user-facing
+guidance belongs on the traits rather than in module documentation.
 See [diagnostic rendering](diagnostic-rendering.md#capabilities-and-structure) for presentation rules.
 
 ## Membership and exactness

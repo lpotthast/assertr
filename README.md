@@ -102,7 +102,7 @@ assert_that!(Some(42)).get_some().is_greater_than(40);
 assert_that!("42".parse::<u32>()).get_ok().is_equal_to(42);
 assert_that!(|| panic!("boom"))
     .panics()
-    .has_type::<&str>()
+    .has_message()
     .is_equal_to("boom");
 ```
 
@@ -228,7 +228,7 @@ assert_that!(failures).has_length(1);
 ```
 
 Both borrow the value. `must_owned()` and `verify_owned()` take ownership. See
-[`IntoAssertContext`](https://docs.rs/assertr/latest/assertr/trait.IntoAssertContext.html) for
+[`FluentEntry`](https://docs.rs/assertr/latest/assertr/trait.FluentEntry.html) for
 all naming rules and for recording the source expression in reports.
 
 ## Finding assertions

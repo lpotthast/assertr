@@ -101,9 +101,9 @@
 //! assertr writes some text itself: field names and positions in failure paths, omission notes,
 //! type names, labels such as `2xx`, and prose passed in by the assertion author. Map keys in
 //! paths, counts, lengths, and `any_of` branch numbers are values and go through the renderer.
-//! Converting a string, format arguments, or a primitive into [`Rendered`] produces such verbatim
-//! text, which bypasses the renderer and the budget. Use these conversions only for that kind of
-//! text. Render values through a [`RenderingContext`].
+//! Converting a string or [`format_args!`] output into [`Rendered`] produces such verbatim text,
+//! which bypasses the renderer and the budget. Use these conversions only for that kind of text.
+//! Numbers and other values have no conversion. Render them through a [`RenderingContext`].
 //!
 //! ## Render values in custom assertions
 //!

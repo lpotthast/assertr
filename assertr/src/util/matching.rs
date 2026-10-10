@@ -276,12 +276,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    mod matches_exactly_early_exit {
-        use alloc::vec::Vec;
-
-        use crate::{prelude::*, util::matching::matches_exactly};
 
         #[test]
         fn stops_at_the_first_unassignable_actual_value() {
@@ -299,47 +293,46 @@ mod tests {
     mod match_bipartite {
         use alloc::vec::Vec;
 
-        use crate::{prelude::*, util::matching::match_bipartite};
+        use crate::{
+            prelude::*,
+            util::matching::{BipartiteMatchResult, match_bipartite},
+        };
 
-        #[test]
-        fn returns_equal_on_matching_input() {
-            let actual = [1, 2, 3];
-            let predicates: [fn(&i32) -> bool; 3] = [|it| *it == 1, |it| *it == 2, |it| *it == 3];
-            let result = match_bipartite(
+        fn match_predicates(
+            actual: &[i32],
+            predicates: &[fn(&i32) -> bool],
+        ) -> BipartiteMatchResult {
+            match_bipartite(
                 actual.len(),
                 predicates.len(),
                 |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
-            );
+            )
+        }
+
+        #[test]
+        fn returns_equal_on_matching_input() {
+            let result =
+                match_predicates(&[1, 2, 3], &[|it| *it == 1, |it| *it == 2, |it| *it == 3]);
 
             assert_that!(result.is_exact()).is_true();
         }
 
         #[test]
         fn finds_exact_matching_when_predicates_overlap() {
-            let actual = [1, 2];
-            let predicates: [fn(&i32) -> bool; 2] = [|it| *it <= 2, |it| *it == 1];
-            let result = match_bipartite(
-                actual.len(),
-                predicates.len(),
-                |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
-            );
+            let result = match_predicates(&[1, 2], &[|it| *it <= 2, |it| *it == 1]);
 
             assert_that!(result.is_exact()).is_true();
         }
 
         #[test]
         fn reports_unmatched_actual_values_and_expected_predicates() {
-            let actual = [1, 5, 7];
-            let predicates: [fn(&i32) -> bool; 4] =
-                [|it| *it == 5, |it| *it == 3, |it| *it == 4, |it| *it == 42];
-            let result = match_bipartite(
-                actual.len(),
-                predicates.len(),
-                |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
+            let result = match_predicates(
+                &[1, 5, 7],
+                &[|it| *it == 5, |it| *it == 3, |it| *it == 4, |it| *it == 42],
             );
 
-            assert_that!(result.unmatched_actual.as_slice()).is_equal_to([0, 2].as_slice());
-            assert_that!(result.unmatched_expected.as_slice()).is_equal_to([1, 2, 3].as_slice());
+            assert_that!(result.unmatched_actual).contains_exactly([0, 2]);
+            assert_that!(result.unmatched_expected).contains_exactly([1, 2, 3]);
         }
 
         #[test]
@@ -367,8 +360,8 @@ mod tests {
                 true
             });
 
-            assert_that!(result.unmatched_actual.as_slice())
-                .is_equal_to((expected_len..actual_len).collect::<Vec<_>>().as_slice());
+            assert_that!(result.unmatched_actual)
+                .contains_exactly((expected_len..actual_len).collect::<Vec<_>>());
             assert_that!(result.unmatched_expected).is_empty();
             // The first value that finds no free slot compares against every slot once while
             // proving that no reassignment can free one. The remaining surplus values reuse that
@@ -384,7 +377,7 @@ mod tests {
                 .spawn(move || {
                     assert_that!(match_bipartite(len, len, |_, _| true).is_exact()).is_true();
                     let surplus = match_bipartite(len + 1, len, |_, _| true);
-                    assert_that!(surplus.unmatched_actual.as_slice()).is_equal_to([len].as_slice());
+                    assert_that!(surplus.unmatched_actual).contains_exactly([len]);
                 })
                 .expect("thread spawns");
 
@@ -393,18 +386,14 @@ mod tests {
 
         #[test]
         fn finds_the_maximum_matching_after_an_exhausted_search() {
-            let actual = [1, 1, 1, 3, 5];
-            let predicates: [fn(&i32) -> bool; 3] =
-                [|it| *it == 1, |it| it % 2 == 1, |it| *it == 5];
-            let result = match_bipartite(
-                actual.len(),
-                predicates.len(),
-                |actual_index, predicate_index| predicates[predicate_index](&actual[actual_index]),
+            let result = match_predicates(
+                &[1, 1, 1, 3, 5],
+                &[|it| *it == 1, |it| it % 2 == 1, |it| *it == 5],
             );
 
             // The third `1` exhausts every reassignment through the first two predicates. That must
             // neither block the `5` from taking its own predicate nor leave a predicate unmatched.
-            assert_that!(result.unmatched_actual.as_slice()).is_equal_to([2, 3].as_slice());
+            assert_that!(result.unmatched_actual).contains_exactly([2, 3]);
             assert_that!(result.unmatched_expected).is_empty();
         }
     }

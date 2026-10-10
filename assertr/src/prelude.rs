@@ -50,13 +50,13 @@ pub use crate::{
     AssertThat, assert_that, assert_that_owned, assert_that_type,
     assertions::{
         BoolAssertions, BoxAssertions, BoxExtractAssertions, CharAssertions, CollectionAssertions,
-        DebugAssertions, DisplayAssertions, ExactSizeIteratorAssertions, HasLength,
-        IdentityAssertions, IntoIteratorAssertions, IteratorAssertions, LengthAssertions,
-        MapAssertions, MemAssertions, OptionAssertions, OptionExtractAssertions,
-        PartialEqAssertions, PartialOrdAssertions, PatternAssertions, PollAssertions,
-        PollExtractAssertions, RandomAccessExtractAssertions, RangeAssertions,
-        RangeBoundAssertions, RefCellAssertions, ResultAssertions, ResultExtractAssertions,
-        SetAssertions, StableOrderAssertions, StableOrderExtractAssertions, StrAssertions,
+        DebugAssertions, DisplayAssertions, ExactSizeIteratorAssertions, IdentityAssertions,
+        IntoIteratorAssertions, IteratorAssertions, LengthAssertions, MapAssertions, MemAssertions,
+        OptionAssertions, OptionExtractAssertions, PartialEqAssertions, PartialOrdAssertions,
+        PatternAssertions, PollAssertions, PollExtractAssertions, RandomAccessExtractAssertions,
+        RangeAssertions, RangeBoundAssertions, RefCellAssertions, ResultAssertions,
+        ResultExtractAssertions, SetAssertions, StableOrderAssertions,
+        StableOrderExtractAssertions, StrAssertions,
     },
     elements_are, elements_are_in_any_order, entries_are,
     expectation::Expectation,
@@ -67,4 +67,4 @@ pub use crate::{
     renderer::{DebugRenderer, RenderingBudget, ValueRenderer},
 };
 #[cfg(feature = "fluent")]
-pub use crate::{IntoAssertContext, IntoOwnedAssertContext};
+pub use crate::{FluentEntry, OwnedFluentEntry};

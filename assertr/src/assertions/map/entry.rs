@@ -25,7 +25,19 @@ pub struct EntryRejection<'a, K: ?Sized> {
     pub(super) evidence: Evidence,
 }
 
-/// Matches a value at a key using the map's native lookup relation.
+/// Requires a map to contain `key`, with a value matching `matcher`.
+///
+/// The key is a lookup operand, not a matcher. It is looked up with the map's native
+/// [`MapLookup`], and may be a borrowed form of the stored key. Extra entries are allowed. Collect
+/// entries in a list for [`entries_are`](super::entries_are) to require exact keys.
+///
+/// ```
+/// use assertr::{matchers::{entry, gt}, prelude::*};
+/// use std::collections::BTreeMap;
+///
+/// let map = BTreeMap::from([(String::from("retries"), 3), (String::from("timeout"), 30)]);
+/// assert_that!(map).matches(entry("retries", gt(0)));
+/// ```
 pub fn entry<K, M>(key: K, matcher: M) -> Entry<K, M> {
     Entry { key, matcher }
 }
@@ -103,7 +115,9 @@ where
             .relation("contains a matching entry")
             .expected(context.render().value(key()))
             .child(context.describe(expected)),
-        Some(evidence) => evidence.explain(failure.relation("does not contain a matching entry")),
+        Some(evidence) => failure
+            .relation("does not contain a matching entry")
+            .evidence(evidence),
     }
 }
 
@@ -204,17 +218,9 @@ mod tests {
         let failures =
             assert_that!(BTreeMap::from([("a", 1)])).capture(|it| it.matches(entry("a", eq(2))));
 
-        assert_that!(failures).contains_exactly_satisfying([
-            |item: AssertThat<AssertionFailure, Capture>| {
-                item.derive(|subject| &subject.children[0].path)
-                    .contains_exactly_satisfying([|element: AssertThat<PathSegment, Capture>| {
-                        element
-                            .derive(|value| value)
-                            .is_matching(pattern!(PathSegment::Key(_)));
-                    }]);
-                item.derive(|subject| &subject.children[0].kind)
-                    .is_equal_to(FailureKind::Equality);
-            },
-        ]);
+        assert_that!(&failures).has_length(1);
+        let child = &failures[0].children[0];
+        assert_that!(&child.path).contains_exactly_matching([pattern!(PathSegment::Key(_))]);
+        assert_that!(child.kind).is_equal_to(FailureKind::Equality);
     }
 }

@@ -13,10 +13,24 @@
 //! [`Panic`] and [`Capture`] are its only implementations.
 
 mod sealed {
-    pub trait Sealed {}
+    pub trait Sealed {
+        /// Whether failures are collected for later inspection (`true`) or raise an immediate
+        /// panic (`false`).
+        const CAPTURES: bool;
+    }
 
-    impl Sealed for super::Panic {}
-    impl Sealed for super::Capture {}
+    impl Sealed for super::Panic {
+        const CAPTURES: bool = false;
+    }
+
+    impl Sealed for super::Capture {
+        const CAPTURES: bool = true;
+    }
+}
+
+/// Whether mode `M` collects failures instead of panicking.
+pub(crate) const fn captures<M: Mode>() -> bool {
+    <M as sealed::Sealed>::CAPTURES
 }
 
 /// The mode of an assertion, deciding what happens when an assertion fails.
@@ -27,9 +41,6 @@ mod sealed {
 pub trait Mode:
     sealed::Sealed + core::panic::UnwindSafe + core::panic::RefUnwindSafe + 'static
 {
-    /// Whether failures are collected for later inspection (`true`) or raise an immediate panic
-    /// (`false`).
-    const CAPTURES: bool;
 }
 
 /// Panic mode, in which the first failure panics immediately.
@@ -46,10 +57,6 @@ pub struct Panic;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Capture;
 
-impl Mode for Panic {
-    const CAPTURES: bool = false;
-}
+impl Mode for Panic {}
 
-impl Mode for Capture {
-    const CAPTURES: bool = true;
-}
+impl Mode for Capture {}

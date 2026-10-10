@@ -172,8 +172,8 @@ struct FactText<'a>(&'a Fact);
 
 impl Display for FactText<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !self.0.label.is_empty() {
-            f.write_str(&self.0.label)?;
+        if let Some(label) = &self.0.label {
+            f.write_str(label)?;
             f.write_str(": ")?;
         }
         f.write_str(format!("{:#}", self.0.value).trim_end_matches('\n'))
@@ -627,9 +627,9 @@ mod tests {
         #[test]
         fn nested_failures_are_indented_one_level_per_depth_with_empty_lines_left_empty() {
             let grandchild = FailureBuilder::new::<i32>(FailureKind::Ordering)
-                .actual(1)
+                .actual("1")
                 .relation("is not greater than")
-                .expected(5)
+                .expected("5")
                 .path([PathSegment::Index(0)])
                 .build();
             let child = FailureBuilder::new::<[i32; 1]>(FailureKind::Predicate)

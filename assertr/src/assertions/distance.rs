@@ -134,9 +134,12 @@ impl<T: NumericDistance> NumericDistance for Wrapping<T> {
     }
 }
 
-/// Checks distance from an expected value with an inclusive, non-negative deviation.
-/// Uses [`NumericDistance`] without requiring `Clone` or floating-point math features. Values
-/// render compactly, for example `10s` for a `jiff::SignedDuration`.
+/// Checks that the subject lies within an inclusive, non-negative deviation of an expected value.
+///
+/// Build it with [`close_to`] or [`IsCloseTo::new`]. It uses [`NumericDistance`] without
+/// requiring `Clone` or floating-point math features. A negative or NaN deviation rejects every
+/// subject with its own report. Values render compactly, for example `10s` for a
+/// `jiff::SignedDuration`.
 #[derive(Debug, Clone)]
 pub struct IsCloseTo<E, D = E> {
     expected: E,
@@ -144,7 +147,7 @@ pub struct IsCloseTo<E, D = E> {
 }
 
 impl<E, D> IsCloseTo<E, D> {
-    /// Owns the expected value and allowed deviation.
+    /// Owns the expected value and allowed deviation. [`close_to`] is a shorter spelling.
     #[must_use]
     pub const fn new(expected: E, allowed_deviation: D) -> Self {
         Self {
@@ -152,6 +155,25 @@ impl<E, D> IsCloseTo<E, D> {
             allowed_deviation,
         }
     }
+}
+
+/// Matches a subject within `allowed_deviation` of `expected`, inclusively.
+///
+/// Both operands may be owned or borrowed. They are compared as the subject's type, which must
+/// implement [`NumericDistance`]:
+///
+/// ```
+/// use assertr::{matchers::{close_to, each}, prelude::*};
+///
+/// assert_that!(0.3_f64).matches(close_to(0.1 + 0.2, 1e-9));
+/// assert_that!([9, 10, 11]).matches(each(close_to(10, 1)));
+///
+/// let failures = assert_that!(13).with_location(false).capture(|it| it.matches(close_to(10, 2)));
+/// assert_that!(failures[0].to_string()).contains("is not close to");
+/// ```
+#[must_use]
+pub const fn close_to<E, D>(expected: E, allowed_deviation: D) -> IsCloseTo<E, D> {
+    IsCloseTo::new(expected, allowed_deviation)
 }
 
 /// The reason a numeric tolerance was rejected.
@@ -184,13 +206,10 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
     ) -> Result<(), Self::Rejection<'a>> {
         let expected = borrow_for::<T, _>(&self.expected);
         let allowed_deviation = borrow_for::<T, _>(&self.allowed_deviation);
+        let reject = |reason| Err((expected, allowed_deviation, reason));
         // A NaN deviation is incomparable with zero and therefore invalid, like a negative one.
         if !allowed_deviation.ge(&T::zero_distance()) {
-            return Err((
-                expected,
-                allowed_deviation,
-                CloseToRejection::InvalidDeviation,
-            ));
+            return reject(CloseToRejection::InvalidDeviation);
         }
         if actual
             .checked_distance(expected)
@@ -198,11 +217,7 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
         {
             Ok(())
         } else {
-            Err((
-                expected,
-                allowed_deviation,
-                CloseToRejection::OutsideDeviation,
-            ))
+            reject(CloseToRejection::OutsideDeviation)
         }
     }
 
@@ -216,31 +231,33 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
         // Compact leaves keep values such as durations readable. Scalars render the same either
         // way.
         let render = context.render().compact();
-        match rejected {
-            None => failure
-                .relation("is close to")
-                .expected(render.value(borrow_for::<T, _>(&self.expected)))
-                .fact(Fact::labelled(
-                    "Allowed deviation",
-                    render.value(borrow_for::<T, _>(&self.allowed_deviation)),
-                )),
-            Some((actual, (expected, allowed_deviation, rejection))) => {
-                let allowed_deviation = render.value(allowed_deviation);
-                match rejection {
-                    CloseToRejection::InvalidDeviation => failure
-                        .relation("was given an invalid allowed deviation")
-                        .fact(Fact::labelled("Allowed deviation", allowed_deviation))
-                        .fact(Fact::note(
-                            "The allowed deviation must be zero or positive.",
-                        )),
-                    CloseToRejection::OutsideDeviation => failure
-                        .actual(render.value(actual))
-                        .relation("is not close to")
-                        .expected(render.value(expected))
-                        .fact(Fact::labelled("Allowed deviation", allowed_deviation)),
-                }
+        let allowed = |deviation: &T| Fact::labelled("Allowed deviation", render.value(deviation));
+        let (actual, expected, allowed_deviation) = match rejected {
+            None => (
+                None,
+                borrow_for::<T, _>(&self.expected),
+                borrow_for::<T, _>(&self.allowed_deviation),
+            ),
+            Some((_, (_, allowed_deviation, CloseToRejection::InvalidDeviation))) => {
+                return failure
+                    .relation("was given an invalid allowed deviation")
+                    .fact(allowed(allowed_deviation))
+                    .fact(Fact::note(
+                        "The allowed deviation must be zero or positive.",
+                    ));
             }
-        }
+            Some((actual, (expected, allowed_deviation, CloseToRejection::OutsideDeviation))) => {
+                (Some(actual), expected, allowed_deviation)
+            }
+        };
+        failure
+            .relations(
+                actual.map(|actual| render.value(actual)),
+                "is close to",
+                "is not close to",
+            )
+            .expected(render.value(expected))
+            .fact(allowed(allowed_deviation))
     }
 }
 

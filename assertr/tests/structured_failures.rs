@@ -245,7 +245,7 @@ mod fields {
         assert_that!(text_opt(failure.expected.as_ref())).is_none();
         assert_that!(failure.facts).contains_exactly([Fact::note("some evidence")]);
         let fact = assert_that!(failure.facts[0]);
-        fact.derive(|fact| &fact.label).is_empty();
+        fact.derive(|fact| &fact.label).is_none();
         fact.derive(|fact| &fact.value)
             .derive(|value| &value.type_name)
             .is_none();

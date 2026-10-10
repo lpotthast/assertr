@@ -10,7 +10,7 @@ extern crate alloc;
 use alloc::{boxed::Box, string::String};
 
 use assertr::{
-    matchers::{entry_matchers, predicate},
+    matchers::{entry, predicate},
     prelude::*,
 };
 
@@ -280,7 +280,7 @@ fn set_and_map_assertions_compile_without_std() {
             .contains_entry_satisfying("a", satisfies_one)
             .contains_keys(["a"])
             .contains_exactly_entries([("a", 1)])
-            .contains_exactly_entries_matching(entry_matchers([("a", predicate(is_one))]))
+            .contains_exactly_entries_matching([entry("a", predicate(is_one))])
             .contains_exactly_entries_satisfying([("a", satisfies_one)])
             .has_length(1);
 

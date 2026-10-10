@@ -12,7 +12,7 @@ use crate::{
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Supplies the chain's rendering settings and location policy for expectation evaluation.
     pub(crate) fn assertion_context(&self) -> AssertionContext<'_, R> {
-        AssertionContext::from_rendering(self.render(), self.state.include_location)
+        self.state.settings.assertion_context(&self.state.renderer)
     }
 
     /// Asserts that the subject satisfies an expectation, then continues with the same subject.
@@ -49,6 +49,9 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Asserts a reusable expectation, returning its successful observation for a projection or
     /// callback. A rejected expectation raises its explained failure and returns `None` in capture
     /// mode. Evaluation and explanation share the original observation.
+    ///
+    /// In panic mode, a rejection panics, so [`require`](Self::require) returns the observation
+    /// without an `Option`. Use this method in code generic over the mode.
     ///
     /// This tracks one assertion, just like [`matches`](Self::matches). A method that delegates
     /// here must use `#[track_caller]` and must not track the assertion again.
@@ -119,12 +122,29 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
 }
 
 impl<T, R> AssertThat<'_, T, Panic, R> {
-    /// Asserts an expectation whose successful observation an extraction continues with.
+    /// Asserts a reusable expectation and returns its successful observation.
     ///
-    /// Panic mode raises every rejection, so a returned value always exists. This tracks one
-    /// assertion, just like [`test_assertion`](Self::test_assertion).
+    /// Panic mode raises every rejection, so a returned value always exists. Use this to continue
+    /// with what an expectation observed, such as a parsed value or a found element. In code
+    /// generic over the mode, use [`test_assertion`](Self::test_assertion) instead.
+    ///
+    /// ```
+    /// use assertr::{matchers::IsSome, prelude::*};
+    ///
+    /// let maybe_port = Some(8080);
+    /// let chain = assert_that!(maybe_port);
+    /// let port: &u16 = chain.require(&IsSome);
+    /// assert_that!(port).is_equal_to(8080);
+    /// ```
+    ///
+    /// This tracks one assertion, just like [`matches`](Self::matches). A method that delegates
+    /// here must use `#[track_caller]` and must not track the assertion again.
+    ///
+    /// # Panics
+    ///
+    /// Panics with the explained failure if the expectation rejects the subject.
     #[track_caller]
-    pub(crate) fn require<'a, D: Expectation<T, R>>(&'a self, definition: &'a D) -> D::Success<'a> {
+    pub fn require<'a, D: Expectation<T, R>>(&'a self, definition: &'a D) -> D::Success<'a> {
         self.test_assertion(definition)
             .expect("panic mode raises rejected expectations")
     }
@@ -135,15 +155,10 @@ mod tests {
     use core::cell::Cell;
 
     use super::*;
-    use crate::{
-        expectation::Expectation,
-        failure::{FailureBuilder, FailureKind},
-        prelude::*,
-        renderer::RenderingBudget,
-    };
+    use crate::{prelude::*, renderer::RenderingBudget, test_support::NoRenderer};
 
     #[cfg(feature = "fluent")]
-    mod matches_fluent_aliases {
+    mod fluent_aliases {
         use crate::{matchers::eq, prelude::*};
 
         #[test]
@@ -155,7 +170,56 @@ mod tests {
     mod matches {
         use indoc::indoc;
 
-        use crate::{matchers::*, prelude::*};
+        use super::*;
+        use crate::matchers::*;
+
+        struct Expected<'e> {
+            text: &'e str,
+            calls: &'e Cell<usize>,
+        }
+
+        impl<R: ValueRenderer<str>> Expectation<String, R> for Expected<'_> {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                String: 'a;
+            type Rejection<'a>
+                = (&'a str, &'a str)
+            where
+                Self: 'a,
+                String: 'a;
+
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a String,
+                context: &AssertionContext<'_, R>,
+            ) -> Result<(), Self::Rejection<'a>> {
+                self.calls.set(self.calls.get() + 1);
+                assert_that!(context.include_location()).is_false();
+                assert_that!(context.render().budget().max_leaf_characters()).is_equal_to(2);
+                Err((actual.as_str(), self.text))
+            }
+
+            const KIND: FailureKind = FailureKind::Other;
+
+            fn explain<'a>(
+                &'a self,
+                rejected: Option<(&'a String, Self::Rejection<'a>)>,
+                failure: FailureBuilder,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder {
+                let render = context.render();
+                match rejected {
+                    None => failure
+                        .relation("has the expected text")
+                        .expected(render.value(self.text)),
+                    Some((_, (actual, expected))) => failure
+                        .actual(render.value(actual))
+                        .expected(render.value(expected)),
+                }
+            }
+        }
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -165,7 +229,7 @@ mod tests {
         #[test]
         fn does_not_require_a_renderer() {
             assert_that!(())
-                .with_renderer(crate::test_support::NoRenderer)
+                .with_renderer(NoRenderer)
                 .matches(anything());
         }
 
@@ -180,6 +244,19 @@ mod tests {
         }
 
         #[test]
+        fn tracks_before_evaluation_can_panic() {
+            let failures = assert_that!(1).capture(|it| {
+                let child = it.derive(|value| value);
+                let outcome = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
+                    child.matches(predicate(|_: &i32| panic!("evaluation panicked")));
+                }));
+                assert_that!(outcome).is_err();
+                it
+            });
+            assert_that!(failures).is_empty();
+        }
+
+        #[test]
         fn uses_the_equality_failure_directly() {
             let failures = assert_that!(1)
                 .with_location(false)
@@ -189,7 +266,7 @@ mod tests {
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element
                         .derive(|value| &value.kind)
-                        .is_equal_to(crate::failure::FailureKind::Equality);
+                        .is_equal_to(FailureKind::Equality);
                     element.derive(|value| &value.children).is_empty();
                     element
                         .derive_owned(ToString::to_string)
@@ -205,6 +282,65 @@ mod tests {
                 },
             ]);
         }
+
+        #[test]
+        fn retains_the_borrowed_rejection_without_evaluating_again() {
+            let calls = Cell::new(0);
+            let text = String::from("expected");
+            let definition = Expected {
+                text: &text,
+                calls: &calls,
+            };
+            let actual = String::from("actual");
+            let failures = assert_that!(actual)
+                .with_location(false)
+                .with_subject_name("subject")
+                .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(2))
+                .capture(|it| it.matches(&definition));
+            assert_that!(calls.get()).is_equal_to(1);
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].kind).is_equal_to(FailureKind::Other);
+            assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("subject"));
+            assert_that!(failures[0].expression).is_equal_to(Some("actual"));
+            assert_that!(failures[0].location).is_none();
+            assert_that!(failures[0].children).is_empty();
+
+            for rendered in [&failures[0].actual, &failures[0].expected] {
+                let crate::renderer::RenderedBody::Text {
+                    text,
+                    omitted_characters,
+                } = &rendered.as_ref().unwrap().body
+                else {
+                    panic!("expected a rendered leaf")
+                };
+                assert_that!(text.chars().count()).is_equal_to(2);
+                assert_that!(*omitted_characters).is_greater_than(0);
+            }
+        }
+    }
+
+    mod test_assertion {
+        use crate::{matchers::eq, prelude::*};
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1), test_assertion(&eq(2)));
+        }
+    }
+
+    mod require {
+        use crate::{matchers::IsSome, prelude::*};
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(None::<i32>), require(&IsSome));
+        }
+
+        #[test]
+        fn returns_the_successful_observation() {
+            let chain = assert_that!(Some(7));
+            assert_that!(chain.require(&IsSome)).is_equal_to(7);
+        }
     }
 
     mod one_use {
@@ -214,7 +350,6 @@ mod tests {
 
         #[test]
         fn success_transfers_a_guard_without_renderer_support_or_repeated_observation() {
-            struct NoRenderer;
             let value = RefCell::new(7);
             let calls = Cell::new(0);
             let chain = assert_that!(()).with_renderer(NoRenderer);
@@ -231,9 +366,9 @@ mod tests {
                 |(), _, _| panic!("a successful observation must not be explained"),
             );
             assert_that!(calls.get()).is_equal_to(1);
-            assert_that!(value.try_borrow_mut().is_err()).is_true();
+            assert_that!(value.try_borrow_mut()).is_err();
             drop(success);
-            assert_that!(value.try_borrow_mut().is_ok()).is_true();
+            assert_that!(value.try_borrow_mut()).is_ok();
         }
 
         #[test]
@@ -254,7 +389,7 @@ mod tests {
                     },
                     |guard, failure, context| {
                         explanations.set(explanations.get() + 1);
-                        assert_that!(value.try_borrow_mut().is_err()).is_true();
+                        assert_that!(value.try_borrow_mut()).is_err();
                         let failure = failure.actual(context.render().value(&*guard));
                         drop(guard);
                         failure
@@ -268,104 +403,6 @@ mod tests {
             assert_that!(explanations.get()).is_equal_to(1);
             assert_that!(failures).has_length(1);
             assert_that!(failures[0].to_string()).contains("Actual: 7");
-        }
-    }
-
-    struct Expected<'e> {
-        text: &'e str,
-        calls: &'e Cell<usize>,
-    }
-
-    impl<R: ValueRenderer<str>> Expectation<String, R> for Expected<'_> {
-        type Success<'a>
-            = ()
-        where
-            Self: 'a,
-            String: 'a;
-        type Rejection<'a>
-            = (&'a str, &'a str)
-        where
-            Self: 'a,
-            String: 'a;
-
-        fn evaluate<'a>(
-            &'a self,
-            actual: &'a String,
-            context: &AssertionContext<'_, R>,
-        ) -> Result<(), Self::Rejection<'a>> {
-            self.calls.set(self.calls.get() + 1);
-            assert_that!(context.include_location()).is_false();
-            assert_that!(context.render().budget().max_leaf_characters()).is_equal_to(2);
-            Err((actual.as_str(), self.text))
-        }
-
-        const KIND: FailureKind = FailureKind::Other;
-
-        fn explain<'a>(
-            &'a self,
-            rejected: Option<(&'a String, Self::Rejection<'a>)>,
-            failure: FailureBuilder,
-            context: &AssertionContext<'_, R>,
-        ) -> FailureBuilder {
-            let render = context.render();
-            match rejected {
-                None => failure
-                    .relation("has the expected text")
-                    .expected(render.value(self.text)),
-                Some((_, (actual, expected))) => failure
-                    .actual(render.value(actual))
-                    .expected(render.value(expected)),
-            }
-        }
-    }
-
-    #[test]
-    fn tracks_before_evaluation_can_panic() {
-        use crate::matchers::predicate;
-
-        let failures = assert_that!(1).capture(|it| {
-            let child = it.derive(|value| value);
-            let outcome = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
-                child.matches(predicate(|_: &i32| panic!("evaluation panicked")));
-            }));
-            assert_that!(outcome).is_err();
-            it
-        });
-        assert_that!(failures).is_empty();
-    }
-
-    #[test]
-    fn ordinary_and_matcher_execution_retain_borrowed_rejection_without_retesting() {
-        let calls = Cell::new(0);
-        let text = String::from("expected");
-        let definition = Expected {
-            text: &text,
-            calls: &calls,
-        };
-        let actual = String::from("actual");
-        let failures = assert_that!(actual)
-            .with_location(false)
-            .with_subject_name("subject")
-            .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(2))
-            .capture(|it| it.matches(&definition));
-        assert_that!(calls.get()).is_equal_to(1);
-        assert_that!(failures).has_length(1);
-        assert_that!(failures[0].kind).is_equal_to(FailureKind::Other);
-        assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("subject"));
-        assert_that!(failures[0].expression).is_equal_to(Some("actual"));
-        assert_that!(failures[0].location).is_none();
-        assert_that!(failures[0].children).is_empty();
-
-        for rendered in [&failures[0].actual, &failures[0].expected] {
-            let crate::renderer::RenderedBody::Text {
-                text,
-                omitted_characters,
-            } = &rendered.as_ref().unwrap().body
-            else {
-                panic!("expected a rendered leaf")
-            };
-            assert_that!(text.chars().count()).is_equal_to(2);
-            assert_that!(*omitted_characters).is_greater_than(0);
         }
     }
 }
