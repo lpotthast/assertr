@@ -37,7 +37,7 @@
 //! | [`HasLength`] | Length assertions such as `has_length` and `is_empty` |
 //! | [`Collection`] | Element assertions that ignore order, such as `contains` |
 //! | [`StableOrder`] | Assertions on order and positions, such as `contains_exactly` |
-//! | [`RandomAccess`] | Extraction by position with `get_at` |
+//! | [`RandomAccess`] | Extraction by position with `at` |
 //! | [`SetLookup`] | Set relations such as `is_subset_of` |
 //! | [`Map`] and [`MapLookup`] | Map assertions such as `contains_key` |
 //! | [`NumericDistance`] | Tolerance checks with `is_close_to` |

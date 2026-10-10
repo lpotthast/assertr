@@ -58,7 +58,7 @@ async fn contracts(driver: &WebDriver) -> WebDriverResult<()> {
     assert_that!(&trigger)
         .text_content()
         .await
-        .get_some()
+        .some()
         .is_equal_to("Launch");
     assert_that!(&trigger).displayed().await.is_true();
     assert_that!(&trigger).enabled().await.is_true();

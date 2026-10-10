@@ -375,7 +375,7 @@ mod tests {
 
             assert_that!(&actual).is_matching(pattern!(Some(value) if value == "value"));
 
-            assert_that!(actual).get_some().is_equal_to("value");
+            assert_that!(actual).some().is_equal_to("value");
         }
 
         #[test]

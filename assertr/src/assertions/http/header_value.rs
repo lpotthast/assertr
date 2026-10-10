@@ -115,7 +115,7 @@ pub trait HttpHeaderValueAssertions<M: Mode, R = DebugRenderer> {
     ///
     /// This permits printable ASCII and horizontal tabs, but rejects opaque bytes. The subject
     /// stays the full `HeaderValue`, so further assertions can be chained in any mode. Use
-    /// [`HttpHeaderValueExtractAssertions::get_ascii`] to extract a `String` in panic mode, or
+    /// [`HttpHeaderValueExtractAssertions::ascii`] to extract a `String` in panic mode, or
     /// [`HttpHeaderValueAssertions::is_ascii_satisfying`] to assert on it in any mode.
     fn is_ascii(self) -> Self
     where
@@ -182,7 +182,7 @@ pub trait HttpHeaderValueExtractAssertions<'t, R = DebugRenderer> {
     ///
     /// Use [`HttpHeaderValueAssertions::is_ascii_satisfying`] for capture mode, or
     /// [`HttpHeaderValueAssertions::is_ascii`] when the text is irrelevant.
-    fn get_ascii(self) -> AssertThat<'t, String, Panic, R>
+    fn ascii(self) -> AssertThat<'t, String, Panic, R>
     where
         R: ValueRenderer<http::header::HeaderValue>;
 }
@@ -191,7 +191,7 @@ impl<'t, R> HttpHeaderValueExtractAssertions<'t, R>
     for AssertThat<'t, http::header::HeaderValue, Panic, R>
 {
     #[track_caller]
-    fn get_ascii(self) -> AssertThat<'t, String, Panic, R>
+    fn ascii(self) -> AssertThat<'t, String, Panic, R>
     where
         R: ValueRenderer<http::header::HeaderValue>,
     {
@@ -222,7 +222,7 @@ mod tests {
                 .be_ascii_satisfying(|s| {
                     s.starts_with("http");
                 });
-            actual.must().get_ascii().is_equal_to("http/1.1");
+            actual.must().ascii().is_equal_to("http/1.1");
         }
     }
 
@@ -423,7 +423,7 @@ mod tests {
         }
     }
 
-    mod get_ascii {
+    mod ascii {
         use http::header::HeaderValue;
 
         use crate::prelude::*;
@@ -431,23 +431,23 @@ mod tests {
         #[test]
         fn caller_location_is_as_expected() {
             let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
-            assert_caller_location!(assert_that!(actual), get_ascii());
+            assert_caller_location!(assert_that!(actual), ascii());
         }
 
         #[test]
         fn extracts_visible_ascii_values() {
             let actual = HeaderValue::from_static("http/1.1");
-            assert_that!(actual).get_ascii().is_equal_to("http/1.1");
+            assert_that!(actual).ascii().is_equal_to("http/1.1");
 
             let actual = HeaderValue::from_bytes(&[32, 33, 34]).expect("valid header value");
-            assert_that!(actual).get_ascii().is_equal_to(" !\"");
+            assert_that!(actual).ascii().is_equal_to(" !\"");
         }
 
         #[test]
         fn rejects_non_ascii_utf8_values() {
             let actual = HeaderValue::from_str("\u{c4}").expect("valid header value");
 
-            assert_that!(|| assert_that!(actual).with_location(false).get_ascii())
+            assert_that!(|| assert_that!(actual).with_location(false).ascii())
                 .panics()
                 .has_message()
                 .contains(r#"Actual: "\xc3\x84""#);

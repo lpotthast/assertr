@@ -107,7 +107,7 @@ pub trait PollAssertions<T, M: Mode, R = DebugRenderer> {
     /// Asserts that the subject is `Ready`.
     ///
     /// Non-extracting: the subject stays the full `Poll`, so further assertions can be chained in
-    /// any mode. Use [`PollExtractAssertions::get_ready`] to extract the contained value in panic
+    /// any mode. Use [`PollExtractAssertions::ready`] to extract the contained value in panic
     /// mode, or [`PollAssertions::is_ready_satisfying`] to assert on it in any mode.
     fn is_ready(self) -> Self;
 
@@ -160,12 +160,12 @@ pub trait PollExtractAssertions<'t, T, R = DebugRenderer> {
     /// This is available only in `Panic` mode because `Pending` cannot produce a `T`. Use
     /// [`PollAssertions::is_ready_satisfying`] for capture mode, or the non-extracting
     /// [`PollAssertions::is_ready`] when the contained value is irrelevant.
-    fn get_ready(self) -> AssertThat<'t, T, Panic, R>;
+    fn ready(self) -> AssertThat<'t, T, Panic, R>;
 }
 
 impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic, R> {
     #[track_caller]
-    fn get_ready(self) -> AssertThat<'t, T, Panic, R> {
+    fn ready(self) -> AssertThat<'t, T, Panic, R> {
         self.matches(IsReady)
             .map(|actual| project_checked(actual, ready, ready_ref))
     }
@@ -274,20 +274,20 @@ mod tests {
         }
     }
 
-    mod get_ready {
+    mod ready {
         use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(Poll::<i32>::Pending), get_ready());
+            assert_caller_location!(assert_that!(Poll::<i32>::Pending), ready());
         }
 
         #[test]
         fn extracts_borrowed_and_owned_values() {
             let poll = Poll::Ready(Foo { val: 42 });
-            assert_that!(poll).get_ready().is_equal_to(Foo { val: 42 });
+            assert_that!(poll).ready().is_equal_to(Foo { val: 42 });
             assert_that_owned!(poll)
-                .get_ready()
+                .ready()
                 .is_equal_to(Foo { val: 42 });
         }
 
@@ -296,7 +296,7 @@ mod tests {
             rejected_kind(FailureKind::Variant, || {
                 let _ = assert_that!(Poll::<i32>::Pending)
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
-                    .get_ready();
+                    .ready();
             });
         }
     }

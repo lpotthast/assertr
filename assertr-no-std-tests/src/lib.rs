@@ -129,7 +129,7 @@ fn capture_errors_compile_without_std() -> Result<(), Box<dyn core::error::Error
     use alloc::string::ToString;
     let failures = assert_that_owned!(0..).capture(|it| it.starts_with([1, 2]));
     let _report = failures.to_string();
-    let single = assert_that!(failures).get_single().actual().clone();
+    let single = assert_that!(failures).single().actual().clone();
     let _: Box<dyn core::error::Error + Send + Sync> = single.into();
     let result: Result<(), AssertionFailures> = Err(failures);
     result?;
@@ -783,7 +783,7 @@ mod tests {
     /// The message of the panic raised by `action`.
     fn panic_message(action: impl FnOnce() + UnwindSafe) -> AssertThat<'static, String, Panic> {
         assert_that_owned!(std::panic::catch_unwind(action))
-            .get_err()
+            .err()
             .has_message()
     }
 

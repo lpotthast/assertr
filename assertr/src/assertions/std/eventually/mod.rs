@@ -1199,10 +1199,10 @@ mod tests {
             assert_that!(failure.actual.as_ref().map(ToString::to_string))
                 .is_equal_to(Some(last.to_string()));
             assert_that!(fact(&failure, "Waited"))
-                .get_some()
+                .some()
                 .ends_with(format!("({last} observations)"));
             assert_that!(fact(&failure, "Observed values"))
-                .get_some()
+                .some()
                 .starts_with("(")
                 .contains(format!(": {last}"));
         }
@@ -1542,10 +1542,10 @@ mod tests {
             assert_that!(failure.actual.as_ref().map(ToString::to_string))
                 .is_equal_to(Some("3".to_owned()));
             assert_that!(fact(&failure, "Held"))
-                .get_some()
+                .some()
                 .ends_with("(2 observations), then not");
             assert_that!(fact(&failure, "Observed values"))
-                .get_some()
+                .some()
                 .contains(": 1\n")
                 .contains(": 3");
         }
@@ -1653,7 +1653,7 @@ mod tests {
             .await;
 
             assert_that!(fact(&failure, "Held"))
-                .get_some()
+                .some()
                 .ends_with("(1 observation), then not");
         }
     }
@@ -1710,7 +1710,7 @@ mod tests {
                 "The observation did not complete before the timeout.".to_owned(),
             ));
             assert_that!(fact(&failure, "Waited"))
-                .get_some()
+                .some()
                 .ends_with("(0 observations)");
         }
 
@@ -1748,7 +1748,7 @@ mod tests {
                 "The observation did not complete within 20ms.".to_owned(),
             ));
             assert_that!(fact(&failure, "Held"))
-                .get_some()
+                .some()
                 .ends_with("(1 observation), then not");
         }
     }

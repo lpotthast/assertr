@@ -55,7 +55,7 @@ tokio = ["std", "dep:tokio"]
 thirtyfour = ["std", "dep:thirtyfour", "dep:http"]
 thirtyfour-cdp = ["thirtyfour", "thirtyfour/cdp", "dep:serde", "serde?/derive"]
 program = ["std", "dep:which"]
-# Responses carry `http` header values, so `get_header` results get the `http` assertions. reqwest
+# Responses carry `http` header values, so `header` results get the `http` assertions. reqwest
 # already depends on `http`, so this adds no crate.
 reqwest = ["std", "dep:reqwest", "http"]
 # The integrations below support `no_std` with `alloc`. Where the wrapped crate has a `std`

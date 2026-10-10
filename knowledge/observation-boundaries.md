@@ -168,7 +168,7 @@ Reqwest body extraction consumes an owned response in panic mode:
 
 The extraction detaches the chain with `into_parts` before returning the future, as eventual assertions do, so the
 future is `Send` whenever the renderer is. The continuation is a new root chain on the body or decoded value, with the
-chain's diagnostic settings and messages. Reading and decoding count as one `get_json` assertion. A partially consumed
+chain's diagnostic settings and messages. Reading and decoding count as one `json` assertion. A partially consumed
 response cannot be recovered. Header extraction checks presence and continues on a clone of the first value. Header
 assertions validate the looked-up name first, because `HeaderMap` treats an invalid name as absent. An invalid name
 fails with relation "was given an invalid header name", so `does_not_have_header` cannot pass for it. Header diagnostics follow the [sensitive header

@@ -124,7 +124,7 @@ pub trait ProgramExtractAssertions<'t, 'a, R = DebugRenderer> {
     /// resulting [`PathBuf`].
     ///
     /// This projection is available only in [`Panic`] mode because failure cannot produce a path.
-    fn get_resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
+    fn resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
     where
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>;
 }
@@ -141,7 +141,7 @@ impl<'a, M: Mode, R> ProgramAssertions<'a, R> for AssertThat<'_, Program<'a>, M,
 
 impl<'t, 'a, R> ProgramExtractAssertions<'t, 'a, R> for AssertThat<'t, Program<'a>, Panic, R> {
     #[track_caller]
-    fn get_resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
+    fn resolved_path(self) -> AssertThat<'t, PathBuf, Panic, R>
     where
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
@@ -215,7 +215,7 @@ mod tests {
             assert_that!(|| {
                 let _ = assert_that!(Program::from(MISSING))
                     .with_renderer(CustomValueRenderer)
-                    .get_resolved_path();
+                    .resolved_path();
             })
             .panics()
             .has_message()
@@ -224,7 +224,7 @@ mod tests {
             assert_that!(|| {
                 let _ = assert_that!(Program::from(MISSING))
                     .with_renderer(RedactingRenderer)
-                    .get_resolved_path();
+                    .resolved_path();
             })
             .panics()
             .has_message()
@@ -293,18 +293,18 @@ mod tests {
         }
     }
 
-    mod get_resolved_path {
+    mod resolved_path {
         use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(Program::from(MISSING)), get_resolved_path());
+            assert_caller_location!(assert_that!(Program::from(MISSING)), resolved_path());
         }
 
         #[test]
         fn continues_on_the_resolved_path() {
             assert_that!(Program::from("ls"))
-                .get_resolved_path()
+                .resolved_path()
                 .is_absolute()
                 .is_a_file()
                 .has_file_stem("ls");

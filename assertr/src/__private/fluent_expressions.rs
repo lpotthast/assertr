@@ -48,7 +48,7 @@ mod tests {
 
     fn assert_string_panic_contains(panic: std::thread::Result<()>, expected: &str) {
         assert_that_owned!(panic)
-            .get_err()
+            .err()
             .has_type::<String>()
             .contains(expected);
     }

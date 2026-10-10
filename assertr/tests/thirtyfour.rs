@@ -34,7 +34,7 @@ fn transformed_observations_and_validated_snapshots_remain_send() {
                 .inner_text()
                 .await
                 .map_owned(|text| text.parse::<u32>())
-                .get_ok()
+                .ok()
                 .is_equal_to(3);
             assert_that!(&element)
                 .attribute("aria-expanded")
@@ -44,7 +44,7 @@ fn transformed_observations_and_validated_snapshots_remain_send() {
             let message = assert_that!(&element)
                 .property("validationMessage")
                 .await
-                .get_some()
+                .some()
                 .is_not_blank()
                 .actual()
                 .clone();

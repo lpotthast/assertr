@@ -101,21 +101,21 @@ pub trait ResultExtractAssertions<'t, T, E, R = DebugRenderer> {
     /// Asserts that the subject is `Ok`, then returns an assertion over its value.
     ///
     /// A borrowed subject yields a borrowed value. An owned subject yields an owned value.
-    fn get_ok(self) -> AssertThat<'t, T, Panic, R>
+    fn ok(self) -> AssertThat<'t, T, Panic, R>
     where
         R: ValueRenderer<E>;
 
     /// Asserts that the subject is `Err`, then returns an assertion over its error.
     ///
     /// A borrowed subject yields a borrowed error. An owned subject yields an owned error.
-    fn get_err(self) -> AssertThat<'t, E, Panic, R>
+    fn err(self) -> AssertThat<'t, E, Panic, R>
     where
         R: ValueRenderer<T>;
 }
 
 impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result<T, E>, Panic, R> {
     #[track_caller]
-    fn get_ok(self) -> AssertThat<'t, T, Panic, R>
+    fn ok(self) -> AssertThat<'t, T, Panic, R>
     where
         R: ValueRenderer<E>,
     {
@@ -124,7 +124,7 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     }
 
     #[track_caller]
-    fn get_err(self) -> AssertThat<'t, E, Panic, R>
+    fn err(self) -> AssertThat<'t, E, Panic, R>
     where
         R: ValueRenderer<T>,
     {
@@ -140,7 +140,7 @@ pub trait ResultAssertions<T, E, M: Mode, R = DebugRenderer> {
     /// Asserts that the subject is `Ok`.
     ///
     /// Non-extracting: the subject stays the full `Result`, so further assertions can be chained in
-    /// any mode. Use [`ResultExtractAssertions::get_ok`] to extract the contained value in panic
+    /// any mode. Use [`ResultExtractAssertions::ok`] to extract the contained value in panic
     /// mode, or [`ResultAssertions::is_ok_satisfying`] to assert on it in any mode.
     fn is_ok(self) -> Self
     where
@@ -149,7 +149,7 @@ pub trait ResultAssertions<T, E, M: Mode, R = DebugRenderer> {
     /// Asserts that the subject is `Err`.
     ///
     /// Non-extracting: the subject stays the full `Result`, so further assertions can be chained in
-    /// any mode. Use [`ResultExtractAssertions::get_err`] to extract the contained error in panic
+    /// any mode. Use [`ResultExtractAssertions::err`] to extract the contained error in panic
     /// mode, or [`ResultAssertions::is_err_satisfying`] to assert on it in any mode.
     fn is_err(self) -> Self
     where
@@ -364,22 +364,22 @@ mod tests {
         }
     }
 
-    mod get_ok {
+    mod ok {
         use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
             assert_caller_location!(
                 assert_that!(Result::<i32, String>::Err("someError".to_owned())),
-                get_ok()
+                ok()
             );
         }
 
         #[test]
         fn extracts_borrowed_and_owned_values() {
             let result: Result<String, ()> = Ok(String::from("value"));
-            assert_that!(result).get_ok().is_equal_to("value");
-            assert_that_owned!(result).get_ok().is_equal_to("value");
+            assert_that!(result).ok().is_equal_to("value");
+            assert_that_owned!(result).ok().is_equal_to("value");
         }
 
         #[test]
@@ -387,26 +387,24 @@ mod tests {
             rejected_kind(FailureKind::Variant, || {
                 let _ = assert_that!(Result::<i32, i32>::Err(1))
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
-                    .get_ok();
+                    .ok();
             });
         }
     }
 
-    mod get_err {
+    mod err {
         use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(Result::<i32, String>::Ok(42)), get_err());
+            assert_caller_location!(assert_that!(Result::<i32, String>::Ok(42)), err());
         }
 
         #[test]
         fn extracts_borrowed_and_owned_errors() {
             let result: Result<(), String> = Err(String::from("someError"));
-            assert_that!(result).get_err().is_equal_to("someError");
-            assert_that_owned!(result)
-                .get_err()
-                .is_equal_to("someError");
+            assert_that!(result).err().is_equal_to("someError");
+            assert_that_owned!(result).err().is_equal_to("someError");
         }
 
         #[test]
@@ -414,7 +412,7 @@ mod tests {
             rejected_kind(FailureKind::Variant, || {
                 let _ = assert_that!(Result::<i32, i32>::Ok(1))
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
-                    .get_err();
+                    .err();
             });
         }
     }

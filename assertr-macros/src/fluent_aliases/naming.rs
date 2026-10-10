@@ -32,7 +32,8 @@ const VERBS: [(&str, &str); 7] = [
 /// `not_have_*`, and `does_not_*` becomes `not_*`. The possessive `has_no_*` keeps its word order
 /// as `have_no_*` ("must have no remaining elements"). A namespace prefix from
 /// [`PASSTHROUGH_PREFIXES`] is kept in front of the derived alias. Returns `None` for names
-/// outside these rules, for example already imperative `get_*` extractions.
+/// outside these rules, for example extractions named after what they continue with, such as
+/// `some`, `first`, or `json`.
 pub(super) fn automatic_alias(name: &str) -> Option<String> {
     if let Some(namespace) = PASSTHROUGH_PREFIXES
         .into_iter()
@@ -122,9 +123,11 @@ mod tests {
     }
 
     #[test]
-    fn leaves_already_imperative_names_without_a_second_alias() {
-        assert_that!(automatic_alias("get_some")).is_none();
-        assert_that!(automatic_alias("get_json")).is_none();
+    fn leaves_extraction_names_without_an_alias() {
+        assert_that!(automatic_alias("some")).is_none();
+        assert_that!(automatic_alias("first")).is_none();
+        assert_that!(automatic_alias("json")).is_none();
+        assert_that!(automatic_alias("resolved_path")).is_none();
     }
 
     #[test]

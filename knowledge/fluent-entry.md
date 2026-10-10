@@ -36,8 +36,9 @@ on a reference reborrows the referenced value. Subject types and capture complet
 See [entry rustdoc](../assertr/src/entry/fluent.rs) for method-resolution examples.
 
 Aliases preserve behavior and bounds. [Naming rules](../assertr-macros/src/fluent_aliases/naming.rs) derive spellings
-such as `is_equal_to` → `be_equal_to`, `contains` → `contain`, and `matches` → `match_expectation`. Explicit overrides
-cover unsupported names. Custom traits get aliases from the re-exported `assertr::fluent_aliases`. The macro rejects
+such as `is_equal_to` → `be_equal_to`, `contains` → `contain`, and `matches` → `match_expectation`. Extractions are
+named after the value they continue with, such as `some`, `first`, or `json`, and get no alias because they already
+read naturally after `must()`. Explicit overrides cover other unsupported names. Custom traits get aliases from the re-exported `assertr::fluent_aliases`. The macro rejects
 repeated or combined helpers, helpers on items other than methods, and aliases that collide with another trait item. A
 method gated by `#[cfg]` is checked only against ungated items, because gated items may share a name across
 configurations.

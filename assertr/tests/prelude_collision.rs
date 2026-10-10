@@ -92,3 +92,27 @@ mod matcher_names {
         assert_that!(1).matches(matchers::eq(1));
     }
 }
+
+/// Extractions are named after the value they continue with, such as `some`, `ok`, `first`, and
+/// `at`. These short names must resolve to exactly one prelude trait for each subject type.
+#[test]
+fn extraction_names_resolve_unambiguously_through_the_prelude() {
+    use core::task::Poll;
+
+    assert_that!(Some(vec![1, 2, 3]))
+        .some()
+        .first()
+        .is_equal_to(1);
+    assert_that!(Ok::<_, ()>(vec![4]))
+        .ok()
+        .single()
+        .is_equal_to(4);
+    assert_that!(Err::<(), _>(vec![5, 6]))
+        .err()
+        .last()
+        .is_equal_to(6);
+    assert_that!(Poll::Ready(vec![7, 8]))
+        .ready()
+        .at(1)
+        .is_equal_to(8);
+}

@@ -41,7 +41,7 @@
 //! ```rust
 //! use assertr::{matchers::IsSome, prelude::*};
 //!
-//! assert_that!(Some(42)).matches(IsSome).get_some().is_equal_to(42);
+//! assert_that!(Some(42)).matches(IsSome).some().is_equal_to(42);
 //! ```
 //!
 //! Matchers implement `Debug` and `Clone` when their contents do. Matchers without generic

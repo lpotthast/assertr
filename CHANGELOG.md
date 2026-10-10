@@ -48,8 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   have been seen, so it also works on infinite iterators.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
   exact comparisons of borrowed targets that preserve duplicate counts, without equality or target renderer bounds.
-- Borrowed panic-mode element projections `get_first`, `get_last`, and `get_single` for `StableOrder` collections, and
-  `get_at` for `RandomAccess` collections.
+- Borrowed panic-mode element projections `first`, `last`, and `single` for `StableOrder` collections, and
+  `at` for `RandomAccess` collections.
 - `BinaryHeap` supports length and order-free collection assertions.
 - Collection, set, and map assertions work on `&mut` subjects, such as `assert_that_owned!(&mut vec)`.
 - `Box<dyn Any + Send>` and `Box<dyn Any + Send + Sync>` support `is_of_type`, `has_type`, and `has_type_ref`, for
@@ -124,6 +124,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** Renamed the fluent entry traits `IntoAssertContext` and `IntoOwnedAssertContext` to `FluentEntry` and
   `OwnedFluentEntry`. Code using the prelude and method syntax is unaffected.
 - **Breaking:** Renamed `Type::get_type_name` to `Type::type_name`.
+- **Breaking:** Extracting assertions no longer use a `get_` prefix. Renamed `get_some`, `get_ok`, `get_err`,
+  `get_ready`, and `get_ascii` to `some`, `ok`, `err`, `ready`, and `ascii`, and the reqwest response extractions
+  `get_header`, `get_text`, and `get_json` to `header`, `text`, and `json`. Checks keep their `is_` prefix, so
+  `is_some` checks the variant and `some` extracts its value.
 - **Breaking:** Renamed `is_blank_ascii` and its fluent alias `be_blank_ascii` to `is_ascii_blank` and `be_ascii_blank`,
   matching the `is_ascii_*` character assertions.
 - **Breaking:** Removed `AssertrCondition`, `ConditionAssertions`, `IterableConditionAssertions`, and their `is`,
@@ -214,7 +218,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   values, and original errors. Custom renderers must implement the method-level `ValueRenderer` bounds, and generic
   callers must supply `R` in formatting, exact-size iterator, and reqwest response assertion trait bounds.
 - **Breaking:** `as_json()` and `as_toml()` return owned `Result` subjects that preserve serialization errors, and the
-  `json()` and `toml()` adapters are removed. Replace string chains with `.as_json().get_ok()` in panic mode or
+  `json()` and `toml()` adapters are removed. Replace string chains with `.as_json().ok()` in panic mode or
   `.as_json().is_ok_satisfying(...)` in capture mode, and likewise for TOML.
 - **Breaking:** `has_type` and `has_type_ref` move from `BoxAssertions` and `PanicValueAssertions` to
   `BoxExtractAssertions`, which covers boxed `dyn Any` payloads and `PanicValue`. `BoxAssertions` keeps the
@@ -226,7 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** `is_matching` and `is_not_matching` require `Fn` pattern guards, so guards consuming their captures no
   longer compile.
 - **Breaking:** Replace `ProgramAssertionsRequiringPanicMode` and its `exists_and` method and fluent alias with
-  `ProgramExtractAssertions::get_resolved_path`.
+  `ProgramExtractAssertions::resolved_path`.
 - **Breaking:** Range `contains_element` and `does_not_contain_element` consume and return their assertion chain.
   Chain successive checks or start a new chain instead of reusing a moved one.
 - **Breaking:** `TokioMutexAssertions` takes the mode parameter (`TokioMutexAssertions<T, M, R>`). Its
@@ -246,12 +250,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Failing HTTP header checks show header values, including values marked sensitive, and escape non-ASCII bytes. This
   covers reqwest `has_header_value` and `does_not_have_header`, and `HeaderValue` checks such as `is_ascii`.
 - **Breaking:** Reqwest header assertions and expectations (`has_header`, `does_not_have_header`, `has_header_value`,
-  and `get_header`) fail with "was given an invalid header name" for a name that is not a valid HTTP header name,
+  and the `header` extraction) fail with "was given an invalid header name" for a name that is not a valid HTTP header name,
   instead of treating it as absent. `does_not_have_header` no longer passes for such a name. Their rejections are
   `matchers::response::HeaderRejection` values.
-- The `reqwest` feature enables `http`, so values extracted by `get_header` always support
+- The `reqwest` feature enables `http`, so values extracted by `header` always support
   `HttpHeaderValueAssertions`.
-- Reqwest `get_text()` and `get_json()` futures are `Send` when the renderer is.
+- Reqwest `text()` and `json()` futures are `Send` when the renderer is.
 - **Breaking:** The `http` feature enables `std`. `serde-json`, `serde-toml`, and `serde` no longer enable `std` and
   work on embedded `no_std` targets with `alloc`.
 - **Breaking:** `jiff` is built without its default features. Enable jiff's time-zone database features in your own

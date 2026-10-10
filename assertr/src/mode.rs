@@ -5,7 +5,7 @@
 //! and returned by [`AssertThat::capture`](crate::AssertThat::capture). Child chains share the mode
 //! of their root.
 //!
-//! Assertions that extract a value, such as `get_some` or `get_ok`, exist only in panic mode. After
+//! Assertions that extract a value, such as `some` or `ok`, exist only in panic mode. After
 //! a failure there is no value to continue with. In capture mode, use the `*_satisfying` variants,
 //! such as `is_some_satisfying`, instead.
 //!
@@ -46,7 +46,7 @@ pub trait Mode:
 /// Panic mode, in which the first failure panics immediately.
 ///
 /// This is the default mode. Projections that cannot produce a continuation after failure, such as
-/// `get_ok`, are available only in this mode.
+/// `ok`, are available only in this mode.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Panic;
 

@@ -1819,10 +1819,10 @@ mod custom_capabilities {
             .contains_exactly([1, 2, 3])
             .contains_exactly_in_any_order([3, 2, 1])
             .has_length(3);
-        assert_that!(ring).get_first().is_equal_to(1);
-        assert_that!(ring).get_last().is_equal_to(3);
-        assert_that!(ring).get_at(1).is_equal_to(2);
-        assert_that!(Ring(vec![42])).get_single().is_equal_to(42);
+        assert_that!(ring).first().is_equal_to(1);
+        assert_that!(ring).last().is_equal_to(3);
+        assert_that!(ring).at(1).is_equal_to(2);
+        assert_that!(Ring(vec![42])).single().is_equal_to(42);
 
         let failures = assert_that!(Ring(vec![1, 2, 3]))
             .with_location(false)

@@ -248,10 +248,8 @@ mod tests {
 
         #[test]
         fn extractions_continue_on_a_temporary() {
-            assert_that!(Some(42)).get_some().is_equal_to(42);
-            assert_that!(Result::<i32, ()>::Ok(42))
-                .get_ok()
-                .is_equal_to(42);
+            assert_that!(Some(42)).some().is_equal_to(42);
+            assert_that!(Result::<i32, ()>::Ok(42)).ok().is_equal_to(42);
         }
     }
 
@@ -301,7 +299,7 @@ mod tests {
                 evaluations += 1;
                 Some(42)
             })
-            .get_some()
+            .some()
             .is_equal_to(42);
 
             assert_that!(evaluations).is_equal_to(1);

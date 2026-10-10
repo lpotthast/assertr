@@ -171,7 +171,7 @@ mod ownership {
         let count = Arc::new(AtomicUsize::new(0));
         let mut values = vec![1];
         let assertion = assert_that!(values).with_panic_presentation(counting(&count));
-        let first = assertion.get_first();
+        let first = assertion.first();
         assert_that!(first.actual()).is_equal_to(1);
 
         // Both contexts remain in scope, including the owned presentation's destructor.

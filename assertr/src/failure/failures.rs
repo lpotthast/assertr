@@ -208,9 +208,7 @@ mod tests {
         assert_that!(failures)
             .has_length(1)
             .contains_exactly(core::slice::from_ref(&expected));
-        assert_that!(failures)
-            .get_at(0)
-            .is_equal_to(expected.clone());
+        assert_that!(failures).at(0).is_equal_to(expected.clone());
         assert_that!((&failures).into_iter().count()).is_equal_to(1);
         assert_that_owned!(&AssertionFailures::from(expected)).is_equal_to(&failures);
         assert_that_owned!(&AssertionFailures::from(failures.clone().into_vec()))

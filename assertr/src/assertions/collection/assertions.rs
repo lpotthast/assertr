@@ -124,8 +124,8 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
-    /// Asserts that no element matches `unwanted`.
-    fn does_not_contain_matching<P>(self, unwanted: P) -> Self
+    /// Asserts that no element matches the unwanted constraint `not_expected`.
+    fn does_not_contain_matching<P>(self, not_expected: P) -> Self
     where
         P: Expectation<T, R>,
         R: ValueRenderer<T>;
@@ -267,12 +267,12 @@ where
     }
 
     #[track_caller]
-    fn does_not_contain_matching<P>(self, unwanted: P) -> Self
+    fn does_not_contain_matching<P>(self, not_expected: P) -> Self
     where
         P: Expectation<C::Item, R>,
         R: ValueRenderer<C::Item>,
     {
-        self.matches(DoesNotContainMatching::new(unwanted))
+        self.matches(DoesNotContainMatching::new(not_expected))
     }
 
     #[track_caller]

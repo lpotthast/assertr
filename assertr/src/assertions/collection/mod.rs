@@ -177,7 +177,7 @@ pub trait Collection: HasLength {
 /// `ends_with`, `contains_contiguous`, `contains_exactly`, their `_matching` and `_satisfying`
 /// variants, and `contains_exactly_same_instances`. In panic mode,
 /// [`StableOrderExtractAssertions`](crate::assertions::StableOrderExtractAssertions) adds
-/// `get_first`, `get_last`, and `get_single`. Failures name the index of a mismatching element.
+/// `first`, `last`, and `single`. Failures name the index of a mismatching element.
 /// The trait has no methods. It only declares that [`Collection::elements`] yields elements in
 /// their meaningful order.
 ///
@@ -215,7 +215,7 @@ pub trait Collection: HasLength {
 /// assert_that!(playlist)
 ///     .starts_with(["Intro"])
 ///     .contains_exactly(["Intro", "Theme", "Outro"])
-///     .get_last()
+///     .last()
 ///     .is_equal_to("Outro");
 /// ```
 ///
@@ -266,7 +266,7 @@ pub trait StableOrder: Collection {}
 ///
 /// Implementing `RandomAccess` for your own collection makes
 /// [`RandomAccessExtractAssertions`](crate::assertions::RandomAccessExtractAssertions) available,
-/// whose `get_at` checks that an index is in bounds and continues with the element there.
+/// whose `at` checks that an index is in bounds and continues with the element there.
 /// Traversal-based sequence assertions need only [`StableOrder`].
 ///
 /// ```
@@ -304,7 +304,7 @@ pub trait StableOrder: Collection {}
 ///     }
 /// }
 ///
-/// assert_that!(Grid { cells: vec![0, 7, 0] }).get_at(1).is_equal_to(7);
+/// assert_that!(Grid { cells: vec![0, 7, 0] }).at(1).is_equal_to(7);
 /// ```
 ///
 /// `RandomAccess` is not part of the prelude, so import it from
@@ -323,7 +323,7 @@ pub trait StableOrder: Collection {}
 #[diagnostic::on_unimplemented(
     message = "the collection does not support constant-time access by position",
     label = "no random-access capability",
-    note = "indexed extraction such as `get_at` requires `RandomAccess`; traversal-based sequence assertions need only `StableOrder`"
+    note = "indexed extraction such as `at` requires `RandomAccess`; traversal-based sequence assertions need only `StableOrder`"
 )]
 pub trait RandomAccess: StableOrder {
     /// Returns the element at the zero-based `index`, or `None` when `index` is out of bounds.
@@ -614,7 +614,7 @@ mod tests {
             .contains_exactly_in_any_order([3, 2, 1])
             .has_length(3);
         assert_that_owned!(&mut list).ends_with([2, 3]);
-        assert_that_owned!(&mut vec).get_at(2).is_equal_to(3);
+        assert_that_owned!(&mut vec).at(2).is_equal_to(3);
     }
 
     #[test]

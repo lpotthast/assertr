@@ -189,7 +189,7 @@ mod tests {
             action: impl FnOnce() + core::panic::UnwindSafe,
         ) -> AssertThat<'static, String, Panic> {
             assert_that_owned!(std::panic::catch_unwind(action))
-                .get_err()
+                .err()
                 .has_message()
         }
 

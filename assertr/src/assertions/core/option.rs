@@ -94,12 +94,12 @@ pub trait OptionExtractAssertions<'t, T, R = DebugRenderer> {
     /// This is available only in `Panic` mode because `None` cannot produce a `T`. Use
     /// [`OptionAssertions::is_some_satisfying`] for capture mode, or the non-extracting
     /// [`OptionAssertions::is_some`] when the contained value is irrelevant.
-    fn get_some(self) -> AssertThat<'t, T, Panic, R>;
+    fn some(self) -> AssertThat<'t, T, Panic, R>;
 }
 
 impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, Panic, R> {
     #[track_caller]
-    fn get_some(self) -> AssertThat<'t, T, Panic, R> {
+    fn some(self) -> AssertThat<'t, T, Panic, R> {
         self.matches(IsSome)
             .map(|actual| project_checked(actual, |it| it, Option::as_ref))
     }
@@ -112,7 +112,7 @@ pub trait OptionAssertions<T, M: Mode, R = DebugRenderer> {
     /// Asserts that the subject is `Some`.
     ///
     /// Non-extracting: the subject stays the full `Option`, so further assertions can be chained in
-    /// any mode. Use [`OptionExtractAssertions::get_some`] to extract the contained value in panic
+    /// any mode. Use [`OptionExtractAssertions::some`] to extract the contained value in panic
     /// mode, or [`OptionAssertions::is_some_satisfying`] to assert on it in any mode.
     fn is_some(self) -> Self;
 
@@ -265,19 +265,19 @@ mod tests {
         }
     }
 
-    mod get_some {
+    mod some {
         use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(Option::<i32>::None), get_some());
+            assert_caller_location!(assert_that!(Option::<i32>::None), some());
         }
 
         #[test]
         fn extracts_the_borrowed_inner_value() {
             let option = Some(String::from("value"));
 
-            assert_that!(option).get_some().is_equal_to("value");
+            assert_that!(option).some().is_equal_to("value");
 
             // The option was only borrowed and remains usable.
             assert_that!(option).is_some();
@@ -286,7 +286,7 @@ mod tests {
         #[test]
         fn extracts_the_owned_inner_value() {
             assert_that_owned!(Some(String::from("value")))
-                .get_some()
+                .some()
                 .is_equal_to("value");
         }
 
@@ -295,7 +295,7 @@ mod tests {
             rejected_kind(FailureKind::Variant, || {
                 let _ = assert_that!(Option::<i32>::None)
                     .with_panic_presentation(|failure| format!("{:?}", failure.kind))
-                    .get_some();
+                    .some();
             });
         }
     }

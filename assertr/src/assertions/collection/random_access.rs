@@ -73,12 +73,12 @@ where
 /// use assertr::prelude::*;
 /// use std::collections::LinkedList;
 ///
-/// assert_that!(LinkedList::from([1, 2, 3])).get_at(1);
+/// assert_that!(LinkedList::from([1, 2, 3])).at(1);
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait RandomAccessExtractAssertions<'t, T, R = DebugRenderer> {
     /// Asserts that `index` is in bounds, then returns an assertion over that element.
-    fn get_at(&'t self, index: usize) -> AssertThat<'t, T, Panic, R>
+    fn at(&'t self, index: usize) -> AssertThat<'t, T, Panic, R>
     where
         R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
 }
@@ -88,7 +88,7 @@ where
     C: RandomAccess,
 {
     #[track_caller]
-    fn get_at(&'t self, index: usize) -> AssertThat<'t, C::Item, Panic, R>
+    fn at(&'t self, index: usize) -> AssertThat<'t, C::Item, Panic, R>
     where
         R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
     {
@@ -110,7 +110,7 @@ mod tests {
 
         #[test]
         fn are_as_expected() {
-            vec![1].must().get_at(0).be_equal_to(1);
+            vec![1].must().at(0).be_equal_to(1);
         }
     }
 
@@ -132,9 +132,7 @@ mod tests {
         fn index_and_length_use_the_active_renderer() {
             use crate::test_support::CustomValueRenderer;
             assert_that!(|| {
-                assert_that!([7])
-                    .with_renderer(CustomValueRenderer)
-                    .get_at(9);
+                assert_that!([7]).with_renderer(CustomValueRenderer).at(9);
             })
             .panics()
             .has_type::<String>()
@@ -143,25 +141,25 @@ mod tests {
         }
     }
 
-    mod get_at {
+    mod at {
         use indoc::formatdoc;
 
         use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(vec![1, 2]), get_at(2));
+            assert_caller_location!(assert_that!(vec![1, 2]), at(2));
         }
 
         #[test]
         fn returns_the_element_at_the_index() {
-            assert_that!(vec![1, 2, 3]).get_at(1).is_equal_to(2);
+            assert_that!(vec![1, 2, 3]).at(1).is_equal_to(2);
         }
 
         #[test]
         fn panics_when_the_index_is_out_of_bounds() {
             assert_that!(|| {
-                assert_that!(vec![1, 2]).with_location(false).get_at(2);
+                assert_that!(vec![1, 2]).with_location(false).at(2);
             })
             .panics()
             .has_type::<String>()
@@ -192,7 +190,7 @@ mod tests {
                 .with_renderer(CustomValueRenderer)
                 .with_location(false)
                 .with_rendering_budget(RenderingBudget::default().with_max_leaf_characters(3));
-            let failures = chain.get_at(0).capture(|it| it.is_equal_to(8));
+            let failures = chain.at(0).capture(|it| it.is_equal_to(8));
             assert_that!(failures).contains_exactly_satisfying([
                 |element: AssertThat<AssertionFailure, Capture>| {
                     element

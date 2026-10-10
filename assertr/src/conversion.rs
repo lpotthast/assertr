@@ -15,7 +15,7 @@ impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
     /// ```
     /// use assertr::prelude::*;
     /// let value = [1, 2];
-    /// assert_that!(value).as_json().get_ok().is_equal_to("[1,2]");
+    /// assert_that!(value).as_json().ok().is_equal_to("[1,2]");
     /// let failures = assert_that!(value).capture(|it| {
     ///     it.as_json().is_ok_satisfying(|json| {
     ///         json.is_equal_to("[1,2]");
@@ -41,7 +41,7 @@ impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
     /// #[derive(serde::Serialize)]
     /// struct Config { value: u32 }
     /// assert_that!(Config { value: 42 })
-    ///     .as_toml().get_ok().is_equal_to("value = 42\n");
+    ///     .as_toml().ok().is_equal_to("value = 42\n");
     /// let failures = assert_that!(Config { value: 42 }).capture(|it| {
     ///     it.as_toml().is_ok_satisfying(|toml| {
     ///         toml.is_equal_to("value = 42\n");
@@ -146,7 +146,7 @@ mod tests {
                         .with_subject_name("serialized subject")
                         .with_rendering_budget(budget)
                         .$method()
-                        .get_ok();
+                        .ok();
                     let failures = converted.capture(|it| it.is_equal_to("wrong"));
                     assert_that!(failures).contains_exactly_satisfying([
                         |element: AssertThat<AssertionFailure, Capture>| {

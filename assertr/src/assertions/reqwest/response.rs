@@ -3,10 +3,10 @@
 //! Assertions cover status codes and headers. Projections expose one header, the text body, or a
 //! JSON body. Failures include the request URL.
 //!
-//! Reading a body consumes the response. `get_text()` and `get_json()` are async and require
+//! Reading a body consumes the response. `text()` and `json()` are async and require
 //! `assert_that_owned!` or `.must_owned()`.
 //!
-//! `reqwest` re-exports `http`'s header types, so the value extracted by `get_header` is an
+//! `reqwest` re-exports `http`'s header types, so the value extracted by `header` is an
 //! `http::HeaderValue` with `HttpHeaderValueAssertions`. The `reqwest` feature enables `http` for
 //! this.
 
@@ -542,12 +542,12 @@ pub trait ReqwestResponseExtractAssertions<'t, R = DebugRenderer> {
     /// Asserts that the header is present, then continues the chain on a clone of its first value.
     ///
     /// The extracted `HeaderValue` is the subject of `HttpHeaderValueAssertions`, so
-    /// `.get_header("content-type").is_ascii_satisfying(..)` works across both integrations. A
+    /// `.header("content-type").is_ascii_satisfying(..)` works across both integrations. A
     /// name that is not a valid HTTP header name fails like a missing header, with "was given an
     /// invalid header name".
     ///
     /// Missing-header diagnostics render header names and the URL through `ValueRenderer<str>`.
-    fn get_header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>
+    fn header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>
     where
         R: ValueRenderer<str>;
 
@@ -564,13 +564,13 @@ pub trait ReqwestResponseExtractAssertions<'t, R = DebugRenderer> {
     ///
     /// Panics when the assertion only borrows its subject, and when the body cannot be read.
     /// Ownership is checked when this method is called, before it returns the future.
-    fn get_text(self) -> impl Future<Output = AssertThat<'t, String, Panic, R>>
+    fn text(self) -> impl Future<Output = AssertThat<'t, String, Panic, R>>
     where
         R: ValueRenderer<str> + ValueRenderer<reqwest::Error>;
 
     /// Reads the response body, deserializes it into `T`, and continues the chain on the value.
     ///
-    /// Reads the body like [`get_text`](ReqwestResponseExtractAssertions::get_text), then
+    /// Reads the body like [`text`](ReqwestResponseExtractAssertions::text), then
     /// deserializes it with `serde_json`. Reading and decoding count as one assertion. A
     /// deserialization failure includes the received text.
     ///
@@ -588,7 +588,7 @@ pub trait ReqwestResponseExtractAssertions<'t, R = DebugRenderer> {
     /// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
     /// assert_that_owned!(response)
     ///     .is_success()
-    ///     .get_json::<Greeting>()
+    ///     .json::<Greeting>()
     ///     .await
     ///     .is_equal_to(Greeting { text: "hello".to_owned() });
     /// # });
@@ -600,7 +600,7 @@ pub trait ReqwestResponseExtractAssertions<'t, R = DebugRenderer> {
     /// the body is not valid JSON for `T`. Ownership is checked when this method is called, before
     /// it returns the future.
     #[cfg(feature = "serde-json")]
-    fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
+    fn json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
         T: serde::de::DeserializeOwned + 't,
         R: ValueRenderer<str> + ValueRenderer<reqwest::Error> + ValueRenderer<serde_json::Error>;
@@ -610,7 +610,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     for AssertThat<'t, reqwest::Response, Panic, R>
 {
     #[track_caller]
-    fn get_header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>
+    fn header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>
     where
         R: ValueRenderer<str>,
     {
@@ -620,13 +620,13 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     }
 
     #[track_caller]
-    fn get_text(self) -> impl Future<Output = AssertThat<'t, String, Panic, R>>
+    fn text(self) -> impl Future<Output = AssertThat<'t, String, Panic, R>>
     where
         R: ValueRenderer<str> + ValueRenderer<reqwest::Error>,
     {
         let read = read_body(
             self,
-            "get_text() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
+            "text() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
         );
         async move {
             let body = read.await;
@@ -636,14 +636,14 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
 
     #[track_caller]
     #[cfg(feature = "serde-json")]
-    fn get_json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
+    fn json<T>(self) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
     where
         T: serde::de::DeserializeOwned + 't,
         R: ValueRenderer<str> + ValueRenderer<reqwest::Error> + ValueRenderer<serde_json::Error>,
     {
         let read = read_body(
             self,
-            "get_json() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
+            "json() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
         );
         async move {
             let ReadBody {
@@ -906,11 +906,11 @@ mod tests {
             response(500, &[], "").must().be_server_error();
             ok_response()
                 .must()
-                .get_header("content-type")
+                .header("content-type")
                 .is_equal_to(reqwest::header::HeaderValue::from_static("text/plain"));
-            block_on(ok_response().must_owned().get_text()).is_equal_to("world");
+            block_on(ok_response().must_owned().text()).is_equal_to("world");
             #[cfg(feature = "serde-json")]
-            block_on(super::json_response("42").must_owned().get_json::<u32>()).is_equal_to(42);
+            block_on(super::json_response("42").must_owned().json::<u32>()).is_equal_to(42);
         }
     }
 
@@ -989,13 +989,13 @@ mod tests {
             drop(
                 assert_that_owned!(response(200, &[], "text"))
                     .with_renderer(EvidenceRenderer)
-                    .get_text(),
+                    .text(),
             );
             #[cfg(feature = "serde-json")]
             drop(
                 assert_that_owned!(response(200, &[], "null"))
                     .with_renderer(EvidenceRenderer)
-                    .get_json::<u32>(),
+                    .json::<u32>(),
             );
         }
 
@@ -1009,7 +1009,7 @@ mod tests {
                 .has_header("x-api-key")
                 .has_header_value("x-api-key", "secret")
                 .does_not_have_header("missing")
-                .get_header("x-api-key");
+                .header("x-api-key");
         }
 
         #[test]
@@ -1136,10 +1136,10 @@ mod tests {
                     .has_message()
                 };
             }
-            body_panic!(failing_response(), CustomValueRenderer, get_text)
+            body_panic!(failing_response(), CustomValueRenderer, text)
                 .contains(r#"URL: custom("http://localhost/failing")"#)
                 .contains("Error: custom(reqwest::Error {");
-            body_panic!(failing_response(), RedactingRenderer, get_text)
+            body_panic!(failing_response(), RedactingRenderer, text)
                 .contains("Error: <redacted>")
                 .does_not_contain("localhost");
 
@@ -1149,7 +1149,7 @@ mod tests {
                 body_panic!(
                     super::json_response(body),
                     CustomValueRenderer,
-                    get_json::<super::Person>
+                    json::<super::Person>
                 )
                 .contains(r#"Actual: custom("{\"name\":\"private-name\""#)
                 .contains(r#"URL: custom("http://localhost/hello")"#)
@@ -1157,7 +1157,7 @@ mod tests {
                 body_panic!(
                     super::json_response(body),
                     RedactingRenderer,
-                    get_json::<super::Person>
+                    json::<super::Person>
                 )
                 .contains("Error: <redacted>")
                 .does_not_contain("private")
@@ -1592,19 +1592,19 @@ mod tests {
         }
     }
 
-    mod get_header {
+    mod header {
         use super::{TextOnly, ok_response, response};
         use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(ok_response()), get_header("missing-header"));
+            assert_caller_location!(assert_that!(ok_response()), header("missing-header"));
         }
 
         #[test]
         fn extracts_the_first_value_as_one_assertion() {
             let response = response(200, &[("x-mode", "first"), ("x-mode", "second")], "");
-            let assertion = assert_that!(response).get_header("x-mode");
+            let assertion = assert_that!(response).header("x-mode");
 
             assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
             assertion.is_equal_to(reqwest::header::HeaderValue::from_static("first"));
@@ -1613,7 +1613,7 @@ mod tests {
         #[test]
         fn rejects_an_invalid_header_name() {
             assert_that!(|| {
-                assert_that!(ok_response()).get_header("content type");
+                assert_that!(ok_response()).header("content type");
             })
             .panics()
             .has_message()
@@ -1626,7 +1626,7 @@ mod tests {
             let assertion: AssertThat<'_, reqwest::header::HeaderValue, Panic, TextOnly> =
                 assert_that!(response)
                     .with_renderer(TextOnly)
-                    .get_header("content-type");
+                    .header("content-type");
 
             assert_that!(assertion.actual().as_bytes()).is_equal_to(b"text/plain".as_slice());
         }
@@ -1636,7 +1636,7 @@ mod tests {
             assert_that!(|| {
                 assert_that!(ok_response())
                     .with_location(false)
-                    .get_header("content-type")
+                    .header("content-type")
                     .is_ascii_satisfying(|s| {
                         s.is_equal_to("nope");
                     });
@@ -1653,7 +1653,7 @@ mod tests {
         }
     }
 
-    mod get_text {
+    mod text {
         use indoc::formatdoc;
 
         use super::{block_on, failing_response, ok_response, response};
@@ -1661,7 +1661,7 @@ mod tests {
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(async assert_that_owned!(failing_response()), get_text());
+            assert_caller_location!(async assert_that_owned!(failing_response()), text());
         }
 
         #[tokio::test]
@@ -1669,13 +1669,13 @@ mod tests {
             let parent = assert_that!(());
             parent
                 .derive_owned(|()| ok_response())
-                .get_text()
+                .text()
                 .await
                 .is_equal_to("world");
             assert_that!(parent.state.records.assertion_count()).is_equal_to(1);
 
             assert_that_owned!(response(204, &[], ""))
-                .get_text()
+                .text()
                 .await
                 .is_equal_to("");
         }
@@ -1685,18 +1685,18 @@ mod tests {
             fn require_send<F: Future + Send>(future: F) -> F {
                 future
             }
-            drop(require_send(assert_that_owned!(ok_response()).get_text()));
+            drop(require_send(assert_that_owned!(ok_response()).text()));
         }
 
         #[test]
         fn panics_synchronously_when_the_response_is_only_borrowed() {
             assert_that!(|| {
                 let response = ok_response();
-                drop(assert_that!(response).get_text());
+                drop(assert_that!(response).text());
             }).panics()
             .has_type::<&str>()
             .is_equal_to(
-                "get_text() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
+                "text() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
             );
         }
 
@@ -1706,7 +1706,7 @@ mod tests {
                 block_on(async {
                     assert_that_owned!(failing_response())
                         .with_location(false)
-                        .get_text()
+                        .text()
                         .await;
                 });
             })
@@ -1737,13 +1737,13 @@ mod tests {
     }
 
     #[cfg(feature = "serde-json")]
-    mod get_json {
+    mod json {
         use super::{Person, block_on, json_response};
         use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(async assert_that_owned!(json_response("not json")), get_json::<Person>());
+            assert_caller_location!(async assert_that_owned!(json_response("not json")), json::<Person>());
         }
 
         #[tokio::test]
@@ -1751,7 +1751,7 @@ mod tests {
             let parent = assert_that!(());
             parent
                 .derive_owned(|()| json_response(r#"{"name":"Bob","age":42}"#))
-                .get_json::<Person>()
+                .json::<Person>()
                 .await
                 .is_equal_to(Person {
                     name: "Bob".to_owned(),
@@ -1766,7 +1766,7 @@ mod tests {
                 future
             }
             drop(require_send(
-                assert_that_owned!(json_response("1")).get_json::<u32>(),
+                assert_that_owned!(json_response("1")).json::<u32>(),
             ));
         }
 
@@ -1793,12 +1793,12 @@ mod tests {
                 }
             }
 
-            let assertion = block_on(assert_that_owned!(json_response("7")).get_json::<Decoded>());
+            let assertion = block_on(assert_that_owned!(json_response("7")).json::<Decoded>());
             assert_that!(assertion.actual().0).is_equal_to(7);
             assert_that!(CALLS.load(Ordering::Relaxed)).is_equal_to(1);
 
             assert_that!(|| {
-                block_on(assert_that_owned!(json_response("0")).get_json::<Decoded>());
+                block_on(assert_that_owned!(json_response("0")).json::<Decoded>());
             })
             .panics()
             .has_message()
@@ -1815,7 +1815,7 @@ mod tests {
                 block_on(async {
                     assert_that_owned!(json_response(body))
                         .with_location(false)
-                        .get_json::<Person>()
+                        .json::<Person>()
                         .await;
                 });
             })
@@ -1841,11 +1841,11 @@ mod tests {
         fn panics_synchronously_when_the_response_is_only_borrowed() {
             assert_that!(|| {
                 let response = json_response(r#"{"name":"Bob","age":42}"#);
-                drop(assert_that!(response).get_json::<Person>());
+                drop(assert_that!(response).json::<Person>());
             }).panics()
             .has_type::<&str>()
             .is_equal_to(
-                "get_json() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
+                "json() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
             );
         }
     }

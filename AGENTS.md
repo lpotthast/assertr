@@ -60,8 +60,9 @@ fit.
 - Put behavior, exact diagnostic tests, and built-in adapter tests beside the generic family that owns them. Keep
   downstream-implementor and `no_std` coverage in existing integration fixtures instead of duplicating every assertion
   across every adapter. Pin each failure shape's exact report once, not again per mode or per delegating method.
-- Prefer natural assertion names. Type-changing assertions do not require a `get_` prefix. Keep checking and extracting
-  behavior distinguishable, for example `is_of_type` checks and `has_type` extracts.
+- Prefer natural assertion names. Type-changing assertions do not use a `get_` prefix. Keep checking and extracting
+  behavior distinguishable, for example `is_some` checks and `some` extracts, and `is_of_type` checks and `has_type`
+  extracts.
 - Shape public `*Assertions` traits as `<'t, subject parameters, M: Mode, R = DebugRenderer>`, declaring each parameter
   only when a signature uses it.
 - New assertion traits use `#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]`. Follow

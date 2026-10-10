@@ -234,7 +234,7 @@ mod tests {
             let references = [&values[0], &values[0]];
             let assertion = assert_that!(references);
             assertion
-                .get_first()
+                .first()
                 .is_same_instance_as(&references[0])
                 .is_not_same_instance_as(&references[1]);
 

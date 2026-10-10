@@ -61,7 +61,7 @@ pub trait ThirtyfourWebElementAssertions<'t, R = DebugRenderer> {
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>;
 
-    /// Reads an optional attribute. Use `.is_none()` for absence or `.get_some()` to extract it.
+    /// Reads an optional attribute. Use `.is_none()` for absence or `.some()` to extract it.
     fn attribute(
         self,
         name: impl Into<String>,
@@ -535,7 +535,7 @@ mod tests {
                 assert_that!(element)
                     .attribute("empty")
                     .await
-                    .get_some()
+                    .some()
                     .is_empty();
             }));
         }
@@ -729,7 +729,7 @@ mod tests {
                         });
                     }))
                     .await
-                    .get_some()
+                    .some()
                     .contains("menu");
             }));
             assert_that!(transport.paths()).has_length(2);
@@ -795,7 +795,7 @@ mod tests {
                 assert_that!(element)
                     .property("value")
                     .await
-                    .get_some()
+                    .some()
                     .is_equal_to("42");
             }));
             assert_that!(transport.paths())
@@ -841,7 +841,7 @@ mod tests {
                 assert_that!(element)
                     .text_content()
                     .await
-                    .get_some()
+                    .some()
                     .is_equal_to("DOM text");
             }));
             assert_that!(transport.paths())

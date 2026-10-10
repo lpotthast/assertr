@@ -98,8 +98,8 @@ a `Result`, or a panic:
 ```rust
 use assertr::prelude::*;
 
-assert_that!(Some(42)).get_some().is_greater_than(40);
-assert_that!("42".parse::<u32>()).get_ok().is_equal_to(42);
+assert_that!(Some(42)).some().is_greater_than(40);
+assert_that!("42".parse::<u32>()).ok().is_equal_to(42);
 assert_that!(|| panic!("boom"))
     .panics()
     .has_message()
@@ -207,7 +207,7 @@ assert_that!(failures[0].to_string()).contains("is not less than");
 Each failure is structured data. Its fields hold the rendered actual and expected values, the
 relation between them, and nested failures. Its `Display` implementation produces the report.
 
-Assertions that switch to a different subject, such as `get_some()`, are not available in
+Assertions that switch to a different subject, such as `some()`, are not available in
 capture mode, because a failure leaves no value to continue with. Use their `*_satisfying`
 variants instead, for example `is_some_satisfying(|value| ..)`.
 

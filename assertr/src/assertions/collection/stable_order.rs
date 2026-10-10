@@ -458,22 +458,22 @@ where
 /// use assertr::prelude::*;
 /// use std::collections::BTreeSet;
 ///
-/// assert_that!(BTreeSet::from([1, 2, 3])).get_first();
+/// assert_that!(BTreeSet::from([1, 2, 3])).first();
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait StableOrderExtractAssertions<'t, T, R = DebugRenderer> {
     /// Asserts that the collection is non-empty, then returns an assertion over its first element.
-    fn get_first(&'t self) -> AssertThat<'t, T, Panic, R>
+    fn first(&'t self) -> AssertThat<'t, T, Panic, R>
     where
         R: ValueRenderer<T> + Clone;
 
     /// Asserts that the collection is non-empty, then returns an assertion over its last element.
-    fn get_last(&'t self) -> AssertThat<'t, T, Panic, R>
+    fn last(&'t self) -> AssertThat<'t, T, Panic, R>
     where
         R: ValueRenderer<T> + Clone;
 
     /// Asserts that the collection contains exactly one element, then returns an assertion over it.
-    fn get_single(&'t self) -> AssertThat<'t, T, Panic, R>
+    fn single(&'t self) -> AssertThat<'t, T, Panic, R>
     where
         R: ValueRenderer<T> + Clone + ValueRenderer<usize>;
 }
@@ -483,7 +483,7 @@ where
     C: StableOrder,
 {
     #[track_caller]
-    fn get_first(&'t self) -> AssertThat<'t, C::Item, Panic, R>
+    fn first(&'t self) -> AssertThat<'t, C::Item, Panic, R>
     where
         R: ValueRenderer<C::Item> + Clone,
     {
@@ -492,7 +492,7 @@ where
     }
 
     #[track_caller]
-    fn get_last(&'t self) -> AssertThat<'t, C::Item, Panic, R>
+    fn last(&'t self) -> AssertThat<'t, C::Item, Panic, R>
     where
         R: ValueRenderer<C::Item> + Clone,
     {
@@ -501,7 +501,7 @@ where
     }
 
     #[track_caller]
-    fn get_single(&'t self) -> AssertThat<'t, C::Item, Panic, R>
+    fn single(&'t self) -> AssertThat<'t, C::Item, Panic, R>
     where
         R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
     {
@@ -533,9 +533,9 @@ mod tests {
 
         #[test]
         fn are_as_expected() {
-            vec![1].must().get_first().be_equal_to(1);
-            vec![1].must().get_last().be_equal_to(1);
-            vec![1].must().get_single().be_equal_to(1);
+            vec![1].must().first().be_equal_to(1);
+            vec![1].must().last().be_equal_to(1);
+            vec![1].must().single().be_equal_to(1);
             let values = [1, 2, 3];
             values.must().start_with([1, 2]);
             values.must().start_with_matching([eq(1), eq(2)]);
@@ -621,7 +621,7 @@ mod tests {
             assert_that!(|| {
                 assert_that!([1, 2])
                     .with_renderer(CustomValueRenderer)
-                    .get_single();
+                    .single();
             })
             .panics()
             .has_type::<String>()
@@ -642,7 +642,7 @@ mod tests {
         }
     }
 
-    mod get_first {
+    mod first {
         use alloc::{collections::LinkedList, vec::Vec};
 
         use indoc::formatdoc;
@@ -651,22 +651,20 @@ mod tests {
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(Vec::<i32>::new()), get_first());
+            assert_caller_location!(assert_that!(Vec::<i32>::new()), first());
         }
 
         #[test]
         fn returns_the_first_element_of_a_stable_order_collection() {
             assert_that!(LinkedList::from([1, 2, 3]))
-                .get_first()
+                .first()
                 .is_equal_to(1);
         }
 
         #[test]
         fn panics_for_an_empty_collection() {
             assert_that!(|| {
-                assert_that!(Vec::<i32>::new())
-                    .with_location(false)
-                    .get_first();
+                assert_that!(Vec::<i32>::new()).with_location(false).first();
             })
             .panics()
             .has_type::<String>()
@@ -682,39 +680,39 @@ mod tests {
         }
     }
 
-    mod get_last {
+    mod last {
         use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!([] as [i32; 0]), get_last());
+            assert_caller_location!(assert_that!([] as [i32; 0]), last());
         }
 
         #[test]
         fn returns_the_last_element() {
-            assert_that!(vec![1, 2, 3]).get_last().is_equal_to(3);
+            assert_that!(vec![1, 2, 3]).last().is_equal_to(3);
         }
     }
 
-    mod get_single {
+    mod single {
         use indoc::formatdoc;
 
         use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
-            assert_caller_location!(assert_that!(vec![1, 2]), get_single());
+            assert_caller_location!(assert_that!(vec![1, 2]), single());
         }
 
         #[test]
         fn returns_the_only_element() {
-            assert_that!(vec![2]).get_single().is_equal_to(2);
+            assert_that!(vec![2]).single().is_equal_to(2);
         }
 
         #[test]
         fn panics_when_there_is_more_than_one_element() {
             assert_that!(|| {
-                assert_that!(vec![1, 2]).with_location(false).get_single();
+                assert_that!(vec![1, 2]).with_location(false).single();
             })
             .panics()
             .has_type::<String>()
