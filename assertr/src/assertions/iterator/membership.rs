@@ -1,6 +1,6 @@
 use super::{
     AssertionContext, Borrow, FailureBuilder, FailureKind, PREVIEW_CAPACITY, PhantomData,
-    PositionReporting, RenderingOrder, Scan, Tail, ValueRenderer, Vec, consumed_fact,
+    RenderingOrder, Scan, Tail, ValueRenderer, Vec, consumed_fact,
 };
 use crate::{
     assertions::{HasLength, collection::Collection},
@@ -180,15 +180,13 @@ where
 /// Requires no element equal to a borrowed view, stopping at the first match.
 pub(crate) struct DoesNotContainScan<'e, T, E: ?Sized> {
     expected: &'e E,
-    positions: PositionReporting,
     item: PhantomData<fn() -> T>,
 }
 
 impl<'e, T, E: ?Sized> DoesNotContainScan<'e, T, E> {
-    pub(crate) const fn new(expected: &'e E, positions: PositionReporting) -> Self {
+    pub(crate) const fn new(expected: &'e E) -> Self {
         Self {
             expected,
-            positions,
             item: PhantomData,
         }
     }
@@ -234,22 +232,20 @@ where
             .actual(tail.rendered::<T, _>(render))
             .relation("contains")
             .unexpected(render.value(self.expected));
-        tail.facts(failure, render, self.positions.index(index))
+        tail.facts(failure, render, Some(index))
     }
 }
 
 /// Requires an element matching an expectation, stopping at the first match.
 pub(crate) struct ContainsMatchingScan<T, P> {
     expected: P,
-    positions: PositionReporting,
     item: PhantomData<fn() -> T>,
 }
 
 impl<T, P> ContainsMatchingScan<T, P> {
-    pub(crate) const fn new(expected: P, positions: PositionReporting) -> Self {
+    pub(crate) const fn new(expected: P) -> Self {
         Self {
             expected,
-            positions,
             item: PhantomData,
         }
     }
@@ -278,12 +274,9 @@ where
         let mut candidates = context.isolated();
         let mut consumed = 0;
         for item in iterator {
-            let accepted = match self.positions.index(consumed) {
-                Some(index) => candidates.scoped(PathSegment::Index(index), |candidate| {
-                    candidate.evaluate(item.borrow(), &self.expected)
-                }),
-                None => candidates.evaluate(item.borrow(), &self.expected),
-            };
+            let accepted = candidates.scoped(PathSegment::Index(consumed), |candidate| {
+                candidate.evaluate(item.borrow(), &self.expected)
+            });
             consumed += 1;
             if accepted {
                 return Ok(());
@@ -308,15 +301,13 @@ where
 /// Requires no element matching an expectation, stopping at the first match.
 pub(crate) struct DoesNotContainMatchingScan<T, P> {
     expected: P,
-    positions: PositionReporting,
     item: PhantomData<fn() -> T>,
 }
 
 impl<T, P> DoesNotContainMatchingScan<T, P> {
-    pub(crate) const fn new(expected: P, positions: PositionReporting) -> Self {
+    pub(crate) const fn new(expected: P) -> Self {
         Self {
             expected,
-            positions,
             item: PhantomData,
         }
     }
@@ -348,7 +339,7 @@ where
                         .actual(child.render().value(item.borrow()))
                         .relation("matches the unwanted constraint")
                         .constraint(child.describe(&self.expected))
-                        .path(self.positions.index(index).map(PathSegment::Index))
+                        .path([PathSegment::Index(index)])
                         .build()
                 });
                 return Err((child.into_evidence(), index + 1));
@@ -397,9 +388,9 @@ mod tests {
                 value,
                 borrows: &borrows,
             });
-            let failures = assert_that!([] as [i32; 0])
+            let failures = assert_that_owned!(core::iter::empty::<i32>())
                 .with_rendering_budget(RenderingBudget::default().with_max_items(budget))
-                .capture(|it| it.into_iter_contains_all(expected));
+                .capture(|it| it.contains_all(expected));
             assert_that!(borrows.get()).is_equal_to(2 * budget.min(3));
             let missing = failures[0]
                 .facts
@@ -419,7 +410,7 @@ mod tests {
 
     #[test]
     fn missing_view_filters_found_operands_in_expected_order() {
-        let failures = assert_that!([2]).capture(|it| it.into_iter_contains_all([1, 2, 3]));
+        let failures = assert_that_owned!([2].into_iter()).capture(|it| it.contains_all([1, 2, 3]));
         let report = failures[0].to_string();
         assert_that!(report.as_str())
             .contains("Elements not found: [\n        1,\n        3,\n    ]");

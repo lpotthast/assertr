@@ -29,9 +29,9 @@ use crate::{
 /// support for the element type rather than the collection type. Identity methods display addresses
 /// and require no rendering support.
 ///
-/// For a type that supports borrowed traversal but does not implement [`Collection`], use
-/// [`IntoIteratorAssertions`](crate::assertions::IntoIteratorAssertions). Its methods
-/// carry the `into_iter_` prefix.
+/// For a type that supports borrowed traversal but does not implement [`Collection`], assert on a
+/// borrowing iterator with [`IteratorAssertions`](crate::assertions::IteratorAssertions), such as
+/// `assert_that_owned!(values.iter())`.
 ///
 /// Bulk value lists use [repeatable expected data](crate#expected-lists).
 #[allow(clippy::return_self_not_must_use)]

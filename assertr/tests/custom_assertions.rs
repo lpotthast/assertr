@@ -903,18 +903,6 @@ mod callback_renderer_bounds {
         }
     }
 
-    // Borrowed traversal does not require any collection capability.
-    struct BorrowedItems([Option<Secret>; 1]);
-
-    impl<'a> IntoIterator for &'a BorrowedItems {
-        type Item = &'a Option<Secret>;
-        type IntoIter = core::slice::Iter<'a, Option<Secret>>;
-
-        fn into_iter(self) -> Self::IntoIter {
-            self.0.iter()
-        }
-    }
-
     #[test]
     fn collection_callbacks_need_only_the_renderers_their_failures_use() {
         let values = Bag([Some(Secret)]);
@@ -960,14 +948,6 @@ mod callback_renderer_bounds {
     }
 
     #[test]
-    fn borrowed_iterator_callbacks_need_only_a_count_renderer() {
-        assert_that!(BorrowedItems([Some(Secret)]))
-            .with_renderer(CountRenderer)
-            .into_iter_contains_satisfying(is_some)
-            .into_iter_contains_exactly_in_any_order_satisfying([is_some]);
-    }
-
-    #[test]
     fn map_entry_callback_needs_only_a_query_renderer() {
         // QueryRenderer cannot render the stored String keys or Option<Secret> values.
         assert_that!(BTreeMap::from([(String::from("secret"), Some(Secret))]))
@@ -998,10 +978,6 @@ mod callback_renderer_bounds {
             .must_owned()
             .with_renderer(CountRenderer)
             .contain_satisfying(is_some);
-        BorrowedItems([Some(Secret)])
-            .must()
-            .with_renderer(CountRenderer)
-            .into_iter_contain_satisfying(is_some);
         BTreeMap::from([(String::from("secret"), Some(Secret))])
             .must()
             .with_renderer(QueryRenderer)

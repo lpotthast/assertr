@@ -111,21 +111,6 @@ impl ValueRenderer<usize> for ResourceRenderer<'_> {
     }
 }
 
-struct Source<'a> {
-    values: &'a [i32],
-    state: State,
-    exact_hint: bool,
-}
-
-impl<'a> IntoIterator for &'a Source<'_> {
-    type Item = &'a i32;
-    type IntoIter = Observed<'a, core::slice::Iter<'a, i32>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.state.observe(self.values.iter(), self.exact_hint)
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 enum Operation {
     Contains,
@@ -272,104 +257,8 @@ mod direct {
     }
 }
 
-mod borrowed {
-    use Operation::{Contains, Reject, Unordered};
-
+mod direct_counting {
     use super::*;
-
-    #[test]
-    fn membership_and_unordered_adapters_retain_the_owning_iterator() {
-        for (operation, expected, next, failed) in [
-            (Contains, 2, 2, false),
-            (Contains, 9, 4, true),
-            (Reject, 2, 2, true),
-            (Reject, 9, 4, false),
-            (Unordered, 2, 2, true),
-        ] {
-            for entry in [Equality, Matcher, Callback] {
-                let source = Source {
-                    values: &[1, 2, 3],
-                    state: State::default(),
-                    exact_hint: false,
-                };
-                let failures = assert_that!(source)
-                    .with_renderer(ResourceRenderer(&source.state))
-                    .capture(|it| match (operation, entry) {
-                        (Contains, Equality) => it.into_iter_contains(expected),
-                        (Contains, Matcher) => it.into_iter_contains_matching(eq(expected)),
-                        (Reject, Equality) => it.into_iter_does_not_contain(expected),
-                        (Reject, Matcher) => it.into_iter_does_not_contain_matching(eq(expected)),
-                        (Unordered, Equality) => {
-                            it.into_iter_contains_exactly_in_any_order([expected])
-                        }
-                        (Unordered, Matcher) => {
-                            it.into_iter_contains_exactly_in_any_order_matching([eq(expected)])
-                        }
-                        (Contains, Callback) => {
-                            it.into_iter_contains_satisfying(callback(&source.state, expected))
-                        }
-                        (Reject, Callback) => it.into_iter_does_not_contain_satisfying(callback(
-                            &source.state,
-                            expected,
-                        )),
-                        (Unordered, Callback) => it
-                            .into_iter_contains_exactly_in_any_order_satisfying([callback(
-                                &source.state,
-                                expected,
-                            )]),
-                        _ => unreachable!(),
-                    });
-                source
-                    .state
-                    .verify(next, usize::from(matches!(operation, Unordered)));
-                verify_failure(&failures, &source.state, failed);
-                assert_that!(source.state.clones.get())
-                    .is_equal_to(2 * source.state.callbacks.get());
-                if matches!(entry, Callback) {
-                    assert_that!(source.state.callbacks.get()).is_greater_than(0);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn each_borrowed_assertion_creates_exactly_one_fresh_iterator() {
-        let source = Source {
-            values: &[1, 2, 3],
-            state: State::default(),
-            exact_hint: false,
-        };
-        assert_that!(source)
-            .into_iter_contains(2)
-            .into_iter_contains_all([1, 3])
-            .into_iter_does_not_contain(4)
-            .into_iter_has_length(3);
-        assert_that!(source.state.iterations.get()).is_equal_to(4);
-        assert_that!(source.state.drops.get()).is_equal_to(4);
-    }
-
-    #[test]
-    fn chained_callbacks_create_fresh_iterators_and_reuse_borrowed_lists() {
-        let source = Source {
-            values: &[1, 2],
-            state: State::default(),
-            exact_hint: false,
-        };
-        let callbacks = [1, 2].map(|value| callback(&source.state, value));
-        let chain = assert_that!(source).with_renderer(ResourceRenderer(&source.state));
-        let failures = chain.capture(|it| {
-            it.into_iter_contains_satisfying(&callbacks[1])
-                .into_iter_contains_exactly_in_any_order_satisfying(&callbacks)
-                .into_iter_does_not_contain_satisfying(callback(&source.state, 9))
-        });
-        assert_that!(failures).is_empty();
-        assert_that!(source.state.iterations.get()).is_equal_to(3);
-        assert_that!(source.state.drops.get()).is_equal_to(3);
-        assert_that!(source.state.next.get()).is_equal_to(8);
-        assert_that!(source.state.resource.try_borrow_mut()).is_ok();
-        assert_that!(source.state.clones.get()).is_equal_to(2 * source.state.callbacks.get());
-        assert_that!(source.values).contains_exactly([1, 2]);
-    }
 
     #[test]
     fn contains_all_stops_on_success_or_exhaustion() {
@@ -380,16 +269,13 @@ mod borrowed {
             (&[9][..], 4, true),
             (&[][..], 0, false),
         ] {
-            let source = Source {
-                values: &[1, 2, 3],
-                state: State::default(),
-                exact_hint: false,
-            };
-            let failures = assert_that!(source)
-                .with_renderer(ResourceRenderer(&source.state))
-                .capture(|it| it.into_iter_contains_all(expected));
-            source.state.verify(next, 0);
-            verify_failure(&failures, &source.state, failed);
+            let state = State::default();
+            let iterator = state.observe([1, 2, 3].into_iter(), false);
+            let failures = assert_that_owned!(iterator)
+                .with_renderer(ResourceRenderer(&state))
+                .capture(|it| it.contains_all(expected));
+            state.verify(next, 0);
+            verify_failure(&failures, &state, failed);
         }
     }
 
@@ -398,17 +284,14 @@ mod borrowed {
         for values in [&[][..], &[1, 2, 3][..]] {
             for exact_hint in [false, true] {
                 for operation in 0..3 {
-                    let source = Source {
-                        values,
-                        state: State::default(),
-                        exact_hint,
-                    };
-                    let failures = assert_that!(source)
-                        .with_renderer(ResourceRenderer(&source.state))
+                    let state = State::default();
+                    let iterator = state.observe(values.iter().copied(), exact_hint);
+                    let failures = assert_that_owned!(iterator)
+                        .with_renderer(ResourceRenderer(&state))
                         .capture(|it| match operation {
-                            0 => it.into_iter_is_empty(),
-                            1 => it.into_iter_is_not_empty(),
-                            _ => it.into_iter_has_length(1),
+                            0 => it.is_exhausted(),
+                            1 => it.is_not_exhausted(),
+                            _ => it.has_count(1),
                         });
                     let next = if operation < 2 {
                         1
@@ -417,7 +300,7 @@ mod borrowed {
                     } else {
                         values.len().min(1) + 1
                     };
-                    source.state.verify(next, usize::from(operation == 2));
+                    state.verify(next, usize::from(operation == 2));
                     let failed = match operation {
                         0 => !values.is_empty(),
                         1 => values.is_empty(),
@@ -425,7 +308,7 @@ mod borrowed {
                     };
                     assert_that!(failures.len()).is_equal_to(usize::from(failed));
                     if failed && operation != 1 {
-                        verify_failure(&failures, &source.state, true);
+                        verify_failure(&failures, &state, true);
                     }
                 }
             }
@@ -478,35 +361,23 @@ mod release {
 
     #[test]
     fn candidate_observations_are_not_repeated_and_guards_are_released_between_candidates() {
-        for borrowed in [false, true] {
-            for expected in [2, 9] {
-                let source = Source {
-                    values: &[1, 2, 3],
-                    state: State::default(),
-                    exact_hint: false,
-                };
-                let calls = Cell::new(0);
-                let candidate_guard = RefCell::new(());
-                let matcher = matchers::predicate(|value: &i32| {
-                    let _guard = candidate_guard.borrow_mut();
-                    calls.set(calls.get() + 1);
-                    *value == expected
-                });
-                let failures = if borrowed {
-                    assert_that!(source)
-                        .with_renderer(ResourceRenderer(&source.state))
-                        .capture(|it| it.into_iter_contains_matching(matcher))
-                } else {
-                    let iterator = source.state.observe(source.values.iter().copied(), false);
-                    assert_that_owned!(iterator)
-                        .with_renderer(ResourceRenderer(&source.state))
-                        .capture(|it| it.contains_matching(matcher))
-                };
-                assert_that!(calls.get()).is_equal_to(if expected == 2 { 2 } else { 3 });
-                assert_that!(candidate_guard.try_borrow_mut()).is_ok();
-                source.state.verify(if expected == 2 { 2 } else { 4 }, 0);
-                verify_failure(&failures, &source.state, expected == 9);
-            }
+        for expected in [2, 9] {
+            let state = State::default();
+            let calls = Cell::new(0);
+            let candidate_guard = RefCell::new(());
+            let matcher = matchers::predicate(|value: &i32| {
+                let _guard = candidate_guard.borrow_mut();
+                calls.set(calls.get() + 1);
+                *value == expected
+            });
+            let iterator = state.observe([1, 2, 3].into_iter(), false);
+            let failures = assert_that_owned!(iterator)
+                .with_renderer(ResourceRenderer(&state))
+                .capture(|it| it.contains_matching(matcher));
+            assert_that!(calls.get()).is_equal_to(if expected == 2 { 2 } else { 3 });
+            assert_that!(candidate_guard.try_borrow_mut()).is_ok();
+            state.verify(if expected == 2 { 2 } else { 4 }, 0);
+            verify_failure(&failures, &state, expected == 9);
         }
     }
 }
@@ -526,12 +397,8 @@ mod string_views {
         assert_that_owned!(values()).contains_contiguous(["b", "a"]);
         assert_that_owned!(values()).contains_exactly(["a", "b", "a"]);
         assert_that_owned!(values()).contains_exactly_in_any_order(["a", "a", "b"]);
+        assert_that_owned!(values()).contains_all(["a", "b"]);
         let borrowed = [String::from("a"), String::from("b")];
-        assert_that!(borrowed)
-            .into_iter_contains("b")
-            .into_iter_contains_all(["a", "b"])
-            .into_iter_does_not_contain("c")
-            .into_iter_contains_exactly_in_any_order(["b", "a"]);
         assert_that_owned!(borrowed.iter()).contains("a");
     }
 
@@ -547,11 +414,7 @@ mod string_views {
         assert_that_owned!(values()).contains_contiguous([&a]);
         assert_that_owned!(values()).contains_exactly([&a]);
         assert_that_owned!(values()).contains_exactly_in_any_order([&a]);
-        assert_that!([String::from("a")])
-            .into_iter_contains(&a)
-            .into_iter_does_not_contain(&c)
-            .into_iter_contains_all([&a])
-            .into_iter_contains_exactly_in_any_order([&a]);
+        assert_that_owned!(values()).contains_all([&a]);
         assert_that_owned!([&a].into_iter()).contains(&a);
     }
 }
@@ -583,7 +446,6 @@ mod callbacks {
     #[derive(Clone, Copy, Debug)]
     enum Adapter {
         Iterator,
-        Borrowed,
         StableOrder,
     }
 
@@ -601,7 +463,7 @@ mod callbacks {
 
     #[test]
     fn adapters_propagate_callback_evidence_and_clone_the_renderer_for_opaque_items() {
-        use Adapter::{Borrowed, Iterator, StableOrder};
+        use Adapter::{Iterator, StableOrder};
         use Operation::{Contains, Contiguous, Exact, Prefix, Suffix, Unordered};
 
         // Each adapter runs one candidate. The callback has two failing assertions on a
@@ -613,8 +475,6 @@ mod callbacks {
             (Iterator, Contiguous),
             (Iterator, Exact),
             (Iterator, Unordered),
-            (Borrowed, Contains),
-            (Borrowed, Unordered),
             (StableOrder, Prefix),
             (StableOrder, Suffix),
             (StableOrder, Contiguous),
@@ -649,10 +509,6 @@ mod callbacks {
                         .with_rendering_budget(budget)
                         .with_location(false)
                         .capture(|it| match (adapter, operation) {
-                            (Borrowed, Contains) => it.into_iter_contains_satisfying(check),
-                            (Borrowed, Unordered) => {
-                                it.into_iter_contains_exactly_in_any_order_satisfying([check])
-                            }
                             (StableOrder, Prefix) => it.starts_with_satisfying([check]),
                             (StableOrder, Suffix) => it.ends_with_satisfying([check]),
                             (StableOrder, Contiguous) => it.contains_contiguous_satisfying([check]),
@@ -675,7 +531,7 @@ mod callbacks {
                         &(9 + i32::try_from(index).unwrap()),
                     );
                     assert_that!(leaf.location).is_none();
-                    let path = if matches!(adapter, Borrowed) || matches!(operation, Unordered) {
+                    let path = if matches!(operation, Unordered) {
                         vec![]
                     } else {
                         vec![PathSegment::Index(0)]
@@ -707,20 +563,6 @@ mod tracking {
         }
     }
 
-    struct Input<F> {
-        values: [i32; 1],
-        observe: F,
-    }
-
-    impl<'a, F: Fn()> IntoIterator for &'a Input<F> {
-        type Item = &'a i32;
-        type IntoIter = core::slice::Iter<'a, i32>;
-        fn into_iter(self) -> Self::IntoIter {
-            (self.observe)();
-            self.values.iter()
-        }
-    }
-
     #[test]
     fn sequence_views_are_accessed_after_tracking() {
         for method in 0..4 {
@@ -745,13 +587,7 @@ mod tracking {
                     0 => drop(direct().ends_with(expected)),
                     1 => drop(direct().contains_exactly_satisfying(callbacks)),
                     2 => drop(direct().contains_exactly_in_any_order(expected)),
-                    _ => drop(
-                        root.derive_owned(|()| Input {
-                            values: [1],
-                            observe,
-                        })
-                        .into_iter_contains_all(expected),
-                    ),
+                    _ => drop(direct().contains_all(expected)),
                 }
                 assert_that!(root.state.records.assertion_count()).is_equal_to(1);
                 root
@@ -818,7 +654,13 @@ mod reporting {
         let failures = assert_that!(vec![1, 2, 3])
             .with_location(false)
             .with_detail_message("user context")
-            .capture(|it| it.into_iter_does_not_contain(2).into_iter_contains(9));
+            .capture(|it| {
+                it.derive_owned(|values| values.clone().into_iter())
+                    .does_not_contain(2);
+                it.derive_owned(|values| values.clone().into_iter())
+                    .contains(9);
+                it
+            });
 
         assert_that!(&failures).contains_exactly_satisfying([
             |element: AssertThat<AssertionFailure, Capture>| {
@@ -827,7 +669,7 @@ mod reporting {
                     .contains_exactly(["user context"]);
                 element
                     .derive_owned(|value| value.facts.as_slice())
-                    .does_not_contain_matching(matchers::predicate(|it: &Fact| {
+                    .contains_matching(matchers::predicate(|it: &Fact| {
                         it.label.as_deref() == Some("Decisive index")
                     }));
             },

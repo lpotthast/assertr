@@ -214,19 +214,6 @@ mod tests {
     }
 
     #[test]
-    fn borrowed_iteration_over_a_set_never_reports_offsets_as_indexes() {
-        let failures = assert_that!(BTreeSet::from([1, 2, 3]))
-            .with_location(false)
-            .capture(|it| it.into_iter_does_not_contain(2));
-
-        assert_that!(failures).contains_exactly_satisfying([
-            |element: AssertThat<AssertionFailure, Capture>| {
-                element.derive(|value| &value.path).is_empty();
-            },
-        ]);
-    }
-
-    #[test]
     fn collection_failures_include_the_btree_set_type_name() {
         let failures = assert_that!(BTreeSet::from([2]))
             .with_location(false)

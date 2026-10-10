@@ -188,12 +188,13 @@ fn iterator_assertions_compile_without_std() {
     assert_that_owned!([2, 1].into_iter()).contains_exactly_in_any_order([1, 2]);
     assert_that!([1, 2].into_iter()).has_remaining_count(2);
 
+    assert_that_owned!([1, 2].into_iter()).has_count(2);
     assert_that!([1, 2])
-        .into_iter_contains_all([2, 1])
+        .contains_all([2, 1])
         .starts_with([1])
         .ends_with([2])
         .contains_contiguous_satisfying([positive, positive])
-        .into_iter_contains_exactly_in_any_order([2, 1]);
+        .contains_exactly_in_any_order([2, 1]);
 }
 
 #[cfg_attr(test, test)]
@@ -216,9 +217,7 @@ fn callback_assertions_compile_without_subject_renderers() {
         .starts_with_satisfying([is_some])
         .ends_with_satisfying([is_some])
         .contains_contiguous_satisfying([is_some])
-        .contains_exactly_satisfying([is_some])
-        .into_iter_contains_satisfying(is_some)
-        .into_iter_contains_exactly_in_any_order_satisfying([is_some]);
+        .contains_exactly_satisfying([is_some]);
     assert_that_owned!([Some(Secret)].into_iter())
         .with_renderer(NumericRenderer)
         .contains_exactly_satisfying([is_some]);
@@ -336,7 +335,7 @@ fn structural_matchers_without_std() {
     assert_that!(children).matches(elements_are![partial!(Child { id: eq(1), .. })]);
     assert_that!(children)
         .with_renderer(NumericRenderer)
-        .into_iter_contains_matching(partial!(Child {
+        .contains_matching(partial!(Child {
             id: matchers::anything(),
             ..
         }));
@@ -670,7 +669,7 @@ fn reusable_bulk_views_compile_without_std() {
     let operands = vec![TextOperand("hello")];
     let expected_list = matchers::collection::ContainsAll::new(&operands);
     assert_that!([String::from("hello")])
-        .into_iter_contains_all(operands.as_slice())
+        .contains_all(operands.as_slice())
         .matches(&expected_list);
     assert_that!(vec![String::from("hello")]).matches(&expected_list);
     let keys = vec![TextOperand("key")];

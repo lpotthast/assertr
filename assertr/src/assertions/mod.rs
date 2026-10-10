@@ -11,7 +11,7 @@
 //! | `Option`, `Result`, `Poll` | [`OptionAssertions`], [`ResultAssertions`], [`PollAssertions`] and their `*ExtractAssertions` |
 //! | Ranges, `RefCell`, lengths, types | [`RangeAssertions`], [`RangeBoundAssertions`], [`RefCellAssertions`], [`LengthAssertions`], [`MemAssertions`] |
 //! | Collections | [`CollectionAssertions`], [`CollectionExtractAssertions`], [`StableOrderAssertions`], [`StableOrderExtractAssertions`], [`RandomAccessExtractAssertions`] |
-//! | Iterators | [`IteratorAssertions`], [`IntoIteratorAssertions`], [`ExactSizeIteratorAssertions`] |
+//! | Iterators | [`IteratorAssertions`], [`ExactSizeIteratorAssertions`] |
 //! | Sets and maps | [`SetAssertions`], [`MapAssertions`], [`MapProjectionAssertions`] |
 //! | Boxed `Any` and panic payloads | [`BoxAssertions`], [`BoxExtractAssertions`] |
 //! | Closures (`std`) | `FnOnceAssertions`, `AsyncFnOnceAssertions` |
@@ -129,9 +129,7 @@ pub use self::core::bool::BoolAssertions;
 #[cfg(any(feature = "std", test))]
 pub use self::core::r#fn::{AsyncFnOnceAssertions, FnOnceAssertions};
 // Iterators, collections, sets, and maps.
-pub use self::core::iter::{
-    ExactSizeIteratorAssertions, IntoIteratorAssertions, IteratorAssertions,
-};
+pub use self::core::iter::{ExactSizeIteratorAssertions, IteratorAssertions};
 pub use self::core::{
     char::CharAssertions,
     debug::DebugAssertions,

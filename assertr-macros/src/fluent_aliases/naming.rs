@@ -1,9 +1,5 @@
 //! Naming rules for automatically generated fluent aliases.
 
-/// Namespace prefixes that are kept verbatim. The alias rule applies to the remainder
-/// (`into_iter_contains` -> `into_iter_contain`, `into_iter_is_empty` -> `into_iter_be_empty`).
-const PASSTHROUGH_PREFIXES: [&str; 1] = ["into_iter_"];
-
 /// Prefixes replaced in front of the remaining name. Negated prefixes come before their positive
 /// counterparts so `is_not_empty` never degrades to `be_not_empty`.
 const PREFIXES: [(&str, &str); 5] = [
@@ -30,19 +26,10 @@ const VERBS: [(&str, &str); 7] = [
 /// Negated methods put `not` first in their alias, matching the English imperative ("must not be
 /// equal to", "must not have changed"): `is_not_*` becomes `not_be_*`, `has_not_*` becomes
 /// `not_have_*`, and `does_not_*` becomes `not_*`. The possessive `has_no_*` keeps its word order
-/// as `have_no_*` ("must have no remaining elements"). A namespace prefix from
-/// [`PASSTHROUGH_PREFIXES`] is kept in front of the derived alias. Returns `None` for names
+/// as `have_no_*` ("must have no remaining elements"). Returns `None` for names
 /// outside these rules, for example extractions named after what they continue with, such as
 /// `some`, `first`, or `json`.
 pub(super) fn automatic_alias(name: &str) -> Option<String> {
-    if let Some(namespace) = PASSTHROUGH_PREFIXES
-        .into_iter()
-        .find(|prefix| name.starts_with(prefix))
-    {
-        return automatic_alias(&name[namespace.len()..])
-            .map(|alias| format!("{namespace}{alias}"));
-    }
-
     // `match` is a keyword and `be_matching` belongs to `is_matching`, so `matches` gets the
     // explicit `match_expectation`.
     if name == "matches" {
@@ -103,23 +90,6 @@ mod tests {
         assert_that!(automatic_alias("panics").as_deref()).is_equal_to(Some("panic"));
         assert_that!(automatic_alias("panics_async").as_deref()).is_equal_to(Some("panic_async"));
         assert_that!(automatic_alias("needs_drop").as_deref()).is_equal_to(Some("need_drop"));
-    }
-
-    #[test]
-    fn keeps_namespace_prefixes_in_front_of_the_alias() {
-        assert_that!(automatic_alias("into_iter_contains").as_deref())
-            .is_equal_to(Some("into_iter_contain"));
-        assert_that!(automatic_alias("into_iter_is_empty").as_deref())
-            .is_equal_to(Some("into_iter_be_empty"));
-        assert_that!(automatic_alias("into_iter_is_not_empty").as_deref())
-            .is_equal_to(Some("into_iter_not_be_empty"));
-        assert_that!(automatic_alias("into_iter_has_length").as_deref())
-            .is_equal_to(Some("into_iter_have_length"));
-        assert_that!(automatic_alias("into_iter_does_not_contain_matching").as_deref())
-            .is_equal_to(Some("into_iter_not_contain_matching"));
-        assert_that!(automatic_alias("into_iter_starts_with").as_deref())
-            .is_equal_to(Some("into_iter_start_with"));
-        assert_that!(automatic_alias("into_iter_map")).is_none();
     }
 
     #[test]

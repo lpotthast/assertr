@@ -4,16 +4,16 @@ use super::{
 };
 use crate::failure::Fact;
 
-/// Requires an iterator to yield no element, consuming at most one.
-pub(crate) struct IsEmptyScan<T>(PhantomData<fn() -> T>);
+/// Requires an iterator to be exhausted, yielding no element. Consumes at most one.
+pub(crate) struct IsExhaustedScan<T>(PhantomData<fn() -> T>);
 
-impl<T> IsEmptyScan<T> {
+impl<T> IsExhaustedScan<T> {
     pub(crate) const fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<T, I, R> Scan<I, R> for IsEmptyScan<T>
+impl<T, I, R> Scan<I, R> for IsExhaustedScan<T>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -45,21 +45,21 @@ where
                 core::slice::from_ref(&item),
                 RenderingOrder::PreserveIteration,
             ))
-            .relation("is not empty");
+            .relation("is not exhausted");
         consumed_fact(failure, render, 1)
     }
 }
 
 /// Requires an iterator to yield at least one element, consuming at most one.
-pub(crate) struct IsNotEmptyScan<T>(PhantomData<fn() -> T>);
+pub(crate) struct IsNotExhaustedScan<T>(PhantomData<fn() -> T>);
 
-impl<T> IsNotEmptyScan<T> {
+impl<T> IsNotExhaustedScan<T> {
     pub(crate) const fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<T, I, R> Scan<I, R> for IsNotEmptyScan<T>
+impl<T, I, R> Scan<I, R> for IsNotExhaustedScan<T>
 where
     I: Iterator,
     I::Item: Borrow<T>,
@@ -88,12 +88,12 @@ where
                     .render()
                     .borrowed_values::<T, _>(empty, RenderingOrder::PreserveIteration),
             )
-            .relation("is unexpectedly empty")
+            .relation("is unexpectedly exhausted")
     }
 }
 
-/// Why a length scan rejected its input.
-pub(crate) enum LengthRejection<Item> {
+/// Why a count scan rejected its input.
+pub(crate) enum CountRejection<Item> {
     /// An exact size hint ruled out the expected length before consuming anything.
     Reported(KnownLength),
     /// Counting decided the rejection. The count is exact if the input ended, and a lower bound
@@ -103,12 +103,12 @@ pub(crate) enum LengthRejection<Item> {
 
 /// Counts at most `expected + 1` elements. An exact size hint can only reject early. A hint that
 /// agrees with the expected length is verified by counting, because hints are not trusted.
-pub(crate) struct LengthScan<T> {
+pub(crate) struct CountScan<T> {
     expected: usize,
     item: PhantomData<fn() -> T>,
 }
 
-impl<T> LengthScan<T> {
+impl<T> CountScan<T> {
     pub(crate) const fn new(expected: usize) -> Self {
         Self {
             expected,
@@ -117,13 +117,13 @@ impl<T> LengthScan<T> {
     }
 }
 
-impl<T, I, R> Scan<I, R> for LengthScan<T>
+impl<T, I, R> Scan<I, R> for CountScan<T>
 where
     I: Iterator,
     I::Item: Borrow<T>,
     R: ValueRenderer<T> + ValueRenderer<usize>,
 {
-    type Rejection = LengthRejection<I::Item>;
+    type Rejection = CountRejection<I::Item>;
 
     fn kind(&self) -> FailureKind {
         FailureKind::Length
@@ -135,7 +135,7 @@ where
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection> {
         if let Some(known) = KnownLength::mismatch(iterator, self.expected, LengthBound::Exact) {
-            return Err(LengthRejection::Reported(known));
+            return Err(CountRejection::Reported(known));
         }
         let mut tail = Tail::new(PREVIEW_CAPACITY);
         let mut exact = false;
@@ -149,7 +149,7 @@ where
         if exact && tail.consumed == self.expected {
             Ok(())
         } else {
-            Err(LengthRejection::Counted {
+            Err(CountRejection::Counted {
                 tail: tail.finish(),
                 exact,
             })
@@ -164,18 +164,18 @@ where
     ) -> FailureBuilder {
         let render = context.render();
         let failure = failure
-            .relation("does not have the expected length")
+            .relation("does not have the expected count")
             .expected(render.value(&self.expected));
         match rejection {
-            LengthRejection::Reported(known) => known.reported_fact(failure, render),
-            LengthRejection::Counted { tail, exact } => {
+            CountRejection::Reported(known) => known.reported_fact(failure, render),
+            CountRejection::Counted { tail, exact } => {
                 let failure = failure
                     .actual(tail.rendered::<T, _>(render))
                     .fact(Fact::labelled(
                         if exact {
-                            "Actual length"
+                            "Actual count"
                         } else {
-                            "Minimum actual length"
+                            "Minimum actual count"
                         },
                         render.value(&tail.consumed),
                     ));
@@ -187,10 +187,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    mod length_scan {
+    mod count_scan {
         use indoc::formatdoc;
 
-        use super::super::LengthScan;
+        use super::super::CountScan;
         use crate::{
             assertions::iterator::run,
             failure::AssertionFailures,
@@ -244,7 +244,7 @@ mod tests {
                         hints: &hints,
                         drops: &drops,
                     };
-                    run(&it, || (iterator, LengthScan::<i32>::new(3)));
+                    run(&it, || (iterator, CountScan::<i32>::new(3)));
                     it
                 });
             assert_that!(hints.get()).is_equal_to(1);
@@ -262,7 +262,7 @@ mod tests {
                 .with_location(false)
                 .with_rendering_budget(budget)
                 .capture(|it| {
-                    run(&it, || (iterator, LengthScan::<i32>::new(expected)));
+                    run(&it, || (iterator, CountScan::<i32>::new(expected)));
                     it
                 })
         }
@@ -275,7 +275,7 @@ mod tests {
                 -------- assertr --------
                 Expression: `()`
 
-                does not have the expected length
+                does not have the expected count
 
                 Expected: custom(3)
 
@@ -308,16 +308,16 @@ mod tests {
                     custom(2),
                 ]
 
-                does not have the expected length
+                does not have the expected count
 
                 Expected: custom(1)
 
                 Details:
-                  - Minimum actual length: custom(2)
+                  - Minimum actual count: custom(2)
                 -------- assertr --------
             "});
 
-                    assert_custom_fact(element.actual(), "Minimum actual length", 2);
+                    assert_custom_fact(element.actual(), "Minimum actual count", 2);
                 },
             ]);
         }
@@ -340,12 +340,12 @@ mod tests {
                     cus... 6 more characters ...,
                 ]
 
-                does not have the expected length
+                does not have the expected count
 
                 Expected: cus... 6 more characters ...
 
                 Details:
-                  - Minimum actual length: cus... 6 more characters ...
+                  - Minimum actual count: cus... 6 more characters ...
                 -------- assertr --------
             "});
                 },
@@ -355,7 +355,7 @@ mod tests {
             let fact = failures[0]
                 .facts
                 .iter()
-                .find(|fact| fact.label.as_deref() == Some("Minimum actual length"))
+                .find(|fact| fact.label.as_deref() == Some("Minimum actual count"))
                 .unwrap();
             assert_that!(fact.value.type_name).is_equal_to(Some("usize"));
             assert_that!(fact.value.body).is_equal_to(RenderedBody::Text {
@@ -421,12 +421,12 @@ mod tests {
                     custom(2),
                 ]
 
-                does not have the expected length
+                does not have the expected count
 
                 Expected: custom(0)
 
                 Details:
-                  - Minimum actual length: custom(1)
+                  - Minimum actual count: custom(1)
                 -------- assertr --------
             "});
                 },
@@ -434,30 +434,27 @@ mod tests {
         }
 
         #[test]
-        fn borrowed_length_and_emptiness_agree_on_a_lying_size_hint() {
-            struct LyingSlice<'a>(core::slice::Iter<'a, i32>);
-            impl<'a> Iterator for LyingSlice<'a> {
-                type Item = &'a i32;
-                fn next(&mut self) -> Option<&'a i32> {
+        fn count_and_exhaustion_agree_on_a_lying_size_hint() {
+            /// Yields three items while reporting an exact length of zero.
+            struct Lying(core::ops::Range<i32>);
+            impl Iterator for Lying {
+                type Item = i32;
+                fn next(&mut self) -> Option<i32> {
                     self.0.next()
                 }
                 fn size_hint(&self) -> (usize, Option<usize>) {
                     (0, Some(0))
                 }
             }
-            struct Source([i32; 3]);
-            impl<'a> IntoIterator for &'a Source {
-                type Item = &'a i32;
-                type IntoIter = LyingSlice<'a>;
-                fn into_iter(self) -> LyingSlice<'a> {
-                    LyingSlice(self.0.iter())
-                }
-            }
 
-            let failures = assert_that!(Source([1, 2, 3]))
+            let count = assert_that_owned!(Lying(0..3))
                 .with_location(false)
-                .capture(|it| it.into_iter_has_length(0).into_iter_is_empty());
-            assert_that!(failures).has_length(2);
+                .capture(|it| it.has_count(0));
+            let exhausted = assert_that_owned!(Lying(0..3))
+                .with_location(false)
+                .capture(IteratorAssertions::is_exhausted);
+            assert_that!(count).has_length(1);
+            assert_that!(exhausted).has_length(1);
         }
     }
 }

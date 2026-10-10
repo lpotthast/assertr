@@ -3,9 +3,9 @@ use crate::{
     assertions::{
         collection::Placement,
         iterator::{
-            ContainsAllScan, ContainsMatchingScan, ContainsScan, DoesNotContainMatchingScan,
-            DoesNotContainScan, ElementsEqualScan, ElementsMatchScan,
-            PositionReporting::YieldOrder, Scan, UnorderedEqualScan, UnorderedMatchScan, run,
+            ContainsAllScan, ContainsMatchingScan, ContainsScan, CountScan,
+            DoesNotContainMatchingScan, DoesNotContainScan, ElementsEqualScan, ElementsMatchScan,
+            IsExhaustedScan, IsNotExhaustedScan, Scan, UnorderedEqualScan, UnorderedMatchScan, run,
         },
     },
     borrow_for::{BorrowFor, borrow_for},
@@ -37,7 +37,8 @@ use crate::{
 ///
 /// These assertions drive the iterator itself and therefore need to own it: create the assertion
 /// with `assert_that_owned!(...)` (or the fluent `.must_owned()`). To assert on a borrowed
-/// collection, use the collection assertions or the `into_iter_*` assertions instead.
+/// collection, use the collection assertions, or pass a borrowing iterator such as
+/// `assert_that_owned!(values.iter())`.
 ///
 /// Every method consumes only as much of the iterator as is needed to decide the assertion, then
 /// renders any rejection while the iterator is still alive, drops the unconsumed remainder before
@@ -232,6 +233,38 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     where
         A: for<'a> Fn(AssertThat<'a, T, Capture, R>),
         R: Clone + ValueRenderer<usize>;
+
+    /// Asserts that the iterator is exhausted: it yields no element.
+    ///
+    /// Consumes at most one element. A collection with a known length uses
+    /// [`LengthAssertions::is_empty`](crate::assertions::LengthAssertions::is_empty) instead.
+    fn is_exhausted(self) -> AssertThat<'t, (), M, R>
+    where
+        R: ValueRenderer<T> + ValueRenderer<usize>;
+
+    /// Asserts that the iterator is not exhausted: it yields at least one element.
+    ///
+    /// Consumes at most one element.
+    fn is_not_exhausted(self) -> AssertThat<'t, (), M, R>
+    where
+        R: ValueRenderer<T>;
+
+    /// Asserts that the iterator yields exactly `expected` elements, like [`Iterator::count`].
+    ///
+    /// Reads at most `expected + 1` elements, so it also fails on an infinite iterator. An exact
+    /// [`Iterator::size_hint`] can reject a mismatch before consuming anything. A collection with
+    /// a known length uses
+    /// [`LengthAssertions::has_length`](crate::assertions::LengthAssertions::has_length) instead.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// let values = [1, 2, 3, 4];
+    /// assert_that_owned!(values.iter().filter(|it| *it % 2 == 0)).has_count(2);
+    /// ```
+    fn has_count(self, expected: usize) -> AssertThat<'t, (), M, R>
+    where
+        R: ValueRenderer<T> + ValueRenderer<usize>;
 }
 
 impl<'t, T, I, M: Mode, R> IteratorAssertions<'t, T, M, R> for AssertThat<'t, I, M, R>
@@ -266,9 +299,7 @@ where
         P: Expectation<T, R>,
         R: ValueRenderer<usize>,
     {
-        consume(self, || {
-            ContainsMatchingScan::<T, _>::new(expected, YieldOrder)
-        })
+        consume(self, || ContainsMatchingScan::<T, _>::new(expected))
     }
 
     #[track_caller]
@@ -402,7 +433,7 @@ where
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || {
-            DoesNotContainScan::<T, _>::new(borrow_for::<T, _>(&not_expected), YieldOrder)
+            DoesNotContainScan::<T, _>::new(borrow_for::<T, _>(&not_expected))
         })
     }
 
@@ -413,7 +444,7 @@ where
         R: ValueRenderer<usize> + ValueRenderer<T>,
     {
         consume(self, || {
-            DoesNotContainMatchingScan::<T, _>::new(not_expected, YieldOrder)
+            DoesNotContainMatchingScan::<T, _>::new(not_expected)
         })
     }
 
@@ -495,6 +526,30 @@ where
             UnorderedMatchScan::<T, _>::new(SatisfyingList::new(assertions.as_ref()))
         })
     }
+
+    #[track_caller]
+    fn is_exhausted(self) -> AssertThat<'t, (), M, R>
+    where
+        R: ValueRenderer<T> + ValueRenderer<usize>,
+    {
+        consume(self, IsExhaustedScan::<T>::new)
+    }
+
+    #[track_caller]
+    fn is_not_exhausted(self) -> AssertThat<'t, (), M, R>
+    where
+        R: ValueRenderer<T>,
+    {
+        consume(self, IsNotExhaustedScan::<T>::new)
+    }
+
+    #[track_caller]
+    fn has_count(self, expected: usize) -> AssertThat<'t, (), M, R>
+    where
+        R: ValueRenderer<T> + ValueRenderer<usize>,
+    {
+        consume(self, || CountScan::<T>::new(expected))
+    }
 }
 
 /// Takes the iterator out of `this`, then tracks the assertion and lets `scan` create the scan.
@@ -555,6 +610,9 @@ mod tests {
             values().contain_exactly_in_any_order([3, 1, 2]);
             values().contain_exactly_in_any_order_matching([eq(3), eq(1), eq(2)]);
             values().contain_exactly_in_any_order_satisfying([is(3), is(1), is(2)]);
+            core::iter::empty::<i32>().must_owned().be_exhausted();
+            values().not_be_exhausted();
+            values().have_count(3);
         }
     }
 
@@ -683,8 +741,9 @@ mod tests {
         }
     }
 
-    /// The borrowed `into_iter_contains_all` pins the report of the shared scan.
     mod contains_all {
+        use indoc::formatdoc;
+
         use crate::prelude::*;
 
         #[test]
@@ -707,6 +766,197 @@ mod tests {
             let mut iterator = 0..;
             assert_that_owned!(&mut iterator).contains_all([3, 1]);
             assert_that!(iterator.next()).is_equal_to(Some(4));
+        }
+
+        #[test]
+        fn panics_when_any_expected_value_is_absent() {
+            assert_that!(|| {
+                assert_that_owned!(vec![1, 2, 3].into_iter())
+                    .with_location(false)
+                    .contains_all([2, 4]);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `vec![1, 2, 3].into_iter()`
+
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    does not contain all of
+
+                    Expected: [
+                        2,
+                        4,
+                    ]
+
+                    Details:
+                      - Elements not found: [
+                            4,
+                        ]
+                      - Consumed elements: 3
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod is_exhausted {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that_owned!([1].into_iter()), is_exhausted());
+        }
+
+        #[test]
+        fn succeeds_without_elements() {
+            assert_that_owned!([1, 2].iter().filter(|it| **it > 2)).is_exhausted();
+        }
+
+        #[test]
+        fn panics_with_the_first_element() {
+            assert_that!(|| {
+                assert_that_owned!([1, 2].into_iter())
+                    .with_location(false)
+                    .is_exhausted();
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2].into_iter()`
+
+                    Actual: [
+                        1,
+                    ]
+
+                    is not exhausted
+
+                    Details:
+                      - Consumed elements: 1
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod is_not_exhausted {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!(core::iter::empty::<i32>()),
+                is_not_exhausted()
+            );
+        }
+
+        #[test]
+        fn succeeds_on_an_infinite_iterator() {
+            assert_that_owned!(0..).is_not_exhausted();
+        }
+
+        #[test]
+        fn panics_without_elements() {
+            assert_that!(|| {
+                assert_that_owned!(core::iter::empty::<i32>())
+                    .with_location(false)
+                    .is_not_exhausted();
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `core::iter::empty::<i32>()`
+
+                    Actual: []
+
+                    is unexpectedly exhausted
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod has_count {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that_owned!([1, 2, 3].into_iter()), has_count(2));
+        }
+
+        #[test]
+        fn succeeds_when_the_count_matches() {
+            assert_that_owned!([1, 2, 3].iter().filter(|it| **it > 1)).has_count(2);
+        }
+
+        #[test]
+        fn fails_on_an_infinite_iterator_after_one_extra_element() {
+            let mut iterator = 0..;
+            let failures = assert_that_owned!(&mut iterator).capture(|it| it.has_count(2));
+            assert_that!(failures).has_length(1);
+            assert_that!(iterator.next()).is_equal_to(Some(3));
+        }
+
+        #[test]
+        fn panics_with_the_counted_elements() {
+            assert_that!(|| {
+                assert_that_owned!([1, 2, 3].iter().filter(|it| **it > 0))
+                    .with_location(false)
+                    .has_count(2);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2, 3].iter().filter(|it| **it > 0)`
+
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    does not have the expected count
+
+                    Expected: 2
+
+                    Details:
+                      - Minimum actual count: 3
+                    -------- assertr --------
+                "});
+        }
+
+        #[test]
+        fn rejects_an_exact_size_hint_without_consuming() {
+            assert_that!(|| {
+                assert_that_owned!([1, 2, 3].into_iter())
+                    .with_location(false)
+                    .has_count(2);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2, 3].into_iter()`
+
+                    does not have the expected count
+
+                    Expected: 2
+
+                    Details:
+                      - Reported length: 3
+                    -------- assertr --------
+                "});
         }
     }
 

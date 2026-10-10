@@ -264,11 +264,6 @@ fn callback_list_adapters_allocate_no_wrapper_vector() {
         contains_exactly_in_any_order_matching,
         contains_exactly_in_any_order_satisfying
     );
-    compare!(
-        assert_that!(values),
-        into_iter_contains_exactly_in_any_order_matching,
-        into_iter_contains_exactly_in_any_order_satisfying
-    );
 }
 
 mod working_storage {
@@ -354,12 +349,10 @@ mod working_storage {
                 );
             }
             5 => {
-                black_box(
-                    IntoIteratorAssertions::<Item, DebugRenderer>::into_iter_contains_all(
-                        assert_that!(actual),
-                        black_box(expected),
-                    ),
-                );
+                black_box(IteratorAssertions::<Item, _, DebugRenderer>::contains_all(
+                    assert_that_owned!(actual.iter().copied()),
+                    black_box(expected),
+                ));
             }
             6 => {
                 black_box(

@@ -19,7 +19,7 @@ mod tests;
 use alloc::{collections::VecDeque, vec::Vec};
 use core::{borrow::Borrow, marker::PhantomData, panic::Location};
 
-pub(crate) use cardinality::{IsEmptyScan, IsNotEmptyScan, LengthScan};
+pub(crate) use cardinality::{CountScan, IsExhaustedScan, IsNotExhaustedScan};
 pub(crate) use membership::{
     ContainsAllScan, ContainsMatchingScan, ContainsScan, DoesNotContainMatchingScan,
     DoesNotContainScan,
@@ -138,7 +138,7 @@ impl<Item> Tail<Item> {
 
     /// Attaches what the scan learned about consumption: how many elements were consumed, whether
     /// the preview had to drop earlier ones, and the index of the element that decided the
-    /// assertion, if the caller reports positions.
+    /// assertion, if one did.
     fn facts<R: ValueRenderer<usize>>(
         &self,
         failure: FailureBuilder,
@@ -163,25 +163,6 @@ impl<Item> Tail<Item> {
             omitted => failure.fact(Fact::note(format_args!(
                 "The preview shows the last {shown} consumed elements. {omitted} earlier elements were omitted."
             ))),
-        }
-    }
-}
-
-/// Whether the position of an element within the iteration is meaningful to the caller.
-///
-/// Direct iterator assertions report yield positions. Borrowed `into_iter_*` assertions run over an
-/// arbitrary traversal and never mention positions.
-#[derive(Clone, Copy)]
-pub(crate) enum PositionReporting {
-    YieldOrder,
-    Unavailable,
-}
-
-impl PositionReporting {
-    const fn index(self, index: usize) -> Option<usize> {
-        match self {
-            Self::YieldOrder => Some(index),
-            Self::Unavailable => None,
         }
     }
 }

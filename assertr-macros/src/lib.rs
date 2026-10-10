@@ -35,7 +35,6 @@ use syn::{Item, ItemTrait, parse_macro_input};
 ///   `ends_with` -> `end_with`, `needs_drop` -> `need_drop`.
 /// - `matches` -> `match_expectation`, because `match` is a keyword and `be_matching` belongs to
 ///   `is_matching`.
-/// - The namespace prefix `into_iter_` stays in front: `into_iter_contains` -> `into_iter_contain`.
 /// - Names starting with `get_` are already imperative and get no alias. Other names get an alias
 ///   only when one is given explicitly.
 ///

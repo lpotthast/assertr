@@ -46,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   supports set relations through the map's native lookup.
 - `IteratorAssertions::contains_all` checks that an owned iterator yields every expected value and stops as soon as all
   have been seen, so it also works on infinite iterators.
+- `IteratorAssertions::is_exhausted`, `is_not_exhausted`, and `has_count` check how many elements an owned iterator
+  yields. `has_count` reads at most one element more than expected and verifies an exact `size_hint` instead of
+  trusting it.
 - Reference identity assertions `is_same_instance_as` and `is_not_same_instance_as`, plus collection membership and
   exact comparisons of borrowed targets that preserve duplicate counts, without equality or target renderer bounds.
 - Borrowed panic-mode element projections `single` for any collection, including sets and map views, `first` and
@@ -152,7 +155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ZonedAssertions::is_in_time_zone`, and `TokioWatchReceiverAssertions::has_current_value` take `BorrowFor` operands
   too, so untyped `.into()` arguments may need a type annotation.
 - **Breaking:** Bulk value, key, and entry methods accept finite slice-backed `AsRef` lists instead of iterators. This
-  affects `contains_all`, `into_iter_contains_all`, `contains_keys`, `contains_exactly_entries`, and
+  affects `contains_all`, `contains_keys`, `contains_exactly_entries`, and
   `contains_exactly_entries_satisfying`, including their fluent aliases, which lose their iterator generic parameter.
   Collect generators explicitly with `.collect::<Vec<_>>()`.
 - **Breaking:** Removed the published `MapKeyQuery` extension API. Bulk map-key operands and keyed matchers use
@@ -181,10 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   matcher lists with `[entry(..)]`, `matchers![entry(..), ..]`, or `[..].map(|(key, matcher)| entry(key, matcher))`.
   Predicate rejections render the rejected subject, so their diagnostics require a renderer for it.
 - **Breaking:** `StableOrder` and `StableOrderAssertions` replace `Sequence` and `SequenceAssertions` and own positional
-  prefix, suffix, contiguous, and exact comparisons. Removed `into_iter_starts_with`, `into_iter_ends_with`,
-  `into_iter_contains_contiguous`, and `into_iter_contains_exactly`, including their `_matching` and `_satisfying`
-  variants and fluent aliases. Call `starts_with`, `ends_with`, `contains_contiguous`, or `contains_exactly` on
-  `StableOrder` collections, or assert an owned iterator with `assert_that_owned!(x.into_iter())`.
+  prefix, suffix, contiguous, and exact comparisons.
 - **Breaking:** Custom `Collection` and `Map` implementations must move `length` to `HasLength`, replace collection
   `STYLE` and `TYPE_NAME` with `PRESENTATION: CollectionPresentation`, and replace map `TYPE_NAME` with
   `RENDERING_ORDER: RenderingOrder`, using the types in `renderer`. Custom set implementations and bounds must rename
@@ -311,8 +311,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   original I/O error for any other inspection error. `is_a_file`, `is_a_directory`, and `is_a_symlink` no longer
   report inspection errors as a missing path. These methods require `ValueRenderer<std::io::Error>`, which the default
   `DebugRenderer` provides.
-- `into_iter_has_length` no longer trusts an agreeing exact `size_hint`. It verifies it by reading at most one element
-  beyond the expected length.
 - Tokio `RwLock` state assertions retain acquired guards while rendering failures, preventing lock reacquisition races.
 - Rootcause current-context type mismatches, range `is_outside_of_range`, and standard and Tokio lock `is_free` aliases
   report the caller's assertion location. Owned rootcause report assertions include the `Expression:` line and no
@@ -328,9 +326,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
-- **Breaking:** Removed deprecated `contains_exactly_matching_in_any_order`, `contain_exactly_matching_in_any_order`,
-  and `into_iter_iterator_is_empty`. Use `contains_exactly_in_any_order_matching`, its fluent alias, and
-  `into_iter_is_empty` respectively.
+- **Breaking:** Removed deprecated `contains_exactly_matching_in_any_order` and
+  `contain_exactly_matching_in_any_order`. Use `contains_exactly_in_any_order_matching` and its fluent alias.
+- **Breaking:** Removed `IntoIteratorAssertions` with every `into_iter_*` method and fluent alias. Use the collection
+  assertions, or pass a borrowing iterator to `assert_that_owned!(values.iter())` for `IteratorAssertions`, which adds
+  `is_exhausted`, `is_not_exhausted`, and `has_count` for the former emptiness and length checks. Generated fluent
+  aliases no longer keep an `into_iter_` prefix in front.
 - **Breaking:** Removed `Actual::map`. Match on the `Actual` variants instead.
 - **Breaking:** Removed `AssertThat::and()`, which returned the chain unchanged. Chain the next assertion directly.
 - **Breaking:** Removed `is_additive_identity` and `is_multiplicative_identity` and their fluent aliases. Use

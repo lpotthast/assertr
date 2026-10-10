@@ -4,7 +4,6 @@ depends_on: [ expectation-execution ]
 sources:
   - assertr/src/assertions/core/iter/exact_size.rs
   - assertr/src/assertions/core/iter/iterator.rs
-  - assertr/src/assertions/core/iter/into_iterator.rs
   - assertr/src/assertions/iterator/*.rs
 ---
 
@@ -20,8 +19,7 @@ explain a failure, so they retain the values and observations needed for diagnos
 
 | Family | Input and result |
 |---|---|
-| `into_iter_*` | Require `&Subject: IntoIterator<Item = &T>`. Create a fresh iterator borrowing the subject for each call. Return the original chain. Maps yield `(&K, &V)` pairs and use map assertions instead. |
-| Terminal `IteratorAssertions` | Require an owned iterator. Consume the needed input, drop the rest, and return a chain over `()`. |
+| Terminal `IteratorAssertions` | Require an owned iterator. Consume the needed input, drop the rest, and return a chain over `()`. Borrowed traversal passes a borrowing iterator, such as `assert_that_owned!(values.iter())`. |
 | `ExactSizeIterator` length checks | Read `len()` without consuming items. |
 
 ## Consumption
@@ -30,8 +28,8 @@ explain a failure, so they retain the values and observations needed for diagnos
 |---|---|
 | Single-element membership | Stop at the first match or forbidden item, or when the input ends. |
 | `contains_all` | Stop when all expected values have matched or the input ends. An empty expected list consumes nothing. |
-| Emptiness by scanning | Call `next()` once. |
-| Length by scanning | Use an exact `size_hint` only to reject a mismatch without consuming. Otherwise, including when the hint agrees, consume at most the expected length plus one. Report an exact length if the input ends, or a lower bound otherwise. |
+| `is_exhausted`, `is_not_exhausted` | Call `next()` once. |
+| `has_count` | Use an exact `size_hint` only to reject a mismatch without consuming. Otherwise, including when the hint agrees, consume at most the expected count plus one. Report an exact count if the input ends, or a lower bound otherwise. |
 | Empty prefix, suffix, or contiguous pattern | Consume nothing. |
 | Prefix and positional exact equality | Compare each visited pair once and stop at the first mismatch. Exact matching reads at most the expected length plus one. |
 | Nonempty suffix | Read to the end, then compare every required position. Distinguish input that is too short from unequal values. |
@@ -64,8 +62,8 @@ paths. They do not include equality-preview metadata. When a scan rejects empty 
 constraint. Omitting evidence from a nonempty scan does not trigger that fallback. Missing positional matchers are
 described without evaluating them or running callbacks. Budgets may further truncate the evidence.
 
-Direct iterator diagnostics may identify items by the order in which they were yielded. Borrowed traversals do not
-report these offsets as stable collection indexes. Locations use [typed paths](failure-processing.md#paths).
+Iterator diagnostics identify items by the order in which they were yielded. Locations use
+[typed paths](failure-processing.md#paths).
 
 A zero item budget omits child failures for prefix, exact, and suffix mismatches. The assertion still fails and records
 how many children were omitted. Streaming `contains_all` retains expected data and borrows missing operands only when
@@ -74,8 +72,8 @@ displaying them.
 ## Observation lifetime
 
 The [execution adapter](../assertr/src/assertions/iterator/mod.rs) keeps one iterator alive throughout the scan and its
-diagnostics. Neither the iterator nor its items need `Clone`. The private `consume` helper of `IteratorAssertions` and
-`traverse` helper of `IntoIteratorAssertions` create each scan inside the adapter, after tracking.
+diagnostics. Neither the iterator nor its items need `Clone`. The private `consume` helper of `IteratorAssertions`
+creates each scan inside the adapter, after tracking.
 
 1. Track the assertion, then access the expected list before scanning. Borrow operands as comparisons reach them.
 2. Scan through `&mut I` and retain the result. Explanation must not call `next` or `size_hint` again.
