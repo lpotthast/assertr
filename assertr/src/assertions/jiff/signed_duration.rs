@@ -18,7 +18,7 @@ fn compact<R: ValueRenderer<SignedDuration>>(
 
 sign_expectations!(SignedDuration, zero: SignedDuration::ZERO, present: compact);
 
-pub use crate::assertions::distance::IsCloseTo;
+use crate::assertions::distance::IsCloseTo;
 
 /// Exact, overflow-checked distance between durations. A distance larger than
 /// `SignedDuration::MAX` cannot be represented and therefore never satisfies a deviation.
@@ -189,7 +189,7 @@ mod tests {
                 assert_that!(duration).with_location(false).is_zero();
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `duration`
@@ -226,7 +226,7 @@ mod tests {
                     .is_negative();
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `SignedDuration::ZERO`
@@ -263,7 +263,7 @@ mod tests {
                     .is_positive();
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `SignedDuration::from_secs(-5)`
@@ -281,7 +281,6 @@ mod tests {
         use jiff::SignedDuration;
 
         use crate::{
-            failure::FailureKind,
             prelude::*,
             test_support::{SENTINEL, SentinelRenderer},
         };
@@ -298,7 +297,7 @@ mod tests {
         // Borrowed forms are the API contract being tested, even for Copy durations.
         #[allow(clippy::needless_borrows_for_generic_args)]
         fn accepts_owned_borrowed_and_independently_typed_operands() {
-            use super::super::IsCloseTo;
+            use crate::assertions::distance::IsCloseTo;
             const TYPED: IsCloseTo<SignedDuration> =
                 IsCloseTo::new(SignedDuration::ZERO, SignedDuration::ZERO);
             let expected = SignedDuration::from_secs(3);
@@ -314,108 +313,6 @@ mod tests {
             assert_that!(actual).matches(&reusable).matches(&reusable);
             #[cfg(feature = "fluent")]
             actual.must().be_close_to(&expected, &deviation);
-        }
-
-        #[test]
-        fn resolves_operands_once_in_order_and_reuses_rejected_views() {
-            use core::{
-                borrow::Borrow,
-                cell::{Cell, RefCell},
-            };
-
-            use super::super::IsCloseTo;
-            use crate::borrow_for::BorrowFor;
-            struct Operand<'a> {
-                value: SignedDuration,
-                calls: Cell<usize>,
-                name: &'static str,
-                events: &'a RefCell<Vec<&'static str>>,
-            }
-            impl Borrow<SignedDuration> for Operand<'_> {
-                fn borrow(&self) -> &SignedDuration {
-                    self.events.borrow_mut().push(self.name);
-                    let previous = self.calls.replace(self.calls.get() + 1);
-                    if previous == 0 {
-                        &self.value
-                    } else {
-                        &SignedDuration::MAX
-                    }
-                }
-            }
-            impl BorrowFor<SignedDuration> for Operand<'_> {
-                type View = SignedDuration;
-            }
-            struct DurationRenderer;
-            impl ValueRenderer<SignedDuration> for DurationRenderer {
-                fn fmt(
-                    &self,
-                    value: &SignedDuration,
-                    f: &mut core::fmt::Formatter<'_>,
-                ) -> core::fmt::Result {
-                    write!(f, "{} seconds", value.as_secs())
-                }
-            }
-            for deviation in [-1, 0, 1] {
-                let events = RefCell::new(Vec::new());
-                let operand = |value, name| Operand {
-                    value: SignedDuration::from_secs(value),
-                    calls: Cell::new(0),
-                    name,
-                    events: &events,
-                };
-                let matcher =
-                    IsCloseTo::new(operand(3, "expected"), operand(deviation, "deviation"));
-                assert_that!(&*events.borrow()).is_empty();
-                let failures = assert_that!(SignedDuration::from_secs(4))
-                    .with_renderer(DurationRenderer)
-                    .with_location(false)
-                    .capture(|it| it.matches(&matcher));
-                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
-                let plain = assert_that!(SignedDuration::from_secs(4))
-                    .with_renderer(DurationRenderer)
-                    .with_location(false)
-                    .capture(|it| {
-                        it.is_close_to(
-                            SignedDuration::from_secs(3),
-                            SignedDuration::from_secs(deviation),
-                        )
-                    });
-                assert_that!(failures).is_equal_to(plain);
-                events.borrow_mut().clear();
-                let root = assert_that!(SignedDuration::ZERO).with_renderer(DurationRenderer);
-                let description = root
-                    .assertion_context()
-                    .describe::<SignedDuration, _>(&matcher);
-                assert_that!(description.relation.as_deref()).is_equal_to(Some("is close to"));
-                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
-                // Re-evaluation resolves the new views.
-                events.borrow_mut().clear();
-                let root = assert_that!(SignedDuration::MAX);
-                assert_that!(
-                    matcher
-                        .evaluate(&SignedDuration::MAX, &root.assertion_context())
-                        .is_ok()
-                )
-                .is_true();
-                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
-
-                events.borrow_mut().clear();
-                assert_that!(SignedDuration::from_secs(4))
-                    .with_renderer(DurationRenderer)
-                    .is_close_to(operand(3, "expected"), SignedDuration::from_secs(1));
-                assert_that!(&*events.borrow()).contains_exactly(["expected"]);
-                #[cfg(feature = "fluent")]
-                {
-                    events.borrow_mut().clear();
-                    let failures = assert_that!(SignedDuration::from_secs(4))
-                        .with_renderer(DurationRenderer)
-                        .capture(|it| {
-                            it.be_close_to(operand(3, "expected"), operand(deviation, "deviation"))
-                        });
-                    assert_that!(failures).has_length(usize::from(deviation < 1));
-                    assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
-                }
-            }
         }
 
         #[test]
@@ -501,59 +398,6 @@ mod tests {
         }
 
         #[test]
-        fn rejects_negative_deviations_even_at_extremes() {
-            for actual in [
-                SignedDuration::MIN,
-                SignedDuration::ZERO,
-                SignedDuration::MAX,
-            ] {
-                for expected in [
-                    SignedDuration::MIN,
-                    SignedDuration::ZERO,
-                    SignedDuration::MAX,
-                ] {
-                    for deviation in [SignedDuration::from_nanos(-1), SignedDuration::MIN] {
-                        let failures =
-                            assert_that!(actual).capture(|it| it.is_close_to(expected, deviation));
-                        assert_that!(failures).contains_exactly_satisfying([
-                            |element: AssertThat<AssertionFailure, Capture>| {
-                                element
-                                    .derive(|value| &value.kind)
-                                    .is_equal_to(FailureKind::Ordering);
-                                element
-                                    .derive_owned(|value| value.relation.as_deref())
-                                    .is_equal_to(Some("was given an invalid allowed deviation"));
-                            },
-                        ]);
-                    }
-                }
-            }
-        }
-
-        #[test]
-        fn capture_collects_failures_and_allows_further_chaining() {
-            let failures = assert_that!(SignedDuration::MAX).capture(|it| {
-                it.is_close_to(SignedDuration::MIN, SignedDuration::MAX)
-                    .is_close_to(SignedDuration::MAX, SignedDuration::MIN)
-                    .is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1))
-                    .is_equal_to(SignedDuration::MAX)
-            });
-
-            assert_that!(failures).contains_exactly_satisfying(
-                ["is not close to", "was given an invalid allowed deviation"].map(|relation| {
-                    move |failure: AssertThat<AssertionFailure, Capture>| {
-                        failure
-                            .derive(|failure| &failure.kind)
-                            .is_equal_to(FailureKind::Ordering);
-                        failure
-                            .derive_owned(|failure| failure.relation.as_deref())
-                            .is_equal_to(Some(relation));
-                    }
-                }),
-            );
-        }
-
-        #[test]
         fn reports_extreme_values_without_overflowing() {
             assert_that!(|| {
                 assert_that!(SignedDuration::ZERO)
@@ -561,7 +405,7 @@ mod tests {
                     .is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1));
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `SignedDuration::ZERO`
@@ -574,28 +418,6 @@ mod tests {
 
                 Details:
                   - Allowed deviation: 1s
-                -------- assertr --------
-            "});
-        }
-
-        #[test]
-        fn reports_negative_deviation() {
-            assert_that!(|| {
-                assert_that!(SignedDuration::ZERO)
-                    .with_location(false)
-                    .is_close_to(SignedDuration::ZERO, SignedDuration::from_secs(-1));
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `SignedDuration::ZERO`
-
-                was given an invalid allowed deviation
-
-                Details:
-                  - Allowed deviation: 1s ago
-                  - The allowed deviation must be zero or positive.
                 -------- assertr --------
             "});
         }

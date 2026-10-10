@@ -18,6 +18,8 @@ sources:
   - assertr/src/assertions/tokio/rw_lock.rs
   - assertr/src/assertions/tokio/watch.rs
   - assertr/src/assertions/reqwest/response.rs
+  - assertr/src/assertions/thirtyfour/element.rs
+  - assertr/src/assertions/thirtyfour/read.rs
 ---
 
 # Observation boundaries
@@ -59,7 +61,7 @@ Function assertions require ownership and panic mode:
 |---|---|---|
 | Synchronous function assertion | At method call. | Track before invocation. |
 | Async function assertion | At method call. | Track and invoke on first poll. |
-| Reqwest body extraction | At method call, retained across await. | Track and reject borrowed responses before returning the future. Read the body when polled. |
+| Reqwest body extraction | At method call, retained across await. | Track, reject borrowed responses, and detach the chain before returning the future. Read the body when polled. |
 
 The executor receives the retained result before the output or panic payload is transferred. Explanation never invokes
 the function or polls the future again. Localized `AssertUnwindSafe` permits mutable captures without restoring state.
@@ -93,7 +95,8 @@ override it regardless of the order in which they are called. `giving_up_on` acc
 The final call captures the caller location, tracks one assertion on the chain and its ancestors, resolves the patience,
 and splits the chain with `into_parts`: ancestor
 messages are collected as in `capture`, and the future keeps only the observation, the diagnostic settings, and the
-renderer. It is therefore `Send` whenever they are, unlike other async adapters. The continuation is a new root chain on
+renderer. It is therefore `Send` whenever they are, like the reqwest body and browser element adapters, but unlike
+the async function assertions. The continuation is a new root chain on
 the observed value. Panic mode raises immediately, so it needs neither the records nor the parent link.
 
 `try_matches` uses the same observation execution as `matches`, returning the final observed value or a
@@ -163,8 +166,12 @@ Reqwest body extraction consumes an owned response in panic mode:
 | JSON-decode failure after successful text read | Text, URL, expected type, original parser error. |
 | Success | No temporary error details on continuation. |
 
-Reading and decoding count as one `get_json` assertion. A partially consumed response cannot be recovered. Header
-extraction checks presence and continues on a clone of the first value. Header diagnostics follow the [sensitive header
+The extraction detaches the chain with `into_parts` before returning the future, as eventual assertions do, so the
+future is `Send` whenever the renderer is. The continuation is a new root chain on the body or decoded value, with the
+chain's diagnostic settings and messages. Reading and decoding count as one `get_json` assertion. A partially consumed
+response cannot be recovered. Header extraction checks presence and continues on a clone of the first value. Header
+assertions validate the looked-up name first, because `HeaderMap` treats an invalid name as absent. An invalid name
+fails with relation "was given an invalid header name", so `does_not_have_header` cannot pass for it. Header diagnostics follow the [sensitive header
 rules](diagnostic-rendering.md#sensitive-http-header-evidence). Regression:
 [`panics_synchronously_when_the_response_is_only_borrowed`](../assertr/src/assertions/reqwest/response.rs).
 
@@ -176,10 +183,11 @@ when polled. Successful reads attach a new root on the observed value, preservin
 settings and messages, and add a message naming the operation and remote element. Subsequent assertions use
 their own call sites. No diagnostic path reads the browser again.
 
-`has_attribute` combines a single attribute read with the existing `IsSome` expectation, then
-extracts its string without an additional assertion count. Optional projections preserve absence.
-Protocol failures fail with `Operation`, `Element`, and the rendered `WebDriver error` as facts, and never become
-negative successes.
+`has_attribute` combines a single attribute read with a presence check, then extracts its string without an
+additional assertion count. A missing attribute fails with relation "does not have the attribute" and the name as the
+expected value. Optional projections preserve absence.
+Protocol failures fail with relation "could not be observed", as eventual observations do, with `Operation`,
+`Element`, and the rendered `WebDriver error` as facts. They never become negative successes.
 Focus validates the fixed handle before comparing the active element's remote identity in its session.
 
 Computed labels and roles use typed standard WebDriver commands. `thirtyfour-cdp` uses typed CDP
@@ -190,7 +198,9 @@ from WebDriver rendered text and missing `innerText` is an error.
 For repeated observations use the existing builders and fresh read closures, with explicit
 `giving_up_on_any_error()` for fixed-handle WebDriver errors. Direct projections do not poll, and
 asserting repeatedly on an extracted snapshot cannot observe changes. Resolver retries remain
-outside this integration. Public read helpers return WebDriver errors and also work without assertions.
+outside this integration. The public helpers in `assertions::thirtyfour::read` return WebDriver errors and also work
+without assertions.
 
-[Unit tests](../assertr/src/assertions/thirtyfour/mod.rs) script protocol responses. `just test-browser` runs the real
-Chromium [contracts](../assertr/tests/thirtyfour_browser.rs) against the WebDriver endpoint in `ASSERTR_WEBDRIVER_URL`.
+[Unit tests](../assertr/src/assertions/thirtyfour/element.rs) script protocol responses. `just test-browser` runs the real
+Chromium [contracts](../assertr/tests/thirtyfour_browser.rs) against the WebDriver endpoint in `ASSERTR_WEBDRIVER_URL`. They
+quit the session even when an assertion panics.

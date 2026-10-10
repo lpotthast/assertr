@@ -5,7 +5,7 @@ use thirtyfour::{By, DesiredCapabilities, WebDriver, prelude::*};
 
 #[tokio::test]
 #[ignore = "requires ASSERTR_WEBDRIVER_URL and a Chromium browser; see just test-browser"]
-async fn browser_contracts() -> WebDriverResult<()> {
+async fn browser_contracts() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint = std::env::var("ASSERTR_WEBDRIVER_URL").expect("set ASSERTR_WEBDRIVER_URL");
     let mut caps = DesiredCapabilities::chrome();
     if let Ok(binary) = std::env::var("ASSERTR_CHROME_BINARY") {
@@ -14,7 +14,15 @@ async fn browser_contracts() -> WebDriverResult<()> {
     caps.add_arg("--headless=new")?;
     caps.add_arg("--no-sandbox")?;
     caps.add_arg("--disable-dev-shm-usage")?;
-    let driver = WebDriver::new(endpoint, caps).await?;
+    // `run_and_quit` also quits the session when an assertion panics, then resumes the panic.
+    WebDriver::new(endpoint, caps)
+        .await?
+        .run_and_quit(|driver| async move { contracts(&driver).await })
+        .await?;
+    Ok(())
+}
+
+async fn contracts(driver: &WebDriver) -> WebDriverResult<()> {
     driver
         .goto(concat!(
             "data:text/html,",
@@ -75,12 +83,7 @@ async fn browser_contracts() -> WebDriverResult<()> {
     let inert = driver.find(By::Id("inert")).await?;
     assert_that!(&inert).accessible_name().await.is_empty();
     driver.refresh().await?;
-    assert_that!(trigger.attr("aria-label").await.is_err()).is_true();
-    assert_that!(
-        assertr::assertions::thirtyfour::read::focused(&trigger)
-            .await
-            .is_err()
-    )
-    .is_true();
-    driver.quit().await
+    assert_that!(trigger.attr("aria-label").await).is_err();
+    assert_that!(assertr::assertions::thirtyfour::read::focused(&trigger).await).is_err();
+    Ok(())
 }

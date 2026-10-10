@@ -385,10 +385,13 @@ pub mod path {
 #[cfg(feature = "http")]
 pub mod header_value {
     #[doc(inline)]
-    pub use crate::assertions::http::header_value::{IsAscii, IsInsensitive, IsSensitive};
+    pub use crate::assertions::http::header_value::{IsAscii, IsNotSensitive, IsSensitive};
 }
 
-/// Signed-duration properties and tolerances. Requires `jiff`.
+/// Signed-duration sign and zero expectations. Requires `jiff`.
+///
+/// For tolerances, use the root [`close_to`] matcher, which accepts
+/// `jiff::SignedDuration`.
 #[cfg(feature = "jiff")]
 pub mod signed_duration {
     #[doc(inline)]
@@ -416,13 +419,14 @@ pub mod program {
     pub use crate::assertions::program::Exists;
 }
 
-/// Response status and header expectations. Requires `reqwest`.
+/// Response status and header expectations, with the reasons header expectations reject.
+/// Requires `reqwest`.
 #[cfg(feature = "reqwest")]
 pub mod response {
     #[doc(inline)]
     pub use crate::assertions::reqwest::response::{
-        DoesNotHaveHeader, HasHeader, HasHeaderValue, HasStatusCode, IsClientError,
-        IsInformational, IsRedirection, IsServerError, IsSuccess,
+        DoesNotHaveHeader, HasHeader, HasHeaderValue, HasStatusCode, HeaderRejection,
+        IsClientError, IsInformational, IsRedirection, IsServerError, IsSuccess,
     };
 }
 

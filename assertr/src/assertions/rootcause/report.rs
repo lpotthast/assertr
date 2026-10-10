@@ -538,7 +538,7 @@ fn explain_context_type<E>(
             "has the expected current context type",
             "is not the expected current context type",
         )
-        .expected(format_args!("{}", type_name::<E>()))
+        .expected(type_name::<E>())
 }
 
 #[cfg(test)]
@@ -765,7 +765,7 @@ mod tests {
                     .has_current_context_type::<String>();
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `report!(TestError("root"))`
@@ -813,7 +813,7 @@ mod tests {
                     .has_current_context_display_value("other");
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `report!(TestError("root"))`
@@ -868,7 +868,7 @@ mod tests {
                     .has_current_context_debug_string("other");
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `report!(TestError("root"))`
@@ -969,18 +969,10 @@ mod tests {
                     .has_current_context::<String>();
             })
             .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r#"
-                -------- assertr --------
-                Expression: `report!("root")`
-
-                Actual: &str
-
-                is not the expected current context type
-
-                Expected: alloc::string::String
-                -------- assertr --------
-            "#});
+            .has_message()
+            // `has_current_context_type` pins the exact report of this shared explanation.
+            .contains("Actual: &str")
+            .contains("is not the expected current context type");
         }
     }
 }

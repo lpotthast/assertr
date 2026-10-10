@@ -119,7 +119,7 @@ mod tests {
 
             assert_that!(|| assert_that!(duration).with_location(false).is_zero())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `duration`
@@ -181,7 +181,7 @@ mod tests {
                     .is_positive();
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `(-2).hours().minutes(30)`

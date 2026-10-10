@@ -741,7 +741,7 @@ where
 }
 
 /// The failure of an observation that produced no value.
-fn not_observed<T>() -> FailureBuilder {
+pub(crate) fn not_observed<T>() -> FailureBuilder {
     FailureBuilder::new::<T>(FailureKind::Other).relation("could not be observed")
 }
 

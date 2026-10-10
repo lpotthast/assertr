@@ -501,8 +501,6 @@ mod tests {
     mod is_close_to {
         // The NumericDistance tests own the primitive arithmetic and special-value matrices.
         // These tests cover tolerance handling, diagnostics, and integration.
-        use indoc::formatdoc;
-
         use crate::prelude::*;
 
         #[test]
@@ -535,27 +533,16 @@ mod tests {
 
         #[test]
         fn panics_when_outside_allowed_range() {
+            // `distance` pins the exact report of the shared `IsCloseTo` expectation.
             assert_that!(|| {
                 assert_that!(0.3319)
                     .with_location(false)
                     .is_close_to(0.333, 0.001)
             })
             .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                    -------- assertr --------
-                    Expression: `0.3319`
-
-                    Actual: 0.3319
-
-                    is not close to
-
-                    Expected: 0.333
-
-                    Details:
-                      - Allowed deviation: 0.001
-                    -------- assertr --------
-                "});
+            .has_message()
+            .contains("is not close to")
+            .contains("Allowed deviation: 0.001");
         }
 
         #[test]
@@ -593,25 +580,13 @@ mod tests {
 
         #[test]
         fn rejects_negative_or_nan_deviation() {
-            let failures = assert_that!(1.0).capture(|it| it.is_close_to(1.0, f64::NAN));
-            assert_that!(failures[0].relation.as_deref())
-                .is_equal_to(Some("was given an invalid allowed deviation"));
-            assert_that!(|| {
-                assert_that!(1_i8).with_location(false).is_close_to(1, -1);
-            })
-            .panics()
-            .has_type::<String>()
-            .is_equal_to(formatdoc! {r"
-                -------- assertr --------
-                Expression: `1_i8`
-
-                was given an invalid allowed deviation
-
-                Details:
-                  - Allowed deviation: -1
-                  - The allowed deviation must be zero or positive.
-                -------- assertr --------
-            "});
+            let failures = assert_that!(1.0)
+                .capture(|it| it.is_close_to(1.0, f64::NAN).is_close_to(1.0, -1.0));
+            assert_that!(failures).has_length(2);
+            for failure in failures {
+                assert_that!(failure.relation.as_deref())
+                    .is_equal_to(Some("was given an invalid allowed deviation"));
+            }
         }
     }
 

@@ -18,7 +18,7 @@
 //! | Numbers (`num`) | `NumAssertions` |
 //! | `Path`, `Command`, `Mutex` (`std`) | `PathAssertions`, `CommandAssertions`, `MutexAssertions` |
 //! | Observations, closures returning a future of a changing value (`std`) | `EventualAssertions`, with builders and retry policies in `eventually` |
-//! | Browser elements (`thirtyfour`) | `ThirtyfourWebElementAssertions`, plus shared reads in `thirtyfour::read`; optional `thirtyfour-cdp` descriptions |
+//! | Browser elements (`thirtyfour`) | `ThirtyfourWebElementAssertions`, plus shared reads in `thirtyfour::read` and optional `thirtyfour-cdp` descriptions |
 //! | Integrations | `HttpHeaderValueAssertions` (`http`), `SignedDurationAssertions`, `SpanAssertions`, `ZonedAssertions` (`jiff`), `ProgramAssertions` (`program`), `ReqwestResponseAssertions` (`reqwest`), `RootcauseReportAssertions` (`rootcause`), `TokioMutexAssertions`, `TokioRwLockAssertions`, `TokioWatchReceiverAssertions` (`tokio`) |
 //!
 //! Feature-gated traits appear in the list below when their feature is enabled.
@@ -84,7 +84,7 @@ pub(crate) mod std;
 #[cfg(feature = "thirtyfour")]
 pub mod thirtyfour;
 #[cfg(feature = "thirtyfour")]
-pub use thirtyfour::ThirtyfourWebElementAssertions;
+pub use thirtyfour::element::ThirtyfourWebElementAssertions;
 #[cfg(feature = "tokio")]
 pub(crate) mod tokio;
 

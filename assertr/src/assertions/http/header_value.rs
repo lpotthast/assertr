@@ -13,8 +13,9 @@ use crate::{
 ///
 /// The `Debug` form of a sensitive `HeaderValue` hides its contents, but a failing header check
 /// must show the value it asserted. The active renderer therefore receives an unmarked diagnostic
-/// copy, so a renderer that redacts header values still applies. The subject stays unchanged.
-fn reveal<R: ValueRenderer<http::HeaderValue>>(
+/// copy, so a renderer that redacts header values still applies. The original value stays
+/// unchanged.
+pub(crate) fn reveal<R: ValueRenderer<http::HeaderValue>>(
     render: RenderingContext<'_, R>,
     value: &http::HeaderValue,
 ) -> Rendered {
@@ -71,10 +72,10 @@ property_expectation! {
 
 property_expectation! {
     /// Checks whether a header value is not marked sensitive.
-    pub struct IsInsensitive for http::HeaderValue;
+    pub struct IsNotSensitive for http::HeaderValue;
     kind Other;
     check |actual| !actual.is_sensitive();
-    relations "is insensitive", "is sensitive";
+    relations "is not sensitive", "is sensitive";
     present reveal;
 }
 
@@ -106,7 +107,7 @@ pub trait HttpHeaderValueAssertions<M: Mode, R = DebugRenderer> {
         R: ValueRenderer<http::HeaderValue>;
 
     /// Asserts that the header value is not marked sensitive.
-    fn is_insensitive(self) -> Self
+    fn is_not_sensitive(self) -> Self
     where
         R: ValueRenderer<http::HeaderValue>;
 
@@ -143,11 +144,11 @@ impl<M: Mode, R> HttpHeaderValueAssertions<M, R>
     }
 
     #[track_caller]
-    fn is_insensitive(self) -> Self
+    fn is_not_sensitive(self) -> Self
     where
         R: ValueRenderer<http::HeaderValue>,
     {
-        self.matches(IsInsensitive)
+        self.matches(IsNotSensitive)
     }
 
     #[track_caller]
@@ -216,7 +217,7 @@ mod tests {
             let actual = HeaderValue::from_static("http/1.1");
             actual
                 .must()
-                .be_insensitive()
+                .not_be_sensitive()
                 .be_ascii()
                 .be_ascii_satisfying(|s| {
                     s.starts_with("http");
@@ -273,7 +274,7 @@ mod tests {
             let failures = assert_that!(actual)
                 .with_renderer(RedactingRenderer)
                 .with_location(false)
-                .capture(HttpHeaderValueAssertions::is_insensitive);
+                .capture(HttpHeaderValueAssertions::is_not_sensitive);
 
             assert_redacted(&failures[0], &["secret"]);
         }
@@ -314,12 +315,12 @@ mod tests {
         }
 
         #[test]
-        fn panics_when_insensitive() {
+        fn panics_when_not_sensitive() {
             let actual = HeaderValue::from_static("http/1.1");
 
             assert_that!(|| assert_that!(actual).with_location(false).is_sensitive())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `actual`
@@ -332,7 +333,7 @@ mod tests {
         }
     }
 
-    mod is_insensitive {
+    mod is_not_sensitive {
         use http::HeaderValue;
         use indoc::formatdoc;
 
@@ -342,12 +343,12 @@ mod tests {
         fn caller_location_is_as_expected() {
             let mut actual = HeaderValue::from_static("http/1.1");
             actual.set_sensitive(true);
-            assert_caller_location!(assert_that!(actual), is_insensitive());
+            assert_caller_location!(assert_that!(actual), is_not_sensitive());
         }
 
         #[test]
         fn succeeds_when_not_marked_sensitive() {
-            assert_that!(HeaderValue::from_static("http/1.1")).is_insensitive();
+            assert_that!(HeaderValue::from_static("http/1.1")).is_not_sensitive();
         }
 
         #[test]
@@ -355,9 +356,9 @@ mod tests {
             let mut actual = HeaderValue::from_static("http/1.1");
             actual.set_sensitive(true);
 
-            assert_that!(|| assert_that!(actual).with_location(false).is_insensitive())
+            assert_that!(|| assert_that!(actual).with_location(false).is_not_sensitive())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `actual`
@@ -395,7 +396,7 @@ mod tests {
 
             assert_that!(|| assert_that!(actual).with_location(false).is_ascii())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `actual`
@@ -448,7 +449,7 @@ mod tests {
 
             assert_that!(|| assert_that!(actual).with_location(false).get_ascii())
                 .panics()
-                .has_type::<String>()
+                .has_message()
                 .contains(r#"Actual: "\xc3\x84""#);
         }
     }

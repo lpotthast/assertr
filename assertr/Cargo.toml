@@ -55,7 +55,9 @@ tokio = ["std", "dep:tokio"]
 thirtyfour = ["std", "dep:thirtyfour", "dep:http"]
 thirtyfour-cdp = ["thirtyfour", "thirtyfour/cdp", "dep:serde", "serde?/derive"]
 program = ["std", "dep:which"]
-reqwest = ["std", "dep:reqwest"]
+# Responses carry `http` header values, so `get_header` results get the `http` assertions. reqwest
+# already depends on `http`, so this adds no crate.
+reqwest = ["std", "dep:reqwest", "http"]
 # The integrations below support `no_std` with `alloc`. Where the wrapped crate has a `std`
 # feature, assertr's own `std` feature enables it through a weak edge.
 rootcause = ["dep:rootcause"]

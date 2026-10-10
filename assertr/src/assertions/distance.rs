@@ -523,6 +523,116 @@ mod tests {
         }
     }
 
+    mod is_close_to {
+        // The generic tolerance protocol and its reports. Each `NumericDistance` integration
+        // covers only its own distances and rendering.
+        use core::{
+            borrow::Borrow,
+            cell::{Cell, RefCell},
+        };
+
+        use indoc::formatdoc;
+
+        use super::super::{IsCloseTo, close_to};
+        use crate::{borrow_for::BorrowFor, expectation::Expectation, prelude::*};
+
+        #[test]
+        fn reports_a_value_outside_the_deviation() {
+            let failures = assert_that!(13)
+                .with_location(false)
+                .capture(|it| it.matches(close_to(10, 2)));
+            assert_that!(&failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `13`
+
+                Actual: 13
+
+                is not close to
+
+                Expected: 10
+
+                Details:
+                  - Allowed deviation: 2
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn reports_an_invalid_deviation_without_comparing() {
+            let failures = assert_that!(1)
+                .with_location(false)
+                .capture(|it| it.matches(close_to(1, -1)).matches(close_to(1, 0)));
+            assert_that!(failures).has_length(1);
+            assert_that!(&failures[0]).has_text_report(formatdoc! {r"
+                -------- assertr --------
+                Expression: `1`
+
+                was given an invalid allowed deviation
+
+                Details:
+                  - Allowed deviation: -1
+                  - The allowed deviation must be zero or positive.
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn resolves_operands_once_in_order_and_reuses_rejected_views() {
+            /// Records each borrow. Later borrows return another value, so an explanation that
+            /// borrowed again would show it.
+            struct Operand<'a> {
+                value: i32,
+                calls: Cell<usize>,
+                name: &'static str,
+                events: &'a RefCell<Vec<&'static str>>,
+            }
+            impl Borrow<i32> for Operand<'_> {
+                fn borrow(&self) -> &i32 {
+                    self.events.borrow_mut().push(self.name);
+                    if self.calls.replace(self.calls.get() + 1) == 0 {
+                        &self.value
+                    } else {
+                        &i32::MAX
+                    }
+                }
+            }
+            impl BorrowFor<i32> for Operand<'_> {
+                type View = i32;
+            }
+
+            for deviation in [-1, 0, 1] {
+                let events = RefCell::new(Vec::new());
+                let operand = |value, name| Operand {
+                    value,
+                    calls: Cell::new(0),
+                    name,
+                    events: &events,
+                };
+                let matcher =
+                    IsCloseTo::new(operand(3, "expected"), operand(deviation, "deviation"));
+                assert_that!(&*events.borrow()).is_empty();
+                let failures = assert_that!(5)
+                    .with_location(false)
+                    .capture(|it| it.matches(&matcher));
+                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
+                let plain = assert_that!(5)
+                    .with_location(false)
+                    .capture(|it| it.matches(close_to(3, deviation)));
+                assert_that!(failures).is_equal_to(plain);
+
+                events.borrow_mut().clear();
+                let description = AssertionContext::default().describe::<i32, _>(&matcher);
+                assert_that!(description.relation.as_deref()).is_equal_to(Some("is close to"));
+                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
+
+                // Re-evaluation resolves the new views.
+                events.borrow_mut().clear();
+                assert_that!(matcher.evaluate(&i32::MAX, &AssertionContext::default())).is_ok();
+                assert_that!(&*events.borrow()).contains_exactly(["expected", "deviation"]);
+            }
+        }
+    }
+
     unsigned_integer_tests!(u8, u16, u32, u64, u128, usize);
     signed_integer_tests!(i8, i16, i32, i64, i128, isize);
     float_tests!(f32);

@@ -281,7 +281,7 @@ For a fixed element, `giving_up_on_any_error()` makes browser errors terminal, i
 handles. Resolving a replacement node belongs in the caller's locator policy. `consistently_ok`
 checks immediately for an explicit duration, without an initial settling period. Both engines
 also provide `try_matches` for fallible helpers. Additional typed reads are in
-`assertions::thirtyfour::read`; native reads remain available on `WebElement` itself.
+`assertions::thirtyfour::read`. Native reads remain available on `WebElement` itself.
 
 ## Custom assertions
 

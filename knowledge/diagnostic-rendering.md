@@ -112,7 +112,7 @@ failures, including those of [unordered assignment](matcher-composition.md#candi
 ## Sensitive HTTP header evidence
 
 Failing header checks show header values, including values marked sensitive. Reqwest `has_header_value` and
-`does_not_have_header`, and the `HeaderValue` checks `is_ascii`, `is_sensitive`, and `is_insensitive`, render a
+`does_not_have_header`, and the `HeaderValue` checks `is_ascii`, `is_sensitive`, and `is_not_sensitive`, render a
 diagnostic clone with the sensitivity flag cleared through `ValueRenderer<HeaderValue>`. The original value is
 unchanged, and a custom renderer can still redact every header value. Comparisons use raw bytes, including non-UTF-8
 values. Generic rendering, including direct `HeaderValue` equality, receives the original value, whose `Debug` output

@@ -6,18 +6,20 @@
 //! Reading a body consumes the response. `get_text()` and `get_json()` are async and require
 //! `assert_that_owned!` or `.must_owned()`.
 //!
-//! With the `http` feature enabled, the value extracted by `get_header` composes with
-//! `HttpHeaderValueAssertions`: `reqwest` re-exports `http`'s header types, so the two
-//! integrations meet on the same `HeaderValue`.
+//! `reqwest` re-exports `http`'s header types, so the value extracted by `get_header` is an
+//! `http::HeaderValue` with `HttpHeaderValueAssertions`. The `reqwest` feature enables `http` for
+//! this.
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use core::panic::Location;
 
-use reqwest::header::HeaderValue;
+use reqwest::header::{HeaderName, HeaderValue};
 
 use crate::{
     AssertThat,
     actual::Actual,
+    assert_that::DetachedChain,
+    assertions::http::header_value::reveal,
     expectation::{AssertionContext, Expectation},
     failure::{Fact, FailureBuilder, FailureKind},
     mode::{Mode, Panic},
@@ -171,9 +173,22 @@ status_class_expectation!(
     "5xx",
 );
 
+/// Why a response header expectation rejected the response.
+///
+/// `T` is what the expectation retains for a valid header name, for example the looked-up name
+/// of a missing header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeaderRejection<'a, T> {
+    /// The looked-up name is not a valid HTTP header name, so no header can have it.
+    InvalidName(&'a str),
+    /// The header did not meet the expectation.
+    Rejected(T),
+}
+
 /// Checks that the response contains a header, returning its first value.
 ///
-/// Rejection retains the looked-up name. Diagnostics list the present header names.
+/// Rejection retains the looked-up name. Diagnostics list the present header names. A name that
+/// is not a valid HTTP header name is rejected as invalid.
 #[derive(Debug, Clone)]
 pub struct HasHeader<E>(E);
 impl<E, R> Expectation<reqwest::Response, R> for HasHeader<E>
@@ -187,7 +202,7 @@ where
         Self: 'a,
         reqwest::Response: 'a;
     type Rejection<'a>
-        = &'a str
+        = HeaderRejection<'a, &'a str>
     where
         Self: 'a,
         reqwest::Response: 'a;
@@ -197,10 +212,7 @@ where
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let name = self.0.as_ref();
-        match actual.headers().get(name) {
-            Some(value) => Ok(value),
-            None => Err(name),
-        }
+        first_value(actual, name)?.ok_or(HeaderRejection::Rejected(name))
     }
 
     const KIND: FailureKind = FailureKind::Membership;
@@ -215,7 +227,12 @@ where
             None => failure
                 .relation("contains the header")
                 .expected(render.value(self.0.as_ref())),
-            Some((actual, name)) => explain_missing_header(failure, render, actual, name),
+            Some((actual, HeaderRejection::InvalidName(name))) => {
+                explain_invalid_name(failure, render, actual, name)
+            }
+            Some((actual, HeaderRejection::Rejected(name))) => {
+                explain_missing_header(failure, render, actual, name)
+            }
         }
     }
 }
@@ -229,7 +246,8 @@ impl<E> HasHeader<E> {
 }
 /// Checks that the response does not contain a header.
 ///
-/// Rejection retains the looked-up name and the header's first value.
+/// Rejection retains the looked-up name and the header's first value. A name that is not a valid
+/// HTTP header name is rejected as invalid instead of passing as absent.
 #[derive(Debug, Clone)]
 pub struct DoesNotHaveHeader<E>(E);
 impl<E, R> Expectation<reqwest::Response, R> for DoesNotHaveHeader<E>
@@ -243,7 +261,7 @@ where
         Self: 'a,
         reqwest::Response: 'a;
     type Rejection<'a>
-        = (&'a str, &'a HeaderValue)
+        = HeaderRejection<'a, (&'a str, &'a HeaderValue)>
     where
         Self: 'a,
         reqwest::Response: 'a;
@@ -253,8 +271,8 @@ where
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let name = self.0.as_ref();
-        match actual.headers().get(name) {
-            Some(value) => Err((name, value)),
+        match first_value(actual, name)? {
+            Some(value) => Err(HeaderRejection::Rejected((name, value))),
             None => Ok(()),
         }
     }
@@ -271,12 +289,15 @@ where
             None => failure
                 .relation("does not contain the header")
                 .unexpected(render.value(self.0.as_ref())),
-            Some((actual, (name, value))) => failure
+            Some((actual, HeaderRejection::InvalidName(name))) => {
+                explain_invalid_name(failure, render, actual, name)
+            }
+            Some((actual, HeaderRejection::Rejected((name, value)))) => failure
                 .actual(render_header_names(render, actual))
                 .relation("contains the header")
                 .unexpected(render.value(name))
                 .fact(url_fact(render, actual))
-                .fact(Fact::labelled("Value", render_header(render, value))),
+                .fact(Fact::labelled("Value", reveal(render, value))),
         }
     }
 }
@@ -289,6 +310,8 @@ impl<E> DoesNotHaveHeader<E> {
     }
 }
 /// Compares the first header value with the expected raw UTF-8 bytes.
+///
+/// A name that is not a valid HTTP header name is rejected as invalid.
 #[derive(Debug, Clone)]
 pub struct HasHeaderValue<N, E> {
     name: N,
@@ -306,7 +329,7 @@ where
         Self: 'a,
         reqwest::Response: 'a;
     type Rejection<'a>
-        = (&'a str, &'a str, Option<&'a HeaderValue>)
+        = HeaderRejection<'a, (&'a str, &'a str, Option<&'a HeaderValue>)>
     where
         Self: 'a,
         reqwest::Response: 'a;
@@ -317,9 +340,9 @@ where
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let name = self.name.as_ref();
         let expected = self.expected.as_ref();
-        match actual.headers().get(name) {
+        match first_value(actual, name)? {
             Some(value) if value.as_bytes() == expected.as_bytes() => Ok(()),
-            value => Err((name, expected, value)),
+            value => Err(HeaderRejection::Rejected((name, expected, value))),
         }
     }
 
@@ -339,12 +362,15 @@ where
                     "Expected value",
                     render.value(self.expected.as_ref()),
                 )),
-            Some((actual, (name, expected, None))) => {
+            Some((actual, HeaderRejection::InvalidName(name))) => {
+                explain_invalid_name(failure, render, actual, name)
+            }
+            Some((actual, HeaderRejection::Rejected((name, expected, None)))) => {
                 explain_missing_header(failure, render, actual, name)
                     .fact(Fact::labelled("Expected value", render.value(expected)))
             }
-            Some((actual, (name, expected, Some(value)))) => failure
-                .actual(render_header(render, value))
+            Some((actual, HeaderRejection::Rejected((name, expected, Some(value))))) => failure
+                .actual(reveal(render, value))
                 .expected(render.value(expected))
                 .fact(url_fact(render, actual))
                 .fact(Fact::labelled("Header", render.value(name))),
@@ -396,16 +422,19 @@ pub trait ReqwestResponseAssertions<R = DebugRenderer> {
 
     /// Asserts that the response has a header with this name, regardless of its value.
     ///
-    /// Header names are matched case-insensitively, as HTTP requires.
-    /// Failure diagnostics render header names and the URL through `ValueRenderer<str>`.
+    /// Header names are matched case-insensitively, as HTTP requires. A name that is not a valid
+    /// HTTP header name fails with "was given an invalid header name". Failure diagnostics render
+    /// header names and the URL through `ValueRenderer<str>`.
     fn has_header(self, name: impl AsRef<str>) -> Self
     where
         R: ValueRenderer<str>;
 
     /// Asserts that the response has no header with this name.
     ///
-    /// Failure diagnostics show the first header value. Its contents are displayed even when
-    /// marked with [`HeaderValue::set_sensitive(true)`](HeaderValue::set_sensitive), so test
+    /// A name that is not a valid HTTP header name fails with "was given an invalid header name"
+    /// instead of passing, because no header could ever have it. Failure diagnostics show the first
+    /// header value. Its contents are displayed even when marked with
+    /// [`HeaderValue::set_sensitive(true)`](HeaderValue::set_sensitive), so test
     /// failures expose the value being asserted. The renderer receives an unmarked diagnostic copy
     /// and the response's header stays unchanged. By default, non-ASCII bytes use hexadecimal
     /// escapes. The rendering budget still applies. Header names and the URL use
@@ -417,7 +446,8 @@ pub trait ReqwestResponseAssertions<R = DebugRenderer> {
     /// Asserts that the response's first value for this header equals the expected UTF-8 value.
     ///
     /// The comparison uses raw header bytes. A non-UTF-8 subject value cannot equal the string
-    /// expectation. By default, non-ASCII header bytes use hexadecimal escapes on failure.
+    /// expectation. By default, non-ASCII header bytes use hexadecimal escapes on failure. A name
+    /// that is not a valid HTTP header name fails with "was given an invalid header name".
     ///
     /// Diagnostics display header contents even when marked with
     /// [`HeaderValue::set_sensitive(true)`](HeaderValue::set_sensitive), so test failures expose
@@ -511,9 +541,10 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
 pub trait ReqwestResponseExtractAssertions<'t, R = DebugRenderer> {
     /// Asserts that the header is present, then continues the chain on a clone of its first value.
     ///
-    /// With the `http` feature enabled, the extracted `HeaderValue` is the subject of
-    /// `HttpHeaderValueAssertions`, so `.get_header("content-type").is_ascii_satisfying(..)` works
-    /// across both integrations.
+    /// The extracted `HeaderValue` is the subject of `HttpHeaderValueAssertions`, so
+    /// `.get_header("content-type").is_ascii_satisfying(..)` works across both integrations. A
+    /// name that is not a valid HTTP header name fails like a missing header, with "was given an
+    /// invalid header name".
     ///
     /// Missing-header diagnostics render header names and the URL through `ValueRenderer<str>`.
     fn get_header(self, name: impl AsRef<str>) -> AssertThat<'t, HeaderValue, Panic, R>
@@ -522,8 +553,12 @@ pub trait ReqwestResponseExtractAssertions<'t, R = DebugRenderer> {
 
     /// Reads the response body and continues the chain on it as a `String`.
     ///
-    /// Consumes the response, so the assertion has to own it: create it with
+    /// Consumes the response, so the assertion has to own it. Create it with
     /// `assert_that_owned!(response)` or `response.must_owned()`.
+    ///
+    /// The assertion is tracked and the chain detached when this method is called. The returned
+    /// future holds no chain records, so it is `Send` when the renderer is. It continues on a new
+    /// assertion chain with the original chain's diagnostic settings and messages.
     ///
     /// # Panics
     ///
@@ -535,10 +570,29 @@ pub trait ReqwestResponseExtractAssertions<'t, R = DebugRenderer> {
 
     /// Reads the response body, deserializes it into `T`, and continues the chain on the value.
     ///
-    /// Reads the body with [`get_text`](ReqwestResponseExtractAssertions::get_text), then
-    /// deserializes it with `serde_json`. A deserialization failure includes the received text.
+    /// Reads the body like [`get_text`](ReqwestResponseExtractAssertions::get_text), then
+    /// deserializes it with `serde_json`. Reading and decoding count as one assertion. A
+    /// deserialization failure includes the received text.
     ///
     /// Requires the `serde-json` feature in addition to `reqwest`.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// #[derive(Debug, PartialEq, serde::Deserialize)]
+    /// struct Greeting {
+    ///     text: String,
+    /// }
+    ///
+    /// # let response = reqwest::Response::from(http::Response::new(r#"{"text":"hello"}"#));
+    /// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
+    /// assert_that_owned!(response)
+    ///     .is_success()
+    ///     .get_json::<Greeting>()
+    ///     .await
+    ///     .is_equal_to(Greeting { text: "hello".to_owned() });
+    /// # });
+    /// ```
     ///
     /// # Panics
     ///
@@ -570,11 +624,14 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     where
         R: ValueRenderer<str> + ValueRenderer<reqwest::Error>,
     {
-        let body = read_body(
+        let read = read_body(
             self,
             "get_text() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
         );
-        async move { body.await.0 }
+        async move {
+            let body = read.await;
+            body.chain.attach(Actual::Owned(body.text))
+        }
     }
 
     #[track_caller]
@@ -584,76 +641,81 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
         T: serde::de::DeserializeOwned + 't,
         R: ValueRenderer<str> + ValueRenderer<reqwest::Error> + ValueRenderer<serde_json::Error>,
     {
-        let body = read_body(
+        let read = read_body(
             self,
             "get_json() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
         );
         async move {
-            let (this, url, location) = body.await;
-            match serde_json::from_str::<T>(this.actual()) {
-                Ok(value) => this.map(|_| Actual::Owned(value)),
+            let ReadBody {
+                text,
+                chain,
+                url,
+                location,
+            } = read.await;
+            match serde_json::from_str::<T>(&text) {
+                Ok(value) => chain.attach(Actual::Owned(value)),
                 Err(error) => {
-                    let render = this.render();
-                    this.raise_at(
-                        this.failure(FailureKind::Other)
-                            .actual(render.value(this.actual().as_str()))
-                            .relation("is not valid JSON for the expected type")
-                            .fact(Fact::labelled(URL, render.value(url.as_str())))
-                            .fact(Fact::labelled("Expected type", core::any::type_name::<T>()))
-                            .fact(Fact::labelled("Error", render.value(&error))),
-                        location,
-                    );
-                    unreachable!("panic mode raises invalid JSON")
+                    let render = chain.render();
+                    let failure = FailureBuilder::new::<String>(FailureKind::Other)
+                        .actual(render.value(text.as_str()))
+                        .relation("is not valid JSON for the expected type")
+                        .fact(Fact::labelled(URL, render.value(url.as_str())))
+                        .fact(Fact::labelled("Expected type", core::any::type_name::<T>()))
+                        .fact(Fact::labelled("Error", render.value(&error)));
+                    chain.raise_at(failure, location)
                 }
             }
         }
     }
 }
 
-/// Tracks a body extraction, rejects a borrowed response with `borrowed_message`, and captures
-/// the caller and the request URL. The returned future reads the body when polled and continues
-/// on it, also returning the URL and caller for later diagnostics.
+/// A successfully read response body and its detached chain. JSON decoding also needs the
+/// request URL and the caller for its diagnostics.
+struct ReadBody<R> {
+    text: String,
+    chain: DetachedChain<R>,
+    #[cfg(feature = "serde-json")]
+    url: String,
+    #[cfg(feature = "serde-json")]
+    location: &'static Location<'static>,
+}
+
+/// Tracks a body extraction, rejects a borrowed response with `borrowed_message`, captures the
+/// caller and the request URL, and detaches the chain. The returned future reads the body when
+/// polled and raises a read failure. It holds no chain records, so it is `Send` when the renderer
+/// is.
 #[track_caller]
-fn read_body<'t, R>(
-    assertion: AssertThat<'t, reqwest::Response, Panic, R>,
+fn read_body<R>(
+    assertion: AssertThat<'_, reqwest::Response, Panic, R>,
     borrowed_message: &'static str,
-) -> impl Future<
-    Output = (
-        AssertThat<'t, String, Panic, R>,
-        String,
-        &'static Location<'static>,
-    ),
->
+) -> impl Future<Output = ReadBody<R>>
 where
     R: ValueRenderer<str> + ValueRenderer<reqwest::Error>,
 {
     assertion.track_assertion();
-    let AssertThat { actual, state } = assertion;
+    let location = Location::caller();
+    let (actual, chain) = assertion.into_parts();
     let Actual::Owned(response) = actual else {
         std::panic::panic_any(borrowed_message);
     };
-    let location = Location::caller();
     let url = response.url().as_str().to_owned();
     async move {
         match response.text().await {
-            Ok(text) => {
-                let actual = Actual::Owned(text);
-                (AssertThat { actual, state }, url, location)
-            }
+            Ok(text) => ReadBody {
+                text,
+                chain,
+                #[cfg(feature = "serde-json")]
+                url,
+                #[cfg(feature = "serde-json")]
+                location,
+            },
             Err(error) => {
-                let this = AssertThat {
-                    actual: Actual::Owned(error),
-                    state,
-                };
-                let render = this.render();
-                this.raise_at(
-                    FailureBuilder::new::<reqwest::Response>(FailureKind::Other)
-                        .relation("has a body that could not be read")
-                        .fact(Fact::labelled(URL, render.value(url.as_str())))
-                        .fact(Fact::labelled("Error", render.value(this.actual()))),
-                    location,
-                );
-                unreachable!("panic mode raises unreadable bodies")
+                let render = chain.render();
+                let failure = FailureBuilder::new::<reqwest::Response>(FailureKind::Other)
+                    .relation("has a body that could not be read")
+                    .fact(Fact::labelled(URL, render.value(url.as_str())))
+                    .fact(Fact::labelled("Error", render.value(&error)));
+                chain.raise_at(failure, location)
             }
         }
     }
@@ -676,11 +738,7 @@ fn render_header_names<R: ValueRenderer<str>>(
     render: RenderingContext<'_, R>,
     actual: &reqwest::Response,
 ) -> Rendered {
-    let names: Vec<&str> = actual
-        .headers()
-        .keys()
-        .map(reqwest::header::HeaderName::as_str)
-        .collect();
+    let names: Vec<&str> = actual.headers().keys().map(HeaderName::as_str).collect();
     render.borrowed_values::<str, _>(&names, RenderingOrder::PreserveIteration)
 }
 
@@ -698,22 +756,31 @@ fn explain_missing_header<R: ValueRenderer<str>>(
         .fact(url_fact(render, actual))
 }
 
-/// Renders a header value with its contents visible, even when it is marked sensitive.
+/// Looks up the first value of the header `name`, rejecting a name that no header can have.
 ///
-/// The `Debug` form of a sensitive `HeaderValue` hides its contents, but a failing header check
-/// must show the value it asserted. The active renderer therefore receives an unmarked diagnostic
-/// copy, so a renderer that redacts header values still applies. The response stays unchanged.
-fn render_header<R: ValueRenderer<HeaderValue>>(
-    rendering: RenderingContext<'_, R>,
-    value: &HeaderValue,
-) -> Rendered {
-    if value.is_sensitive() {
-        let mut visible = value.clone();
-        visible.set_sensitive(false);
-        rendering.value(&visible)
-    } else {
-        rendering.value(value)
+/// `HeaderMap` lookups treat an invalid name as absent. Checking it first keeps
+/// `does_not_have_header` from passing for a name that could never be present.
+fn first_value<'a, T>(
+    actual: &'a reqwest::Response,
+    name: &'a str,
+) -> Result<Option<&'a HeaderValue>, HeaderRejection<'a, T>> {
+    match HeaderName::from_bytes(name.as_bytes()) {
+        Ok(header) => Ok(actual.headers().get(&header)),
+        Err(_) => Err(HeaderRejection::InvalidName(name)),
     }
+}
+
+/// Explains a header expectation given a name that is not a valid HTTP header name.
+fn explain_invalid_name<R: ValueRenderer<str>>(
+    failure: FailureBuilder,
+    render: RenderingContext<'_, R>,
+    actual: &reqwest::Response,
+    name: &str,
+) -> FailureBuilder {
+    failure
+        .relation("was given an invalid header name")
+        .fact(url_fact(render, actual))
+        .fact(Fact::labelled("Header", render.value(name)))
 }
 
 #[cfg(test)]
@@ -1066,7 +1133,7 @@ mod tests {
                                 .await;
                         });
                     }).panics()
-                    .has_type::<String>()
+                    .has_message()
                 };
             }
             body_panic!(failing_response(), CustomValueRenderer, get_text)
@@ -1126,7 +1193,7 @@ mod tests {
                     .has_status_code(reqwest::StatusCode::OK);
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `response(404, &[], "")`
@@ -1142,71 +1209,124 @@ mod tests {
         }
     }
 
-    mod status_classes {
-        use indoc::formatdoc;
+    /// Checks that the status-class assertion `$method` accepts the `$member` statuses and
+    /// rejects `$outsider` with `$relation` and the class `$label`, continuing the chain.
+    macro_rules! status_class_case {
+        ($method:ident, [$($member:literal),+], $outsider:literal, $relation:literal, $label:literal) => {{
+            $(assert_that!(super::response($member, &[], "")).$method();)+
+            let subject = super::response($outsider, &[], "");
+            let failures = assert_that!(subject)
+                .with_location(false)
+                // The chain continues after the failed class check.
+                .capture(|it| it.$method().has_status_code(subject.status()));
+            assert_that!(&failures[0]).has_text_report(indoc::formatdoc! {r#"
+                -------- assertr --------
+                Expression: `subject`
 
+                Actual: {}
+
+                {}
+
+                Expected: {}
+
+                Details:
+                  - URL: "http://localhost/hello"
+                -------- assertr --------
+            "#, $outsider, $relation, $label});
+            assert_that!(failures).has_length(1);
+        }};
+    }
+
+    mod is_informational {
         use super::response;
         use crate::prelude::*;
 
         #[test]
-        fn caller_locations_are_as_expected() {
+        fn caller_location_is_as_expected() {
             assert_caller_location!(assert_that!(response(200, &[], "")), is_informational());
-            assert_caller_location!(assert_that!(response(500, &[], "")), is_success());
-            assert_caller_location!(assert_that!(response(200, &[], "")), is_redirection());
-            assert_caller_location!(assert_that!(response(500, &[], "")), is_client_error());
-            assert_caller_location!(assert_that!(response(404, &[], "")), is_server_error());
         }
 
         #[test]
-        fn accept_their_class_and_reject_other_statuses() {
-            macro_rules! case {
-                ($method:ident, [$($member:literal),+], $outsider:literal, $relation:literal, $label:literal) => {{
-                    $(assert_that!(response($member, &[], "")).$method();)+
-                    let subject = response($outsider, &[], "");
-                    let failures = assert_that!(subject)
-                        .with_location(false)
-                        // The chain continues after the failed class check.
-                        .capture(|it| it.$method().has_status_code(subject.status()));
-                    assert_that!(&failures[0]).has_text_report(formatdoc! {r#"
-                        -------- assertr --------
-                        Expression: `subject`
-
-                        Actual: {}
-
-                        {}
-
-                        Expected: {}
-
-                        Details:
-                          - URL: "http://localhost/hello"
-                        -------- assertr --------
-                    "#, $outsider, $relation, $label});
-                    assert_that!(failures).has_length(1);
-                }};
-            }
-            case!(
+        fn accepts_its_class_and_rejects_other_statuses() {
+            status_class_case!(
                 is_informational,
                 [100, 103],
                 200,
                 "is not informational",
                 "1xx"
             );
-            case!(is_success, [200, 204, 299], 500, "is not a success", "2xx");
-            case!(
+        }
+    }
+
+    mod is_success {
+        use super::response;
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(500, &[], "")), is_success());
+        }
+
+        #[test]
+        fn accepts_its_class_and_rejects_other_statuses() {
+            status_class_case!(is_success, [200, 204, 299], 500, "is not a success", "2xx");
+        }
+    }
+
+    mod is_redirection {
+        use super::response;
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(200, &[], "")), is_redirection());
+        }
+
+        #[test]
+        fn accepts_its_class_and_rejects_other_statuses() {
+            status_class_case!(
                 is_redirection,
                 [301, 308],
                 200,
                 "is not a redirection",
                 "3xx"
             );
-            case!(
+        }
+    }
+
+    mod is_client_error {
+        use super::response;
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(500, &[], "")), is_client_error());
+        }
+
+        #[test]
+        fn accepts_its_class_and_rejects_other_statuses() {
+            status_class_case!(
                 is_client_error,
                 [400, 451],
                 500,
                 "is not a client error",
                 "4xx"
             );
-            case!(
+        }
+    }
+
+    mod is_server_error {
+        use super::response;
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(response(404, &[], "")), is_server_error());
+        }
+
+        #[test]
+        fn accepts_its_class_and_rejects_other_statuses() {
+            status_class_case!(
                 is_server_error,
                 [500, 503],
                 404,
@@ -1245,7 +1365,7 @@ mod tests {
                     .has_header("content-type");
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `response(200, &[("x-api-key", "1234")], "")`
@@ -1260,6 +1380,25 @@ mod tests {
 
                 Details:
                   - URL: "http://localhost/hello"
+                -------- assertr --------
+            "#});
+        }
+
+        #[test]
+        fn rejects_an_invalid_header_name() {
+            let failures = assert_that!(ok_response())
+                .with_location(false)
+                .capture(|it| it.has_header("content type"));
+
+            assert_that!(failures[0]).has_text_report(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `ok_response()`
+
+                was given an invalid header name
+
+                Details:
+                  - URL: "http://localhost/hello"
+                  - Header: "content type"
                 -------- assertr --------
             "#});
         }
@@ -1314,6 +1453,14 @@ mod tests {
         #[test]
         fn succeeds_when_the_header_is_absent() {
             assert_that!(ok_response()).does_not_have_header("x-api-key");
+        }
+
+        #[test]
+        fn rejects_an_invalid_header_name_instead_of_passing() {
+            let failures =
+                assert_that!(ok_response()).capture(|it| it.does_not_have_header("x api key"));
+            assert_that!(failures[0].relation.as_deref())
+                .is_equal_to(Some("was given an invalid header name"));
         }
 
         #[test]
@@ -1411,6 +1558,14 @@ mod tests {
         }
 
         #[test]
+        fn rejects_an_invalid_header_name() {
+            let failures = assert_that!(ok_response())
+                .capture(|it| it.has_header_value("content type", "text/plain"));
+            assert_that!(failures[0].relation.as_deref())
+                .is_equal_to(Some("was given an invalid header name"));
+        }
+
+        #[test]
         fn panics_with_the_expected_value_as_a_detail_when_the_header_is_absent() {
             assert_that!(|| {
                 assert_that!(response(200, &[], ""))
@@ -1418,7 +1573,7 @@ mod tests {
                     .has_header_value("content-type", "application/json");
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `response(200, &[], "")`
@@ -1456,6 +1611,16 @@ mod tests {
         }
 
         #[test]
+        fn rejects_an_invalid_header_name() {
+            assert_that!(|| {
+                assert_that!(ok_response()).get_header("content type");
+            })
+            .panics()
+            .has_message()
+            .contains("was given an invalid header name");
+        }
+
+        #[test]
         fn extraction_requires_only_a_string_renderer_and_preserves_it() {
             let response = ok_response();
             let assertion: AssertThat<'_, reqwest::header::HeaderValue, Panic, TextOnly> =
@@ -1467,7 +1632,6 @@ mod tests {
         }
 
         #[test]
-        #[cfg(feature = "http")]
         fn does_not_attach_missing_header_detail_to_later_failures() {
             assert_that!(|| {
                 assert_that!(ok_response())
@@ -1478,7 +1642,7 @@ mod tests {
                     });
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
                 Expected: "nope"
@@ -1502,14 +1666,26 @@ mod tests {
 
         #[tokio::test]
         async fn extracts_the_body_as_one_assertion() {
-            let assertion = assert_that_owned!(ok_response()).get_text().await;
-            assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
-            assertion.is_equal_to("world");
+            let parent = assert_that!(());
+            parent
+                .derive_owned(|()| ok_response())
+                .get_text()
+                .await
+                .is_equal_to("world");
+            assert_that!(parent.state.records.assertion_count()).is_equal_to(1);
 
             assert_that_owned!(response(204, &[], ""))
                 .get_text()
                 .await
                 .is_equal_to("");
+        }
+
+        #[test]
+        fn future_is_send() {
+            fn require_send<F: Future + Send>(future: F) -> F {
+                future
+            }
+            drop(require_send(assert_that_owned!(ok_response()).get_text()));
         }
 
         #[test]
@@ -1535,7 +1711,7 @@ mod tests {
                 });
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `failing_response()`
@@ -1572,14 +1748,26 @@ mod tests {
 
         #[tokio::test]
         async fn extracts_the_deserialized_body_as_one_assertion() {
-            let assertion = assert_that_owned!(json_response(r#"{"name":"Bob","age":42}"#))
+            let parent = assert_that!(());
+            parent
+                .derive_owned(|()| json_response(r#"{"name":"Bob","age":42}"#))
                 .get_json::<Person>()
-                .await;
-            assert_that!(assertion.state.records.assertion_count()).is_equal_to(1);
-            assertion.is_equal_to(Person {
-                name: "Bob".to_owned(),
-                age: 42,
-            });
+                .await
+                .is_equal_to(Person {
+                    name: "Bob".to_owned(),
+                    age: 42,
+                });
+            assert_that!(parent.state.records.assertion_count()).is_equal_to(1);
+        }
+
+        #[test]
+        fn future_is_send() {
+            fn require_send<F: Future + Send>(future: F) -> F {
+                future
+            }
+            drop(require_send(
+                assert_that_owned!(json_response("1")).get_json::<u32>(),
+            ));
         }
 
         #[test]
@@ -1613,7 +1801,7 @@ mod tests {
                 block_on(assert_that_owned!(json_response("0")).get_json::<Decoded>());
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .contains("rejected zero");
             assert_that!(CALLS.load(Ordering::Relaxed)).is_equal_to(2);
         }
@@ -1632,7 +1820,7 @@ mod tests {
                 });
             })
             .panics()
-            .has_type::<String>()
+            .has_message()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
                 Expression: `json_response(body)`

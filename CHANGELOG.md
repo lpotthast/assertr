@@ -85,8 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   observation history as `matches`.
 - `PathAssertions::is_absolute` and `matchers::path::IsAbsolute` check `Path::is_absolute`.
 - Optional `thirtyfour` integration extracts browser element attributes, properties, text, state, and computed
-  accessibility into ordinary assertion chains. `has_attribute` checks presence and continues on the string for
-  equality, prefixes, and other assertions. Async reads preserve caller diagnostics and support `Send` futures.
+  accessibility into ordinary assertion chains through `ThirtyfourWebElementAssertions` in `assertions` and the
+  prelude. `has_attribute` checks presence, failing with "does not have the attribute", and continues on the string
+  for equality, prefixes, and other assertions. Async reads preserve caller diagnostics and support `Send` futures.
   `thirtyfour-cdp` adds Chromium accessibility descriptions. The fallible reads in `assertions::thirtyfour::read`
   compose with eventual and consistency assertions. Neither feature selects a browser manager or HTTP client.
 - `Actual::into_owned` moves an owned subject and clones a borrowed one.
@@ -232,10 +233,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `std`.
 - **Breaking:** HTTP header values lose their own `is_empty` and `is_not_empty`. `HeaderValue` implements `HasLength`,
   so the same calls and `has_length` resolve to `LengthAssertions` through the prelude and count bytes. `is_sensitive`
-  and `is_insensitive` require `ValueRenderer<HeaderValue>` instead of `ValueRenderer<bool> + Clone` and report the
+  and `is_not_sensitive` require `ValueRenderer<HeaderValue>` instead of `ValueRenderer<bool> + Clone` and report the
   header value.
+- **Breaking:** `HttpHeaderValueAssertions::is_insensitive` is renamed to `is_not_sensitive` (fluent alias
+  `not_be_sensitive`), and its expectation `matchers::header_value::IsInsensitive` to `IsNotSensitive`.
 - Failing HTTP header checks show header values, including values marked sensitive, and escape non-ASCII bytes. This
   covers reqwest `has_header_value` and `does_not_have_header`, and `HeaderValue` checks such as `is_ascii`.
+- **Breaking:** Reqwest header assertions and expectations (`has_header`, `does_not_have_header`, `has_header_value`,
+  and `get_header`) fail with "was given an invalid header name" for a name that is not a valid HTTP header name,
+  instead of treating it as absent. `does_not_have_header` no longer passes for such a name. Their rejections are
+  `matchers::response::HeaderRejection` values.
+- The `reqwest` feature enables `http`, so values extracted by `get_header` always support
+  `HttpHeaderValueAssertions`.
+- Reqwest `get_text()` and `get_json()` futures are `Send` when the renderer is.
 - **Breaking:** The `http` feature enables `std`. `serde-json`, `serde-toml`, and `serde` no longer enable `std` and
   work on embedded `no_std` targets with `alloc`.
 - **Breaking:** `jiff` is built without its default features. Enable jiff's time-zone database features in your own

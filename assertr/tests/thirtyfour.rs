@@ -3,9 +3,10 @@
 use assertr::prelude::*;
 use thirtyfour::WebElement;
 
+fn require_send(_: impl Future<Output = ()> + Send) {}
+
 #[test]
 fn async_composition_is_send_for_owned_and_borrowed_elements() {
-    fn require_send(_: impl Future<Output = ()> + Send) {}
     let _: fn(WebElement) = |element| {
         require_send(async move {
             assert_that!(&element)
@@ -27,7 +28,6 @@ fn async_composition_is_send_for_owned_and_borrowed_elements() {
 
 #[test]
 fn transformed_observations_and_validated_snapshots_remain_send() {
-    fn require_send(_: impl Future<Output = ()> + Send) {}
     let _: fn(WebElement) = |element| {
         require_send(async move {
             assert_that!(&element)

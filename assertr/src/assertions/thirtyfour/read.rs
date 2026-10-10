@@ -3,6 +3,23 @@
 //! Native reads remain available directly on `WebElement`. These functions supply operations
 //! missing from thirtyfour or with explicitly different text semantics. They never poll or
 //! reacquire a node, and retain `WebDriver` errors for the caller's retry policy.
+//!
+//! A read is a fresh observation for an eventual assertion:
+//!
+//! ```
+//! # #[cfg(feature = "thirtyfour")]
+//! # async fn example(element: &thirtyfour::WebElement) {
+//! use assertr::{assertions::thirtyfour::read, prelude::*};
+//!
+//! assert_that!(|| read::accessible_name(element))
+//!     .eventually_ok()
+//!     .giving_up_on_any_error()
+//!     .satisfies(|name| {
+//!         name.starts_with("Open");
+//!     })
+//!     .await;
+//! # }
+//! ```
 
 #[cfg(feature = "thirtyfour-cdp")]
 mod cdp;
@@ -11,7 +28,7 @@ mod cdp;
 pub use cdp::accessible_description;
 use thirtyfour::{
     ElementId, RequestData, SessionId, WebElement, common::command::FormatRequestData,
-    prelude::WebDriverResult,
+    error::WebDriverError, prelude::WebDriverResult,
 };
 
 /// A standard command reading a browser-computed property of an element.
@@ -72,7 +89,7 @@ pub async fn inner_text(element: &WebElement) -> WebDriverResult<String> {
         .await?
         .map(|text| text.trim().to_owned())
         .ok_or_else(|| {
-            thirtyfour::error::WebDriverError::NotFound(
+            WebDriverError::NotFound(
                 "innerText".into(),
                 "element has no innerText property".into(),
             )
