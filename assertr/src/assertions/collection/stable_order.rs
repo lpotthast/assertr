@@ -1053,6 +1053,11 @@ mod tests {
                       - Elements not expected: [
                             1,
                         ]
+                    Nested failures:
+                      - At [0]:
+                        Expected: 2
+
+                          Actual: 1
                     -------- assertr --------
                 "});
         }
@@ -1086,6 +1091,11 @@ mod tests {
 
                     Details:
                       - Only the order of the elements differs.
+                    Nested failures:
+                      - At [0]:
+                        Expected: 3
+
+                          Actual: 1
                     -------- assertr --------
                 "});
         }
@@ -1124,6 +1134,11 @@ mod tests {
                       - Elements not expected: [
                             1,
                         ]
+                    Nested failures:
+                      - At [1]:
+                        Expected: 2
+
+                          Actual: 1
                     -------- assertr --------
                 "});
         }

@@ -179,7 +179,8 @@ pub trait Collection: HasLength {
 /// `ends_with`, `contains_contiguous`, `contains_exactly`, their `_matching` and `_satisfying`
 /// variants, and `contains_exactly_same_instances`. In panic mode,
 /// [`StableOrderExtractAssertions`](crate::assertions::StableOrderExtractAssertions) adds
-/// `first` and `last`. Failures name the index of a mismatching element.
+/// `first` and `last`. Prefix, suffix, and exact comparisons name the index of the first
+/// mismatching element.
 /// The trait has no methods. It only declares that [`Collection::elements`] yields elements in
 /// their meaningful order.
 ///

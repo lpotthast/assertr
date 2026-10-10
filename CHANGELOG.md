@@ -130,6 +130,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `satisfies`, `satisfies_owned`, and `satisfies_ref` locate failures raised in their closure at their own call, the
   outermost one when nested. A `#[track_caller]` custom assertion wrapping them now reports its caller instead of a
   line inside its implementation.
+- Collection `contains_exactly` failures also name the first mismatching position as a nested `At [index]` failure,
+  as `starts_with`, `ends_with`, and the iterator form do.
 - `assert_that!` owns closure literals and `async` blocks, so `assert_that!(|| ..).panics()` and
   `assert_that!(async || ..).panics_async()` work without `assert_that_owned!`. Other expressions are still borrowed.
   The synchronous `panics` and `does_not_panic` never poll a returned future. A `panics` failure for a function

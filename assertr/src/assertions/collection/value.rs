@@ -127,15 +127,18 @@ where
 ///
 /// `A` is the collection item type and `E` the borrowed view of an expected element. The
 /// rejection borrows the actual elements no expected element claimed and the expected elements
-/// no actual element claimed, and records whether only their order differs. Explanation reports
-/// them under "Elements not found" and "Elements not expected" without comparing the elements
-/// again. Probes, which are never explained, skip computing this assignment. The contents are
-/// private. Pass the rejection back to the `explain` method of the expectation that produced it.
+/// no actual element claimed, and records whether only their order differs. An ordered
+/// comparison also retains its first mismatching position, reported as a child failure. Explanation
+/// reports them under "Elements not found" and "Elements not expected" without comparing the
+/// elements again. Probes, which are never explained, skip computing this assignment. The contents
+/// are private. Pass the rejection back to the `explain` method of the expectation that produced
+/// it.
 #[derive(Debug)]
 pub struct ExactElementsRejection<'a, A: ?Sized, E: ?Sized> {
     unexpected: Vec<&'a A>,
     missing: Vec<&'a E>,
     only_order_differs: bool,
+    mismatch: Option<ElementMismatch<'a, A, E>>,
 }
 
 /// Checks collection membership with the actual element's `PartialEq` implementation and a borrowed
@@ -724,10 +727,22 @@ where
                 unexpected: Vec::new(),
                 missing: Vec::new(),
                 only_order_differs: false,
+                mismatch: None,
             });
         }
 
         let elements = actual.elements().collect::<Vec<_>>();
+        let mismatch = elements
+            .iter()
+            .copied()
+            .zip(expected.iter().map(borrow_for::<C::Item, _>))
+            .enumerate()
+            .find(|(_, (actual, expected))| !(*actual).eq(*expected))
+            .map(|(index, (actual, expected))| ElementMismatch {
+                index,
+                actual,
+                expected,
+            });
         let matched = match_bipartite(elements.len(), expected.len(), |a, e| {
             elements[a].eq(borrow_for::<C::Item, _>(&expected[e]))
         });
@@ -739,6 +754,7 @@ where
             unexpected,
             missing,
             only_order_differs,
+            mismatch,
         })
     }
 
@@ -759,6 +775,7 @@ where
                     unexpected,
                     missing,
                     only_order_differs,
+                    mismatch,
                 } = rejection;
                 let mut failure = unmatched_facts(
                     failure
@@ -772,6 +789,18 @@ where
                 );
                 if only_order_differs {
                     failure = failure.fact(Fact::note("Only the order of the elements differs."));
+                }
+                if let Some(ElementMismatch {
+                    index,
+                    actual: element,
+                    expected,
+                }) = mismatch
+                {
+                    let mut child = context.isolated();
+                    child.record(|context| {
+                        indexed_equality_mismatch(context, index, element, expected)
+                    });
+                    failure = failure.evidence(child.into_evidence());
                 }
                 failure
             }
@@ -828,6 +857,7 @@ where
                 unexpected: Vec::new(),
                 missing: Vec::new(),
                 only_order_differs: false,
+                mismatch: None,
             });
         }
         let elements = actual.elements().collect::<Vec<_>>();
@@ -848,6 +878,7 @@ where
             unexpected,
             missing,
             only_order_differs: false,
+            mismatch: None,
         })
     }
 
